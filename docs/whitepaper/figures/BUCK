@@ -1,0 +1,32 @@
+
+genrule(
+    name = "impl-reputation",
+    srcs = ["impl-reputation.mmd"],
+    out = "impl-reputation.png",
+    cmd = 'mmdc -i "impl-reputation.mmd" -o "$OUT"',
+    visibility = ["PUBLIC"],
+)
+
+genrule(
+    name = "proposed_architecture",
+    srcs = ["proposed_architecture.mmd"],
+    out = "proposed_architecture.png",
+    cmd = 'mmdc -i "proposed_architecture.mmd" -o "$OUT"',
+    visibility = ["PUBLIC"],
+)
+
+genrule(
+    name = "proposed-solution",
+    srcs = ["proposed-solution.mmd"],
+    out = "proposed-solution.png",
+    cmd = 'mmdc -i "proposed-solution.mmd" -o "$OUT"',
+    visibility = ["PUBLIC"],
+)
+
+genrule(
+    name = "impl-networking",
+    srcs = ["impl-networking.mmd"],
+    out = "impl-networking.png",
+    cmd = 'mmdc -i "impl-networking.mmd" -o "$OUT"',
+    visibility = ["PUBLIC"],
+)

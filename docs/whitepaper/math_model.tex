@@ -1,0 +1,57 @@
+\section{Incentive Analysis for Malicious Behavior in Decentralized Systems}
+
+\subsection{Introduction}
+
+Understanding the incentives that could drive malicious behavior is crucial for enhancing the security and robustness of decentralized systems. The aim is to provide a nuanced understanding of the conditions under which malicious activities are more likely, offering insights for designing secure systems that do not need to rely on conventional consensus-based BFT schemes.
+
+\subsection{Model Variables}
+
+\begin{itemize}
+    \item \( P(B_m), P(B_h) \) : Probability distributions for the expected benefits from malicious and honest behavior.
+    \item \( P(C_m), P(C_h) \) : Probability distributions for the financial costs.
+    \item \( P(R_m), P(R_h) \) : Probability distributions for the financial equivalent of reputation loss or gain, respectively for malicious and honest behavior.
+    \item \( P(T_m), P(T_h) \) : Probability distributions for the time required for malicious and honest behavior.
+\end{itemize}
+
+\subsection{Model Formulation}
+
+The expected net benefits, adjusted for time, can be modeled as:
+
+\[
+    E[N_m] = \frac{E[B_m]}{E[T_m]} - (E[C_m] + E[R_m])
+\]
+\[
+    E[N_h] = \frac{E[B_h]}{E[T_h]} - (E[C_h] + E[R_h])
+\]
+
+Here, \( E[C_m] + E[R_m] \) and \( E[C_h] + E[R_h] \) represent the total expected costs for malicious and honest behavior, respectively. These costs include both the financial costs and the financial equivalent of reputation loss.
+
+\subsection{Conditions for Malicious Behavior}
+
+Malicious behavior is more likely if \( E[N_m] > E[N_h] \).
+
+\subsection{Proof}
+
+\textbf{Theorem:} Malicious behavior is more likely to occur if and only if \( E[N_m] > E[N_h] \).
+
+\textbf{Proof:}
+
+We aim to prove that malicious behavior is more likely when the expected net benefit of malicious behavior \( E[N_m] \) is greater than that of honest behavior \( E[N_h] \).
+
+The condition \( E[N_m] > E[N_h] \) simplifies to:
+
+\[
+    \frac{E[B_m]}{E[T_m]} - (E[C_m] + E[R_m]) > \frac{E[B_h]}{E[T_h]} - (E[C_h] + E[R_h])
+\]
+
+Rearranging terms, we get:
+
+\[
+    \frac{E[B_m]}{E[T_m]} - \frac{E[B_h]}{E[T_h]} > (E[C_h] + E[R_h]) - (E[C_m] + E[R_m])
+\]
+
+This inequality shows that malicious behavior is more likely when the expected time-adjusted benefit of malicious behavior over honest behavior is greater than the expected net cost difference, which includes both the financial costs and the financial equivalent of reputation loss for both behaviors.
+
+Therefore, malicious behavior is more likely to occur if and only if \( E[N_m] > E[N_h] \).
+
+\textbf{Q.E.D.}

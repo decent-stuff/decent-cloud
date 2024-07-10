@@ -1,0 +1,47 @@
+DEPS_THIRD_PARTY = [
+    "//third-party:ahash",
+    "//third-party:anyhow",
+    "//third-party:borsh",
+    "//third-party:clap",
+    "//third-party:ed25519-compact",
+    "//third-party:fs-err",
+    "//third-party:indexmap",
+    "//third-party:ledger-map",
+    "//third-party:log",
+    "//third-party:memmap2",
+    "//third-party:sha2",
+    "//third-party:strum",
+    "//third-party:tiny-bip39",
+    "//common:dcc-common",
+]
+
+rust_library(
+    name = "sim-lib",
+    srcs = [
+        "src/lib.rs",
+        "src/node_provider.rs",
+    ],
+    deps = DEPS_THIRD_PARTY,
+    edition = "2021",
+    visibility = ["PUBLIC"],
+)
+
+rust_binary(
+    name = "dc",
+    srcs = glob(["src/*.rs"]),
+    crate_root = "src/main.rs",
+    deps = [
+        ":sim-lib",
+    ] + DEPS_THIRD_PARTY,
+    edition = "2021",
+    visibility = ["PUBLIC"],
+)
+
+rust_binary(
+    name = "keygen",
+    srcs = [
+        "src/keygen.rs",
+    ],
+    crate_root = "src/keygen.rs",
+    deps = DEPS_THIRD_PARTY,
+)

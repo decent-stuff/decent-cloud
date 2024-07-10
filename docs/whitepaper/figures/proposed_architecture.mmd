@@ -1,0 +1,20 @@
+graph TB
+  D["Developer"] -- "Finds Node" --> BC["Blockchain"]
+  D -- "Pays for Node Usage" --> BC
+  NP["Node Provider"] -- "Runs Node" --> N["Node"]
+  N -- "Accesses Data" --> DS["Decentralized / S3 / Other Storage"]
+  N -- "Runs Classical Web Service" --> WS["Web Service"]
+  N -- "Runs Arbitrary Applications" --> WL["Arbitrary Workloads"]
+  WS -- "Serves Requests" --> EU["End User"]
+
+  subgraph BC["Blockchain: Reputation and Financial Transactions"]
+    LE["Node Renting Event"] -- "Records Node Renting" --> Ledger
+    Ledger -- "Increases Developer Reputation" --> DREP["Developer Reputation"]
+    Ledger -- "Increases Node Provider Reputation" --> NREP["Node Provider Reputation"]
+    DREP -- "Can Spend Reputation to Reduce Node Provider Reputation" --> NREP
+    NREP -- "Can Spend Reputation to Reduce Developer Reputation" --> DREP
+  end
+
+  BC -- "Periodic Reputation-Based Rewards" --> NP
+  BC -- "Assigns Node" --> NP
+  BC -- "Rented Node Rewards" --> NP

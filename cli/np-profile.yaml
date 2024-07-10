@@ -1,0 +1,12 @@
+name: "Test Node Provider"
+description: Just a test
+url: https://example.com
+logo_url: https://example.com/logo.jpg
+why_choose_us:  Because we're the best!
+locations:
+  Europe: Frankfurt
+  US: Chicago
+contacts:
+  Twitter: x.com/dc-prov
+  Linkedin: linkedin.com/dc-prov
+  email: suppport@dc-prov.com

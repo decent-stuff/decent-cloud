@@ -1,0 +1,24 @@
+{
+  "canisters": {
+    "decent_cloud": {
+      "candid": "decent_cloud.did",
+      "package": "decent_cloud_canister",
+      "type": "rust"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "replica": {
+        "log_level": "info"
+      }
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}

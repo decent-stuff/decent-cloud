@@ -1,0 +1,52 @@
+[package]
+name = "decent-cloud"
+version.workspace = true
+edition = "2021"
+default-run = "dc"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "dc"
+path = "src/main.rs"
+
+[[bin]]
+name = "keygen"
+path = "src/keygen.rs"
+
+[dependencies]
+ahash.workspace = true
+anyhow.workspace = true
+base64.workspace = true
+borsh.workspace = true
+candid.workspace = true
+chrono.workspace = true
+clap.workspace = true
+data-encoding.workspace = true
+dcc-common = { path = "../common" }
+decent_cloud_canister = { path = "../ic-canister" }
+dirs.workspace = true
+ed25519-dalek.workspace = true
+flate2.workspace = true
+fs-err.workspace = true
+hex.workspace = true
+hmac.workspace = true
+ic-agent.workspace = true
+ic-cdk.workspace = true
+icrc-ledger-types.workspace = true
+indexmap.workspace = true
+ledger-map.workspace = true
+log.workspace = true
+memmap2.workspace = true
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+serde.workspace = true
+sha2.workspace = true
+strum_macros.workspace = true
+strum.workspace = true
+tabular.workspace = true
+tiny-bip39.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

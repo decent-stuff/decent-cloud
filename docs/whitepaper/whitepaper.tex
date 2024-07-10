@@ -1,0 +1,58 @@
+% \documentclass[nobib]{tufte-book}
+\documentclass[
+	a4paper, % Paper size, use either a4paper or letterpaper
+	10pt, % Default font size, can also use 11pt or 12pt, although this is not recommended
+	% unnumberedsections, % Comment to enable section numbering
+	twoside, % Two side traditional mode where headers and footers change between odd and even pages, comment this option to make them fixed
+]{LTJournalArticle}
+
+% \usepackage{amsmath}
+% \usepackage{graphicx}
+\usepackage{hyperref}
+
+% \usepackage[style=verbose, autocite=footnote, backend=biber]{biblatex}
+% \usepackage{biblatex}
+\addbibresource{references.bib}
+
+\runninghead{Decentralized Cloud: A New Paradigm}
+
+\title{Decentralized Cloud: A New Paradigm} % Article title, use manual lines breaks (\\) to beautify the layout
+
+\author{%
+	Anonymous
+}
+
+
+% Full-width abstract
+\renewcommand{\maketitlehookd}{%
+	\begin{abstract}
+        \input{abstract}
+	\end{abstract}
+}
+
+\begin{document}
+
+\maketitle
+
+% \frontmatter
+
+% \tableofcontents
+
+% \mainmatter
+
+\input{introduction.tex}
+\input{problem_statement.tex}
+\input{proposed_solution.tex}
+\input{math_model.tex}
+\input{implementation}
+\input{benefits_and_impact}
+\input{conclusion}
+
+% \backmatter
+
+\printbibliography
+
+% \appendix
+% \input{appendix}
+
+\end{document}

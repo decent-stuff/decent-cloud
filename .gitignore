@@ -1,0 +1,15 @@
+*.aux
+*.run.xml
+*.log
+*.bbl
+*.blg
+*.bcf
+*.fls
+*.out
+*.toc
+*.fdb_latexmk
+__pycache__/
+target/
+.DS_Store
+.vscode/settings.json
+.pixi
