@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,6 +17,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install dfx
+      run: DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
     - name: Install cargo-make
       run: cargo install --force cargo-make
     - name: Build and test
