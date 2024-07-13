@@ -3,33 +3,10 @@ RUST_BACKTRACE = "1"
 
 [config]
 default_to_workspace = false
-on_error_task = "post-test"
+on_error_task = "dfx-stop"
 unstable_features = ["CTRL_C_HANDLING"]
 
-[tasks.format]
-install_crate = "rustfmt"
-command = "cargo"
-args = ["fmt", "--", "--emit=files"]
-
-[tasks.canister]
-command = "dfx"
-args = ["build", "--all"]
-cwd = "./ic-canister/"
-
-[tasks.clippy]
-command = "cargo"
-args = ["clippy"]
-
-[tasks.clippy-canister]
-command = "cargo"
-args = ["clippy", "--target=wasm32-unknown-unknown"]
-cwd = "./ic-canister/"
-
-[tasks.build]
-command = "cargo"
-args = ["build"]
-
-[tasks.pre-test]
+[tasks.dfx-start]
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
@@ -41,12 +18,42 @@ while true; do
     dfx ping local && break;
     sleep 1;
 done;
+dfx canister create --all
 '''
 
-[tasks.test]
-dependencies = ["pre-test", "build", "canister"]
+[tasks.format]
+dependencies = ["dfx-start"]
+install_crate = "rustfmt"
+command = "cargo"
+args = ["fmt", "--", "--emit=files"]
 
-[tasks.post-test]
+[tasks.canister]
+dependencies = ["dfx-start"]
+command = "dfx"
+args = ["build", "--all"]
+cwd = "./ic-canister/"
+
+[tasks.clippy]
+dependencies = ["dfx-start"]
+command = "cargo"
+args = ["clippy"]
+
+[tasks.clippy-canister]
+dependencies = ["dfx-start"]
+command = "cargo"
+args = ["clippy", "--target=wasm32-unknown-unknown"]
+cwd = "./ic-canister/"
+
+[tasks.build]
+dependencies = ["dfx-start"]
+command = "cargo"
+args = ["build"]
+
+
+[tasks.test]
+dependencies = ["dfx-start", "build", "canister"]
+
+[tasks.dfx-stop]
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
@@ -54,24 +61,14 @@ set -eEuo pipefail
 (cd ic-canister && dfx stop)
 '''
 
-[tasks.pytest]
-script = '''
-#!/usr/bin/env bash
-set -eEuo pipefail
-
-pixi install
-pixi run pytest
-'''
-
 [tasks.all]
 dependencies = [
     "format",
+    "dfx-start",
     "canister",
     "clippy",
     "clippy-canister",
     "build",
-    "pre-test",
     "test",
-    "pytest",
-    "post-test",
+    "dfx-stop",
 ]

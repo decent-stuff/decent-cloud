@@ -36,15 +36,6 @@ pub fn main() {
         for var in vars_to_unset.iter() {
             std::env::remove_var(var);
         }
-        if !Command::new("dfx")
-            .args(["canister", "create", "--all"])
-            .current_dir(&canister_dir_path)
-            .status()
-            .expect("Failed to create canister")
-            .success()
-        {
-            panic!("failed to create canister")
-        };
 
         if !Command::new("dfx")
             .args(["build"])
