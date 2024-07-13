@@ -1,3 +1,4 @@
+use ed25519_dalek::ed25519::Error as DalekError;
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
@@ -40,26 +41,25 @@ pub enum DccIdentity {
 // }
 
 impl DccIdentity {
-    pub fn new_signing(ed25519_signing_key: &SigningKey) -> Result<Self, Box<dyn Error>> {
+    pub fn new_signing(ed25519_signing_key: &SigningKey) -> Result<Self, CryptoError> {
         Ok(DccIdentity::Ed25519(
             Some(ed25519_signing_key.clone()),
             ed25519_signing_key.verifying_key(),
         ))
     }
 
-    pub fn new_verifying(ed25519_verifying_key: &VerifyingKey) -> Result<Self, Box<dyn Error>> {
+    pub fn new_verifying(ed25519_verifying_key: &VerifyingKey) -> Result<Self, CryptoError> {
         Ok(DccIdentity::Ed25519(None, *ed25519_verifying_key))
     }
 
-    pub fn new_from_seed(seed: &[u8]) -> Result<Self, Box<dyn Error>> {
+    pub fn new_from_seed(seed: &[u8]) -> Result<Self, CryptoError> {
         let signing_key = Self::generate_ed25519_signing_key_from_seed(seed);
         DccIdentity::new_signing(&signing_key)
     }
 
-    pub fn new_verifying_from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn Error>> {
+    pub fn new_verifying_from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
         let bytes = slice_to_32_bytes_array(bytes)?;
-        let verifying_key =
-            VerifyingKey::from_bytes(bytes).expect("failed to create verifying key");
+        let verifying_key = VerifyingKey::from_bytes(bytes)?;
         DccIdentity::new_verifying(&verifying_key)
     }
 
@@ -144,33 +144,32 @@ impl DccIdentity {
         SigningKey::from_bytes(&seed_bytes)
     }
 
-    pub fn sign(&self, data: &[u8]) -> Result<Signature, Box<dyn Error>> {
+    pub fn sign(&self, data: &[u8]) -> Result<Signature, CryptoError> {
         match self {
             DccIdentity::Ed25519(Some(signing_key), _) => {
                 let mut prehashed = Sha512::new();
                 prehashed.update(data);
-                Ok(signing_key
-                    .sign_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT))
-                    .expect("signing failed"))
+                Ok(signing_key.sign_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT))?)
             }
             _ => panic!("Invalid type of DccIdentity"),
         }
     }
 
-    pub fn verify_bytes(&self, data: &[u8], signature_bytes: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub fn verify_bytes(&self, data: &[u8], signature_bytes: &[u8]) -> Result<(), CryptoError> {
         let signature = Signature::from_bytes(slice_to_64_bytes_array(signature_bytes)?);
         self.verify(data, &signature)
     }
 
-    pub fn verify(&self, data: &[u8], signature: &Signature) -> Result<(), Box<dyn Error>> {
+    pub fn verify(&self, data: &[u8], signature: &Signature) -> Result<(), CryptoError> {
         match self {
             DccIdentity::Ed25519(_, verifying_key) => {
                 let mut prehashed = Sha512::new();
                 prehashed.update(data);
-                verifying_key
-                    .verify_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT), signature)
-                    .expect("verify failed");
-                Ok(())
+                Ok(verifying_key.verify_prehashed(
+                    prehashed,
+                    Some(ED25519_SIGN_CONTEXT),
+                    signature,
+                )?)
             }
         }
     }
@@ -195,10 +194,7 @@ impl DccIdentity {
     }
 
     #[cfg(target_arch = "x86_64")]
-    pub fn write_verifying_key_to_pem_file(
-        &self,
-        file_path: &PathBuf,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn write_verifying_key_to_pem_file(&self, file_path: &PathBuf) -> Result<(), CryptoError> {
         let pem_string = self.verifying_key_as_pem();
 
         fs_err::create_dir_all(file_path.parent().expect("file_path has no parent"))?;
@@ -219,15 +215,15 @@ impl DccIdentity {
         }
     }
 
-    pub fn signing_key_as_pem_string(&self) -> Result<String, Box<dyn Error>> {
+    pub fn signing_key_as_pem_string(&self) -> Result<String, CryptoError> {
         let contents = self.to_der_signing();
         let pem_obj = pem::Pem::new(ED25519_PEM_SIGNING_KEY_TAG, contents);
         Ok(pem::encode(&pem_obj))
     }
 
     #[cfg(target_arch = "x86_64")]
-    pub fn write_signing_key_to_pem_file(&self, file_path: &PathBuf) -> Result<(), Box<dyn Error>> {
-        let pem_string = self.signing_key_as_pem_string().expect("no signing key");
+    pub fn write_signing_key_to_pem_file(&self, file_path: &PathBuf) -> Result<(), CryptoError> {
+        let pem_string = self.signing_key_as_pem_string()?;
 
         fs_err::create_dir_all(file_path.parent().expect("file_path has no parent"))?;
         let mut file = fs_err::File::create(file_path)?;
@@ -243,7 +239,7 @@ impl DccIdentity {
     }
 
     #[cfg(target_arch = "x86_64")]
-    pub fn save_to_dir(&self, identity: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save_to_dir(&self, identity: &str) -> Result<(), CryptoError> {
         let identity_dir = Self::identities_dir().join(identity);
 
         let public_pem_file_path = identity_dir.join("public.pem");
@@ -260,35 +256,30 @@ impl DccIdentity {
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn read_signing_key_from_pem_file(file_path: &PathBuf) -> Result<SigningKey, Box<dyn Error>> {
+    fn read_signing_key_from_pem_file(file_path: &PathBuf) -> Result<SigningKey, CryptoError> {
         let mut file = fs_err::File::open(file_path)?;
         let mut pem_string = String::new();
         file.read_to_string(&mut pem_string)?;
         let pem = pem::parse(pem_string)?;
 
         // let secret_key = Self::from_der(&pem.contents())?;
-        let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_der(pem.contents())
-            .expect("failed to read signing key");
-        // let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_pem(&pem_string)
-        //     .expect("failed to read signing key");
+        let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_der(pem.contents())?;
+        // let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_pem(&pem_string)?;
         Ok(key)
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn read_verifying_key_from_pem_file(
-        file_path: &PathBuf,
-    ) -> Result<VerifyingKey, Box<dyn Error>> {
+    fn read_verifying_key_from_pem_file(file_path: &PathBuf) -> Result<VerifyingKey, CryptoError> {
         let mut file = fs_err::File::open(file_path)?;
         let mut pem_string = String::new();
         file.read_to_string(&mut pem_string)?;
 
-        let key = ed25519_dalek::pkcs8::DecodePublicKey::from_public_key_pem(&pem_string)
-            .expect("failed to read verifying key");
+        let key = ed25519_dalek::pkcs8::DecodePublicKey::from_public_key_pem(&pem_string)?;
         Ok(key)
     }
 
     #[cfg(target_arch = "x86_64")]
-    pub fn load_from_dir(identity_dir: &PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn load_from_dir(identity_dir: &PathBuf) -> Result<Self, CryptoError> {
         let identity_dir = if identity_dir.is_absolute() {
             identity_dir.to_path_buf()
         } else {
@@ -305,6 +296,65 @@ impl DccIdentity {
 
             Self::new_verifying(&verifying_key)
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum CryptoError {
+    DalekError(DalekError),
+    Pkcs8Error(pkcs8::Error),
+    PemError(pem::PemError),
+    IoError(std::io::Error),
+    Generic(String),
+}
+
+impl std::fmt::Display for CryptoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            CryptoError::DalekError(e) => e.fmt(f),
+            CryptoError::Pkcs8Error(e) => e.fmt(f),
+            CryptoError::PemError(e) => e.fmt(f),
+            CryptoError::IoError(e) => e.fmt(f),
+            CryptoError::Generic(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Error for CryptoError {}
+
+impl From<DalekError> for CryptoError {
+    fn from(error: DalekError) -> Self {
+        CryptoError::DalekError(error)
+    }
+}
+
+impl From<pkcs8::Error> for CryptoError {
+    fn from(error: pkcs8::Error) -> Self {
+        CryptoError::Pkcs8Error(error)
+    }
+}
+
+impl From<pkcs8::spki::Error> for CryptoError {
+    fn from(error: pkcs8::spki::Error) -> Self {
+        CryptoError::Pkcs8Error(error.into())
+    }
+}
+
+impl From<pem::PemError> for CryptoError {
+    fn from(error: pem::PemError) -> Self {
+        CryptoError::PemError(error)
+    }
+}
+
+impl From<String> for CryptoError {
+    fn from(error: String) -> Self {
+        CryptoError::Generic(error)
+    }
+}
+
+impl From<std::io::Error> for CryptoError {
+    fn from(error: std::io::Error) -> Self {
+        CryptoError::IoError(error)
     }
 }
 

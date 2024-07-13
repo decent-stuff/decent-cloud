@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         LedgerCanister::new(canister_id, identity, network_url.to_string()).await
     };
 
-    match args.subcommand() {
+    Ok(match args.subcommand() {
         Some(("keygen", arg_matches)) => {
             let identity = arg_matches
                 .get_one::<String>("identity")
@@ -446,7 +446,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable
-    }
+    }?)
 }
 
 fn list_identities() -> Result<(), Box<dyn std::error::Error>> {
