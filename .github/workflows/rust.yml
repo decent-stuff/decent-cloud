@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 env:
@@ -12,14 +12,22 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Install dfx
-      run: DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
-    - name: Install cargo-make
-      run: cargo install --force cargo-make
-    - name: Build and test
-      run: cargo make
+      - uses: actions/checkout@v4
+      - name: Install dfx
+        run: DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+      - name: Install cargo-make
+        run: cargo install --force cargo-make
+      - name: Clone Ledger Map
+        shell: bash
+        run: |
+          set -eEuo pipefail
+          (
+            cd ..
+            git clone --depth 1 https://github.com/decent-cloud/ledger-map.git
+            cd -
+          )
+      - name: Build and test
+        run: cargo make
