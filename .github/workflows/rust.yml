@@ -21,7 +21,7 @@ jobs:
           set -eExuo pipefail
           DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
           source "$HOME/.local/share/dfx/env"
-          cat "$HOME/.local/share/dfx/env" >> $GITHUB_ENV
+          echo "export PATH=$HOME/.local/share/dfx/bin:$PATH" >> $GITHUB_ENV
           dfx --version
       - name: Install cargo-make
         run: cargo install --force cargo-make
