@@ -273,7 +273,7 @@ fn np_register(
         dcc_identity.to_ic_principal(),
         "node_provider_register",
         Encode!(
-            &dcc_identity.as_unique_id().as_bytes(),
+            &dcc_identity.as_uid_bytes(),
             &dcc_identity.verifying_key().to_bytes()
         )
         .unwrap(),
@@ -298,7 +298,7 @@ fn user_register(
         dcc_identity.to_ic_principal(),
         "user_register",
         Encode!(
-            &dcc_identity.as_unique_id().as_bytes(),
+            &dcc_identity.as_uid_bytes(),
             &dcc_identity.verifying_key().to_bytes()
         )
         .unwrap(),
@@ -307,7 +307,7 @@ fn user_register(
     (dcc_identity, result)
 }
 
-fn identity_reputation_get(pic: &PocketIc, can: Principal, identity: &String) -> u64 {
+fn identity_reputation_get(pic: &PocketIc, can: Principal, identity: &Vec<u8>) -> u64 {
     let args = Encode!(&identity).unwrap();
     query_check_and_decode!(pic, can, "get_identity_reputation", args, u64)
 }
@@ -335,7 +335,7 @@ fn np_check_in(
         dcc_identity.to_ic_principal(),
         "node_provider_check_in",
         Encode!(
-            &dcc_identity.as_unique_id().as_bytes(),
+            &dcc_identity.as_uid_bytes(),
             &payload
         )
         .unwrap(),
@@ -513,10 +513,10 @@ fn test_reputation() {
 
     test_ffwd_to_next_block(ts_ns, &p, c);
 
-    assert!(identity_reputation_get(&p, c, &np1.as_unique_id()) > 0);
-    assert!(identity_reputation_get(&p, c, &np2.as_unique_id()) > 0);
-    assert!(identity_reputation_get(&p, c, &np3.as_unique_id()) > 0);
+    assert!(identity_reputation_get(&p, c, &np1.as_uid_bytes()) > 0);
+    assert!(identity_reputation_get(&p, c, &np2.as_uid_bytes()) > 0);
+    assert!(identity_reputation_get(&p, c, &np3.as_uid_bytes()) > 0);
 
-    assert!(identity_reputation_get(&p, c, &u1.as_unique_id()) > 0);
-    assert!(identity_reputation_get(&p, c, &u2.as_unique_id()) > 0);
+    assert!(identity_reputation_get(&p, c, &u1.as_uid_bytes()) > 0);
+    assert!(identity_reputation_get(&p, c, &u2.as_uid_bytes()) > 0);
 }

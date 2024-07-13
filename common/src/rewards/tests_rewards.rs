@@ -198,14 +198,14 @@ fn test_rewards_distribute_with_eligible_nps() {
     test_ledger
         .upsert(
             LABEL_NP_REGISTER,
-            &np1.to_base32_bytes_verifying(),
+            np1.as_uid_bytes(),
             np1.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
             LABEL_NP_CHECK_IN,
-            &np1.to_base32_bytes_verifying(),
+            np1.as_uid_bytes(),
             np1.to_bytes_verifying(),
         )
         .unwrap();
@@ -225,7 +225,7 @@ fn test_rewards_distribute_with_eligible_nps() {
     test_ledger
         .upsert(
             LABEL_NP_CHECK_IN,
-            &np1.to_base32_bytes_verifying(),
+            &np1.as_uid_bytes(),
             np1.to_bytes_verifying(),
         )
         .unwrap();
@@ -244,21 +244,21 @@ fn test_rewards_distribute_with_eligible_nps() {
     test_ledger
         .upsert(
             LABEL_NP_REGISTER,
-            &np2.to_base32_bytes_verifying(),
+            &np2.as_uid_bytes(),
             np2.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
             LABEL_NP_CHECK_IN,
-            &np1.to_base32_bytes_verifying(),
+            &np1.as_uid_bytes(),
             np1.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
             LABEL_NP_CHECK_IN,
-            &np2.to_base32_bytes_verifying(),
+            &np2.as_uid_bytes(),
             np2.to_bytes_verifying(),
         )
         .unwrap();

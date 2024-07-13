@@ -353,19 +353,20 @@ type ResultData = variant { Ok: record { text; vec nat8 }; Err: text; };
 
 service : {
     // Node Provider (NP) management operations
-    node_provider_register: (node_provider_unique_id: vec nat8, node_provider_pubkey_bytes: vec nat8) -> (ResultString);
-    node_provider_check_in: (node_provider_unique_id: vec nat8, nonce_signature: vec nat8) -> (ResultString);
-    node_provider_update_profile: (node_provider_unique_id: vec nat8, update_profile_payload: vec nat8) -> (ResultString);
+    node_provider_register: (node_provider_uid_bytes: vec nat8, node_provider_pubkey_bytes: vec nat8) -> (ResultString);
+    node_provider_check_in: (node_provider_uid_bytes: vec nat8, nonce_signature: vec nat8) -> (ResultString);
+    node_provider_update_profile: (node_provider_uid_bytes: vec nat8, update_profile_payload: vec nat8) -> (ResultString);
+    node_provider_update_offering: (node_provider_uid_bytes: vec nat8, update_offering_payload: vec nat8) -> (ResultString);
     node_provider_list_checked_in: () -> (ResultString) query;
-    node_provider_get_profile_by_unique_id: (vec nat8) -> (opt text) query;
+    node_provider_get_profile_by_uid_bytes: (vec nat8) -> (opt text) query;
     node_provider_get_profile_by_principal: (principal) -> (opt text) query;
     get_np_check_in_nonce: () -> (vec nat8) query;
 
     // User management operations
-    user_register: (user_unique_id: vec nat8, user_pubkey_bytes: vec nat8) -> (ResultString);
+    user_register: (user_uid_bytes: vec nat8, user_pubkey_bytes: vec nat8) -> (ResultString);
 
     // Common NP and user management operations
-    get_identity_reputation: (identity_unique_id: text) -> (nat64) query;
+    get_identity_reputation: (identity_uid_bytes: vec nat8) -> (nat64) query;
     get_registration_fee: () -> (nat64) query;
 
     // Token and balances

@@ -26,23 +26,24 @@ fn get_registration_fee() -> u64 {
 
 #[ic_cdk::update]
 fn node_provider_register(
-    node_provider_unique_id: Vec<u8>,
+    np_uid_bytes: Vec<u8>,
     node_provider_pubkey_bytes: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_register(node_provider_unique_id, node_provider_pubkey_bytes)
+    _node_provider_register(np_uid_bytes, node_provider_pubkey_bytes)
 }
 
 #[ic_cdk::update]
 fn node_provider_update_profile(
-    node_provider_unique_id: Vec<u8>,
+    np_uid_bytes: Vec<u8>,
     update_profile_payload: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_update_profile(node_provider_unique_id, update_profile_payload)
+    _node_provider_update_profile(np_uid_bytes, update_profile_payload)
+}
 }
 
 #[ic_cdk::query]
-fn node_provider_get_profile_by_unique_id(node_provider_unique_id: Vec<u8>) -> Option<String> {
-    _node_provider_get_profile_by_unique_id(node_provider_unique_id)
+fn node_provider_get_profile_by_uid_bytes(np_uid_bytes: Vec<u8>) -> Option<String> {
+    _node_provider_get_profile_by_uid_bytes(np_uid_bytes)
 }
 
 #[ic_cdk::query]
@@ -52,10 +53,10 @@ fn node_provider_get_profile_by_principal(principal: Principal) -> Option<String
 
 #[ic_cdk::update]
 fn node_provider_check_in(
-    node_provider_unique_id: Vec<u8>,
+    np_uid_bytes: Vec<u8>,
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_check_in(node_provider_unique_id, nonce_signature)
+    _node_provider_check_in(np_uid_bytes, nonce_signature)
 }
 
 #[ic_cdk::query]
@@ -64,12 +65,12 @@ fn get_np_check_in_nonce() -> Vec<u8> {
 }
 
 #[ic_cdk::update]
-fn user_register(user_unique_id: Vec<u8>, user_pubkey_bytes: Vec<u8>) -> Result<String, String> {
-    _user_register(user_unique_id, user_pubkey_bytes)
+fn user_register(user_uid_bytes: Vec<u8>, user_pubkey_bytes: Vec<u8>) -> Result<String, String> {
+    _user_register(user_uid_bytes, user_pubkey_bytes)
 }
 
 #[ic_cdk::query]
-fn get_identity_reputation(identity: String) -> u64 {
+fn get_identity_reputation(identity: Vec<u8>) -> u64 {
     _get_identity_reputation(identity)
 }
 

@@ -174,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_register(
-                            &dcc_ident.as_unique_id().into_bytes(),
+                            &dcc_ident.as_uid_bytes(),
                             dcc_ident.verifying_key().as_ref(),
                         )
                         .await?;
@@ -204,7 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_check_in(
-                            &dcc_ident.as_unique_id().into_bytes(),
+                            &dcc_ident.as_uid_bytes(),
                             &dcc_ident.sign(&nonce_bytes)?.to_bytes(),
                         )
                         .await
@@ -237,7 +237,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_update_profile(
-                            &dcc_ident.as_unique_id().into_bytes(),
+                            &dcc_ident.as_uid_bytes(),
                             &serde_json::to_vec(&payload)?,
                         )
                         .await
@@ -259,7 +259,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let ic_auth = dcc_to_ic_auth(&dcc_ident);
                         let canister = ledger_canister(ic_auth).await?;
                         let args = Encode!(
-                            &dcc_ident.as_unique_id().into_bytes(),
+                            &dcc_ident.as_uid_bytes(),
                             &dcc_ident.verifying_key().as_ref()
                         )?;
                         let result = canister.call_update("user_register", &args).await?;

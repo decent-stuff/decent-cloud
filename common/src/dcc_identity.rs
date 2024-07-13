@@ -5,7 +5,6 @@ use ic_cdk::println;
 use pkcs8::der::zeroize::Zeroizing;
 
 use crate::{Account, MINTING_ACCOUNT_PRINCIPAL};
-use data_encoding::BASE32;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512, Signature, SigningKey, VerifyingKey};
 use hmac::{Hmac, Mac};
@@ -70,18 +69,6 @@ impl DccIdentity {
         }
     }
 
-    pub fn to_base32_string_verifying(&self) -> String {
-        match self {
-            DccIdentity::Ed25519(_, verifying_key) => BASE32.encode(&verifying_key.to_bytes()),
-        }
-    }
-
-    pub fn to_base32_bytes_verifying(&self) -> Vec<u8> {
-        match self {
-            DccIdentity::Ed25519(_, verifying_key) => verifying_key.to_bytes().to_vec(),
-        }
-    }
-
     pub fn to_ic_principal(&self) -> candid::Principal {
         match self {
             DccIdentity::Ed25519(_, verifying_key) => {
@@ -103,8 +90,14 @@ impl DccIdentity {
         }
     }
 
-    pub fn as_unique_id(&self) -> String {
+    /// Returns the public key in PEM format. This is more universal than the IC principals.
+    pub fn as_uid_string(&self) -> String {
         self.verifying_key_as_pem_one_line().to_owned()
+    }
+
+    /// Returns the public key as bytes. This is more universal than the IC principals.
+    pub fn as_uid_bytes(&self) -> Vec<u8> {
+        self.to_bytes_verifying()
     }
 
     pub fn is_minting_account(&self) -> bool {
@@ -321,12 +314,7 @@ impl std::fmt::Display for DccIdentity {
             DccIdentity::Ed25519(None, _) => write!(f, " [Ed25519 verifying] ")?,
             DccIdentity::Ed25519(Some(_), _) => write!(f, " [Ed25519 signing] ")?,
         }
-        write!(
-            f,
-            "{} ({})",
-            self.to_base32_string_verifying(),
-            self.to_ic_principal()
-        )
+        write!(f, "{} ({})", self.as_uid_string(), self.to_ic_principal())
     }
 }
 
@@ -410,24 +398,6 @@ mod tests {
             dcc_identity.verifying_key().to_bytes(),
             signing_key.verifying_key().to_bytes()
         );
-    }
-
-    #[test]
-    fn test_to_base32_string_verifying() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        let base32_string = dcc_identity.to_base32_string_verifying();
-        assert!(!base32_string.is_empty());
-    }
-
-    #[test]
-    fn test_to_base32_bytes_verifying() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        let base32_bytes = dcc_identity.to_base32_bytes_verifying();
-        assert!(!base32_bytes.is_empty());
     }
 
     #[test]

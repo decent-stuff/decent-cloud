@@ -173,18 +173,18 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
 pub fn do_node_provider_check_in(
     ledger: &mut LedgerMap,
     caller: Principal,
-    np_unique_id: Vec<u8>,
+    np_uid_bytes: Vec<u8>,
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
     println!("[do_node_provider_check_in]: caller: {}", caller);
-    if np_unique_id.len() > 64 {
+    if np_uid_bytes.len() > 64 {
         return Err("Node provider unique id too long".to_string());
     }
     if nonce_signature.len() != 64 {
         return Err("Invalid signature".to_string());
     }
     let np_pubkey = ledger
-        .get(LABEL_NP_REGISTER, &np_unique_id)
+        .get(LABEL_NP_REGISTER, &np_uid_bytes)
         .map_err(|e| e.to_string())?;
     let pub_key_bytes = slice_to_32_bytes_array(&np_pubkey)?;
     let verifying_key = VerifyingKey::from_bytes(pub_key_bytes).map_err(|e| e.to_string())?;
@@ -219,7 +219,7 @@ pub fn do_node_provider_check_in(
     }
 
     ledger
-        .upsert(LABEL_NP_CHECK_IN, np_unique_id, nonce_signature)
+        .upsert(LABEL_NP_CHECK_IN, np_uid_bytes, nonce_signature)
         .map(|_| "ok".to_string())
         .map_err(|e| format!("{:?}", e))?;
 

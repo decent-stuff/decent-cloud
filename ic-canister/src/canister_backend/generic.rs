@@ -3,7 +3,7 @@ use borsh::BorshDeserialize;
 use candid::Principal;
 use dcc_common::cache_transactions::RecentCache;
 use dcc_common::{
-    account_balance_get, cursor_from_data, get_account_from_pubkey, get_unique_id_from_principal,
+    account_balance_get, cursor_from_data, get_account_from_pubkey, get_uid_from_principal,
     refresh_caches_from_ledger, registration_fee_e9s, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_applied_np_count, rewards_distribute,
     rewards_pending_e9s, set_test_config, FundsTransfer, LedgerCursor, BLOCK_INTERVAL_SECS,
@@ -138,22 +138,22 @@ pub(crate) fn _get_registration_fee() -> u64 {
 }
 
 pub(crate) fn _node_provider_register(
-    node_provider_unique_id: Vec<u8>,
-    node_provider_pubkey_bytes: Vec<u8>,
+    np_uid_bytes: Vec<u8>,
+    np_pubkey_bytes: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
     LEDGER_MAP.with(|ledger| {
         dcc_common::do_node_provider_register(
             &mut ledger.borrow_mut(),
             ic_cdk::api::caller(),
-            node_provider_unique_id,
-            node_provider_pubkey_bytes,
+            np_uid_bytes,
+            np_pubkey_bytes,
         )
     })
 }
 
 pub(crate) fn _node_provider_update_profile(
-    node_provider_unique_id: Vec<u8>,
+    np_uid_bytes: Vec<u8>,
     update_profile_payload: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
@@ -161,27 +161,39 @@ pub(crate) fn _node_provider_update_profile(
         dcc_common::do_node_provider_update_profile(
             &mut ledger.borrow_mut(),
             ic_cdk::api::caller(),
-            node_provider_unique_id,
+            np_uid_bytes,
             update_profile_payload,
         )
     })
 }
 
-pub(crate) fn _node_provider_get_profile_by_unique_id(
-    node_provider_unique_id: Vec<u8>,
-) -> Option<String> {
+pub(crate) fn _node_provider_update_offering(
+    np_uid_bytes: Vec<u8>,
+    update_offering_payload: Vec<u8>,
+) -> Result<String, String> {
+    // To prevent DOS attacks, a fee is charged for executing this operation
     LEDGER_MAP.with(|ledger| {
-        dcc_common::do_node_provider_get_profile(&ledger.borrow(), node_provider_unique_id)
+        dcc_common::do_node_provider_update_offering(
+            &mut ledger.borrow_mut(),
+            ic_cdk::api::caller(),
+            np_uid_bytes,
+            update_offering_payload,
+        )
     })
 }
 
+pub(crate) fn _node_provider_get_profile_by_uid_bytes(np_uid_bytes: Vec<u8>) -> Option<String> {
+    LEDGER_MAP
+        .with(|ledger| dcc_common::do_node_provider_get_profile(&ledger.borrow(), np_uid_bytes))
+}
+
 pub(crate) fn _node_provider_get_profile_by_principal(principal: Principal) -> Option<String> {
-    let node_provider_unique_id = get_unique_id_from_principal(principal);
-    _node_provider_get_profile_by_unique_id(node_provider_unique_id)
+    let np_uid_bytes = get_uid_from_principal(principal);
+    _node_provider_get_profile_by_uid_bytes(np_uid_bytes)
 }
 
 pub(crate) fn _node_provider_check_in(
-    node_provider_unique_id: Vec<u8>,
+    np_uid_bytes: Vec<u8>,
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
@@ -189,7 +201,7 @@ pub(crate) fn _node_provider_check_in(
         dcc_common::do_node_provider_check_in(
             &mut ledger.borrow_mut(),
             ic_cdk::api::caller(),
-            node_provider_unique_id,
+            np_uid_bytes,
             nonce_signature,
         )
     })
@@ -200,7 +212,7 @@ pub(crate) fn _get_np_check_in_nonce() -> Vec<u8> {
 }
 
 pub(crate) fn _user_register(
-    user_unique_id: Vec<u8>,
+    user_uid_bytes: Vec<u8>,
     user_pubkey_bytes: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
@@ -208,13 +220,13 @@ pub(crate) fn _user_register(
         dcc_common::do_user_register(
             &mut ledger.borrow_mut(),
             ic_cdk::api::caller(),
-            user_unique_id,
+            user_uid_bytes,
             user_pubkey_bytes,
         )
     })
 }
 
-pub(crate) fn _get_identity_reputation(identity: String) -> u64 {
+pub(crate) fn _get_identity_reputation(identity: Vec<u8>) -> u64 {
     reputation_get(&identity)
 }
 
