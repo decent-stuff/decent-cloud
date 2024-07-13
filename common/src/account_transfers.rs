@@ -86,7 +86,6 @@ pub fn charge_fees_to_account_and_bump_reputation(
             Some(get_timestamp_ns()),
             vec![],
             0u64.into(),
-            vec![],
         ),
     ) {
         Ok(_) => Ok(ledger_add_reputation_change(
@@ -120,7 +119,6 @@ pub fn charge_fees_to_account_no_bump_reputation(
             Some(get_timestamp_ns()),
             vec![],
             0u64.into(),
-            vec![],
         ),
     ) {
         Ok(_) => Ok(()),
@@ -379,7 +377,6 @@ pub struct FundsTransferV1 {
     pub created_at_time: Option<u64>,
     pub memo: Vec<u8>,
     pub amount: NumTokens,
-    pub signature: Vec<u8>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
@@ -397,7 +394,6 @@ impl FundsTransfer {
         created_at_time: Option<u64>,
         memo: Vec<u8>,
         amount: NumTokens,
-        signature: Vec<u8>,
     ) -> Self {
         FundsTransfer::V1(FundsTransferV1 {
             from,
@@ -407,7 +403,6 @@ impl FundsTransfer {
             created_at_time,
             memo,
             amount,
-            signature,
         })
     }
 

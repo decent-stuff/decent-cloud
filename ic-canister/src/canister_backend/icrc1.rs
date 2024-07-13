@@ -126,7 +126,6 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
                 Some(arg.created_at_time.unwrap_or(get_timestamp_ns())),
                 arg.memo.unwrap_or_default().0.into_vec(),
                 arg.amount,
-                vec![],
             ),
         )
         .unwrap_or_else(|err| ic_cdk::trap(&err.to_string()));
@@ -157,7 +156,6 @@ pub fn _mint_tokens_for_test(account: Icrc1Account, amount: Nat, memo: Option<Ic
                 Some(get_timestamp_ns()),
                 memo.unwrap_or_default().0.into_vec(),
                 dcc_common::NumTokens(amount),
-                vec![],
             ),
         )
         .unwrap_or_else(|err| ic_cdk::trap(&err.to_string()));

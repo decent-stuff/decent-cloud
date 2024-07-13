@@ -160,7 +160,6 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
                 Some(get_timestamp_ns()),
                 vec![],
                 token_rewards_per_np.into(),
-                vec![],
             ),
         )?;
     }

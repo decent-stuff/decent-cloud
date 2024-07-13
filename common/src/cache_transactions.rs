@@ -212,7 +212,6 @@ mod tests {
                 Some(get_timestamp_ns()),
                 vec![],
                 amount.into(),
-                vec![],
             )
         }
 
