@@ -4,11 +4,11 @@ pub mod cache_balances;
 pub mod cache_transactions;
 pub mod compression;
 pub mod dcc_identity;
-pub mod identity_reputation;
 pub mod ledger_cursor;
 pub mod ledger_refresh;
 pub mod profiles;
 pub mod registration;
+pub mod reputation;
 pub mod rewards;
 
 pub use account_transfers::*;
@@ -19,11 +19,11 @@ use candid::Principal;
 pub use compression::*;
 pub use dcc_identity::{slice_to_32_bytes_array, slice_to_64_bytes_array};
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
-pub use identity_reputation::*;
 pub use ledger_cursor::*;
 pub use ledger_refresh::*;
 pub use profiles::*;
 pub use registration::*;
+pub use reputation::*;
 pub use rewards::*;
 
 #[cfg(not(target_arch = "wasm32"))]

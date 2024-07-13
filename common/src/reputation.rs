@@ -8,13 +8,13 @@ use sha2::{Digest, Sha256};
 use std::{cell::RefCell, collections::HashMap};
 
 thread_local! {
-    static REPUTATIONS: RefCell<AHashMap<String, u64>> = RefCell::new(HashMap::default());
+    static REPUTATIONS: RefCell<AHashMap<Vec<u8>, u64>> = RefCell::new(HashMap::default());
 }
 
-pub fn reputation_get(identity_unique_id: &String) -> u64 {
+pub fn reputation_get<S: AsRef<[u8]>>(identity_uid: S) -> u64 {
     REPUTATIONS.with(|reputations| {
         let reputations = reputations.borrow();
-        match reputations.get(identity_unique_id) {
+        match reputations.get(identity_uid.as_ref()) {
             Some(rep) => *rep,
             None => 0,
         }
@@ -24,8 +24,8 @@ pub fn reputation_get(identity_unique_id: &String) -> u64 {
 pub fn reputations_apply_changes(changes: &ReputationChange) {
     REPUTATIONS.with(|reputations| {
         let mut reputations = reputations.borrow_mut();
-        for (identity_unique_id, delta) in changes.changes() {
-            let reputation = reputations.entry(identity_unique_id.clone()).or_default();
+        for (identity_uid, delta) in changes.changes() {
+            let reputation = reputations.entry(identity_uid.clone()).or_default();
             *reputation = (*reputation as i64 + delta).max(0) as u64;
         }
     });
@@ -50,8 +50,8 @@ pub fn ledger_add_reputation_change(
     if dcc_identity.is_minting_account() {
         warn!("Attempted to add reputation change to minting account");
     } else {
-        let identity_unique_id = dcc_identity.as_unique_id();
-        let entry = ReputationChange::new_single(identity_unique_id, delta);
+        let identity_uid = dcc_identity.as_uid_bytes();
+        let entry = ReputationChange::new_single(identity_uid, delta);
         let entry_bytes = borsh::to_vec(&entry)?;
 
         let entry_id: [u8; 32] = Sha256::digest(&entry_bytes).into();
@@ -68,9 +68,11 @@ pub fn reputations_clear() {
     REPUTATIONS.with(|reputations| reputations.borrow_mut().clear());
 }
 
+type Identifier = Vec<u8>;
+
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ReputationChangeV1 {
-    changes: Vec<(String, i64)>,
+    changes: Vec<(Identifier, i64)>,
 }
 
 /// Represents a list of reputation changes on specific principals
@@ -81,20 +83,20 @@ pub enum ReputationChange {
 
 impl ReputationChange {
     /// Create a new list of reputation changes, for appending to the ledger
-    /// identity_unique_id: The identity to change
+    /// identity_uid: The identity to change
     /// delta: The absolute change (positive or negative) to the identity's reputation
-    pub fn new_single(identity_unique_id: String, delta: i64) -> Self {
+    pub fn new_single(identity_uid: Identifier, delta: i64) -> Self {
         Self::V1(ReputationChangeV1 {
-            changes: vec![(identity_unique_id, delta)],
+            changes: vec![(identity_uid, delta)],
         })
     }
 
     /// Create a new list of reputation changes, for appending to the ledger
-    pub fn new_many(changes: Vec<(String, i64)>) -> Self {
+    pub fn new_many(changes: Vec<(Identifier, i64)>) -> Self {
         Self::V1(ReputationChangeV1 { changes })
     }
 
-    pub fn changes(&self) -> &[(String, i64)] {
+    pub fn changes(&self) -> &[(Identifier, i64)] {
         match self {
             ReputationChange::V1(r) => &r.changes,
         }
@@ -168,22 +170,22 @@ mod tests {
     #[test]
     fn test_reputation_get_existing() {
         reputations_clear();
-        let identity = "user1".to_string();
+        let identity = b"user1".to_vec();
         reputations_apply_changes(&ReputationChange::new_single(identity.clone(), 10));
-        assert_eq!(reputation_get(&identity), 10);
+        assert_eq!(reputation_get(identity), 10);
     }
 
     #[test]
     fn test_reputation_get_non_existing() {
         reputations_clear();
-        let identity = "non_existent_user".to_string();
+        let identity = b"non_existent_user".to_vec();
         assert_eq!(reputation_get(&identity), 0);
     }
 
     #[test]
     fn test_reputations_apply_changes_single_positive() {
         reputations_clear();
-        let identity = "user1".to_string();
+        let identity = b"user1".to_vec();
         reputations_apply_changes(&ReputationChange::new_single(identity.clone(), 10));
         assert_eq!(reputation_get(&identity), 10);
     }
@@ -191,7 +193,7 @@ mod tests {
     #[test]
     fn test_reputations_apply_changes_single_negative() {
         reputations_clear();
-        let identity = "user1".to_string();
+        let identity = b"user1".to_vec();
         reputations_apply_changes(&ReputationChange::new_single(identity.clone(), -5));
         assert_eq!(reputation_get(&identity), 0);
     }
@@ -200,9 +202,9 @@ mod tests {
     fn test_reputations_apply_changes_many() {
         reputations_clear();
         let changes = vec![
-            ("user1".to_string(), 10),
-            ("user2".to_string(), -5),
-            ("user3".to_string(), 15),
+            (b"user1".to_vec(), 10),
+            (b"user2".to_vec(), -5),
+            (b"user3".to_vec(), 15),
         ];
         reputations_apply_changes(&ReputationChange::new_many(changes.clone()));
         for (identity, delta) in changes {
@@ -213,7 +215,7 @@ mod tests {
     #[test]
     fn test_reputations_apply_aging() {
         reputations_clear();
-        let identity = "user1".to_string();
+        let identity = b"user1".to_vec();
         reputations_apply_changes(&ReputationChange::new_single(identity.clone(), 100));
         let reputation_age = ReputationAge::new(10_000); // 1% reduction
         reputations_apply_aging(&reputation_age);
@@ -224,7 +226,7 @@ mod tests {
     #[test]
     fn test_reputations_apply_aging_edge_case() {
         reputations_clear();
-        let identity = "user1".to_string();
+        let identity = b"user1".to_vec();
         reputations_apply_changes(&ReputationChange::new_single(identity.clone(), 1));
         let reputation_age = ReputationAge::new(1_000_000); // 100% reduction
         reputations_apply_aging(&reputation_age);
@@ -235,7 +237,7 @@ mod tests {
     #[test]
     fn test_reputations_clear() {
         reputations_clear();
-        let identity = "user1".to_string();
+        let identity = b"user1".to_vec();
         reputations_apply_changes(&ReputationChange::new_single(identity.clone(), 10));
         reputations_clear();
         assert_eq!(reputation_get(&identity), 0);
@@ -243,7 +245,7 @@ mod tests {
 
     #[test]
     fn test_reputation_change_new_single() {
-        let identity = "user1".to_string();
+        let identity = b"user1".to_vec();
         let delta = 5;
         let change = ReputationChange::new_single(identity.clone(), delta);
         assert_eq!(change.changes(), &[(identity, delta)]);
@@ -251,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_reputation_change_new_many() {
-        let changes = vec![("user1".to_string(), 5), ("user2".to_string(), -3)];
+        let changes = vec![(b"user1".to_vec(), 5), (b"user2".to_vec(), -3)];
         let change = ReputationChange::new_many(changes.clone());
         assert_eq!(change.changes(), &changes[..]);
     }

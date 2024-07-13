@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 use crate::{
-    charge_fees_to_account_no_bump_reputation, reward_e9s_per_block, slice_to_32_bytes_array,
-    zlib_decompress, DccIdentity, LABEL_NP_PROFILE, LABEL_NP_REGISTER,
+    charge_fees_to_account_no_bump_reputation, reputation_get, reward_e9s_per_block,
+    zlib_decompress, DccIdentity, LABEL_NP_PROFILE,
 };
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
@@ -10,8 +8,9 @@ use candid::Principal;
 use ic_cdk::println;
 use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
-pub fn operation_fee_e9s() -> u64 {
+pub fn np_profile_update_fee_e9s() -> u64 {
     reward_e9s_per_block() / 10000
 }
 
