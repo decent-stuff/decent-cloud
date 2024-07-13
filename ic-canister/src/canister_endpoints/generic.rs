@@ -39,6 +39,13 @@ fn node_provider_update_profile(
 ) -> Result<String, String> {
     _node_provider_update_profile(np_uid_bytes, update_profile_payload)
 }
+
+#[ic_cdk::update]
+fn node_provider_update_offering(
+    np_uid_bytes: Vec<u8>,
+    update_offering_payload: Vec<u8>,
+) -> Result<String, String> {
+    _node_provider_update_offering(np_uid_bytes, update_offering_payload)
 }
 
 #[ic_cdk::query]

@@ -652,6 +652,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
+ "strsim",
  "strum",
  "strum_macros",
  "tempfile",

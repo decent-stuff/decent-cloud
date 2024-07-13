@@ -10,7 +10,7 @@ use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
     zlib_compress, Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor,
-    NodeProviderProfile, UpdateProfilePayload, LABEL_DC_TOKEN_TRANSFER,
+    NodeProviderProfile, UpdateOfferingPayload, UpdateProfilePayload, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
