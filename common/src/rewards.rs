@@ -177,7 +177,8 @@ pub fn do_node_provider_check_in(
     np_uid_bytes: Vec<u8>,
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
-    println!("[do_node_provider_check_in]: caller: {}", caller);
+    info!("[do_node_provider_check_in]: caller: {}", caller);
+
     if np_uid_bytes.len() > 64 {
         return Err("Node provider unique id too long".to_string());
     }

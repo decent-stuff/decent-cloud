@@ -1,6 +1,7 @@
 use crate::{
-    charge_fees_to_account_no_bump_reputation, reputation_get, reward_e9s_per_block,
-    zlib_decompress, DccIdentity, LABEL_NP_PROFILE,
+    charge_fees_to_account_no_bump_reputation, info, reputation_get, reward_e9s_per_block,
+    zlib_decompress, DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE,
+    MAX_JSON_ZLIB_PAYLOAD_LENGTH, MAX_UID_LENGTH,
 };
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
@@ -43,7 +44,7 @@ pub fn do_node_provider_update_profile(
     np_uid_bytes: Vec<u8>,
     update_profile_payload: Vec<u8>,
 ) -> Result<String, String> {
-    if np_uid_bytes.len() > 64 {
+    if np_uid_bytes.len() > MAX_UID_LENGTH {
         return Err("Node provider unique id too long".to_string());
     }
 
@@ -52,15 +53,15 @@ pub fn do_node_provider_update_profile(
     if caller != dcc_identity.to_ic_principal() {
         return Err("Invalid caller".to_string());
     }
-    println!("[do_node_provider_update_profile]: {}", dcc_identity);
+    info!("[do_node_provider_update_profile]: {}", dcc_identity);
 
     let payload: UpdateProfilePayload =
         serde_json::from_slice(&update_profile_payload).map_err(|e| e.to_string())?;
 
-    if payload.signature.len() != 64 {
+    if payload.signature.len() != ED25519_SIGNATURE_LENGTH {
         return Err("Invalid signature".to_string());
     }
-    if payload.profile_payload.len() > 1024 {
+    if payload.profile_payload.len() > MAX_JSON_ZLIB_PAYLOAD_LENGTH {
         return Err("Profile payload too long".to_string());
     }
 

@@ -60,6 +60,7 @@ pub const DC_TOKEN_NAME: &str = "Decent Cloud";
 pub const DC_TOKEN_SYMBOL: &str = "DC";
 pub const DC_TOKEN_TOTAL_SUPPLY: u64 = 21_000_000 * DC_TOKEN_DECIMALS_DIV;
 pub const DC_TOKEN_TRANSFER_FEE_E9S: u64 = 1_000_000;
+pub const ED25519_SIGNATURE_LENGTH: usize = 64;
 pub const ED25519_SIGN_CONTEXT: &[u8] = b"decent-cloud";
 pub const FETCH_SIZE_BYTES_DEFAULT: u64 = 1024 * 1024;
 pub const KEY_LAST_REWARD_DISTRIBUTION_TS: &[u8] = b"LastRewardNs";
@@ -72,6 +73,8 @@ pub const LABEL_REPUTATION_AGE: &str = "RepAge";
 pub const LABEL_REPUTATION_CHANGE: &str = "RepChange";
 pub const LABEL_REWARD_DISTRIBUTION: &str = "RewardDistr";
 pub const LABEL_USER_REGISTER: &str = "UserRegister";
+pub const MAX_JSON_ZLIB_PAYLOAD_LENGTH: usize = 1024;
+pub const MAX_UID_LENGTH: usize = 64;
 pub const MEMO_BYTES_MAX: usize = 32;
 /// Reduction of reputations for all accounts, based on time (per block), in parts per million
 pub const REPUTATION_AGING_PPM: u64 = 1_000;

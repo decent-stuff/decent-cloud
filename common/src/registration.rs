@@ -1,6 +1,7 @@
 use crate::{
     amount_as_string_u64, charge_fees_to_account_and_bump_reputation, info, reward_e9s_per_block,
     slice_to_32_bytes_array, AHashMap, DccIdentity, LABEL_NP_REGISTER, LABEL_USER_REGISTER,
+    MAX_UID_LENGTH,
 };
 use candid::Principal;
 use ed25519_dalek::VerifyingKey;
@@ -36,17 +37,17 @@ pub fn do_node_provider_register(
     np_uid_bytes: Vec<u8>, // both are the same
     np_pubkey_bytes: Vec<u8>,
 ) -> Result<String, String> {
-    if np_uid_bytes.len() > 64 {
+    if np_uid_bytes.len() > MAX_UID_LENGTH {
         return Err("Node provider uid too long".to_string());
     }
-    if np_pubkey_bytes.len() > 64 {
+    if np_pubkey_bytes.len() > MAX_UID_LENGTH {
         return Err("Node provider public key too long".to_string());
     }
     let dcc_identity = DccIdentity::new_verifying_from_bytes(&np_pubkey_bytes).unwrap();
     if dcc_identity.to_ic_principal() != caller {
         return Err("Invalid caller".to_string());
     }
-    println!("[do_node_provider_register]: {}", dcc_identity);
+    info!("[do_node_provider_register]: {}", dcc_identity);
 
     match ledger.get(LABEL_NP_REGISTER, &np_uid_bytes) {
         Ok(_) => {
@@ -66,7 +67,8 @@ pub fn do_user_register(
     user_uid: Vec<u8>,
     user_pubkey_bytes: Vec<u8>,
 ) -> Result<String, String> {
-    println!("[do_user_register]: caller: {}", caller);
+    info!("[do_user_register]: caller: {}", caller);
+
     match ledger.get(LABEL_USER_REGISTER, &user_uid) {
         Ok(_) => {
             info!("User already registered");
