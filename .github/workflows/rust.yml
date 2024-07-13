@@ -35,4 +35,8 @@ jobs:
             cd -
           )
       - name: Build and test
-        run: cargo make
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          source "$HOME/.local/share/dfx/env"
+          cargo make
