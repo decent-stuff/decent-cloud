@@ -345,10 +345,9 @@ mod tests {
             .unwrap()
             .into_path()
             .join("test_ledger_store.bin");
-        ledger_map::platform_specific::override_backing_file(Some(file_path));
-        ledger_map::partition_table::persist();
 
-        LedgerMap::new(labels_to_index).expect("Failed to create a test temp ledger")
+        LedgerMap::new_with_path(labels_to_index, Some(file_path))
+            .expect("Failed to create a test temp ledger")
     }
 
     fn create_offering(

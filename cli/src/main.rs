@@ -10,7 +10,7 @@ use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
     zlib_compress, Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor,
-    NodeProviderProfile, UpdateOfferingPayload, UpdateProfilePayload, LABEL_DC_TOKEN_TRANSFER,
+    NodeProviderProfile, UpdateProfilePayload, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -20,10 +20,7 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue, icrc1::transfer::TransferArg,
     icrc1::transfer::TransferError as Icrc1TransferError,
 };
-use ledger_map::{
-    platform_specific::{self, persistent_storage_read},
-    LedgerMap,
-};
+use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
 use log::{info, Level, LevelFilter, Metadata, Record};
 use std::{
     collections::HashMap,
@@ -46,8 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Could not get home directory")
             .join(".dcc/ledger/main.bin"),
     };
-    platform_specific::override_backing_file(Some(ledger_path.clone()));
-    let ledger_local = LedgerMap::new(None).expect("Failed to load the local ledger");
+    let ledger_local =
+        LedgerMap::new_with_path(None, Some(ledger_path)).expect("Failed to load the local ledger");
     refresh_caches_from_ledger(&ledger_local).expect("Failed to get balances");
 
     let network = args
@@ -495,7 +492,6 @@ async fn fetch_ledger_data(
     ledger_canister: &LedgerCanister,
     local_ledger_path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    ledger_map::override_backing_file(Some(local_ledger_path.clone()));
     let mut ledger_file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -504,7 +500,8 @@ async fn fetch_ledger_data(
         .expect("failed to open the local ledger path");
 
     let cursor_local = {
-        let ledger = LedgerMap::new(None).expect("Failed to create LedgerMap");
+        let ledger = LedgerMap::new_with_path(None, Some(local_ledger_path.clone()))
+            .expect("Failed to create LedgerMap");
         cursor_from_data(
             ledger_map::partition_table::get_data_partition().start_lba,
             ledger_map::platform_specific::persistent_storage_size_bytes(),
@@ -578,8 +575,8 @@ pub async fn push_ledger_data(
     ledger_canister: &LedgerCanister,
     local_ledger_path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    ledger_map::override_backing_file(Some(local_ledger_path));
-    let ledger_local = LedgerMap::new(Some(vec![])).expect("Failed to create LedgerMap");
+    let ledger_local = LedgerMap::new_with_path(Some(vec![]), Some(local_ledger_path))
+        .expect("Failed to create LedgerMap");
     let cursor_local = cursor_from_data(
         ledger_map::partition_table::get_data_partition().start_lba,
         ledger_map::platform_specific::persistent_storage_size_bytes(),
