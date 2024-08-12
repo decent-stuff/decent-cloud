@@ -30,7 +30,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: .github/container
           push: true
           tags: ghcr.io/${{ github.repository }}/ci-image:latest
 
