@@ -3,7 +3,10 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main # or specify any other branch you want to trigger the build
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch: # allows for manual triggering of the workflow
 
 jobs:
