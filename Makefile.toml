@@ -12,7 +12,7 @@ script = '''
 set -eEuo pipefail
 
 cd ic-canister
-dfx stop || true
+for i in {1..10}; do dfx stop && break || sleep 1; done;
 dfx start --background
 while true; do
     dfx ping local && break;
@@ -58,7 +58,7 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-(cd ic-canister && dfx stop)
+( cd ic-canister && for i in {1..10}; do dfx stop && break || sleep 1; done; )
 '''
 
 [tasks.all]
