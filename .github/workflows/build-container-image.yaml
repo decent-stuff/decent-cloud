@@ -32,13 +32,13 @@ jobs:
         with:
           context: .github/container
           push: true
-          tags: ci-cargo:latest
+          tags: ghcr.io/${{ github.repository }}/ci-image:latest
 
       - name: Verify Docker image
         shell: bash
         run: |
           set -eExuo pipefail
-          IMAGE=ghcr.io/${{ github.repository }}/ci-cargo:latest
+          IMAGE=ghcr.io/${{ github.repository }}/ci-image:latest
           docker pull $IMAGE
-          docker run --rm $IMAGE --version
-          docker run --rm $IMAGE make --version
+          docker run --rm $IMAGE cargo --version
+          docker run --rm $IMAGE cargo make --version

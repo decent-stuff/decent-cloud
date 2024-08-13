@@ -15,6 +15,3 @@ RUN cargo install cargo-make
 
 # Display the version of cargo and cargo make
 RUN cargo --version && cargo make --version
-
-# Set the entrypoint to cargo-make by default
-ENTRYPOINT ["cargo"]
