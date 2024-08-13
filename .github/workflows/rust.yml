@@ -20,8 +20,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check dfx
         env:
+          # dfx requires XDG_DATA_HOME to be set
           XDG_DATA_HOME: /usr/local
-        run: dfx --version
+        run: |
+          dfxvm default 0.22.0
+          dfx --version
       - name: Clone Ledger Map
         shell: bash
         run: |
@@ -32,4 +35,7 @@ jobs:
             cd -
           )
       - name: Build and test
+        env:
+          # dfx requires XDG_DATA_HOME to be set
+          XDG_DATA_HOME: /usr/local
         run: cargo make
