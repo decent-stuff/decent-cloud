@@ -1,5 +1,9 @@
 name: Build and Push Docker Image
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.push.branch }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
