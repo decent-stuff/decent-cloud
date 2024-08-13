@@ -11,6 +11,9 @@ RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install
 
 ENV PATH=/usr/local/dfx/bin:$PATH
 
+# Install deps
+RUN apt update && apt install -y libunwind-dev
+
 # Install cargo-make
 RUN cargo install cargo-make
 

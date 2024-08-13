@@ -14,15 +14,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ci-image@sha256:6b789968bd7db8591b8f2847f81bc89c4a8a68b3772569e16eb7ba253f8b8a9d
+      image: ghcr.io/${{ github.repository }}/ci-image@sha256:06330a54472a2d7dcb8d2fc4112743fa4c08483993ce447bed40e131c389373a
 
     steps:
       - uses: actions/checkout@v4
-      - name: Check dfx
-        env:
-          # dfx requires XDG_DATA_HOME to be set
-          XDG_DATA_HOME: /usr/local
+      - name: dfxvm init
         run: |
+          echo "dfxvm requires the default version to be set once after starting the container (bug!)"
           dfxvm default 0.22.0
           dfx --version
       - name: Clone Ledger Map
