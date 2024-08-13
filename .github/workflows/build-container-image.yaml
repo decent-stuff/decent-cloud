@@ -28,17 +28,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .github/container
           push: true
-          tags: ghcr.io/${{ github.repository }}/ci-image:latest
+          tags: ci-cargo:latest
 
       - name: Verify Docker image
         shell: bash
         run: |
           set -eExuo pipefail
-          IMAGE=ghcr.io/${{ github.repository }}/ci-image:latest
+          IMAGE=ghcr.io/${{ github.repository }}/ci-cargo:latest
           docker pull $IMAGE
-          docker run --rm $IMAGE cargo --version
-          docker run --rm $IMAGE cargo-make --version
+          docker run --rm $IMAGE --version
+          docker run --rm $IMAGE make --version
