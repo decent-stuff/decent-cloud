@@ -1,0 +1,64 @@
+[project]
+name = "decent-cloud"
+version = "0.1.0"
+description = ""
+authors = [{ name = "Yan Liu", email = "yanliu8@proton.me" }]
+license = "APACHE"
+readme = "README.md"
+requires-python = ">=3.10"
+# packages = [{ include = "decent_cloud" }]
+
+[tool.poetry]
+name = "decent-cloud"
+version = "0.1.0"
+description = ""
+authors = ["Yan Liu <yanliu8@proton.me>"]
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.tasks]
+build = "cargo build --release"
+install-pre-commit = "pixi global install pre-commit"
+install-poetry = "pixi global install poetry"
+install-gh = "pixi global install gh"
+install-micromamba = "pixi global install micromamba"
+install-starship = "pixi global install starship"
+install-ruff = "pixi global install ruff"
+install-tbump = "pixi global install tbump"
+install-pocket-ic-server = "curl -L -o - https://github.com/dfinity/pocketic/releases/download/5.0.0/pocket-ic-x86_64-linux.gz | gunzip | install /dev/stdin -m 755 $HOME/bin/pocket-ic"
+install = { depends_on = [
+    "install-pre-commit",
+    "install-gh",
+    "install-poetry",
+    "install-micromamba",
+    "install-starship",
+    "install-ruff",
+    "install-tbump",
+    "install-pocket-ic-server",
+] }
+pytest = { cmd = "pytest", env = { "POCKET_IC_BIN" = "$HOME/bin/pocket-ic" } }
+test-all = "cargo test --all-features"
+lint = "pre-commit run --all"
+bump = "tbump --only-patch"
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+pythonpath = [".", "simulator"]
+addopts = ["--import-mode=importlib"]
+
+[tool.ruff]
+line-length = 130
+
+[tool.pixi.dependencies]
+pytest = ">=8.1.1,<8.2"
+poetry = ">=1.8.2,<1.9"
+mock = ">=5.1.0,<5.2"
+black = ">=24.4.0,<24.5"
+
+[tool.pixi.pypi-dependencies]
+pocket-ic = "*" # Any version (the wildcard `*` is a pixi addition)
