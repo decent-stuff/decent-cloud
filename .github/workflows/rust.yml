@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check dfx
+        shell: bash
         run: |
           set -eExuo pipefail
           # source "$HOME/.local/share/dfx/env"
