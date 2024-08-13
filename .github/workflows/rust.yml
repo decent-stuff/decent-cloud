@@ -9,7 +9,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  XDG_DATA_HOME: /usr/local
 
 jobs:
   build:
@@ -20,7 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check dfx
-        shell: bash
+        env:
+          XDG_DATA_HOME: /usr/local
         run: dfx --version
       - name: Clone Ledger Map
         shell: bash
@@ -32,5 +32,4 @@ jobs:
             cd -
           )
       - name: Build and test
-        shell: bash
         run: cargo make
