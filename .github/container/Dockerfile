@@ -15,9 +15,8 @@ ENV PATH=/usr/local/dfx/bin:$PATH
 RUN apt update && apt install -y libunwind-dev
 
 # Install Rust
-RUN rustup toolchain install nightly \
-    && rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
-    && rustup component add rustfmt
+RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
+    && rustup toolchain install nightly
 
 # Install cargo-make
 RUN cargo install cargo-make
