@@ -9,6 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  XDG_DATA_HOME: /usr/local
 
 jobs:
   build:
