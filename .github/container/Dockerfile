@@ -26,3 +26,8 @@ RUN cargo install cargo-make
 RUN curl -L https://github.com/dfinity/pocketic/releases/download/5.0.0/pocket-ic-x86_64-linux.gz -o - | gzip -d - > /usr/local/bin/pocket-ic && chmod +x /usr/local/bin/pocket-ic
 
 ENV POCKET_IC_BIN=/usr/local/bin/pocket-ic
+
+ENV TINI_VERSION v0.19.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+RUN chmod +x /tini
+ENTRYPOINT ["/tini", "--"]
