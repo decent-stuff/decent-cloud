@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
-          # source "$HOME/.local/share/dfx/env"
+          source "$HOME/.local/share/dfx/env"
           dfx --version
       - name: Clone Ledger Map
         shell: bash
