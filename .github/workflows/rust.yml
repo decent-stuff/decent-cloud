@@ -36,4 +36,4 @@ jobs:
         env:
           # dfx requires XDG_DATA_HOME to be set
           XDG_DATA_HOME: /usr/local
-        run: /tini -- cargo make
+        run: /tini -s -- cargo make
