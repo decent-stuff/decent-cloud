@@ -16,7 +16,7 @@ RUN apt update && apt install -y libunwind-dev
 
 # Install Rust
 RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
-    && rustup toolchain install nightly
+    && rustup toolchain install nightly --profile complete
 
 # Install cargo-make
 RUN cargo install cargo-make
