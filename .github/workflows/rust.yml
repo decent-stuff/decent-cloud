@@ -14,16 +14,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ci-image@sha256:e58e9f1d205535b2ae12e493d1e0bc5fec14c392709759f61d98c819882d0854
+      image: ghcr.io/${{ github.repository }}/ci-image@sha256:afc4437e594a9c314e834d1037640ff9e41ad69b233f87f69dd2e695ce666a1e
 
     steps:
       - uses: actions/checkout@v4
       - name: Check dfx
         shell: bash
-        run: |
-          set -eExuo pipefail
-          source "/root/.local/share/dfx/env"
-          dfx --version
+        run: dfx --version
       - name: Clone Ledger Map
         shell: bash
         run: |
@@ -35,7 +32,4 @@ jobs:
           )
       - name: Build and test
         shell: bash
-        run: |
-          set -eExuo pipefail
-          source "/root/.local/share/dfx/env"
-          cargo make
+        run: cargo make
