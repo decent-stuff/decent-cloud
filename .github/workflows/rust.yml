@@ -14,7 +14,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ci-image@sha256:b8f3e9f04920bb0a1db513133fb48fffe97e46eb7b4d273e2374029174fec0c3
+      image: ghcr.io/${{ github.repository }}/ci-image@sha256:9da24ac0528e3a96707ec4973bf441a08fb3fa6a1f018437394f5dee91cf02e4
 
     steps:
       - uses: actions/checkout@v4
