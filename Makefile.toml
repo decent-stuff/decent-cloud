@@ -12,8 +12,8 @@ script = '''
 set -eEuo pipefail
 
 cd ic-canister
-dfx stop || true
-dfx start --background
+for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done;
+dfx start --background --clean
 while true; do
     dfx ping local && break;
     sleep 1;
@@ -58,7 +58,7 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-(cd ic-canister && dfx stop)
+( cd ic-canister && for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done; )
 '''
 
 [tasks.all]
