@@ -9,6 +9,7 @@
 *.toc
 *.fdb_latexmk
 __pycache__/
+build/
 target/
 .DS_Store
 .vscode/settings.json

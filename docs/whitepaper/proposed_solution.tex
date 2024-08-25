@@ -1,40 +1,89 @@
 \section{Proposed Solution}
 \label{sec:proposed_solution}
 
-Our objective is to address the limitations associated with the current centralized cloud computing model by transitioning certain aspects of it to a decentralized model. In this model, independent entities, known as node providers, can host and execute arbitrary workloads on their servers, similar to the execution of Web3 smart contracts.
+To address the limitations of the current centralized cloud computing model, we propose a novel decentralized cloud platform that combines the best aspects of traditional cloud services with the advantages of decentralized systems. Our solution is designed to tackle each of the key issues identified in the problem statement while introducing innovative features that enhance flexibility, security, and efficiency.
 
-However, unlike Web3, where potential malicious behavior is countered by replicating the same workload across multiple nodes and running consensus on the execution outcome, our model takes a different approach. While replication and consensus are effective, they come with a high cost in terms of data transfer and time, especially when the nodes are geographically distributed.
+\subsection{Core Components of the Solution}
 
-\subsection{Leveraging Reputation}
+\subsubsection{Decentralized Infrastructure}
+Our platform leverages a network of independent node providers, each capable of hosting and executing arbitrary workloads. This approach:
+\begin{itemize}
+    \item Mitigates vendor lock-in by offering a diverse ecosystem of providers
+    \item Enhances resilience by distributing resources across nodes of different providers
+    \item Improves resource utilization by tapping into underused computational capacity
+\end{itemize}
 
-Traditional cloud computing operates without major problems, and instances of malicious behavior among cloud providers are rare. This is because cloud providers have made significant investments to start operating and have their reputation at stake if they offer subpar service.
+\subsubsection{Reputation-Based Trust System}
+\label{subsec:reputation_system}
+Unlike typical Web3 solutions that rely on consensus mechanisms, our platform implements a robust reputation system:
+\begin{itemize}
+    \item Node providers and developers build and maintain long-term reputations
+    \item Users can select providers based on their track record of reliability and performance
+    \item The system incentivizes honest behavior and high-quality service
+\end{itemize}
 
-Our solution is to implement a robust method for tracking the reputation of all participants, making it highly undesirable for a participant to risk losing their hard-earned reputation. This approach nearly eliminates the risk of malicious behavior. A node provider might accept or reject running a workload based on the developer reputation, and vice versa.
+This approach addresses the trust and security concerns associated with decentralized systems while maintaining the performance advantages of traditional cloud services.
 
-\subsection{Decentralized Matching Engine for Efficient Resource Allocation}
+\subsubsection{Efficient Resource Allocation}
+Our platform can be used to ensure optimal resource allocation. For instance:
+\begin{itemize}
+    \item Task requirements can be matched with available node resources in real-time
+    \item Dynamic load balancing optimizes resource utilization across the network
+    \item Pricing is transparent and competitive, driven by market demand
+\end{itemize}
 
-To ensure efficient resource allocation and task scheduling, the platform will use a modern matching engine and, if needed, machine learning algorithms. Resource matching will among other things consider factors such as the task requirements, the resources of each node, the network conditions, and the reputation of the nodes.
-This approach allows for dynamic load balancing among node providers based on demand. Moreover, by implementing robust security measures and a reputation system, the system will be secure and trustworthy.
+This approach allows users to tackle the cost inefficiencies and opaque pricing models of traditional centralized providers.
 
-\subsection{Affordable nodes. Security included.}
+\subsubsection{Enhanced Security and Privacy}
 
-The demand for nodes from developers is easily met by supply provided by node providers. Our decentralized cloud platform is designed to operate independently of blockchain performance constraints. The matching engine that runs as a smart contract only stands on the control path of node usage -- finding and contracting a suitable node, thereby ensuring that the performance of the platform is not limited by the blockchain's capabilities.
-
-All developers will need nodes, and node providers have more than enough nodes to handle the demand. Our matching engine is only used for signing the contract, which means that blockchain performance does not limit the performance of the decentralized cloud platform.
+The system supports sensitive data processing and storage using Confidential Computing VMs, and also facilitates the rental of GPU nodes for Machine Learning (ML) and Artificial Intelligence (AI) training and inference applications at reasonable market prices, catering to different developer preferences. Some developers may opt for the lowest cost GPUs irrespective of node provider reputation and confidentiality guarantees, while others may prefer high-end GPUs with higher node provider reputation. This flexibility accommodates all developer categories, a feature unique to this platform.
 
 For some use cases, such as storing and rotating tokens, certificates, and other secrets, developers will need nodes with additional security. For these use cases, platform will support Confidential Containers\cite{brasser2022trusted}.
 
-\subsection{Wide Range of Applications}
+To address data privacy and security concerns, our platform offers:
+\begin{itemize}
+    \item Support for Confidential Computing VMs, enabling secure processing of sensitive data
+    \item End-to-end encryption for data in transit and at rest
+    \item Granular control over data location and processing parameters
+\end{itemize}
 
-The platform will support a wide range of applications, from scientific computing and machine learning to web hosting and data storage. By providing a decentralized alternative to traditional cloud providers, the platform will promote competition in the cloud computing market and drive down prices.
+\subsection{Addressing Specific Challenges}
 
-\subsection{DAO Governance}
+\subsubsection{Overcoming Vendor Lock-in}
+Our platform's open architecture and standardized interfaces allow for easy migration between providers, addressing the vendor lock-in issue prevalent in centralized systems.
 
-By employing a decentralized matching engine and a DAO model for governance, we aim to create a system that is transparent and democratic, fostering competition and innovation.
+\subsubsection{Improving Control and Transparency}
+Users have unprecedented visibility into the underlying infrastructure and can choose specific nodes or node providers based on their requirements, enhancing control and transparency.
 
+\subsubsection{Enhancing Cost-Effectiveness}
+The platform's market-driven pricing model and efficient resource allocation system ensure that users only pay for the resources they actually use, addressing the cost inefficiencies of traditional cloud services.
 
-Figure~\ref{fig:proposed-architecture} illustrates the architecture of the proposed platform. In the following sections we'll dive into details on each of the above topics.
+\subsection{Innovative Features}
 
+\subsubsection{Wide Range of Applications}
+Our platform supports diverse applications, from scientific high-performance computing and machine learning to web hosting and data storage, catering to a broad spectrum of user needs.
+
+\subsubsection{DAO Governance}
+We implement a Decentralized Autonomous Organization (DAO) model for platform governance, ensuring transparency and community-driven decision-making.
+
+\subsubsection{Blockchain-Based Control Plane}
+By running the control plane on a blockchain, we ensure transparent and immutable record-keeping for financial transactions and reputation tracking, while keeping the performance-sensitive data plane on the regular internet for optimal speed.
+
+\subsection{Benefits for Stakeholders}
+
+\subsubsection{For Developers}
+\begin{itemize}
+    \item Access to a diverse range of computational resources
+    \item Flexibility to choose providers based on specific needs
+    \item Potential for significant cost savings
+\end{itemize}
+
+\subsubsection{For Node Providers}
+\begin{itemize}
+    \item Opportunity to monetize unused computational resources
+    \item Access to a global market of users
+    \item Incentives for maintaining high-quality service through the reputation system
+\end{itemize}
 
 \begin{figure*}[h]
     \centering
@@ -42,3 +91,7 @@ Figure~\ref{fig:proposed-architecture} illustrates the architecture of the propo
     \caption{Proposed platform architecture.}
     \label{fig:proposed-architecture}
 \end{figure*}
+
+Figure~\ref{fig:proposed-architecture} illustrates the architecture of our proposed platform, showcasing how these components interact to create a robust, efficient, and user-centric cloud computing ecosystem.
+
+In the following sections, we will delve deeper into the technical details of each component, exploring how they work together to realize the full potential of decentralized cloud computing.

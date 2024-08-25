@@ -1,11 +1,48 @@
 \section{Problem Statement}
 \label{sec:problem_statement}
 
-The current cloud computing paradigm is dominated by a few large providers, such as Amazon Web Services (AWS), Google Cloud Platform (GCP), and Microsoft Azure. These providers offer a wide range of services, from basic compute and storage to advanced machine learning and analytics tools. However, this centralized model has several drawbacks:
+The current cloud computing landscape is dominated by a handful of large providers, including Amazon Web Services (AWS), Google Cloud Platform (GCP), and Microsoft Azure, which together control roughly 70\% of the cloud computing market, as of 2024. While these providers offer a comprehensive range of services spanning basic compute and storage to advanced machine learning and analytics tools, this centralized model presents several significant challenges:
 
 \begin{itemize}
-    \item \textbf{Vendor lock-in:} Once a user chooses a cloud provider, it can be difficult to switch to another provider due to differences in service offerings, APIs, and pricing models.
-    \item \textbf{Limited control and transparency:} Users have little control over where and how their data is stored and processed. They also have limited visibility into the underlying infrastructure.
-    \item \textbf{Data privacy and security:} Centralized cloud providers are attractive targets for hackers. Despite the security measures put in place by these providers, data breaches can and do occur. A breach at the level of a cloud provider can provide the attacker with access to all services and data hosted by the cloud provider.
-    \item \textbf{Cost:} The pricing models of cloud providers can be complex and unpredictable. Users may end up paying for resources they don't use.
+    \item \textbf{Vendor lock-in:} The choice of a cloud provider often becomes a long-term commitment due to:
+    \begin{itemize}
+        \item Proprietary APIs and services that are not easily portable
+        \item Substantial costs and technical challenges associated with migrating data and applications
+        \item Pricing models that incentivize increased usage within a single ecosystem
+    \end{itemize}
+
+    \item \textbf{Limited control and transparency:} Users face significant constraints in managing their cloud resources:
+    \begin{itemize}
+        \item Lack of granular control over data storage locations and processing methods
+        \item Limited visibility into the underlying infrastructure and its performance characteristics
+        \item Difficulty in optimizing applications due to the abstracted nature of cloud services
+    \end{itemize}
+
+    \item \textbf{Data privacy and security concerns:} Centralized cloud providers present attractive targets for cyberattacks:
+    \begin{itemize}
+        \item A single breach can potentially compromise vast amounts of data across multiple clients
+        \item Users must trust the provider's security measures without full transparency
+        \item Compliance with varying international data protection regulations becomes complex
+    \end{itemize}
+
+    \item \textbf{Cost and resource inefficiencies:} The pricing structures of major cloud providers can lead to financial inefficiencies:
+    \begin{itemize}
+        \item Complex, often opaque pricing models make cost prediction and management challenging
+        \item Users frequently over-provision resources to ensure performance, leading to waste
+        \item Lack of a true pay-per-use model for many services results in unnecessary expenses
+    \end{itemize}
 \end{itemize}
+
+These issues have varying impacts across different stakeholders in the cloud computing ecosystem:
+
+\begin{itemize}
+    \item \textbf{Individual Developers:} Face barriers to experimentation and innovation due to high costs and complex management of cloud resources. They may struggle to scale their projects efficiently as requirements grow.
+
+    \item \textbf{Startups:} Often find themselves locked into a specific provider early in their development, limiting future flexibility. They may face sudden cost increases as they scale, impacting their financial planning and viability.
+
+    \item \textbf{Enterprises:} Struggle with vendor lock-in, which can impact long-term strategic decisions. They face significant challenges in maintaining regulatory compliance across different regions and in protecting sensitive data.
+
+    \item \textbf{Government and Non-Profit Organizations:} May face difficulties in ensuring data sovereignty and meeting strict security requirements. Budget constraints can limit their ability to leverage advanced cloud services effectively.
+\end{itemize}
+
+Addressing these challenges is crucial for fostering a more open, efficient, and innovative cloud computing ecosystem. The need for a solution that provides greater flexibility, transparency, and cost-effectiveness while maintaining robust security and performance is evident across all sectors of the industry.
