@@ -15,16 +15,45 @@ Our platform leverages a network of independent node providers, each capable of 
 
 \subsubsection{Reputation-Based Trust System}
 \label{subsec:reputation_system}
-Unlike typical Web3 solutions that rely on consensus mechanisms, our platform implements a robust reputation system:
+
+Unlike typical Web3 solutions that rely on consensus mechanisms to mitigate the Byzantine Fault Tolerance (BFT) problem --- allowing up to 50\% (or a bit less on some platforms) of the network to be malicious --- our platform takes a different approach. We primarily rely on conventional legal contracts and Service Level Agreements (SLAs), supplemented by a robust blockchain-tracked reputation system. This dual approach ensures accountability through traditional means while providing an additional layer of trust and transparency.
+
+In the anonymous blockchain space, an actor is more likely to behave maliciously than in the real world. In the real world there is a lot more at stake than in the blockchain space, an actor would be much less likely to behave maliciously, given that they risk suffering both legal and financial consequences for malicious behavior. Malicious behavior may still occur, but the potential benefit of such behavior needs to clearly compensate the potential cost, which may come in the form of a loss of the long-term financial benefit and the potential financial loss in the following legal processes, as analyzed in more details in Section~\ref{sec:math_model}.
+
+Decent Cloud is designed with this in mind, and it focuses on incentivizing honest behavior and providing  high-quality service while implementing mechanisms to penalize poor performance or malicious actions. Good reputation is hard to earn, and it's easy to lose. Especially if big clients (with high reputation) are dissatisfied with the provided services.
+
+\paragraph{Building Reputation:}
+Node providers and developers accrue reputation through successful transactions and positive interactions on the platform:
+
 \begin{itemize}
-    \item Node providers and developers build and maintain long-term reputations
-    \item Users can select providers based on their track record of reliability and performance
-    \item The system incentivizes honest behavior and high-quality service
+    \item Each completed transaction between a developer and a node provider results in a 2\% transaction fee, from which there is a 1\% increase in both parties' reputation scores.
+    \item Consistent user satisfaction contributes to gradual reputation increases of node providers over extended periods and numerous transactions.
+    \item Developers who rent many resources or spend significant amounts over longer periods of time will have higher reputation scores than those who do not.
 \end{itemize}
 
-This approach addresses the trust and security concerns associated with decentralized systems while maintaining the performance advantages of traditional cloud services.
+\paragraph{Reputation Dynamics:}
+Our system introduces an innovative approach to managing reputation:
+
+\begin{itemize}
+    \item Both node providers and developers build reputation through successful transactions.
+    \item Rather than complicating the platform to autonomously track and judge honest behavior, we empower users to report and penalize malicious behavior.
+    \item If dissatisfied with a service or collaboration, a user can choose to reduce another party's reputation. This action comes at a cost: the sender's reputation decreases by the amount spent, while the receiver's reputation decreases by a higher amount, such as 200%.
+\end{itemize}
+
+This mechanism offers several advantages:
+
+\begin{itemize}
+    \item Robustness: It's straightforward to implement and reason about.
+    \item Quality Incentive: It motivates node providers to maintain high-quality service and prioritize user satisfaction.
+    \item Resilience against Malicious Actors: Malicious node providers would quickly acquire poor reputations, limiting their ability to attract new users. Similarly, malicious developers quickly lose power to hurt the reputation of others, as they lose their own reputation in the process.
+\end{itemize}
+
+\paragraph{Reputation System Impact:}
+
+This dynamic reputation system empowers users to make informed decisions when selecting node providers. It addresses trust and security concerns associated with decentralized systems while preserving the performance advantages of traditional cloud services. All reputation scores are publicly visible and immutably recorded on the blockchain, ensuring transparency and creating a reliable history of interactions and service quality.
 
 \subsubsection{Efficient Resource Allocation}
+
 Our platform can be used to ensure optimal resource allocation. For instance:
 \begin{itemize}
     \item Task requirements can be matched with available node resources in real-time
