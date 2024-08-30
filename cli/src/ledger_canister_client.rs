@@ -63,13 +63,15 @@ impl LedgerCanister {
             "node_provider_register".to_string(),
             "node_provider_check_in".to_string(),
             "node_provider_update_profile".to_string(),
+            "data_push".to_string(),
+            "data_push_auth".to_string(),
         ]
     }
 
     pub fn list_functions_queries(&self) -> Vec<String> {
         vec![
             "get_np_check_in_nonce".to_string(),
-            "fetch".to_string(),
+            "data_fetch".to_string(),
             "metadata".to_string(),
             "get_logs_debug".to_string(),
             "get_logs_info".to_string(),
@@ -117,9 +119,13 @@ impl LedgerCanister {
         Decode!(response.as_slice(), Vec<u8>).expect("Failed to decode response")
     }
 
-    pub async fn fetch(&self, cursor: Option<String>) -> Result<(String, Vec<u8>), String> {
-        let args = Encode!(&(cursor)).map_err(|e| e.to_string())?;
-        let response = self.call_query("fetch", &args).await?;
+    pub async fn data_fetch(
+        &self,
+        cursor: Option<String>,
+        bytes_before: Option<Vec<u8>>,
+    ) -> Result<(String, Vec<u8>), String> {
+        let args = Encode!(&(cursor, bytes_before)).map_err(|e| e.to_string())?;
+        let response = self.call_query("data_fetch", &args).await?;
         Decode!(response.as_slice(), Result<(String, Vec<u8>), String>)
             .map_err(|e| e.to_string())?
     }

@@ -10,7 +10,7 @@ use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
     zlib_compress, Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor,
-    NodeProviderProfile, UpdateProfilePayload, LABEL_DC_TOKEN_TRANSFER,
+    NodeProviderProfile, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -308,8 +308,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .expect("Could not get home directory")
                     .join(".dcc/ledger/main.bin"),
             };
-            let push_auth = arg_matches.get_flag("push-authorize");
-            let push = arg_matches.get_flag("push");
+            let push_auth = arg_matches.get_flag("data-push-authorize");
+            let push = arg_matches.get_flag("data-push");
             if push_auth || push {
                 let local_identity = match local_identity {
                     Some(ident) => ident.to_string(),
@@ -322,7 +322,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let ic_auth = dcc_to_ic_auth(&dcc_ident);
                     let canister = ledger_canister(ic_auth).await?;
                     let args = Encode!(&()).map_err(|e| e.to_string())?;
-                    let result = canister.call_update("push_auth", &args).await?;
+                    let result = canister.call_update("data_push_auth", &args).await?;
                     let response =
                         Decode!(&result, Result<String, String>).map_err(|e| e.to_string())??;
 
@@ -333,7 +333,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let ic_auth = dcc_to_ic_auth(&dcc_ident);
                 let canister = ledger_canister(ic_auth).await?;
 
-                return push_ledger_data(&canister, local_ledger_path).await;
+                return ledger_data_push(&canister, local_ledger_path).await;
             }
 
             let canister_function = match arg_matches.get_one::<String>("canister_function") {
@@ -371,9 +371,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let canister = ledger_canister(None).await?;
                     println!("{}", canister.init_ledger_map().await?);
                 }
-                "fetch" => {
+                "data_fetch" | "fetch" => {
                     let canister = ledger_canister(None).await?;
-                    fetch_ledger_data(&canister, local_ledger_path).await?;
+                    ledger_data_fetch(&canister, local_ledger_path).await?;
                     println!("Done fetching data from the Ledger canister");
                 }
                 "metadata" => {
@@ -488,7 +488,7 @@ fn dcc_to_ic_auth(dcc_identity: &DccIdentity) -> Option<BasicIdentity> {
         })
 }
 
-async fn fetch_ledger_data(
+async fn ledger_data_fetch(
     ledger_canister: &LedgerCanister,
     local_ledger_path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -510,12 +510,23 @@ async fn fetch_ledger_data(
         )
     };
 
+    let bytes_before = if cursor_local.position > DATA_PULL_BYTES_BEFORE_LEN as u64 {
+        let mut buf = vec![0u8; DATA_PULL_BYTES_BEFORE_LEN as usize];
+        persistent_storage_read(
+            cursor_local.position - DATA_PULL_BYTES_BEFORE_LEN as u64,
+            &mut buf,
+        )?;
+        Some(buf)
+    } else {
+        None
+    };
+
     println!(
         "Fetching data from the Ledger canister, with local cursor: {}",
         cursor_local
     );
     let (cursor_remote, data) = ledger_canister
-        .fetch(Some(cursor_local.to_request_string()))
+        .data_fetch(Some(cursor_local.to_request_string()), bytes_before)
         .await?;
     let cursor_remote = LedgerCursor::new_from_string(cursor_remote);
     let offset_remote = cursor_remote.position;
@@ -571,7 +582,7 @@ async fn get_ledger_metadata(ledger_canister: &LedgerCanister) -> HashMap<String
         .collect()
 }
 
-pub async fn push_ledger_data(
+pub async fn ledger_data_push(
     ledger_canister: &LedgerCanister,
     local_ledger_path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -619,7 +630,7 @@ pub async fn push_ledger_data(
             buf_size, position,
         );
         let args = Encode!(&cursor_push.to_urlenc_string(), &buf).map_err(|e| e.to_string())?;
-        let result = ledger_canister.call_update("push", &args).await?;
+        let result = ledger_canister.call_update("data_push", &args).await?;
         let result = Decode!(&result, Result<String, String>).map_err(|e| e.to_string())??;
         println!("Response from pushing at position {}: {}", position, result);
     }

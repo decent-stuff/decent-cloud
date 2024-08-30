@@ -7,8 +7,9 @@ use dcc_common::{
     np_registration_fee_e9s, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_applied_np_count, rewards_distribute,
     rewards_pending_e9s, set_test_config, FundsTransfer, LedgerCursor, BLOCK_INTERVAL_SECS,
-    CACHE_TXS_NUM_COMMITTED, LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_PROFILE,
-    LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
+    LABEL_NP_CHECK_IN, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION,
+    LABEL_USER_REGISTER,
 };
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -241,7 +242,10 @@ pub(crate) fn _node_provider_list_checked_in() -> Result<Vec<String>, String> {
     })
 }
 
-pub(crate) fn _fetch(cursor: Option<String>) -> Result<(String, Vec<u8>), String> {
+pub(crate) fn _data_fetch(
+    cursor: Option<String>,
+    bytes_before: Option<Vec<u8>>,
+) -> Result<(String, Vec<u8>), String> {
     LEDGER_MAP.with(|ledger| {
         let req_cursor = LedgerCursor::new_from_string(cursor.unwrap_or_default());
         let req_position_start = req_cursor.position;
@@ -258,6 +262,23 @@ pub(crate) fn _fetch(cursor: Option<String>) -> Result<(String, Vec<u8>), String
         if local_cursor.response_bytes == 0 {
             return Ok((local_cursor.to_urlenc_string(), vec![]));
         }
+        if let Some(bytes_before) = bytes_before {
+            if local_cursor.position > DATA_PULL_BYTES_BEFORE_LEN as u64 {
+                let mut buf_bytes_before = vec![0u8; DATA_PULL_BYTES_BEFORE_LEN as usize];
+                persistent_storage_read(
+                    local_cursor.position - DATA_PULL_BYTES_BEFORE_LEN as u64,
+                    &mut buf_bytes_before,
+                )
+                .map_err(|e| e.to_string())?;
+                if bytes_before != buf_bytes_before {
+                    return Err(format!(
+                        "{} bytes before position {} does not match",
+                        DATA_PULL_BYTES_BEFORE_LEN, local_cursor.position
+                    ));
+                }
+            }
+        }
+
         let mut buf = vec![0u8; local_cursor.response_bytes as usize];
         persistent_storage_read(local_cursor.position, &mut buf).map_err(|e| e.to_string())?;
         info!(
@@ -268,7 +289,7 @@ pub(crate) fn _fetch(cursor: Option<String>) -> Result<(String, Vec<u8>), String
     })
 }
 
-pub(crate) fn _push_auth() -> Result<String, String> {
+pub(crate) fn _data_push_auth() -> Result<String, String> {
     // If LEDGER_MAP is currently empty and there is no authorized pusher,
     // set the authorized pusher to the caller.
     LEDGER_MAP.with(|ledger| {
@@ -299,7 +320,7 @@ pub(crate) fn _push_auth() -> Result<String, String> {
     })
 }
 
-pub(crate) fn _push(cursor: String, data: Vec<u8>) -> Result<String, String> {
+pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String> {
     let caller = ic_cdk::api::caller();
     let authorized_pusher = AUTHORIZED_PUSHER.with(|authorized_pusher| *authorized_pusher.borrow());
 

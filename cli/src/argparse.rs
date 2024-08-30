@@ -162,14 +162,23 @@ pub fn parse_args() -> clap::ArgMatches {
                         .num_args(1),
                 )
                 .arg(
-                    Arg::new("push-authorize")
-                        .long("push_authorize")
+                    Arg::new("data-fetch")
+                        .long("data-fetch")
+                        .visible_aliases(&["fetch", "pull"])
+                        .action(ArgAction::SetTrue)
+                        .help("Sync data from the ledger"),
+                )
+                .arg(
+                    Arg::new("data-push-authorize")
+                        .long("data-push-authorize")
+                        .visible_aliases(&["push-authorize", "push-auth"])
                         .help("Authorize push to the Decent Cloud Ledger")
                         .action(ArgAction::SetTrue),
                     )
                 .arg(
-                    Arg::new("push")
-                        .long("push")
+                    Arg::new("data-push")
+                        .long("data-push")
+                        .visible_aliases(&["push"])
                         .help("Push the ledger entries to the Decent Cloud Ledger")
                         .action(ArgAction::SetTrue)
                     )
@@ -192,12 +201,6 @@ pub fn parse_args() -> clap::ArgMatches {
                         .default_value("127.0.0.1")
                         .help("Which IC network to use"),
                 )
-                .arg(
-                    Arg::new("fetch")
-                        .long("fetch")
-                        .action(ArgAction::SetTrue)
-                        .help("Sync from the ledger"),
-                ),
         )
         .get_matches()
 }

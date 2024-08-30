@@ -79,6 +79,7 @@ pub const MEMO_BYTES_MAX: usize = 32;
 /// Reduction of reputations for all accounts, based on time (per block), in parts per million
 pub const REPUTATION_AGING_PPM: u64 = 1_000;
 pub const REWARD_HALVING_AFTER_BLOCKS: u64 = 210_000; // halve the rewards every 210000 reward distributions
+pub const DATA_PULL_BYTES_BEFORE_LEN: u16 = 16; // How many bytes before the pulled data should be compared as a quick sanity check
 
 // Default first block's time
 // Calculated with:

@@ -87,18 +87,21 @@ fn node_provider_list_checked_in() -> Result<Vec<String>, String> {
 }
 
 #[ic_cdk::query]
-fn fetch(cursor: Option<String>) -> Result<(String, Vec<u8>), String> {
-    _fetch(cursor)
+fn data_fetch(
+    cursor: Option<String>,
+    bytes_before: Option<Vec<u8>>,
+) -> Result<(String, Vec<u8>), String> {
+    _data_fetch(cursor, bytes_before)
 }
 
 #[ic_cdk::update]
-fn push_auth() -> Result<String, String> {
-    _push_auth()
+fn data_push_auth() -> Result<String, String> {
+    _data_push_auth()
 }
 
 #[ic_cdk::update]
-fn push(cursor: String, data: Vec<u8>) -> Result<String, String> {
-    _push(cursor, data)
+fn data_push(cursor: String, data: Vec<u8>) -> Result<String, String> {
+    _data_push(cursor, data)
 }
 
 #[ic_cdk::query]

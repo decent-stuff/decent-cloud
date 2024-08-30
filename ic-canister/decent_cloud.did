@@ -390,9 +390,9 @@ service : {
     get_data_certificate : () -> (DataCertificate) query;
 
     // Synchronization (pushing and pulling) of the ledger data
-    fetch: (cursor: opt text) -> (ResultData) query;
-    push_auth: () -> (ResultString);
-    push: (cursor: text, data: vec nat8) -> (ResultString);
+    data_fetch: (cursor: opt text, bytes_before: opt vec nat8) -> (ResultData) query;
+    data_push_auth: () -> (ResultString);
+    data_push: (cursor: text, data: vec nat8) -> (ResultString);
     metadata: () -> (vec record { text; MetadataValue; }) query;
 
     // Debugging and troubleshooting
