@@ -16,7 +16,6 @@ crc32fast.workspace = true
 data-encoding.workspace = true
 derp.workspace = true
 ed25519-dalek.workspace = true
-flate2.workspace = true
 hex.workspace = true
 hmac.workspace = true
 icrc-ledger-types.workspace = true

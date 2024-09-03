@@ -1,7 +1,7 @@
 use crate::{
     charge_fees_to_account_no_bump_reputation, info, reputation_get, reward_e9s_per_block,
-    zlib_decompress, DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE,
-    MAX_JSON_ZLIB_PAYLOAD_LENGTH, MAX_UID_LENGTH,
+    DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE, MAX_JSON_ZLIB_PAYLOAD_LENGTH,
+    MAX_UID_LENGTH,
 };
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
@@ -87,10 +87,8 @@ pub fn do_node_provider_get_profile(ledger: &LedgerMap, np_uid_bytes: Vec<u8>) -
         Ok(profile) => {
             let payload: UpdateProfilePayload =
                 serde_json::from_slice(&profile).expect("Failed to decode profile payload");
-            let profile: NodeProviderProfile = serde_json::from_str(
-                &zlib_decompress(&payload.profile_payload).expect("Failed to decompress profile"),
-            )
-            .expect("Failed to decode profile");
+            let profile: NodeProviderProfile =
+                serde_json::from_slice(&payload.profile_payload).expect("Failed to decode profile");
             let profile_with_reputation = NodeProviderProfileWithReputation {
                 profile,
                 reputation: reputation_get(&np_uid_bytes),

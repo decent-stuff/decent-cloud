@@ -9,8 +9,8 @@ use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
-    zlib_compress, Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor,
-    NodeProviderProfile, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
+    Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor, NodeProviderProfile,
+    UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -221,9 +221,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let np_profile: NodeProviderProfile =
                         serde_yaml_ng::from_reader(File::open(profile_file)?)?;
 
-                    // Compress the profile with zlib and sign it
-                    let raw_data = serde_json::to_vec(&np_profile)?;
-                    let profile_payload = zlib_compress(&raw_data)?;
+                    // Serialize the profile and sign it
+                    let profile_payload = serde_json::to_vec(&np_profile)?;
                     let signature = dcc_ident.sign(&profile_payload)?.to_vec();
 
                     // Send the payload

@@ -1,6 +1,6 @@
 use crate::{
     charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, slice_to_32_bytes_array,
-    zlib_decompress, DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, LABEL_NP_REGISTER,
+    DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, LABEL_NP_REGISTER,
     MAX_JSON_ZLIB_PAYLOAD_LENGTH, MAX_UID_LENGTH,
 };
 use candid::Principal;
@@ -155,10 +155,8 @@ pub fn do_get_matching_offerings(ledger: &LedgerMap, filters: SearchFilters) -> 
     {
         let payload: UpdateOfferingPayload =
             serde_json::from_slice(entry.value()).expect("Failed to decode payload");
-        let offering: NPOffering = serde_json::from_str(
-            &zlib_decompress(&payload.offering_payload).expect("Failed to decompress"),
-        )
-        .expect("Failed to decode offering");
+        let offering: NPOffering =
+            serde_json::from_slice(&payload.offering_payload).expect("Failed to decode offering");
 
         // If any filter doesn't match, skip this offering
         for filter in &filters {
@@ -326,7 +324,7 @@ pub fn do_get_matching_offerings(ledger: &LedgerMap, filters: SearchFilters) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{do_get_matching_offerings, info, zlib_compress, AvailableUnit, SearchFilter};
+    use crate::{do_get_matching_offerings, info, AvailableUnit, SearchFilter};
     use ledger_map::LedgerMap;
 
     fn log_init() {
@@ -381,7 +379,7 @@ mod tests {
             }],
         };
         let offering_payload = UpdateOfferingPayload {
-            offering_payload: zlib_compress(&serde_json::to_vec(&offering).unwrap()).unwrap(),
+            offering_payload: serde_json::to_vec(&offering).unwrap(),
             signature: vec![],
         };
 

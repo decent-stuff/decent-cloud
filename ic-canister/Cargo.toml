@@ -17,7 +17,6 @@ ciborium.workspace = true
 crc32fast.workspace = true
 dcc-common.workspace = true
 ed25519-dalek.workspace = true
-flate2.workspace = true
 hex.workspace = true
 ic-canister-log.workspace = true
 ic-cdk-timers.workspace = true
