@@ -164,21 +164,21 @@ pub fn parse_args() -> clap::ArgMatches {
                 .arg(
                     Arg::new("data-fetch")
                         .long("data-fetch")
-                        .visible_aliases(&["fetch", "pull"])
+                        .visible_aliases(["fetch", "pull"])
                         .action(ArgAction::SetTrue)
                         .help("Sync data from the ledger"),
                 )
                 .arg(
                     Arg::new("data-push-authorize")
                         .long("data-push-authorize")
-                        .visible_aliases(&["push-authorize", "push-auth"])
+                        .visible_aliases(["push-authorize", "push-auth"])
                         .help("Authorize push to the Decent Cloud Ledger")
                         .action(ArgAction::SetTrue),
                     )
                 .arg(
                     Arg::new("data-push")
                         .long("data-push")
-                        .visible_aliases(&["push"])
+                        .visible_aliases(["push"])
                         .help("Push the ledger entries to the Decent Cloud Ledger")
                         .action(ArgAction::SetTrue)
                     )

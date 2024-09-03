@@ -458,7 +458,7 @@ impl FundsTransfer {
 
     pub fn to_tx_id(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        hasher.update(&self.to_bytes().unwrap());
+        hasher.update(self.to_bytes().unwrap());
         hasher.finalize().into()
     }
 }

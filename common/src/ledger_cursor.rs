@@ -192,7 +192,7 @@ pub fn cursor_from_data(
     let loc_next_write_position = loc_next_write_position.min(loc_storage_bytes);
 
     // Start - end position ==> size
-    // size is ideally equal to FETCH_SIZE_BYTES_DEFAULT, but we may not have enough data in the persistent storage
+    // size is ideally equal to FETCH_SIZE_BYTES_DEFAULT, but there may not be enough data in the persistent storage
     let response_end_position =
         (response_start_position + crate::FETCH_SIZE_BYTES_DEFAULT).min(loc_next_write_position);
 
