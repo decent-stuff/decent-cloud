@@ -96,6 +96,12 @@ pub fn parse_args() -> clap::ArgMatches {
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
+                    Arg::new("balances")
+                        .long("balances")
+                        .help("Get balances of all node provider identities")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
                     Arg::new("register")
                         .long("register")
                         .help("Register node provider at the Decent Cloud Ledger")
@@ -125,6 +131,12 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("list")
                         .long("list")
                         .help("List all user identities")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("balances")
+                        .long("balances")
+                        .help("Get balances of all user identities")
                         .action(ArgAction::SetTrue),
                 )
                 .arg(

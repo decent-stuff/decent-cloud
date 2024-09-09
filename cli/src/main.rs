@@ -160,8 +160,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         Some(("np", arg_matches)) => {
-            if arg_matches.get_flag("list") {
-                list_identities()?;
+            if arg_matches.get_flag("list") || arg_matches.get_flag("balances") {
+                list_identities(arg_matches.get_flag("balances"))?;
             } else if arg_matches.contains_id("register") {
                 if let Some(np_desc) = arg_matches.get_one::<String>("register") {
                     let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
@@ -246,8 +246,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         Some(("user", arg_matches)) => {
-            if arg_matches.get_flag("list") {
-                list_identities()?
+            if arg_matches.get_flag("list") || arg_matches.get_flag("balances") {
+                list_identities(arg_matches.get_flag("balances"))?
             } else if arg_matches.contains_id("register") {
                 match arg_matches.get_one::<String>("register") {
                     Some(np_desc) => {
@@ -445,7 +445,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }?)
 }
 
-fn list_identities() -> Result<(), Box<dyn std::error::Error>> {
+fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
     let identities_dir = DccIdentity::identities_dir();
     println!("Available identities at {}:", identities_dir.display());
     for identity in std::fs::read_dir(identities_dir)? {
@@ -457,12 +457,16 @@ fn list_identities() -> Result<(), Box<dyn std::error::Error>> {
                     let identity_name = identity_name.to_string_lossy();
                     match DccIdentity::load_from_dir(&path) {
                         Ok(dcc_identity) => {
-                            println!(
-                                "{} => {}, balance {}",
-                                identity_name,
-                                dcc_identity,
-                                account_balance_get_as_string(&dcc_identity.as_account())
-                            );
+                            if include_balances {
+                                println!(
+                                    "{} => {}, balance {}",
+                                    identity_name,
+                                    dcc_identity,
+                                    account_balance_get_as_string(&dcc_identity.as_account())
+                                );
+                            } else {
+                                println!("{} => {}", identity_name, dcc_identity);
+                            }
                         }
                         Err(e) => {
                             println!("{} => Error: {}", identity_name, e);
