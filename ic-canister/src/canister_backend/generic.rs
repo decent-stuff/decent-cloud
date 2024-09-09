@@ -249,7 +249,7 @@ pub(crate) fn _data_fetch(
     LEDGER_MAP.with(|ledger| {
         info!(
             "Serving data request with cursor: {} and bytes_before: {}",
-            cursor.unwrap_or_default(),
+            cursor.as_ref().unwrap_or(&String::new()),
             hex::encode(bytes_before.as_ref().unwrap_or(&vec![]))
         );
         let req_cursor = LedgerCursor::new_from_string(cursor.unwrap_or_default());
