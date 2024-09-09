@@ -247,6 +247,11 @@ pub(crate) fn _data_fetch(
     bytes_before: Option<Vec<u8>>,
 ) -> Result<(String, Vec<u8>), String> {
     LEDGER_MAP.with(|ledger| {
+        info!(
+            "Serving data request with cursor: {} and bytes_before: {}",
+            cursor.unwrap_or_default(),
+            hex::encode(bytes_before.as_ref().unwrap_or(&vec![]))
+        );
         let req_cursor = LedgerCursor::new_from_string(cursor.unwrap_or_default());
         let req_position_start = req_cursor.position;
         let local_cursor = cursor_from_data(

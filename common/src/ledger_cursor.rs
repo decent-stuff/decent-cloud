@@ -72,7 +72,7 @@ impl std::str::FromStr for LedgerCursor {
             let (key, value) = match part.split_once('=') {
                 Some(x) => x,
                 None => {
-                    error!("Skipping invalid part {}", part);
+                    error!("Skipping invalid part {} of input {}", part, s);
                     continue;
                 }
             };
@@ -186,9 +186,10 @@ pub fn cursor_from_data(
     loc_next_write_position: u64,
     req_start_position: u64,
 ) -> LedgerCursor {
+    // Handle edge case: req_start_position is before the start of the data partition
     let response_start_position = loc_ledger_start_data_lba.max(req_start_position);
 
-    // Edge case: intended next-write position is beyond the end of the persistent storage
+    // Handle edge case: loc_next_write_position is beyond the end of the persistent storage
     let loc_next_write_position = loc_next_write_position.min(loc_storage_bytes);
 
     // Start - end position ==> size

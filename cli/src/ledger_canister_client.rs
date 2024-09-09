@@ -124,7 +124,7 @@ impl LedgerCanister {
         cursor: Option<String>,
         bytes_before: Option<Vec<u8>>,
     ) -> Result<(String, Vec<u8>), String> {
-        let args = Encode!(&(cursor, bytes_before)).map_err(|e| e.to_string())?;
+        let args = Encode!(&cursor, &bytes_before).map_err(|e| e.to_string())?;
         let response = self.call_query("data_fetch", &args).await?;
         Decode!(response.as_slice(), Result<(String, Vec<u8>), String>)
             .map_err(|e| e.to_string())?

@@ -525,8 +525,9 @@ async fn ledger_data_fetch(
     };
 
     println!(
-        "Fetching data from the Ledger canister, with local cursor: {}",
-        cursor_local
+        "Fetching data from the Ledger canister, with local cursor: {} and bytes before: {:?}",
+        cursor_local,
+        hex::encode(bytes_before.as_ref().unwrap_or(&vec![])),
     );
     let (cursor_remote, data) = ledger_canister
         .data_fetch(Some(cursor_local.to_request_string()), bytes_before)
@@ -539,7 +540,7 @@ async fn ledger_data_fetch(
     );
     if offset_remote < cursor_local.position {
         return Err(format!(
-            "Ledger canister has less data {} than available locally {}",
+            "Ledger canister has less data than available locally {} < {} bytes",
             offset_remote, cursor_local.position
         )
         .into());
