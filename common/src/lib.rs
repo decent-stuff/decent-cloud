@@ -1,6 +1,7 @@
 pub mod account_transfers;
 pub mod account_transfers_errors;
 pub mod cache_balances;
+pub mod cache_reputation;
 pub mod cache_transactions;
 pub mod dcc_identity;
 pub mod ledger_cursor;
@@ -8,12 +9,12 @@ pub mod ledger_refresh;
 pub mod offerings;
 pub mod profiles;
 pub mod registration;
-pub mod reputation;
 pub mod rewards;
 
 pub use account_transfers::*;
 pub use account_transfers_errors::TransferError;
 pub use cache_balances::*;
+pub use cache_reputation::*;
 pub use cache_transactions::*;
 use candid::Principal;
 pub use dcc_identity::{slice_to_32_bytes_array, slice_to_64_bytes_array};
@@ -23,7 +24,6 @@ pub use ledger_refresh::*;
 pub use offerings::*;
 pub use profiles::*;
 pub use registration::*;
-pub use reputation::*;
 pub use rewards::*;
 
 #[cfg(not(target_arch = "wasm32"))]

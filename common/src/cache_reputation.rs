@@ -106,7 +106,7 @@ impl ReputationChange {
 /// Reductions of account reputations, applied to all accounts
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ReputationAgeV1 {
-    reductions_ppm: u64,
+    age_reductions_ppm: u64,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
@@ -115,13 +115,13 @@ pub enum ReputationAge {
 }
 
 impl ReputationAge {
-    pub fn new(reductions_ppm: u64) -> Self {
-        Self::V1(ReputationAgeV1 { reductions_ppm })
+    pub fn new(age_reductions_ppm: u64) -> Self {
+        Self::V1(ReputationAgeV1 { age_reductions_ppm })
     }
 
     pub fn reductions_ppm(&self) -> u64 {
         match self {
-            ReputationAge::V1(r) => r.reductions_ppm,
+            ReputationAge::V1(r) => r.age_reductions_ppm,
         }
     }
 }
