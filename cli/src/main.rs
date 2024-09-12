@@ -9,8 +9,8 @@ use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
-    Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor, NodeProviderProfile,
-    UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
+    reputation_get, Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor,
+    NodeProviderProfile, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -459,13 +459,19 @@ fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Err
                         Ok(dcc_identity) => {
                             if include_balances {
                                 println!(
-                                    "{} => {}, balance {}",
+                                    "{} => {}, reputation {}, balance {}",
                                     identity_name,
                                     dcc_identity,
+                                    reputation_get(&dcc_identity.as_uid_string()),
                                     account_balance_get_as_string(&dcc_identity.as_account())
                                 );
                             } else {
-                                println!("{} => {}", identity_name, dcc_identity);
+                                println!(
+                                    "{} => {} reputation {}",
+                                    identity_name,
+                                    dcc_identity,
+                                    reputation_get(&dcc_identity.as_uid_string())
+                                );
                             }
                         }
                         Err(e) => {
