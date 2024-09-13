@@ -1,4 +1,4 @@
-use crate::account_transfers::Account;
+use crate::account_transfers::IcrcCompatibleAccount;
 use crate::{AHashMap, DC_TOKEN_DECIMALS_DIV};
 use candid::Nat;
 #[cfg(target_arch = "wasm32")]
@@ -8,10 +8,10 @@ use num_bigint::BigUint;
 use std::{cell::RefCell, collections::HashMap};
 
 thread_local! {
-    static ACCOUNT_BALANCES: RefCell<AHashMap<Account, BigUint>> = RefCell::new(HashMap::default());
+    static ACCOUNT_BALANCES: RefCell<AHashMap<IcrcCompatibleAccount, BigUint>> = RefCell::new(HashMap::default());
 }
 
-pub fn account_balance_get(account: &Account) -> Nat {
+pub fn account_balance_get(account: &IcrcCompatibleAccount) -> Nat {
     ACCOUNT_BALANCES.with(|balances| {
         let balances = balances.borrow();
         match balances.get(account) {
@@ -21,7 +21,7 @@ pub fn account_balance_get(account: &Account) -> Nat {
     })
 }
 
-pub fn account_balance_get_as_string(account: &Account) -> String {
+pub fn account_balance_get_as_string(account: &IcrcCompatibleAccount) -> String {
     amount_as_string(&account_balance_get(account))
 }
 
@@ -54,7 +54,7 @@ fn _balance_sub(balance: &BigUint, amount: &BigUint) -> anyhow::Result<BigUint> 
 }
 
 #[allow(dead_code)]
-pub fn account_balance_sub(account: &Account, amount: &Nat) -> anyhow::Result<Nat> {
+pub fn account_balance_sub(account: &IcrcCompatibleAccount, amount: &Nat) -> anyhow::Result<Nat> {
     ACCOUNT_BALANCES.with(|balances| {
         let mut balances = balances.borrow_mut();
         let balance = balances.entry(account.clone()).or_default();
@@ -63,7 +63,7 @@ pub fn account_balance_sub(account: &Account, amount: &Nat) -> anyhow::Result<Na
     })
 }
 
-pub fn account_balance_add(account: &Account, amount: &Nat) -> anyhow::Result<Nat> {
+pub fn account_balance_add(account: &IcrcCompatibleAccount, amount: &Nat) -> anyhow::Result<Nat> {
     ACCOUNT_BALANCES.with(|balances| {
         let mut balances = balances.borrow_mut();
         let balance = balances.entry(account.clone()).or_default();
@@ -82,8 +82,8 @@ mod tests {
     use super::*;
     use candid::Principal;
 
-    fn mk_test_account(owner: u32, subaccount: Option<u32>) -> Account {
-        Account::new(
+    fn mk_test_account(owner: u32, subaccount: Option<u32>) -> IcrcCompatibleAccount {
+        IcrcCompatibleAccount::new(
             Principal::from_slice(&owner.to_le_bytes()),
             subaccount.map(|s| s.to_le_bytes().to_vec()),
         )

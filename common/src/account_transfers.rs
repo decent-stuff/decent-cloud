@@ -26,7 +26,7 @@ use crate::{
 };
 
 thread_local! {
-    static FEES_SINK_ACCOUNTS: RefCell<Option<Vec<Account>>> = const { RefCell::new(None) };
+    static FEES_SINK_ACCOUNTS: RefCell<Option<Vec<IcrcCompatibleAccount>>> = const { RefCell::new(None) };
 }
 
 pub fn ledger_funds_transfer(
@@ -79,7 +79,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
-            dcc_identity.as_account(),
+            dcc_identity.as_icrc_compatible_account(),
             MINTING_ACCOUNT,
             Some(amount_e9s.into()),
             Some(fees_sink_accounts()),
@@ -112,7 +112,7 @@ pub fn charge_fees_to_account_no_bump_reputation(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
-            dcc_identity.as_account(),
+            dcc_identity.as_icrc_compatible_account(),
             MINTING_ACCOUNT,
             Some(amount_e9s.into()),
             Some(fees_sink_accounts()),
@@ -130,21 +130,21 @@ pub fn charge_fees_to_account_no_bump_reputation(
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Account {
+pub struct IcrcCompatibleAccount {
     pub owner: Principal,
     pub subaccount: Option<Vec<u8>>,
 }
 
-impl Default for Account {
+impl Default for IcrcCompatibleAccount {
     fn default() -> Self {
-        Account {
+        IcrcCompatibleAccount {
             owner: Principal::from_slice(&[]),
             subaccount: None,
         }
     }
 }
 
-impl BorshSerialize for Account {
+impl BorshSerialize for IcrcCompatibleAccount {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         let owner_bytes = self.owner.as_slice();
         BorshSerialize::serialize(&owner_bytes.to_vec(), writer)?;
@@ -153,7 +153,7 @@ impl BorshSerialize for Account {
     }
 }
 
-impl BorshDeserialize for Account {
+impl BorshDeserialize for IcrcCompatibleAccount {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         // Deserialize the owner from Vec<u8>
         let owner_vec: Vec<u8> = BorshDeserialize::deserialize(buf)?;
@@ -162,7 +162,7 @@ impl BorshDeserialize for Account {
         // Deserialize the subaccount
         let subaccount: Option<Vec<u8>> = BorshDeserialize::deserialize(buf)?;
 
-        Ok(Account { owner, subaccount })
+        Ok(IcrcCompatibleAccount { owner, subaccount })
     }
 
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
@@ -170,18 +170,18 @@ impl BorshDeserialize for Account {
         let owner_vec: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
         let owner = Principal::from_slice(&owner_vec);
         let subaccount = BorshDeserialize::deserialize_reader(reader)?;
-        Ok(Account { owner, subaccount })
+        Ok(IcrcCompatibleAccount { owner, subaccount })
     }
 }
 
 #[allow(dead_code)]
-impl Account {
+impl IcrcCompatibleAccount {
     pub fn new(owner: Principal, subaccount: Option<Vec<u8>>) -> Self {
-        Account { owner, subaccount }
+        IcrcCompatibleAccount { owner, subaccount }
     }
 
     pub const fn new_minting() -> Self {
-        Account {
+        IcrcCompatibleAccount {
             owner: MINTING_ACCOUNT_PRINCIPAL,
             subaccount: None,
         }
@@ -200,32 +200,32 @@ impl Account {
     }
 }
 
-impl From<&str> for Account {
+impl From<&str> for IcrcCompatibleAccount {
     fn from(owner: &str) -> Self {
-        Account {
+        IcrcCompatibleAccount {
             owner: Principal::from_text(owner).unwrap(),
             subaccount: None,
         }
     }
 }
 
-impl From<&String> for Account {
+impl From<&String> for IcrcCompatibleAccount {
     fn from(owner: &String) -> Self {
-        Account::from(owner.as_str())
+        IcrcCompatibleAccount::from(owner.as_str())
     }
 }
 
-impl From<icrc_ledger_types::icrc1::account::Account> for Account {
+impl From<icrc_ledger_types::icrc1::account::Account> for IcrcCompatibleAccount {
     fn from(account: icrc_ledger_types::icrc1::account::Account) -> Self {
-        Account {
+        IcrcCompatibleAccount {
             owner: account.owner,
             subaccount: account.subaccount.map(|s| s.to_vec()),
         }
     }
 }
 
-impl From<Account> for Icrc1Account {
-    fn from(account: Account) -> Self {
+impl From<IcrcCompatibleAccount> for Icrc1Account {
+    fn from(account: IcrcCompatibleAccount) -> Self {
         Icrc1Account {
             owner: account.owner,
             subaccount: account
@@ -235,8 +235,8 @@ impl From<Account> for Icrc1Account {
     }
 }
 
-impl From<&Account> for Icrc1Account {
-    fn from(account: &Account) -> Self {
+impl From<&IcrcCompatibleAccount> for Icrc1Account {
+    fn from(account: &IcrcCompatibleAccount) -> Self {
         Icrc1Account {
             owner: account.owner,
             subaccount: account
@@ -247,13 +247,13 @@ impl From<&Account> for Icrc1Account {
     }
 }
 
-pub fn set_fees_sink_accounts(accounts: Option<Vec<Account>>) {
+pub fn set_fees_sink_accounts(accounts: Option<Vec<IcrcCompatibleAccount>>) {
     FEES_SINK_ACCOUNTS.with(|fees_sink_accounts| {
         *fees_sink_accounts.borrow_mut() = accounts;
     });
 }
 
-pub fn fees_sink_accounts() -> Vec<Account> {
+pub fn fees_sink_accounts() -> Vec<IcrcCompatibleAccount> {
     FEES_SINK_ACCOUNTS.with(
         |fees_sink_accounts| match fees_sink_accounts.borrow().as_ref() {
             Some(accounts) => accounts.clone(),
@@ -270,7 +270,7 @@ fn full_account_checksum(owner: &[u8], subaccount: &[u8]) -> String {
     BASE32.encode(&checksum).to_lowercase()
 }
 
-impl std::fmt::Display for Account {
+impl std::fmt::Display for IcrcCompatibleAccount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/TextualEncoding.md#textual-encoding-of-icrc-1-accounts
         match &self.subaccount {
@@ -370,10 +370,10 @@ impl BorshDeserialize for NumTokens {
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct FundsTransferV1 {
-    pub from: Account,
-    pub to: Account,
+    pub from: IcrcCompatibleAccount,
+    pub to: IcrcCompatibleAccount,
     pub fee: Option<NumTokens>,
-    pub fees_accounts: Option<Vec<Account>>,
+    pub fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
     pub created_at_time: Option<u64>,
     pub memo: Vec<u8>,
     pub amount: NumTokens,
@@ -387,10 +387,10 @@ pub enum FundsTransfer {
 #[allow(dead_code)]
 impl FundsTransfer {
     pub fn new(
-        from: Account,
-        to: Account,
+        from: IcrcCompatibleAccount,
+        to: IcrcCompatibleAccount,
         fee: Option<NumTokens>,
-        fees_accounts: Option<Vec<Account>>,
+        fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
         created_at_time: Option<u64>,
         memo: Vec<u8>,
         amount: NumTokens,
@@ -406,13 +406,13 @@ impl FundsTransfer {
         })
     }
 
-    pub fn from(&self) -> &Account {
+    pub fn from(&self) -> &IcrcCompatibleAccount {
         match self {
             FundsTransfer::V1(ft) => &ft.from,
         }
     }
 
-    pub fn to(&self) -> &Account {
+    pub fn to(&self) -> &IcrcCompatibleAccount {
         match self {
             FundsTransfer::V1(ft) => &ft.to,
         }
@@ -424,7 +424,7 @@ impl FundsTransfer {
         }
     }
 
-    pub fn fee_accounts(&self) -> Option<&[Account]> {
+    pub fn fee_accounts(&self) -> Option<&[IcrcCompatibleAccount]> {
         match self {
             FundsTransfer::V1(ft) => ft.fees_accounts.as_deref(),
         }

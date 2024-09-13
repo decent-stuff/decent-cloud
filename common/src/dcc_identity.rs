@@ -5,7 +5,7 @@ use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ic_cdk::println;
 use pkcs8::der::zeroize::Zeroizing;
 
-use crate::{Account, MINTING_ACCOUNT_PRINCIPAL};
+use crate::{IcrcCompatibleAccount, MINTING_ACCOUNT_PRINCIPAL};
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512, Signature, SigningKey, VerifyingKey};
 use hmac::{Hmac, Mac};
@@ -80,10 +80,12 @@ impl DccIdentity {
         }
     }
 
-    pub fn as_account(&self) -> Account {
-        Account::new(self.to_ic_principal(), None)
+    pub fn as_icrc_compatible_account(&self) -> IcrcCompatibleAccount {
+        IcrcCompatibleAccount::new(self.to_ic_principal(), None)
     }
 
+    /// Returns the public key as bytes.
+    /// This is more universal than the IC principals, since an IC principal can be derived from the public key.
     pub fn to_bytes_verifying(&self) -> Vec<u8> {
         match self {
             DccIdentity::Ed25519(_, verifying_key) => verifying_key.to_bytes().to_vec(),
@@ -93,11 +95,6 @@ impl DccIdentity {
     /// Returns the public key in PEM format. This is more universal than the IC principals.
     pub fn as_uid_string(&self) -> String {
         self.verifying_key_as_pem_one_line().to_owned()
-    }
-
-    /// Returns the public key as bytes. This is more universal than the IC principals.
-    pub fn as_uid_bytes(&self) -> Vec<u8> {
-        self.to_bytes_verifying()
     }
 
     pub fn is_minting_account(&self) -> bool {
@@ -361,10 +358,10 @@ impl From<std::io::Error> for CryptoError {
 impl std::fmt::Display for DccIdentity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            DccIdentity::Ed25519(None, _) => write!(f, " [Ed25519 verifying] ")?,
-            DccIdentity::Ed25519(Some(_), _) => write!(f, " [Ed25519 signing] ")?,
+            DccIdentity::Ed25519(None, _) => write!(f, "[Ed25519 verifying] ")?,
+            DccIdentity::Ed25519(Some(_), _) => write!(f, "[Ed25519 signing] ")?,
         }
-        write!(f, "{} ({})", self.as_uid_string(), self.to_ic_principal())
+        write!(f, "{}", self.to_ic_principal())
     }
 }
 
@@ -465,7 +462,7 @@ mod tests {
         let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
         let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
         assert_eq!(
-            dcc_identity.as_account().owner.to_text(),
+            dcc_identity.as_icrc_compatible_account().owner.to_text(),
             "tuke6-qjtdo-jtp67-maudl-vlprb-szzw2-fvlmx-a5i3v-pqqbt-tmn3q-eae"
         );
     }

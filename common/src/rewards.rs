@@ -1,15 +1,15 @@
 use crate::platform_specific::get_timestamp_ns;
+use crate::MAX_PUBKEY_BYTES;
 use crate::{
     account_transfers::FundsTransfer, amount_as_string_u64,
     charge_fees_to_account_and_bump_reputation, get_account_from_pubkey, info,
-    ledger_funds_transfer, np_registration_fee_e9s, slice_to_32_bytes_array,
-    slice_to_64_bytes_array, DccIdentity, TransferError, BLOCK_INTERVAL_SECS,
-    DC_TOKEN_DECIMALS_DIV, ED25519_SIGN_CONTEXT, FIRST_BLOCK_TIMESTAMP_NS,
+    ledger_funds_transfer, np_registration_fee_e9s, DccIdentity, TransferError,
+    BLOCK_INTERVAL_SECS, DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS,
     KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
     LABEL_REWARD_DISTRIBUTION, MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
 };
 use candid::Principal;
-use ed25519_dalek::{Digest, Sha512, Signature, VerifyingKey};
+use ed25519_dalek::Signature;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -142,14 +142,7 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
         })?;
 
     for np in eligible_nps {
-        let node_provide_public_key_bytes =
-            ledger
-                .get(LABEL_NP_REGISTER, np.key())
-                .map_err(|e| TransferError::GenericError {
-                    error_code: 10094u64.into(),
-                    message: e.to_string(),
-                })?;
-        let np_acct = get_account_from_pubkey(&node_provide_public_key_bytes);
+        let np_acct = get_account_from_pubkey(&np.key());
 
         ledger_funds_transfer(
             ledger,
@@ -174,40 +167,37 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
 pub fn do_node_provider_check_in(
     ledger: &mut LedgerMap,
     caller: Principal,
-    np_uid_bytes: Vec<u8>,
+    pubkey_bytes: Vec<u8>,
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
     info!("[do_node_provider_check_in]: caller: {}", caller);
 
-    if np_uid_bytes.len() > 64 {
+    if pubkey_bytes.len() > MAX_PUBKEY_BYTES {
         return Err("Node provider unique id too long".to_string());
     }
     if nonce_signature.len() != 64 {
         return Err("Invalid signature".to_string());
     }
-    let np_pubkey = ledger
-        .get(LABEL_NP_REGISTER, &np_uid_bytes)
+    // Ensure the NP is registered
+    ledger
+        .get(LABEL_NP_REGISTER, &pubkey_bytes)
         .map_err(|e| e.to_string())?;
-    let pub_key_bytes = slice_to_32_bytes_array(&np_pubkey)?;
-    let verifying_key = VerifyingKey::from_bytes(pub_key_bytes).map_err(|e| e.to_string())?;
-    let dcc_identity = DccIdentity::new_verifying(&verifying_key).map_err(|e| e.to_string())?;
+    let dcc_identity =
+        DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
     info!(
         "Check-in of {}, account: {}",
         dcc_identity,
-        get_account_from_pubkey(&np_pubkey)
+        get_account_from_pubkey(&pubkey_bytes)
     );
     let latest_nonce = ledger.get_latest_block_hash();
-    let signature_bytes = slice_to_64_bytes_array(&nonce_signature)?;
-    let signature = Signature::from_bytes(signature_bytes);
+    let signature = Signature::from_slice(&nonce_signature).map_err(|e| e.to_string())?;
     info!(
         "Checking signature {} against latest nonce: {}",
         signature,
         hex::encode(&latest_nonce)
     );
-    let mut prehashed: Sha512 = Sha512::new();
-    prehashed.update(latest_nonce);
-    verifying_key
-        .verify_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT), &signature)
+    dcc_identity
+        .verify(&latest_nonce, &signature)
         .expect("Signature didn't verify");
 
     if ledger.get_blocks_count() > 0 {
@@ -221,7 +211,7 @@ pub fn do_node_provider_check_in(
     }
 
     ledger
-        .upsert(LABEL_NP_CHECK_IN, np_uid_bytes, nonce_signature)
+        .upsert(LABEL_NP_CHECK_IN, pubkey_bytes, nonce_signature)
         .map(|_| "ok".to_string())
         .map_err(|e| format!("{:?}", e))?;
 

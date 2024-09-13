@@ -203,7 +203,7 @@ mod tests {
         fn create_dummy_funds_transfer(to: u64, amount: u64) -> FundsTransfer {
             FundsTransfer::new(
                 MINTING_ACCOUNT,
-                crate::Account {
+                crate::IcrcCompatibleAccount {
                     owner: Principal::from_slice(&to.to_be_bytes()),
                     subaccount: None,
                 },

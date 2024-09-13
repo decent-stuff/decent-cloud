@@ -11,10 +11,10 @@ thread_local! {
     static REPUTATIONS: RefCell<AHashMap<Vec<u8>, u64>> = RefCell::new(HashMap::default());
 }
 
-pub fn reputation_get<S: AsRef<[u8]>>(identity_uid: S) -> u64 {
+pub fn reputation_get<S: AsRef<[u8]>>(verifying_pk: S) -> u64 {
     REPUTATIONS.with(|reputations| {
         let reputations = reputations.borrow();
-        match reputations.get(identity_uid.as_ref()) {
+        match reputations.get(verifying_pk.as_ref()) {
             Some(rep) => *rep,
             None => 0,
         }
@@ -24,8 +24,8 @@ pub fn reputation_get<S: AsRef<[u8]>>(identity_uid: S) -> u64 {
 pub fn reputations_apply_changes(changes: &ReputationChange) {
     REPUTATIONS.with(|reputations| {
         let mut reputations = reputations.borrow_mut();
-        for (identity_uid, delta) in changes.changes() {
-            let reputation = reputations.entry(identity_uid.clone()).or_default();
+        for (verifying_pk, delta) in changes.changes() {
+            let reputation = reputations.entry(verifying_pk.clone()).or_default();
             *reputation = (*reputation as i64 + delta).max(0) as u64;
         }
     });
@@ -50,8 +50,7 @@ pub fn ledger_add_reputation_change(
     if dcc_identity.is_minting_account() {
         warn!("Attempted to add reputation change to minting account");
     } else {
-        let identity_uid = dcc_identity.as_uid_bytes();
-        let entry = ReputationChange::new_single(identity_uid, delta);
+        let entry = ReputationChange::new_single(dcc_identity.to_bytes_verifying(), delta);
         let entry_bytes = borsh::to_vec(&entry)?;
 
         let entry_id: [u8; 32] = Sha256::digest(&entry_bytes).into();
@@ -83,11 +82,11 @@ pub enum ReputationChange {
 
 impl ReputationChange {
     /// Create a new list of reputation changes, for appending to the ledger
-    /// identity_uid: The identity to change
+    /// verifying_pk: Verifying (public) key of the identity to change
     /// delta: The absolute change (positive or negative) to the identity's reputation
-    pub fn new_single(identity_uid: Identifier, delta: i64) -> Self {
+    pub fn new_single(verifying_pk: Identifier, delta: i64) -> Self {
         Self::V1(ReputationChangeV1 {
-            changes: vec![(identity_uid, delta)],
+            changes: vec![(verifying_pk, delta)],
         })
     }
 

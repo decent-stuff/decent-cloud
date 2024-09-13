@@ -1,7 +1,7 @@
 use crate::{
     charge_fees_to_account_no_bump_reputation, info, reputation_get, reward_e9s_per_block,
     DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE, MAX_JSON_ZLIB_PAYLOAD_LENGTH,
-    MAX_UID_LENGTH,
+    MAX_PUBKEY_BYTES,
 };
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
@@ -41,15 +41,15 @@ pub struct UpdateProfilePayload {
 pub fn do_node_provider_update_profile(
     ledger: &mut LedgerMap,
     caller: Principal,
-    np_uid_bytes: Vec<u8>,
+    pubkey_bytes: Vec<u8>,
     update_profile_payload: Vec<u8>,
 ) -> Result<String, String> {
-    if np_uid_bytes.len() > MAX_UID_LENGTH {
-        return Err("Node provider unique id too long".to_string());
+    if pubkey_bytes.len() > MAX_PUBKEY_BYTES {
+        return Err("Provided public key too long".to_string());
     }
 
     let dcc_identity =
-        DccIdentity::new_verifying_from_bytes(&np_uid_bytes).map_err(|e| e.to_string())?;
+        DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
     if caller != dcc_identity.to_ic_principal() {
         return Err("Invalid caller".to_string());
     }
@@ -74,7 +74,7 @@ pub fn do_node_provider_update_profile(
             )?;
             // Store the original signed payload in the ledger
             ledger
-                .upsert(LABEL_NP_PROFILE, &np_uid_bytes, &update_profile_payload)
+                .upsert(LABEL_NP_PROFILE, &pubkey_bytes, &update_profile_payload)
                 .map(|_| "Profile updated! Thank you.".to_string())
                 .map_err(|e| e.to_string())
         }
@@ -82,8 +82,8 @@ pub fn do_node_provider_update_profile(
     }
 }
 
-pub fn do_node_provider_get_profile(ledger: &LedgerMap, np_uid_bytes: Vec<u8>) -> Option<String> {
-    match ledger.get(LABEL_NP_PROFILE, &np_uid_bytes) {
+pub fn do_node_provider_get_profile(ledger: &LedgerMap, pubkey_bytes: Vec<u8>) -> Option<String> {
+    match ledger.get(LABEL_NP_PROFILE, &pubkey_bytes) {
         Ok(profile) => {
             let payload: UpdateProfilePayload =
                 serde_json::from_slice(&profile).expect("Failed to decode profile payload");
@@ -91,7 +91,7 @@ pub fn do_node_provider_get_profile(ledger: &LedgerMap, np_uid_bytes: Vec<u8>) -
                 serde_json::from_slice(&payload.profile_payload).expect("Failed to decode profile");
             let profile_with_reputation = NodeProviderProfileWithReputation {
                 profile,
-                reputation: reputation_get(&np_uid_bytes),
+                reputation: reputation_get(&pubkey_bytes),
             };
             Some(serde_json::to_string(&profile_with_reputation).expect("Failed to encode profile"))
         }

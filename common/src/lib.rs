@@ -42,7 +42,7 @@ pub use dcc_identity::DccIdentity;
 #[allow(unused_imports)]
 use ledger_map::{debug, error, info, warn};
 
-pub const MINTING_ACCOUNT: Account = Account::new_minting();
+pub const MINTING_ACCOUNT: IcrcCompatibleAccount = IcrcCompatibleAccount::new_minting();
 pub const MINTING_ACCOUNT_PRINCIPAL: Principal = Principal::from_slice(b"MINTING");
 pub const MINTING_ACCOUNT_ICRC1: Icrc1Account = Icrc1Account {
     owner: MINTING_ACCOUNT_PRINCIPAL,
@@ -72,7 +72,7 @@ pub const LABEL_REPUTATION_CHANGE: &str = "RepChange";
 pub const LABEL_REWARD_DISTRIBUTION: &str = "RewardDistr";
 pub const LABEL_USER_REGISTER: &str = "UserRegister";
 pub const MAX_JSON_ZLIB_PAYLOAD_LENGTH: usize = 1024;
-pub const MAX_UID_LENGTH: usize = 64;
+pub const MAX_PUBKEY_BYTES: usize = 32;
 pub const MEMO_BYTES_MAX: usize = 32;
 /// Reduction of reputations for all accounts, based on time (per block), in parts per million
 pub const REPUTATION_AGING_PPM: u64 = 1_000;
@@ -84,8 +84,8 @@ pub const DATA_PULL_BYTES_BEFORE_LEN: u16 = 16; // How many bytes before the pul
 // python3 -c "from datetime import datetime; print(int(datetime.strptime('2024-01-01 00:00:00', '%Y-%m-%d %H:%M:%S').timestamp()), '* 1_000_000_000')"
 pub const FIRST_BLOCK_TIMESTAMP_NS: u64 = 1704063600 * 1_000_000_000;
 
-pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> Account {
+pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> IcrcCompatibleAccount {
     let dcc_ident = DccIdentity::new_verifying_from_bytes(pubkey_bytes)
         .unwrap_or_else(|_| panic!("Failed to parse pubkey {}", hex::encode(pubkey_bytes)));
-    dcc_ident.as_account()
+    dcc_ident.as_icrc_compatible_account()
 }

@@ -11,8 +11,8 @@ use crate::canister_backend::generic::LEDGER_MAP;
 use candid::types::number::Nat;
 use candid::CandidType;
 use dcc_common::{
-    account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer, Account,
-    FundsTransfer, NumTokens,
+    account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer,
+    FundsTransfer, IcrcCompatibleAccount, NumTokens,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -35,7 +35,7 @@ pub fn _icrc1_metadata() -> Vec<(String, MetadataValue)> {
 }
 
 pub fn _icrc1_balance_of(account: Icrc1Account) -> Nat {
-    let account = Account::from(account);
+    let account = IcrcCompatibleAccount::from(account);
     account_balance_get(&account)
 }
 
@@ -85,7 +85,7 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     }
 
     let caller_principal = caller();
-    let from = Account::new(
+    let from = IcrcCompatibleAccount::new(
         caller_principal,
         arg.from_subaccount.map(|subaccount| subaccount.to_vec()),
     );
@@ -94,7 +94,7 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     if balance < arg.amount.0 {
         return Err(Icrc1TransferError::InsufficientFunds { balance });
     }
-    let to: Account = arg.to.into();
+    let to: IcrcCompatibleAccount = arg.to.into();
 
     LEDGER_MAP.with(|ledger| {
         if to.is_minting_account() {

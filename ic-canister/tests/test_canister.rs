@@ -265,18 +265,19 @@ fn np_register(
 ) -> (DccIdentity, Result<String, String>) {
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
-        mint_tokens_for_test(pic, can, &dcc_identity.as_account().into(), initial_funds);
+        mint_tokens_for_test(
+            pic,
+            can,
+            &dcc_identity.as_icrc_compatible_account().into(),
+            initial_funds,
+        );
     }
     let result = update_check_and_decode!(
         pic,
         can,
         dcc_identity.to_ic_principal(),
         "node_provider_register",
-        Encode!(
-            &dcc_identity.as_uid_bytes(),
-            &dcc_identity.verifying_key().to_bytes()
-        )
-        .unwrap(),
+        Encode!(&dcc_identity.to_bytes_verifying(), &Vec::<u8>::new()).unwrap(),
         Result<String, String>
     );
     (dcc_identity, result)
@@ -290,18 +291,19 @@ fn user_register(
 ) -> (DccIdentity, Result<String, String>) {
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
-        mint_tokens_for_test(pic, can, &dcc_identity.as_account().into(), initial_funds);
+        mint_tokens_for_test(
+            pic,
+            can,
+            &dcc_identity.as_icrc_compatible_account().into(),
+            initial_funds,
+        );
     }
     let result = update_check_and_decode!(
         pic,
         can,
         dcc_identity.to_ic_principal(),
         "user_register",
-        Encode!(
-            &dcc_identity.as_uid_bytes(),
-            &dcc_identity.verifying_key().to_bytes()
-        )
-        .unwrap(),
+        Encode!(&dcc_identity.to_bytes_verifying(), &Vec::<u8>::new()).unwrap(),
         Result<String, String>
     );
     (dcc_identity, result)
@@ -335,7 +337,7 @@ fn np_check_in(
         dcc_identity.to_ic_principal(),
         "node_provider_check_in",
         Encode!(
-            &dcc_identity.as_uid_bytes(),
+            &dcc_identity.to_bytes_verifying(),
             &payload
         )
         .unwrap(),
@@ -418,55 +420,64 @@ fn test_np_registration_and_check_in() {
     // np_past now has 50 * 100 = 5000 tokens
     let amount = 5000u64 * DC_TOKEN_DECIMALS_DIV;
     assert_eq!(
-        get_account_balance(&p, c, &np_past.as_account().into()),
+        get_account_balance(&p, c, &np_past.as_icrc_compatible_account().into()),
         amount
     );
 
     // Since the ledger is not empty, NP registration requires a payment of the registration fee
     let (np1, reg1) = np_register(&p, c, b"np1", 0);
     assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500_000_000".to_string());
-    assert_eq!(get_account_balance(&p, c, &np1.as_account().into()), 0u64);
+    assert_eq!(
+        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        0u64
+    );
 
     let (np2, reg2) = np_register(&p, c, b"np2", 0);
     assert_eq!(reg2.unwrap_err(), "InsufficientFunds: account ejigd-cloes-e7n46-7uop4-cwkfh-ccuxk-ry2cf-adfeg-3ik3k-znob6-pae has 0 and requested 500_000_000".to_string());
     commit(&p, c);
 
-    let np_past_acct = np_past.as_account().into();
-    let np2_acct = np2.as_account().into();
+    let np_past_acct = np_past.as_icrc_compatible_account().into();
+    let np2_acct = np2.as_icrc_compatible_account().into();
     let amount_send = 10u64 * DC_TOKEN_DECIMALS_DIV;
     let response = transfer_funds(&p, c, &np_past_acct, &np2_acct, amount_send);
 
     assert!(response.is_ok());
 
     assert_eq!(
-        get_account_balance(&p, c, &np_past.as_account().into()),
+        get_account_balance(&p, c, &np_past.as_icrc_compatible_account().into()),
         amount - amount_send - DC_TOKEN_TRANSFER_FEE_E9S
     );
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_account().into()),
+        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
         amount_send
     );
 
     // Now np1 still can't register
     let (np1, reg1) = np_register(&p, c, b"np1", 0);
     assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500_000_000".to_string());
-    assert_eq!(get_account_balance(&p, c, &np1.as_account().into()), 0u64);
+    assert_eq!(
+        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        0u64
+    );
 
     // But np2 can, since it has enough funds
     let (np2, reg2) = np_register(&p, c, b"np2", 0);
     assert_eq!(reg2.unwrap(), "ok".to_string());
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_account().into()),
+        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
         9500000000u64
     );
 
     upgrade_test_canister(&p, c).expect("Canister upgrade failed");
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_account().into()),
+        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
         9500000000u64
     );
 
-    assert_eq!(get_account_balance(&p, c, &np1.as_account().into()), 0u64);
+    assert_eq!(
+        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        0u64
+    );
 
     commit(&p, c);
     // check in np2
@@ -478,17 +489,20 @@ fn test_np_registration_and_check_in() {
     // Now np2 got a reward of 50 tokens distributed to it
     // The balance is 50 (reward) + 10 (np_past transfer) - 0.5 (reg fee) - 0.5 (check in) = 59000000000 e9s
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_account().into()),
+        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
         59000000000u64
     );
 
     upgrade_test_canister(&p, c).expect("Canister upgrade failed");
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_account().into()),
+        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
         59000000000u64
     );
 
-    assert_eq!(get_account_balance(&p, c, &np1.as_account().into()), 0u64);
+    assert_eq!(
+        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        0u64
+    );
 }
 
 #[test]
@@ -513,10 +527,10 @@ fn test_reputation() {
 
     test_ffwd_to_next_block(ts_ns, &p, c);
 
-    assert!(identity_reputation_get(&p, c, &np1.as_uid_bytes()) > 0);
-    assert!(identity_reputation_get(&p, c, &np2.as_uid_bytes()) > 0);
-    assert!(identity_reputation_get(&p, c, &np3.as_uid_bytes()) > 0);
+    assert!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()) > 0);
+    assert!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()) > 0);
+    assert!(identity_reputation_get(&p, c, &np3.to_bytes_verifying()) > 0);
 
-    assert!(identity_reputation_get(&p, c, &u1.as_uid_bytes()) > 0);
-    assert!(identity_reputation_get(&p, c, &u2.as_uid_bytes()) > 0);
+    assert!(identity_reputation_get(&p, c, &u1.to_bytes_verifying()) > 0);
+    assert!(identity_reputation_get(&p, c, &u2.to_bytes_verifying()) > 0);
 }

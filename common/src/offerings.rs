@@ -1,7 +1,7 @@
 use crate::{
-    charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, slice_to_32_bytes_array,
-    DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, LABEL_NP_REGISTER,
-    MAX_JSON_ZLIB_PAYLOAD_LENGTH, MAX_UID_LENGTH,
+    charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, DccIdentity,
+    ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, LABEL_NP_REGISTER, MAX_JSON_ZLIB_PAYLOAD_LENGTH,
+    MAX_PUBKEY_BYTES,
 };
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
@@ -33,7 +33,7 @@ pub struct AvailableUnit {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct NPOffering {
-    pub node_provider_uid_bytes: Vec<u8>,
+    pub node_provider_pubkey_bytes: Vec<u8>,
     pub resource_name: ResourceName,
     pub resource_desc: ResourceDesc,
     pub vcpus: Quantity32,
@@ -63,15 +63,15 @@ pub struct UpdateOfferingPayload {
 pub fn do_node_provider_update_offering(
     ledger: &mut LedgerMap,
     caller: Principal,
-    np_uid_bytes: Vec<u8>,
+    pubkey_bytes: Vec<u8>,
     update_offering_payload: Vec<u8>,
 ) -> Result<String, String> {
-    if np_uid_bytes.len() > MAX_UID_LENGTH {
+    if pubkey_bytes.len() > MAX_PUBKEY_BYTES {
         return Err("Node provider unique id too long".to_string());
     }
 
     let dcc_identity =
-        DccIdentity::new_verifying_from_bytes(&np_uid_bytes).map_err(|e| e.to_string())?;
+        DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
     if caller != dcc_identity.to_ic_principal() {
         return Err("Invalid caller".to_string());
     }
@@ -87,12 +87,11 @@ pub fn do_node_provider_update_offering(
         return Err("Profile payload too long".to_string());
     }
 
-    match ledger.get(LABEL_NP_REGISTER, &np_uid_bytes) {
+    match ledger.get(LABEL_NP_REGISTER, &pubkey_bytes) {
         Ok(np_key) => {
             // Check the signature
-            let pub_key_bytes = slice_to_32_bytes_array(&np_key)?;
             let dcc_identity =
-                DccIdentity::new_verifying_from_bytes(pub_key_bytes).map_err(|e| e.to_string())?;
+                DccIdentity::new_verifying_from_bytes(&np_key).map_err(|e| e.to_string())?;
 
             if dcc_identity.to_ic_principal() != caller {
                 return Err("Invalid caller".to_string());
@@ -107,7 +106,7 @@ pub fn do_node_provider_update_offering(
                     )?;
                     // Store the original signed payload in the ledger
                     ledger
-                        .upsert(LABEL_NP_OFFERING, &np_uid_bytes, &update_offering_payload)
+                        .upsert(LABEL_NP_OFFERING, &pubkey_bytes, &update_offering_payload)
                         .map(|_| "Offering updated! Thank you.".to_string())
                         .map_err(|e| e.to_string())
                 }
@@ -350,7 +349,7 @@ mod tests {
 
     fn create_offering(
         ledger: &mut LedgerMap,
-        uid_bytes: Vec<u8>,
+        identity_pubkey_bytes: Vec<u8>,
         resource_name: &str,
         resource_desc: &str,
         vcpus: Quantity32,
@@ -362,7 +361,7 @@ mod tests {
         addons: Vec<Addon>,
     ) {
         let offering = NPOffering {
-            node_provider_uid_bytes: uid_bytes.clone(),
+            node_provider_pubkey_bytes: identity_pubkey_bytes.clone(),
             resource_name: resource_name.to_string(),
             resource_desc: resource_desc.to_string(),
             vcpus,
@@ -386,7 +385,7 @@ mod tests {
         ledger
             .upsert(
                 LABEL_NP_OFFERING.to_string(),
-                uid_bytes,
+                identity_pubkey_bytes,
                 serde_json::to_vec(&offering_payload).unwrap(),
             )
             .unwrap();
@@ -612,7 +611,7 @@ mod tests {
         let result = do_node_provider_update_offering(
             &mut ledger,
             dcc_identity.to_ic_principal(),
-            dcc_identity.as_uid_bytes(),
+            dcc_identity.to_bytes_verifying(),
             serde_json::to_vec(&long_payload).unwrap(),
         );
         assert!(result.is_err());
@@ -632,7 +631,7 @@ mod tests {
         let result = do_node_provider_update_offering(
             &mut ledger,
             dcc_identity.to_ic_principal(),
-            dcc_identity.as_uid_bytes(),
+            dcc_identity.to_bytes_verifying(),
             serde_json::to_vec(&payload).unwrap(),
         );
         assert!(result.is_err());
@@ -648,8 +647,8 @@ mod tests {
         ledger
             .upsert(
                 LABEL_NP_REGISTER.to_string(),
-                dcc_identity.as_uid_bytes().clone(),
-                dcc_identity.as_uid_bytes(),
+                dcc_identity.to_bytes_verifying().clone(),
+                dcc_identity.to_bytes_verifying(),
             )
             .unwrap();
 
@@ -661,7 +660,7 @@ mod tests {
         let result = do_node_provider_update_offering(
             &mut ledger,
             dcc_identity.to_ic_principal(),
-            dcc_identity.as_uid_bytes(),
+            dcc_identity.to_bytes_verifying(),
             serde_json::to_vec(&payload).unwrap(),
         );
         assert!(result.is_err());

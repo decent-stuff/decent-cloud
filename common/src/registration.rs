@@ -1,10 +1,8 @@
 use crate::{
     amount_as_string_u64, charge_fees_to_account_and_bump_reputation, info, reward_e9s_per_block,
-    slice_to_32_bytes_array, AHashMap, DccIdentity, LABEL_NP_REGISTER, LABEL_USER_REGISTER,
-    MAX_UID_LENGTH,
+    AHashMap, DccIdentity, LABEL_NP_REGISTER, LABEL_USER_REGISTER, MAX_PUBKEY_BYTES,
 };
 use candid::Principal;
-use ed25519_dalek::VerifyingKey;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -16,7 +14,7 @@ thread_local! {
     pub static PRINCIPAL_MAP: RefCell<AHashMap<Principal, Vec<u8>>> = RefCell::new(HashMap::default());
 }
 
-pub fn get_uid_from_principal(principal: Principal) -> Vec<u8> {
+pub fn get_pubkey_from_principal(principal: Principal) -> Vec<u8> {
     PRINCIPAL_MAP.with(|principal_map| {
         principal_map
             .borrow()
@@ -34,14 +32,10 @@ pub fn np_registration_fee_e9s() -> u64 {
 pub fn do_node_provider_register(
     ledger: &mut LedgerMap,
     caller: Principal,
-    np_uid_bytes: Vec<u8>, // both are the same
-    np_pubkey_bytes: Vec<u8>,
+    np_pubkey_bytes: Vec<u8>, // both are the same
 ) -> Result<String, String> {
-    if np_uid_bytes.len() > MAX_UID_LENGTH {
-        return Err("Node provider uid too long".to_string());
-    }
-    if np_pubkey_bytes.len() > MAX_UID_LENGTH {
-        return Err("Node provider public key too long".to_string());
+    if np_pubkey_bytes.len() > MAX_PUBKEY_BYTES {
+        return Err("Provided public key too long".to_string());
     }
     let dcc_identity = DccIdentity::new_verifying_from_bytes(&np_pubkey_bytes).unwrap();
     if dcc_identity.to_ic_principal() != caller {
@@ -49,13 +43,13 @@ pub fn do_node_provider_register(
     }
     info!("[do_node_provider_register]: {}", dcc_identity);
 
-    match ledger.get(LABEL_NP_REGISTER, &np_uid_bytes) {
+    match ledger.get(LABEL_NP_REGISTER, &np_pubkey_bytes) {
         Ok(_) => {
             info!("Node provider already registered");
             Err("Node provider already registered".to_string())
         }
         Err(ledger_map::LedgerError::EntryNotFound) => {
-            account_register(ledger, LABEL_NP_REGISTER, np_uid_bytes, np_pubkey_bytes)
+            account_register(ledger, LABEL_NP_REGISTER, np_pubkey_bytes)
         }
         Err(e) => Err(e.to_string()),
     }
@@ -64,18 +58,20 @@ pub fn do_node_provider_register(
 pub fn do_user_register(
     ledger: &mut LedgerMap,
     caller: Principal,
-    user_uid: Vec<u8>,
     user_pubkey_bytes: Vec<u8>,
 ) -> Result<String, String> {
     info!("[do_user_register]: caller: {}", caller);
+    if user_pubkey_bytes.len() > MAX_PUBKEY_BYTES {
+        return Err("Provided public key too long".to_string());
+    }
 
-    match ledger.get(LABEL_USER_REGISTER, &user_uid) {
+    match ledger.get(LABEL_USER_REGISTER, &user_pubkey_bytes) {
         Ok(_) => {
             info!("User already registered");
             Err("User already registered".to_string())
         }
         Err(ledger_map::LedgerError::EntryNotFound) => {
-            account_register(ledger, LABEL_USER_REGISTER, user_uid, user_pubkey_bytes)
+            account_register(ledger, LABEL_USER_REGISTER, user_pubkey_bytes)
         }
         Err(e) => Err(e.to_string()),
     }
@@ -84,13 +80,10 @@ pub fn do_user_register(
 fn account_register(
     ledger: &mut LedgerMap,
     label: &str,
-    identity_uid: Vec<u8>,
-    identity_pubkey_bytes: Vec<u8>,
+    pubkey_bytes: Vec<u8>,
 ) -> Result<String, String> {
-    let identity_pubkey_bytes = slice_to_32_bytes_array(&identity_pubkey_bytes)?;
-    let verifying_key =
-        VerifyingKey::from_bytes(identity_pubkey_bytes).map_err(|e| e.to_string())?;
-    let dcc_identity = DccIdentity::new_verifying(&verifying_key).map_err(|e| e.to_string())?;
+    let dcc_identity =
+        DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
 
     if ledger.get_blocks_count() > 0 {
         let amount = np_registration_fee_e9s();
@@ -103,13 +96,15 @@ fn account_register(
         charge_fees_to_account_and_bump_reputation(ledger, &dcc_identity, amount)?;
     }
 
+    // Update the cache of principal -> pubkey
     PRINCIPAL_MAP.with(|p| {
         p.borrow_mut()
-            .insert(dcc_identity.to_ic_principal(), identity_uid.clone())
+            .insert(dcc_identity.to_ic_principal(), pubkey_bytes.clone())
     });
 
+    // Store the pubkey in the ledger
     ledger
-        .upsert(label, &identity_uid, identity_pubkey_bytes)
+        .upsert(label, pubkey_bytes, vec![])
         .map(|_| "ok".to_string())
         .map_err(|e| e.to_string())
 }

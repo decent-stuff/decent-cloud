@@ -9,8 +9,9 @@ use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
-    reputation_get, Account, CursorDirection, DccIdentity, FundsTransfer, LedgerCursor,
-    NodeProviderProfile, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
+    reputation_get, CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount,
+    LedgerCursor, NodeProviderProfile, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN,
+    LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -102,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .get_one::<String>("identity")
                 .expect("is present");
             let dcc_identity = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
-            let account = dcc_identity.as_account();
+            let account = dcc_identity.as_icrc_compatible_account();
 
             if arg_matches.get_flag("balance") {
                 println!(
@@ -113,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if let Some(transfer_to_account) = arg_matches.get_one::<String>("transfer-to") {
-                let transfer_to_account = Account::from(transfer_to_account);
+                let transfer_to_account = IcrcCompatibleAccount::from(transfer_to_account);
                 let transfer_amount_e9s = match arg_matches.get_one::<String>("amount-dct") {
                     Some(value) => value.parse::<Nat>()? * 10_u64.pow(9),
                     None => match arg_matches.get_one::<String>("amount-e9s") {
@@ -171,7 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_register(
-                            &dcc_ident.as_uid_bytes(),
+                            &dcc_ident.to_bytes_verifying(),
                             dcc_ident.verifying_key().as_ref(),
                         )
                         .await?;
@@ -201,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_check_in(
-                            &dcc_ident.as_uid_bytes(),
+                            &dcc_ident.to_bytes_verifying(),
                             &dcc_ident.sign(&nonce_bytes)?.to_bytes(),
                         )
                         .await
@@ -233,7 +234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_update_profile(
-                            &dcc_ident.as_uid_bytes(),
+                            &dcc_ident.to_bytes_verifying(),
                             &serde_json::to_vec(&payload)?,
                         )
                         .await
@@ -255,7 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let ic_auth = dcc_to_ic_auth(&dcc_ident);
                         let canister = ledger_canister(ic_auth).await?;
                         let args = Encode!(
-                            &dcc_ident.as_uid_bytes(),
+                            &dcc_ident.to_bytes_verifying(),
                             &dcc_ident.verifying_key().as_ref()
                         )?;
                         let result = canister.call_update("user_register", &args).await?;
@@ -462,15 +463,17 @@ fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Err
                                     "{} => {}, reputation {}, balance {}",
                                     identity_name,
                                     dcc_identity,
-                                    reputation_get(&dcc_identity.as_uid_string()),
-                                    account_balance_get_as_string(&dcc_identity.as_account())
+                                    reputation_get(dcc_identity.to_bytes_verifying()),
+                                    account_balance_get_as_string(
+                                        &dcc_identity.as_icrc_compatible_account()
+                                    )
                                 );
                             } else {
                                 println!(
                                     "{} => {} reputation {}",
                                     identity_name,
                                     dcc_identity,
-                                    reputation_get(&dcc_identity.as_uid_string())
+                                    reputation_get(dcc_identity.to_bytes_verifying())
                                 );
                             }
                         }
