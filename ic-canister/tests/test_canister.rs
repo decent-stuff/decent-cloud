@@ -1,7 +1,8 @@
 use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
-    DccIdentity, BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
+    np_registration_fee_e9s, reward_e9s_per_block_recalculate, DccIdentity, BLOCK_INTERVAL_SECS,
+    FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -436,6 +437,10 @@ fn test_np_registration_and_check_in() {
     assert_eq!(reg2.unwrap_err(), "InsufficientFunds: account ejigd-cloes-e7n46-7uop4-cwkfh-ccuxk-ry2cf-adfeg-3ik3k-znob6-pae has 0 and requested 500_000_000".to_string());
     commit(&p, c);
 
+    // Initial reputation is 0
+    assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
+    assert_eq!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()), 0);
+
     let np_past_acct = np_past.as_icrc_compatible_account().into();
     let np2_acct = np2.as_icrc_compatible_account().into();
     let amount_send = 10u64 * DC_TOKEN_DECIMALS_DIV;
@@ -502,6 +507,16 @@ fn test_np_registration_and_check_in() {
     assert_eq!(
         get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
         0u64
+    );
+
+    // At this point NP1 did not register, but NP2 did.
+    // Registration sets the initial reputation (can be reconsidered in the future).
+    // However, check-in and periodic reward distribution does not increase reputation!
+    reward_e9s_per_block_recalculate();
+    assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
+    assert_eq!(
+        identity_reputation_get(&p, c, &np2.to_bytes_verifying()),
+        np_registration_fee_e9s()
     );
 }
 

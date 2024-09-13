@@ -2,7 +2,7 @@ use crate::platform_specific::get_timestamp_ns;
 use crate::MAX_PUBKEY_BYTES;
 use crate::{
     account_transfers::FundsTransfer, amount_as_string_u64,
-    charge_fees_to_account_and_bump_reputation, get_account_from_pubkey, info,
+    charge_fees_to_account_no_bump_reputation, get_account_from_pubkey, info,
     ledger_funds_transfer, np_registration_fee_e9s, DccIdentity, TransferError,
     BLOCK_INTERVAL_SECS, DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS,
     KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
@@ -142,7 +142,7 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
         })?;
 
     for np in eligible_nps {
-        let np_acct = get_account_from_pubkey(&np.key());
+        let np_acct = get_account_from_pubkey(np.key());
 
         ledger_funds_transfer(
             ledger,
@@ -207,7 +207,7 @@ pub fn do_node_provider_check_in(
             amount_as_string_u64(amount),
             dcc_identity.to_ic_principal()
         );
-        charge_fees_to_account_and_bump_reputation(ledger, &dcc_identity, amount)?;
+        charge_fees_to_account_no_bump_reputation(ledger, &dcc_identity, amount)?;
     }
 
     ledger
