@@ -6,7 +6,7 @@ use std::fmt;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Profile {
     V0_1_0(ProfileV0_1_0),
-    // Add future versions here as new variants, e.g., V0_2_0(ProfileV0_2_0)
+    // Future versions can be added as new variants
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,19 +36,30 @@ impl Profile {
     pub fn parse(yaml: &str) -> Result<Self, String> {
         // Load the YAML and deserialize into a Profile struct based on the api_version
         let doc: serde_yaml_ng::Value =
-            serde_yaml_ng::from_str(yaml).map_err(|_| "Failed to parse YAML")?;
+            serde_yaml_ng::from_str(yaml).map_err(|e| format!("Failed to parse YAML: {}", e))?;
 
-        let kind = doc["kind"].as_str().unwrap_or("");
+        // Validate the kind
+        let kind = doc["kind"]
+            .as_str()
+            .ok_or("Missing or invalid 'kind' field")?;
         if kind != "Profile" {
-            return Err(format!("Unsupported kind {}", kind));
+            return Err(format!("Unsupported kind '{}'", kind));
         }
+
         // Check the api_version to determine which Profile variant to use
-        let api_version = doc["api_version"].as_str().unwrap_or("");
+        let api_version = doc["api_version"]
+            .as_str()
+            .ok_or("Missing or invalid 'api_version' field")?;
         match api_version {
             "v0.1.0" => Self::parse_profile_v0_1_0(doc),
-            // Future versions can be added here with additional cases
-            _ => Err("Unsupported api_version".to_string()),
+            _ => Err(format!("Unsupported api_version '{}'", api_version)),
         }
+    }
+
+    fn parse_profile_v0_1_0(doc: serde_yaml_ng::Value) -> Result<Self, String> {
+        serde_yaml_ng::from_value(doc)
+            .map(Profile::V0_1_0)
+            .map_err(|e| format!("Failed to deserialize ProfileV0_1_0: {}", e))
     }
 
     // Function to search for a particular field by key and value
@@ -57,12 +68,6 @@ impl Profile {
             Profile::V0_1_0(profile) => profile.search(key, value),
             // Add future version search methods as needed
         }
-    }
-    fn parse_profile_v0_1_0(doc: serde_yaml_ng::Value) -> Result<Self, String> {
-        let profile: ProfileV0_1_0 =
-            serde_yaml_ng::from_value(doc).map_err(|_| "Failed to deserialize ProfileV0_1_0")?;
-
-        Ok(Self::V0_1_0(profile))
     }
 }
 
@@ -74,7 +79,7 @@ impl ProfileV0_1_0 {
             "name" => self.metadata.name.contains(value),
             "version" => self.metadata.version == value,
             "description" => self.spec.description.contains(value),
-            "url" => self.spec.url.contains(value),
+            "url" => self.spec.url == value,
             "logo_url" => self.spec.logo_url == value,
             "why_choose_us" => self.spec.why_choose_us.contains(value),
             _ => self
@@ -99,7 +104,10 @@ impl fmt::Display for ProfileV0_1_0 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match serde_yaml_ng::to_string(self) {
             Ok(yaml_str) => write!(f, "{}", yaml_str),
-            Err(_) => Err(fmt::Error),
+            Err(e) => {
+                write!(f, "Failed to format ProfileV0_1_0: {}", e)?;
+                Err(fmt::Error)
+            }
         }
     }
 }
@@ -110,9 +118,14 @@ fn main() {
         eprintln!("Usage: {} <YAML file>", args[0]);
         std::process::exit(1);
     }
-    let yaml = std::fs::read_to_string(args[1].clone()).expect("Failed to read YAML file");
-    let profile = Profile::parse(&yaml).expect("Failed to parse YAML");
-    println!("{}", profile);
+    let yaml = std::fs::read_to_string(&args[1]).expect("Failed to read YAML file");
+    match Profile::parse(&yaml) {
+        Ok(profile) => println!("{}", profile),
+        Err(e) => {
+            eprintln!("Error parsing profile: {}", e);
+            std::process::exit(1);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -147,7 +160,7 @@ mod tests {
                 assert_eq!(p.kind, "Profile");
                 assert!(p.search("name", "Test Node Provider"));
                 assert!(p.search("Twitter", "x.com/dc-prov"));
-            } // No other versions should be present in this test case
+            }
         }
     }
 
