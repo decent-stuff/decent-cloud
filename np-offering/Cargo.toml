@@ -1,0 +1,8 @@
+[package]
+name = "np-offering"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml_ng = { workspace = true }

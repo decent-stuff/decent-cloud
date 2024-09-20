@@ -1768,6 +1768,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "np-offering"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml_ng",
+]
+
+[[package]]
 name = "np-profile"
 version = "0.1.0"
 dependencies = [
