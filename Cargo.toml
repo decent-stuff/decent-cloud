@@ -60,4 +60,4 @@ tempfile = "3"
 tiny-bip39 = "1.0"
 tokio = { version = "1", features = ["full"] }
 which = "6.0"
-# yaml-rust = "0.4"
+yaml-rust = "0.4"

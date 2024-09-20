@@ -1,0 +1,7 @@
+[package]
+name = "np-profile"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+yaml-rust = { workspace = true }
