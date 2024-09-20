@@ -22,7 +22,7 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
 RUN cargo install cargo-make
 
 # Install pocket-ic-server
-RUN curl -L https://github.com/dfinity/pocketic/releases/download/5.0.0/pocket-ic-x86_64-linux.gz -o - | gzip -d - > /usr/local/bin/pocket-ic && chmod +x /usr/local/bin/pocket-ic
+RUN curl -L https://github.com/dfinity/pocketic/releases/download/6.0.0/pocket-ic-x86_64-linux.gz -o - | gzip -d - > /usr/local/bin/pocket-ic && chmod +x /usr/local/bin/pocket-ic
 
 ENV POCKET_IC_BIN=/usr/local/bin/pocket-ic
 
