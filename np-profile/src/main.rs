@@ -24,10 +24,10 @@ pub struct Metadata {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Spec {
-    pub description: String,
-    pub url: String,
-    pub logo_url: String,
-    pub why_choose_us: String,
+    pub description: Option<String>,
+    pub url: Option<String>,
+    pub logo_url: Option<String>,
+    pub why_choose_us: Option<String>,
     pub contacts: HashMap<String, String>,
 }
 
@@ -75,13 +75,20 @@ impl ProfileV0_1_0 {
     // Function to search within the v0.1.0 profile fields
     pub fn search(&self, key: &str, value: &str) -> bool {
         match key {
-            "kind" => self.kind == value,
             "name" => self.metadata.name.contains(value),
-            "version" => self.metadata.version == value,
-            "description" => self.spec.description.contains(value),
-            "url" => self.spec.url == value,
-            "logo_url" => self.spec.logo_url == value,
-            "why_choose_us" => self.spec.why_choose_us.contains(value),
+            "version" => self.metadata.version.contains(value),
+            "description" => self
+                .spec
+                .description
+                .as_ref()
+                .map_or(false, |v| v.contains(value)),
+            "url" => self.spec.url.as_ref().map_or(false, |v| v == value),
+            "logo_url" => self.spec.logo_url.as_ref().map_or(false, |v| v == value),
+            "why_choose_us" => self
+                .spec
+                .why_choose_us
+                .as_ref()
+                .map_or(false, |v| v.contains(value)),
             _ => self
                 .spec
                 .contacts
