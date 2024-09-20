@@ -1,4 +1,4 @@
-apiVersion: v0.1.0
+api_version: v0.1.0
 kind: Profile
 metadata:
   name: "Test Node Provider"

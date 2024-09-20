@@ -4,4 +4,5 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-yaml-rust = { workspace = true }
+serde = { workspace = true }
+serde_yaml_ng = { workspace = true }

@@ -1,28 +1,28 @@
-// profile_parser.rs
-
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use yaml_rust::{Yaml, YamlLoader};
+use std::fmt;
 
-#[derive(Debug)]
+// Define the Profile enum with version-specific variants
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Profile {
     V0_1_0(ProfileV0_1_0),
     // Add future versions here as new variants, e.g., V0_2_0(ProfileV0_2_0)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ProfileV0_1_0 {
     pub kind: String,
     pub metadata: Metadata,
     pub spec: Spec,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Metadata {
     pub name: String,
     pub version: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Spec {
     pub description: String,
     pub url: String,
@@ -32,21 +32,22 @@ pub struct Spec {
 }
 
 impl Profile {
-    // Function to parse the YAML string into a Profile enum, specific to the apiVersion v0.1.0
+    // Function to parse the YAML string into a Profile enum, specific to the api_version v0.1.0
     pub fn parse(yaml: &str) -> Result<Self, String> {
-        let docs = YamlLoader::load_from_str(yaml).map_err(|_| "Failed to load YAML")?;
-        let doc = &docs[0];
+        // Load the YAML and deserialize into a Profile struct based on the api_version
+        let doc: serde_yaml_ng::Value =
+            serde_yaml_ng::from_str(yaml).map_err(|_| "Failed to parse YAML")?;
 
         let kind = doc["kind"].as_str().unwrap_or("");
         if kind != "Profile" {
             return Err(format!("Unsupported kind {}", kind));
         }
-        // Check the apiVersion to determine which Profile variant to use
-        let api_version = doc["apiVersion"].as_str().unwrap_or("");
+        // Check the api_version to determine which Profile variant to use
+        let api_version = doc["api_version"].as_str().unwrap_or("");
         match api_version {
             "v0.1.0" => Self::parse_profile_v0_1_0(doc),
             // Future versions can be added here with additional cases
-            _ => Err("Unsupported apiVersion".to_string()),
+            _ => Err("Unsupported api_version".to_string()),
         }
     }
 
@@ -57,47 +58,11 @@ impl Profile {
             // Add future version search methods as needed
         }
     }
-    fn parse_profile_v0_1_0(doc: &Yaml) -> Result<Self, String> {
-        let kind = doc["kind"].as_str().unwrap_or("").to_string();
-        let metadata = Metadata {
-            name: doc["metadata"]["name"].as_str().unwrap_or("").to_string(),
-            version: doc["metadata"]["version"]
-                .as_str()
-                .unwrap_or("")
-                .to_string(),
-        };
+    fn parse_profile_v0_1_0(doc: serde_yaml_ng::Value) -> Result<Self, String> {
+        let profile: ProfileV0_1_0 =
+            serde_yaml_ng::from_value(doc).map_err(|_| "Failed to deserialize ProfileV0_1_0")?;
 
-        let spec = Spec {
-            description: doc["spec"]["description"]
-                .as_str()
-                .unwrap_or("")
-                .to_string(),
-            url: doc["spec"]["url"].as_str().unwrap_or("").to_string(),
-            logo_url: doc["spec"]["logo_url"].as_str().unwrap_or("").to_string(),
-            why_choose_us: doc["spec"]["why_choose_us"]
-                .as_str()
-                .unwrap_or("")
-                .to_string(),
-            contacts: doc["spec"]["contacts"]
-                .as_hash()
-                .map(|hash| {
-                    hash.iter()
-                        .map(|(k, v)| {
-                            (
-                                k.as_str().unwrap_or("").to_string(),
-                                v.as_str().unwrap_or("").to_string(),
-                            )
-                        })
-                        .collect()
-                })
-                .unwrap_or_else(HashMap::new),
-        };
-
-        Ok(Self::V0_1_0(ProfileV0_1_0 {
-            kind,
-            metadata,
-            spec,
-        }))
+        Ok(Self::V0_1_0(profile))
     }
 }
 
@@ -121,6 +86,35 @@ impl ProfileV0_1_0 {
     }
 }
 
+impl fmt::Display for Profile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Profile::V0_1_0(profile) => write!(f, "{}", profile),
+            // Add future versions' display methods as needed
+        }
+    }
+}
+
+impl fmt::Display for ProfileV0_1_0 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match serde_yaml_ng::to_string(self) {
+            Ok(yaml_str) => write!(f, "{}", yaml_str),
+            Err(_) => Err(fmt::Error),
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        eprintln!("Usage: {} <YAML file>", args[0]);
+        std::process::exit(1);
+    }
+    let yaml = std::fs::read_to_string(args[1].clone()).expect("Failed to read YAML file");
+    let profile = Profile::parse(&yaml).expect("Failed to parse YAML");
+    println!("{}", profile);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,7 +122,7 @@ mod tests {
     #[test]
     fn test_parse_and_search() {
         let yaml = r#"
-            apiVersion: v0.1.0
+            api_version: v0.1.0
             kind: Profile
             metadata:
                 name: "Test Node Provider"
@@ -160,7 +154,7 @@ mod tests {
     #[test]
     fn test_unsupported_api_version() {
         let yaml = r#"
-            apiVersion: v0.0.5
+            api_version: v0.0.5
             kind: Profile
         "#;
         assert!(Profile::parse(yaml).is_err());
@@ -169,7 +163,7 @@ mod tests {
     #[test]
     fn test_unsupported_kind() {
         let yaml = r#"
-            apiVersion: v0.1.0
+            api_version: v0.1.0
             kind: Offering
         "#;
         assert!(Profile::parse(yaml).is_err());
