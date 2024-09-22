@@ -624,8 +624,11 @@ pub async fn ledger_data_push(
         cursor_local.data_end_position - cursor_remote.data_end_position
     );
 
-    let last_i =
-        (cursor_local.data_end_position - cursor_local.data_begin_position) / PUSH_BLOCK_SIZE + 1;
+    let last_i = (cursor_local
+        .data_end_position
+        .saturating_sub(cursor_local.data_begin_position))
+        / PUSH_BLOCK_SIZE
+        + 1;
     for i in 0..last_i {
         let position = (i * PUSH_BLOCK_SIZE).max(cursor_local.data_begin_position);
 
@@ -637,7 +640,8 @@ pub async fn ledger_data_push(
             i + 1 < last_i,
         );
 
-        let buf_size = PUSH_BLOCK_SIZE.min(cursor_local.data_end_position - position) as usize;
+        let buf_size =
+            PUSH_BLOCK_SIZE.min(cursor_local.data_end_position.saturating_sub(position)) as usize;
         let mut buf = vec![0u8; buf_size];
         persistent_storage_read(position, &mut buf).map_err(|e| e.to_string())?;
         println!(
