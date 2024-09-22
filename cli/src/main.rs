@@ -293,8 +293,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else if arg_matches.get_flag("list_entries_raw") {
                 println!("Raw Entries:");
-                for ledger_block in ledger_local.iter_raw() {
-                    let ledger_block = ledger_block?;
+                for entry in ledger_local.iter_raw() {
+                    let (blk_header, ledger_block) = entry?;
+                    println!("{}", blk_header);
                     println!("{}", ledger_block)
                 }
             }
@@ -517,8 +518,8 @@ async fn ledger_data_fetch(
         cursor_from_data(
             ledger_map::partition_table::get_data_partition().start_lba,
             ledger_map::platform_specific::persistent_storage_size_bytes(),
-            ledger.get_next_block_write_position(),
-            ledger.get_next_block_write_position(),
+            ledger.get_next_block_start_pos(),
+            ledger.get_next_block_start_pos(),
         )
     };
 
@@ -604,8 +605,8 @@ pub async fn ledger_data_push(
     let cursor_local = cursor_from_data(
         ledger_map::partition_table::get_data_partition().start_lba,
         ledger_map::platform_specific::persistent_storage_size_bytes(),
-        ledger_local.get_next_block_write_position(),
-        ledger_local.get_next_block_write_position(),
+        ledger_local.get_next_block_start_pos(),
+        ledger_local.get_next_block_start_pos(),
     );
 
     let remote_metadata = get_ledger_metadata(ledger_canister).await;

@@ -249,7 +249,7 @@ pub(crate) fn _data_fetch(
         let local_cursor = cursor_from_data(
             ledger_map::partition_table::get_data_partition().start_lba,
             ledger_map::platform_specific::persistent_storage_size_bytes(),
-            ledger.borrow().get_next_block_write_position(),
+            ledger.borrow().get_next_block_start_pos(),
             req_position_start,
         );
         info!("Calculated cursor: {:?}", local_cursor);
@@ -376,8 +376,8 @@ pub(crate) fn _metadata() -> Vec<(String, MetadataValue)> {
                 ledger.get_latest_block_timestamp_ns(),
             ),
             MetadataValue::entry(
-                "ledger:next_block_write_position",
-                ledger.get_next_block_write_position(),
+                "ledger:next_block_start_pos",
+                ledger.get_next_block_start_pos(),
             ),
             MetadataValue::entry(
                 "ledger:authorized_pusher",

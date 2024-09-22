@@ -24,7 +24,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
     let mut num_txs = 0u64;
     let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
     for block in ledger.iter_raw() {
-        let block = block?;
+        let (_blk_head, block) = block?;
         for entry in block.entries() {
             match entry.label() {
                 LABEL_REPUTATION_CHANGE => {

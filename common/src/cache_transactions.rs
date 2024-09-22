@@ -227,7 +227,7 @@ mod tests {
             );
             entries.push(entry);
         }
-        let ledger_block = LedgerBlock::new(entries, 0, None, 0, vec![]);
+        let ledger_block = LedgerBlock::new(entries, 0, vec![]);
 
         // Pretend that the first free transaction number is 899
         RecentCache::parse_ledger_block(899, &ledger_block);
