@@ -1,7 +1,7 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use candid::{CandidType, Deserialize, Nat, Principal};
+use candid::{CandidType, Deserialize, Principal};
 use data_encoding::BASE32;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
@@ -11,13 +11,8 @@ use icrc_ledger_types::{
     icrc3::transactions::{Burn, Mint, Transaction, Transfer},
 };
 use ledger_map::{info, LedgerMap};
-use num_bigint::BigUint;
 use sha2::{Digest, Sha256};
-use std::{
-    cell::RefCell,
-    iter::Sum,
-    ops::{Add, AddAssign},
-};
+use std::cell::RefCell;
 
 use crate::{
     account_balance_add, account_balance_get, account_balance_sub, get_timestamp_ns,
@@ -43,8 +38,8 @@ pub fn ledger_funds_transfer(
         if balance_from < amount_withdraw_from {
             return Err(TransferError::InsufficientFunds {
                 account: transfer.from().clone().into(),
-                current_balance: balance_from.into(),
-                requested_amount: amount_withdraw_from.into(),
+                current_balance: balance_from,
+                requested_amount: amount_withdraw_from,
             });
         }
         account_balance_sub(transfer.from(), amount_withdraw_from).map_err(|e| {
@@ -291,94 +286,6 @@ impl std::fmt::Display for IcrcCompatibleAccount {
                 write!(f, "{}-{}.{}", self.owner, checksum, hex_subaccount)
             }
         }
-    }
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct NumTokens(pub Nat);
-
-impl From<u128> for NumTokens {
-    fn from(value: u128) -> Self {
-        NumTokens(Nat::from(value))
-    }
-}
-
-impl From<u64> for NumTokens {
-    fn from(value: u64) -> Self {
-        NumTokens(Nat::from(value))
-    }
-}
-
-impl From<u32> for NumTokens {
-    fn from(value: u32) -> Self {
-        NumTokens(Nat::from(value))
-    }
-}
-
-impl From<Nat> for NumTokens {
-    fn from(value: Nat) -> Self {
-        NumTokens(value)
-    }
-}
-
-impl From<BigUint> for NumTokens {
-    fn from(value: BigUint) -> Self {
-        NumTokens(Nat::from(value))
-    }
-}
-
-impl From<NumTokens> for Nat {
-    fn from(value: NumTokens) -> Self {
-        value.0
-    }
-}
-
-impl std::fmt::Display for NumTokens {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Sum<NumTokens> for NumTokens {
-    fn sum<I: Iterator<Item = NumTokens>>(iter: I) -> Self {
-        iter.map(|n| n.0 .0).sum::<BigUint>().into()
-    }
-}
-
-impl<'a> Sum<&'a NumTokens> for NumTokens {
-    fn sum<I: Iterator<Item = &'a NumTokens>>(iter: I) -> Self {
-        iter.map(|n| &n.0 .0).sum::<BigUint>().into()
-    }
-}
-
-impl Add<NumTokens> for NumTokens {
-    type Output = NumTokens;
-    fn add(self, rhs: NumTokens) -> NumTokens {
-        (self.0 .0 + rhs.0 .0).into()
-    }
-}
-
-impl AddAssign<NumTokens> for NumTokens {
-    fn add_assign(&mut self, rhs: NumTokens) {
-        self.0 .0 += rhs.0 .0;
-    }
-}
-
-impl BorshSerialize for NumTokens {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
-        BorshSerialize::serialize(&self.0 .0.to_bytes_le(), writer)
-    }
-}
-
-impl BorshDeserialize for NumTokens {
-    fn deserialize(buf: &mut &[u8]) -> Result<Self, std::io::Error> {
-        let bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
-        Ok(NumTokens(Nat::from(BigUint::from_bytes_le(&bytes))))
-    }
-
-    fn deserialize_reader<R: std::io::prelude::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let bytes: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
-        Ok(NumTokens(Nat::from(BigUint::from_bytes_le(&bytes))))
     }
 }
 

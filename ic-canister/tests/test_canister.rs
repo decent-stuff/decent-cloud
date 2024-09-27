@@ -1,8 +1,8 @@
 use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
-    np_registration_fee_e9s, reward_e9s_per_block_recalculate, DccIdentity, BLOCK_INTERVAL_SECS,
-    FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
+    np_registration_fee_e9s, reward_e9s_per_block_recalculate, Balance, DccIdentity,
+    BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -220,7 +220,7 @@ fn mint_tokens_for_test(
     pic: &PocketIc,
     can_id: Principal,
     acct: &Icrc1Account,
-    amount: u64,
+    amount: Balance,
 ) -> Nat {
     update_check_and_decode!(
         pic,
@@ -237,7 +237,7 @@ fn transfer_funds(
     can: Principal,
     send_from: &Icrc1Account,
     send_to: &Icrc1Account,
-    amount_send: u64,
+    amount_send: Balance,
 ) -> Result<candid::Nat, TransferError> {
     // Transfer amount_send tokens from one account to another
     let transfer_args = TransferArg {
@@ -262,7 +262,7 @@ fn np_register(
     pic: &PocketIc,
     can: Principal,
     seed: &[u8],
-    initial_funds: u64,
+    initial_funds: Balance,
 ) -> (DccIdentity, Result<String, String>) {
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
@@ -288,7 +288,7 @@ fn user_register(
     pic: &PocketIc,
     can: Principal,
     seed: &[u8],
-    initial_funds: u64,
+    initial_funds: Balance,
 ) -> (DccIdentity, Result<String, String>) {
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
@@ -360,17 +360,17 @@ fn test_balances_and_transfers() {
     let account_a = icrc1_account_from_slice(b"A");
     let account_b = icrc1_account_from_slice(b"B");
 
-    assert_eq!(get_account_balance(&pic, c, &account_a), 0u64);
-    assert_eq!(get_account_balance(&pic, c, &account_b), 0u64);
+    assert_eq!(get_account_balance(&pic, c, &account_a), 0u64 as Balance);
+    assert_eq!(get_account_balance(&pic, c, &account_b), 0u64 as Balance);
 
     // Mint 666 tokens on account_a
-    let amount_mint = 666u64 * DC_TOKEN_DECIMALS_DIV;
-    let amount_send = 111u64 * DC_TOKEN_DECIMALS_DIV;
+    let amount_mint = 666 as Balance * DC_TOKEN_DECIMALS_DIV;
+    let amount_send = 111 as Balance * DC_TOKEN_DECIMALS_DIV;
     let response = mint_tokens_for_test(&pic, c, &account_a, amount_mint);
     println!("mint_tokens_for_test response: {:?}", response);
 
     assert_eq!(get_account_balance(&pic, c, &account_a), amount_mint);
-    assert_eq!(get_account_balance(&pic, c, &account_b), 0u64);
+    assert_eq!(get_account_balance(&pic, c, &account_b), 0u64 as Balance);
 
     let response = transfer_funds(&pic, c, &account_a, &account_b, amount_send);
 
@@ -419,7 +419,7 @@ fn test_np_registration_and_check_in() {
     );
     commit(&p, c);
     // np_past now has 50 * 100 = 5000 tokens
-    let amount = 5000u64 * DC_TOKEN_DECIMALS_DIV;
+    let amount: Balance = 5000u32 as Balance * DC_TOKEN_DECIMALS_DIV;
     assert_eq!(
         get_account_balance(&p, c, &np_past.as_icrc_compatible_account().into()),
         amount
@@ -427,14 +427,14 @@ fn test_np_registration_and_check_in() {
 
     // Since the ledger is not empty, NP registration requires a payment of the registration fee
     let (np1, reg1) = np_register(&p, c, b"np1", 0);
-    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500_000_000".to_string());
+    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500000000".to_string());
     assert_eq!(
         get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
         0u64
     );
 
     let (np2, reg2) = np_register(&p, c, b"np2", 0);
-    assert_eq!(reg2.unwrap_err(), "InsufficientFunds: account ejigd-cloes-e7n46-7uop4-cwkfh-ccuxk-ry2cf-adfeg-3ik3k-znob6-pae has 0 and requested 500_000_000".to_string());
+    assert_eq!(reg2.unwrap_err(), "InsufficientFunds: account ejigd-cloes-e7n46-7uop4-cwkfh-ccuxk-ry2cf-adfeg-3ik3k-znob6-pae has 0 and requested 500000000".to_string());
     commit(&p, c);
 
     // Initial reputation is 0
@@ -443,7 +443,7 @@ fn test_np_registration_and_check_in() {
 
     let np_past_acct = np_past.as_icrc_compatible_account().into();
     let np2_acct = np2.as_icrc_compatible_account().into();
-    let amount_send = 10u64 * DC_TOKEN_DECIMALS_DIV;
+    let amount_send = 10 * DC_TOKEN_DECIMALS_DIV;
     let response = transfer_funds(&p, c, &np_past_acct, &np2_acct, amount_send);
 
     assert!(response.is_ok());
@@ -459,7 +459,7 @@ fn test_np_registration_and_check_in() {
 
     // Now np1 still can't register
     let (np1, reg1) = np_register(&p, c, b"np1", 0);
-    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500_000_000".to_string());
+    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500000000".to_string());
     assert_eq!(
         get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
         0u64
@@ -515,7 +515,7 @@ fn test_np_registration_and_check_in() {
     reward_e9s_per_block_recalculate();
     assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
     assert_eq!(
-        identity_reputation_get(&p, c, &np2.to_bytes_verifying()),
+        identity_reputation_get(&p, c, &np2.to_bytes_verifying()) as Balance,
         np_registration_fee_e9s()
     );
 }

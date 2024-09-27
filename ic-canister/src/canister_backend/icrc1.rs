@@ -12,7 +12,7 @@ use candid::types::number::Nat;
 use candid::CandidType;
 use dcc_common::{
     account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer, Balance,
-    FundsTransfer, IcrcCompatibleAccount, NumTokens,
+    FundsTransfer, IcrcCompatibleAccount,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -191,12 +191,12 @@ pub struct TransferArg {
     pub from_subaccount: Option<Icrc1Subaccount>,
     pub to: Icrc1Account,
     #[serde(default)]
-    pub fee: Option<NumTokens>,
+    pub fee: Option<Balance>,
     #[serde(default)]
     pub created_at_time: Option<u64>,
     #[serde(default)]
     pub memo: Option<Icrc1Memo>,
-    pub amount: NumTokens,
+    pub amount: Balance,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

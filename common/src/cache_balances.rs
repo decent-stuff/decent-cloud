@@ -39,6 +39,9 @@ pub fn account_balance_sub(
     ACCOUNT_BALANCES.with(|balances| {
         let mut balances = balances.borrow_mut();
         let balance = balances.entry(account.clone()).or_default();
+        if *balance < amount {
+            anyhow::bail!("Account balance too low, cannot subtract balance")
+        };
         *balance = balance.saturating_sub(amount);
         Ok(*balance)
     })
@@ -76,38 +79,41 @@ mod tests {
     #[test]
     fn test_accounts_ops() {
         let account_1 = mk_test_account(1, None);
-        assert_eq!(account_balance_get(&account_1), 0u32);
+        assert_eq!(account_balance_get(&account_1), 0);
         assert_eq!(
-            account_balance_add(&account_1, &100u32.into()).unwrap(),
-            100u32
+            account_balance_add(&account_1, 100u32.into()).unwrap(),
+            100u32 as Balance
         );
-        assert_eq!(account_balance_get(&account_1), 100u32);
+        assert_eq!(account_balance_get(&account_1), 100u32 as Balance);
         assert_eq!(
-            account_balance_sub(&account_1, &50u32.into()).unwrap(),
-            50u32
+            account_balance_sub(&account_1, 50u32.into()).unwrap(),
+            50u32 as Balance
         );
         assert_eq!(
-            account_balance_sub(&account_1, &100u32.into())
+            account_balance_sub(&account_1, 100u32.into())
                 .unwrap_err()
                 .to_string(),
             "Account balance too low, cannot subtract balance"
         );
         assert_eq!(
-            account_balance_sub(&account_1, &50u32.into()).unwrap(),
-            0u32
+            account_balance_sub(&account_1, 50u32.into()).unwrap(),
+            0u32 as Balance
         );
-        assert_eq!(account_balance_sub(&account_1, &0u32.into()).unwrap(), 0u32);
         assert_eq!(
-            account_balance_sub(&account_1, &1u32.into())
+            account_balance_sub(&account_1, 0u32.into()).unwrap(),
+            0u32 as Balance
+        );
+        assert_eq!(
+            account_balance_sub(&account_1, 1u32.into())
                 .unwrap_err()
                 .to_string(),
             "Account balance too low, cannot subtract balance"
         );
         assert_eq!(
-            account_balance_add(&account_1, &100u32.into()).unwrap(),
-            100u32
+            account_balance_add(&account_1, 100u32.into()).unwrap(),
+            100u32 as Balance
         );
         account_balances_clear();
-        assert_eq!(account_balance_get(&account_1), 0u32);
+        assert_eq!(account_balance_get(&account_1), 0u32 as Balance);
     }
 }

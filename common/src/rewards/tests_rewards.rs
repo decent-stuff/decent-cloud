@@ -20,7 +20,7 @@ fn test_single_reward_period() {
     reward_e9s_per_block_recalculate();
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(base_ts),
-        50 * DC_TOKEN_DECIMALS_DIV as u64
+        50 * DC_TOKEN_DECIMALS_DIV
     );
 }
 
@@ -32,7 +32,7 @@ fn test_partial_reward_period() {
     reward_e9s_per_block_recalculate();
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(base_ts),
-        25 * DC_TOKEN_DECIMALS_DIV as u64
+        25 * DC_TOKEN_DECIMALS_DIV
     );
 }
 
@@ -55,7 +55,7 @@ fn test_at_halving_point() {
     let at_halving = base_ts + 210000 * BLOCK_INTERVAL_SECS * 1_000_000_000; // At halving
     set_timestamp_ns(at_halving);
     reward_e9s_per_block_recalculate();
-    assert_eq!(reward_e9s_per_block(), 25 * DC_TOKEN_DECIMALS_DIV as u64);
+    assert_eq!(reward_e9s_per_block(), 25 * DC_TOKEN_DECIMALS_DIV);
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(base_ts),
         25 * DC_TOKEN_DECIMALS_DIV * 210000
@@ -71,7 +71,7 @@ fn test_after_several_halvings() {
     let expected_reward = ((50 * DC_TOKEN_DECIMALS_DIV) >> 5) * 5 * 210000; // Should have halved 5 times
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(base_ts),
-        expected_reward as u64
+        expected_reward
     );
 }
 
@@ -85,19 +85,19 @@ fn test_rewards_per_time_period() {
     reward_e9s_per_block_recalculate();
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS),
-        25 * DC_TOKEN_DECIMALS_DIV as u64
+        25 * DC_TOKEN_DECIMALS_DIV
     );
     set_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 1_000_000_000);
     reward_e9s_per_block_recalculate();
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS),
-        50 * DC_TOKEN_DECIMALS_DIV as u64
+        50 * DC_TOKEN_DECIMALS_DIV
     );
     set_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 3 / 2 * 1_000_000_000);
     reward_e9s_per_block_recalculate();
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS),
-        75 * DC_TOKEN_DECIMALS_DIV as u64
+        75 * DC_TOKEN_DECIMALS_DIV
     );
 
     // However, if rewards are distributed after 1 block only, it should be only 25 tokens
@@ -105,7 +105,7 @@ fn test_rewards_per_time_period() {
         calc_token_rewards_e9_since_timestamp_ns(
             FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 1_000_000_000
         ),
-        25 * DC_TOKEN_DECIMALS_DIV as u64
+        25 * DC_TOKEN_DECIMALS_DIV
     );
 }
 

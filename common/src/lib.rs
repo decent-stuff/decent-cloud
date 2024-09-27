@@ -21,7 +21,6 @@ pub use dcc_identity::{slice_to_32_bytes_array, slice_to_64_bytes_array};
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 pub use ledger_cursor::*;
 pub use ledger_refresh::*;
-use num_traits::cast::ToPrimitive;
 pub use offerings::*;
 pub use profiles::*;
 pub use registration::*;
@@ -86,12 +85,6 @@ pub const DATA_PULL_BYTES_BEFORE_LEN: u16 = 16; // How many bytes before the pul
 pub const FIRST_BLOCK_TIMESTAMP_NS: u64 = 1704063600 * 1_000_000_000;
 
 pub type Balance = u128;
-
-impl From<NumTokens> for Balance {
-    fn from(value: NumTokens) -> Self {
-        value.0 .0.to_u128().unwrap_or(Self::MAX.into()) as Self
-    }
-}
 
 pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> IcrcCompatibleAccount {
     let dcc_ident = DccIdentity::new_verifying_from_bytes(pubkey_bytes)
