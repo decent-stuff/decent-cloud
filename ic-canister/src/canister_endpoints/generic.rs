@@ -1,5 +1,6 @@
 use crate::canister_backend::generic::*;
 use candid::Principal;
+use dcc_common::Balance;
 #[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -20,7 +21,7 @@ fn post_upgrade(enable_test_config: Option<bool>) {
 }
 
 #[ic_cdk::query]
-fn get_registration_fee() -> u64 {
+fn get_registration_fee() -> Balance {
     _get_registration_fee()
 }
 

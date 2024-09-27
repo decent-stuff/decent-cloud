@@ -1,5 +1,5 @@
 use crate::{
-    charge_fees_to_account_no_bump_reputation, info, reputation_get, reward_e9s_per_block,
+    charge_fees_to_account_no_bump_reputation, info, reputation_get, reward_e9s_per_block, Balance,
     DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE, MAX_JSON_ZLIB_PAYLOAD_LENGTH,
     MAX_PUBKEY_BYTES,
 };
@@ -11,7 +11,7 @@ use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub fn np_profile_update_fee_e9s() -> u64 {
+pub fn np_profile_update_fee_e9s() -> Balance {
     reward_e9s_per_block() / 10000
 }
 

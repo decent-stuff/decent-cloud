@@ -6,10 +6,10 @@ use dcc_common::{
     account_balance_get, cursor_from_data, get_account_from_pubkey, get_pubkey_from_principal,
     np_registration_fee_e9s, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_applied_np_count, rewards_distribute,
-    rewards_pending_e9s, set_test_config, FundsTransfer, LedgerCursor, BLOCK_INTERVAL_SECS,
-    CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN, LABEL_DC_TOKEN_TRANSFER,
-    LABEL_NP_CHECK_IN, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION,
-    LABEL_USER_REGISTER,
+    rewards_pending_e9s, set_test_config, Balance, FundsTransfer, LedgerCursor,
+    BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN,
+    LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_PROFILE, LABEL_NP_REGISTER,
+    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
 };
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -134,7 +134,7 @@ pub fn _post_upgrade(enable_test_config: Option<bool>) {
     set_test_config(enable_test_config.unwrap_or_default());
 }
 
-pub(crate) fn _get_registration_fee() -> u64 {
+pub(crate) fn _get_registration_fee() -> Balance {
     np_registration_fee_e9s()
 }
 

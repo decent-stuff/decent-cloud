@@ -1,6 +1,6 @@
 use crate::{
-    amount_as_string_u64, charge_fees_to_account_and_bump_reputation, info, reward_e9s_per_block,
-    AHashMap, DccIdentity, LABEL_NP_REGISTER, LABEL_USER_REGISTER, MAX_PUBKEY_BYTES,
+    amount_as_string, charge_fees_to_account_and_bump_reputation, info, reward_e9s_per_block,
+    AHashMap, Balance, DccIdentity, LABEL_NP_REGISTER, LABEL_USER_REGISTER, MAX_PUBKEY_BYTES,
 };
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
@@ -24,7 +24,7 @@ pub fn get_pubkey_from_principal(principal: Principal) -> Vec<u8> {
     })
 }
 
-pub fn np_registration_fee_e9s() -> u64 {
+pub fn np_registration_fee_e9s() -> Balance {
     reward_e9s_per_block() / 100
 }
 
@@ -89,11 +89,11 @@ fn account_register(
         let amount = np_registration_fee_e9s();
         info!(
             "Charging {} tokens from {} for {} registration",
-            amount_as_string_u64(amount),
+            amount_as_string(amount),
             dcc_identity.to_ic_principal(),
             label
         );
-        charge_fees_to_account_and_bump_reputation(ledger, &dcc_identity, amount)?;
+        charge_fees_to_account_and_bump_reputation(ledger, &dcc_identity, amount as Balance)?;
     }
 
     // Update the cache of principal -> pubkey

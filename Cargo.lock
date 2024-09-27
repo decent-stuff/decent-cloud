@@ -618,6 +618,7 @@ dependencies = [
  "icrc-ledger-types",
  "ledger-map",
  "num-bigint",
+ "num-traits",
  "pem",
  "pkcs8",
  "serde",
@@ -690,6 +691,7 @@ dependencies = [
  "icrc-ledger-types",
  "ledger-map",
  "num-bigint",
+ "num-traits",
  "once_cell",
  "pocket-ic",
  "serde",
@@ -1640,7 +1642,7 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 
 [[package]]
 name = "ledger-map"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ahash",
  "anyhow",

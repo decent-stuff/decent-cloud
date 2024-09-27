@@ -21,7 +21,7 @@ use std::{
 
 use crate::{
     account_balance_add, account_balance_get, account_balance_sub, get_timestamp_ns,
-    ledger_add_reputation_change, slice_to_32_bytes_array, DccIdentity, TransferError,
+    ledger_add_reputation_change, slice_to_32_bytes_array, Balance, DccIdentity, TransferError,
     LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
 };
 
@@ -34,12 +34,12 @@ pub fn ledger_funds_transfer(
     transfer: FundsTransfer,
 ) -> Result<(), TransferError> {
     info!("{}", transfer);
-    let amount = &transfer.amount().0;
+    let amount = transfer.amount();
     let transfer_bytes = transfer.to_bytes()?;
     let transfer_id = transfer.to_tx_id();
     if !transfer.from().is_minting_account() {
         let balance_from = account_balance_get(transfer.from());
-        let amount_withdraw_from = amount.clone() + transfer.fee().cloned().unwrap_or_default().0;
+        let amount_withdraw_from = amount + transfer.fee().unwrap_or_default();
         if balance_from < amount_withdraw_from {
             return Err(TransferError::InsufficientFunds {
                 account: transfer.from().clone().into(),
@@ -47,7 +47,7 @@ pub fn ledger_funds_transfer(
                 requested_amount: amount_withdraw_from.into(),
             });
         }
-        account_balance_sub(transfer.from(), &amount_withdraw_from).map_err(|e| {
+        account_balance_sub(transfer.from(), amount_withdraw_from).map_err(|e| {
             TransferError::GenericError {
                 error_code: 10136u64.into(),
                 message: e.to_string(),
@@ -70,28 +70,32 @@ pub fn ledger_funds_transfer(
 pub fn charge_fees_to_account_and_bump_reputation(
     ledger: &mut LedgerMap,
     dcc_identity: &DccIdentity,
-    amount_e9s: u64,
+    amount_e9s: Balance,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
     }
+    let balance_from_after =
+        account_balance_get(&dcc_identity.as_icrc_compatible_account()) - amount_e9s;
     match ledger_funds_transfer(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
             dcc_identity.as_icrc_compatible_account(),
             MINTING_ACCOUNT,
-            Some(amount_e9s.into()),
+            amount_e9s.into(),
             Some(fees_sink_accounts()),
             Some(get_timestamp_ns()),
             vec![],
-            0u64.into(),
+            0,
+            balance_from_after,
+            0,
         ),
     ) {
         Ok(_) => Ok(ledger_add_reputation_change(
             ledger,
             dcc_identity,
-            amount_e9s.min(i64::MAX as u64) as i64,
+            amount_e9s.min(i64::MAX as Balance) as i64,
         )?),
         Err(e) => {
             info!("Failed to charge fees: {}", e);
@@ -103,22 +107,26 @@ pub fn charge_fees_to_account_and_bump_reputation(
 pub fn charge_fees_to_account_no_bump_reputation(
     ledger: &mut LedgerMap,
     dcc_identity: &DccIdentity,
-    amount_e9s: u64,
+    amount_e9s: Balance,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
     }
+    let balance_from_after =
+        account_balance_get(&dcc_identity.as_icrc_compatible_account()) - amount_e9s;
     match ledger_funds_transfer(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
             dcc_identity.as_icrc_compatible_account(),
             MINTING_ACCOUNT,
-            Some(amount_e9s.into()),
+            Some(amount_e9s),
             Some(fees_sink_accounts()),
             Some(get_timestamp_ns()),
             vec![],
-            0u64.into(),
+            0,
+            balance_from_after,
+            0,
         ),
     ) {
         Ok(_) => Ok(()),
@@ -301,6 +309,12 @@ impl From<u64> for NumTokens {
     }
 }
 
+impl From<u32> for NumTokens {
+    fn from(value: u32) -> Self {
+        NumTokens(Nat::from(value))
+    }
+}
+
 impl From<Nat> for NumTokens {
     fn from(value: Nat) -> Self {
         NumTokens(value)
@@ -372,11 +386,13 @@ impl BorshDeserialize for NumTokens {
 pub struct FundsTransferV1 {
     pub from: IcrcCompatibleAccount,
     pub to: IcrcCompatibleAccount,
-    pub fee: Option<NumTokens>,
+    pub fee: Option<Balance>,
     pub fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
     pub created_at_time: Option<u64>,
     pub memo: Vec<u8>,
-    pub amount: NumTokens,
+    pub amount: Balance,
+    pub balance_from_after: Balance,
+    pub balance_to_after: Balance,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
@@ -386,14 +402,17 @@ pub enum FundsTransfer {
 
 #[allow(dead_code)]
 impl FundsTransfer {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         from: IcrcCompatibleAccount,
         to: IcrcCompatibleAccount,
-        fee: Option<NumTokens>,
+        fee: Option<Balance>,
         fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
         created_at_time: Option<u64>,
         memo: Vec<u8>,
-        amount: NumTokens,
+        amount: Balance,
+        balance_from_after: Balance,
+        balance_to_after: Balance,
     ) -> Self {
         FundsTransfer::V1(FundsTransferV1 {
             from,
@@ -403,6 +422,8 @@ impl FundsTransfer {
             created_at_time,
             memo,
             amount,
+            balance_from_after,
+            balance_to_after,
         })
     }
 
@@ -418,9 +439,9 @@ impl FundsTransfer {
         }
     }
 
-    pub fn fee(&self) -> Option<&NumTokens> {
+    pub fn fee(&self) -> Option<Balance> {
         match self {
-            FundsTransfer::V1(ft) => ft.fee.as_ref(),
+            FundsTransfer::V1(ft) => ft.fee,
         }
     }
 
@@ -442,9 +463,21 @@ impl FundsTransfer {
         }
     }
 
-    pub fn amount(&self) -> &NumTokens {
+    pub fn amount(&self) -> Balance {
         match self {
-            FundsTransfer::V1(ft) => &ft.amount,
+            FundsTransfer::V1(ft) => ft.amount,
+        }
+    }
+
+    pub fn balance_from_after(&self) -> Balance {
+        match self {
+            FundsTransfer::V1(ft) => ft.balance_from_after,
+        }
+    }
+
+    pub fn balance_to_after(&self) -> Balance {
+        match self {
+            FundsTransfer::V1(ft) => ft.balance_to_after,
         }
     }
 
@@ -488,7 +521,7 @@ impl From<FundsTransfer> for Transaction {
             Transaction {
                 kind: "mint".into(),
                 mint: Some(Mint {
-                    amount: ft.amount().0.clone(),
+                    amount: ft.amount().into(),
                     to: ft.to().into(),
                     memo: None,
                     created_at_time: ft.created_at_time(),
@@ -503,7 +536,7 @@ impl From<FundsTransfer> for Transaction {
                 kind: "burn".into(),
                 mint: None,
                 burn: Some(Burn {
-                    amount: ft.amount().0.clone(),
+                    amount: ft.amount().into(),
                     from: ft.from().into(),
                     spender: None,
                     memo: None,
@@ -522,7 +555,7 @@ impl From<FundsTransfer> for Transaction {
                     from: ft.from().into(),
                     to: ft.to().into(),
                     spender: None,
-                    amount: ft.amount().0.clone(),
+                    amount: ft.amount().into(),
                     fee: None,
                     memo: None,
                     created_at_time: ft.created_at_time(),

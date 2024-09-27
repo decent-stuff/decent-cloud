@@ -58,13 +58,12 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                     })?;
 
                     if !transfer.from().is_minting_account() {
-                        let amount = transfer.amount().0.clone()
-                            + transfer.fee().cloned().unwrap_or_default().0;
-                        account_balance_sub(transfer.from(), &amount)?;
+                        let amount = transfer.amount() + transfer.fee().unwrap_or_default();
+                        account_balance_sub(transfer.from(), amount)?;
                     }
 
                     if !transfer.to().is_minting_account() {
-                        account_balance_add(transfer.to(), &transfer.amount().0)?;
+                        account_balance_add(transfer.to(), transfer.amount())?;
                     }
 
                     RecentCache::add_entry(num_txs, transfer.into());

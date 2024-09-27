@@ -1,5 +1,5 @@
 use crate::{
-    charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, DccIdentity,
+    charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, Balance, DccIdentity,
     ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, LABEL_NP_REGISTER, MAX_JSON_ZLIB_PAYLOAD_LENGTH,
     MAX_PUBKEY_BYTES,
 };
@@ -11,7 +11,7 @@ use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
 use strsim::jaro_winkler;
 
-fn np_offering_update_fee_e9s() -> u64 {
+fn np_offering_update_fee_e9s() -> Balance {
     reward_e9s_per_block() / 10000
 }
 

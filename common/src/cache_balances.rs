@@ -1,74 +1,58 @@
 use crate::account_transfers::IcrcCompatibleAccount;
-use crate::{AHashMap, DC_TOKEN_DECIMALS_DIV};
-use candid::Nat;
+use crate::{AHashMap, Balance, DC_TOKEN_DECIMALS_DIV};
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
-use num_bigint::BigUint;
 use std::{cell::RefCell, collections::HashMap};
 
 thread_local! {
-    static ACCOUNT_BALANCES: RefCell<AHashMap<IcrcCompatibleAccount, BigUint>> = RefCell::new(HashMap::default());
+    static ACCOUNT_BALANCES: RefCell<AHashMap<IcrcCompatibleAccount, Balance>> = RefCell::new(HashMap::default());
 }
 
-pub fn account_balance_get(account: &IcrcCompatibleAccount) -> Nat {
+pub fn account_balance_get(account: &IcrcCompatibleAccount) -> Balance {
     ACCOUNT_BALANCES.with(|balances| {
         let balances = balances.borrow();
-        match balances.get(account) {
-            Some(balance) => Nat::from(balance.clone()),
-            None => Nat::from(0u8),
-        }
+        balances.get(account).copied().unwrap_or_default()
     })
 }
 
 pub fn account_balance_get_as_string(account: &IcrcCompatibleAccount) -> String {
-    amount_as_string(&account_balance_get(account))
+    amount_as_string(account_balance_get(account))
 }
 
-pub fn amount_as_string(amount: &Nat) -> String {
-    let balance = amount.0.to_u64_digits();
-    if balance.is_empty() {
+pub fn amount_as_string(amount: Balance) -> String {
+    if amount == 0 {
         return "0.0".to_string();
     }
-    assert_eq!(balance.len(), 1);
-    amount_as_string_u64(balance[0])
-}
-
-pub fn amount_as_string_u64(amount: u64) -> String {
     format!(
         "{}.{}",
-        amount / DC_TOKEN_DECIMALS_DIV,
-        amount % DC_TOKEN_DECIMALS_DIV
+        amount / DC_TOKEN_DECIMALS_DIV as Balance,
+        amount % DC_TOKEN_DECIMALS_DIV as Balance
     )
 }
 
-pub fn amount_as_string_u128(amount: u128) -> String {
-    amount_as_string_u64(amount as u64)
-}
-
-fn _balance_sub(balance: &BigUint, amount: &BigUint) -> anyhow::Result<BigUint> {
-    if balance < amount {
-        anyhow::bail!("Account balance too low, cannot subtract balance")
-    }
-    Ok(balance - amount)
-}
-
 #[allow(dead_code)]
-pub fn account_balance_sub(account: &IcrcCompatibleAccount, amount: &Nat) -> anyhow::Result<Nat> {
+pub fn account_balance_sub(
+    account: &IcrcCompatibleAccount,
+    amount: Balance,
+) -> anyhow::Result<Balance> {
     ACCOUNT_BALANCES.with(|balances| {
         let mut balances = balances.borrow_mut();
         let balance = balances.entry(account.clone()).or_default();
-        *balance = _balance_sub(balance, &amount.0)?;
-        Ok(Nat::from(balance.clone()))
+        *balance = balance.saturating_sub(amount);
+        Ok(*balance)
     })
 }
 
-pub fn account_balance_add(account: &IcrcCompatibleAccount, amount: &Nat) -> anyhow::Result<Nat> {
+pub fn account_balance_add(
+    account: &IcrcCompatibleAccount,
+    amount: Balance,
+) -> anyhow::Result<Balance> {
     ACCOUNT_BALANCES.with(|balances| {
         let mut balances = balances.borrow_mut();
         let balance = balances.entry(account.clone()).or_default();
-        *balance += &amount.0;
-        Ok(Nat::from(balance.clone()))
+        *balance = balance.saturating_add(amount);
+        Ok(*balance)
     })
 }
 

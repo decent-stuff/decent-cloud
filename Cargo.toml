@@ -43,6 +43,7 @@ ledger-map = { path = "../ledger-map" }
 # ledger-map = { git = "https://github.com/decent-cloud/ledger-map.git", branch = "main" }
 log = "0.4"
 memmap2 = "0.9"
+num-traits = "0.2"
 num-bigint = { version = "0.4", default-features = false, features = ["serde"] }
 pem = "3.0"
 pkcs8 = "0.10"

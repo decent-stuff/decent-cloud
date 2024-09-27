@@ -21,6 +21,7 @@ pub use dcc_identity::{slice_to_32_bytes_array, slice_to_64_bytes_array};
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 pub use ledger_cursor::*;
 pub use ledger_refresh::*;
+use num_traits::cast::ToPrimitive;
 pub use offerings::*;
 pub use profiles::*;
 pub use registration::*;
@@ -52,12 +53,12 @@ use std::{collections::HashMap, hash::BuildHasherDefault};
 pub type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<ahash::AHasher>>;
 
 pub const BLOCK_INTERVAL_SECS: u64 = 600;
-pub const DC_TOKEN_DECIMALS_DIV: u64 = 10u64.pow(DC_TOKEN_DECIMALS as u32);
+pub const DC_TOKEN_DECIMALS_DIV: Balance = (10u32 as Balance).pow(DC_TOKEN_DECIMALS as u32);
 pub const DC_TOKEN_DECIMALS: u8 = 9;
 pub const DC_TOKEN_NAME: &str = "Decent Cloud";
 pub const DC_TOKEN_SYMBOL: &str = "DC";
-pub const DC_TOKEN_TOTAL_SUPPLY: u64 = 21_000_000 * DC_TOKEN_DECIMALS_DIV;
-pub const DC_TOKEN_TRANSFER_FEE_E9S: u64 = 1_000_000;
+pub const DC_TOKEN_TOTAL_SUPPLY: Balance = 21_000_000 * DC_TOKEN_DECIMALS_DIV;
+pub const DC_TOKEN_TRANSFER_FEE_E9S: Balance = 1_000_000;
 pub const ED25519_SIGNATURE_LENGTH: usize = 64;
 pub const ED25519_SIGN_CONTEXT: &[u8] = b"decent-cloud";
 pub const FETCH_SIZE_BYTES_DEFAULT: u64 = 1024 * 1024;
@@ -83,6 +84,14 @@ pub const DATA_PULL_BYTES_BEFORE_LEN: u16 = 16; // How many bytes before the pul
 // Calculated with:
 // python3 -c "from datetime import datetime; print(int(datetime.strptime('2024-01-01 00:00:00', '%Y-%m-%d %H:%M:%S').timestamp()), '* 1_000_000_000')"
 pub const FIRST_BLOCK_TIMESTAMP_NS: u64 = 1704063600 * 1_000_000_000;
+
+pub type Balance = u128;
+
+impl From<NumTokens> for Balance {
+    fn from(value: NumTokens) -> Self {
+        value.0 .0.to_u128().unwrap_or(Self::MAX.into()) as Self
+    }
+}
 
 pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> IcrcCompatibleAccount {
     let dcc_ident = DccIdentity::new_verifying_from_bytes(pubkey_bytes)

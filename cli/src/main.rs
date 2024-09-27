@@ -9,9 +9,9 @@ use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
-    reputation_get, CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount,
+    reputation_get, Balance, CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount,
     LedgerCursor, NodeProviderProfile, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN,
-    LABEL_DC_TOKEN_TRANSFER,
+    DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -116,9 +116,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(transfer_to_account) = arg_matches.get_one::<String>("transfer-to") {
                 let transfer_to_account = IcrcCompatibleAccount::from(transfer_to_account);
                 let transfer_amount_e9s = match arg_matches.get_one::<String>("amount-dct") {
-                    Some(value) => value.parse::<Nat>()? * 10_u64.pow(9),
+                    Some(value) => value.parse::<Balance>()? * DC_TOKEN_DECIMALS_DIV,
                     None => match arg_matches.get_one::<String>("amount-e9s") {
-                        Some(value) => value.parse::<Nat>()?,
+                        Some(value) => value.parse::<Balance>()?,
                         None => {
                             panic!("You must specify either --amount-dct or --amount-e9s")
                         }
@@ -126,14 +126,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 println!(
                     "Transferring {} tokens from {} \t to account {}",
-                    amount_as_string(&transfer_amount_e9s),
+                    amount_as_string(transfer_amount_e9s),
                     account,
                     transfer_to_account,
                 );
                 let ic_auth = dcc_to_ic_auth(&dcc_identity);
                 let canister = ledger_canister(ic_auth).await?;
                 let transfer_args = TransferArg {
-                    amount: transfer_amount_e9s,
+                    amount: transfer_amount_e9s.into(),
                     fee: Some(DC_TOKEN_TRANSFER_FEE_E9S.into()),
                     from_subaccount: None,
                     to: transfer_to_account.into(),
