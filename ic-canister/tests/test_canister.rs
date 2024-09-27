@@ -227,7 +227,7 @@ fn mint_tokens_for_test(
         can_id,
         acct.owner,
         "mint_tokens_for_test",
-        candid::encode_args((acct, Nat::from(amount), None::<Option<Icrc1Memo>>)).unwrap(),
+        candid::encode_args((acct, amount, None::<Option<Icrc1Memo>>)).unwrap(),
         Nat
     )
 }

@@ -11,8 +11,8 @@ use crate::canister_backend::generic::LEDGER_MAP;
 use candid::types::number::Nat;
 use candid::CandidType;
 use dcc_common::{
-    account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer, Balance,
-    FundsTransfer, IcrcCompatibleAccount,
+    account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer,
+    nat_to_balance, Balance, FundsTransfer, IcrcCompatibleAccount,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -91,7 +91,7 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     );
 
     let balance_from_after = account_balance_get(&from);
-    let amount: Balance = arg.amount.clone().into();
+    let amount = nat_to_balance(&arg.amount);
     if balance_from_after < amount {
         return Err(Icrc1TransferError::InsufficientFunds {
             balance: balance_from_after.into(),
@@ -101,7 +101,7 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     let to: IcrcCompatibleAccount = arg.to.into();
 
     LEDGER_MAP.with(|ledger| {
-        let fee: Balance = arg.fee.clone().map(|f| f.into()).unwrap_or_default();
+        let fee = nat_to_balance(&arg.fee.unwrap_or_default());
         let balance_to_after: Balance = if to.is_minting_account() {
             if fee != 0 {
                 return Err(Icrc1TransferError::BadFee {
@@ -130,11 +130,11 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
             FundsTransfer::new(
                 from,
                 to,
-                Some(arg.fee.unwrap_or(0u32.into()).into()),
+                Some(fee),
                 Some(fees_sink_accounts()),
                 Some(arg.created_at_time.unwrap_or(get_timestamp_ns())),
                 arg.memo.unwrap_or_default().0.into_vec(),
-                arg.amount.into(),
+                amount,
                 balance_from_after,
                 balance_to_after,
             ),
@@ -191,12 +191,12 @@ pub struct TransferArg {
     pub from_subaccount: Option<Icrc1Subaccount>,
     pub to: Icrc1Account,
     #[serde(default)]
-    pub fee: Option<Balance>,
+    pub fee: Option<Nat>,
     #[serde(default)]
     pub created_at_time: Option<u64>,
     #[serde(default)]
     pub memo: Option<Icrc1Memo>,
-    pub amount: Balance,
+    pub amount: Nat,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
