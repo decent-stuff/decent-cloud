@@ -656,6 +656,8 @@ dependencies = [
  "ledger-map",
  "log",
  "memmap2",
+ "np-offering",
+ "np-profile",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -1781,7 +1783,17 @@ dependencies = [
 name = "np-profile"
 version = "0.1.0"
 dependencies = [
+ "np-yaml-search",
  "serde",
+ "serde_yaml_ng",
+]
+
+[[package]]
+name = "np-yaml-search"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "regex",
  "serde_yaml_ng",
 ]
 

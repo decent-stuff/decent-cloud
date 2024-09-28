@@ -127,6 +127,14 @@ pub fn parse_args() -> clap::ArgMatches {
                         .help("Update Node Provider profile, from the provided profile description file")
                         .action(ArgAction::Set)
                         .num_args(2),
+                )
+                .arg(
+                    Arg::new("update-offering")
+                        .long("update-offering")
+                        .help("Update Node Provider offering, from the provided offering description file")
+                        .action(ArgAction::Set)
+                        .num_args(2)
+                        .conflicts_with("update-profile"),
                 ),
         )
         .subcommand(

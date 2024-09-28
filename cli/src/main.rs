@@ -23,6 +23,8 @@ use icrc_ledger_types::{
 };
 use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
 use log::{info, Level, LevelFilter, Metadata, Record};
+use np_offering::Offering;
+// use np_profile::Profile;
 use std::{
     collections::HashMap,
     io::{self, BufReader, Seek, Write},
@@ -249,6 +251,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     info!("Profile update response: {}", result);
                 } else {
                     panic!("You must specify an identity of the node provider");
+                }
+            } else if arg_matches.contains_id("update-offering") {
+                if let Some(values) = arg_matches.get_many::<String>("update-offering") {
+                    let values = values.collect::<Vec<_>>();
+                    let np_desc = values[0];
+                    let offering_file = values[1];
+
+                    let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
+                    let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                    let provider_offering: Offering =
+                        serde_yaml_ng::from_reader(File::open(offering_file)?)?;
+                    println!("Provider offering: {}", provider_offering);
+                    // FIXME: update offering in the ledger
                 }
             }
             Ok(())

@@ -37,6 +37,8 @@ indexmap.workspace = true
 ledger-map.workspace = true
 log.workspace = true
 memmap2.workspace = true
+np-offering = { path = "../np-offering" }
+np-profile = { path = "../np-profile" }
 serde_json.workspace = true
 serde_yaml_ng.workspace = true
 serde.workspace = true
