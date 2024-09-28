@@ -182,6 +182,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     panic!("You must specify an identity to register");
                 }
+            } else if arg_matches.contains_id("check-in-nonce") {
+                let nonce_bytes = ledger_canister(None).await?.get_np_check_in_nonce().await;
+                let nonce_string = hex::encode(&nonce_bytes);
+
+                println!("0x{}", nonce_string);
             } else if arg_matches.contains_id("check-in") {
                 if let Some(np_desc) = arg_matches.get_one::<String>("check-in") {
                     let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
