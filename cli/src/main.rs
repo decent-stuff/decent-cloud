@@ -53,12 +53,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("missing required argument '--network'");
     let canister_id = match network.as_str() {
         "local" => IcPrincipal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai")?,
-        "mainnet" | "ic" => IcPrincipal::from_text("tlvs5-oqaaa-aaaas-aaabq-cai")?,
+        "mainnet-eu" => IcPrincipal::from_text("tlvs5-oqaaa-aaaas-aaabq-cai")?,
+        "mainnet-01" | "ic" => IcPrincipal::from_text("ggi4a-wyaaa-aaaai-actqq-cai")?,
+        "mainnet-02" => IcPrincipal::from_text("gplx4-aqaaa-aaaai-actra-cai")?,
         _ => panic!("unknown network: {}", network),
     };
     let network_url = match network.as_str() {
         "local" => "http://127.0.0.1:8000",
-        "mainnet" | "ic" => "https://ic0.app",
+        "mainnet-eu" | "mainnet-01" | "mainnet-02" | "ic" => "https://ic0.app",
         _ => panic!("unknown network: {}", network),
     };
     let ledger_canister = |identity| async {

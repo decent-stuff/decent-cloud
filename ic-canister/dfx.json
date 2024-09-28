@@ -13,6 +13,18 @@
     }
   },
   "networks": {
+    "mainnet-01": {
+      "providers": [
+        "https://ic0.app"
+      ],
+      "type": "persistent"
+    },
+    "mainnet-eu": {
+      "providers": [
+        "https://ic0.app"
+      ],
+      "type": "persistent"
+    },
     "local": {
       "replica": {
         "log_level": "info"
