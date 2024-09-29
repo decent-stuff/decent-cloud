@@ -1775,6 +1775,7 @@ dependencies = [
 name = "np-offering"
 version = "0.1.0"
 dependencies = [
+ "np-yaml-search",
  "serde",
  "serde_yaml_ng",
 ]
@@ -1793,6 +1794,7 @@ name = "np-yaml-search"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "parse-size",
  "regex",
  "serde_yaml_ng",
 ]
@@ -1931,6 +1933,12 @@ dependencies = [
  "smallvec",
  "windows-targets 0.52.6",
 ]
+
+[[package]]
+name = "parse-size"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "487f2ccd1e17ce8c1bfab3a65c89525af41cfad4c8659021a1e9a2aacd73b89b"
 
 [[package]]
 name = "paste"

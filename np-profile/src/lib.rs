@@ -37,7 +37,7 @@ impl Profile {
         serde_yaml_ng::from_str(yaml_str).map_err(|e| format!("Failed to parse YAML: {}", e))
     }
 
-    // Function to parse the YAML string into a Profile enum, specific to the api_version v0.1.0
+    // Function to parse the input YAML string into a Profile enum, specific to the api_version v0.1.0
     pub fn parse(yaml_str: &str) -> Result<Self, String> {
         // Load the YAML and deserialize into a Profile struct based on the api_version
         let doc = Self::parse_as_yaml_value(yaml_str)?;

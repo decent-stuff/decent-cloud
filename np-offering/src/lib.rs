@@ -1,3 +1,4 @@
+use np_yaml_search::yaml_value_matches;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -279,10 +280,13 @@ pub struct AvailabilityZone {
 }
 
 impl Offering {
-    // Function to parse the YAML string into an Offering enum
-    pub fn parse(yaml: &str) -> Result<Self, String> {
-        let doc: serde_yaml_ng::Value =
-            serde_yaml_ng::from_str(yaml).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+    pub fn parse_as_yaml_value(yaml_str: &str) -> Result<serde_yaml_ng::Value, String> {
+        serde_yaml_ng::from_str(yaml_str).map_err(|e| format!("Failed to parse YAML: {}", e))
+    }
+
+    // Function to parse the input YAML string into an Offering enum
+    pub fn parse(yaml_str: &str) -> Result<Self, String> {
+        let doc = Self::parse_as_yaml_value(yaml_str)?;
 
         let kind = doc["kind"]
             .as_str()
@@ -306,191 +310,16 @@ impl Offering {
             .map_err(|e| format!("Failed to deserialize CloudProviderOfferingV0_1_0: {}", e))
     }
 
-    // Function to search within the offering
-    pub fn search(&self, key: &str, value: &str) -> bool {
-        match self {
-            Offering::V0_1_0(offering) => offering.search(key, value),
-            // Add future versions' search methods as needed
-        }
-    }
-}
-
-impl CloudProviderOfferingV0_1_0 {
-    // Search function that considers defaults and region-specific overrides
-    pub fn search(&self, key: &str, value: &str) -> bool {
-        // Search in provider metadata
-        if self.metadata.name.contains(value) || self.provider.name.contains(value) {
-            return true;
-        }
-
-        // Search in defaults
-        if let Some(ref defaults) = self.defaults {
-            if defaults.search(key, value) {
-                return true;
+    pub fn search(yaml_str: &str, search_str: &str) -> bool {
+        let yaml_value = match Offering::parse_as_yaml_value(yaml_str) {
+            Ok(yaml_value) => yaml_value,
+            Err(e) => {
+                println!("Failed to parse YAML: {}", e);
+                return false;
             }
-        }
+        };
 
-        // Search in regions, considering overrides
-        for region in &self.regions {
-            if region.search(key, value, &self.defaults) {
-                return true;
-            }
-        }
-
-        false
-    }
-}
-
-impl DefaultSpec {
-    pub fn search(&self, key: &str, value: &str) -> bool {
-        match key {
-            "compliance" => self.compliance.as_ref().map_or(false, |compliance| {
-                compliance.iter().any(|c| c.contains(value))
-            }),
-            "sla" => self.sla.as_ref().map_or(false, |sla| {
-                let uptime = sla.uptime.as_deref().unwrap_or_default();
-                let measurement_period = sla.measurement_period.as_deref().unwrap_or_default();
-                let binding = Default::default();
-                let support = sla.support.as_ref().unwrap_or(&binding);
-                let binding = Default::default();
-                let sla_response_time = support.response_time.as_ref().unwrap_or(&binding);
-                let downtime_compensation = sla.downtime_compensation.as_deref().unwrap_or(&[]);
-                let binding = Default::default();
-                let maintenance = sla.maintenance.as_ref().unwrap_or(&binding);
-                let maintenance_window = maintenance.window.as_deref().unwrap_or_default();
-                let notification_period = maintenance
-                    .notification_period
-                    .as_deref()
-                    .unwrap_or_default();
-                uptime.contains(value)
-                    || measurement_period.contains(value)
-                    || support.levels.as_ref().map_or(false, |levels| {
-                        levels.iter().any(|level| level.contains(value))
-                    })
-                    || sla_response_time
-                        .critical
-                        .as_deref()
-                        .unwrap_or_default()
-                        .contains(value)
-                    || sla_response_time
-                        .high
-                        .as_deref()
-                        .unwrap_or_default()
-                        .contains(value)
-                    || sla_response_time
-                        .medium
-                        .as_deref()
-                        .unwrap_or_default()
-                        .contains(value)
-                    || sla_response_time
-                        .low
-                        .as_deref()
-                        .unwrap_or_default()
-                        .contains(value)
-                    || downtime_compensation.iter().any(|compensation| {
-                        compensation
-                            .less_than
-                            .as_deref()
-                            .unwrap_or_default()
-                            .contains(value)
-                            || compensation
-                                .credit_percentage
-                                .map_or(false, |cp| cp.to_string().contains(value))
-                    })
-                    || maintenance_window.contains(value)
-                    || notification_period.contains(value)
-            }),
-            "machine_spec" | "instance_types" => {
-                self.machine_spec.as_ref().map_or(false, |machine_spec| {
-                    machine_spec.instance_types.iter().any(|instance_type| {
-                        instance_type.type_.contains(value)
-                            || instance_type
-                                .cpu
-                                .as_deref()
-                                .unwrap_or_default()
-                                .contains(value)
-                            || instance_type
-                                .memory
-                                .as_deref()
-                                .unwrap_or_default()
-                                .contains(value)
-                            || instance_type.storage.as_ref().map_or(false, |storage| {
-                                storage.type_.contains(value) || storage.size.contains(value)
-                            })
-                            || instance_type
-                                .pricing
-                                .as_ref()
-                                .map_or(false, |pricing| pricing.on_demand.contains(value))
-                            || instance_type.pricing.as_ref().map_or(false, |pricing| {
-                                pricing.reserved.as_ref().map_or(false, |reserved| {
-                                    reserved.one_year.contains(value)
-                                        || reserved
-                                            .three_year
-                                            .as_deref()
-                                            .unwrap_or_default()
-                                            .contains(value)
-                                })
-                            })
-                    })
-                })
-            }
-            "network_spec" => self.network_spec.as_ref().map_or(false, |network_spec| {
-                network_spec
-                    .vpc_support
-                    .as_ref()
-                    .map_or(false, |vpc_support| *vpc_support)
-                    == value.parse::<bool>().unwrap_or_default()
-                    || network_spec
-                        .public_ip
-                        .as_ref()
-                        .map_or(false, |public_ip| *public_ip)
-                        == value.parse::<bool>().unwrap_or_default()
-                    || network_spec
-                        .private_ip
-                        .as_ref()
-                        .map_or(false, |private_ip| *private_ip)
-                        == value.parse::<bool>().unwrap_or_default()
-                // FIXME: add firewalls
-            }),
-            // TODO: Add other fields:
-            // pub security
-            // pub monitoring: Option<Monitoring>,
-            // pub backup: Option<Backup>,
-            // pub cost_optimization: Option<CostOptimization>,
-            // pub service_integrations: Option<ServiceIntegrations>,
-            _ => false,
-        }
-    }
-}
-
-impl Region {
-    pub fn search(&self, _key: &str, value: &str, default_spec: &Option<DefaultSpec>) -> bool {
-        // Check region-specific fields
-        if self.name.contains(value) {
-            return true;
-        }
-        if let Some(ref description) = self.description {
-            if description.contains(value) {
-                return true;
-            }
-        }
-
-        // Merge defaults with region-specific overrides for machine_spec
-        let machine_spec = self.machine_spec.as_ref().or(match default_spec {
-            Some(defaults) => defaults.machine_spec.as_ref(),
-            None => None,
-        });
-
-        if let Some(spec) = machine_spec {
-            for instance_type in &spec.instance_types {
-                if instance_type.type_.contains(value) {
-                    return true;
-                }
-                // TODO: Check other fields as well
-            }
-        }
-
-        false
+        yaml_value_matches(&yaml_value, search_str)
     }
 }
 

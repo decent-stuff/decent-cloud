@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["cli", "common", "ic-canister", "np-offering", "np-profile", "np-yaml-search"]
+members = [
+    "cli",
+    "common",
+    "ic-canister",
+    "np-offering",
+    "np-profile",
+    "np-yaml-search",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -45,6 +52,7 @@ log = "0.4"
 memmap2 = "0.9"
 num-traits = "0.2"
 num-bigint = { version = "0.4", default-features = false, features = ["serde"] }
+parse-size = "1.1.0"
 pem = "3.0"
 pkcs8 = "0.10"
 pocket-ic = "5"

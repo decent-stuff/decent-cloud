@@ -195,7 +195,7 @@ regions:
           gpu:
             count: 4
             type: NVIDIA A100
-            memory: 80 GB per GPU
+            memory: 80 GB
           memory: 256 GB
           storage:
             type: NVMe SSD
