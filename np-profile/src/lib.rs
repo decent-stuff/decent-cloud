@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn test_parse_and_search() {
-        let yaml = r#"
+        let profile_yaml = r#"
             api_version: v0.1.0
             kind: Profile
             metadata:
@@ -124,16 +124,19 @@ mod tests {
                     email: "support@dc-prov.com"
         "#;
 
-        let profile = Profile::parse(yaml).expect("Failed to parse YAML");
+        let profile = Profile::parse(profile_yaml).expect("Failed to parse YAML");
 
         match profile {
             Profile::V0_1_0(p) => {
                 assert_eq!(p.metadata.name, "Test Node Provider");
                 assert_eq!(p.kind, "Profile");
-                assert!(p.search("name", "Test Node Provider"));
-                assert!(p.search("Twitter", "x.com/dc-prov"));
             }
         }
+        assert!(Profile::search(profile_yaml, "name=Test Node Provider"));
+        assert!(Profile::search(
+            profile_yaml,
+            "Twitter contains x.com/dc-prov"
+        ));
     }
 
     #[test]

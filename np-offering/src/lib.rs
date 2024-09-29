@@ -404,11 +404,24 @@ regions:
 
     #[test]
     fn test_search_offering() {
-        let offering = Offering::parse(SAMPLE_YAML).expect("Failed to parse YAML");
-        assert!(offering.search("name", "GenericCloudService"));
-        assert!(offering.search("name", "eu-central-1"));
-        assert!(offering.search("type", "memory-optimized"));
-        assert!(!offering.search("nonexistent", "value"));
+        assert!(Offering::search(SAMPLE_YAML, "name =GenericCloudService"));
+        assert!(Offering::search(SAMPLE_YAML, "name=GenericCloudService"));
+        assert!(Offering::search(SAMPLE_YAML, "name= GenericCloudService"));
+        assert!(Offering::search(SAMPLE_YAML, "name contains Cloud"));
+        assert!(Offering::search(SAMPLE_YAML, "name contains CloudService"));
+        assert!(Offering::search(SAMPLE_YAML, "name contains Service"));
+        assert!(Offering::search(
+            SAMPLE_YAML,
+            "name contains GenericCloudService"
+        ));
+        assert!(Offering::search(
+            SAMPLE_YAML,
+            "name startswith GenericCloudService"
+        ));
+        assert!(Offering::search(SAMPLE_YAML, "name endswith Service"));
+        assert!(Offering::search(SAMPLE_YAML, "name=eu-central-1"));
+        assert!(Offering::search(SAMPLE_YAML, "type=memory-optimized"));
+        assert!(!Offering::search(SAMPLE_YAML, "nonexistent=value"));
     }
 
     #[test]
