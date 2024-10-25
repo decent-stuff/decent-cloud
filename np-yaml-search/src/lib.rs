@@ -2,6 +2,7 @@ use parse_size::parse_size;
 use regex::Regex;
 use serde_yaml_ng::Value;
 use std::str::FromStr;
+use strsim::jaro_winkler;
 
 pub struct Search {
     key: String,
@@ -95,8 +96,16 @@ impl CompareOp {
         let value = &try_parse_size_bytes(value);
         let other = &try_parse_size_bytes(other);
         match self {
-            CompareOp::Equal => value == other,
-            CompareOp::NotEqual => value != other,
+            CompareOp::Equal => match (value, other) {
+                (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
+                (Value::String(a), Value::String(b)) => jaro_winkler(a, b) > 0.9,
+                (a, b) => a == b,
+            },
+            CompareOp::NotEqual => match (value, other) {
+                (Value::Number(a), Value::Number(b)) => a.as_f64() != b.as_f64(),
+                (Value::String(a), Value::String(b)) => jaro_winkler(a, b) <= 0.9,
+                (a, b) => a != b,
+            },
             CompareOp::GreaterThan => match (value, other) {
                 (Value::Number(a), Value::Number(b)) => a.as_f64() > b.as_f64(),
                 (Value::String(a), Value::String(b)) => a > b,
