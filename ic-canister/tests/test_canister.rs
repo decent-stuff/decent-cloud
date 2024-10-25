@@ -34,7 +34,7 @@ static CANISTER_WASM: Lazy<Vec<u8>> = Lazy::new(|| {
         .output()
         .unwrap();
     path.push("target/wasm32-unknown-unknown/release/decent_cloud_canister.wasm");
-    std::fs::read(path).unwrap()
+    fs_err::read(path).unwrap()
 });
 
 macro_rules! query_check_and_decode {

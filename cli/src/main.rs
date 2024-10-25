@@ -472,7 +472,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
     let identities_dir = DccIdentity::identities_dir();
     println!("Available identities at {}:", identities_dir.display());
-    for identity in std::fs::read_dir(identities_dir)? {
+    for identity in fs_err::read_dir(identities_dir)? {
         match identity {
             Ok(identity) => {
                 let path = identity.path();

@@ -6,7 +6,7 @@ fn main() {
         eprintln!("Usage: {} <YAML file> <Search string>", args[0]);
         std::process::exit(1);
     }
-    let yaml = std::fs::read_to_string(&args[1]).expect("Failed to read YAML file");
+    let yaml = fs_err::read_to_string(&args[1]).expect("Failed to read YAML file");
     if Profile::search(&yaml, &args[2]) {
         eprintln!("Profile matches!");
         match Profile::parse(&yaml) {
