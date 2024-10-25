@@ -557,7 +557,8 @@ async fn ledger_data_fetch(
     };
 
     println!(
-        "Fetching data from the Ledger canister, with local cursor: {} and bytes before: {:?}",
+        "Fetching data from the Ledger canister {}, with local cursor: {} and bytes before: {:?}",
+        ledger_canister.canister_id(),
         cursor_local,
         hex::encode(bytes_before.as_ref().unwrap_or(&vec![])),
     );

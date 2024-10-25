@@ -38,6 +38,10 @@ impl LedgerCanister {
         })
     }
 
+    pub fn canister_id(&self) -> &Principal {
+        &self.canister_id
+    }
+
     pub async fn call_update(&self, method_name: &str, args: &[u8]) -> Result<Vec<u8>, String> {
         self.agent
             .update(&self.canister_id, method_name)
