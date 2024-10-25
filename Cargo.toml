@@ -35,17 +35,17 @@ ed25519-dalek = { version = "2", default-features = false, features = [
     "pem",
 ] }
 env_logger = "0.11"
-fs-err = "2.11"
+fs-err = "3.0.0"
 hex = "0.4"
 hmac = "0.12"
-ic-agent = "0.38.2"
+ic-agent = "0.39.1"
 ic-canister-log = "0.2"
 ic-cdk = "0.16"
 ic-certification = "2.6"
 ic-metrics-encoder = "1.1"
 ic-cdk-timers = "0.10"
 icrc-ledger-types = "0.1"
-indexmap = "2.5"
+indexmap = "2.6"
 ledger-map = { path = "../ledger-map" }
 # ledger-map = { git = "https://github.com/decent-cloud/ledger-map.git", branch = "main" }
 log = "0.4"
@@ -56,10 +56,10 @@ parse-size = "1.1.0"
 pem = "3.0"
 pkcs8 = "0.10"
 pocket-ic = "5"
-regex = "1.11"
+regex = "1.11.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
-serde_json = { version = "1.0", features = ["preserve_order"] }
+serde_json = { version = "1.0.132", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 sha2 = "0.10"
 strsim = "0.11"
@@ -67,6 +67,6 @@ strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 tabular = "0.2"
 tempfile = "3.13"
-tiny-bip39 = "1.0"
-tokio = { version = "1", features = ["full"] }
+tiny-bip39 = "2.0"
+tokio = { version = "1.41", features = ["full"] }
 which = "6.0"
