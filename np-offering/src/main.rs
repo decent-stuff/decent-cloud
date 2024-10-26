@@ -7,15 +7,10 @@ fn main() {
         std::process::exit(1);
     }
     let yaml = fs_err::read_to_string(&args[1]).expect("Failed to read YAML file");
-    if Offering::search_yaml(&yaml, &args[2]) {
+    let offering = Offering::new_from_str(&yaml, "yaml").expect("Failed to parse YAML");
+    if offering.matches_search(&args[2]) {
         eprintln!("Profile matches!");
-        match Offering::parse(&yaml) {
-            Ok(offering) => println!("{}", offering),
-            Err(e) => {
-                eprintln!("Error parsing offering: {}", e);
-                std::process::exit(1);
-            }
-        }
+        println!("{}", offering);
     } else {
         eprintln!("Profile does not match!");
         std::process::exit(1);
