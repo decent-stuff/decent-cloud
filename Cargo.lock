@@ -1809,6 +1809,7 @@ dependencies = [
 name = "np-offering"
 version = "0.1.0"
 dependencies = [
+ "fs-err",
  "np-json-search",
  "serde",
  "serde_json",

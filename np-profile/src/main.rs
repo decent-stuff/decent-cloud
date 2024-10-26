@@ -7,15 +7,10 @@ fn main() {
         std::process::exit(1);
     }
     let yaml = fs_err::read_to_string(&args[1]).expect("Failed to read YAML file");
-    if Profile::new_from_json_if_matches(&yaml, &args[2]) {
+    let profile = Profile::new_from_str(&yaml, "yaml").expect("Failed to parse YAML");
+    if profile.matches_search(&args[2]) {
         eprintln!("Profile matches!");
-        match Profile::parse(&yaml) {
-            Ok(profile) => println!("{}", profile),
-            Err(e) => {
-                eprintln!("Error parsing profile: {}", e);
-                std::process::exit(1);
-            }
-        }
+        println!("{}", profile)
     } else {
         eprintln!("Profile does not match!");
         std::process::exit(1);
