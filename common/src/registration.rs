@@ -85,7 +85,7 @@ fn account_register(
     let dcc_identity =
         DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
 
-    if ledger.get_blocks_count() > 0 {
+    let fees = if ledger.get_blocks_count() > 0 {
         let amount = np_registration_fee_e9s();
         info!(
             "Charging {} tokens from {} for {} registration",
@@ -94,7 +94,10 @@ fn account_register(
             label
         );
         charge_fees_to_account_and_bump_reputation(ledger, &dcc_identity, amount as Balance)?;
-    }
+        amount
+    } else {
+        0
+    };
 
     // Update the cache of principal -> pubkey
     PRINCIPAL_MAP.with(|p| {
@@ -105,6 +108,11 @@ fn account_register(
     // Store the pubkey in the ledger
     ledger
         .upsert(label, pubkey_bytes, vec![])
-        .map(|_| "ok".to_string())
+        .map(|_| {
+            format!(
+                "Registration complete! Thank you. You have been charged {} tokens",
+                amount_as_string(fees)
+            )
+        })
         .map_err(|e| e.to_string())
 }

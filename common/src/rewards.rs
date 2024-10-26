@@ -204,7 +204,7 @@ pub fn do_node_provider_check_in(
         .verify(&latest_nonce, &signature)
         .expect("Signature didn't verify");
 
-    if ledger.get_blocks_count() > 0 {
+    let fees = if ledger.get_blocks_count() > 0 {
         let amount = np_registration_fee_e9s();
         info!(
             "Charging {} tokens {} for NP check in",
@@ -212,14 +212,20 @@ pub fn do_node_provider_check_in(
             dcc_identity.to_ic_principal()
         );
         charge_fees_to_account_no_bump_reputation(ledger, &dcc_identity, amount as Balance)?;
-    }
+        amount
+    } else {
+        0
+    };
 
     ledger
         .upsert(LABEL_NP_CHECK_IN, pubkey_bytes, nonce_signature)
         .map(|_| "ok".to_string())
         .map_err(|e| format!("{:?}", e))?;
 
-    Ok("Signature verified, check in successful.".to_string())
+    Ok(format!(
+        "Signature verified, check in successful. You have been charged {} tokens",
+        amount_as_string(fees)
+    ))
 }
 
 pub fn rewards_applied_np_count(ledger: &LedgerMap) -> usize {

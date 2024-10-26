@@ -1,6 +1,7 @@
 use crate::{
-    charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, Balance, DccIdentity,
-    ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES, MAX_PUBKEY_BYTES,
+    amount_as_string, charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block,
+    Balance, DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
+    MAX_PUBKEY_BYTES,
 };
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
@@ -49,15 +50,17 @@ pub fn do_node_provider_update_offering(
 
     match dcc_identity.verify_bytes(&payload.offering_payload, &payload.signature) {
         Ok(()) => {
-            charge_fees_to_account_no_bump_reputation(
-                ledger,
-                &dcc_identity,
-                np_offering_update_fee_e9s(),
-            )?;
+            let fees = np_offering_update_fee_e9s();
+            charge_fees_to_account_no_bump_reputation(ledger, &dcc_identity, fees)?;
             // Store the original signed payload in the ledger
             ledger
                 .upsert(LABEL_NP_OFFERING, &pubkey_bytes, update_offering_payload)
-                .map(|_| "Offering updated! Thank you.".to_string())
+                .map(|_| {
+                    format!(
+                        "Offering updated! Thank you. You have been charged {} tokens",
+                        amount_as_string(fees)
+                    )
+                })
                 .map_err(|e| e.to_string())
         }
         Err(e) => Err(format!("Signature is invalid: {:?}", e)),
