@@ -30,7 +30,7 @@ static CANISTER_WASM: Lazy<Vec<u8>> = Lazy::new(|| {
     let mut path = workspace_dir();
     Command::new("dfx")
         .arg("build")
-        .current_dir(&path.join("ic-canister"))
+        .current_dir(path.join("ic-canister"))
         .output()
         .unwrap();
     path.push("target/wasm32-unknown-unknown/release/decent_cloud_canister.wasm");

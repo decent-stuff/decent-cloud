@@ -80,18 +80,14 @@ fn find_and_compare(json: &Value, key: &str, op: &CompareOp, value: &Value) -> b
         Value::Object(map) => {
             for (k, v) in map {
                 // Check if the current key matches
-                if k == key {
-                    if op.matches(v, value) {
-                        return true;
-                    }
+                if k == key && op.matches(v, value) {
+                    return true;
                 }
                 // If key contains '.', attempt to navigate nested objects
                 if key.contains('.') {
                     if let Some((first_part, rest_key)) = key.split_once('.') {
-                        if k == first_part {
-                            if find_and_compare(v, rest_key, op, value) {
-                                return true;
-                            }
+                        if k == first_part && find_and_compare(v, rest_key, op, value) {
+                            return true;
                         }
                     }
                 }
@@ -183,7 +179,7 @@ impl std::fmt::Display for CompareOp {
 fn try_parse_size_bytes(s: &Value) -> Value {
     if let Value::String(s) = s {
         match parse_size(s) {
-            Ok(size) => Value::Number(serde_json::Number::from(size as u64)),
+            Ok(size) => Value::Number(serde_json::Number::from(size)),
             Err(_) => s.clone().into(),
         }
     } else {
@@ -414,8 +410,8 @@ mod tests {
         let json_value: Value = from_str(json_str).unwrap();
         let search_str_hit = "key1 = memory-optimized and key2 = GenericCloudService";
         let search_str_miss = "key1 = storage-optimized and key2 = GenericCloudService";
-        let search_hit = Search::from_str(&search_str_hit).unwrap();
-        let search_miss = Search::from_str(&search_str_miss).unwrap();
+        let search_hit = Search::from_str(search_str_hit).unwrap();
+        let search_miss = Search::from_str(search_str_miss).unwrap();
         assert!(search_hit.matches(&json_value));
         assert!(!search_miss.matches(&json_value));
     }

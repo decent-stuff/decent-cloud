@@ -213,9 +213,9 @@ mod tests {
                 None,
                 Some(get_timestamp_ns()),
                 vec![],
-                amount.into(),
+                amount,
                 0,
-                balance_to_after.into(),
+                balance_to_after,
             )
         }
 
@@ -225,7 +225,7 @@ mod tests {
             let transfer = create_dummy_funds_transfer(i, (i + 1) as Balance);
             let entry = ledger_map::LedgerEntry::new(
                 LABEL_DC_TOKEN_TRANSFER,
-                transfer.to_tx_id().to_vec(),
+                transfer.to_tx_id(),
                 borsh::to_vec(&transfer).unwrap(),
                 ledger_map::Operation::Upsert,
             );

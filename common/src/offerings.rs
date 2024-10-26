@@ -38,7 +38,7 @@ pub fn do_node_provider_update_offering(
     info!("[do_node_provider_update_offering]: {}", dcc_identity);
 
     let payload: UpdateOfferingPayload =
-        serde_json::from_slice(&update_offering_payload).map_err(|e| e.to_string())?;
+        serde_json::from_slice(update_offering_payload).map_err(|e| e.to_string())?;
 
     if payload.signature.len() != ED25519_SIGNATURE_LENGTH {
         return Err("Invalid signature".to_string());
@@ -56,7 +56,7 @@ pub fn do_node_provider_update_offering(
             )?;
             // Store the original signed payload in the ledger
             ledger
-                .upsert(LABEL_NP_OFFERING, &pubkey_bytes, &update_offering_payload)
+                .upsert(LABEL_NP_OFFERING, &pubkey_bytes, update_offering_payload)
                 .map(|_| "Offering updated! Thank you.".to_string())
                 .map_err(|e| e.to_string())
         }

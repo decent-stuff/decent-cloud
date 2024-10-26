@@ -182,12 +182,7 @@ pub(crate) fn _node_provider_update_offering(
 pub(crate) fn _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
     let np_profile = LEDGER_MAP
         .with(|ledger| dcc_common::do_node_provider_get_profile(&ledger.borrow(), pubkey_bytes));
-    match np_profile {
-        Some(np_profile) => {
-            Some(serde_json::to_string_pretty(&np_profile).expect("Failed to encode"))
-        }
-        None => None,
-    }
+    np_profile.map(|np_profile| serde_json::to_string_pretty(&np_profile).expect("Failed to encode"))
 }
 
 pub(crate) fn _node_provider_get_profile_by_principal(principal: Principal) -> Option<String> {

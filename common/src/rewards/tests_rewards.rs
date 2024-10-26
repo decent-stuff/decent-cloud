@@ -224,7 +224,7 @@ fn test_rewards_distribute_with_eligible_nps() {
     test_ledger
         .upsert(
             LABEL_NP_CHECK_IN,
-            &np1.to_bytes_verifying(),
+            np1.to_bytes_verifying(),
             np1.to_bytes_verifying(),
         )
         .unwrap();
@@ -243,21 +243,21 @@ fn test_rewards_distribute_with_eligible_nps() {
     test_ledger
         .upsert(
             LABEL_NP_REGISTER,
-            &np2.to_bytes_verifying(),
+            np2.to_bytes_verifying(),
             np2.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
             LABEL_NP_CHECK_IN,
-            &np1.to_bytes_verifying(),
+            np1.to_bytes_verifying(),
             np1.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
             LABEL_NP_CHECK_IN,
-            &np2.to_bytes_verifying(),
+            np2.to_bytes_verifying(),
             np2.to_bytes_verifying(),
         )
         .unwrap();
