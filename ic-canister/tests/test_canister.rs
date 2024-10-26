@@ -416,7 +416,7 @@ fn test_np_registration_and_check_in() {
     let (np_past, _reg1) = np_register(&p, c, b"np_past", 0);
     assert_eq!(
         np_check_in(&p, c, &np_past).unwrap(),
-        "Signature verified, check in successful.".to_string()
+        "Signature verified, check in successful. You have been charged 0.0 tokens".to_string()
     );
     commit(&p, c);
     // np_past now has 50 * 100 = 5000 tokens
@@ -468,7 +468,10 @@ fn test_np_registration_and_check_in() {
 
     // But np2 can, since it has enough funds
     let (np2, reg2) = np_register(&p, c, b"np2", 0);
-    assert_eq!(reg2.unwrap(), "ok".to_string());
+    assert_eq!(
+        reg2.unwrap(),
+        "Registration complete! Thank you. You have been charged 0.500000000 tokens".to_string()
+    );
     assert_eq!(
         get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
         9500000000u64
@@ -489,7 +492,8 @@ fn test_np_registration_and_check_in() {
     // check in np2
     assert_eq!(
         np_check_in(&p, c, &np2).unwrap(),
-        "Signature verified, check in successful.".to_string()
+        "Signature verified, check in successful. You have been charged 0.500000000 tokens"
+            .to_string()
     );
     test_ffwd_to_next_block(ts_ns, &p, c);
     // Now np2 got a reward of 50 tokens distributed to it
@@ -530,16 +534,31 @@ fn test_reputation() {
     test_ffwd_to_next_block(ts_ns, &p, c);
 
     let (np1, reg1) = np_register(&p, c, b"np1", 2 * DC_TOKEN_DECIMALS_DIV);
-    assert_eq!(reg1.unwrap(), "ok".to_string());
+    assert_eq!(
+        reg1.unwrap(),
+        "Registration complete! Thank you. You have been charged 0.500000000 tokens".to_string()
+    );
     let (np2, reg2) = np_register(&p, c, b"np2", 2 * DC_TOKEN_DECIMALS_DIV);
-    assert_eq!(reg2.unwrap(), "ok".to_string());
+    assert_eq!(
+        reg2.unwrap(),
+        "Registration complete! Thank you. You have been charged 0.500000000 tokens".to_string()
+    );
     let (np3, reg3) = np_register(&p, c, b"np3", 2 * DC_TOKEN_DECIMALS_DIV);
-    assert_eq!(reg3.unwrap(), "ok".to_string());
+    assert_eq!(
+        reg3.unwrap(),
+        "Registration complete! Thank you. You have been charged 0.500000000 tokens".to_string()
+    );
 
     let (u1, r_u1) = user_register(&p, c, b"u1", 2 * DC_TOKEN_DECIMALS_DIV);
-    assert_eq!(r_u1.unwrap(), "ok".to_string());
+    assert_eq!(
+        r_u1.unwrap(),
+        "Registration complete! Thank you. You have been charged 0.500000000 tokens".to_string()
+    );
     let (u2, r_u2) = user_register(&p, c, b"u2", 2 * DC_TOKEN_DECIMALS_DIV);
-    assert_eq!(r_u2.unwrap(), "ok".to_string());
+    assert_eq!(
+        r_u2.unwrap(),
+        "Registration complete! Thank you. You have been charged 0.500000000 tokens".to_string()
+    );
 
     test_ffwd_to_next_block(ts_ns, &p, c);
 
