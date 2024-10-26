@@ -65,7 +65,7 @@ pub fn do_node_provider_update_offering(
 }
 
 /// Search for offerings that match the given filter
-pub fn do_get_matching_offerings(ledger: &LedgerMap, filter: String) -> Vec<Offering> {
+pub fn do_get_matching_offerings(ledger: &LedgerMap, search_filter: &str) -> Vec<Offering> {
     let mut results = vec![];
 
     for entry in ledger
@@ -77,8 +77,9 @@ pub fn do_get_matching_offerings(ledger: &LedgerMap, filter: String) -> Vec<Offe
         let offering: Offering =
             serde_json::from_slice(&payload.offering_payload).expect("Failed to decode offering");
 
-        // FIXME: filter
-        results.push(offering);
+        if offering.matches_search(search_filter) {
+            results.push(offering);
+        }
     }
 
     results

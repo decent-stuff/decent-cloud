@@ -12,7 +12,7 @@ use candid::types::number::Nat;
 use candid::CandidType;
 use dcc_common::{
     account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer,
-    nat_to_balance, Balance, FundsTransfer, IcrcCompatibleAccount,
+    nat_to_balance, Balance, FundsTransfer, IcrcCompatibleAccount, DC_TOKEN_LOGO,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -31,6 +31,7 @@ pub fn _icrc1_metadata() -> Vec<(String, MetadataValue)> {
         MetadataValue::entry("icrc1:name", DC_TOKEN_NAME.to_string()),
         MetadataValue::entry("icrc1:symbol", DC_TOKEN_SYMBOL.to_string()),
         MetadataValue::entry("icrc1:fee", DC_TOKEN_TRANSFER_FEE_E9S),
+        MetadataValue::entry("icrc1:logo", DC_TOKEN_LOGO.to_string()),
     ]
 }
 

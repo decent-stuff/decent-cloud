@@ -64,18 +64,28 @@ pub fn do_node_provider_update_profile(
     }
 }
 
-pub fn do_node_provider_get_profile(ledger: &LedgerMap, pubkey_bytes: Vec<u8>) -> Option<String> {
+#[derive(Serialize)]
+pub struct NodeProviderProfileWithReputation {
+    pub profile: np_profile::Profile,
+    pub reputation: u64,
+}
+
+pub fn do_node_provider_get_profile(
+    ledger: &LedgerMap,
+    pubkey_bytes: Vec<u8>,
+) -> Option<NodeProviderProfileWithReputation> {
     match ledger.get(LABEL_NP_PROFILE, &pubkey_bytes) {
-        Ok(profile) => {
+        Ok(profile_bytes) => {
             let payload: UpdateProfilePayload =
-                serde_json::from_slice(&profile).expect("Failed to decode profile payload");
-            let profile: NodeProviderProfile =
-                serde_json::from_slice(&payload.profile_payload).expect("Failed to decode profile");
-            let profile_with_reputation = NodeProviderProfileWithReputation {
+                serde_json::from_slice(&profile_bytes).expect("Failed to decode profile payload");
+            let profile_str =
+                std::str::from_utf8(&payload.profile_payload).expect("Failed to decode profile");
+            let profile = np_profile::Profile::new_from_str(profile_str, "json")
+                .expect("Failed to decode profile");
+            Some(NodeProviderProfileWithReputation {
                 profile,
                 reputation: reputation_get(&pubkey_bytes),
-            };
-            Some(serde_json::to_string(&profile_with_reputation).expect("Failed to encode profile"))
+            })
         }
         Err(_) => None,
     }

@@ -2,7 +2,7 @@ use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
     np_registration_fee_e9s, reward_e9s_per_block_recalculate, Balance, DccIdentity,
-    BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
+    BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -166,6 +166,7 @@ fn test_icrc1_compatibility() {
             MetadataValue::entry("icrc1:name", DC_TOKEN_NAME.to_string()),
             MetadataValue::entry("icrc1:symbol", DC_TOKEN_SYMBOL.to_string()),
             MetadataValue::entry("icrc1:fee", DC_TOKEN_TRANSFER_FEE_E9S),
+            MetadataValue::entry("icrc1:logo", DC_TOKEN_LOGO.to_string()),
         ]
     );
     assert_eq!(

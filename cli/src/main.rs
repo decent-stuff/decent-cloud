@@ -10,12 +10,12 @@ use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
     reputation_get, Balance, CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount,
-    LedgerCursor, NodeProviderProfile, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN,
+    LedgerCursor, UpdateOfferingPayload, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN,
     DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
-use fs_err::{File, OpenOptions};
+use fs_err::OpenOptions;
 use ic_agent::identity::BasicIdentity;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue, icrc1::transfer::TransferArg,
@@ -23,8 +23,6 @@ use icrc_ledger_types::{
 };
 use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
 use log::{info, Level, LevelFilter, Metadata, Record};
-use np_offering::Offering;
-// use np_profile::Profile;
 use std::{
     collections::HashMap,
     io::{self, BufReader, Seek, Write},
@@ -228,11 +226,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
                     let ic_auth = dcc_to_ic_auth(&dcc_ident);
-                    let np_profile: NodeProviderProfile =
-                        serde_yaml_ng::from_reader(File::open(profile_file)?)?;
+                    let np_profile = np_profile::Profile::new_from_file(profile_file)?;
 
                     // Serialize the profile and sign it
-                    let profile_payload = serde_json::to_vec(&np_profile)?;
+                    let profile_payload = serde_json::to_vec(&np_profile.as_json_value())?;
                     let signature = dcc_ident.sign(&profile_payload)?.to_vec();
 
                     // Send the payload
@@ -260,11 +257,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
                 let ic_auth = dcc_to_ic_auth(&dcc_ident);
-                let yaml_str = fs_err::read_to_string(offering_file)?;
-                let provider_offering = Offering::parse(&yaml_str)?;
+
+                let np_offering = np_offering::Offering::new_from_file(offering_file)?;
 
                 // Update the NP offering in the ledger
-                let offering_payload = serde_json::to_vec(&provider_offering)?;
+                let offering_payload = serde_json::to_vec(&np_offering.as_json_value())?;
                 let signature = dcc_ident.sign(&offering_payload)?.to_vec();
 
                 // Send the payload

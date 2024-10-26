@@ -159,7 +159,7 @@ pub(crate) fn _node_provider_update_profile(
             &mut ledger.borrow_mut(),
             ic_cdk::api::caller(),
             pubkey_bytes,
-            update_profile_payload,
+            &update_profile_payload,
         )
     })
 }
@@ -174,14 +174,20 @@ pub(crate) fn _node_provider_update_offering(
             &mut ledger.borrow_mut(),
             ic_cdk::api::caller(),
             pubkey_bytes,
-            update_offering_payload,
+            &update_offering_payload,
         )
     })
 }
 
 pub(crate) fn _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
-    LEDGER_MAP
-        .with(|ledger| dcc_common::do_node_provider_get_profile(&ledger.borrow(), pubkey_bytes))
+    let np_profile = LEDGER_MAP
+        .with(|ledger| dcc_common::do_node_provider_get_profile(&ledger.borrow(), pubkey_bytes));
+    match np_profile {
+        Some(np_profile) => {
+            Some(serde_json::to_string_pretty(&np_profile).expect("Failed to encode"))
+        }
+        None => None,
+    }
 }
 
 pub(crate) fn _node_provider_get_profile_by_principal(principal: Principal) -> Option<String> {

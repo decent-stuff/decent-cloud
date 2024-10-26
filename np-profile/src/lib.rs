@@ -33,6 +33,10 @@ impl ProfileV0_1_0 {
     pub fn matches_search(&self, search_str: &str) -> bool {
         value_matches(&self.json_value, search_str)
     }
+
+    pub fn as_json_value(&self) -> &JsonValue {
+        &self.json_value
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,6 +55,18 @@ pub struct Spec {
 }
 
 impl Profile {
+    pub fn new_from_file(path: &str) -> Result<Self, String> {
+        let input =
+            fs_err::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+        if path.to_lowercase().ends_with(".json") {
+            Self::new_from_str(&input, "json")
+        } else if path.to_lowercase().ends_with(".yaml") {
+            Self::new_from_str(&input, "yaml")
+        } else {
+            Err("Unsupported file format. Use '.json' or '.yaml'.".to_string())
+        }
+    }
+
     pub fn new_from_str(input: &str, format: &str) -> Result<Self, String> {
         let doc: JsonValue = match format {
             "yaml" => {
@@ -90,6 +106,12 @@ impl Profile {
     pub fn matches_search(&self, search_str: &str) -> bool {
         match self {
             Profile::V0_1_0(profile) => profile.matches_search(search_str),
+        }
+    }
+
+    pub fn as_json_value(&self) -> &JsonValue {
+        match self {
+            Profile::V0_1_0(profile) => profile.as_json_value(),
         }
     }
 }

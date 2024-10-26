@@ -696,6 +696,7 @@ dependencies = [
  "crc32fast",
  "dcc-common",
  "ed25519-dalek",
+ "fs-err",
  "hex",
  "ic-canister-log",
  "ic-cdk 0.16.0",
