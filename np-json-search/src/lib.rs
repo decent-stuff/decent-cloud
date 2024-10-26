@@ -200,12 +200,12 @@ impl CompareOp {
         match self {
             CompareOp::Equal => match (value, other) {
                 (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
-                (Value::String(a), Value::String(b)) => a == b,
+                (Value::String(a), Value::String(b)) => a.to_lowercase() == b.to_lowercase(),
                 (a, b) => a == b,
             },
             CompareOp::NotEqual => match (value, other) {
                 (Value::Number(a), Value::Number(b)) => a.as_f64() != b.as_f64(),
-                (Value::String(a), Value::String(b)) => a != b,
+                (Value::String(a), Value::String(b)) => a.to_lowercase() != b.to_lowercase(),
                 (a, b) => a != b,
             },
             CompareOp::Like => match (value, other) {
@@ -213,7 +213,9 @@ impl CompareOp {
                     a.as_f64() > b.as_f64().map(|b| b * 0.9)
                         && a.as_f64() < b.as_f64().map(|b| b * 1.1)
                 }
-                (Value::String(a), Value::String(b)) => jaro_winkler(a, b) > 0.9,
+                (Value::String(a), Value::String(b)) => {
+                    jaro_winkler(&a.to_lowercase(), &b.to_lowercase()) > 0.9
+                }
                 _ => false,
             },
             CompareOp::NotLike => match (value, other) {
@@ -221,27 +223,29 @@ impl CompareOp {
                     a.as_f64() <= b.as_f64().map(|b| b * 0.9)
                         || a.as_f64() >= b.as_f64().map(|b| b * 1.1)
                 }
-                (Value::String(a), Value::String(b)) => jaro_winkler(a, b) <= 0.9,
+                (Value::String(a), Value::String(b)) => {
+                    jaro_winkler(&a.to_lowercase(), &b.to_lowercase()) <= 0.9
+                }
                 _ => false,
             },
             CompareOp::GreaterThan => match (value, other) {
                 (Value::Number(a), Value::Number(b)) => a.as_f64() > b.as_f64(),
-                (Value::String(a), Value::String(b)) => a > b,
+                (Value::String(a), Value::String(b)) => a.to_lowercase() > b.to_lowercase(),
                 _ => false,
             },
             CompareOp::LessThan => match (value, other) {
                 (Value::Number(a), Value::Number(b)) => a.as_f64() < b.as_f64(),
-                (Value::String(a), Value::String(b)) => a < b,
+                (Value::String(a), Value::String(b)) => a.to_lowercase() < b.to_lowercase(),
                 _ => false,
             },
             CompareOp::GreaterThanOrEqual => match (value, other) {
                 (Value::Number(a), Value::Number(b)) => a.as_f64() >= b.as_f64(),
-                (Value::String(a), Value::String(b)) => a >= b,
+                (Value::String(a), Value::String(b)) => a.to_lowercase() >= b.to_lowercase(),
                 _ => false,
             },
             CompareOp::LessThanOrEqual => match (value, other) {
                 (Value::Number(a), Value::Number(b)) => a.as_f64() <= b.as_f64(),
-                (Value::String(a), Value::String(b)) => a <= b,
+                (Value::String(a), Value::String(b)) => a.to_lowercase() <= b.to_lowercase(),
                 _ => false,
             },
             CompareOp::Regex => {
@@ -259,7 +263,7 @@ impl CompareOp {
             CompareOp::Contains => {
                 if let Value::String(s) = value {
                     if let Value::String(other) = other {
-                        s.contains(other)
+                        s.to_lowercase().contains(&other.to_lowercase())
                     } else {
                         false
                     }
@@ -270,7 +274,7 @@ impl CompareOp {
             CompareOp::StartsWith => {
                 if let Value::String(s) = value {
                     if let Value::String(other) = other {
-                        s.starts_with(other)
+                        s.to_lowercase().starts_with(&other.to_lowercase())
                     } else {
                         false
                     }
@@ -281,7 +285,7 @@ impl CompareOp {
             CompareOp::EndsWith => {
                 if let Value::String(s) = value {
                     if let Value::String(other) = other {
-                        s.ends_with(other)
+                        s.to_lowercase().ends_with(&other.to_lowercase())
                     } else {
                         false
                     }
