@@ -1,6 +1,6 @@
 use crate::{
     charge_fees_to_account_no_bump_reputation, info, reputation_get, reward_e9s_per_block, Balance,
-    DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE, MAX_JSON_ZLIB_PAYLOAD_LENGTH,
+    DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE, MAX_NP_PROFILE_BYTES,
     MAX_PUBKEY_BYTES,
 };
 use candid::Principal;
@@ -9,27 +9,9 @@ use candid::Principal;
 use ic_cdk::println;
 use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 pub fn np_profile_update_fee_e9s() -> Balance {
     reward_e9s_per_block() / 10000
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-pub struct NodeProviderProfile {
-    pub name: String,
-    pub description: String,
-    pub url: String,
-    pub logo_url: String,
-    pub why_choose_us: String,
-    pub locations: BTreeMap<String, String>,
-    pub contacts: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-pub struct NodeProviderProfileWithReputation {
-    pub profile: NodeProviderProfile,
-    pub reputation: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -42,7 +24,7 @@ pub fn do_node_provider_update_profile(
     ledger: &mut LedgerMap,
     caller: Principal,
     pubkey_bytes: Vec<u8>,
-    update_profile_payload: Vec<u8>,
+    update_profile_payload: &[u8],
 ) -> Result<String, String> {
     if pubkey_bytes.len() > MAX_PUBKEY_BYTES {
         return Err("Provided public key too long".to_string());
@@ -56,12 +38,12 @@ pub fn do_node_provider_update_profile(
     info!("[do_node_provider_update_profile]: {}", dcc_identity);
 
     let payload: UpdateProfilePayload =
-        serde_json::from_slice(&update_profile_payload).map_err(|e| e.to_string())?;
+        serde_json::from_slice(update_profile_payload).map_err(|e| e.to_string())?;
 
     if payload.signature.len() != ED25519_SIGNATURE_LENGTH {
         return Err("Invalid signature".to_string());
     }
-    if payload.profile_payload.len() > MAX_JSON_ZLIB_PAYLOAD_LENGTH {
+    if payload.profile_payload.len() > MAX_NP_PROFILE_BYTES {
         return Err("Profile payload too long".to_string());
     }
 
@@ -74,7 +56,7 @@ pub fn do_node_provider_update_profile(
             )?;
             // Store the original signed payload in the ledger
             ledger
-                .upsert(LABEL_NP_PROFILE, &pubkey_bytes, &update_profile_payload)
+                .upsert(LABEL_NP_PROFILE, &pubkey_bytes, update_profile_payload)
                 .map(|_| "Profile updated! Thank you.".to_string())
                 .map_err(|e| e.to_string())
         }

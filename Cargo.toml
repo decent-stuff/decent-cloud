@@ -6,7 +6,7 @@ members = [
     "ic-canister",
     "np-offering",
     "np-profile",
-    "np-yaml-search",
+    "np-json-search",
 ]
 
 [workspace.package]
@@ -52,6 +52,8 @@ log = "0.4"
 memmap2 = "0.9"
 num-traits = "0.2"
 num-bigint = { version = "0.4", default-features = false, features = ["serde"] }
+np-offering = { path = "np-offering" }
+np-profile = { path = "np-profile" }
 parse-size = "1.1.0"
 pem = "3.0"
 pkcs8 = "0.10"

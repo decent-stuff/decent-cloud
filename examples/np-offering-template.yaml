@@ -56,8 +56,6 @@ defaults:
           reserved:
             one_year: "$0.03/hour"
             three_year: "$0.02/hour"
-        compliance:
-          - GDPR
         tags:
           - low-cost
           - small-instance
@@ -147,8 +145,6 @@ regions:
             on_demand: "$0.15/hour"
             reserved:
               one_year: "$0.10/hour"
-          compliance:
-            - GDPR
           tags:
             - high-performance
             - GDPR-compliant

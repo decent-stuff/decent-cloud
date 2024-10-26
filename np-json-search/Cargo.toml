@@ -1,5 +1,5 @@
 [package]
-name = "np-yaml-search"
+name = "np-json-search"
 version.workspace = true
 edition.workspace = true
 
@@ -7,4 +7,6 @@ edition.workspace = true
 anyhow.workspace = true
 parse-size.workspace = true
 regex.workspace = true
+serde_json.workspace = true
 serde_yaml_ng.workspace = true
+strsim.workspace = true

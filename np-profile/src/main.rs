@@ -7,7 +7,7 @@ fn main() {
         std::process::exit(1);
     }
     let yaml = fs_err::read_to_string(&args[1]).expect("Failed to read YAML file");
-    if Profile::search(&yaml, &args[2]) {
+    if Profile::new_from_json_if_matches(&yaml, &args[2]) {
         eprintln!("Profile matches!");
         match Profile::parse(&yaml) {
             Ok(profile) => println!("{}", profile),

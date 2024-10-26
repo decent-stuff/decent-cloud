@@ -5,5 +5,7 @@ edition.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
-np-yaml-search = { path = "../np-yaml-search" }
+np-json-search = { path = "../np-json-search" }
+strsim.workspace = true

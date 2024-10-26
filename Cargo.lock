@@ -628,6 +628,8 @@ dependencies = [
  "ic-cdk 0.16.0",
  "icrc-ledger-types",
  "ledger-map",
+ "np-offering",
+ "np-profile",
  "num-bigint",
  "num-traits",
  "pem",
@@ -635,7 +637,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "strsim",
  "strum",
  "strum_macros",
  "tempfile",
@@ -1793,30 +1794,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "np-json-search"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "parse-size",
+ "regex",
+ "serde_json",
+ "serde_yaml_ng",
+ "strsim",
+]
+
+[[package]]
 name = "np-offering"
 version = "0.1.0"
 dependencies = [
- "np-yaml-search",
+ "np-json-search",
  "serde",
+ "serde_json",
  "serde_yaml_ng",
+ "strsim",
 ]
 
 [[package]]
 name = "np-profile"
 version = "0.1.0"
 dependencies = [
- "np-yaml-search",
+ "fs-err",
+ "np-json-search",
  "serde",
- "serde_yaml_ng",
-]
-
-[[package]]
-name = "np-yaml-search"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "parse-size",
- "regex",
+ "serde_json",
  "serde_yaml_ng",
 ]
 

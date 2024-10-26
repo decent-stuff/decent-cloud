@@ -1,0 +1,85 @@
+# Versioning Information
+api_version: v0.1.0
+kind: cloud_provider_offering
+metadata:
+  name: "GenericCloudService"
+  version: "1.0"
+
+# Provider Information
+provider:
+  name: generic cloud provider
+  description: a generic offering specification for a cloud provider
+
+# Default Specifications (applies globally unless overridden)
+defaults:
+  machine_spec:
+    instance_types:
+      - type: general-purpose
+        cpu: 0.5 vCPUs
+        memory: 512 MB
+        storage:
+          type: SSD
+          size: 2 GB
+        pricing:
+          on_demand: "$0.01/hour"
+          reserved:
+            one_year: "$0.01/hour"
+            three_year: "$0.01/hour"
+        tags:
+          - xxx-small-instance
+        metadata:
+          optimized_for: general
+          availability: medium
+
+  network_spec:
+    vpc_support: true
+    public_ip: true
+    private_ip: true
+    load_balancers:
+      type:
+        - network
+
+  monitoring:
+    enabled: true
+    metrics:
+      cpu_utilization: true
+      memory_usage: true
+      disk_iops: true
+      network_traffic: true
+    logging:
+      enabled: true
+      log_retention: "30 days"
+
+# Region-Specific Overrides
+regions:
+  - name: eu-central-1
+    description: central europe region
+    geography:
+      continent: Europe
+      country: Germany
+      iso_codes: # ISO 3166 country codes
+        country_code: DE
+        region_code: EU
+    compliance:
+      - GDPR
+    availability_zones:
+      - name: eu-central-1a
+        description: primary availability zone
+      - name: eu-central-1b
+        description: secondary availability zone
+
+  - name: us-east-1
+    description: united states east coast region
+    geography:
+      continent: North America
+      country: United States
+      iso_codes: # ISO 3166 country codes
+        country_code: US
+        region_code: NA
+    compliance:
+      - SOC 2
+    availability_zones:
+      - name: us-east-1a
+        description: primary availability zone
+      - name: us-east-1b
+        description: secondary availability zone

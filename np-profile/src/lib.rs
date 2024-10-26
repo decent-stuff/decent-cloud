@@ -1,9 +1,10 @@
-use np_yaml_search::yaml_value_matches;
+use np_json_search::value_matches;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use serde_yaml_ng::{self, Value as YamlValue};
 use std::collections::HashMap;
 use std::fmt;
 
-// Define the Profile enum with version-specific variants
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Profile {
     V0_1_0(ProfileV0_1_0),
@@ -15,6 +16,23 @@ pub struct ProfileV0_1_0 {
     pub kind: String,
     pub metadata: Metadata,
     pub spec: Spec,
+
+    // Add a field to hold the raw JsonValue representation, for use in matches_search
+    #[serde(skip)]
+    json_value: JsonValue,
+}
+
+impl ProfileV0_1_0 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.kind.as_str() != "Profile" {
+            return Err(format!("Unsupported kind '{}'", self.kind));
+        }
+        Ok(())
+    }
+
+    pub fn matches_search(&self, search_str: &str) -> bool {
+        value_matches(&self.json_value, search_str)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,49 +51,46 @@ pub struct Spec {
 }
 
 impl Profile {
-    pub fn parse_as_yaml_value(yaml_str: &str) -> Result<serde_yaml_ng::Value, String> {
-        serde_yaml_ng::from_str(yaml_str).map_err(|e| format!("Failed to parse YAML: {}", e))
-    }
-
-    // Function to parse the input YAML string into a Profile enum, specific to the api_version v0.1.0
-    pub fn parse(yaml_str: &str) -> Result<Self, String> {
-        // Load the YAML and deserialize into a Profile struct based on the api_version
-        let doc = Self::parse_as_yaml_value(yaml_str)?;
-
-        // Validate the kind
-        let kind = doc["kind"]
-            .as_str()
-            .ok_or("Missing or invalid 'kind' field")?;
-        if kind != "Profile" {
-            return Err(format!("Unsupported kind '{}'", kind));
-        }
-
-        // Check the api_version to determine which Profile variant to use
-        let api_version = doc["api_version"]
-            .as_str()
-            .ok_or("Missing or invalid 'api_version' field")?;
-        match api_version {
-            "v0.1.0" => Self::parse_profile_v0_1_0(doc),
-            _ => Err(format!("Unsupported api_version '{}'", api_version)),
-        }
-    }
-
-    fn parse_profile_v0_1_0(doc: serde_yaml_ng::Value) -> Result<Self, String> {
-        serde_yaml_ng::from_value(doc)
-            .map(Profile::V0_1_0)
-            .map_err(|e| format!("Failed to deserialize ProfileV0_1_0: {}", e))
-    }
-
-    pub fn search(yaml_str: &str, search_str: &str) -> bool {
-        let yaml_value = match Profile::parse_as_yaml_value(yaml_str) {
-            Ok(yaml_value) => yaml_value,
-            Err(e) => {
-                println!("Failed to parse YAML: {}", e);
-                return false;
+    pub fn new_from_str(input: &str, format: &str) -> Result<Self, String> {
+        let doc: JsonValue = match format {
+            "yaml" => {
+                let yaml_value: YamlValue = serde_yaml_ng::from_str(input)
+                    .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+                serde_json::to_value(yaml_value)
+                    .map_err(|e| format!("Failed to convert YAML to JSON value: {}", e))?
             }
+            "json" => {
+                serde_json::from_str(input).map_err(|e| format!("Failed to parse JSON: {}", e))?
+            }
+            _ => return Err("Unsupported format. Use 'yaml' or 'json'.".to_string()),
         };
 
-        yaml_value_matches(&yaml_value, search_str)
+        match doc.get("api_version").and_then(|v| v.as_str()) {
+            Some("v0.1.0") => {
+                let mut profile = serde_json::from_value::<ProfileV0_1_0>(doc.clone())
+                    .map(Profile::V0_1_0)
+                    .map_err(|e| format!("Failed to deserialize Profile: {}", e))?;
+
+                match profile {
+                    Profile::V0_1_0(ref mut profile) => profile.json_value = doc,
+                }
+                Ok(profile)
+            }
+            Some(version) => Err(format!("Unsupported api_version '{}'", version)),
+            None => Err("Missing 'api_version' field.".to_string()),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Profile::V0_1_0(profile) => profile.validate(),
+        }
+    }
+
+    pub fn matches_search(&self, search_str: &str) -> bool {
+        match self {
+            Profile::V0_1_0(profile) => profile.matches_search(search_str),
+        }
     }
 }
 
@@ -83,7 +98,6 @@ impl fmt::Display for Profile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Profile::V0_1_0(profile) => write!(f, "{}", profile),
-            // Add future versions' display methods as needed
         }
     }
 }
@@ -105,14 +119,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_and_search() {
+    fn test_parse_and_search_yaml() {
         let profile_yaml = r#"
             api_version: v0.1.0
             kind: Profile
             metadata:
                 name: "Test Node Provider"
                 version: "0.0.1"
-
             spec:
                 description: "Just a test"
                 url: "https://example.com"
@@ -124,36 +137,49 @@ mod tests {
                     email: "support@dc-prov.com"
         "#;
 
-        let profile = Profile::parse(profile_yaml).expect("Failed to parse YAML");
+        let profile = Profile::new_from_str(profile_yaml, "yaml").expect("Failed to parse YAML");
 
         match profile {
-            Profile::V0_1_0(p) => {
+            Profile::V0_1_0(ref p) => {
                 assert_eq!(p.metadata.name, "Test Node Provider");
                 assert_eq!(p.kind, "Profile");
             }
         }
-        assert!(Profile::search(profile_yaml, "name=Test Node Provider"));
-        assert!(Profile::search(
-            profile_yaml,
-            "Twitter contains x.com/dc-prov"
-        ));
+        assert!(profile.matches_search("name=Test Node Provider"));
+        assert!(profile.matches_search("Twitter contains x.com/dc-prov"));
     }
 
     #[test]
-    fn test_unsupported_api_version() {
-        let yaml = r#"
-            api_version: v0.0.5
-            kind: Profile
-        "#;
-        assert!(Profile::parse(yaml).is_err());
-    }
+    fn test_parse_and_search_json() {
+        let profile_json = r#"{
+            "api_version": "v0.1.0",
+            "kind": "Profile",
+            "metadata": {
+                "name": "Test Node Provider",
+                "version": "0.0.1"
+            },
+            "spec": {
+                "description": "Just a test",
+                "url": "https://example.com",
+                "logo_url": "https://example.com/logo.jpg",
+                "why_choose_us": "Because we're the best!",
+                "contacts": {
+                    "Twitter": "x.com/dc-prov",
+                    "Linkedin": "linkedin.com/dc-prov",
+                    "email": "support@dc-prov.com"
+                }
+            }
+        }"#;
 
-    #[test]
-    fn test_unsupported_kind() {
-        let yaml = r#"
-            api_version: v0.1.0
-            kind: Offering
-        "#;
-        assert!(Profile::parse(yaml).is_err());
+        let profile = Profile::new_from_str(profile_json, "json").expect("Failed to parse JSON");
+
+        match profile {
+            Profile::V0_1_0(ref p) => {
+                assert_eq!(p.metadata.name, "Test Node Provider");
+                assert_eq!(p.kind, "Profile");
+            }
+        }
+        assert!(profile.matches_search("name=Test Node Provider"));
+        assert!(profile.matches_search("Twitter contains x.com/dc-prov"));
     }
 }

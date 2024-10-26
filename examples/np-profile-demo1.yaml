@@ -1,13 +1,13 @@
 api_version: v0.1.0
 kind: Profile
 metadata:
-  name: "Test Node Provider"
+  name: "Demo Node Provider"
   version: "0.0.1"
 
 spec:
-  description: "Just a test"
-  url: "https://example.com"
-  logo_url: "https://example.com/logo.jpg"
+  description: "This is a demo node provider"
+  url: "https://demo-node-provider.com"
+  logo_url: "https://demo-node-provider.com/logo.jpg"
   why_choose_us: "Because we're the best!"
   contacts:
     Twitter: "x.com/dc-prov"

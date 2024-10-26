@@ -253,19 +253,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     panic!("You must specify an identity of the node provider");
                 }
             } else if arg_matches.contains_id("update-offering") {
-                if let Some(values) = arg_matches.get_many::<String>("update-offering") {
-                    let values = values.collect::<Vec<_>>();
-                    let np_desc = values[0];
-                    let offering_file = values[1];
+                let values = arg_matches.get_many::<String>("update-offering").unwrap();
+                let (np_desc, offering_file) = match values.collect::<Vec<_>>()[..] {
+                    [np_desc, offering_file] => (np_desc, offering_file),
+                    _ => panic!("Usage: <np-desc> <offering-file>"),
+                };
+                let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
+                let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                let yaml_str = fs_err::read_to_string(offering_file)?;
+                let provider_offering = Offering::parse(&yaml_str)?;
 
-                    let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                    let ic_auth = dcc_to_ic_auth(&dcc_ident);
-                    let provider_offering: Offering =
-                        serde_yaml_ng::from_reader(File::open(offering_file)?)?;
-                    println!("Provider offering: {}", provider_offering);
-                    // FIXME: update offering in the ledger
-                }
+                // Update the NP offering in the ledger
+                let offering_payload = serde_json::to_vec(&provider_offering)?;
+                let signature = dcc_ident.sign(&offering_payload)?.to_vec();
+
+                // Send the payload
+                let payload = UpdateOfferingPayload {
+                    offering_payload,
+                    signature,
+                };
+                let result = ledger_canister(ic_auth)
+                    .await?
+                    .node_provider_update_offering(
+                        &dcc_ident.to_bytes_verifying(),
+                        &serde_json::to_vec(&payload)?,
+                    )
+                    .await
+                    .map_err(|e| format!("Update offering failed: {}", e))?;
+                info!("Offering update response: {}", result);
             }
+
             Ok(())
         }
         Some(("user", arg_matches)) => {

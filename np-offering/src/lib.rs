@@ -1,5 +1,7 @@
-use np_yaml_search::yaml_value_matches;
+use np_json_search::value_matches;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use serde_yaml_ng::{self, Value as YamlValue};
 use std::fmt;
 
 // Define the Offering enum with version-specific variants
@@ -17,6 +19,10 @@ pub struct CloudProviderOfferingV0_1_0 {
     pub provider: Provider,
     pub defaults: Option<DefaultSpec>,
     pub regions: Vec<Region>,
+
+    // Raw JsonValue representation, for use in matches_search
+    #[serde(skip)]
+    json_value: JsonValue,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -280,46 +286,50 @@ pub struct AvailabilityZone {
 }
 
 impl Offering {
-    pub fn parse_as_yaml_value(yaml_str: &str) -> Result<serde_yaml_ng::Value, String> {
-        serde_yaml_ng::from_str(yaml_str).map_err(|e| format!("Failed to parse YAML: {}", e))
-    }
-
-    // Function to parse the input YAML string into an Offering enum
-    pub fn parse(yaml_str: &str) -> Result<Self, String> {
-        let doc = Self::parse_as_yaml_value(yaml_str)?;
-
-        let kind = doc["kind"]
-            .as_str()
-            .ok_or("Missing or invalid 'kind' field")?;
-        if kind != "cloud_provider_offering" {
-            return Err(format!("Unsupported kind '{}'", kind));
-        }
-
-        let api_version = doc["api_version"]
-            .as_str()
-            .ok_or("Missing or invalid 'api_version' field")?;
-        match api_version {
-            "v0.1.0" => Self::parse_v0_1_0(doc),
-            _ => Err(format!("Unsupported api_version '{}'", api_version)),
-        }
-    }
-
-    fn parse_v0_1_0(doc: serde_yaml_ng::Value) -> Result<Self, String> {
-        serde_yaml_ng::from_value(doc)
-            .map(Offering::V0_1_0)
-            .map_err(|e| format!("Failed to deserialize CloudProviderOfferingV0_1_0: {}", e))
-    }
-
-    pub fn search(yaml_str: &str, search_str: &str) -> bool {
-        let yaml_value = match Offering::parse_as_yaml_value(yaml_str) {
-            Ok(yaml_value) => yaml_value,
-            Err(e) => {
-                println!("Failed to parse YAML: {}", e);
-                return false;
+    pub fn new_from_str(input: &str, format: &str) -> Result<Self, String> {
+        let doc: JsonValue = match format {
+            "yaml" => {
+                let yaml_value: YamlValue = serde_yaml_ng::from_str(input)
+                    .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+                serde_json::to_value(yaml_value)
+                    .map_err(|e| format!("Failed to convert YAML to JSON value: {}", e))?
             }
+            "json" => {
+                serde_json::from_str(input).map_err(|e| format!("Failed to parse JSON: {}", e))?
+            }
+            _ => return Err("Unsupported format. Use 'yaml' or 'json'.".to_string()),
         };
 
-        yaml_value_matches(&yaml_value, search_str)
+        match doc.get("api_version").and_then(|v| v.as_str()) {
+            Some("v0.1.0") => {
+                let mut offering =
+                    serde_json::from_value::<CloudProviderOfferingV0_1_0>(doc.clone())
+                        .map(Offering::V0_1_0)
+                        .map_err(|e| {
+                            format!("Failed to deserialize CloudProviderOfferingV0_1_0: {}", e)
+                        })?;
+
+                match offering {
+                    Offering::V0_1_0(ref mut o) => o.json_value = doc,
+                }
+
+                Ok(offering)
+            }
+            Some(version) => Err(format!("Unsupported api_version '{}'", version)),
+            None => Err("Missing 'api_version' field.".to_string()),
+        }
+    }
+
+    pub fn matches_search(&self, search_str: &str) -> bool {
+        match self {
+            Offering::V0_1_0(offering) => offering.matches_search(search_str),
+        }
+    }
+}
+
+impl CloudProviderOfferingV0_1_0 {
+    pub fn matches_search(&self, search_str: &str) -> bool {
+        value_matches(&self.json_value, search_str)
     }
 }
 
@@ -327,7 +337,6 @@ impl fmt::Display for Offering {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Offering::V0_1_0(offering) => write!(f, "{}", offering),
-            // Add future versions' display methods as needed
         }
     }
 }
@@ -390,7 +399,7 @@ regions:
 
     #[test]
     fn test_parse_offering() {
-        let offering = Offering::parse(SAMPLE_YAML).expect("Failed to parse YAML");
+        let offering = Offering::new_from_str(SAMPLE_YAML, "yaml").expect("Failed to parse YAML");
         match offering {
             Offering::V0_1_0(offering) => {
                 assert_eq!(offering.metadata.name, "GenericCloudService");
@@ -404,24 +413,28 @@ regions:
 
     #[test]
     fn test_search_offering() {
-        assert!(Offering::search(SAMPLE_YAML, "name =GenericCloudService"));
-        assert!(Offering::search(SAMPLE_YAML, "name=GenericCloudService"));
-        assert!(Offering::search(SAMPLE_YAML, "name= GenericCloudService"));
-        assert!(Offering::search(SAMPLE_YAML, "name contains Cloud"));
-        assert!(Offering::search(SAMPLE_YAML, "name contains CloudService"));
-        assert!(Offering::search(SAMPLE_YAML, "name contains Service"));
-        assert!(Offering::search(
-            SAMPLE_YAML,
-            "name contains GenericCloudService"
-        ));
-        assert!(Offering::search(
-            SAMPLE_YAML,
-            "name startswith GenericCloudService"
-        ));
-        assert!(Offering::search(SAMPLE_YAML, "name endswith Service"));
-        assert!(Offering::search(SAMPLE_YAML, "name=eu-central-1"));
-        assert!(Offering::search(SAMPLE_YAML, "type=memory-optimized"));
-        assert!(!Offering::search(SAMPLE_YAML, "nonexistent=value"));
+        let offering = Offering::new_from_str(SAMPLE_YAML, "yaml").expect("Failed to parse YAML");
+        // Test matches_search with spaces before and after
+        assert!(offering.matches_search("name =GenericCloudService"));
+        assert!(offering.matches_search("name=GenericCloudService"));
+        assert!(offering.matches_search("name= GenericCloudService"));
+
+        assert!(offering.matches_search("provider.name=generic cloud provider"));
+        assert!(offering.matches_search("name contains Cloud"));
+        assert!(offering.matches_search("name contains CloudService"));
+        assert!(offering.matches_search("name contains Service"));
+        assert!(offering.matches_search("name contains GenericCloudService"));
+        assert!(offering.matches_search("name startswith GenericCloudService"));
+        assert!(offering.matches_search("name endswith Service"));
+
+        assert!(offering.matches_search("type=memory-optimized"));
+        assert!(offering.matches_search("type=memory-optimized and name=GenericCloudService"));
+
+        assert!(offering.matches_search("name endswith Service"));
+
+        assert!(offering.matches_search("regions.name=eu-central-1"));
+        assert!(offering.matches_search("type=memory-optimized"));
+        assert!(!offering.matches_search("nonexistent=value"));
     }
 
     #[test]
@@ -437,7 +450,8 @@ provider:
 regions:
   - name: us-east-1
 "#;
-        let offering = Offering::parse(minimal_yaml).expect("Failed to parse minimal YAML");
+        let offering =
+            Offering::new_from_str(minimal_yaml, "yaml").expect("Failed to parse minimal YAML");
         match offering {
             Offering::V0_1_0(offering) => {
                 assert_eq!(offering.metadata.name, "MinimalCloudService");
@@ -450,7 +464,7 @@ regions:
 
     #[test]
     fn test_default_inheritance() {
-        let offering = Offering::parse(SAMPLE_YAML).expect("Failed to parse YAML");
+        let offering = Offering::new_from_str(SAMPLE_YAML, "yaml").expect("Failed to parse YAML");
         match offering {
             Offering::V0_1_0(offering) => {
                 let default_instance_types = &offering

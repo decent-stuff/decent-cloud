@@ -72,7 +72,8 @@ pub const LABEL_REPUTATION_AGE: &str = "RepAge";
 pub const LABEL_REPUTATION_CHANGE: &str = "RepChange";
 pub const LABEL_REWARD_DISTRIBUTION: &str = "RewardDistr";
 pub const LABEL_USER_REGISTER: &str = "UserRegister";
-pub const MAX_JSON_ZLIB_PAYLOAD_LENGTH: usize = 1024;
+pub const MAX_NP_PROFILE_BYTES: usize = 4 * 1024;
+pub const MAX_NP_OFFERING_BYTES: usize = 32 * 1024;
 pub const MAX_PUBKEY_BYTES: usize = 32;
 pub const MEMO_BYTES_MAX: usize = 32;
 /// Reduction of reputations for all accounts, based on time (per block), in parts per million
