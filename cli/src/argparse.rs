@@ -228,5 +228,23 @@ pub fn parse_args() -> clap::ArgMatches {
                         .help("Which IC network to use"),
                 )
         )
+        .subcommand(
+            Command::new("offering")
+                .arg_required_else_help(true)
+                .about("Offering management commands.")
+                .arg(
+                    Arg::new("list")
+                        .long("list")
+                        .help("List all offerings")
+                        .action(ArgAction::SetTrue),
+                    )
+                .arg(
+                    Arg::new("query")
+                        .long("query")
+                        .help("Search for offerings that match the provided query")
+                        .action(ArgAction::Set)
+                        .num_args(1),
+                ),
+        )
         .get_matches()
 }

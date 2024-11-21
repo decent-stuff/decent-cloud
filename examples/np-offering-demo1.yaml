@@ -14,7 +14,8 @@ provider:
 defaults:
   machine_spec:
     instance_types:
-      - type: general-purpose
+      - id: xxx-small
+        type: general-purpose
         cpu: 0.5 vCPUs
         memory: 512 MB
         storage:
@@ -25,8 +26,6 @@ defaults:
           reserved:
             one_year: "$0.01/hour"
             three_year: "$0.01/hour"
-        tags:
-          - xxx-small-instance
         metadata:
           optimized_for: general
           availability: medium

@@ -8,10 +8,11 @@ use bip39::Seed;
 use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
 use dcc_common::{
-    account_balance_get_as_string, amount_as_string, cursor_from_data, refresh_caches_from_ledger,
-    reputation_get, Balance, CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount,
-    LedgerCursor, UpdateOfferingPayload, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN,
-    DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
+    account_balance_get_as_string, amount_as_string, cursor_from_data,
+    offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get, Balance,
+    CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor,
+    UpdateOfferingPayload, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV,
+    LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -477,6 +478,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => panic!("Unknown canister function: {}", canister_function),
             };
 
+            Ok(())
+        }
+        Some(("offering", arg_matches)) => {
+            let query = arg_matches.get_one::<String>("query").cloned();
+            if arg_matches.get_flag("list") || query.is_some() {
+                let offerings =
+                    do_get_matching_offerings(&ledger_local, &query.unwrap_or_default());
+                println!("Found {} matching offerings:", offerings.len());
+                for offering in offerings {
+                    println!("{}", serde_json::to_string(&offering)?);
+                }
+            }
             Ok(())
         }
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable

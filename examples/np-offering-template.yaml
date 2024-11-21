@@ -45,7 +45,8 @@ defaults:
 
   machine_spec:
     instance_types:
-      - type: general-purpose
+      - id: gp-small
+        type: general-purpose
         cpu: 2 vCPUs
         memory: 2 GB
         storage:
@@ -135,7 +136,8 @@ regions:
       - GDPR
     machine_spec:
       instance_types:
-        - type: memory-optimized
+        - id: mem-medium
+          type: memory-optimized
           cpu: 4 vCPUs
           memory: 16 GB
           storage:
@@ -169,7 +171,8 @@ regions:
       - SOC 2
     machine_spec:
       instance_types:
-        - type: compute-optimized
+        - id: cpu-large
+          type: compute-optimized
           cpu: 8 vCPUs
           memory: 32 GB
           storage:
@@ -185,7 +188,8 @@ regions:
           metadata:
             optimized_for: high-compute
             availability: high
-        - type: ai-optimized
+        - id: ai-large
+          type: ai-optimized
           description: high-performance instance optimized for AI/ML workloads
           cpu: 16 vCPUs
           gpu:

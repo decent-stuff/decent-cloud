@@ -77,10 +77,14 @@ pub fn do_get_matching_offerings(ledger: &LedgerMap, search_filter: &str) -> Vec
     {
         let payload: UpdateOfferingPayload =
             serde_json::from_slice(entry.value()).expect("Failed to decode payload");
-        let offering: Offering =
-            serde_json::from_slice(&payload.offering_payload).expect("Failed to decode offering");
+        let offering_str =
+            std::str::from_utf8(&payload.offering_payload).expect("Failed to decode offering");
+        let offering =
+            Offering::new_from_str(offering_str, "json").expect("Failed to decode offering");
 
-        if offering.matches_search(search_filter) {
+        if search_filter.is_empty() {
+            results.push(offering);
+        } else if offering.matches_search(search_filter) {
             results.push(offering);
         }
     }
