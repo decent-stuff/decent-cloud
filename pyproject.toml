@@ -27,7 +27,7 @@ install-micromamba = "pixi global install micromamba"
 install-starship = "pixi global install starship"
 install-ruff = "pixi global install ruff"
 install-tbump = "pixi global install tbump"
-install-pocket-ic-server = "curl -L -o - https://github.com/dfinity/pocketic/releases/download/6.0.0/pocket-ic-x86_64-linux.gz | gunzip | install /dev/stdin -m 755 $HOME/bin/pocket-ic"
+install-pocket-ic-server = "curl -L -o - https://github.com/dfinity/pocketic/releases/download/7.0.0/pocket-ic-x86_64-linux.gz | gunzip | install /dev/stdin -m 755 $HOME/bin/pocket-ic"
 install = { depends_on = [
     "install-pre-commit",
     "install-gh",

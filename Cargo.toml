@@ -18,7 +18,7 @@ ahash = { version = "0.8", default-features = false }
 anyhow = "1.0"
 base32 = "0.5"
 base64 = "0.22"
-borsh = { version = "1.5", features = ["derive"] }
+borsh = { version = "1.5.3", features = ["derive"] }
 ciborium = "0.2"
 candid = "0.10"
 chrono = "0.4"
@@ -40,10 +40,10 @@ hex = "0.4"
 hmac = "0.12"
 ic-agent = "0.39.1"
 ic-canister-log = "0.2"
-ic-cdk = "0.16"
+ic-cdk = "0.17"
 ic-certification = "2.6"
 ic-metrics-encoder = "1.1"
-ic-cdk-timers = "0.10"
+ic-cdk-timers = "0.11"
 icrc-ledger-types = "0.1"
 indexmap = "2.6"
 ledger-map = { path = "../ledger-map" }
@@ -57,18 +57,18 @@ np-profile = { path = "np-profile" }
 parse-size = "1.1.0"
 pem = "3.0"
 pkcs8 = "0.10"
-pocket-ic = "5"
+pocket-ic = "6"
 regex = "1.11.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
-serde_json = { version = "1.0.132", features = ["preserve_order"] }
+serde_json = { version = "1.0.133", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 sha2 = "0.10"
 strsim = "0.11"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 tabular = "0.2"
-tempfile = "3.13"
+tempfile = "3.14"
 tiny-bip39 = "2.0"
 tokio = { version = "1.41", features = ["full"] }
-which = "6.0"
+which = "7.0"
