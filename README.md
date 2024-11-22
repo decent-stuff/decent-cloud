@@ -82,13 +82,13 @@ The result PDF document will be at `build/docs/whitepaper/whitepaper.pdf`.
 
 # Update CI image
 
-There is a CI workflow that you can run to refresh the CI build image: https://github.com/decent-cloud/decent-cloud/actions/workflows/build-container-image.yaml
+There is a CI workflow that you can run to refresh the CI build image: https://github.com/decent-stuff/decent-cloud/actions/workflows/build-container-image.yaml
 
 If that fails, you can build the image locally and push it manually.
 
 ```
-docker build .github/container/ --tag ghcr.io/decent-cloud/decent-cloud/ci-image:latest
-docker push ghcr.io/decent-cloud/decent-cloud/ci-image:latest
+docker build .github/container/ --tag ghcr.io/decent-stuff/decent-cloud/ci-image:latest
+docker push ghcr.io/decent-stuff/decent-cloud/ci-image:latest
 ```
 
 If `docker push` fails with `denied: denied` or similar error, refresh the ghcr token at https://github.com/settings/tokens?page=1 and run

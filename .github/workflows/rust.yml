@@ -21,7 +21,7 @@ jobs:
       - name: dfxvm init
         run: |
           echo "dfxvm requires the default version to be set once after starting the container (bug!)"
-          dfxvm default 0.22.0
+          dfxvm default 0.24.2
           dfx --version
       - name: Clone Ledger Map
         shell: bash
@@ -29,7 +29,7 @@ jobs:
           set -eExuo pipefail
           (
             cd ..
-            git clone --depth 1 https://github.com/decent-cloud/ledger-map.git
+            git clone --depth 1 https://github.com/decent-stuff/ledger-map.git
             cd -
           )
       - name: Build and test
