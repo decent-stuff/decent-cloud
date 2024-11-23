@@ -10,18 +10,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mnemonic = mnemonic_from_stdin(reader, io::stdout())?;
     let seed = Seed::new(&mnemonic, "");
 
-    let dcc_identity = DccIdentity::new_from_seed(seed.as_bytes())?;
+    let dcc_id = DccIdentity::new_from_seed(seed.as_bytes())?;
 
     // Sign a message
     let message: &[u8] = b"Hello, world!";
-    let signature: Signature = dcc_identity.sign(message)?;
+    let signature: Signature = dcc_id.sign(message)?;
 
-    let verifying_key = dcc_identity.verifying_key();
-    println!("DccIdentity: {:?}", dcc_identity);
+    let verifying_key = dcc_id.verifying_key();
+    println!("DccIdentity: {:?}", dcc_id);
     println!("Public Key: {:?}", verifying_key.to_bytes());
     println!("Signature: {:?}", signature);
 
-    match dcc_identity.verify(message, &signature) {
+    match dcc_id.verify(message, &signature) {
         Ok(()) => println!("Signature is valid."),
         Err(e) => println!("Signature is invalid: {}", e),
     }

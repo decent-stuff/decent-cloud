@@ -695,6 +695,7 @@ dependencies = [
  "crc32fast",
  "dcc-common",
  "ed25519-dalek",
+ "flate2",
  "fs-err",
  "hex",
  "ic-canister-log",
@@ -704,6 +705,7 @@ dependencies = [
  "ic-metrics-encoder",
  "icrc-ledger-types",
  "ledger-map",
+ "np-offering",
  "num-bigint",
  "num-traits",
  "once_cell",
@@ -1981,6 +1983,7 @@ dependencies = [
 name = "np-offering"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "fs-err",
  "np-json-search",
  "serde",
@@ -1993,6 +1996,7 @@ dependencies = [
 name = "np-profile"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "fs-err",
  "np-json-search",
  "serde",

@@ -225,24 +225,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let np_desc = values[0];
                     let profile_file = values[1];
 
-                    let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                    let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
+                    let ic_auth = dcc_to_ic_auth(&dcc_id);
+
                     let np_profile = np_profile::Profile::new_from_file(profile_file)?;
+                    let np_profile_payload = UpdateProfilePayload::new_signed(&np_profile, &dcc_id);
 
-                    // Serialize the profile and sign it
-                    let profile_payload = serde_json::to_vec(&np_profile.as_json_value())?;
-                    let signature = dcc_ident.sign(&profile_payload)?.to_vec();
-
-                    // Send the payload
-                    let payload = UpdateProfilePayload {
-                        profile_payload,
-                        signature,
-                    };
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_update_profile(
-                            &dcc_ident.to_bytes_verifying(),
-                            &serde_json::to_vec(&payload)?,
+                            &dcc_id.to_bytes_verifying(),
+                            &borsh::to_vec(&np_profile_payload)?,
                         )
                         .await
                         .map_err(|e| format!("Update profile failed: {}", e))?;
@@ -256,25 +249,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     [np_desc, offering_file] => (np_desc, offering_file),
                     _ => panic!("Usage: <np-desc> <offering-file>"),
                 };
-                let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
+                let ic_auth = dcc_to_ic_auth(&dcc_id);
 
                 let np_offering = np_offering::Offering::new_from_file(offering_file)?;
+                let np_offering_payload = UpdateOfferingPayload::new_signed(&np_offering, &dcc_id);
 
-                // Update the NP offering in the ledger
-                let offering_payload = serde_json::to_vec(&np_offering.as_json_value())?;
-                let signature = dcc_ident.sign(&offering_payload)?.to_vec();
-
-                // Send the payload
-                let payload = UpdateOfferingPayload {
-                    offering_payload,
-                    signature,
-                };
                 let result = ledger_canister(ic_auth)
                     .await?
                     .node_provider_update_offering(
-                        &dcc_ident.to_bytes_verifying(),
-                        &serde_json::to_vec(&payload)?,
+                        &dcc_id.to_bytes_verifying(),
+                        &borsh::to_vec(&np_offering_payload)?,
                     )
                     .await
                     .map_err(|e| format!("Update offering failed: {}", e))?;
@@ -483,11 +468,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(("offering", arg_matches)) => {
             let query = arg_matches.get_one::<String>("query").cloned();
             if arg_matches.get_flag("list") || query.is_some() {
-                let offerings =
-                    do_get_matching_offerings(&ledger_local, &query.unwrap_or_default());
+                let query = query.unwrap_or_default();
+                let offerings = do_get_matching_offerings(&ledger_local, &query);
                 println!("Found {} matching offerings:", offerings.len());
-                for offering in offerings {
-                    println!("{}", serde_json::to_string(&offering)?);
+                for (dcc_id, offering) in offerings {
+                    println!(
+                        "{} ==> {}",
+                        dcc_identity,
+                        &offering.as_json_string().unwrap_or_default()
+                    );
                 }
             }
             Ok(())

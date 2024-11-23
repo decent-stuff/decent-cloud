@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use np_json_search::value_matches;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -5,14 +6,14 @@ use serde_yaml_ng::{self, Value as YamlValue};
 use std::fmt;
 
 // Define the Offering enum with version-specific variants
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum Offering {
     V0_1_0(CloudProviderOfferingV0_1_0),
     // Future versions can be added here
 }
 
 // Main struct for Cloud Provider Offering version 0.1.0
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct CloudProviderOfferingV0_1_0 {
     pub kind: String,
     pub metadata: Metadata,
@@ -22,22 +23,23 @@ pub struct CloudProviderOfferingV0_1_0 {
 
     // Raw JsonValue representation, for use in matches_search
     #[serde(skip)]
+    #[borsh(skip)]
     json_value: JsonValue,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Metadata {
     pub name: String,
     pub version: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Provider {
     pub name: String,
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct DefaultSpec {
     pub compliance: Option<Vec<String>>,
     pub sla: Option<SLA>,
@@ -50,7 +52,7 @@ pub struct DefaultSpec {
     pub service_integrations: Option<ServiceIntegrations>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct SLA {
     pub uptime: Option<String>,
     pub measurement_period: Option<String>,
@@ -59,13 +61,13 @@ pub struct SLA {
     pub maintenance: Option<Maintenance>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Support {
     pub levels: Option<Vec<String>>,
     pub response_time: Option<ResponseTime>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ResponseTime {
     pub critical: Option<String>,
     pub high: Option<String>,
@@ -73,25 +75,25 @@ pub struct ResponseTime {
     pub low: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Compensation {
     pub less_than: Option<String>,
     pub more_than: Option<String>,
     pub credit_percentage: Option<u8>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Maintenance {
     pub window: Option<String>,
     pub notification_period: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct MachineSpec {
     pub instance_types: Vec<InstanceType>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct InstanceType {
     pub id: String,
     #[serde(rename = "type")]
@@ -109,7 +111,7 @@ pub struct InstanceType {
     pub ai_spec: Option<AISpec>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct GPU {
     pub count: u32,
     #[serde(rename = "type")]
@@ -117,7 +119,7 @@ pub struct GPU {
     pub memory: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Storage {
     #[serde(rename = "type")]
     pub type_: String,
@@ -125,31 +127,31 @@ pub struct Storage {
     pub iops: Option<u32>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Pricing {
     pub on_demand: String,
     pub reserved: Option<ReservedPricing>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ReservedPricing {
     pub one_year: String,
     pub three_year: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct MetadataSpec {
     pub optimized_for: Option<String>,
     pub availability: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct NetworkSpecDetails {
     pub bandwidth: Option<String>,
     pub latency: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct AISpec {
     pub framework_optimizations: Option<Vec<String>>,
     pub software_stack: Option<SoftwareStack>,
@@ -157,12 +159,12 @@ pub struct AISpec {
     pub distributed_training_support: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct SoftwareStack {
     pub preinstalled: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct NetworkSpec {
     pub vpc_support: Option<bool>,
     pub public_ip: Option<bool>,
@@ -171,45 +173,45 @@ pub struct NetworkSpec {
     pub firewalls: Option<Firewalls>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct LoadBalancers {
     #[serde(rename = "type")]
     pub types: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Firewalls {
     pub stateful: Option<bool>,
     pub stateless: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Security {
     pub data_encryption: Option<DataEncryption>,
     pub identity_and_access_management: Option<IAM>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct DataEncryption {
     pub at_rest: Option<String>,
     pub in_transit: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct IAM {
     pub multi_factor_authentication: Option<bool>,
     pub role_based_access_control: Option<bool>,
     pub single_sign_on: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Monitoring {
     pub enabled: Option<bool>,
     pub metrics: Option<Metrics>,
     pub logging: Option<Logging>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Metrics {
     pub cpu_utilization: Option<bool>,
     pub memory_usage: Option<bool>,
@@ -217,13 +219,13 @@ pub struct Metrics {
     pub network_traffic: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Logging {
     pub enabled: Option<bool>,
     pub log_retention: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Backup {
     pub enabled: Option<bool>,
     pub frequency: Option<String>,
@@ -231,33 +233,33 @@ pub struct Backup {
     pub disaster_recovery: Option<DisasterRecovery>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct DisasterRecovery {
     pub cross_region_replication: Option<bool>,
     pub failover_time: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct CostOptimization {
     pub spot_instances_available: Option<bool>,
     pub savings_plans: Option<Vec<SavingsPlan>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct SavingsPlan {
     #[serde(rename = "type")]
     pub type_: String,
     pub discount: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ServiceIntegrations {
     pub databases: Option<Vec<String>>,
     pub storage_services: Option<Vec<String>>,
     pub messaging_services: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Region {
     pub name: String,
     pub description: Option<String>,
@@ -267,20 +269,20 @@ pub struct Region {
     pub availability_zones: Option<Vec<AvailabilityZone>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Geography {
     pub continent: Option<String>,
     pub country: Option<String>,
     pub iso_codes: Option<IsoCodes>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct IsoCodes {
     pub country_code: Option<String>,
     pub region_code: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct AvailabilityZone {
     pub name: String,
     pub description: Option<String>,
@@ -320,7 +322,7 @@ impl Offering {
                     serde_json::from_value::<CloudProviderOfferingV0_1_0>(doc.clone())
                         .map(Offering::V0_1_0)
                         .map_err(|e| {
-                            format!("Failed to deserialize CloudProviderOfferingV0_1_0: {}", e)
+                            format!("Failed to deserialize CloudProviderOfferingV0_1_0: (err {}) from input doc {}", e, input)
                         })?;
 
                 match offering {
@@ -329,8 +331,14 @@ impl Offering {
 
                 Ok(offering)
             }
-            Some(version) => Err(format!("Unsupported api_version '{}'", version)),
-            None => Err("Missing 'api_version' field.".to_string()),
+            Some(version) => Err(format!(
+                "Unsupported api_version '{}' in the input doc {}",
+                version, input
+            )),
+            None => Err(format!(
+                "Missing 'api_version' field in the input doc {}",
+                input
+            )),
         }
     }
 
@@ -344,6 +352,10 @@ impl Offering {
         match self {
             Offering::V0_1_0(offering) => offering.as_json_value(),
         }
+    }
+
+    pub fn as_json_string(&self) -> Result<String, String> {
+        serde_json::to_string(self).map_err(|e| e.to_string())
     }
 }
 

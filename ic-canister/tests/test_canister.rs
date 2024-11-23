@@ -2,15 +2,19 @@ use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
     np_registration_fee_e9s, reward_e9s_per_block_recalculate, Balance, DccIdentity,
-    BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
+    UpdateOfferingPayload, BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS,
+    MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
+use flate2::bufread::ZlibDecoder;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use icrc_ledger_types::icrc1::transfer::{Memo as Icrc1Memo, TransferArg, TransferError};
+use np_offering::Offering;
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 use pocket_ic::WasmResult;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -283,6 +287,50 @@ fn np_register(
         Result<String, String>
     );
     (dcc_identity, result)
+}
+
+fn offering_add(
+    pic: &PocketIc,
+    can: Principal,
+    dcc_id: &DccIdentity,
+    offering: &Offering,
+) -> Result<String, String> {
+    let payload = UpdateOfferingPayload::new_signed(offering, dcc_id);
+    let payload_bytes = &borsh::to_vec(&payload).unwrap();
+    update_check_and_decode!(
+        pic,
+        can,
+        dcc_id.to_ic_principal(),
+        "node_provider_update_offering",
+        Encode!(&dcc_id.to_bytes_verifying(), payload_bytes).unwrap(),
+        Result<String, String>
+    )
+}
+
+fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
+    pic: &PocketIc,
+    can: Principal,
+    search_query: &T,
+) -> Vec<(DccIdentity, Offering)> {
+    query_check_and_decode!(
+        pic,
+        can,
+        "offering_search",
+        Encode!(&search_query).unwrap(),
+        Vec<(Vec<u8>, Vec<u8>)>
+    )
+    .into_iter()
+    .map(|(np_pubkey_bytes, payload_bytes)| {
+        let mut offering_as_json_string = String::new();
+        ZlibDecoder::new(payload_bytes.as_slice())
+            .read_to_string(&mut offering_as_json_string)
+            .unwrap();
+        (
+            DccIdentity::new_verifying_from_bytes(&np_pubkey_bytes).unwrap(),
+            serde_json::from_str(&offering_as_json_string).unwrap(),
+        )
+    })
+    .collect()
 }
 
 fn user_register(
@@ -568,4 +616,44 @@ fn test_reputation() {
 
     assert!(identity_reputation_get(&p, c, &u1.to_bytes_verifying()) > 0);
     assert!(identity_reputation_get(&p, c, &u2.to_bytes_verifying()) > 0);
+}
+
+#[test]
+fn test_offerings() {
+    let (p, c) = create_test_canister();
+    let ts_ns = get_timestamp_ns(&p, c);
+
+    let _ = np_register(&p, c, b"np_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
+    test_ffwd_to_next_block(ts_ns, &p, c);
+
+    let np1 = np_register(&p, c, b"np1", 2 * DC_TOKEN_DECIMALS_DIV).0;
+    // let u1 = user_register(&p, c, b"u1", 2 * DC_TOKEN_DECIMALS_DIV).0;
+    test_ffwd_to_next_block(ts_ns, &p, c);
+
+    assert_eq!(offering_search(&p, c, "").len(), 0);
+    let offering = Offering::new_from_file("tests/data/np-offering-demo1.yaml").unwrap();
+    offering_add(&p, c, &np1, &offering).unwrap();
+
+    let search_results = offering_search(&p, c, "");
+    assert_eq!(search_results.len(), 1);
+    assert_eq!(
+        search_results[0].0.to_bytes_verifying(),
+        np1.to_bytes_verifying()
+    );
+    assert_eq!(
+        search_results[0].1.as_json_string(),
+        offering.as_json_string()
+    );
+
+    test_ffwd_to_next_block(ts_ns, &p, c);
+    let search_results = offering_search(&p, c, "");
+    assert_eq!(search_results.len(), 1);
+    assert_eq!(
+        search_results[0].0.to_bytes_verifying(),
+        np1.to_bytes_verifying()
+    );
+    assert_eq!(
+        search_results[0].1.as_json_string(),
+        offering.as_json_string()
+    );
 }

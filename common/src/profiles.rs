@@ -1,23 +1,79 @@
 use crate::{
-    charge_fees_to_account_no_bump_reputation, info, reputation_get, reward_e9s_per_block, Balance,
-    DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE, MAX_NP_PROFILE_BYTES,
-    MAX_PUBKEY_BYTES,
+    amount_as_string, charge_fees_to_account_no_bump_reputation, info, reputation_get,
+    reward_e9s_per_block, Balance, DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE,
+    MAX_NP_PROFILE_BYTES, MAX_PUBKEY_BYTES,
 };
+use borsh::{BorshDeserialize, BorshSerialize};
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
-use serde::{Deserialize, Serialize};
+use np_profile::Profile;
+use serde::Serialize;
 
 pub fn np_profile_update_fee_e9s() -> Balance {
     reward_e9s_per_block() / 10000
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-pub struct UpdateProfilePayload {
-    pub profile_payload: Vec<u8>,
+#[derive(Debug, BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Hash)]
+pub struct UpdateProfilePayloadV1 {
+    pub profile_bytes: Vec<u8>,
     pub signature: Vec<u8>,
+}
+
+#[derive(Debug, BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Hash)]
+pub enum UpdateProfilePayload {
+    V1(UpdateProfilePayloadV1),
+}
+
+impl UpdateProfilePayload {
+    pub fn new_signed(profile: &Profile, dcc_id: &DccIdentity) -> Self {
+        let enc_bytes = borsh::to_vec(&profile).unwrap();
+        let signature = dcc_id.sign(&enc_bytes).unwrap();
+        UpdateProfilePayload::V1(UpdateProfilePayloadV1 {
+            profile_bytes: enc_bytes,
+            signature: signature.to_vec(),
+        })
+    }
+
+    pub fn verify_signature(&self, dcc_id: &DccIdentity) -> Result<(), String> {
+        match self {
+            UpdateProfilePayload::V1(payload) => {
+                if payload.signature.len() != ED25519_SIGNATURE_LENGTH {
+                    return Err("Invalid signature".to_string());
+                }
+                if payload.profile_bytes.len() > MAX_NP_PROFILE_BYTES {
+                    return Err("Profile payload too long".to_string());
+                }
+
+                dcc_id
+                    .verify_bytes(payload.profile_bytes.as_slice(), &payload.signature)
+                    .map_err(|e| e.to_string())
+            }
+        }
+    }
+
+    pub fn deserialize_unchecked(data: &[u8]) -> Result<UpdateProfilePayload, String> {
+        UpdateProfilePayload::try_from_slice(data).map_err(|e| e.to_string())
+    }
+
+    pub fn deserialize_checked(
+        dcc_id: &DccIdentity,
+        data: &[u8],
+    ) -> Result<UpdateProfilePayload, String> {
+        let result = Self::deserialize_unchecked(data)?;
+        result.verify_signature(dcc_id).map_err(|e| e.to_string())?;
+        Ok(result)
+    }
+
+    pub fn profile(&self) -> Result<Profile, String> {
+        match self {
+            UpdateProfilePayload::V1(payload) => {
+                Profile::try_from_slice(&payload.profile_bytes).map_err(|e| e.to_string())
+            }
+        }
+    }
 }
 
 pub fn do_node_provider_update_profile(
@@ -30,38 +86,31 @@ pub fn do_node_provider_update_profile(
         return Err("Provided public key too long".to_string());
     }
 
-    let dcc_identity =
-        DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
-    if caller != dcc_identity.to_ic_principal() {
+    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
+    if caller != dcc_id.to_ic_principal() {
         return Err("Invalid caller".to_string());
     }
-    info!("[do_node_provider_update_profile]: {}", dcc_identity);
+    info!(
+        "[do_node_provider_update_profile]: {} => {} bytes",
+        dcc_id,
+        update_profile_payload.len()
+    );
 
-    let payload: UpdateProfilePayload =
-        serde_json::from_slice(update_profile_payload).map_err(|e| e.to_string())?;
+    UpdateProfilePayload::deserialize_checked(&dcc_id, update_profile_payload)?;
 
-    if payload.signature.len() != ED25519_SIGNATURE_LENGTH {
-        return Err("Invalid signature".to_string());
-    }
-    if payload.profile_payload.len() > MAX_NP_PROFILE_BYTES {
-        return Err("Profile payload too long".to_string());
-    }
+    let fees = np_profile_update_fee_e9s();
+    charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, fees)?;
 
-    match dcc_identity.verify_bytes(&payload.profile_payload, &payload.signature) {
-        Ok(()) => {
-            charge_fees_to_account_no_bump_reputation(
-                ledger,
-                &dcc_identity,
-                np_profile_update_fee_e9s(),
-            )?;
-            // Store the original signed payload in the ledger
-            ledger
-                .upsert(LABEL_NP_PROFILE, &pubkey_bytes, update_profile_payload)
-                .map(|_| "Profile updated! Thank you.".to_string())
-                .map_err(|e| e.to_string())
-        }
-        Err(e) => Err(format!("Signature is invalid: {:?}", e)),
-    }
+    // Store the original signed payload in the ledger, for easy future verification
+    ledger
+        .upsert(LABEL_NP_PROFILE, &pubkey_bytes, update_profile_payload)
+        .map(|_| {
+            format!(
+                "Profile updated! Thank you. You have been charged {} tokens",
+                amount_as_string(fees),
+            )
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Serialize)]
@@ -75,18 +124,15 @@ pub fn do_node_provider_get_profile(
     pubkey_bytes: Vec<u8>,
 ) -> Option<NodeProviderProfileWithReputation> {
     match ledger.get(LABEL_NP_PROFILE, &pubkey_bytes) {
-        Ok(profile_bytes) => {
-            let payload: UpdateProfilePayload =
-                serde_json::from_slice(&profile_bytes).expect("Failed to decode profile payload");
-            let profile_str =
-                std::str::from_utf8(&payload.profile_payload).expect("Failed to decode profile");
-            let profile = np_profile::Profile::new_from_str(profile_str, "json")
-                .expect("Failed to decode profile");
-            Some(NodeProviderProfileWithReputation {
+        // Don't check the signature to save time
+        Ok(data) => UpdateProfilePayload::deserialize_unchecked(&data)
+            .ok()?
+            .profile()
+            .ok()
+            .map(|profile| NodeProviderProfileWithReputation {
                 profile,
                 reputation: reputation_get(&pubkey_bytes),
-            })
-        }
+            }),
         Err(_) => None,
     }
 }

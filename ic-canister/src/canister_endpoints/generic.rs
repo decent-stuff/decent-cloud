@@ -47,6 +47,11 @@ fn node_provider_update_offering(
 }
 
 #[ic_cdk::query]
+fn offering_search(search_query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
+    _offering_search(search_query)
+}
+
+#[ic_cdk::query]
 fn node_provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
     _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes)
 }

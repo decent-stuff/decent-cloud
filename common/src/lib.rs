@@ -75,6 +75,11 @@ pub const LABEL_REWARD_DISTRIBUTION: &str = "RewardDistr";
 pub const LABEL_USER_REGISTER: &str = "UserRegister";
 pub const MAX_NP_PROFILE_BYTES: usize = 4 * 1024;
 pub const MAX_NP_OFFERING_BYTES: usize = 32 * 1024;
+// Maximum response size (replicated execution)	in bytes is 2 MiB
+pub const MAX_RESPONSE_BYTES_REPLICATED: usize = 2 * 1024 * 1024;
+// Maximum response size (non-replicated execution, i.e. in query calls) in bytes is 3 MiB
+// https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
+pub const MAX_RESPONSE_BYTES_NON_REPLICATED: usize = 3 * 1024 * 1024;
 pub const MAX_PUBKEY_BYTES: usize = 32;
 pub const MEMO_BYTES_MAX: usize = 32;
 /// Reduction of reputations for all accounts, based on time (per block), in parts per million

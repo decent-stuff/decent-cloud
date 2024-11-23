@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use np_json_search::value_matches;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -5,13 +6,13 @@ use serde_yaml_ng::{self, Value as YamlValue};
 use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum Profile {
     V0_1_0(ProfileV0_1_0),
     // Future versions can be added as new variants
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ProfileV0_1_0 {
     pub kind: String,
     pub metadata: Metadata,
@@ -19,6 +20,7 @@ pub struct ProfileV0_1_0 {
 
     // Add a field to hold the raw JsonValue representation, for use in matches_search
     #[serde(skip)]
+    #[borsh(skip)]
     json_value: JsonValue,
 }
 
@@ -39,13 +41,13 @@ impl ProfileV0_1_0 {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Metadata {
     pub name: String,
     pub version: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct Spec {
     pub description: Option<String>,
     pub url: Option<String>,

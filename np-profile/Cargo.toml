@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+borsh.workspace = true
 fs-err = { workspace = true }
 np-json-search = { path = "../np-json-search" }
 serde = { workspace = true }

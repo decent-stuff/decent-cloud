@@ -8,15 +8,18 @@ use dcc_common::{
     reward_e9s_per_block_recalculate, rewards_applied_np_count, rewards_distribute,
     rewards_pending_e9s, set_test_config, Balance, FundsTransfer, LedgerCursor,
     BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN,
-    LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_PROFILE, LABEL_NP_REGISTER,
-    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE,
+    LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
+use flate2::{write::ZlibEncoder, Compression};
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::platform_specific::{persistent_storage_read, persistent_storage_write};
-use ledger_map::{error, info, LedgerMap};
+use ledger_map::{error, info, warn, LedgerMap};
 use serde::Serialize;
 use std::cell::RefCell;
+use std::io::prelude::*;
 use std::ops::AddAssign;
 use std::time::Duration;
 
@@ -28,6 +31,7 @@ thread_local! {
         LABEL_USER_REGISTER.to_string(),
         LABEL_REWARD_DISTRIBUTION.to_string(),
         LABEL_NP_PROFILE.to_string(),
+        LABEL_NP_OFFERING.to_string(),
     ])).expect("Failed to create LedgerMap"));
     pub(crate) static AUTHORIZED_PUSHER: RefCell<Option<Principal>> = const { RefCell::new(None) };
     #[cfg(target_arch = "wasm32")]
@@ -208,6 +212,36 @@ pub(crate) fn _node_provider_check_in(
 
 pub(crate) fn _get_np_check_in_nonce() -> Vec<u8> {
     LEDGER_MAP.with(|ledger| ledger.borrow().get_latest_block_hash())
+}
+
+pub(crate) fn _offering_search(query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
+    let mut response_bytes = 0;
+    let mut response = Vec::new();
+    let max_offering_response_bytes = MAX_RESPONSE_BYTES_NON_REPLICATED * 9 / 10; // 90% of max response bytes
+    LEDGER_MAP.with(|ledger| {
+        for (dcc_id, offering) in dcc_common::do_get_matching_offerings(&ledger.borrow(), &query) {
+            // convert results to json and compress that json with zlib
+            let offering_json_string = match offering.as_json_string() {
+                Ok(json) => json,
+                Err(e) => {
+                    warn!("Failed to serialize offering: {}", e);
+                    continue;
+                }
+            };
+            let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+
+            enc.write_all(offering_json_string.as_bytes())
+                .expect("Failed to compress");
+            let compressed = enc.finish().expect("Failed to compress");
+            let pubkey_bytes = dcc_id.to_bytes_verifying();
+            response_bytes += pubkey_bytes.len() + compressed.len();
+            if response_bytes > max_offering_response_bytes {
+                break;
+            }
+            response.push((pubkey_bytes, compressed));
+        }
+    });
+    response
 }
 
 pub(crate) fn _user_register(pubkey_bytes: Vec<u8>) -> Result<String, String> {
