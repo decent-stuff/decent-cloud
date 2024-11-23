@@ -93,6 +93,7 @@ pub struct MachineSpec {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InstanceType {
+    pub id: String,
     #[serde(rename = "type")]
     pub type_: String,
     pub description: Option<String>,
@@ -395,7 +396,8 @@ defaults:
     - SOC 2
   machine_spec:
     instance_types:
-      - type: general-purpose
+      - id: xxx-small
+        type: general-purpose
         cpu: 2 vCPUs
         memory: 2 GB
         storage:
@@ -410,7 +412,8 @@ regions:
       - GDPR
     machine_spec:
       instance_types:
-        - type: memory-optimized
+        - id: xx-small
+          type: memory-optimized
           cpu: 4 vCPUs
           memory: 16 GB
           storage:
