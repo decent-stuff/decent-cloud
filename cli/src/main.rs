@@ -474,7 +474,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for (dcc_id, offering) in offerings {
                     println!(
                         "{} ==> {}",
-                        dcc_identity,
+                        dcc_id,
                         &offering.as_json_string().unwrap_or_default()
                     );
                 }

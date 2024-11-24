@@ -69,9 +69,9 @@ impl UpdateProfilePayload {
 
     pub fn profile(&self) -> Result<Profile, String> {
         match self {
-            UpdateProfilePayload::V1(payload) => {
-                Profile::try_from_slice(&payload.profile_bytes).map_err(|e| e.to_string())
-            }
+            UpdateProfilePayload::V1(payload) => Profile::try_from_slice(&payload.profile_bytes)
+                .map(|v| v.compute_json_value())
+                .map_err(|e| e.to_string()),
         }
     }
 }

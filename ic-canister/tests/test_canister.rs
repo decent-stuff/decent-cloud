@@ -289,50 +289,6 @@ fn np_register(
     (dcc_identity, result)
 }
 
-fn offering_add(
-    pic: &PocketIc,
-    can: Principal,
-    dcc_id: &DccIdentity,
-    offering: &Offering,
-) -> Result<String, String> {
-    let payload = UpdateOfferingPayload::new_signed(offering, dcc_id);
-    let payload_bytes = &borsh::to_vec(&payload).unwrap();
-    update_check_and_decode!(
-        pic,
-        can,
-        dcc_id.to_ic_principal(),
-        "node_provider_update_offering",
-        Encode!(&dcc_id.to_bytes_verifying(), payload_bytes).unwrap(),
-        Result<String, String>
-    )
-}
-
-fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
-    pic: &PocketIc,
-    can: Principal,
-    search_query: &T,
-) -> Vec<(DccIdentity, Offering)> {
-    query_check_and_decode!(
-        pic,
-        can,
-        "offering_search",
-        Encode!(&search_query).unwrap(),
-        Vec<(Vec<u8>, Vec<u8>)>
-    )
-    .into_iter()
-    .map(|(np_pubkey_bytes, payload_bytes)| {
-        let mut offering_as_json_string = String::new();
-        ZlibDecoder::new(payload_bytes.as_slice())
-            .read_to_string(&mut offering_as_json_string)
-            .unwrap();
-        (
-            DccIdentity::new_verifying_from_bytes(&np_pubkey_bytes).unwrap(),
-            serde_json::from_str(&offering_as_json_string).unwrap(),
-        )
-    })
-    .collect()
-}
-
 fn user_register(
     pic: &PocketIc,
     can: Principal,
@@ -618,6 +574,50 @@ fn test_reputation() {
     assert!(identity_reputation_get(&p, c, &u2.to_bytes_verifying()) > 0);
 }
 
+fn offering_add(
+    pic: &PocketIc,
+    can: Principal,
+    dcc_id: &DccIdentity,
+    offering: &Offering,
+) -> Result<String, String> {
+    let payload = UpdateOfferingPayload::new_signed(offering, dcc_id);
+    let payload_bytes = &borsh::to_vec(&payload).unwrap();
+    update_check_and_decode!(
+        pic,
+        can,
+        dcc_id.to_ic_principal(),
+        "node_provider_update_offering",
+        Encode!(&dcc_id.to_bytes_verifying(), payload_bytes).unwrap(),
+        Result<String, String>
+    )
+}
+
+fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
+    pic: &PocketIc,
+    can: Principal,
+    search_query: &T,
+) -> Vec<(DccIdentity, Offering)> {
+    query_check_and_decode!(
+        pic,
+        can,
+        "offering_search",
+        Encode!(&search_query).unwrap(),
+        Vec<(Vec<u8>, Vec<u8>)>
+    )
+    .into_iter()
+    .map(|(np_pubkey_bytes, payload_bytes)| {
+        let mut offering_as_json_string = String::new();
+        ZlibDecoder::new(payload_bytes.as_slice())
+            .read_to_string(&mut offering_as_json_string)
+            .unwrap();
+        (
+            DccIdentity::new_verifying_from_bytes(&np_pubkey_bytes).unwrap(),
+            Offering::new_from_str(&offering_as_json_string, "json").unwrap(),
+        )
+    })
+    .collect()
+}
+
 #[test]
 fn test_offerings() {
     let (p, c) = create_test_canister();
@@ -656,4 +656,16 @@ fn test_offerings() {
         search_results[0].1.as_json_string(),
         offering.as_json_string()
     );
+    let search_results = offering_search(&p, c, "memory >= 512MB");
+    assert_eq!(search_results.len(), 1);
+    assert_eq!(
+        search_results[0].0.to_bytes_verifying(),
+        np1.to_bytes_verifying()
+    );
+    assert_eq!(
+        search_results[0].1.as_json_string(),
+        offering.as_json_string()
+    );
+    let search_results = offering_search(&p, c, "memory >= 1512MB");
+    assert_eq!(search_results.len(), 0);
 }

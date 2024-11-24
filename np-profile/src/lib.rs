@@ -16,6 +16,7 @@ pub enum Profile {
 pub struct ProfileV0_1_0 {
     pub kind: String,
     pub metadata: Metadata,
+    pub api_version: String,
     pub spec: Spec,
 
     // Add a field to hold the raw JsonValue representation, for use in matches_search
@@ -34,10 +35,6 @@ impl ProfileV0_1_0 {
 
     pub fn matches_search(&self, search_str: &str) -> bool {
         value_matches(&self.json_value, search_str)
-    }
-
-    pub fn as_json_value(&self) -> &JsonValue {
-        &self.json_value
     }
 }
 
@@ -84,16 +81,15 @@ impl Profile {
         };
 
         match doc.get("api_version").and_then(|v| v.as_str()) {
-            Some("v0.1.0") => {
-                let mut profile = serde_json::from_value::<ProfileV0_1_0>(doc.clone())
-                    .map(Profile::V0_1_0)
-                    .map_err(|e| format!("Failed to deserialize Profile: {}", e))?;
-
-                match profile {
-                    Profile::V0_1_0(ref mut profile) => profile.json_value = doc,
-                }
-                Ok(profile)
-            }
+            Some("v0.1.0") => serde_json::from_value::<ProfileV0_1_0>(doc.clone())
+                .map(Profile::V0_1_0)
+                .map(|v| v.compute_json_value())
+                .map_err(|e| {
+                    format!(
+                        "Failed to deserialize Profile due to err {} from input doc {}",
+                        e, doc
+                    )
+                }),
             Some(version) => Err(format!("Unsupported api_version '{}'", version)),
             None => Err("Missing 'api_version' field.".to_string()),
         }
@@ -111,9 +107,20 @@ impl Profile {
         }
     }
 
-    pub fn as_json_value(&self) -> &JsonValue {
+    pub fn compute_json_value(self) -> Self {
         match self {
-            Profile::V0_1_0(profile) => profile.as_json_value(),
+            Profile::V0_1_0(profile) => Profile::V0_1_0(ProfileV0_1_0 {
+                json_value: serde_json::to_value(&profile).unwrap(),
+                ..profile
+            }),
+        }
+    }
+
+    pub fn as_json_string(&self) -> Result<String, String> {
+        match self {
+            Profile::V0_1_0(profile) => {
+                serde_json::to_string(&profile.json_value).map_err(|e| e.to_string())
+            }
         }
     }
 }
