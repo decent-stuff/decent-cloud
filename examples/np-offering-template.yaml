@@ -1,8 +1,8 @@
 # Versioning Information
 api_version: v0.1.0
-kind: cloud_provider_offering
+kind: Offering
 metadata:
-  name: "GenericCloudService"
+  name: "Node Provider Name"
   version: "1.0"
 
 # This template provides an example of a cloud provider offering.
@@ -53,10 +53,10 @@ defaults:
           type: SSD
           size: 50 GB
         pricing:
-          on_demand: "$0.05/hour"
+          on_demand:
+            hour: "0.05"
           reserved:
-            one_year: "$0.03/hour"
-            three_year: "$0.02/hour"
+            year: "10"
         tags:
           - low-cost
           - small-instance
@@ -144,9 +144,10 @@ regions:
             type: SSD
             size: 100 GB
           pricing:
-            on_demand: "$0.15/hour"
+            on_demand:
+              hour: "0.1"
             reserved:
-              one_year: "$0.10/hour"
+              year: "20"
           tags:
             - high-performance
             - GDPR-compliant
@@ -179,9 +180,10 @@ regions:
             type: NVMe
             size: 200 GB
           pricing:
-            on_demand: "$0.20/hour"
+            on_demand:
+              hour: "0.2"
             reserved:
-              one_year: "$0.15/hour"
+              year: "50"
           tags:
             - high-compute
             - cost-effective
@@ -205,10 +207,10 @@ regions:
             bandwidth: 25 Gbps
             latency: low
           pricing:
-            on_demand: "$3.50/hour"
+            on_demand:
+              hour: "0.5"
             reserved:
-              one_year: "$2.90/hour"
-              three_year: "$2.50/hour"
+              year: "100"
           tags:
             - ai-ml
             - gpu-optimized

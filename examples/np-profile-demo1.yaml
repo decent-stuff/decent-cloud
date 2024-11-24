@@ -1,14 +1,14 @@
 api_version: v0.1.0
 kind: Profile
 metadata:
-  name: "Demo Node Provider"
+  name: "Demo Node Provider, do not use"
   version: "0.0.1"
 
 spec:
   description: "This is a demo node provider"
   url: "https://demo-node-provider.com"
   logo_url: "https://demo-node-provider.com/logo.jpg"
-  why_choose_us: "Because we're the best!"
+  why_choose_us: "DO NOT. This is a demo entry."
   contacts:
     Twitter: "x.com/dc-prov"
     Linkedin: "linkedin.com/dc-prov"

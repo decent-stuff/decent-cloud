@@ -1,8 +1,8 @@
 # Versioning Information
 api_version: v0.1.0
-kind: cloud_provider_offering
+kind: Offering
 metadata:
-  name: "GenericCloudService"
+  name: "Demo Node Provider, do not use"
   version: "1.0"
 
 # Provider Information

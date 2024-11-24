@@ -3,7 +3,7 @@ use np_json_search::value_matches;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_yaml_ng::{self, Value as YamlValue};
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 // Define the Offering enum with version-specific variants
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -105,7 +105,7 @@ pub struct InstanceType {
     pub memory: Option<String>,
     pub storage: Option<Storage>,
     pub network: Option<NetworkSpecDetails>,
-    pub pricing: Option<Pricing>,
+    pub pricing: Option<HashMap<String, HashMap<String, String>>>,
     pub compliance: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     pub metadata: Option<MetadataSpec>,
@@ -126,18 +126,6 @@ pub struct Storage {
     pub type_: String,
     pub size: String,
     pub iops: Option<u32>,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
-pub struct Pricing {
-    pub on_demand: String,
-    pub reserved: Option<ReservedPricing>,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
-pub struct ReservedPricing {
-    pub one_year: String,
-    pub three_year: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -414,7 +402,8 @@ defaults:
           type: SSD
           size: 50 GB
         pricing:
-          on_demand: "$0.05/hour"
+          on_demand:
+            hour: "0.05"
 regions:
   - name: eu-central-1
     description: central europe region
@@ -430,7 +419,8 @@ regions:
             type: SSD
             size: 100 GB
           pricing:
-            on_demand: "$0.15/hour"
+            on_demand:
+                hour: "0.15"
 "#;
 
     #[test]
@@ -469,6 +459,13 @@ regions:
         assert!(offering.matches_search("name endswith Service"));
 
         assert!(offering.matches_search("regions.name=eu-central-1"));
+        assert!(offering.matches_search("pricing.on_demand.hour <= 0.05"));
+        assert!(!offering.matches_search("pricing.on_demand.hour < 0.05"));
+        assert!(!offering.matches_search("pricing.on_demand.hour <= 0.01"));
+        assert!(offering.matches_search("pricing.on_demand.hour >= 0.05"));
+        assert!(offering.matches_search("pricing.on_demand.hour >= 0.15"));
+        assert!(!offering.matches_search("pricing.on_demand.hour > 0.15"));
+        assert!(!offering.matches_search("pricing.on_demand.hour > 0.5"));
         assert!(offering.matches_search("type=memory-optimized"));
         assert!(!offering.matches_search("nonexistent=value"));
     }
