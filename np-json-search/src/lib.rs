@@ -1,4 +1,3 @@
-use parse_size::parse_size;
 use regex::Regex;
 use serde_json::Value;
 use std::str::FromStr;
@@ -176,115 +175,108 @@ impl std::fmt::Display for CompareOp {
     }
 }
 
-fn try_parse_size_bytes(s: &Value) -> Value {
-    if let Value::String(s) = s {
-        match parse_size(s) {
-            Ok(size) => Value::Number(serde_json::Number::from(size)),
-            Err(_) => s.clone().into(),
+fn try_parse_size_bytes(value: &Value) -> Value {
+    let size_parser = parse_size::Config::new().with_byte_suffix(parse_size::ByteSuffix::Allow);
+    if let Value::String(s) = value {
+        match size_parser.parse_size(s) {
+            Ok(size) => {
+                if size > 0 {
+                    Value::Number(serde_json::Number::from(size))
+                } else {
+                    Value::String(s.clone())
+                }
+            }
+            Err(_) => Value::String(s.clone()),
         }
     } else {
-        s.clone()
+        value.clone()
     }
 }
 
 impl CompareOp {
     fn matches(&self, value: &Value, other: &Value) -> bool {
-        // Try to parse values as humanized bytes if possible (e.g., "100 MB" -> 100 * 1024 * 1024)
         let value = &try_parse_size_bytes(value);
         let other = &try_parse_size_bytes(other);
 
+        // Helper function to parse values as f64
+        fn parse_value_as_f64(value: &Value) -> Option<f64> {
+            match value {
+                Value::Number(num) => num.as_f64(),
+                Value::String(s) => s.parse::<f64>().ok(),
+                _ => None,
+            }
+        }
+
+        // Helper function to normalize values as lowercase strings
+        fn normalize_string(value: &Value) -> Option<String> {
+            match value {
+                Value::String(s) => Some(s.to_lowercase()),
+                Value::Number(num) => Some(num.to_string()),
+                _ => None,
+            }
+        }
+
+        // Extract numerical and string representations
+        let value_num = parse_value_as_f64(value);
+        let other_num = parse_value_as_f64(other);
+        let value_str = normalize_string(value);
+        let other_str = normalize_string(other);
+
         match self {
-            CompareOp::Equal => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
-                (Value::String(a), Value::String(b)) => a.to_lowercase() == b.to_lowercase(),
-                (a, b) => a == b,
-            },
-            CompareOp::NotEqual => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => a.as_f64() != b.as_f64(),
-                (Value::String(a), Value::String(b)) => a.to_lowercase() != b.to_lowercase(),
-                (a, b) => a != b,
-            },
-            CompareOp::Like => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => {
-                    a.as_f64() > b.as_f64().map(|b| b * 0.9)
-                        && a.as_f64() < b.as_f64().map(|b| b * 1.1)
-                }
-                (Value::String(a), Value::String(b)) => {
-                    jaro_winkler(&a.to_lowercase(), &b.to_lowercase()) > 0.9
-                }
-                _ => false,
-            },
-            CompareOp::NotLike => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => {
-                    a.as_f64() <= b.as_f64().map(|b| b * 0.9)
-                        || a.as_f64() >= b.as_f64().map(|b| b * 1.1)
-                }
-                (Value::String(a), Value::String(b)) => {
-                    jaro_winkler(&a.to_lowercase(), &b.to_lowercase()) <= 0.9
-                }
-                _ => false,
-            },
-            CompareOp::GreaterThan => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => a.as_f64() > b.as_f64(),
-                (Value::String(a), Value::String(b)) => a.to_lowercase() > b.to_lowercase(),
-                _ => false,
-            },
-            CompareOp::LessThan => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => a.as_f64() < b.as_f64(),
-                (Value::String(a), Value::String(b)) => a.to_lowercase() < b.to_lowercase(),
-                _ => false,
-            },
-            CompareOp::GreaterThanOrEqual => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => a.as_f64() >= b.as_f64(),
-                (Value::String(a), Value::String(b)) => a.to_lowercase() >= b.to_lowercase(),
-                _ => false,
-            },
-            CompareOp::LessThanOrEqual => match (value, other) {
-                (Value::Number(a), Value::Number(b)) => a.as_f64() <= b.as_f64(),
-                (Value::String(a), Value::String(b)) => a.to_lowercase() <= b.to_lowercase(),
-                _ => false,
-            },
+            CompareOp::Equal => value_num
+                .zip(other_num)
+                .map_or_else(|| value_str == other_str, |(a, b)| a == b),
+            CompareOp::NotEqual => value_num
+                .zip(other_num)
+                .map_or_else(|| value_str != other_str, |(a, b)| a != b),
+            CompareOp::Like | CompareOp::NotLike => {
+                let similarity_threshold = 0.9;
+                let is_like = value_num.zip(other_num).map_or_else(
+                    || {
+                        let value_str = value_str.unwrap_or_default();
+                        let other_str = other_str.unwrap_or_default();
+                        jaro_winkler(&value_str, &other_str) > similarity_threshold
+                    },
+                    |(a, b)| (a - b).abs() < b * 0.1,
+                );
+                matches!(self, CompareOp::Like) == is_like
+            }
+            CompareOp::GreaterThan => value_num
+                .zip(other_num)
+                .map_or_else(|| value_str > other_str, |(a, b)| a > b),
+            CompareOp::LessThan => value_num
+                .zip(other_num)
+                .map_or_else(|| value_str < other_str, |(a, b)| a < b),
+            CompareOp::GreaterThanOrEqual => value_num
+                .zip(other_num)
+                .map_or_else(|| value_str >= other_str, |(a, b)| a >= b),
+            CompareOp::LessThanOrEqual => value_num
+                .zip(other_num)
+                .map_or_else(|| value_str <= other_str, |(a, b)| a <= b),
             CompareOp::Regex => {
-                if let Value::String(s) = value {
-                    if let Value::String(other) = other {
-                        let re = Regex::new(other).unwrap();
-                        re.is_match(s)
-                    } else {
-                        false
-                    }
+                if let (Some(value_str), Some(other_str)) = (value_str, other_str) {
+                    Regex::new(&other_str).map_or(false, |re| re.is_match(&value_str))
                 } else {
                     false
                 }
             }
             CompareOp::Contains => {
-                if let Value::String(s) = value {
-                    if let Value::String(other) = other {
-                        s.to_lowercase().contains(&other.to_lowercase())
-                    } else {
-                        false
-                    }
+                if let (Some(value_str), Some(other_str)) = (value_str, other_str) {
+                    value_str.contains(&other_str)
                 } else {
                     false
                 }
             }
             CompareOp::StartsWith => {
-                if let Value::String(s) = value {
-                    if let Value::String(other) = other {
-                        s.to_lowercase().starts_with(&other.to_lowercase())
-                    } else {
-                        false
-                    }
+                if let (Some(value_str), Some(other_str)) = (value_str, other_str) {
+                    value_str.starts_with(&other_str)
                 } else {
                     false
                 }
             }
             CompareOp::EndsWith => {
-                if let Value::String(s) = value {
-                    if let Value::String(other) = other {
-                        s.to_lowercase().ends_with(&other.to_lowercase())
-                    } else {
-                        false
-                    }
+                if let (Some(value_str), Some(other_str)) = (value_str, other_str) {
+                    value_str.ends_with(&other_str)
                 } else {
                     false
                 }
@@ -400,6 +392,21 @@ mod tests {
         "#;
         let json_value: Value = from_str(json_str).unwrap();
         let search_str = "stats.count > 5";
+        let search = Search::from_str(search_str).unwrap();
+        assert!(search.matches(&json_value));
+    }
+
+    #[test]
+    fn test_comparison_operator_with_decimal() {
+        let json_str = r#"
+            {
+                "stats": {
+                    "price": "10.5"
+                }
+            }
+        "#;
+        let json_value: Value = from_str(json_str).unwrap();
+        let search_str = "stats.price > 9.5";
         let search = Search::from_str(search_str).unwrap();
         assert!(search.matches(&json_value));
     }
