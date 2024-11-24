@@ -21,10 +21,11 @@ defaults:
           type: SSD
           size: 2 GB
         pricing:
-          hour: "0.01"
-          day: "0.20"
-          month: "2.00"
-          year: "20.00"
+          on_demand:
+            hour: "0.01"
+            day: "0.20"
+            month: "2.00"
+            year: "20.00"
         metadata:
           optimized_for: general
           availability: medium

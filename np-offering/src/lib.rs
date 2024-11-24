@@ -333,10 +333,14 @@ impl Offering {
 
     pub fn compute_json_value(self) -> Self {
         match self {
-            Offering::V0_1_0(offering) => Offering::V0_1_0(CloudProviderOfferingV0_1_0 {
-                json_value: serde_json::to_value(&offering).unwrap(),
-                ..offering
-            }),
+            Offering::V0_1_0(offering) => {
+                let mut json_value = serde_json::to_value(&offering).unwrap();
+                json_value.sort_all_objects();
+                Offering::V0_1_0(CloudProviderOfferingV0_1_0 {
+                    json_value,
+                    ..offering
+                })
+            }
         }
     }
 

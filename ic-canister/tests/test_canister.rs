@@ -666,6 +666,6 @@ fn test_offerings() {
         search_results[0].1.as_json_string(),
         offering.as_json_string()
     );
-    let search_results = offering_search(&p, c, "memory >= 1512MB");
+    let search_results = offering_search(&p, c, "memory < 512MB");
     assert_eq!(search_results.len(), 0);
 }
