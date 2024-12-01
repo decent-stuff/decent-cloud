@@ -255,7 +255,7 @@ impl CompareOp {
                 .map_or_else(|| value_str <= other_str, |(a, b)| a <= b),
             CompareOp::Regex => {
                 if let (Some(value_str), Some(other_str)) = (value_str, other_str) {
-                    Regex::new(&other_str).map_or(false, |re| re.is_match(&value_str))
+                    Regex::new(&other_str).is_ok_and(|re| re.is_match(&value_str))
                 } else {
                     false
                 }
