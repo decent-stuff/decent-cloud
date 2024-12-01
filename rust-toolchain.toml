@@ -1,4 +1,5 @@
 [toolchain]
 channel = "nightly"
-targets = [ "x86_64-unknown-linux-gnu", "wasm32-unknown-unknown" ]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+components = ["rust-analyzer"]
 #profile = "minimal"
