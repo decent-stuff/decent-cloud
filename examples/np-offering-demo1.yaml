@@ -22,10 +22,11 @@ defaults:
           type: SSD
           size: 2 GB
         pricing:
-          on_demand: "$0.01/hour"
+          on_demand:
+            hour: "0.01"
           reserved:
-            one_year: "$0.01/hour"
-            three_year: "$0.01/hour"
+            year: "10"
+            three_year: "20"
         metadata:
           optimized_for: general
           availability: medium
