@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import pathlib
 import sys
-from glob import glob
 
 def check_dependencies():
     dependencies = ['docker']
