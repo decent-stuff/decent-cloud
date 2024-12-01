@@ -43,7 +43,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(value) => PathBuf::from(value),
         None => dirs::home_dir()
             .expect("Could not get home directory")
-            .join(".dcc/ledger/main.bin"),
+            .join(".dcc")
+            .join("ledger")
+            .join("main.bin"),
     };
     let ledger_local =
         LedgerMap::new_with_path(None, Some(ledger_path)).expect("Failed to load the local ledger");
@@ -329,7 +331,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(value) => PathBuf::from(value),
                 None => dirs::home_dir()
                     .expect("Could not get home directory")
-                    .join(".dcc/ledger/main.bin"),
+                    .join(".dcc")
+                    .join("ledger")
+                    .join("main.bin"),
             };
             let push_auth = arg_matches.get_flag("data-push-authorize");
             let push = arg_matches.get_flag("data-push");

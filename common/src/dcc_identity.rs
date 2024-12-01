@@ -231,8 +231,10 @@ impl DccIdentity {
 
     #[cfg(target_arch = "x86_64")]
     pub fn identities_dir() -> PathBuf {
-        let home_dir = std::env::var("HOME").expect("$HOME not set");
-        PathBuf::from(format!("{}/.dcc/identity", home_dir))
+        dirs::home_dir()
+            .expect("Failed to find home directory")
+            .join(".dcc")
+            .join("identity")
     }
 
     #[cfg(target_arch = "x86_64")]
