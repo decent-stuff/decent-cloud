@@ -352,7 +352,37 @@ type ResultData = variant { Ok: record { text; vec nat8 }; Err: text; };
 type OfferingEntry = record {
     np_pub_key: vec nat8;
     offering_compressed: vec nat8;
-}
+};
+
+type OfferingRentRequest = record {
+    requester_pubkey_bytes: vec nat8; // Who is making this rent request?
+    requester_ssh_pubkey: text;       // The ssh key that will be given access to the instance, preferably in ed25519 key format https://en.wikipedia.org/wiki/Ssh-keygen
+    requester_contact: text;          // Where can the requester be contacted by the provided, if needed
+    provider_pubkey_bytes: vec nat8;  // To which provider is this targeted?
+    offering_id: text;                // Requester would like to rent this particular offering id
+    instance_id: opt text;            // optional instance id that can be provided to alter the particular instance a requester already controls
+    instance_config: opt text;        // optional configuration for the rented instance, e.g. cloud-init
+    payment_amount: nat;              // How much is the requester offering to pay for renting the resource
+    rent_period_seconds: nat;         // For how many SECONDS would the requester like to rent the resource; 1 hour = 3600 seconds, 1 day = 86400 seconds
+    rent_start_timestamp: opt nat;    // Optionally, only start renting at this unix time (in seconds) UTC. This can be in the future.
+    request_memo: text;               // Reference to this particular request; arbitrary text. Can be used e.g. for administrative purposes
+    signature: vec nat8;              // The whole request needs to be signed by the requester's private key
+};
+
+type OfferingRentReply = record {
+    requester_pubkey_bytes: vec nat8; // Public key of the original requester
+    request_memo: text;               // Memo field of the original request
+    rent_success: bool;               // Short boolean to mark whether the renting was accepted or rejected by the provider
+    response_text: text;              // Thank you note, or similar on success. Reason the request failed on failure.
+    response_details: text;           // Instructions or a link to the detailed instructions: describing next steps, further information, etc.
+    signature: vec nat8;              // Signature of the response, to simplify verification
+};
+
+type RefundRequest = record { // TODO
+    requester_pubkey_bytes: vec nat8; // Who is making this request?
+    instance_id: text;                // instance id for which a refund is requested
+    signature: vec nat8;              // The whole request needs to be signed by the requester's private key
+};
 
 service : {
     // Node Provider (NP) management operations
@@ -365,6 +395,8 @@ service : {
     node_provider_get_profile_by_principal: (principal) -> (opt text) query;
     get_np_check_in_nonce: () -> (vec nat8) query;
     offering_search: (search_query: text) -> (vec OfferingEntry) query;
+    offering_request: (OfferingRentRequest) -> (ResultString);
+    offering_reply: (OfferingRentReply) -> (ResultString);
 
     // User management operations
     user_register: (pubkey_bytes: vec nat8, reserved: vec nat8) -> (ResultString);

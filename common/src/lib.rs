@@ -9,6 +9,7 @@ pub mod ledger_refresh;
 pub mod offerings;
 pub mod profiles;
 pub mod registration;
+pub mod renting;
 pub mod rewards;
 
 pub use account_transfers::*;
@@ -25,6 +26,7 @@ use num_traits::cast::ToPrimitive;
 pub use offerings::*;
 pub use profiles::*;
 pub use registration::*;
+pub use renting::*;
 pub use rewards::*;
 
 #[cfg(not(target_arch = "wasm32"))]

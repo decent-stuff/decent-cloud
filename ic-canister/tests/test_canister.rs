@@ -618,6 +618,15 @@ fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
     .collect()
 }
 
+// fn offering_request(
+//     pic: &PocketIc,
+//     can: Principal,
+//     dcc_id: &DccIdentity,
+//     offering_id: &str,
+// ) -> Result<String, String> {
+
+// }
+
 #[test]
 fn test_offerings() {
     let (p, c) = create_test_canister();
