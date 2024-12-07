@@ -36,6 +36,7 @@ ed25519-dalek = { version = "2", default-features = false, features = [
 ] }
 env_logger = "0.11"
 flate2 = "1.0"
+filetime = "0.2"
 fs-err = "3.0.0"
 hex = "0.4"
 hmac = "0.12"

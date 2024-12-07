@@ -24,6 +24,7 @@ use icrc_ledger_types::{
 };
 use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
 use log::{info, Level, LevelFilter, Metadata, Record};
+use std::time::SystemTime;
 use std::{
     collections::HashMap,
     io::{self, BufReader, Seek, Write},
@@ -188,7 +189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     panic!("You must specify an identity to register");
                 }
             } else if arg_matches.get_flag("check-in-nonce") {
-                let nonce_bytes = ledger_canister(None).await?.get_np_check_in_nonce().await;
+                let nonce_bytes = ledger_canister(None).await?.get_check_in_nonce().await;
                 let nonce_string = hex::encode(&nonce_bytes);
 
                 println!("0x{}", nonce_string);
@@ -197,10 +198,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
                     let ic_auth = dcc_to_ic_auth(&dcc_ident);
 
-                    let nonce_bytes = ledger_canister(ic_auth)
-                        .await?
-                        .get_np_check_in_nonce()
-                        .await;
+                    // Check the local ledger timestamp
+                    let local_ledger_path = ledger_local
+                        .get_file_path()
+                        .expect("Failed to get local ledger path");
+                    let local_ledger_file_mtime = local_ledger_path.metadata()?.modified()?;
+
+                    // If the local ledger is older than 1 minute, refresh it automatically before proceeding
+                    // If needed, the local ledger can also be refreshed manually from the command line
+                    if local_ledger_file_mtime
+                        < SystemTime::now() - std::time::Duration::from_secs(60)
+                    {
+                        info!("Local ledger is older than 1 minute, refreshing...");
+                        let canister = ledger_canister(None).await?;
+                        ledger_data_fetch(&canister, local_ledger_path).await?;
+
+                        refresh_caches_from_ledger(&ledger_local)
+                            .expect("Loading balances from ledger failed");
+                    }
+                    // The local ledger needs to be refreshed to get the latest nonce
+                    // This provides the incentive to clone and frequently re-fetch the ledger
+                    let nonce_bytes = ledger_local.get_latest_block_hash();
                     let nonce_string = hex::encode(&nonce_bytes);
 
                     info!(
@@ -210,7 +228,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         nonce_string,
                         nonce_bytes.len()
                     );
-                    let ic_auth = dcc_to_ic_auth(&dcc_ident);
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_check_in(
@@ -421,8 +438,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     print!("{}", table);
                 }
-                "get_np_check_in_nonce" => {
-                    let nonce_bytes = ledger_canister(None).await?.get_np_check_in_nonce().await;
+                "get_check_in_nonce" => {
+                    let nonce_bytes = ledger_canister(None).await?.get_check_in_nonce().await;
                     println!("{}", hex::encode(nonce_bytes));
                 }
                 "get_logs_debug" => {
@@ -625,6 +642,9 @@ async fn ledger_data_fetch(
             local_ledger_path.display()
         );
     }
+    // Set the modified time to the current time, to mark that the data is up-to-date
+    filetime::set_file_mtime(local_ledger_path, std::time::SystemTime::now().into())?;
+
     Ok(())
 }
 

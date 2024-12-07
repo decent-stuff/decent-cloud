@@ -27,6 +27,7 @@ dcc-common = { path = "../common" }
 decent_cloud_canister = { path = "../ic-canister" }
 dirs.workspace = true
 ed25519-dalek.workspace = true
+filetime.workspace = true
 fs-err.workspace = true
 hex.workspace = true
 hmac.workspace = true
