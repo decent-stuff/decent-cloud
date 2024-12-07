@@ -174,11 +174,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let ic_auth = dcc_to_ic_auth(&dcc_ident);
 
                     info!("Registering principal: {} as {}", np_desc, dcc_ident);
+                    let pubkey_bytes = dcc_ident.to_bytes_verifying();
+                    let pubkey_signature = dcc_ident.sign(pubkey_bytes.as_ref())?;
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_register(
-                            &dcc_ident.to_bytes_verifying(),
-                            dcc_ident.verifying_key().as_ref(),
+                            &pubkey_bytes,
+                            pubkey_signature.to_bytes().as_slice(),
                         )
                         .await?;
                     println!("Register: {}", result);
@@ -219,7 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map_err(|e| format!("Check-in failed: {}", e))?;
                     info!("Check-in success: {}", result);
                 } else {
-                    panic!("You must specify an identity to register");
+                    panic!("You must specify an identity");
                 }
             } else if arg_matches.contains_id("update-profile") {
                 if let Some(values) = arg_matches.get_many::<String>("update-profile") {
@@ -243,7 +245,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map_err(|e| format!("Update profile failed: {}", e))?;
                     info!("Profile update response: {}", result);
                 } else {
-                    panic!("You must specify an identity of the node provider");
+                    panic!("You must specify an identity");
                 }
             } else if arg_matches.contains_id("update-offering") {
                 let values = arg_matches.get_many::<String>("update-offering").unwrap();
@@ -276,13 +278,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else if arg_matches.contains_id("register") {
                 match arg_matches.get_one::<String>("register") {
                     Some(np_desc) => {
-                        let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                        let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                        let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
+                        let ic_auth = dcc_to_ic_auth(&dcc_id);
                         let canister = ledger_canister(ic_auth).await?;
-                        let args = Encode!(
-                            &dcc_ident.to_bytes_verifying(),
-                            &dcc_ident.verifying_key().as_ref()
-                        )?;
+                        let pubkey_bytes = dcc_id.to_bytes_verifying();
+                        let pubkey_signature = dcc_id.sign(&pubkey_bytes)?;
+                        let args = Encode!(&pubkey_bytes, &pubkey_signature.to_bytes())?;
                         let result = canister.call_update("user_register", &args).await?;
                         let response =
                             Decode!(&result, Result<String, String>).map_err(|e| e.to_string())?;

@@ -278,12 +278,14 @@ fn np_register(
             initial_funds,
         );
     }
+    let pubkey_bytes = dcc_identity.to_bytes_verifying();
+    let pubkey_signature = dcc_identity.sign(&pubkey_bytes).unwrap();
     let result = update_check_and_decode!(
         pic,
         can,
         dcc_identity.to_ic_principal(),
         "node_provider_register",
-        Encode!(&dcc_identity.to_bytes_verifying(), &Vec::<u8>::new()).unwrap(),
+        Encode!(&pubkey_bytes, &pubkey_signature.to_bytes()).unwrap(),
         Result<String, String>
     );
     (dcc_identity, result)
@@ -304,12 +306,14 @@ fn user_register(
             initial_funds,
         );
     }
+    let pubkey_bytes = dcc_identity.to_bytes_verifying();
+    let pubkey_signature = dcc_identity.sign(&pubkey_bytes).unwrap();
     let result = update_check_and_decode!(
         pic,
         can,
         dcc_identity.to_ic_principal(),
         "user_register",
-        Encode!(&dcc_identity.to_bytes_verifying(), &Vec::<u8>::new()).unwrap(),
+        Encode!(&pubkey_bytes, &pubkey_signature.to_bytes()).unwrap(),
         Result<String, String>
     );
     (dcc_identity, result)
@@ -621,10 +625,32 @@ fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
 // fn offering_request(
 //     pic: &PocketIc,
 //     can: Principal,
-//     dcc_id: &DccIdentity,
+//     requester_dcc_id: DccIdentity,
+//     provider_pubkey_bytes: &[u8],
 //     offering_id: &str,
 // ) -> Result<String, String> {
-
+//     let payload = OfferingRequest::new(
+//         requester_dcc_id,
+//         "fake ssh key".to_string(),
+//         "fake contact info".to_string(),
+//         provider_pubkey_bytes,
+//         offering_id.to_string(),
+//         None,
+//         None,
+//         100,
+//         3600,
+//         None,
+//         "memo".to_string(),
+//     );
+//     let payload_bytes = payload.to_payload_signed();
+//     update_check_and_decode!(
+//         pic,
+//         can,
+//         requester_dcc_id.to_ic_principal(),
+//         "offering_request",
+//         Encode!(&payload_bytes).unwrap(),
+//         Result<String, String>
+//     )
 // }
 
 #[test]

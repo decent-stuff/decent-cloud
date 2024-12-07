@@ -27,12 +27,12 @@ fn get_registration_fee() -> Balance {
 
 #[ic_cdk::update]
 fn node_provider_register(pubkey_bytes: Vec<u8>, signature: Vec<u8>) -> Result<String, String> {
-    _node_provider_register(pubkey_bytes, signature)
+    _np_register(pubkey_bytes, signature)
 }
 
 #[ic_cdk::update]
-fn user_register(pubkey_bytes: Vec<u8>, _: Vec<u8>) -> Result<String, String> {
-    _user_register(pubkey_bytes)
+fn user_register(pubkey_bytes: Vec<u8>, signature: Vec<u8>) -> Result<String, String> {
+    _user_register(pubkey_bytes, signature)
 }
 
 #[ic_cdk::update]

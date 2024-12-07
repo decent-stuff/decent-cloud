@@ -60,7 +60,7 @@ pub fn do_account_register(
 
     // Store the pubkey in the ledger
     ledger
-        .upsert(label, pubkey_bytes, vec![])
+        .upsert(label, pubkey_bytes, signature_bytes)
         .map(|_| {
             format!(
                 "Registration complete! Thank you. You have been charged {} tokens",

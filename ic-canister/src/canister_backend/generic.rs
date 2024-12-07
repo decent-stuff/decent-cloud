@@ -142,7 +142,7 @@ pub(crate) fn _get_registration_fee() -> Balance {
     account_registration_fee_e9s()
 }
 
-pub(crate) fn _node_provider_register(
+pub(crate) fn _np_register(
     pubkey_bytes: Vec<u8>,
     signature_bytes: Vec<u8>,
 ) -> Result<String, String> {
