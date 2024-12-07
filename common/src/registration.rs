@@ -1,8 +1,9 @@
 use crate::{
-    amount_as_string, charge_fees_to_account_and_bump_reputation, info, reward_e9s_per_block,
-    AHashMap, Balance, DccIdentity,
+    amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info, info,
+    reward_e9s_per_block, AHashMap, Balance, DccIdentity,
 };
 use candid::Principal;
+use function_name::named;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -28,6 +29,7 @@ pub fn account_registration_fee_e9s() -> Balance {
     reward_e9s_per_block() / 100
 }
 
+#[named]
 pub fn do_account_register(
     ledger: &mut LedgerMap,
     label: &str,
@@ -36,7 +38,7 @@ pub fn do_account_register(
 ) -> Result<String, String> {
     let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
     dcc_id.verify_bytes(&pubkey_bytes, &crypto_signature_bytes)?;
-    info!("[do_account_register]: caller: {}", dcc_id);
+    fn_info!("{}", dcc_id);
 
     let fees = if ledger.get_blocks_count() > 0 {
         let amount = account_registration_fee_e9s();

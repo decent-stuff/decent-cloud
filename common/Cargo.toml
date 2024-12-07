@@ -17,6 +17,7 @@ data-encoding.workspace = true
 derp.workspace = true
 dirs.workspace = true
 ed25519-dalek.workspace = true
+function_name.workspace = true
 hex.workspace = true
 hmac.workspace = true
 icrc-ledger-types.workspace = true

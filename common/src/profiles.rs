@@ -1,8 +1,9 @@
 use crate::{
-    amount_as_string, charge_fees_to_account_no_bump_reputation, info, reputation_get,
+    amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reputation_get,
     reward_e9s_per_block, Balance, DccIdentity, LABEL_NP_PROFILE, MAX_NP_PROFILE_BYTES,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
+use function_name::named;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -52,6 +53,7 @@ impl UpdateProfilePayload {
     }
 }
 
+#[named]
 pub fn do_node_provider_update_profile(
     ledger: &mut LedgerMap,
     pubkey_bytes: Vec<u8>,
@@ -60,11 +62,7 @@ pub fn do_node_provider_update_profile(
 ) -> Result<String, String> {
     let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
     dcc_id.verify_bytes(&profile_serialized, &crypto_signature)?;
-    info!(
-        "[do_node_provider_update_profile]: {} => {} bytes",
-        dcc_id,
-        profile_serialized.len()
-    );
+    fn_info!("{} => {} bytes", dcc_id, profile_serialized.len());
 
     let payload = UpdateProfilePayload::new(&profile_serialized, &crypto_signature)?;
     let payload_bytes = borsh::to_vec(&payload).unwrap();

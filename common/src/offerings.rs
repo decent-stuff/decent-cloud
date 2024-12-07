@@ -1,10 +1,11 @@
 use crate::{
-    amount_as_string, charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, warn,
-    Balance, DccIdentity, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
+    amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reward_e9s_per_block,
+    warn, Balance, DccIdentity, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
+use function_name::named;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -52,6 +53,7 @@ impl UpdateOfferingPayload {
     }
 }
 
+#[named]
 pub fn do_node_provider_update_offering(
     ledger: &mut LedgerMap,
     pubkey_bytes: Vec<u8>,
@@ -60,11 +62,7 @@ pub fn do_node_provider_update_offering(
 ) -> Result<String, String> {
     let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
     dcc_id.verify_bytes(&offering_serialized, &crypto_signature_bytes)?;
-    info!(
-        "[do_node_provider_update_offering]: {} => {} bytes",
-        dcc_id,
-        offering_serialized.len()
-    );
+    fn_info!("{} => {} bytes", dcc_id, offering_serialized.len());
 
     let payload = UpdateOfferingPayload::new(&offering_serialized, &crypto_signature_bytes)?;
     let payload_bytes = borsh::to_vec(&payload).unwrap();

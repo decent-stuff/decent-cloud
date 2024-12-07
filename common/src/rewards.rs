@@ -1,13 +1,13 @@
-use crate::platform_specific::get_timestamp_ns;
 use crate::{
     account_balance_get, account_transfers::FundsTransfer, amount_as_string,
-    charge_fees_to_account_no_bump_reputation, get_account_from_pubkey, info,
-    ledger_funds_transfer, Balance, DccIdentity, TransferError, BLOCK_INTERVAL_SECS,
-    DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS, KEY_LAST_REWARD_DISTRIBUTION_TS,
-    LABEL_NP_CHECK_IN, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, MEMO_BYTES_MAX,
-    MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
+    charge_fees_to_account_no_bump_reputation, fn_info, get_account_from_pubkey, info,
+    ledger_funds_transfer, platform_specific::get_timestamp_ns, Balance, DccIdentity,
+    TransferError, BLOCK_INTERVAL_SECS, DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS,
+    KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
+    LABEL_REWARD_DISTRIBUTION, MEMO_BYTES_MAX, MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
+use function_name::named;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -206,6 +206,7 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
     })
 }
 
+#[named]
 pub fn do_node_provider_check_in(
     ledger: &mut LedgerMap,
     pubkey_bytes: Vec<u8>,
@@ -213,7 +214,7 @@ pub fn do_node_provider_check_in(
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
     let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes)?;
-    info!("[do_node_provider_check_in]: {}", dcc_id);
+    fn_info!("{}", dcc_id);
 
     // Check the max length of the memo
     if memo.len() > MEMO_BYTES_MAX {

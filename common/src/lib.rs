@@ -45,6 +45,17 @@ pub use dcc_identity::DccIdentity;
 #[allow(unused_imports)]
 use ledger_map::{debug, error, info, warn};
 
+#[macro_export]
+macro_rules! fn_info {
+    ($($arg:tt)*) => {
+        crate::info!(
+            "[{}]: {}",
+            function_name!(),
+            format_args!($($arg)*)
+        )
+    };
+}
+
 pub const MINTING_ACCOUNT: IcrcCompatibleAccount = IcrcCompatibleAccount::new_minting();
 pub const MINTING_ACCOUNT_PRINCIPAL: Principal = Principal::from_slice(b"MINTING");
 pub const MINTING_ACCOUNT_ICRC1: Icrc1Account = Icrc1Account {
