@@ -116,6 +116,12 @@ pub fn parse_args() -> clap::ArgMatches {
                         .num_args(1),
                 )
                 .arg(
+                    Arg::new("check-in-memo")
+                        .long("check-in-memo")
+                        .help("Provide the given memo value for the check-in")
+                        .action(ArgAction::Set)
+                )
+                .arg(
                     Arg::new("check-in-nonce")
                         .long("check-in-nonce")
                         .help("Get the Node Provider check-in nonce at the Decent Cloud Ledger")

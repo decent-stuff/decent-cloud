@@ -96,8 +96,13 @@ impl LedgerCanister {
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
-    pub async fn node_provider_check_in(&self, key: &[u8], value: &[u8]) -> Result<String, String> {
-        let args = Encode!(&key, &value).map_err(|e| e.to_string())?;
+    pub async fn node_provider_check_in(
+        &self,
+        key: &[u8],
+        memo: &String,
+        nonce_crypto_sig: &[u8],
+    ) -> Result<String, String> {
+        let args = Encode!(&key, &memo, &nonce_crypto_sig).map_err(|e| e.to_string())?;
         let response = self.call_update("node_provider_check_in", &args).await?;
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }

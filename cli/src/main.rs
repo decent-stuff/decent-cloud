@@ -228,11 +228,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         nonce_string,
                         nonce_bytes.len()
                     );
+                    let check_in_memo = match arg_matches
+                        .get_one::<String>("check-in-memo")
+                        .cloned()
+                    {
+                        Some(memo) => memo,
+                        None => {
+                            println!("No memo specified, did you know that you can specify one? Try out --check-in-memo");
+                            String::new()
+                        }
+                    };
+                    let nonce_crypto_signature = dcc_ident.sign(nonce_bytes.as_ref())?;
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_check_in(
                             &dcc_ident.to_bytes_verifying(),
-                            &dcc_ident.sign(&nonce_bytes)?.to_bytes(),
+                            &check_in_memo,
+                            &nonce_crypto_signature.to_bytes(),
                         )
                         .await
                         .map_err(|e| format!("Check-in failed: {}", e))?;
