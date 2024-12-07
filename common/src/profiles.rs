@@ -1,7 +1,7 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, info, reputation_get,
-    reward_e9s_per_block, Balance, DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_PROFILE,
-    MAX_NP_PROFILE_BYTES, MAX_PUBKEY_BYTES,
+    reward_e9s_per_block, Balance, DccIdentity, LABEL_NP_PROFILE, MAX_NP_PROFILE_BYTES,
+    MAX_PUBKEY_BYTES,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use candid::Principal;
@@ -40,9 +40,6 @@ impl UpdateProfilePayload {
     pub fn verify_signature(&self, dcc_id: &DccIdentity) -> Result<(), String> {
         match self {
             UpdateProfilePayload::V1(payload) => {
-                if payload.signature.len() != ED25519_SIGNATURE_LENGTH {
-                    return Err("Invalid signature".to_string());
-                }
                 if payload.profile_bytes.len() > MAX_NP_PROFILE_BYTES {
                     return Err("Profile payload too long".to_string());
                 }

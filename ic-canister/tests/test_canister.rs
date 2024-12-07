@@ -330,7 +330,7 @@ fn np_check_in(
     dcc_identity: &DccIdentity,
 ) -> Result<String, String> {
     let no_args = encode_one(()).expect("failed to encode");
-    let nonce_bytes = query_check_and_decode!(pic, can, "get_np_check_in_nonce", no_args, Vec<u8>);
+    let nonce_bytes = query_check_and_decode!(pic, can, "get_check_in_nonce", no_args, Vec<u8>);
     let nonce_string = hex::encode(&nonce_bytes);
     println!(
         "Checking-in NP {}, using nonce: {} ({} bytes)",
@@ -339,7 +339,7 @@ fn np_check_in(
         nonce_bytes.len()
     );
 
-    let payload = dcc_identity.sign(&nonce_bytes).unwrap().to_bytes();
+    let crypto_sig = dcc_identity.sign(&nonce_bytes).unwrap().to_bytes();
 
     update_check_and_decode!(
         pic,
@@ -348,7 +348,8 @@ fn np_check_in(
         "node_provider_check_in",
         Encode!(
             &dcc_identity.to_bytes_verifying(),
-            &payload
+            &String::from("Just a test memo!"),
+            &crypto_sig
         )
         .unwrap(),
         Result<String, String>

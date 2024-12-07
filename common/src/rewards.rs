@@ -1,20 +1,58 @@
 use crate::platform_specific::get_timestamp_ns;
-use crate::MAX_PUBKEY_BYTES;
 use crate::{
-    account_balance_get, account_registration_fee_e9s, account_transfers::FundsTransfer,
-    amount_as_string, charge_fees_to_account_no_bump_reputation, get_account_from_pubkey, info,
+    account_balance_get, account_transfers::FundsTransfer, amount_as_string,
+    charge_fees_to_account_no_bump_reputation, get_account_from_pubkey, info,
     ledger_funds_transfer, Balance, DccIdentity, TransferError, BLOCK_INTERVAL_SECS,
     DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS, KEY_LAST_REWARD_DISTRIBUTION_TS,
-    LABEL_NP_CHECK_IN, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, MINTING_ACCOUNT,
-    REWARD_HALVING_AFTER_BLOCKS,
+    LABEL_NP_CHECK_IN, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, MEMO_BYTES_MAX,
+    MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
 };
-use candid::Principal;
-use ed25519_dalek::Signature;
+use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
 use std::cell::RefCell;
+
+pub fn check_in_fee_e9s() -> Balance {
+    reward_e9s_per_block() / 100
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct CheckInPayloadV1 {
+    memo: String, // Memo can for example be shown on a dashboard, as an arbitrary personal message
+    nonce_signature: Vec<u8>,
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub enum CheckInPayload {
+    V1(CheckInPayloadV1),
+}
+
+impl CheckInPayload {
+    pub fn new(memo: String, nonce_signature: Vec<u8>) -> CheckInPayload {
+        CheckInPayload::V1(CheckInPayloadV1 {
+            memo,
+            nonce_signature,
+        })
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, std::io::Error> {
+        borsh::to_vec(self)
+    }
+
+    pub fn memo(&self) -> &str {
+        match self {
+            CheckInPayload::V1(record) => &record.memo,
+        }
+    }
+
+    pub fn nonce_signature(&self) -> &[u8] {
+        match self {
+            CheckInPayload::V1(record) => &record.nonce_signature,
+        }
+    }
+}
 
 fn calc_token_rewards_e9_since_timestamp_ns(last_reward_distribution_ts_ns: u64) -> Balance {
     let elapsed_secs_since_reward_distribution =
@@ -170,62 +208,51 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
 
 pub fn do_node_provider_check_in(
     ledger: &mut LedgerMap,
-    caller: Principal,
     pubkey_bytes: Vec<u8>,
+    memo: String,
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
-    info!("[do_node_provider_check_in]: caller: {}", caller);
+    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes)?;
+    info!("[do_node_provider_check_in]: {}", dcc_id);
 
-    if pubkey_bytes.len() > MAX_PUBKEY_BYTES {
-        return Err("Node provider unique id too long".to_string());
+    // Check the max length of the memo
+    if memo.len() > MEMO_BYTES_MAX {
+        return Err(format!(
+            "Memo too long, max length is {} bytes",
+            MEMO_BYTES_MAX
+        ));
     }
-    if nonce_signature.len() != 64 {
-        return Err("Invalid signature".to_string());
-    }
-    // Ensure the NP is registered
-    ledger
-        .get(LABEL_NP_REGISTER, &pubkey_bytes)
-        .map_err(|e| e.to_string())?;
-    let dcc_identity =
-        DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
-    info!(
-        "Check-in of {}, account: {}",
-        dcc_identity,
-        get_account_from_pubkey(&pubkey_bytes)
-    );
-    let latest_nonce = ledger.get_latest_block_hash();
-    let signature = Signature::from_slice(&nonce_signature).map_err(|e| e.to_string())?;
-    info!(
-        "Checking signature {} against latest nonce: {}",
-        signature,
-        hex::encode(&latest_nonce)
-    );
-    dcc_identity
-        .verify(&latest_nonce, &signature)
-        .expect("Signature didn't verify");
+
+    // Check that the NP is already registered
+    ledger.get(LABEL_NP_REGISTER, &pubkey_bytes)?;
+
+    // Verify the signature
+    dcc_id.verify_bytes(&ledger.get_latest_block_hash(), &nonce_signature)?;
 
     let fees = if ledger.get_blocks_count() > 0 {
-        let amount = account_registration_fee_e9s();
+        let amount = check_in_fee_e9s();
         info!(
-            "Charging {} tokens {} for NP check in",
+            "Charging {} tokens {} for the check in",
             amount_as_string(amount as Balance),
-            dcc_identity.to_ic_principal()
+            dcc_id.to_ic_principal()
         );
-        charge_fees_to_account_no_bump_reputation(ledger, &dcc_identity, amount as Balance)?;
+        charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, amount as Balance)?;
         amount
     } else {
         0
     };
 
-    ledger
-        .upsert(LABEL_NP_CHECK_IN, pubkey_bytes, nonce_signature)
-        .map(|_| "ok".to_string())
-        .map_err(|e| format!("{:?}", e))?;
+    let payload = CheckInPayload::new(memo, nonce_signature);
+    let payload_bytes = payload.to_bytes().unwrap();
 
-    Ok(format!(
-        "Signature verified, check in successful. You have been charged {} tokens",
-        amount_as_string(fees)
-    ))
+    Ok(ledger
+        .upsert(LABEL_NP_CHECK_IN, pubkey_bytes, &payload_bytes)
+        .map(|_| {
+            format!(
+                "Signature verified, check in successful. You have been charged {} tokens",
+                amount_as_string(fees)
+            )
+        })?)
 }
 
 pub fn rewards_applied_np_count(ledger: &LedgerMap) -> usize {

@@ -36,6 +36,15 @@ fn user_register(pubkey_bytes: Vec<u8>, signature: Vec<u8>) -> Result<String, St
 }
 
 #[ic_cdk::update]
+fn node_provider_check_in(
+    pubkey_bytes: Vec<u8>,
+    memo: String,
+    nonce_signature: Vec<u8>,
+) -> Result<String, String> {
+    _node_provider_check_in(pubkey_bytes, memo, nonce_signature)
+}
+
+#[ic_cdk::update]
 fn node_provider_update_profile(
     pubkey_bytes: Vec<u8>,
     update_profile_payload: Vec<u8>,
@@ -66,17 +75,9 @@ fn node_provider_get_profile_by_principal(principal: Principal) -> Option<String
     _node_provider_get_profile_by_principal(principal)
 }
 
-#[ic_cdk::update]
-fn node_provider_check_in(
-    pubkey_bytes: Vec<u8>,
-    nonce_signature: Vec<u8>,
-) -> Result<String, String> {
-    _node_provider_check_in(pubkey_bytes, nonce_signature)
-}
-
 #[ic_cdk::query]
-fn get_np_check_in_nonce() -> Vec<u8> {
-    _get_np_check_in_nonce()
+fn get_check_in_nonce() -> Vec<u8> {
+    _get_check_in_nonce()
 }
 
 #[ic_cdk::query]

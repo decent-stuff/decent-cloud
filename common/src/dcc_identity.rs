@@ -1,4 +1,6 @@
-use crate::{IcrcCompatibleAccount, MAX_PUBKEY_BYTES, MINTING_ACCOUNT_PRINCIPAL};
+use crate::{
+    IcrcCompatibleAccount, ED25519_SIGNATURE_LENGTH, MAX_PUBKEY_BYTES, MINTING_ACCOUNT_PRINCIPAL,
+};
 use ed25519_dalek::ed25519::Error as DalekError;
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
@@ -164,6 +166,9 @@ impl DccIdentity {
     }
 
     pub fn verify_bytes(&self, data: &[u8], signature_bytes: &[u8]) -> Result<(), CryptoError> {
+        if signature_bytes.len() != ED25519_SIGNATURE_LENGTH {
+            return Err("Invalid signature".into());
+        }
         let signature = Signature::from_bytes(slice_to_64_bytes_array(signature_bytes)?);
         self.verify(data, &signature)
     }

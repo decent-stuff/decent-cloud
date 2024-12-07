@@ -74,7 +74,7 @@ impl LedgerCanister {
 
     pub fn list_functions_queries(&self) -> Vec<String> {
         vec![
-            "get_np_check_in_nonce".to_string(),
+            "get_check_in_nonce".to_string(),
             "data_fetch".to_string(),
             "metadata".to_string(),
             "get_logs_debug".to_string(),
@@ -126,12 +126,12 @@ impl LedgerCanister {
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
-    pub async fn get_np_check_in_nonce(&self) -> Vec<u8> {
+    pub async fn get_check_in_nonce(&self) -> Vec<u8> {
         let args = Encode!(&()).expect("Failed to encode args");
         let response = self
-            .call_query("get_np_check_in_nonce", &args)
+            .call_query("get_check_in_nonce", &args)
             .await
-            .expect("Failed to call get_np_check_in_nonce");
+            .expect("Failed to call get_check_in_nonce");
         Decode!(response.as_slice(), Vec<u8>).expect("Failed to decode response")
     }
 

@@ -172,6 +172,22 @@ pub(crate) fn _user_register(
     })
 }
 
+pub(crate) fn _node_provider_check_in(
+    pubkey_bytes: Vec<u8>,
+    memo: String,
+    nonce_signature: Vec<u8>,
+) -> Result<String, String> {
+    // To prevent DOS attacks, a fee is charged for executing this operation
+    LEDGER_MAP.with(|ledger| {
+        dcc_common::do_node_provider_check_in(
+            &mut ledger.borrow_mut(),
+            pubkey_bytes,
+            memo,
+            nonce_signature,
+        )
+    })
+}
+
 pub(crate) fn _node_provider_update_profile(
     pubkey_bytes: Vec<u8>,
     update_profile_payload: Vec<u8>,
@@ -214,22 +230,7 @@ pub(crate) fn _node_provider_get_profile_by_principal(principal: Principal) -> O
     _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes)
 }
 
-pub(crate) fn _node_provider_check_in(
-    pubkey_bytes: Vec<u8>,
-    nonce_signature: Vec<u8>,
-) -> Result<String, String> {
-    // To prevent DOS attacks, a fee is charged for executing this operation
-    LEDGER_MAP.with(|ledger| {
-        dcc_common::do_node_provider_check_in(
-            &mut ledger.borrow_mut(),
-            ic_cdk::api::caller(),
-            pubkey_bytes,
-            nonce_signature,
-        )
-    })
-}
-
-pub(crate) fn _get_np_check_in_nonce() -> Vec<u8> {
+pub(crate) fn _get_check_in_nonce() -> Vec<u8> {
     LEDGER_MAP.with(|ledger| ledger.borrow().get_latest_block_hash())
 }
 
