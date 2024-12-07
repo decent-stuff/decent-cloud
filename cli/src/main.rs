@@ -11,7 +11,7 @@ use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data,
     offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get, Balance,
     CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor,
-    UpdateOfferingPayload, UpdateProfilePayload, DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV,
+    UpdateOfferingPayload, DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV,
     LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
@@ -262,13 +262,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let ic_auth = dcc_to_ic_auth(&dcc_id);
 
                     let np_profile = np_profile::Profile::new_from_file(profile_file)?;
-                    let np_profile_payload = UpdateProfilePayload::new_signed(&np_profile, &dcc_id);
+                    let np_profile_bytes = borsh::to_vec(&np_profile)?;
+                    let crypto_sig = dcc_id.sign(&np_profile_bytes)?;
 
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_update_profile(
                             &dcc_id.to_bytes_verifying(),
-                            &borsh::to_vec(&np_profile_payload)?,
+                            &np_profile_bytes,
+                            &crypto_sig.to_bytes(),
                         )
                         .await
                         .map_err(|e| format!("Update profile failed: {}", e))?;

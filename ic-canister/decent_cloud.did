@@ -370,6 +370,7 @@ type RefundRequest = record { // TODO
 
 service : {
     // Node Provider (NP) management operations
+    // crypto_sig can be used to cryptographically verify the authenticity of the message
     node_provider_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
     node_provider_update_profile: (pubkey_bytes: vec nat8, update_profile_payload: vec nat8, crypto_sig: vec nat8) -> (ResultString);
     node_provider_update_offering: (pubkey_bytes: vec nat8, update_offering_payload: vec nat8, crypto_sig: vec nat8) -> (ResultString);

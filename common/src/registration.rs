@@ -32,10 +32,10 @@ pub fn do_account_register(
     ledger: &mut LedgerMap,
     label: &str,
     pubkey_bytes: Vec<u8>,
-    signature_bytes: Vec<u8>,
+    crypto_signature_bytes: Vec<u8>,
 ) -> Result<String, String> {
     let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
-    dcc_id.verify_bytes(&pubkey_bytes, &signature_bytes)?;
+    dcc_id.verify_bytes(&pubkey_bytes, &crypto_signature_bytes)?;
     info!("[do_account_register]: caller: {}", dcc_id);
 
     let fees = if ledger.get_blocks_count() > 0 {
@@ -60,7 +60,7 @@ pub fn do_account_register(
 
     // Store the pubkey in the ledger
     ledger
-        .upsert(label, pubkey_bytes, signature_bytes)
+        .upsert(label, pubkey_bytes, crypto_signature_bytes)
         .map(|_| {
             format!(
                 "Registration complete! Thank you. You have been charged {} tokens",

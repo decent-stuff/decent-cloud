@@ -26,30 +26,34 @@ fn get_registration_fee() -> Balance {
 }
 
 #[ic_cdk::update]
-fn node_provider_register(pubkey_bytes: Vec<u8>, signature: Vec<u8>) -> Result<String, String> {
-    _np_register(pubkey_bytes, signature)
+fn node_provider_register(
+    pubkey_bytes: Vec<u8>,
+    crypto_signature: Vec<u8>,
+) -> Result<String, String> {
+    _np_register(pubkey_bytes, crypto_signature)
 }
 
 #[ic_cdk::update]
-fn user_register(pubkey_bytes: Vec<u8>, signature: Vec<u8>) -> Result<String, String> {
-    _user_register(pubkey_bytes, signature)
+fn user_register(pubkey_bytes: Vec<u8>, crypto_signature: Vec<u8>) -> Result<String, String> {
+    _user_register(pubkey_bytes, crypto_signature)
 }
 
 #[ic_cdk::update]
 fn node_provider_check_in(
     pubkey_bytes: Vec<u8>,
     memo: String,
-    nonce_signature: Vec<u8>,
+    nonce_crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_check_in(pubkey_bytes, memo, nonce_signature)
+    _node_provider_check_in(pubkey_bytes, memo, nonce_crypto_signature)
 }
 
 #[ic_cdk::update]
 fn node_provider_update_profile(
     pubkey_bytes: Vec<u8>,
     update_profile_payload: Vec<u8>,
+    crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_update_profile(pubkey_bytes, update_profile_payload)
+    _node_provider_update_profile(pubkey_bytes, update_profile_payload, crypto_signature)
 }
 
 #[ic_cdk::update]

@@ -109,10 +109,12 @@ impl LedgerCanister {
 
     pub async fn node_provider_update_profile(
         &self,
-        key: &[u8],
-        value: &[u8],
+        np_pubkey_bytes: &[u8],
+        np_profile_bytes: &[u8],
+        crypto_signature: &[u8],
     ) -> Result<String, String> {
-        let args = Encode!(&key, &value).map_err(|e| e.to_string())?;
+        let args = Encode!(&np_pubkey_bytes, &np_profile_bytes, &crypto_signature)
+            .map_err(|e| e.to_string())?;
         let response = self
             .call_update("node_provider_update_profile", &args)
             .await?;
