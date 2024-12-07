@@ -27,6 +27,7 @@ const ED25519_PEM_SIGNING_KEY_TAG: &str = "PRIVATE KEY";
 // const SECP256K1_PEM_SIGNING_KEY_TAG: &str = "EC PRIVATE KEY";
 // const SECP256K1_PEM_VERIFYING_KEY_TAG: &str = "PUBLIC KEY";
 
+#[allow(clippy::large_enum_variant)]
 #[repr(u8)]
 #[derive(Debug, Default)]
 pub enum DccIdentity {
