@@ -525,42 +525,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
     let identities_dir = DccIdentity::identities_dir();
     println!("Available identities at {}:", identities_dir.display());
-    for identity in fs_err::read_dir(identities_dir)? {
-        match identity {
-            Ok(identity) => {
-                let path = identity.path();
-                if path.is_dir() {
-                    let identity_name = identity.file_name();
-                    let identity_name = identity_name.to_string_lossy();
-                    match DccIdentity::load_from_dir(&path) {
-                        Ok(dcc_identity) => {
-                            if include_balances {
-                                println!(
-                                    "{} => {}, reputation {}, balance {}",
-                                    identity_name,
-                                    dcc_identity,
-                                    reputation_get(dcc_identity.to_bytes_verifying()),
-                                    account_balance_get_as_string(
-                                        &dcc_identity.as_icrc_compatible_account()
-                                    )
-                                );
-                            } else {
-                                println!(
-                                    "{} => {} reputation {}",
-                                    identity_name,
-                                    dcc_identity,
-                                    reputation_get(dcc_identity.to_bytes_verifying())
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            println!("{} => Error: {}", identity_name, e);
-                        }
+    let mut identities: Vec<_> = fs_err::read_dir(identities_dir)?
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(e) => {
+                eprintln!("Failed to read identity: {}", e);
+                None
+            }
+        })
+        .collect();
+
+    identities.sort_by_key(|identity| identity.file_name());
+
+    for identity in identities {
+        let path = identity.path();
+        if path.is_dir() {
+            let identity_name = identity.file_name();
+            let identity_name = identity_name.to_string_lossy();
+            match DccIdentity::load_from_dir(&path) {
+                Ok(dcc_identity) => {
+                    if include_balances {
+                        println!(
+                            "{} => {}, reputation {}, balance {}",
+                            identity_name,
+                            dcc_identity,
+                            reputation_get(dcc_identity.to_bytes_verifying()),
+                            account_balance_get_as_string(
+                                &dcc_identity.as_icrc_compatible_account()
+                            )
+                        );
+                    } else {
+                        println!(
+                            "{} => {} reputation {}",
+                            identity_name,
+                            dcc_identity,
+                            reputation_get(dcc_identity.to_bytes_verifying())
+                        );
                     }
                 }
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
+                Err(e) => {
+                    println!("{} => Error: {}", identity_name, e);
+                }
             }
         }
     }
