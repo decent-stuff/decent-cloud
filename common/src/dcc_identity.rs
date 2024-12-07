@@ -29,8 +29,10 @@ const ED25519_PEM_SIGNING_KEY_TAG: &str = "PRIVATE KEY";
 // const SECP256K1_PEM_VERIFYING_KEY_TAG: &str = "PUBLIC KEY";
 
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum DccIdentity {
+    #[default]
+    Invalid,
     Ed25519(Option<SigningKey>, VerifyingKey),
 }
 
@@ -65,12 +67,14 @@ impl DccIdentity {
 
     pub fn verifying_key(&self) -> &VerifyingKey {
         match self {
+            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
             DccIdentity::Ed25519(_, verifying_key) => verifying_key,
         }
     }
 
     pub fn to_ic_principal(&self) -> candid::Principal {
         match self {
+            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
             DccIdentity::Ed25519(_, verifying_key) => {
                 let der = verifying_key
                     .to_public_key_der()
@@ -88,6 +92,7 @@ impl DccIdentity {
     /// This is more universal than the IC principals, since an IC principal can be derived from the public key.
     pub fn to_bytes_verifying(&self) -> Vec<u8> {
         match self {
+            DccIdentity::Invalid => vec![],
             DccIdentity::Ed25519(_, verifying_key) => verifying_key.to_bytes().to_vec(),
         }
     }
@@ -103,6 +108,7 @@ impl DccIdentity {
 
     pub fn to_der_signing(&self) -> Vec<u8> {
         match self {
+            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
             DccIdentity::Ed25519(Some(secret_key), _verifying_key) => {
                 // According to https://tools.ietf.org/html/rfc8410#section-10.3
                 let mut key_bytes = vec![];
@@ -120,7 +126,9 @@ impl DccIdentity {
                 .expect("failed to prepare der formatted signing key");
                 encoded
             }
-            _ => panic!("Invalid type of DccIdentity"),
+            DccIdentity::Ed25519(None, _verifying_key) => {
+                panic!("Invalid DccIdentity: no signing key")
+            }
         }
     }
 
@@ -159,6 +167,7 @@ impl DccIdentity {
 
     pub fn verify(&self, data: &[u8], signature: &Signature) -> Result<(), CryptoError> {
         match self {
+            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
             DccIdentity::Ed25519(_, verifying_key) => {
                 let mut prehashed = Sha512::new();
                 prehashed.update(data);
@@ -173,6 +182,7 @@ impl DccIdentity {
 
     pub fn verifying_key_as_pem(&self) -> String {
         match self {
+            DccIdentity::Invalid => "".to_string(),
             DccIdentity::Ed25519(_, verifying_key) => verifying_key
                 .to_public_key_pem(LineEnding::LF)
                 .expect("pem encode failed"),
@@ -245,6 +255,7 @@ impl DccIdentity {
         self.write_verifying_key_to_pem_file(&public_pem_file_path)?;
 
         match self {
+            DccIdentity::Invalid => {}
             DccIdentity::Ed25519(Some(_), _) => {
                 self.write_signing_key_to_pem_file(&identity_dir.join("private.pem"))?;
             }
@@ -360,6 +371,7 @@ impl From<std::io::Error> for CryptoError {
 impl std::fmt::Display for DccIdentity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            DccIdentity::Invalid => write!(f, "[Invalid] ")?,
             DccIdentity::Ed25519(None, _) => write!(f, "[Ed25519 verifying] ")?,
             DccIdentity::Ed25519(Some(_), _) => write!(f, "[Ed25519 signing] ")?,
         }
