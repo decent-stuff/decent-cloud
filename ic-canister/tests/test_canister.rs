@@ -1,9 +1,9 @@
 use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
-    np_registration_fee_e9s, reward_e9s_per_block_recalculate, Balance, DccIdentity,
-    UpdateOfferingPayload, BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS,
-    MINTING_ACCOUNT_ICRC1,
+    account_registration_fee_e9s, reward_e9s_per_block_recalculate, Balance, DccIdentity,
+    OfferingRequest, UpdateOfferingPayload, BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO,
+    FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use flate2::bufread::ZlibDecoder;
@@ -525,7 +525,7 @@ fn test_np_registration_and_check_in() {
     assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
     assert_eq!(
         identity_reputation_get(&p, c, &np2.to_bytes_verifying()) as Balance,
-        np_registration_fee_e9s()
+        account_registration_fee_e9s()
     );
 }
 

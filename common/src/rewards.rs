@@ -1,12 +1,12 @@
 use crate::platform_specific::get_timestamp_ns;
 use crate::MAX_PUBKEY_BYTES;
 use crate::{
-    account_balance_get, account_transfers::FundsTransfer, amount_as_string,
-    charge_fees_to_account_no_bump_reputation, get_account_from_pubkey, info,
-    ledger_funds_transfer, np_registration_fee_e9s, Balance, DccIdentity, TransferError,
-    BLOCK_INTERVAL_SECS, DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS,
-    KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
-    LABEL_REWARD_DISTRIBUTION, MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
+    account_balance_get, account_registration_fee_e9s, account_transfers::FundsTransfer,
+    amount_as_string, charge_fees_to_account_no_bump_reputation, get_account_from_pubkey, info,
+    ledger_funds_transfer, Balance, DccIdentity, TransferError, BLOCK_INTERVAL_SECS,
+    DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS, KEY_LAST_REWARD_DISTRIBUTION_TS,
+    LABEL_NP_CHECK_IN, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, MINTING_ACCOUNT,
+    REWARD_HALVING_AFTER_BLOCKS,
 };
 use candid::Principal;
 use ed25519_dalek::Signature;
@@ -205,7 +205,7 @@ pub fn do_node_provider_check_in(
         .expect("Signature didn't verify");
 
     let fees = if ledger.get_blocks_count() > 0 {
-        let amount = np_registration_fee_e9s();
+        let amount = account_registration_fee_e9s();
         info!(
             "Charging {} tokens {} for NP check in",
             amount_as_string(amount as Balance),

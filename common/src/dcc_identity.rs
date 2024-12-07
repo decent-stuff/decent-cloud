@@ -1,14 +1,13 @@
+use crate::{IcrcCompatibleAccount, MAX_PUBKEY_BYTES, MINTING_ACCOUNT_PRINCIPAL};
 use ed25519_dalek::ed25519::Error as DalekError;
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
+use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
+use ed25519_dalek::{Digest, Sha512, Signature, SigningKey, VerifyingKey};
+use hmac::{Hmac, Mac};
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use pkcs8::der::zeroize::Zeroizing;
-
-use crate::{IcrcCompatibleAccount, MINTING_ACCOUNT_PRINCIPAL};
-use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
-use ed25519_dalek::{Digest, Sha512, Signature, SigningKey, VerifyingKey};
-use hmac::{Hmac, Mac};
 use std::error::Error;
 #[cfg(target_arch = "x86_64")]
 use std::io::Read;
@@ -60,6 +59,9 @@ impl DccIdentity {
     }
 
     pub fn new_verifying_from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
+        if bytes.len() > MAX_PUBKEY_BYTES {
+            return Err("Provided public key too long".into());
+        }
         let bytes = slice_to_32_bytes_array(bytes)?;
         let verifying_key = VerifyingKey::from_bytes(bytes)?;
         DccIdentity::new_verifying(&verifying_key)
@@ -332,6 +334,12 @@ impl std::fmt::Display for CryptoError {
 
 impl Error for CryptoError {}
 
+impl From<CryptoError> for String {
+    fn from(error: CryptoError) -> Self {
+        error.to_string()
+    }
+}
+
 impl From<DalekError> for CryptoError {
     fn from(error: DalekError) -> Self {
         CryptoError::DalekError(error)
@@ -365,6 +373,12 @@ impl From<String> for CryptoError {
 impl From<std::io::Error> for CryptoError {
     fn from(error: std::io::Error) -> Self {
         CryptoError::IoError(error)
+    }
+}
+
+impl From<&str> for CryptoError {
+    fn from(error: &str) -> Self {
+        CryptoError::Generic(error.to_string())
     }
 }
 

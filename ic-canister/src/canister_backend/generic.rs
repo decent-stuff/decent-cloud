@@ -3,8 +3,8 @@ use borsh::BorshDeserialize;
 use candid::Principal;
 use dcc_common::cache_transactions::RecentCache;
 use dcc_common::{
-    account_balance_get, cursor_from_data, get_account_from_pubkey, get_pubkey_from_principal,
-    np_registration_fee_e9s, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
+    account_balance_get, account_registration_fee_e9s, cursor_from_data, get_account_from_pubkey,
+    get_pubkey_from_principal, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_applied_np_count, rewards_distribute,
     rewards_pending_e9s, set_test_config, Balance, FundsTransfer, LedgerCursor,
     BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN,
@@ -139,16 +139,35 @@ pub fn _post_upgrade(enable_test_config: Option<bool>) {
 }
 
 pub(crate) fn _get_registration_fee() -> Balance {
-    np_registration_fee_e9s()
+    account_registration_fee_e9s()
 }
 
-pub(crate) fn _node_provider_register(pubkey_bytes: Vec<u8>) -> Result<String, String> {
+pub(crate) fn _node_provider_register(
+    pubkey_bytes: Vec<u8>,
+    signature_bytes: Vec<u8>,
+) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
     LEDGER_MAP.with(|ledger| {
-        dcc_common::do_node_provider_register(
+        dcc_common::do_account_register(
             &mut ledger.borrow_mut(),
-            ic_cdk::api::caller(),
+            LABEL_NP_REGISTER,
             pubkey_bytes,
+            signature_bytes,
+        )
+    })
+}
+
+pub(crate) fn _user_register(
+    pubkey_bytes: Vec<u8>,
+    signature_bytes: Vec<u8>,
+) -> Result<String, String> {
+    // To prevent DOS attacks, a fee is charged for executing this operation
+    LEDGER_MAP.with(|ledger| {
+        dcc_common::do_account_register(
+            &mut ledger.borrow_mut(),
+            LABEL_USER_REGISTER,
+            pubkey_bytes,
+            signature_bytes,
         )
     })
 }
@@ -242,17 +261,6 @@ pub(crate) fn _offering_search(query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
         }
     });
     response
-}
-
-pub(crate) fn _user_register(pubkey_bytes: Vec<u8>) -> Result<String, String> {
-    // To prevent DOS attacks, a fee is charged for executing this operation
-    LEDGER_MAP.with(|ledger| {
-        dcc_common::do_user_register(
-            &mut ledger.borrow_mut(),
-            ic_cdk::api::caller(),
-            pubkey_bytes,
-        )
-    })
 }
 
 pub(crate) fn _get_identity_reputation(identity: Vec<u8>) -> u64 {

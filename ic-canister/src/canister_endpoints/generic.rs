@@ -26,8 +26,13 @@ fn get_registration_fee() -> Balance {
 }
 
 #[ic_cdk::update]
-fn node_provider_register(pubkey_bytes: Vec<u8>, _: Vec<u8>) -> Result<String, String> {
-    _node_provider_register(pubkey_bytes)
+fn node_provider_register(pubkey_bytes: Vec<u8>, signature: Vec<u8>) -> Result<String, String> {
+    _node_provider_register(pubkey_bytes, signature)
+}
+
+#[ic_cdk::update]
+fn user_register(pubkey_bytes: Vec<u8>, _: Vec<u8>) -> Result<String, String> {
+    _user_register(pubkey_bytes)
 }
 
 #[ic_cdk::update]
@@ -72,11 +77,6 @@ fn node_provider_check_in(
 #[ic_cdk::query]
 fn get_np_check_in_nonce() -> Vec<u8> {
     _get_np_check_in_nonce()
-}
-
-#[ic_cdk::update]
-fn user_register(pubkey_bytes: Vec<u8>, _: Vec<u8>) -> Result<String, String> {
-    _user_register(pubkey_bytes)
 }
 
 #[ic_cdk::query]
