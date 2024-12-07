@@ -11,8 +11,7 @@ use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data,
     offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get, Balance,
     CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor,
-    UpdateOfferingPayload, DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV,
-    LABEL_DC_TOKEN_TRANSFER,
+    DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -263,14 +262,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let np_profile = np_profile::Profile::new_from_file(profile_file)?;
                     let np_profile_bytes = borsh::to_vec(&np_profile)?;
-                    let crypto_sig = dcc_id.sign(&np_profile_bytes)?;
+                    let crypto_signature = dcc_id.sign(&np_profile_bytes)?;
 
                     let result = ledger_canister(ic_auth)
                         .await?
                         .node_provider_update_profile(
                             &dcc_id.to_bytes_verifying(),
                             &np_profile_bytes,
-                            &crypto_sig.to_bytes(),
+                            &crypto_signature.to_bytes(),
                         )
                         .await
                         .map_err(|e| format!("Update profile failed: {}", e))?;
@@ -288,13 +287,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let ic_auth = dcc_to_ic_auth(&dcc_id);
 
                 let np_offering = np_offering::Offering::new_from_file(offering_file)?;
-                let np_offering_payload = UpdateOfferingPayload::new_signed(&np_offering, &dcc_id);
+                let np_offering_bytes = borsh::to_vec(&np_offering)?;
+                let crypto_signature = dcc_id.sign(&np_offering_bytes)?;
 
                 let result = ledger_canister(ic_auth)
                     .await?
                     .node_provider_update_offering(
                         &dcc_id.to_bytes_verifying(),
-                        &borsh::to_vec(&np_offering_payload)?,
+                        &np_offering_bytes,
+                        &crypto_signature.to_bytes(),
                     )
                     .await
                     .map_err(|e| format!("Update offering failed: {}", e))?;

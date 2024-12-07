@@ -2,8 +2,7 @@ use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
     account_registration_fee_e9s, reward_e9s_per_block_recalculate, Balance, DccIdentity,
-    OfferingRequest, UpdateOfferingPayload, BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO,
-    FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
+    BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use flate2::bufread::ZlibDecoder;
@@ -579,20 +578,22 @@ fn test_reputation() {
     assert!(identity_reputation_get(&p, c, &u2.to_bytes_verifying()) > 0);
 }
 
+// FIXME: add tests for profile update
+
 fn offering_add(
     pic: &PocketIc,
     can: Principal,
     dcc_id: &DccIdentity,
     offering: &Offering,
 ) -> Result<String, String> {
-    let payload = UpdateOfferingPayload::new_signed(offering, dcc_id);
-    let payload_bytes = &borsh::to_vec(&payload).unwrap();
+    let payload_bytes = borsh::to_vec(&offering).unwrap();
+    let payload_signature_bytes = dcc_id.sign(&payload_bytes).unwrap().to_bytes();
     update_check_and_decode!(
         pic,
         can,
         dcc_id.to_ic_principal(),
         "node_provider_update_offering",
-        Encode!(&dcc_id.to_bytes_verifying(), payload_bytes).unwrap(),
+        Encode!(&dcc_id.to_bytes_verifying(), &payload_bytes, &payload_signature_bytes).unwrap(),
         Result<String, String>
     )
 }

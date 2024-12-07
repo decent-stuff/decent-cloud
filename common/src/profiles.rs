@@ -55,25 +55,26 @@ impl UpdateProfilePayload {
 pub fn do_node_provider_update_profile(
     ledger: &mut LedgerMap,
     pubkey_bytes: Vec<u8>,
-    update_profile_payload: &[u8],
-    crypto_signature_bytes: &[u8],
+    profile_serialized: Vec<u8>,
+    crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
     let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
-    dcc_id.verify_bytes(&update_profile_payload, &crypto_signature_bytes)?;
+    dcc_id.verify_bytes(&profile_serialized, &crypto_signature)?;
     info!(
         "[do_node_provider_update_profile]: {} => {} bytes",
         dcc_id,
-        update_profile_payload.len()
+        profile_serialized.len()
     );
 
-    UpdateProfilePayload::new(&update_profile_payload, crypto_signature_bytes)?;
+    let payload = UpdateProfilePayload::new(&profile_serialized, &crypto_signature)?;
+    let payload_bytes = borsh::to_vec(&payload).unwrap();
 
     let fees = np_profile_update_fee_e9s();
     charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, fees)?;
 
     // Store the original signed payload in the ledger, to enable future verification
     ledger
-        .upsert(LABEL_NP_PROFILE, &pubkey_bytes, update_profile_payload)
+        .upsert(LABEL_NP_PROFILE, &pubkey_bytes, payload_bytes)
         .map(|_| {
             format!(
                 "Profile updated! Thank you. You have been charged {} tokens",

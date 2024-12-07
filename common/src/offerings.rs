@@ -1,12 +1,10 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, info, reward_e9s_per_block, warn,
-    Balance, DccIdentity, ED25519_SIGNATURE_LENGTH, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
-    MAX_PUBKEY_BYTES,
+    Balance, DccIdentity, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use candid::Principal;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -29,42 +27,18 @@ pub enum UpdateOfferingPayload {
 }
 
 impl UpdateOfferingPayload {
-    pub fn new_signed(offering: &Offering, dcc_id: &DccIdentity) -> Self {
-        let enc_bytes = borsh::to_vec(&offering).unwrap();
-        let signature = dcc_id.sign(&enc_bytes).unwrap();
-        UpdateOfferingPayload::V1(UpdateOfferingPayloadV1 {
-            offering_payload: enc_bytes,
-            signature: signature.to_vec(),
-        })
-    }
-
-    pub fn verify_signature(&self, dcc_id: &DccIdentity) -> Result<(), String> {
-        match self {
-            UpdateOfferingPayload::V1(payload) => {
-                if payload.signature.len() != ED25519_SIGNATURE_LENGTH {
-                    return Err("Invalid signature".to_string());
-                }
-                if payload.offering_payload.len() > MAX_NP_OFFERING_BYTES {
-                    return Err("Offering payload too long".to_string());
-                }
-                dcc_id
-                    .verify_bytes(&payload.offering_payload, &payload.signature)
-                    .map_err(|e| e.to_string())
-            }
+    pub fn new(offering_payload: &[u8], crypto_signature_bytes: &[u8]) -> Result<Self, String> {
+        if offering_payload.len() > MAX_NP_OFFERING_BYTES {
+            return Err("Offering payload too long".to_string());
         }
+        Ok(UpdateOfferingPayload::V1(UpdateOfferingPayloadV1 {
+            offering_payload: offering_payload.to_vec(),
+            signature: crypto_signature_bytes.to_vec(),
+        }))
     }
 
     pub fn deserialize_unchecked(data: &[u8]) -> Result<UpdateOfferingPayload, String> {
         UpdateOfferingPayload::try_from_slice(data).map_err(|e| e.to_string())
-    }
-
-    pub fn deserialize_checked(
-        dcc_id: &DccIdentity,
-        data: &[u8],
-    ) -> Result<UpdateOfferingPayload, String> {
-        let result = Self::deserialize_unchecked(data)?;
-        result.verify_signature(dcc_id).map_err(|e| e.to_string())?;
-        Ok(result)
     }
 
     pub fn offering(&self) -> Result<Offering, String> {
@@ -80,32 +54,26 @@ impl UpdateOfferingPayload {
 
 pub fn do_node_provider_update_offering(
     ledger: &mut LedgerMap,
-    caller: Principal,
     pubkey_bytes: Vec<u8>,
-    update_offering_payload: &[u8],
+    offering_serialized: Vec<u8>,
+    crypto_signature_bytes: Vec<u8>,
 ) -> Result<String, String> {
-    if pubkey_bytes.len() > MAX_PUBKEY_BYTES {
-        return Err("Provided public key too long".to_string());
-    }
-
-    let dcc_identity =
-        DccIdentity::new_verifying_from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
-    if caller != dcc_identity.to_ic_principal() {
-        return Err("Invalid caller".to_string());
-    }
+    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
+    dcc_id.verify_bytes(&offering_serialized, &crypto_signature_bytes)?;
     info!(
         "[do_node_provider_update_offering]: {} => {} bytes",
-        dcc_identity,
-        update_offering_payload.len()
+        dcc_id,
+        offering_serialized.len()
     );
 
-    UpdateOfferingPayload::deserialize_checked(&dcc_identity, update_offering_payload)?;
+    let payload = UpdateOfferingPayload::new(&offering_serialized, &crypto_signature_bytes)?;
+    let payload_bytes = borsh::to_vec(&payload).unwrap();
 
     let fees = np_offering_update_fee_e9s();
-    charge_fees_to_account_no_bump_reputation(ledger, &dcc_identity, fees)?;
+    charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, fees)?;
     // Store the original signed payload in the ledger
     ledger
-        .upsert(LABEL_NP_OFFERING, &pubkey_bytes, update_offering_payload)
+        .upsert(LABEL_NP_OFFERING, &pubkey_bytes, payload_bytes)
         .map(|_| {
             format!(
                 "Offering updated! Thank you. You have been charged {} tokens",
@@ -140,8 +108,13 @@ pub fn do_get_matching_offerings(
                 continue;
             }
         };
-        let payload_decoded =
-            UpdateOfferingPayload::deserialize_checked(&dcc_id, entry.value()).unwrap();
+        let payload_decoded = match UpdateOfferingPayload::deserialize_unchecked(entry.value()) {
+            Ok(payload) => payload,
+            Err(e) => {
+                warn!("Error decoding payload: {}", e);
+                continue;
+            }
+        };
         match payload_decoded.offering() {
             Ok(offering) => {
                 if search_filter.is_empty() || offering.matches_search(search_filter) {

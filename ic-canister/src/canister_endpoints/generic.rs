@@ -50,18 +50,19 @@ fn node_provider_check_in(
 #[ic_cdk::update]
 fn node_provider_update_profile(
     pubkey_bytes: Vec<u8>,
-    update_profile_payload: Vec<u8>,
+    profile_serialized: Vec<u8>,
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_update_profile(pubkey_bytes, update_profile_payload, crypto_signature)
+    _node_provider_update_profile(pubkey_bytes, profile_serialized, crypto_signature)
 }
 
 #[ic_cdk::update]
 fn node_provider_update_offering(
     pubkey_bytes: Vec<u8>,
-    update_offering_payload: Vec<u8>,
+    offering_serialized: Vec<u8>,
+    crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_update_offering(pubkey_bytes, update_offering_payload)
+    _node_provider_update_offering(pubkey_bytes, offering_serialized, crypto_signature)
 }
 
 #[ic_cdk::query]

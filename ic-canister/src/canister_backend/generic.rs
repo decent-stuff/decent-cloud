@@ -190,7 +190,7 @@ pub(crate) fn _node_provider_check_in(
 
 pub(crate) fn _node_provider_update_profile(
     pubkey_bytes: Vec<u8>,
-    update_profile_payload: Vec<u8>,
+    profile_serialized: Vec<u8>,
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
@@ -198,8 +198,8 @@ pub(crate) fn _node_provider_update_profile(
         dcc_common::do_node_provider_update_profile(
             &mut ledger.borrow_mut(),
             pubkey_bytes,
-            &update_profile_payload,
-            &crypto_signature,
+            profile_serialized,
+            crypto_signature,
         )
     })
 }
@@ -207,14 +207,15 @@ pub(crate) fn _node_provider_update_profile(
 pub(crate) fn _node_provider_update_offering(
     pubkey_bytes: Vec<u8>,
     update_offering_payload: Vec<u8>,
+    crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
     LEDGER_MAP.with(|ledger| {
         dcc_common::do_node_provider_update_offering(
             &mut ledger.borrow_mut(),
-            ic_cdk::api::caller(),
             pubkey_bytes,
-            &update_offering_payload,
+            update_offering_payload,
+            crypto_signature,
         )
     })
 }
