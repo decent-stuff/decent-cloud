@@ -634,36 +634,62 @@ fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
     .collect()
 }
 
-// fn offering_request(
+fn contract_sign_request(
+    pic: &PocketIc,
+    can: Principal,
+    requester_dcc_id: DccIdentity,
+    provider_pubkey_bytes: &[u8],
+    offering_id: &str,
+) -> Result<String, String> {
+    let requester_pubkey_bytes = requester_dcc_id.to_bytes_verifying();
+    let req = ContractSignRequest::new(
+        requester_pubkey_bytes.clone(),
+        "invalid test ssh key".to_string(),
+        "invalid test contact info".to_string(),
+        provider_pubkey_bytes,
+        offering_id.to_string(),
+        None,
+        None,
+        None,
+        100,
+        3600,
+        None,
+        "memo".to_string(),
+    );
+    let payload_bytes = borsh::to_vec(&req).unwrap();
+    let payload_sig_bytes = requester_dcc_id.sign(&payload_bytes).unwrap().to_bytes();
+    update_check_and_decode!(
+        pic,
+        can,
+        requester_dcc_id.to_ic_principal(),
+        "contract_sign_request",
+        Encode!(&requester_pubkey_bytes, &payload_bytes, &payload_sig_bytes).unwrap(),
+        Result<String, String>
+    )
+}
+
+// FIXME: add tests for contract_sign_request_list
+// fn contract_sign_request_list_open(
+//     pic: &PocketIc,
+//     can: Principal,
+//     provider_dcc_id: &DccIdentity,
+// ) -> Vec<ContractSignRequest> {
+
+// }
+
+// fn contract_sign_reply(
 //     pic: &PocketIc,
 //     can: Principal,
 //     requester_dcc_id: DccIdentity,
-//     provider_pubkey_bytes: &[u8],
-//     offering_id: &str,
+//     reply: &ContractSignReply,
 // ) -> Result<String, String> {
-//     let payload = OfferingRequest::new(
-//         requester_dcc_id,
-//         "fake ssh key".to_string(),
-//         "fake contact info".to_string(),
-//         provider_pubkey_bytes,
-//         offering_id.to_string(),
-//         None,
-//         None,
-//         100,
-//         3600,
-//         None,
-//         "memo".to_string(),
-//     );
-//     let payload_bytes = payload.to_payload_signed();
+//     let payload_bytes = borsh::to_vec(&reply).unwrap();
+//     let payload_sig_bytes = requester_dcc_id.sign(&payload_bytes).unwrap().to_bytes();
 //     update_check_and_decode!(
 //         pic,
 //         can,
 //         requester_dcc_id.to_ic_principal(),
-//         "offering_request",
-//         Encode!(&payload_bytes).unwrap(),
-//         Result<String, String>
-//     )
-// }
+//         "contract_sign_reply",
 
 #[test]
 fn test_offerings() {
@@ -715,4 +741,23 @@ fn test_offerings() {
     );
     let search_results = offering_search(&p, c, "memory < 512MB");
     assert_eq!(search_results.len(), 0);
+
+    // Sign a contract
+    let offering_id = offering.matches_search("memory >= 512MB")[0].clone();
+    assert_eq!(offering_id, "xxx-small");
+
+    let u1 = user_register(&p, c, b"u1", 2 * DC_TOKEN_DECIMALS_DIV).0;
+    contract_sign_request(&p, c, u1, &np1.to_bytes_verifying(), &offering_id).unwrap();
+
+    contract_sign_reply(
+        &p,
+        c,
+        b"u1",
+        b"np1",
+        b"xxx-small",
+        b"memo",
+        b"reply",
+        b"signature",
+    );
+    test_ffwd_to_next_block(ts_ns, &p, c);
 }

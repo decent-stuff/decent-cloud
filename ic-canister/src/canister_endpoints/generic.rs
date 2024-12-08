@@ -70,6 +70,24 @@ fn offering_search(search_query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
     _offering_search(search_query)
 }
 
+#[ic_cdk::update]
+fn contract_sign_request(
+    pubkey_bytes: Vec<u8>,
+    request_serialized: Vec<u8>,
+    crypto_signature: Vec<u8>,
+) -> Result<String, String> {
+    _contract_sign_request(pubkey_bytes, request_serialized, crypto_signature)
+}
+
+#[ic_cdk::update]
+fn contract_sign_reply(
+    pubkey_bytes: Vec<u8>,
+    reply_serialized: Vec<u8>,
+    crypto_signature: Vec<u8>,
+) -> Result<String, String> {
+    _contract_sign_reply(pubkey_bytes, reply_serialized, crypto_signature)
+}
+
 #[ic_cdk::query]
 fn node_provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
     _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes)

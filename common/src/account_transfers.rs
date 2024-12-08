@@ -64,18 +64,20 @@ pub fn ledger_funds_transfer(
 
 pub fn charge_fees_to_account_and_bump_reputation(
     ledger: &mut LedgerMap,
+    dcc_id_charge: &DccIdentity,
+    dcc_id_bump_reputation: &DccIdentity,
     amount_e9s: TokenAmount,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
     }
     let balance_from_after =
-        account_balance_get(&dcc_identity.as_icrc_compatible_account()) - amount_e9s;
+        account_balance_get(&dcc_id_charge.as_icrc_compatible_account()) - amount_e9s;
     match ledger_funds_transfer(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
-            dcc_identity.as_icrc_compatible_account(),
+            dcc_id_charge.as_icrc_compatible_account(),
             MINTING_ACCOUNT,
             amount_e9s.into(),
             Some(fees_sink_accounts()),
@@ -88,7 +90,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
     ) {
         Ok(_) => Ok(ledger_add_reputation_change(
             ledger,
-            dcc_identity,
+            dcc_id_bump_reputation,
             amount_e9s.min(i64::MAX as TokenAmount) as i64,
         )?),
         Err(e) => {

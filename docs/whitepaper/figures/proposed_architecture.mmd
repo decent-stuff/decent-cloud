@@ -8,7 +8,7 @@ graph TB
   WS -- "Serves Requests" --> EU["End User"]
 
   subgraph BC["Blockchain: Reputation and Financial Transactions"]
-    LE["Node Renting Event"] -- "Records Node Renting" --> Ledger
+    LE["Contract Start Event"] -- "Records Contract Start" --> Ledger
     Ledger -- "Increases Developer Reputation" --> DREP["Developer Reputation"]
     Ledger -- "Increases Node Provider Reputation" --> NREP["Node Provider Reputation"]
     DREP -- "Can Spend Reputation to Reduce Node Provider Reputation" --> NREP

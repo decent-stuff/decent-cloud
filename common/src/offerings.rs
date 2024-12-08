@@ -115,7 +115,7 @@ pub fn do_get_matching_offerings(
         };
         match payload_decoded.offering() {
             Ok(offering) => {
-                if search_filter.is_empty() || offering.matches_search(search_filter) {
+                if search_filter.is_empty() || !offering.matches_search(search_filter).is_empty() {
                     results.push((dcc_id, offering));
                 }
             }

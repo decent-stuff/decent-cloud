@@ -3,13 +3,15 @@ pub mod account_transfers_errors;
 pub mod cache_balances;
 pub mod cache_reputation;
 pub mod cache_transactions;
+pub mod contract_refund_request;
+pub mod contract_sign_reply;
+pub mod contract_sign_request;
 pub mod dcc_identity;
 pub mod ledger_cursor;
 pub mod ledger_refresh;
 pub mod offerings;
 pub mod profiles;
 pub mod registration;
-pub mod renting;
 pub mod rewards;
 
 pub use account_transfers::*;
@@ -18,6 +20,9 @@ pub use cache_balances::*;
 pub use cache_reputation::*;
 pub use cache_transactions::*;
 use candid::{Nat, Principal};
+pub use contract_refund_request::*;
+pub use contract_sign_reply::*;
+pub use contract_sign_request::*;
 pub use dcc_identity::{slice_to_32_bytes_array, slice_to_64_bytes_array};
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 pub use ledger_cursor::*;
@@ -26,7 +31,6 @@ use num_traits::cast::ToPrimitive;
 pub use offerings::*;
 pub use profiles::*;
 pub use registration::*;
-pub use renting::*;
 pub use rewards::*;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,7 +52,7 @@ use ledger_map::{debug, error, info, warn};
 #[macro_export]
 macro_rules! fn_info {
     ($($arg:tt)*) => {
-        crate::info!(
+        $crate::info!(
             "[{}]: {}",
             function_name!(),
             format_args!($($arg)*)
@@ -86,6 +90,8 @@ pub const LABEL_REPUTATION_AGE: &str = "RepAge";
 pub const LABEL_REPUTATION_CHANGE: &str = "RepChange";
 pub const LABEL_REWARD_DISTRIBUTION: &str = "RewardDistr";
 pub const LABEL_USER_REGISTER: &str = "UserRegister";
+pub const LABEL_CONTRACT_SIGN_REQUEST: &str = "ContractSignReq";
+pub const LABEL_CONTRACT_SIGN_REPLY: &str = "ContractSignReply";
 pub const MAX_NP_PROFILE_BYTES: usize = 4 * 1024;
 pub const MAX_NP_OFFERING_BYTES: usize = 32 * 1024;
 // Maximum response size (replicated execution)	in bytes is 2 MiB

@@ -354,20 +354,6 @@ type OfferingEntry = record {
     offering_compressed: vec nat8;
 };
 
-type OfferingRentReply = record {
-    requester_pubkey_bytes: vec nat8; // Public key of the original requester
-    request_memo: text;               // Memo field of the original request
-    rent_success: bool;               // Short boolean to mark whether the renting was accepted or rejected by the provider
-    response_text: text;              // Thank you note, or similar on success. Reason the request failed on failure.
-    response_details: text;           // Instructions or a link to the detailed instructions: describing next steps, further information, etc.
-};
-
-type RefundRequest = record { // TODO
-    requester_pubkey_bytes: vec nat8; // Who is making this request?
-    instance_id: text;                // instance id for which a refund is requested
-    crypto_sig: vec nat8;              // The whole request needs to be signed by the requester's private key
-};
-
 service : {
     // Node Provider (NP) management operations
     // crypto_sig can be used to cryptographically verify the authenticity of the message
@@ -378,8 +364,13 @@ service : {
     node_provider_get_profile_by_pubkey_bytes: (vec nat8) -> (opt text) query;
     node_provider_get_profile_by_principal: (principal) -> (opt text) query;
     offering_search: (search_query: text) -> (vec OfferingEntry) query;
-    offering_request: (offering_rent_request_payload: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    offering_reply: (offering_rent_reply_payload: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+
+    // Contract signing and replying
+    contract_sign_request: (pubkey_bytes: vec nat8, contract_info_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+    contract_sign_reply: (pubkey_bytes: vec nat8, contract_reply_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+    // FIXME
+    // contract_extend
+    // contract_cancel
 
     // User management operations
     user_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);

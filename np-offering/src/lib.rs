@@ -1,19 +1,19 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use np_json_search::value_matches;
+use np_json_search::value_matches_with_parents;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_yaml_ng::{self, Value as YamlValue};
 use std::{collections::HashMap, fmt};
 
 // Define the Offering enum with version-specific variants
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub enum Offering {
     V0_1_0(CloudProviderOfferingV0_1_0),
     // Future versions can be added here
 }
 
 // Main struct for Cloud Provider Offering version 0.1.0
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct CloudProviderOfferingV0_1_0 {
     pub kind: String,
     pub metadata: Metadata,
@@ -28,19 +28,19 @@ pub struct CloudProviderOfferingV0_1_0 {
     json_value: JsonValue,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Metadata {
     pub name: String,
     pub version: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Provider {
     pub name: String,
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct DefaultSpec {
     pub compliance: Option<Vec<String>>,
     pub sla: Option<SLA>,
@@ -53,7 +53,7 @@ pub struct DefaultSpec {
     pub service_integrations: Option<ServiceIntegrations>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct SLA {
     pub uptime: Option<String>,
     pub measurement_period: Option<String>,
@@ -62,13 +62,13 @@ pub struct SLA {
     pub maintenance: Option<Maintenance>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Support {
     pub levels: Option<Vec<String>>,
     pub response_time: Option<ResponseTime>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct ResponseTime {
     pub critical: Option<String>,
     pub high: Option<String>,
@@ -76,25 +76,25 @@ pub struct ResponseTime {
     pub low: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Compensation {
     pub less_than: Option<String>,
     pub more_than: Option<String>,
     pub credit_percentage: Option<u8>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Maintenance {
     pub window: Option<String>,
     pub notification_period: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct MachineSpec {
     pub instance_types: Vec<InstanceType>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct InstanceType {
     pub id: String,
     #[serde(rename = "type")]
@@ -112,7 +112,7 @@ pub struct InstanceType {
     pub ai_spec: Option<AISpec>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct GPU {
     pub count: u32,
     #[serde(rename = "type")]
@@ -120,7 +120,7 @@ pub struct GPU {
     pub memory: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Storage {
     #[serde(rename = "type")]
     pub type_: String,
@@ -128,19 +128,19 @@ pub struct Storage {
     pub iops: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct MetadataSpec {
     pub optimized_for: Option<String>,
     pub availability: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct NetworkSpecDetails {
     pub bandwidth: Option<String>,
     pub latency: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct AISpec {
     pub framework_optimizations: Option<Vec<String>>,
     pub software_stack: Option<SoftwareStack>,
@@ -148,12 +148,12 @@ pub struct AISpec {
     pub distributed_training_support: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct SoftwareStack {
     pub preinstalled: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct NetworkSpec {
     pub vpc_support: Option<bool>,
     pub public_ip: Option<bool>,
@@ -162,45 +162,45 @@ pub struct NetworkSpec {
     pub firewalls: Option<Firewalls>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct LoadBalancers {
     #[serde(rename = "type")]
     pub types: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Firewalls {
     pub stateful: Option<bool>,
     pub stateless: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Security {
     pub data_encryption: Option<DataEncryption>,
     pub identity_and_access_management: Option<IAM>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct DataEncryption {
     pub at_rest: Option<String>,
     pub in_transit: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct IAM {
     pub multi_factor_authentication: Option<bool>,
     pub role_based_access_control: Option<bool>,
     pub single_sign_on: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Monitoring {
     pub enabled: Option<bool>,
     pub metrics: Option<Metrics>,
     pub logging: Option<Logging>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Metrics {
     pub cpu_utilization: Option<bool>,
     pub memory_usage: Option<bool>,
@@ -208,13 +208,13 @@ pub struct Metrics {
     pub network_traffic: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Logging {
     pub enabled: Option<bool>,
     pub log_retention: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Backup {
     pub enabled: Option<bool>,
     pub frequency: Option<String>,
@@ -222,33 +222,33 @@ pub struct Backup {
     pub disaster_recovery: Option<DisasterRecovery>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct DisasterRecovery {
     pub cross_region_replication: Option<bool>,
     pub failover_time: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct CostOptimization {
     pub spot_instances_available: Option<bool>,
     pub savings_plans: Option<Vec<SavingsPlan>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct SavingsPlan {
     #[serde(rename = "type")]
     pub type_: String,
     pub discount: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct ServiceIntegrations {
     pub databases: Option<Vec<String>>,
     pub storage_services: Option<Vec<String>>,
     pub messaging_services: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Region {
     pub name: String,
     pub description: Option<String>,
@@ -258,20 +258,20 @@ pub struct Region {
     pub availability_zones: Option<Vec<AvailabilityZone>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct Geography {
     pub continent: Option<String>,
     pub country: Option<String>,
     pub iso_codes: Option<IsoCodes>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct IsoCodes {
     pub country_code: Option<String>,
     pub region_code: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct AvailabilityZone {
     pub name: String,
     pub description: Option<String>,
@@ -325,7 +325,7 @@ impl Offering {
         }
     }
 
-    pub fn matches_search(&self, search_str: &str) -> bool {
+    pub fn matches_search(&self, search_str: &str) -> Vec<String> {
         match self {
             Offering::V0_1_0(offering) => offering.matches_search(search_str),
         }
@@ -344,6 +344,18 @@ impl Offering {
         }
     }
 
+    pub fn get_instance_with_id(&self, id: &str) -> Option<InstanceType> {
+        match self {
+            Offering::V0_1_0(offering) => offering.get_instance_with_id(id),
+        }
+    }
+
+    pub fn json_value(&self) -> &serde_json::Value {
+        match self {
+            Offering::V0_1_0(offering) => &offering.json_value,
+        }
+    }
+
     pub fn as_json_string(&self) -> Result<String, String> {
         match self {
             Offering::V0_1_0(offering) => {
@@ -354,8 +366,30 @@ impl Offering {
 }
 
 impl CloudProviderOfferingV0_1_0 {
-    pub fn matches_search(&self, search_str: &str) -> bool {
-        value_matches(&self.json_value, search_str)
+    pub fn matches_search(&self, search_str: &str) -> Vec<String> {
+        value_matches_with_parents(&self.json_value, "instance_types.id", search_str)
+    }
+
+    pub fn get_instance_with_id(&self, id: &str) -> Option<InstanceType> {
+        for region in &self.regions {
+            if let Some(machine_spec) = &region.machine_spec {
+                for instance_type in &machine_spec.instance_types {
+                    if instance_type.id == id {
+                        return Some(instance_type.clone());
+                    }
+                }
+            }
+        }
+        if let Some(default_spec) = &self.defaults {
+            if let Some(machine_spec) = &default_spec.machine_spec {
+                for instance_type in &machine_spec.instance_types {
+                    if instance_type.id == id {
+                        return Some(instance_type.clone());
+                    }
+                }
+            }
+        }
+        None
     }
 }
 
@@ -445,33 +479,63 @@ regions:
     fn test_search_offering() {
         let offering = Offering::new_from_str(SAMPLE_YAML, "yaml").expect("Failed to parse YAML");
         // Test matches_search with spaces before and after
-        assert!(offering.matches_search("name =GenericCloudService"));
-        assert!(offering.matches_search("name=GenericCloudService"));
-        assert!(offering.matches_search("name= GenericCloudService"));
+        assert!(!offering
+            .matches_search("name =GenericCloudService")
+            .is_empty());
+        assert!(!offering
+            .matches_search("name=GenericCloudService")
+            .is_empty());
+        assert!(!offering
+            .matches_search("name= GenericCloudService")
+            .is_empty());
 
-        assert!(offering.matches_search("provider.name=generic cloud provider"));
-        assert!(offering.matches_search("name contains Cloud"));
-        assert!(offering.matches_search("name contains CloudService"));
-        assert!(offering.matches_search("name contains Service"));
-        assert!(offering.matches_search("name contains GenericCloudService"));
-        assert!(offering.matches_search("name startswith GenericCloudService"));
-        assert!(offering.matches_search("name endswith Service"));
+        assert!(!offering
+            .matches_search("provider.name=generic cloud provider")
+            .is_empty());
+        assert!(!offering.matches_search("name contains Cloud").is_empty());
+        assert!(!offering
+            .matches_search("name contains CloudService")
+            .is_empty());
+        assert!(!offering.matches_search("name contains Service").is_empty());
+        assert!(!offering
+            .matches_search("name contains GenericCloudService")
+            .is_empty());
+        assert!(!offering
+            .matches_search("name startswith GenericCloudService")
+            .is_empty());
+        assert!(!offering.matches_search("name endswith Service").is_empty());
 
-        assert!(offering.matches_search("type=memory-optimized"));
-        assert!(offering.matches_search("type=memory-optimized and name=GenericCloudService"));
-
-        assert!(offering.matches_search("name endswith Service"));
-
-        assert!(offering.matches_search("regions.name=eu-central-1"));
-        assert!(offering.matches_search("pricing.on_demand.hour <= 0.05"));
-        assert!(!offering.matches_search("pricing.on_demand.hour < 0.05"));
-        assert!(!offering.matches_search("pricing.on_demand.hour <= 0.01"));
-        assert!(offering.matches_search("pricing.on_demand.hour >= 0.05"));
-        assert!(offering.matches_search("pricing.on_demand.hour >= 0.15"));
-        assert!(!offering.matches_search("pricing.on_demand.hour > 0.15"));
-        assert!(!offering.matches_search("pricing.on_demand.hour > 0.5"));
-        assert!(offering.matches_search("type=memory-optimized"));
-        assert!(!offering.matches_search("nonexistent=value"));
+        assert!(!offering.matches_search("type=memory-optimized").is_empty());
+        assert!(!offering
+            .matches_search("type=memory-optimized and name=GenericCloudService")
+            .is_empty());
+        assert!(!offering.matches_search("name endswith Service").is_empty());
+        assert!(!offering
+            .matches_search("regions.name=eu-central-1")
+            .is_empty());
+        assert!(!offering
+            .matches_search("pricing.on_demand.hour <= 0.05")
+            .is_empty());
+        assert!(offering
+            .matches_search("pricing.on_demand.hour < 0.05")
+            .is_empty());
+        assert!(offering
+            .matches_search("pricing.on_demand.hour <= 0.01")
+            .is_empty());
+        assert!(!offering
+            .matches_search("pricing.on_demand.hour >= 0.05")
+            .is_empty());
+        assert!(!offering
+            .matches_search("pricing.on_demand.hour >= 0.15")
+            .is_empty());
+        assert!(offering
+            .matches_search("pricing.on_demand.hour > 0.15")
+            .is_empty());
+        assert!(offering
+            .matches_search("pricing.on_demand.hour > 0.5")
+            .is_empty());
+        assert!(!offering.matches_search("type=memory-optimized").is_empty());
+        assert!(offering.matches_search("nonexistent=value").is_empty());
     }
 
     #[test]
