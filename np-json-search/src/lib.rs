@@ -198,7 +198,6 @@ impl CompareOp {
         let value = &try_parse_size_bytes(value);
         let other = &try_parse_size_bytes(other);
 
-        // Helper function to parse values as f64
         fn parse_value_as_f64(value: &Value) -> Option<f64> {
             match value {
                 Value::Number(num) => num.as_f64(),
@@ -294,6 +293,149 @@ pub fn value_matches(json_value: &Value, search_str: &str) -> bool {
         }
     };
     search.matches(json_value)
+}
+
+pub fn value_matches_with_parents(
+    json_value: &Value,
+    remember_parent_key: &str,
+    search_str: &str,
+) -> Vec<String> {
+    let search = match Search::from_str(search_str) {
+        Ok(search) => search,
+        Err(e) => {
+            eprintln!("Failed to parse search string: {}", e);
+            return vec![];
+        }
+    };
+
+    let mut results = Vec::new();
+    let mut found_match = false;
+
+    recursive_collect(
+        json_value,
+        remember_parent_key,
+        &search,
+        None,
+        &mut results,
+        &mut found_match,
+    );
+
+    if results.is_empty() {
+        if found_match {
+            return vec!["".to_string()];
+        } else {
+            return vec![];
+        }
+    } else {
+        // Clean up results, remove duplicates and empty strings
+        results.sort_unstable();
+        results.dedup();
+        if results.len() > 1 {
+            results.retain(|s| !s.is_empty());
+        }
+    }
+
+    results
+}
+
+/// Recursively collect matches:
+/// - Directly attempt to extract `remember_parent_key` at this node (no subtree search).
+/// - If found, update `current_parent`.
+/// - Check for matches. If matches and `current_parent` is Some&non-empty, record it.
+///   Else if matches and no parent, record `""` only if not done before.
+/// - Recurse into children.
+fn recursive_collect(
+    json_value: &Value,
+    remember_parent_key: &str,
+    search: &Search,
+    last_seen_parent: Option<String>,
+    results: &mut Vec<String>,
+    found_match: &mut bool,
+) {
+    // Start with the parent's known value
+    let mut current_parent = last_seen_parent;
+
+    // If this node can directly resolve the `remember_parent_key`, update current_parent
+    if let Some(val) = find_parent_key_direct(json_value, remember_parent_key) {
+        current_parent = Some(val);
+    }
+
+    // Check for a match at this node
+    if search.matches(json_value) {
+        *found_match = true;
+        match &current_parent {
+            Some(p) if !p.is_empty() => {
+                // Non-empty parent found
+                results.push(p.clone());
+            }
+            _ => {
+                // No parent or empty parent
+                results.push("".to_string());
+            }
+        }
+    }
+
+    // Recurse into children
+    match json_value {
+        Value::Object(map) => {
+            for v in map.values() {
+                recursive_collect(
+                    v,
+                    remember_parent_key,
+                    search,
+                    current_parent.clone(),
+                    results,
+                    found_match,
+                );
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr {
+                recursive_collect(
+                    v,
+                    remember_parent_key,
+                    search,
+                    current_parent.clone(),
+                    results,
+                    found_match,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Directly find `remember_parent_key` from the current node.
+/// This allows dot notation but does not search beyond the current object's direct structure.
+fn find_parent_key_direct(obj: &Value, remember_parent_key: &str) -> Option<String> {
+    let parts: Vec<&str> = remember_parent_key.split('.').collect();
+    follow_path_parts(obj, &parts)
+}
+
+fn follow_path_parts(value: &Value, parts: &[&str]) -> Option<String> {
+    if parts.is_empty() {
+        // No more parts left, return string value if any
+        return value.as_str().map(String::from);
+    }
+
+    match value {
+        Value::Object(map) => {
+            // Follow the next part in the object
+            let part = parts[0];
+            map.get(part)
+                .and_then(|next| follow_path_parts(next, &parts[1..]))
+        }
+        Value::Array(arr) => {
+            // Try to find a match in any of the array elements
+            for element in arr {
+                if let Some(val) = follow_path_parts(element, parts) {
+                    return Some(val);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -472,5 +614,67 @@ mod tests {
         assert!(search.matches(&json_value));
         let search = Search::from_str("name.with.dot = value_with_dot").unwrap();
         assert!(search.matches(&json_value));
+    }
+
+    #[test]
+    fn test_remember_parent_key() {
+        let json_str = r#"
+            {
+                "defaults":{
+                    "machine_spec": {"instance_types": [{ "id": "t2.micro", "memory": "512 MB" }]}
+                },
+                "regions":{
+                    "instance_types": { "id": "t2.large" },
+                    "memory": "1024 MB"
+                },
+                "something_else": {
+                    "instance_types": { "id": "t2.nano" },
+                    "memory": "512 MB"
+                }
+            }
+        "#;
+        let json_value: Value = serde_json::from_str(json_str).unwrap();
+        let remember_parent_key = "instance_types.id";
+        let search_str = "memory = 512 MB";
+
+        let results = value_matches_with_parents(&json_value, remember_parent_key, search_str);
+
+        assert_eq!(results, vec!["t2.micro", "t2.nano"]);
+    }
+
+    #[test]
+    fn test_remember_parent_key_complex() {
+        let json_str = r#"{"api_version":"v0.1.0","defaults":{"backup":null,"compliance":null,"cost_optimization":null,"machine_spec":{"instance_types":[{"ai_spec":null,"compliance":null,"cpu":"0.5 vCPUs","description":null,"gpu":null,"id":"xxx-small","memory":"512 MB","metadata":{"availability":"medium","optimized_for":"general"},"network":null,"pricing":{"on_demand":{"hour":"0.01"},"reserved":{"three_year":"20","year":"10"}},"storage":{"iops":null,"size":"2 GB","type":"SSD"},"tags":null,"type":"general-purpose"}]},"monitoring":{"enabled":true,"logging":{"enabled":true,"log_retention":"30 days"},"metrics":{"cpu_utilization":true,"disk_iops":true,"memory_usage":true,"network_traffic":true}},"network_spec":{"firewalls":null,"load_balancers":{"type":["network"]},"private_ip":true,"public_ip":true,"vpc_support":true},"security":null,"service_integrations":null,"sla":null},"kind":"Offering","metadata":{"name":"Demo Node Provider, do not use","version":"1.0"},"provider":{"description":"a generic offering specification for a cloud provider","name":"generic cloud provider"},"regions":[{"availability_zones":[{"description":"primary availability zone","name":"eu-central-1a"},{"description":"secondary availability zone","name":"eu-central-1b"}],"compliance":["GDPR"],"description":"central europe region","geography":{"continent":"Europe","country":"Germany","iso_codes":{"country_code":"DE","region_code":"EU"}},"machine_spec":null,"name":"eu-central-1"},{"availability_zones":[{"description":"primary availability zone","name":"us-east-1a"},{"description":"secondary availability zone","name":"us-east-1b"}],"compliance":["SOC 2"],"description":"united states east coast region","geography":{"continent":"North America","country":"United States","iso_codes":{"country_code":"US","region_code":"NA"}},"machine_spec":null,"name":"us-east-1"}]}
+        "#;
+        let json_value: Value = serde_json::from_str(json_str).unwrap();
+        let remember_parent_key = "instance_types.id";
+        let search_str = "memory >= 512 MB";
+
+        let results = value_matches_with_parents(&json_value, remember_parent_key, search_str);
+
+        assert_eq!(results, vec!["xxx-small"]);
+    }
+
+    #[test]
+    fn test_no_parent_key_found() {
+        let json_str = r#"
+            [
+                {
+                    "instance_types": { "id": "t2.micro" },
+                    "memory": "512 MB"
+                },
+                {
+                    "instance_types": { "id": "t2.large" },
+                    "memory": "1024 MB"
+                }
+            ]
+        "#;
+        let json_value: Value = serde_json::from_str(json_str).unwrap();
+        let remember_parent_key = "nonexistent.key";
+        let search_str = "memory = 512 MB";
+
+        let results = value_matches_with_parents(&json_value, remember_parent_key, search_str);
+
+        assert_eq!(results, vec![""]);
     }
 }

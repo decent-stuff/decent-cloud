@@ -1,3 +1,4 @@
+use np_json_search::value_matches_with_parents;
 use np_offering::Offering;
 
 fn main() {
@@ -8,11 +9,19 @@ fn main() {
     }
 
     let offering = Offering::new_from_file(&args[1]).expect("Failed to parse offering");
-    if offering.matches_search(&args[2]) {
-        eprintln!("Profile matches!");
-        println!("{}", offering);
-    } else {
-        eprintln!("Profile does not match!");
+    let matching_instances =
+        value_matches_with_parents(offering.json_value(), "instance_types.id", &args[2]);
+    if matching_instances.is_empty() {
+        eprintln!("Offering does not match!");
         std::process::exit(1);
+    } else {
+        for instance in matching_instances {
+            if instance.is_empty() {
+                eprintln!("Offering matches, but no particular instance matched!");
+                println!("{}", offering.as_json_string().unwrap());
+            } else {
+                eprintln!("Matching instance id: {}", instance);
+            }
+        }
     }
 }
