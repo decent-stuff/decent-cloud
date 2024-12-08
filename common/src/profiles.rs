@@ -1,6 +1,6 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reputation_get,
-    reward_e9s_per_block, Balance, DccIdentity, LABEL_NP_PROFILE, MAX_NP_PROFILE_BYTES,
+    reward_e9s_per_block, DccIdentity, TokenAmount, LABEL_NP_PROFILE, MAX_NP_PROFILE_BYTES,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
@@ -11,7 +11,7 @@ use ledger_map::LedgerMap;
 use np_profile::Profile;
 use serde::Serialize;
 
-pub fn np_profile_update_fee_e9s() -> Balance {
+pub fn np_profile_update_fee_e9s() -> TokenAmount {
     reward_e9s_per_block() / 1000
 }
 

@@ -1,8 +1,9 @@
 use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
-    account_registration_fee_e9s, reward_e9s_per_block_recalculate, Balance, DccIdentity,
-    BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
+    account_registration_fee_e9s, reward_e9s_per_block_recalculate, ContractSignRequest,
+    DccIdentity, TokenAmount, BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS,
+    MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use flate2::bufread::ZlibDecoder;
@@ -224,7 +225,7 @@ fn mint_tokens_for_test(
     pic: &PocketIc,
     can_id: Principal,
     acct: &Icrc1Account,
-    amount: Balance,
+    amount: TokenAmount,
 ) -> Nat {
     update_check_and_decode!(
         pic,
@@ -241,7 +242,7 @@ fn transfer_funds(
     can: Principal,
     send_from: &Icrc1Account,
     send_to: &Icrc1Account,
-    amount_send: Balance,
+    amount_send: TokenAmount,
 ) -> Result<candid::Nat, TransferError> {
     // Transfer amount_send tokens from one account to another
     let transfer_args = TransferArg {
@@ -266,7 +267,7 @@ fn np_register(
     pic: &PocketIc,
     can: Principal,
     seed: &[u8],
-    initial_funds: Balance,
+    initial_funds: TokenAmount,
 ) -> (DccIdentity, Result<String, String>) {
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
@@ -294,7 +295,7 @@ fn user_register(
     pic: &PocketIc,
     can: Principal,
     seed: &[u8],
-    initial_funds: Balance,
+    initial_funds: TokenAmount,
 ) -> (DccIdentity, Result<String, String>) {
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
@@ -369,17 +370,26 @@ fn test_balances_and_transfers() {
     let account_a = icrc1_account_from_slice(b"A");
     let account_b = icrc1_account_from_slice(b"B");
 
-    assert_eq!(get_account_balance(&pic, c, &account_a), 0u64 as Balance);
-    assert_eq!(get_account_balance(&pic, c, &account_b), 0u64 as Balance);
+    assert_eq!(
+        get_account_balance(&pic, c, &account_a),
+        0u64 as TokenAmount
+    );
+    assert_eq!(
+        get_account_balance(&pic, c, &account_b),
+        0u64 as TokenAmount
+    );
 
     // Mint 666 tokens on account_a
-    let amount_mint = 666 as Balance * DC_TOKEN_DECIMALS_DIV;
-    let amount_send = 111 as Balance * DC_TOKEN_DECIMALS_DIV;
+    let amount_mint = 666 as TokenAmount * DC_TOKEN_DECIMALS_DIV;
+    let amount_send = 111 as TokenAmount * DC_TOKEN_DECIMALS_DIV;
     let response = mint_tokens_for_test(&pic, c, &account_a, amount_mint);
     println!("mint_tokens_for_test response: {:?}", response);
 
     assert_eq!(get_account_balance(&pic, c, &account_a), amount_mint);
-    assert_eq!(get_account_balance(&pic, c, &account_b), 0u64 as Balance);
+    assert_eq!(
+        get_account_balance(&pic, c, &account_b),
+        0u64 as TokenAmount
+    );
 
     let response = transfer_funds(&pic, c, &account_a, &account_b, amount_send);
 
@@ -428,7 +438,7 @@ fn test_np_registration_and_check_in() {
     );
     commit(&p, c);
     // np_past now has 50 * 100 = 5000 tokens
-    let amount: Balance = 5000u32 as Balance * DC_TOKEN_DECIMALS_DIV;
+    let amount: TokenAmount = 5000u32 as TokenAmount * DC_TOKEN_DECIMALS_DIV;
     assert_eq!(
         get_account_balance(&p, c, &np_past.as_icrc_compatible_account().into()),
         amount
@@ -528,7 +538,7 @@ fn test_np_registration_and_check_in() {
     reward_e9s_per_block_recalculate();
     assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
     assert_eq!(
-        identity_reputation_get(&p, c, &np2.to_bytes_verifying()) as Balance,
+        identity_reputation_get(&p, c, &np2.to_bytes_verifying()) as TokenAmount,
         account_registration_fee_e9s()
     );
 }

@@ -1,7 +1,7 @@
 use crate::{
     account_balance_get, account_transfers::FundsTransfer, amount_as_string,
     charge_fees_to_account_no_bump_reputation, fn_info, get_account_from_pubkey, info,
-    ledger_funds_transfer, platform_specific::get_timestamp_ns, Balance, DccIdentity,
+    ledger_funds_transfer, platform_specific::get_timestamp_ns, DccIdentity, TokenAmount,
     TransferError, BLOCK_INTERVAL_SECS, DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS,
     KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
     LABEL_REWARD_DISTRIBUTION, MEMO_BYTES_MAX, MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
@@ -14,7 +14,7 @@ use ic_cdk::println;
 use ledger_map::LedgerMap;
 use std::cell::RefCell;
 
-pub fn check_in_fee_e9s() -> Balance {
+pub fn check_in_fee_e9s() -> TokenAmount {
     reward_e9s_per_block() / 100
 }
 
@@ -54,7 +54,7 @@ impl CheckInPayload {
     }
 }
 
-fn calc_token_rewards_e9_since_timestamp_ns(last_reward_distribution_ts_ns: u64) -> Balance {
+fn calc_token_rewards_e9_since_timestamp_ns(last_reward_distribution_ts_ns: u64) -> TokenAmount {
     let elapsed_secs_since_reward_distribution =
         (get_timestamp_ns().saturating_sub(last_reward_distribution_ts_ns)) / 1_000_000_000;
     let reward_amount_e9 = reward_e9s_per_block();
@@ -64,12 +64,12 @@ fn calc_token_rewards_e9_since_timestamp_ns(last_reward_distribution_ts_ns: u64)
         elapsed_secs_since_reward_distribution, last_reward_distribution_ts_ns
     );
 
-    reward_amount_e9 * elapsed_secs_since_reward_distribution as Balance
-        / BLOCK_INTERVAL_SECS as Balance
+    reward_amount_e9 * elapsed_secs_since_reward_distribution as TokenAmount
+        / BLOCK_INTERVAL_SECS as TokenAmount
 }
 
 thread_local! {
-    static REWARD_E9S_PER_BLOCK: RefCell<Balance> = const { RefCell::new(0) };
+    static REWARD_E9S_PER_BLOCK: RefCell<TokenAmount> = const { RefCell::new(0) };
 }
 
 pub fn reward_e9s_per_block_recalculate() {
@@ -92,7 +92,7 @@ pub fn reward_e9s_per_block_recalculate() {
     })
 }
 
-pub fn reward_e9s_per_block() -> Balance {
+pub fn reward_e9s_per_block() -> TokenAmount {
     REWARD_E9S_PER_BLOCK.with(|reward| *reward.borrow())
 }
 
@@ -122,7 +122,7 @@ pub fn get_last_rewards_distribution_ts(ledger: &LedgerMap) -> Result<u64, Strin
     }
 }
 
-pub fn rewards_pending_e9s(ledger: &LedgerMap) -> Balance {
+pub fn rewards_pending_e9s(ledger: &LedgerMap) -> TokenAmount {
     let since_ts = match get_last_rewards_distribution_ts(ledger) {
         Ok(ts) => ts,
         Err(_) => return 0,
@@ -160,7 +160,7 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
         });
     }
 
-    let token_rewards_per_np = rewards_e9_to_distribute / (eligible_nps.len() as Balance);
+    let token_rewards_per_np = rewards_e9_to_distribute / (eligible_nps.len() as TokenAmount);
     response_text.push(format!(
         "Distributing reward of {} tokens to {} NPs = {} tokens per NP",
         amount_as_string(rewards_e9_to_distribute),
@@ -183,7 +183,7 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
     for np in eligible_nps {
         let np_acct = get_account_from_pubkey(np.key());
 
-        let balance_to_after = account_balance_get(&np_acct) + token_rewards_per_np as Balance;
+        let balance_to_after = account_balance_get(&np_acct) + token_rewards_per_np as TokenAmount;
         ledger_funds_transfer(
             ledger,
             FundsTransfer::new(
@@ -234,10 +234,10 @@ pub fn do_node_provider_check_in(
         let amount = check_in_fee_e9s();
         info!(
             "Charging {} tokens {} for the check in",
-            amount_as_string(amount as Balance),
+            amount_as_string(amount as TokenAmount),
             dcc_id.to_ic_principal()
         );
-        charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, amount as Balance)?;
+        charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, amount as TokenAmount)?;
         amount
     } else {
         0

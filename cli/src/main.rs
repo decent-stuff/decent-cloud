@@ -9,7 +9,7 @@ use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data,
-    offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get, Balance,
+    offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get, TokenAmount,
     CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor,
     DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
@@ -121,9 +121,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(transfer_to_account) = arg_matches.get_one::<String>("transfer-to") {
                 let transfer_to_account = IcrcCompatibleAccount::from(transfer_to_account);
                 let transfer_amount_e9s = match arg_matches.get_one::<String>("amount-dct") {
-                    Some(value) => value.parse::<Balance>()? * DC_TOKEN_DECIMALS_DIV,
+                    Some(value) => value.parse::<TokenAmount>()? * DC_TOKEN_DECIMALS_DIV,
                     None => match arg_matches.get_one::<String>("amount-e9s") {
-                        Some(value) => value.parse::<Balance>()?,
+                        Some(value) => value.parse::<TokenAmount>()?,
                         None => {
                             panic!("You must specify either --amount-dct or --amount-e9s")
                         }

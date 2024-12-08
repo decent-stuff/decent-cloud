@@ -16,7 +16,7 @@ use std::cell::RefCell;
 
 use crate::{
     account_balance_add, account_balance_get, account_balance_sub, get_timestamp_ns,
-    ledger_add_reputation_change, slice_to_32_bytes_array, Balance, DccIdentity, TransferError,
+    ledger_add_reputation_change, slice_to_32_bytes_array, DccIdentity, TokenAmount, TransferError,
     LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
 };
 
@@ -64,8 +64,7 @@ pub fn ledger_funds_transfer(
 
 pub fn charge_fees_to_account_and_bump_reputation(
     ledger: &mut LedgerMap,
-    dcc_identity: &DccIdentity,
-    amount_e9s: Balance,
+    amount_e9s: TokenAmount,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
@@ -90,7 +89,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
         Ok(_) => Ok(ledger_add_reputation_change(
             ledger,
             dcc_identity,
-            amount_e9s.min(i64::MAX as Balance) as i64,
+            amount_e9s.min(i64::MAX as TokenAmount) as i64,
         )?),
         Err(e) => {
             info!("Failed to charge fees: {}", e);
@@ -102,7 +101,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
 pub fn charge_fees_to_account_no_bump_reputation(
     ledger: &mut LedgerMap,
     dcc_identity: &DccIdentity,
-    amount_e9s: Balance,
+    amount_e9s: TokenAmount,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
@@ -293,13 +292,13 @@ impl std::fmt::Display for IcrcCompatibleAccount {
 pub struct FundsTransferV1 {
     pub from: IcrcCompatibleAccount,
     pub to: IcrcCompatibleAccount,
-    pub fee: Option<Balance>,
+    pub fee: Option<TokenAmount>,
     pub fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
     pub created_at_time: Option<u64>,
     pub memo: Vec<u8>,
-    pub amount: Balance,
-    pub balance_from_after: Balance,
-    pub balance_to_after: Balance,
+    pub amount: TokenAmount,
+    pub balance_from_after: TokenAmount,
+    pub balance_to_after: TokenAmount,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
@@ -313,13 +312,13 @@ impl FundsTransfer {
     pub fn new(
         from: IcrcCompatibleAccount,
         to: IcrcCompatibleAccount,
-        fee: Option<Balance>,
+        fee: Option<TokenAmount>,
         fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
         created_at_time: Option<u64>,
         memo: Vec<u8>,
-        amount: Balance,
-        balance_from_after: Balance,
-        balance_to_after: Balance,
+        amount: TokenAmount,
+        balance_from_after: TokenAmount,
+        balance_to_after: TokenAmount,
     ) -> Self {
         FundsTransfer::V1(FundsTransferV1 {
             from,
@@ -346,7 +345,7 @@ impl FundsTransfer {
         }
     }
 
-    pub fn fee(&self) -> Option<Balance> {
+    pub fn fee(&self) -> Option<TokenAmount> {
         match self {
             FundsTransfer::V1(ft) => ft.fee,
         }
@@ -370,19 +369,19 @@ impl FundsTransfer {
         }
     }
 
-    pub fn amount(&self) -> Balance {
+    pub fn amount(&self) -> TokenAmount {
         match self {
             FundsTransfer::V1(ft) => ft.amount,
         }
     }
 
-    pub fn balance_from_after(&self) -> Balance {
+    pub fn balance_from_after(&self) -> TokenAmount {
         match self {
             FundsTransfer::V1(ft) => ft.balance_from_after,
         }
     }
 
-    pub fn balance_to_after(&self) -> Balance {
+    pub fn balance_to_after(&self) -> TokenAmount {
         match self {
             FundsTransfer::V1(ft) => ft.balance_to_after,
         }

@@ -1,6 +1,6 @@
 use crate::{
     amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info, info,
-    reward_e9s_per_block, AHashMap, Balance, DccIdentity,
+    reward_e9s_per_block, AHashMap, DccIdentity, TokenAmount,
 };
 use candid::Principal;
 use function_name::named;
@@ -25,7 +25,7 @@ pub fn get_pubkey_from_principal(principal: Principal) -> Vec<u8> {
     })
 }
 
-pub fn account_registration_fee_e9s() -> Balance {
+pub fn account_registration_fee_e9s() -> TokenAmount {
     reward_e9s_per_block() / 100
 }
 
@@ -48,7 +48,12 @@ pub fn do_account_register(
             dcc_id.to_ic_principal(),
             label
         );
-        charge_fees_to_account_and_bump_reputation(ledger, &dcc_id, amount as Balance)?;
+        charge_fees_to_account_and_bump_reputation(
+            ledger,
+            &dcc_id,
+            &dcc_id,
+            amount as TokenAmount,
+        )?;
         amount
     } else {
         0
