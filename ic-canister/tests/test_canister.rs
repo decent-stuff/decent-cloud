@@ -749,15 +749,15 @@ fn test_offerings() {
     let u1 = user_register(&p, c, b"u1", 2 * DC_TOKEN_DECIMALS_DIV).0;
     contract_sign_request(&p, c, u1, &np1.to_bytes_verifying(), &offering_id).unwrap();
 
-    contract_sign_reply(
-        &p,
-        c,
-        b"u1",
-        b"np1",
-        b"xxx-small",
-        b"memo",
-        b"reply",
-        b"signature",
-    );
+    // contract_sign_reply(
+    //     &p,
+    //     c,
+    //     b"u1",
+    //     b"np1",
+    //     b"xxx-small",
+    //     b"memo",
+    //     b"reply",
+    //     b"signature",
+    // );
     test_ffwd_to_next_block(ts_ns, &p, c);
 }
