@@ -12,7 +12,7 @@ use candid::types::number::Nat;
 use candid::CandidType;
 use dcc_common::{
     account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer,
-    nat_to_balance, TokenAmount, FundsTransfer, IcrcCompatibleAccount, DC_TOKEN_LOGO,
+    nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmount, DC_TOKEN_LOGO,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;

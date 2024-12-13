@@ -1,8 +1,8 @@
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use ledger_map::LedgerError;
 
-use crate::TokenAmount;
 use crate::Icrc1Account;
+use crate::TokenAmount;
 use candid::Nat;
 
 #[derive(Debug)]
