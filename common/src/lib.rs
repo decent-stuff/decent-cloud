@@ -76,7 +76,6 @@ pub const DC_TOKEN_NAME: &str = "Decent Cloud";
 pub const DC_TOKEN_SYMBOL: &str = "DC";
 pub const DC_TOKEN_TOTAL_SUPPLY: TokenAmount = 21_000_000 * DC_TOKEN_DECIMALS_DIV;
 pub const DC_TOKEN_TRANSFER_FEE_E9S: TokenAmount = 1_000_000;
-pub const DC_TOKEN_LOGO: &str = include_str!("./token-logo.base64");
 pub const ED25519_SIGNATURE_LENGTH: usize = 64;
 pub const ED25519_SIGN_CONTEXT: &[u8] = b"decent-cloud";
 pub const FETCH_SIZE_BYTES_DEFAULT: u64 = 1024 * 1024;

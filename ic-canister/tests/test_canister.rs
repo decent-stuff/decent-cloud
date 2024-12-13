@@ -1,9 +1,9 @@
 use crate::canister_backend::icrc1::Icrc1StandardRecord;
+use crate::DC_TOKEN_LOGO;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
     account_registration_fee_e9s, reward_e9s_per_block_recalculate, ContractSignRequest,
-    DccIdentity, TokenAmount, BLOCK_INTERVAL_SECS, DC_TOKEN_LOGO, FIRST_BLOCK_TIMESTAMP_NS,
-    MINTING_ACCOUNT_ICRC1,
+    DccIdentity, TokenAmount, BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use flate2::bufread::ZlibDecoder;

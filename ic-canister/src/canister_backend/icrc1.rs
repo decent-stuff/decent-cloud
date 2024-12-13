@@ -8,11 +8,12 @@
 use ic_cdk::println;
 
 use crate::canister_backend::generic::LEDGER_MAP;
+use crate::DC_TOKEN_LOGO;
 use candid::types::number::Nat;
 use candid::CandidType;
 use dcc_common::{
     account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer,
-    nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmount, DC_TOKEN_LOGO,
+    nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmount,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;

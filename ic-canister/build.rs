@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -14,7 +15,40 @@ fn workspace_dir() -> PathBuf {
     cargo_path.parent().unwrap().to_path_buf()
 }
 
+fn prepare_token_logo_env_var() {
+    let input_path_svg = Path::new("token-logo.svg");
+
+    if input_path_svg.exists() {
+        // Read and encode the SVG file.
+        let svg_content =
+            fs_err::read_to_string(input_path_svg).expect("Failed to read the SVG file");
+        let base64_encoded = BASE64_STANDARD.encode(svg_content);
+
+        println!(
+            "cargo:rustc-env=DC_TOKEN_LOGO_BASE64=data:image/svg+xml;base64,{}",
+            base64_encoded
+        );
+        return;
+    } else {
+        let input_path_png = Path::new("token-logo.png");
+
+        if input_path_png.exists() {
+            // Read and encode the PNG file.
+            let png_content = fs_err::read(input_path_png).expect("Failed to read the PNG file");
+            let base64_encoded = BASE64_STANDARD.encode(png_content);
+            println!(
+                "cargo:rustc-env=DC_TOKEN_LOGO_BASE64=data:image/png;base64,{}",
+                base64_encoded
+            );
+            return;
+        }
+    }
+    panic!("Failed to find token-logo.svg or token-logo.png");
+}
+
 pub fn main() {
+    prepare_token_logo_env_var();
+
     // Only build the canister on x86_64 Linux
     if Ok("linux") != env::var("CARGO_CFG_TARGET_OS").as_deref() {
         return;
