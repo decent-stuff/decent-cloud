@@ -48,7 +48,7 @@ ic-certification = "2.6"
 ic-metrics-encoder = "1.1"
 ic-cdk-timers = "0.11"
 icrc-ledger-types = "0.1"
-indexmap = "2.6"
+indexmap = "2.7"
 ledger-map = { path = "../ledger-map" }
 # ledger-map = { git = "https://github.com/decent-stuff/ledger-map.git", branch = "main" }
 log = "0.4"
@@ -73,5 +73,5 @@ strum_macros = "0.26"
 tabular = "0.2"
 tempfile = "3.14"
 tiny-bip39 = "2.0"
-tokio = { version = "1.41", features = ["full"] }
+tokio = { version = "1.42", features = ["full"] }
 which = "7.0"
