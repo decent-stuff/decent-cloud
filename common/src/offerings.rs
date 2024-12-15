@@ -45,9 +45,7 @@ impl UpdateOfferingPayload {
     pub fn offering(&self) -> Result<Offering, String> {
         match self {
             UpdateOfferingPayload::V1(payload) => {
-                Offering::try_from_slice(&payload.offering_payload)
-                    .map(|v| v.compute_json_value())
-                    .map_err(|e| e.to_string())
+                Offering::new_from_bytes(&payload.offering_payload, "json")
             }
         }
     }

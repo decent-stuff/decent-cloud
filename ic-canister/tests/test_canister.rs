@@ -596,7 +596,7 @@ fn offering_add(
     dcc_id: &DccIdentity,
     offering: &Offering,
 ) -> Result<String, String> {
-    let payload_bytes = borsh::to_vec(&offering).unwrap();
+    let payload_bytes = offering.serialize().unwrap();
     let payload_signature_bytes = dcc_id.sign(&payload_bytes).unwrap().to_bytes();
     update_check_and_decode!(
         pic,

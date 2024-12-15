@@ -279,15 +279,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else if arg_matches.contains_id("update-offering") {
                 let values = arg_matches.get_many::<String>("update-offering").unwrap();
-                let (np_desc, offering_file) = match values.collect::<Vec<_>>()[..] {
-                    [np_desc, offering_file] => (np_desc, offering_file),
+                let (np_desc, offering_file_path) = match values.collect::<Vec<_>>()[..] {
+                    [np_desc, offering_file_path] => (np_desc, offering_file_path),
                     _ => panic!("Usage: <np-desc> <offering-file>"),
                 };
                 let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
                 let ic_auth = dcc_to_ic_auth(&dcc_id);
 
-                let np_offering = np_offering::Offering::new_from_file(offering_file)?;
-                let np_offering_bytes = borsh::to_vec(&np_offering)?;
+                // Offering::new_from_file returns an error if the schema validation fails
+                let np_offering = np_offering::Offering::new_from_file(offering_file_path)?;
+                let np_offering_bytes = np_offering.serialize()?;
                 let crypto_signature = dcc_id.sign(&np_offering_bytes)?;
 
                 let result = ledger_canister(ic_auth)
