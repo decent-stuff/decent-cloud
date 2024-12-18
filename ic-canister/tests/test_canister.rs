@@ -613,6 +613,8 @@ fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
     can: Principal,
     search_query: &T,
 ) -> Vec<(DccIdentity, Offering)> {
+    // The canister endpoint will compress the matches and return them
+    // so we have to decompress them here
     query_check_and_decode!(
         pic,
         can,

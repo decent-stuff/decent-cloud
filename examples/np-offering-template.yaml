@@ -43,6 +43,11 @@ defaults:
       window: "Sunday 00:00 - 04:00 UTC"
       notification_period: "7 days"
 
+  terms_of_service:
+    - Minimum contract period: none
+    - Cancellation period: 30 days
+    - Activation period: Up to 24h
+
   machine_spec:
     instance_types:
       - id: gp-small

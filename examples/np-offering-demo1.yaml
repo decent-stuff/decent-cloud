@@ -31,6 +31,10 @@ defaults:
           optimized_for: general
           availability: medium
 
+  terms_of_service:
+    - Minimum contract period: none
+    - Cancellation period: 1 day
+
   network_spec:
     vpc_support: true
     public_ip: true
