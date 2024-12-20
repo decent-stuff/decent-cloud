@@ -58,6 +58,10 @@ pub fn main() {
         return;
     }
 
+    if matches!(env::var("PROFILE").as_deref(), Ok("release")) {
+        return;
+    }
+
     let workspace_dir_path = workspace_dir();
     let canister_dir_path = workspace_dir_path.join("ic-canister");
     println!("Building canister... {}", canister_dir_path.display());
