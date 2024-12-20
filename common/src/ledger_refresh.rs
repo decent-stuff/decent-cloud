@@ -80,7 +80,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                 }
                 LABEL_CONTRACT_SIGN_REQUEST => {
                     let contract_id = entry.key();
-                    let payload = match ContractSignRequestPayload::try_from_slice(&entry.value()) {
+                    let payload = match ContractSignRequestPayload::try_from_slice(entry.value()) {
                         Ok(payload) => payload,
                         Err(e) => {
                             warn!("Failed to deserialize contract sign request payload: {}", e);

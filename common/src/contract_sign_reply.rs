@@ -145,7 +145,7 @@ pub fn do_contract_sign_reply(
 
     ledger.upsert(
         LABEL_CONTRACT_SIGN_REPLY,
-        &contract_id,
+        contract_id,
         payload_serialized,
     )
     .map(|_| {

@@ -264,7 +264,7 @@ pub fn do_contracts_list_pending(
         Some(pubkey_bytes) => {
             fn_info!(
                 "{}",
-                DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap()
+                DccIdentity::new_verifying_from_bytes(pubkey_bytes).unwrap()
             );
         }
     }
