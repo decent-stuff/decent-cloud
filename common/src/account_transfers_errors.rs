@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+#[allow(unused_imports)]
+use ic_cdk::println;
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use ledger_map::LedgerError;
 

@@ -1,8 +1,10 @@
 use crate::canister_backend::icrc1::Icrc1StandardRecord;
 use crate::DC_TOKEN_LOGO;
+use borsh::BorshDeserialize;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
-    account_registration_fee_e9s, reward_e9s_per_block_recalculate, ContractSignRequest,
+    account_registration_fee_e9s, reward_e9s_per_block_recalculate, ContractId,
+    ContractReqSerialized, ContractSignReply, ContractSignRequest, ContractSignRequestPayload,
     DccIdentity, TokenAmount, BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
@@ -638,10 +640,11 @@ fn offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
 
 fn contract_sign_request(
     pic: &PocketIc,
-    can: Principal,
-    requester_dcc_id: DccIdentity,
+    can: &Principal,
+    requester_dcc_id: &DccIdentity,
     provider_pubkey_bytes: &[u8],
-    offering_id: &str,
+    offering_id: String,
+    memo: String,
 ) -> Result<String, String> {
     let requester_pubkey_bytes = requester_dcc_id.to_bytes_verifying();
     let req = ContractSignRequest::new(
@@ -649,20 +652,20 @@ fn contract_sign_request(
         "invalid test ssh key".to_string(),
         "invalid test contact info".to_string(),
         provider_pubkey_bytes,
-        offering_id.to_string(),
+        offering_id,
         None,
         None,
         None,
         100,
         3600,
         None,
-        "memo".to_string(),
+        memo,
     );
     let payload_bytes = borsh::to_vec(&req).unwrap();
     let payload_sig_bytes = requester_dcc_id.sign(&payload_bytes).unwrap().to_bytes();
     update_check_and_decode!(
         pic,
-        can,
+        *can,
         requester_dcc_id.to_ic_principal(),
         "contract_sign_request",
         Encode!(&requester_pubkey_bytes, &payload_bytes, &payload_sig_bytes).unwrap(),
@@ -670,28 +673,36 @@ fn contract_sign_request(
     )
 }
 
-// FIXME: add tests for contract_sign_request_list
-// fn contract_sign_request_list_open(
-//     pic: &PocketIc,
-//     can: Principal,
-//     provider_dcc_id: &DccIdentity,
-// ) -> Vec<ContractSignRequest> {
+fn contracts_list_pending(
+    pic: &PocketIc,
+    can: Principal,
+    pubkey_bytes: Option<Vec<u8>>,
+) -> Vec<(ContractId, ContractReqSerialized)> {
+    query_check_and_decode!(
+        pic,
+        can,
+        "contracts_list_pending",
+        Encode!(&pubkey_bytes).unwrap(),
+        Vec<(ContractId, ContractReqSerialized)>
+    )
+}
 
-// }
-
-// fn contract_sign_reply(
-//     pic: &PocketIc,
-//     can: Principal,
-//     requester_dcc_id: DccIdentity,
-//     reply: &ContractSignReply,
-// ) -> Result<String, String> {
-//     let payload_bytes = borsh::to_vec(&reply).unwrap();
-//     let payload_sig_bytes = requester_dcc_id.sign(&payload_bytes).unwrap().to_bytes();
-//     update_check_and_decode!(
-//         pic,
-//         can,
-//         requester_dcc_id.to_ic_principal(),
-//         "contract_sign_reply",
+fn contract_sign_reply(
+    pic: &PocketIc,
+    can: Principal,
+    replier_dcc_id: &DccIdentity,
+    requester_dcc_id: &DccIdentity,
+    reply: &ContractSignReply,
+) -> Result<String, String> {
+    let payload_bytes = borsh::to_vec(reply).unwrap();
+    let payload_sig_bytes = replier_dcc_id.sign(&payload_bytes).unwrap().to_bytes();
+    update_check_and_decode!(pic, can, requester_dcc_id.to_ic_principal(), "contract_sign_reply", Encode!(
+        &replier_dcc_id.to_bytes_verifying(),
+        &payload_bytes,
+        &payload_sig_bytes
+    )
+    .unwrap(), Result<String, String>)
+}
 
 #[test]
 fn test_offerings() {
@@ -749,17 +760,47 @@ fn test_offerings() {
     assert_eq!(offering_id, "xxx-small");
 
     let u1 = user_register(&p, c, b"u1", 2 * DC_TOKEN_DECIMALS_DIV).0;
-    contract_sign_request(&p, c, u1, &np1.to_bytes_verifying(), &offering_id).unwrap();
+    contract_sign_request(
+        &p,
+        &c,
+        &u1,
+        &np1.to_bytes_verifying(),
+        offering_id,
+        "test_memo".to_string(),
+    )
+    .unwrap();
 
-    // contract_sign_reply(
-    //     &p,
-    //     c,
-    //     b"u1",
-    //     b"np1",
-    //     b"xxx-small",
-    //     b"memo",
-    //     b"reply",
-    //     b"signature",
-    // );
+    let pending_contracts = contracts_list_pending(&p, c, None);
+    assert_eq!(pending_contracts.len(), 1);
+
+    let pending_contracts = contracts_list_pending(&p, c, Some(np1.to_bytes_verifying()));
+    assert_eq!(pending_contracts.len(), 1);
+
+    let (contract_id, contract_req_bytes) = pending_contracts[0].clone();
+
+    // Verify that the returned contract ID can be correctly recalculated
+    let contract_req = ContractSignRequestPayload::try_from_slice(&contract_req_bytes).unwrap();
+    assert_eq!(contract_id, contract_req.calc_contract_id());
+
+    let reply = ContractSignReply::new(
+        np1.to_bytes_verifying(),
+        "test_memo_wrong",
+        contract_id,
+        true,
+        "Thank you for signing up",
+        "Here are some details",
+    );
+    let res = contract_sign_reply(&p, c, &np1, &u1, &reply).unwrap();
+    assert_eq!(res, "Contract signing reply submitted! Thank you. You have been charged 0.1 tokens as a fee, and your reputation has been bumped accordingly");
+
+    let pending_contracts = contracts_list_pending(&p, c, None);
+    assert_eq!(pending_contracts.len(), 0);
+    let pending_contracts = contracts_list_pending(&p, c, Some(np1.to_bytes_verifying()));
+    assert_eq!(pending_contracts.len(), 0);
     test_ffwd_to_next_block(ts_ns, &p, c);
+
+    let pending_contracts = contracts_list_pending(&p, c, None);
+    assert_eq!(pending_contracts.len(), 0);
+    let pending_contracts = contracts_list_pending(&p, c, Some(np1.to_bytes_verifying()));
+    assert_eq!(pending_contracts.len(), 0);
 }

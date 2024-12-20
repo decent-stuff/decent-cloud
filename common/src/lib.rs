@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+#[allow(unused_imports)]
+use ic_cdk::println;
 pub mod account_transfers;
 pub mod account_transfers_errors;
 pub mod cache_balances;

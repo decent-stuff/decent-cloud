@@ -1,6 +1,6 @@
 use crate::canister_backend::generic::*;
 use candid::Principal;
-use dcc_common::TokenAmount;
+use dcc_common::{ContractId, ContractReqSerialized, TokenAmount};
 #[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -77,6 +77,13 @@ fn contract_sign_request(
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
     _contract_sign_request(pubkey_bytes, request_serialized, crypto_signature)
+}
+
+#[ic_cdk::query]
+fn contracts_list_pending(
+    pubkey_bytes: Option<Vec<u8>>,
+) -> Vec<(ContractId, ContractReqSerialized)> {
+    _contracts_list_pending(pubkey_bytes)
 }
 
 #[ic_cdk::update]

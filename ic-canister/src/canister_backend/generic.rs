@@ -6,11 +6,11 @@ use dcc_common::{
     account_balance_get, account_registration_fee_e9s, cursor_from_data, get_account_from_pubkey,
     get_pubkey_from_principal, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_applied_np_count, rewards_distribute,
-    rewards_pending_e9s, set_test_config, FundsTransfer, LedgerCursor, TokenAmount,
-    BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN,
-    LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
-    LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
-    MAX_RESPONSE_BYTES_NON_REPLICATED,
+    rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, FundsTransfer,
+    LedgerCursor, TokenAmount, BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED,
+    DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER,
+    LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER,
+    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
 use flate2::{write::ZlibEncoder, Compression};
 use ic_cdk::println;
@@ -279,6 +279,14 @@ pub(crate) fn _contract_sign_request(
             request_serialized,
             crypto_signature,
         )
+    })
+}
+
+pub(crate) fn _contracts_list_pending(
+    pubkey_bytes: Option<Vec<u8>>,
+) -> Vec<(ContractId, ContractReqSerialized)> {
+    LEDGER_MAP.with(|ledger| {
+        dcc_common::do_contracts_list_pending(&mut ledger.borrow_mut(), pubkey_bytes)
     })
 }
 

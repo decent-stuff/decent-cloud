@@ -1,5 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::println;
 use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
 

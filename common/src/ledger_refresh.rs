@@ -1,17 +1,19 @@
 use crate::account_transfers::FundsTransfer;
 use crate::cache_transactions::RecentCache;
 use crate::{
-    account_balance_add, account_balance_sub, account_balances_clear, dcc_identity, error,
-    reputations_apply_aging, reputations_apply_changes, reputations_clear, AHashMap, ReputationAge,
-    ReputationChange, CACHE_TXS_NUM_COMMITTED, LABEL_DC_TOKEN_TRANSFER, LABEL_NP_REGISTER,
-    LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, PRINCIPAL_MAP,
+    account_balance_add, account_balance_sub, account_balances_clear, contracts_cache_open_add,
+    contracts_cache_open_remove, dcc_identity, error, reputations_apply_aging,
+    reputations_apply_changes, reputations_clear, AHashMap, ContractSignRequest,
+    ContractSignRequestPayload, ReputationAge, ReputationChange, CACHE_TXS_NUM_COMMITTED,
+    LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER,
+    LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, PRINCIPAL_MAP,
 };
 use borsh::BorshDeserialize;
 use candid::Principal;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
-use ledger_map::{info, LedgerMap};
+use ledger_map::{info, warn, LedgerMap};
 use std::collections::HashMap;
 
 pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
@@ -75,6 +77,30 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                     {
                         principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
                     }
+                }
+                LABEL_CONTRACT_SIGN_REQUEST => {
+                    let contract_id = entry.key();
+                    let payload = match ContractSignRequestPayload::try_from_slice(&entry.value()) {
+                        Ok(payload) => payload,
+                        Err(e) => {
+                            warn!("Failed to deserialize contract sign request payload: {}", e);
+                            continue;
+                        }
+                    };
+
+                    let contract_req =
+                        match ContractSignRequest::try_from_slice(payload.payload_serialized()) {
+                            Ok(contract_req) => contract_req,
+                            Err(e) => {
+                                warn!("Failed to deserialize contract sign request: {}", e);
+                                continue;
+                            }
+                        };
+                    contracts_cache_open_add(contract_id.to_vec(), contract_req);
+                }
+                LABEL_CONTRACT_SIGN_REPLY => {
+                    let contract_id = entry.key();
+                    contracts_cache_open_remove(contract_id);
                 }
                 _ => {}
             }

@@ -1,5 +1,8 @@
 use crate::LABEL_DC_TOKEN_TRANSFER;
 use borsh::BorshDeserialize;
+#[cfg(target_arch = "wasm32")]
+#[allow(unused_imports)]
+use ic_cdk::println;
 use icrc_ledger_types::icrc3::transactions::Transaction;
 use ledger_map::LedgerBlock;
 use std::cell::RefCell;

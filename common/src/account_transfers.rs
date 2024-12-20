@@ -4,7 +4,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use candid::{CandidType, Deserialize, Principal};
 use data_encoding::BASE32;
 #[cfg(target_arch = "wasm32")]
-#[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::{
     icrc1::account::Account as Icrc1Account,

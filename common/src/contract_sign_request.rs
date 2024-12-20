@@ -1,28 +1,69 @@
-use std::io::Error;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::println;
+use std::{cell::RefCell, collections::HashMap, io::Error};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
-use ledger_map::LedgerMap;
+use ledger_map::{warn, LedgerMap};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info, DccIdentity,
+    amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info, AHashMap, DccIdentity,
     TokenAmount, LABEL_CONTRACT_SIGN_REQUEST,
 };
+
+pub type ContractId = Vec<u8>;
+pub type ContractReqSerialized = Vec<u8>;
+
+thread_local! {
+    /// Key is a 32-byte contract id
+    /// Value is a ContractSignRequest
+    static CONTRACTS_CACHE_OPEN: RefCell<AHashMap<Vec<u8>, ContractSignRequest>> = RefCell::new(HashMap::default());
+}
+
+pub fn contracts_cache_get_open_for_provider(
+    filter_provider_pubkey_bytes: Option<Vec<u8>>,
+) -> Vec<(Vec<u8>, ContractSignRequest)> {
+    CONTRACTS_CACHE_OPEN.with(|contracts| {
+        contracts
+            .borrow()
+            .iter()
+            .filter(move |(_, req)| match &filter_provider_pubkey_bytes {
+                None => true, // No filter ==> include all entries
+                Some(filter_provider_pubkey_bytes) => {
+                    req.provider_pubkey_bytes() == filter_provider_pubkey_bytes
+                }
+            })
+            .map(|(key, req)| (key.clone(), req.clone()))
+            .collect()
+    })
+}
+
+pub fn contracts_cache_open_add(contract_id: Vec<u8>, req: ContractSignRequest) {
+    CONTRACTS_CACHE_OPEN.with(|contracts| {
+        contracts.borrow_mut().insert(contract_id, req);
+    })
+}
+
+pub fn contracts_cache_open_remove(contract_id: &[u8]) {
+    CONTRACTS_CACHE_OPEN.with(|contracts| {
+        contracts.borrow_mut().remove(contract_id);
+    })
+}
 
 pub fn contract_sign_fee_e9s(contract_value: TokenAmount) -> TokenAmount {
     contract_value / 100
 }
 
 // Main struct for Offering Request
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum ContractSignRequest {
     V1(ContractSignRequestV1),
 }
 
 // Struct for requesting a contract signature, version 1. Future versions can be added below
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ContractSignRequestV1 {
     requester_pubkey_bytes: Vec<u8>, // Who is making this request?
     requester_ssh_pubkey: String, // The ssh key that will be given access to the instance, preferably in ed25519 key format https://en.wikipedia.org/wiki/Ssh-keygen
@@ -202,10 +243,47 @@ pub fn do_contract_sign_request(
         contract_id,
         payload_bytes,
     ).map(|_| {
+        contracts_cache_open_add(contract_id.to_vec(), contract_req.clone());
         format!(
             "Contract signing req 0x{} submitted! Thank you. You have been charged {} tokens as a fee, and your reputation has been bumped accordingly. Please wait for a response.",
             hex::encode(contract_id),
             amount_as_string(fees)
         )
     }).map_err(|e| e.to_string())
+}
+
+#[named]
+pub fn do_contracts_list_pending(
+    ledger: &mut LedgerMap,
+    pubkey_bytes: Option<Vec<u8>>,
+) -> Vec<(ContractId, ContractReqSerialized)> {
+    match &pubkey_bytes {
+        None => {
+            fn_info!("without a pubkey filter");
+        }
+        Some(pubkey_bytes) => {
+            fn_info!(
+                "{}",
+                DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap()
+            );
+        }
+    }
+
+    contracts_cache_get_open_for_provider(pubkey_bytes)
+        .into_iter()
+        .filter_map(|(key, _)| {
+            ledger
+                .get(LABEL_CONTRACT_SIGN_REQUEST, &key)
+                .map(|req_bytes| (key.to_vec(), req_bytes.to_vec()))
+                .map_err(|e| {
+                    warn!(
+                        "Contract signing req 0x{} not found in ledger: {}",
+                        hex::encode(key),
+                        e
+                    );
+                    e
+                })
+                .ok()
+        })
+        .collect()
 }

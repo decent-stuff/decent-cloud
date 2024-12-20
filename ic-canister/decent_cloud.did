@@ -367,6 +367,7 @@ service : {
 
     // Contract signing and replying
     contract_sign_request: (pubkey_bytes: vec nat8, contract_info_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+    contracts_list_pending: (pubkey_bytes: opt vec nat8) -> (vec record { vec nat8; vec nat8 }) query;
     contract_sign_reply: (pubkey_bytes: vec nat8, contract_reply_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
     // FIXME
     // contract_extend

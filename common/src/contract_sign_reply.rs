@@ -1,12 +1,14 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::println;
 use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    amount_as_string, charge_fees_to_account_and_bump_reputation, contract_sign_fee_e9s, fn_info,
-    ContractSignRequestPayload, DccIdentity, LABEL_CONTRACT_SIGN_REPLY,
-    LABEL_CONTRACT_SIGN_REQUEST,
+    amount_as_string, charge_fees_to_account_and_bump_reputation, contract_sign_fee_e9s,
+    contracts_cache_open_remove, fn_info, ContractSignRequestPayload, DccIdentity,
+    LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
 };
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
@@ -26,6 +28,24 @@ pub enum ContractSignReply {
 }
 
 impl ContractSignReply {
+    pub fn new<S: ToString>(
+        requester_pubkey_bytes: Vec<u8>,
+        request_memo: S,
+        contract_id: Vec<u8>,
+        sign_accepted: bool,
+        response_text: S,
+        response_details: S,
+    ) -> Self {
+        ContractSignReply::V1(ContractSignReplyV1 {
+            requester_pubkey_bytes,
+            request_memo: request_memo.to_string(),
+            contract_id,
+            sign_accepted,
+            response_text: response_text.to_string(),
+            response_details: response_details.to_string(),
+        })
+    }
+
     pub fn contract_id(&self) -> &[u8] {
         match self {
             ContractSignReply::V1(payload) => payload.contract_id.as_slice(),
@@ -60,7 +80,7 @@ impl ContractSignReply {
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ContractSignReplyPayloadV1 {
-    payload_bytes: Vec<u8>,
+    payload_serialized: Vec<u8>,
     crypto_signature: Vec<u8>,
 }
 
@@ -70,11 +90,23 @@ pub enum ContractSignReplyPayload {
 }
 
 impl ContractSignReplyPayload {
-    pub fn new(payload_bytes: Vec<u8>, crypto_signature: Vec<u8>) -> ContractSignReplyPayload {
+    pub fn new(payload_serialized: Vec<u8>, crypto_signature: Vec<u8>) -> ContractSignReplyPayload {
         ContractSignReplyPayload::V1(ContractSignReplyPayloadV1 {
-            payload_bytes,
+            payload_serialized,
             crypto_signature,
         })
+    }
+
+    pub fn payload_serialized(&self) -> &[u8] {
+        match self {
+            ContractSignReplyPayload::V1(payload) => payload.payload_serialized.as_slice(),
+        }
+    }
+
+    pub fn crypto_signature(&self) -> &[u8] {
+        match self {
+            ContractSignReplyPayload::V1(payload) => payload.crypto_signature.as_slice(),
+        }
     }
 }
 
@@ -91,8 +123,9 @@ pub fn do_contract_sign_reply(
     fn_info!("{}", dcc_id);
 
     let cs_reply = ContractSignReply::try_from_slice(&reply_serialized).unwrap();
+    let contract_id = cs_reply.contract_id();
     let cs_req = ledger
-        .get(LABEL_CONTRACT_SIGN_REQUEST, cs_reply.contract_id())
+        .get(LABEL_CONTRACT_SIGN_REQUEST, contract_id)
         .unwrap();
     let cs_req = ContractSignRequestPayload::try_from_slice(&cs_req).unwrap();
     let cs_req = cs_req
@@ -101,21 +134,22 @@ pub fn do_contract_sign_reply(
     if pubkey_bytes != cs_req.provider_pubkey_bytes() {
         return Err(format!(
             "Contract signing reply signed and submitted by {} does not match the provider public key {} from contract req 0x{}",
-            dcc_id, DccIdentity::new_verifying_from_bytes(cs_req.provider_pubkey_bytes()).unwrap(), hex::encode(cs_reply.contract_id())
+            dcc_id, DccIdentity::new_verifying_from_bytes(cs_req.provider_pubkey_bytes()).unwrap(), hex::encode(contract_id)
         ));
     }
     let payload = ContractSignReplyPayload::new(reply_serialized, crypto_signature);
-    let payload_bytes = borsh::to_vec(&payload).unwrap();
+    let payload_serialized = borsh::to_vec(&payload).unwrap();
 
     let fees = contract_sign_fee_e9s(cs_req.payment_amount());
     charge_fees_to_account_and_bump_reputation(ledger, &dcc_id, &dcc_id, fees)?;
 
     ledger.upsert(
         LABEL_CONTRACT_SIGN_REPLY,
-        &pubkey_bytes,
-        payload_bytes,
+        &contract_id,
+        payload_serialized,
     )
     .map(|_| {
+        contracts_cache_open_remove(contract_id);
         format!(
             "Contract signing reply submitted! Thank you. You have been charged {} tokens as a fee, and your reputation has been bumped accordingly",
             amount_as_string(fees)
