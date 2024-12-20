@@ -3,6 +3,8 @@ RUST_BACKTRACE = "1"
 
 [config]
 default_to_workspace = false
+init_task = "dfx-start"
+end_task = "dfx-stop"
 on_error_task = "dfx-stop"
 unstable_features = ["CTRL_C_HANDLING"]
 
@@ -56,9 +58,9 @@ dependencies = ["dfx-start", "build", "canister"]
 [tasks.dfx-stop]
 script = '''
 #!/usr/bin/env bash
-set -eEuo pipefail
+set -eExuo pipefail
 
-( cd ic-canister && for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done; )
+( cd ./ic-canister && for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done; )
 '''
 
 [tasks.all]
