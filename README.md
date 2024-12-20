@@ -1,13 +1,5 @@
 # Install dependencies
 
-We use `pixi` as a dependency manager for Python, and `cargo` for Rust.
-
-Install `pixi` by following https://pixi.sh/latest/ -- it should be something along the lines of:
-
-```bash
-curl -fsSL https://pixi.sh/install.sh | bash
-```
-
 Install `cargo` by following https://rustup.rs/ -- it should be something along the lines of:
 
 ```bash
@@ -19,6 +11,16 @@ To run end-to-end tests, we use [cargo-make](https://github.com/sagiegurari/carg
 ```bash
 cargo install --force cargo-make
 ```
+
+Python is only used to build the whitepaper. We use `pixi` as a dependency manager for Python.
+
+Install `pixi` by following https://pixi.sh/latest/ -- the installation should be something along the lines of:
+
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash
+```
+
+After that you can install all project dependencies with a simple `pixi install` in the project root.
 
 # Usage
 
