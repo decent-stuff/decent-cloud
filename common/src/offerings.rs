@@ -38,16 +38,18 @@ impl UpdateOfferingPayload {
         }))
     }
 
+    pub fn payload_serialized(&self) -> &[u8] {
+        match self {
+            UpdateOfferingPayload::V1(payload) => payload.offering_payload.as_slice(),
+        }
+    }
+
     pub fn deserialize_unchecked(data: &[u8]) -> Result<UpdateOfferingPayload, String> {
         UpdateOfferingPayload::try_from_slice(data).map_err(|e| e.to_string())
     }
 
     pub fn offering(&self) -> Result<Offering, String> {
-        match self {
-            UpdateOfferingPayload::V1(payload) => {
-                Offering::new_from_bytes(&payload.offering_payload, "json")
-            }
-        }
+        Offering::new_from_bytes(self.payload_serialized(), "json")
     }
 }
 
