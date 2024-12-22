@@ -53,7 +53,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let network = args
         .get_one::<String>("network")
-        .expect("missing required argument '--network'");
+        .cloned()
+        .unwrap_or("ic".to_string());
     let canister_id = match network.as_str() {
         "local" => IcPrincipal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai")?,
         "mainnet-eu" => IcPrincipal::from_text("tlvs5-oqaaa-aaaas-aaabq-cai")?,
