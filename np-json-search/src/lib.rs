@@ -20,21 +20,22 @@ impl FromStr for Search {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
 
-        // Handle parentheses for grouping (optional enhancement)
+        // Handle parentheses for grouping (not completed/tested)
         let s = if s.starts_with('(') && s.ends_with(')') {
             &s[1..s.len() - 1]
         } else {
             s
         };
+        let s_lower = s.to_lowercase();
 
         // Parse 'and' and 'or' operators with basic precedence
-        if let Some(index) = s.find(" and ") {
+        if let Some(index) = s_lower.find(" and ") {
             let (left, right) = s.split_at(index);
             let right = &right[5..]; // Skip ' and '
             let left = Search::from_str(left)?;
             let right = Search::from_str(right)?;
             Ok(Search::And(Box::new(left), Box::new(right)))
-        } else if let Some(index) = s.find(" or ") {
+        } else if let Some(index) = s_lower.find(" or ") {
             let (left, right) = s.split_at(index);
             let right = &right[4..]; // Skip ' or '
             let left = Search::from_str(left)?;
@@ -45,7 +46,7 @@ impl FromStr for Search {
                 r"^\s*([\w\.\-_+]+)\s*(==|!=|like|ilike|~|notlike|>=|<=|>|<|=|regex|re|matches|contains|startswith|endswith)\s*(.*)$",
             )
             .unwrap();
-            if let Some(captures) = re.captures(s) {
+            if let Some(captures) = re.captures(&s_lower) {
                 let key = captures[1].trim().to_string();
                 let op = CompareOp::from_str(captures[2].trim())?;
                 let value_str = captures[3]
@@ -593,6 +594,10 @@ mod tests {
         let search = Search::from_str("name = deep_value").unwrap();
         assert!(search.matches(&json_value));
         let search = Search::from_str("name = deep_value and otherkey = other_value").unwrap();
+        assert!(search.matches(&json_value));
+        let search = Search::from_str("name = deep_value AND otherkey = other_value").unwrap();
+        assert!(search.matches(&json_value));
+        let search = Search::from_str("name = deep_value Or otherkey = other_value").unwrap();
         assert!(search.matches(&json_value));
     }
 

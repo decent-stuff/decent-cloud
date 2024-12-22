@@ -539,6 +539,22 @@ regions:
             .is_empty());
         assert!(!offering.matches_search("type=memory-optimized").is_empty());
         assert!(offering.matches_search("nonexistent=value").is_empty());
+        println!(
+            "{:#?}",
+            offering.matches_search("memory > 1gb and storage.size > 1gb")
+        );
+        assert_eq!(
+            offering
+                .matches_search("memory > 1gb and storage.size > 1gb")
+                .len(),
+            2
+        );
+        assert_eq!(
+            offering
+                .matches_search("memory > 512MB AND storage.size > 1gb")
+                .len(),
+            2
+        );
     }
 
     #[test]
