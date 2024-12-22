@@ -11,8 +11,14 @@ pub fn parse_args() -> clap::ArgMatches {
             Arg::new("network")
                 .long("network")
                 .action(ArgAction::Set)
-                .default_value("local")
-                .help("Which IC network to use, e.g., local, ic"),
+                .help("Which IC network to use, e.g., ic, local"),
+        )
+        .arg(
+            Arg::new("identity")
+                .long("identity")
+                .global(true)
+                .help("Identity name for the account")
+                .action(ArgAction::Set),
         )
         .arg(
             Arg::new("local-ledger-dir")
@@ -39,26 +45,12 @@ pub fn parse_args() -> clap::ArgMatches {
                         .conflicts_with("mnemonic")
                         .help("Generate a random new mnemonic")
                         .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("identity")
-                        .long("identity")
-                        .required(true)
-                        .help("Identity for the new key pair")
-                        .action(ArgAction::Set),
                 ),
         )
         .subcommand(
             Command::new("account")
                 .arg_required_else_help(true)
                 .about("Account management commands.")
-                .arg(
-                    Arg::new("identity")
-                        .long("identity")
-                        .required(true)
-                        .help("Identity for the account")
-                        .action(ArgAction::Set),
-                )
                 .arg(
                     Arg::new("balance")
                         .long("balance")
@@ -107,18 +99,14 @@ pub fn parse_args() -> clap::ArgMatches {
                 .arg(
                     Arg::new("register")
                         .long("register")
-                        .help("Register node provider at the Decent Cloud Ledger")
-                        .action(ArgAction::Set)
-                        .value_name("identity-name")
-                        .num_args(1),
+                        .help("Register a node provider in the Decent Cloud Ledger, making it part of the network")
+                        .action(ArgAction::SetTrue),
                 )
                 .arg(
                     Arg::new("check-in")
                         .long("check-in")
-                        .help("Check-in Node Provider at the Decent Cloud Ledger, marking that a NP is available")
-                        .action(ArgAction::Set)
-                        .value_name("identity-name")
-                        .num_args(1),
+                        .help("Check-in Node Provider at the Decent Cloud Ledger, marking that a NP is available and accepting new requests")
+                        .action(ArgAction::SetTrue),
                 )
                 .arg(
                     Arg::new("check-in-memo")
@@ -137,16 +125,16 @@ pub fn parse_args() -> clap::ArgMatches {
                         .long("update-profile")
                         .help("Update Node Provider profile, from the provided profile description file")
                         .action(ArgAction::Set)
-                        .value_names(["identity-name", "file-path"])
-                        .num_args(2),
+                        .value_name("file-path")
+                        .num_args(1),
                 )
                 .arg(
                     Arg::new("update-offering")
                         .long("update-offering")
                         .help("Update Node Provider offering, from the provided offering description file")
                         .action(ArgAction::Set)
-                        .num_args(2)
-                        .value_names(["identity-name", "file-path"])
+                        .num_args(1)
+                        .value_name("file-path")
                         .conflicts_with("update-profile"),
                 ),
         )
@@ -170,9 +158,7 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("register")
                         .long("register")
                         .help("Register user at the Decent Cloud Ledger")
-                        .action(ArgAction::Set)
-                        .value_name("identity-name")
-                        .num_args(1),
+                        .action(ArgAction::SetTrue),
                 ),
         )
         .subcommand(
@@ -194,13 +180,6 @@ pub fn parse_args() -> clap::ArgMatches {
             Command::new("ledger_remote")
                 // .arg_required_else_help(true)
                 .about("Work with the remote Decent Cloud Ledger.")
-                .arg(
-                    Arg::new("identity")
-                        .long("identity")
-                        .help("Identity for the remote ledger")
-                        .action(ArgAction::Set)
-                        .num_args(1),
-                )
                 .arg(
                     Arg::new("data-fetch")
                         .long("data-fetch")

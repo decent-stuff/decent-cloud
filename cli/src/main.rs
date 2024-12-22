@@ -70,12 +70,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ledger_canister = |identity| async {
         LedgerCanister::new(canister_id, identity, network_url.to_string()).await
     };
+    let identity_name = args.get_one::<String>("identity").cloned();
 
     Ok(match args.subcommand() {
         Some(("keygen", arg_matches)) => {
-            let identity = arg_matches
-                .get_one::<String>("identity")
-                .expect("is present");
+            let identity = identity_name.expect("is present");
 
             let mnemonic = if arg_matches.contains_id("mnemonic") {
                 let mnemonic_string = arg_matches
@@ -101,13 +100,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let seed = Seed::new(&mnemonic, "");
             let dcc_identity = DccIdentity::new_from_seed(seed.as_bytes())?;
             info!("Generated identity: {}", dcc_identity);
-            dcc_identity.save_to_dir(identity)
+            dcc_identity.save_to_dir(&identity)
         }
         Some(("account", arg_matches)) => {
             let identities_dir = DccIdentity::identities_dir();
-            let identity = arg_matches
-                .get_one::<String>("identity")
-                .expect("is present");
+            let identity = identity_name.expect("is present");
             let dcc_identity = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
             let account = dcc_identity.as_icrc_compatible_account();
 
@@ -170,125 +167,110 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if arg_matches.get_flag("list") || arg_matches.get_flag("balances") {
                 list_identities(arg_matches.get_flag("balances"))?;
             } else if arg_matches.contains_id("register") {
-                if let Some(np_desc) = arg_matches.get_one::<String>("register") {
-                    let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                    let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                let identity = identity_name.expect("You must specify an identity");
+                let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+                let ic_auth = dcc_to_ic_auth(&dcc_ident);
 
-                    info!("Registering principal: {} as {}", np_desc, dcc_ident);
-                    let pubkey_bytes = dcc_ident.to_bytes_verifying();
-                    let pubkey_signature = dcc_ident.sign(pubkey_bytes.as_ref())?;
-                    let result = ledger_canister(ic_auth)
-                        .await?
-                        .node_provider_register(
-                            &pubkey_bytes,
-                            pubkey_signature.to_bytes().as_slice(),
-                        )
-                        .await?;
-                    println!("Register: {}", result);
-                } else {
-                    panic!("You must specify an identity to register");
-                }
+                info!("Registering principal: {} as {}", identity, dcc_ident);
+                let pubkey_bytes = dcc_ident.to_bytes_verifying();
+                let pubkey_signature = dcc_ident.sign(pubkey_bytes.as_ref())?;
+                let result = ledger_canister(ic_auth)
+                    .await?
+                    .node_provider_register(&pubkey_bytes, pubkey_signature.to_bytes().as_slice())
+                    .await?;
+                println!("Register: {}", result);
             } else if arg_matches.get_flag("check-in-nonce") {
                 let nonce_bytes = ledger_canister(None).await?.get_check_in_nonce().await;
                 let nonce_string = hex::encode(&nonce_bytes);
 
                 println!("0x{}", nonce_string);
             } else if arg_matches.contains_id("check-in") {
-                if let Some(np_desc) = arg_matches.get_one::<String>("check-in") {
-                    let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                    let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                let identity = identity_name.expect("You must specify an identity");
 
-                    // Check the local ledger timestamp
-                    let local_ledger_path = ledger_local
-                        .get_file_path()
-                        .expect("Failed to get local ledger path");
-                    let local_ledger_file_mtime = local_ledger_path.metadata()?.modified()?;
+                let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+                let ic_auth = dcc_to_ic_auth(&dcc_ident);
 
-                    // If the local ledger is older than 1 minute, refresh it automatically before proceeding
-                    // If needed, the local ledger can also be refreshed manually from the command line
-                    if local_ledger_file_mtime
-                        < SystemTime::now() - std::time::Duration::from_secs(60)
-                    {
-                        info!("Local ledger is older than 1 minute, refreshing...");
-                        let canister = ledger_canister(None).await?;
-                        ledger_data_fetch(&canister, local_ledger_path).await?;
+                // Check the local ledger timestamp
+                let local_ledger_path = ledger_local
+                    .get_file_path()
+                    .expect("Failed to get local ledger path");
+                let local_ledger_file_mtime = local_ledger_path.metadata()?.modified()?;
 
-                        refresh_caches_from_ledger(&ledger_local)
-                            .expect("Loading balances from ledger failed");
+                // If the local ledger is older than 1 minute, refresh it automatically before proceeding
+                // If needed, the local ledger can also be refreshed manually from the command line
+                if local_ledger_file_mtime < SystemTime::now() - std::time::Duration::from_secs(60)
+                {
+                    info!("Local ledger is older than 1 minute, refreshing...");
+                    let canister = ledger_canister(None).await?;
+                    ledger_data_fetch(&canister, local_ledger_path).await?;
+
+                    refresh_caches_from_ledger(&ledger_local)
+                        .expect("Loading balances from ledger failed");
+                }
+                // The local ledger needs to be refreshed to get the latest nonce
+                // This provides the incentive to clone and frequently re-fetch the ledger
+                let nonce_bytes = ledger_local.get_latest_block_hash();
+                let nonce_string = hex::encode(&nonce_bytes);
+
+                info!(
+                    "Checking-in provider identity {} ({}), using nonce: {} ({} bytes)",
+                    identity,
+                    dcc_ident,
+                    nonce_string,
+                    nonce_bytes.len()
+                );
+                let check_in_memo = match arg_matches.get_one::<String>("check-in-memo").cloned() {
+                    Some(memo) => memo,
+                    None => {
+                        println!("No memo specified, did you know that you can specify one? Try out --check-in-memo");
+                        String::new()
                     }
-                    // The local ledger needs to be refreshed to get the latest nonce
-                    // This provides the incentive to clone and frequently re-fetch the ledger
-                    let nonce_bytes = ledger_local.get_latest_block_hash();
-                    let nonce_string = hex::encode(&nonce_bytes);
-
-                    info!(
-                        "Checking-in NP identity {} ({}), using nonce: {} ({} bytes)",
-                        np_desc,
-                        dcc_ident,
-                        nonce_string,
-                        nonce_bytes.len()
-                    );
-                    let check_in_memo = match arg_matches
-                        .get_one::<String>("check-in-memo")
-                        .cloned()
-                    {
-                        Some(memo) => memo,
-                        None => {
-                            println!("No memo specified, did you know that you can specify one? Try out --check-in-memo");
-                            String::new()
-                        }
-                    };
-                    let nonce_crypto_signature = dcc_ident.sign(nonce_bytes.as_ref())?;
-                    let result = ledger_canister(ic_auth)
-                        .await?
-                        .node_provider_check_in(
-                            &dcc_ident.to_bytes_verifying(),
-                            &check_in_memo,
-                            &nonce_crypto_signature.to_bytes(),
-                        )
-                        .await
-                        .map_err(|e| format!("Check-in failed: {}", e))?;
-                    info!("Check-in success: {}", result);
-                } else {
-                    panic!("You must specify an identity");
-                }
-            } else if arg_matches.contains_id("update-profile") {
-                if let Some(values) = arg_matches.get_many::<String>("update-profile") {
-                    let values = values.collect::<Vec<_>>();
-                    let np_desc = values[0];
-                    let profile_file = values[1];
-
-                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                    let ic_auth = dcc_to_ic_auth(&dcc_id);
-
-                    let np_profile = np_profile::Profile::new_from_file(profile_file)?;
-                    let np_profile_bytes = borsh::to_vec(&np_profile)?;
-                    let crypto_signature = dcc_id.sign(&np_profile_bytes)?;
-
-                    let result = ledger_canister(ic_auth)
-                        .await?
-                        .node_provider_update_profile(
-                            &dcc_id.to_bytes_verifying(),
-                            &np_profile_bytes,
-                            &crypto_signature.to_bytes(),
-                        )
-                        .await
-                        .map_err(|e| format!("Update profile failed: {}", e))?;
-                    info!("Profile update response: {}", result);
-                } else {
-                    panic!("You must specify an identity");
-                }
-            } else if arg_matches.contains_id("update-offering") {
-                let values = arg_matches.get_many::<String>("update-offering").unwrap();
-                let (np_desc, offering_file_path) = match values.collect::<Vec<_>>()[..] {
-                    [np_desc, offering_file_path] => (np_desc, offering_file_path),
-                    _ => panic!("Usage: <np-desc> <offering-file>"),
                 };
-                let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
+                let nonce_crypto_signature = dcc_ident.sign(nonce_bytes.as_ref())?;
+                let result = ledger_canister(ic_auth)
+                    .await?
+                    .node_provider_check_in(
+                        &dcc_ident.to_bytes_verifying(),
+                        &check_in_memo,
+                        &nonce_crypto_signature.to_bytes(),
+                    )
+                    .await
+                    .map_err(|e| format!("Check-in failed: {}", e))?;
+                info!("Check-in success: {}", result);
+            } else if arg_matches.contains_id("update-profile") {
+                let identity = identity_name.expect("You must specify an identity");
+
+                let profile_file_name = arg_matches
+                    .get_one::<String>("update-profile")
+                    .expect("You must specify a profile file");
+
+                let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+                let ic_auth = dcc_to_ic_auth(&dcc_id);
+
+                let np_profile = np_profile::Profile::new_from_file(profile_file_name)?;
+                let np_profile_bytes = borsh::to_vec(&np_profile)?;
+                let crypto_signature = dcc_id.sign(&np_profile_bytes)?;
+
+                let result = ledger_canister(ic_auth)
+                    .await?
+                    .node_provider_update_profile(
+                        &dcc_id.to_bytes_verifying(),
+                        &np_profile_bytes,
+                        &crypto_signature.to_bytes(),
+                    )
+                    .await
+                    .map_err(|e| format!("Update profile failed: {}", e))?;
+                info!("Profile update response: {}", result);
+            } else if arg_matches.contains_id("update-offering") {
+                let identity = identity_name.expect("You must specify an identity");
+                let offering_file_name = arg_matches
+                    .get_one::<String>("update-offering")
+                    .expect("You must specify an offering file");
+                let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                 let ic_auth = dcc_to_ic_auth(&dcc_id);
 
                 // Offering::new_from_file returns an error if the schema validation fails
-                let np_offering = np_offering::Offering::new_from_file(offering_file_path)?;
+                let np_offering = np_offering::Offering::new_from_file(offering_file_name)?;
                 let np_offering_bytes = np_offering.serialize()?;
                 let crypto_signature = dcc_id.sign(&np_offering_bytes)?;
 
@@ -309,29 +291,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(("user", arg_matches)) => {
             if arg_matches.get_flag("list") || arg_matches.get_flag("balances") {
                 list_identities(arg_matches.get_flag("balances"))?
-            } else if arg_matches.contains_id("register") {
-                match arg_matches.get_one::<String>("register") {
-                    Some(np_desc) => {
-                        let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(np_desc))?;
-                        let ic_auth = dcc_to_ic_auth(&dcc_id);
-                        let canister = ledger_canister(ic_auth).await?;
-                        let pubkey_bytes = dcc_id.to_bytes_verifying();
-                        let pubkey_signature = dcc_id.sign(&pubkey_bytes)?;
-                        let args = Encode!(&pubkey_bytes, &pubkey_signature.to_bytes())?;
-                        let result = canister.call_update("user_register", &args).await?;
-                        let response =
-                            Decode!(&result, Result<String, String>).map_err(|e| e.to_string())?;
+            } else if arg_matches.get_flag("register") {
+                let identity = identity_name.expect("You must specify an identity");
+                let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+                let ic_auth = dcc_to_ic_auth(&dcc_id);
 
-                        match response {
-                            Ok(response) => {
-                                println!("Registration successful: {}", response);
-                            }
-                            Err(e) => {
-                                println!("Registration failed: {}", e);
-                            }
-                        }
+                let canister = ledger_canister(ic_auth).await?;
+                let pubkey_bytes = dcc_id.to_bytes_verifying();
+                let pubkey_signature = dcc_id.sign(&pubkey_bytes)?;
+                let args = Encode!(&pubkey_bytes, &pubkey_signature.to_bytes())?;
+                let result = canister.call_update("user_register", &args).await?;
+                let response =
+                    Decode!(&result, Result<String, String>).map_err(|e| e.to_string())?;
+
+                match response {
+                    Ok(response) => {
+                        println!("Registration successful: {}", response);
                     }
-                    None => panic!("You must specify an identity to register"),
+                    Err(e) => {
+                        println!("Registration failed: {}", e);
+                    }
                 }
             }
             Ok(())
@@ -361,7 +340,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         Some(("ledger_remote", arg_matches)) => {
-            let local_identity = arg_matches.get_one::<String>("identity");
             let local_ledger_path = match arg_matches.get_one::<String>("dir") {
                 Some(value) => PathBuf::from(value),
                 None => dirs::home_dir()
@@ -373,12 +351,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let push_auth = arg_matches.get_flag("data-push-authorize");
             let push = arg_matches.get_flag("data-push");
             if push_auth || push {
-                let local_identity = match local_identity {
-                    Some(ident) => ident.to_string(),
-                    None => panic!("You must specify an identity to authorize"),
-                };
+                let identity = identity_name.expect("You must specify an identity");
 
-                let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(local_identity))?;
+                let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
                 if push_auth {
                     let ic_auth = dcc_to_ic_auth(&dcc_ident);

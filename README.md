@@ -88,12 +88,12 @@ The registration fee should be 0.5 tokens or less. You can get the latest regist
 After sending funds to the principal of your generated identity, you can register a node provider account with:
 
 ```
-cargo run --bin dc -- np --register my-provider
+cargo run --bin dc -- np --identity my-provider --register
 [...]
 INFO - Registering principal: my-provider as [Ed25519 signing] rb26m-cxrhj-t63qa-xg33g-hvla2-pr25n-nmc5y-rc2la-v4zuv-fjkec-wqe
 ```
 
-Or a user account can be similarly registered with: `cargo run --bin dc -- user --register my-user`
+Or a user account can be similarly registered with: `cargo run --bin dc -- user --identity my-user --register`
 
 ## Participating in the periodic token distribution
 
