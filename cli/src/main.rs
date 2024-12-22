@@ -512,9 +512,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Found {} matching offerings:", offerings.len());
                 for (dcc_id, offering) in offerings {
                     println!(
-                        "{} ==> {}",
+                        "{} ==>\n{}",
                         dcc_id,
-                        &offering.as_json_string().unwrap_or_default()
+                        &offering.as_json_string_pretty().unwrap_or_default()
                     );
                 }
             }

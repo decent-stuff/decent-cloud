@@ -355,6 +355,10 @@ impl Offering {
         serde_json::to_string(&self.json_value()).map_err(|e| e.to_string())
     }
 
+    pub fn as_json_string_pretty(&self) -> Result<String, String> {
+        serde_json::to_string_pretty(&self.json_value()).map_err(|e| e.to_string())
+    }
+
     pub fn serialize(&self) -> Result<Vec<u8>, String> {
         serde_json::to_vec(&self.json_value()).map_err(|e| e.to_string())
     }

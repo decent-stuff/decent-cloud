@@ -161,7 +161,7 @@ dc --network ic np --update-profile my-provider my-provider-offering.yaml
 
 You need to pay a fee for this operation, to prevent DOS attacks.
 
-## User taking a suitable offering
+## User contracting an offering
 
 Search for suitable offerings:
 
