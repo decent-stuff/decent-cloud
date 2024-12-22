@@ -163,14 +163,14 @@ You need to pay a fee for this operation, to prevent DOS attacks.
 
 ## User contracting an offering
 
-Search for suitable offerings:
+Search for suitable offerings, preferably after running `ledger_remote fetch` to get the latest offerings:
 
 ```
 cargo run --bin dc -- offering --query 'memory >= 512MB AND storage.size > 1gb'
-dc --network ic offering --query 'memory >= 512MB AND storage.size > 1gb'
 ```
 
-This will give you the offering instance id (FIXME: ensure cli works). You should also check the reputation and history of the provider (FIXME: add example).
+This will give you the list of DC principals and their matching offerings. From the offerings, inspect the offerings and take the instance id from your preferred one.
+You should also check the reputation and historical data for the provider (FIXME: add CLI and an example).
 
 After finding the id:
 
