@@ -193,7 +193,17 @@ Accepting the request increases the reputation of both the provider and the user
 
 All the above should also be doable through the WebUI. Help is welcome!
 
-FIXME: implement refunds and reducing the reputation of others.
+FIXME: implement refunds and reducing the reputation of malicious actors.
+
+## Provider replying to a user request
+
+List open user contract requests, and find contract ids.
+
+```
+cargo run --bin dc -- offering --contracts-list-open
+```
+
+Accept or reject user requests.
 
 # Developer notes
 

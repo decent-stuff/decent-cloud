@@ -12,7 +12,7 @@ pub fn parse_args() -> clap::ArgMatches {
                 .long("network")
                 .action(ArgAction::Set)
                 .default_value("local")
-                .help("Which IC network to use"),
+                .help("Which IC network to use, e.g., local, ic"),
         )
         .arg(
             Arg::new("local-ledger-dir")
@@ -69,12 +69,14 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("transfer-to")
                         .long("transfer-to")
                         .help("Transfer funds to another account")
+                        .value_name("another-account-principal")
                         .action(ArgAction::Set),
                 )
                 .arg(
                     Arg::new("amount-e9s")
                         .long("amount-e9s")
                         .help("Amount to transfer, in e9s")
+                        .value_name("amount-in-token-en9s")
                         .action(ArgAction::Set),
                 )
                 .arg(
@@ -82,6 +84,7 @@ pub fn parse_args() -> clap::ArgMatches {
                         .long("amount-dct")
                         .help("Amount to transfer, in DC tokens")
                         .conflicts_with("amount-e9s")
+                        .value_name("amount-in-tokens")
                         .action(ArgAction::Set),
                 ),
         )
@@ -106,6 +109,7 @@ pub fn parse_args() -> clap::ArgMatches {
                         .long("register")
                         .help("Register node provider at the Decent Cloud Ledger")
                         .action(ArgAction::Set)
+                        .value_name("identity-name")
                         .num_args(1),
                 )
                 .arg(
@@ -113,6 +117,7 @@ pub fn parse_args() -> clap::ArgMatches {
                         .long("check-in")
                         .help("Check-in Node Provider at the Decent Cloud Ledger, marking that a NP is available")
                         .action(ArgAction::Set)
+                        .value_name("identity-name")
                         .num_args(1),
                 )
                 .arg(
@@ -132,6 +137,7 @@ pub fn parse_args() -> clap::ArgMatches {
                         .long("update-profile")
                         .help("Update Node Provider profile, from the provided profile description file")
                         .action(ArgAction::Set)
+                        .value_names(["identity-name", "file-path"])
                         .num_args(2),
                 )
                 .arg(
@@ -140,6 +146,7 @@ pub fn parse_args() -> clap::ArgMatches {
                         .help("Update Node Provider offering, from the provided offering description file")
                         .action(ArgAction::Set)
                         .num_args(2)
+                        .value_names(["identity-name", "file-path"])
                         .conflicts_with("update-profile"),
                 ),
         )
@@ -164,6 +171,7 @@ pub fn parse_args() -> clap::ArgMatches {
                         .long("register")
                         .help("Register user at the Decent Cloud Ledger")
                         .action(ArgAction::Set)
+                        .value_name("identity-name")
                         .num_args(1),
                 ),
         )
@@ -229,7 +237,6 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("network")
                         .long("network")
                         .action(ArgAction::Set)
-                        // .default_value("mainnet")
                         .default_value("127.0.0.1")
                         .help("Which IC network to use"),
                 )
@@ -250,7 +257,37 @@ pub fn parse_args() -> clap::ArgMatches {
                         .help("Search for offerings that match the provided query")
                         .action(ArgAction::Set)
                         .num_args(1),
-                ),
+                )
+                .arg(
+                    Arg::new("contract-request")
+                        .long("contract-request")
+                        .help("Request to sign a contract with the given offering ID")
+                        .action(ArgAction::Set)
+                        .value_name("offering-id")
+                        .num_args(1),
+                )
+                .arg(
+                    Arg::new("contracts-list-open")
+                        .long("contracts-list-open")
+                        .help("List all open contracts")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("contract-reply")
+                        .long("contract-reply")
+                        .help("Reply to a contract request, accept or reject")
+                        .action(ArgAction::Set)
+                        .num_args(1)
+                        .value_name("is-accepted")
+                        .requires("contract-id"),
+                )
+                .arg(
+                    Arg::new("contract-id")
+                        .long("contract-id")
+                        .help("Contract ID to use")
+                        .action(ArgAction::Set)
+                        .num_args(1),
+                )
         )
         .get_matches()
 }
