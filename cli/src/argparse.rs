@@ -37,14 +37,16 @@ pub fn parse_args() -> clap::ArgMatches {
                         .help("Use the following mnemonic to generate a new key pair")
                         .conflicts_with("generate")
                         .action(ArgAction::Set)
-                        .num_args(0..),
+                        .num_args(0..)
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("generate")
                         .long("generate")
                         .conflicts_with("mnemonic")
                         .help("Generate a random new mnemonic")
-                        .action(ArgAction::SetTrue),
+                        .action(ArgAction::SetTrue)
+                        .requires("identity"),
                 ),
         )
         .subcommand(
@@ -55,14 +57,16 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("balance")
                         .long("balance")
                         .help("Balance of the account")
-                        .action(ArgAction::SetTrue),
+                        .action(ArgAction::SetTrue)
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("transfer-to")
                         .long("transfer-to")
                         .help("Transfer funds to another account")
                         .value_name("another-account-principal")
-                        .action(ArgAction::Set),
+                        .action(ArgAction::Set)
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("amount-e9s")
@@ -100,13 +104,15 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("register")
                         .long("register")
                         .help("Register a node provider in the Decent Cloud Ledger, making it part of the network")
-                        .action(ArgAction::SetTrue),
+                        .action(ArgAction::SetTrue)
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("check-in")
                         .long("check-in")
                         .help("Check-in Node Provider at the Decent Cloud Ledger, marking that a NP is available and accepting new requests")
-                        .action(ArgAction::SetTrue),
+                        .action(ArgAction::SetTrue)
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("check-in-memo")
@@ -126,7 +132,8 @@ pub fn parse_args() -> clap::ArgMatches {
                         .help("Update Node Provider profile, from the provided profile description file")
                         .action(ArgAction::Set)
                         .value_name("file-path")
-                        .num_args(1),
+                        .num_args(1)
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("update-offering")
@@ -135,7 +142,8 @@ pub fn parse_args() -> clap::ArgMatches {
                         .action(ArgAction::Set)
                         .num_args(1)
                         .value_name("file-path")
-                        .conflicts_with("update-profile"),
+                        .conflicts_with("update-profile")
+                        .requires("identity"),
                 ),
         )
         .subcommand(
@@ -158,7 +166,8 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("register")
                         .long("register")
                         .help("Register user at the Decent Cloud Ledger")
-                        .action(ArgAction::SetTrue),
+                        .action(ArgAction::SetTrue)
+                        .requires("identity"),
                 ),
         )
         .subcommand(
@@ -192,7 +201,8 @@ pub fn parse_args() -> clap::ArgMatches {
                         .long("data-push-authorize")
                         .visible_aliases(["push-authorize", "push-auth"])
                         .help("Authorize push to the Decent Cloud Ledger")
-                        .action(ArgAction::SetTrue),
+                        .action(ArgAction::SetTrue)
+                        .requires("identity"),
                     )
                 .arg(
                     Arg::new("data-push")
@@ -200,6 +210,7 @@ pub fn parse_args() -> clap::ArgMatches {
                         .visible_aliases(["push"])
                         .help("Push the ledger entries to the Decent Cloud Ledger")
                         .action(ArgAction::SetTrue)
+                        .requires("identity")
                     )
                 .arg(
                     Arg::new("canister_function")
@@ -216,7 +227,6 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("network")
                         .long("network")
                         .action(ArgAction::Set)
-                        .default_value("127.0.0.1")
                         .help("Which IC network to use"),
                 )
         )
@@ -228,14 +238,16 @@ pub fn parse_args() -> clap::ArgMatches {
                     Arg::new("list")
                         .long("list")
                         .help("List all offerings")
-                        .action(ArgAction::SetTrue),
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with("query"),
                     )
                 .arg(
                     Arg::new("query")
                         .long("query")
                         .help("Search for offerings that match the provided query")
                         .action(ArgAction::Set)
-                        .num_args(1),
+                        .num_args(1)
+                        .conflicts_with("list"),
                 )
                 .arg(
                     Arg::new("contract-request")
@@ -243,7 +255,8 @@ pub fn parse_args() -> clap::ArgMatches {
                         .help("Request to sign a contract with the given offering ID")
                         .action(ArgAction::Set)
                         .value_name("offering-id")
-                        .num_args(1),
+                        .num_args(1)
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("contracts-list-open")
@@ -258,7 +271,8 @@ pub fn parse_args() -> clap::ArgMatches {
                         .action(ArgAction::Set)
                         .num_args(1)
                         .value_name("is-accepted")
-                        .requires("contract-id"),
+                        .requires("contract-id")
+                        .requires("identity"),
                 )
                 .arg(
                     Arg::new("contract-id")
