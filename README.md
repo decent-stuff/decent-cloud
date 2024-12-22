@@ -88,12 +88,12 @@ The registration fee should be 0.5 tokens or less. You can get the latest regist
 After sending funds to the principal of your generated identity, you can register a node provider account with:
 
 ```
-dc --network ic np --register my-provider
+cargo run --bin dc -- np --register my-provider
 [...]
 INFO - Registering principal: my-provider as [Ed25519 signing] rb26m-cxrhj-t63qa-xg33g-hvla2-pr25n-nmc5y-rc2la-v4zuv-fjkec-wqe
 ```
 
-Or similarly register a user account with: `dc --network ic user --register my-user`
+Or a user account can be similarly registered with: `cargo run --bin dc -- user --register my-user`
 
 ## Participating in the periodic token distribution
 
@@ -128,14 +128,14 @@ For more technical details, refer to the whitepaper that can be found on the pro
 Example of participation:
 
 ```
-dc --network ic np --check-in my-provider --check-in-memo "Oh yeah! I'm getting DCT!"
+cargo run --bin dc -- np --check-in my-provider --check-in-memo "Oh yeah! I'm getting DCT!"
 ```
 
 In the future, the memos will be shown on the project dashboard (help is welcome!).
 
 Note that the above operation will synchronize the entire ledger to your local machine, ensuring the upstream ledger remains secure from malicious modifications. As the ledger is a cryptographically protected blockchain, maintaining multiple copies enhances protection against any tampering with its history.
 
-You can also manually fetch the ledger by running `dc -- --network ic ledger_remote fetch`
+You can also manually fetch the ledger by running `cargo run --bin dc -- ledger_remote fetch`
 
 ## Updating a Provider Profile
 
@@ -144,7 +144,7 @@ Node provider profile can be prepared locally, as a yaml file. Please check [the
 When ready, update the provider profile in the canister with:
 
 ```
-dc --network ic np --update-profile my-provider my-provider-profile.yaml
+cargo run --bin dc -- np --update-profile my-provider my-provider-profile.yaml
 ```
 
 You need to pay a fee for this operation, to prevent DOS attacks.
@@ -156,7 +156,7 @@ Similar to the profile, each provider can have an offering prepared locally, as 
 When ready, update the provider offering with:
 
 ```
-dc --network ic np --update-profile my-provider my-provider-offering.yaml
+cargo run --bin dc -- np --update-profile my-provider my-provider-offering.yaml
 ```
 
 You need to pay a fee for this operation, to prevent DOS attacks.
@@ -166,6 +166,7 @@ You need to pay a fee for this operation, to prevent DOS attacks.
 Search for suitable offerings:
 
 ```
+cargo run --bin dc -- offering --query 'memory >= 512MB AND storage.size > 1gb'
 dc --network ic offering --query 'memory >= 512MB AND storage.size > 1gb'
 ```
 
@@ -174,7 +175,7 @@ This will give you the offering instance id (FIXME: ensure cli works). You shoul
 After finding the id:
 
 ```
-dc --network ic offering --contract-request <offering-id>
+cargo run --bin dc -- offering --contract-request <offering-id>
 ```
 
 This gives you the contract-id that you can query later to check for the status.
@@ -182,7 +183,7 @@ This gives you the contract-id that you can query later to check for the status.
 To which the provider needs to reply with:
 
 ```
-dc --network ic offering --contract-reply <contract-id>
+cargo run --bin dc -- offering --contract-reply <contract-id>
 ```
 
 The provider can accept or reject the request, based on the user reputation, and the supplied payment amount.
