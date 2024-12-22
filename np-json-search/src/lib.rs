@@ -43,7 +43,7 @@ impl FromStr for Search {
             Ok(Search::Or(Box::new(left), Box::new(right)))
         } else {
             let re = Regex::new(
-                r"^\s*([\w\.\-_+]+)\s*(==|!=|like|ilike|~|notlike|>=|<=|>|<|=|regex|re|matches|contains|startswith|endswith)\s*(.*)$",
+                r"(?i)^\s*([\w\.\-_+]+)\s*(==|!=|like|ilike|~|notlike|>=|<=|>|<|=|regex|re|matches|contains|startswith|endswith)\s*(.*)$",
             )
             .unwrap();
             if let Some(captures) = re.captures(&s_lower) {
@@ -80,7 +80,7 @@ fn find_and_compare(json: &Value, key: &str, op: &CompareOp, value: &Value) -> b
         Value::Object(map) => {
             for (k, v) in map {
                 // Check if the current key matches
-                if k == key && op.matches(v, value) {
+                if k.to_lowercase() == key.to_lowercase() && op.matches(v, value) {
                     return true;
                 }
                 // If key contains '.', attempt to navigate nested objects

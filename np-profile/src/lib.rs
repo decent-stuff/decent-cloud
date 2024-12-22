@@ -211,6 +211,8 @@ mod tests {
             }
         }
         assert!(profile.matches_search("name=Test Node Provider"));
+        assert!(profile.matches_search("twitter CONTAINS dc-prov"));
+        assert!(profile.matches_search("twitter contains x.com/dc-prov"));
         assert!(profile.matches_search("Twitter contains x.com/dc-prov"));
     }
 }
