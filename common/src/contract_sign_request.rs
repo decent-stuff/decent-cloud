@@ -63,11 +63,11 @@ pub enum ContractSignRequest {
 }
 
 // Custom serializer for public keys
-fn serialize_pubkey<S>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_pubkey<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let dcc_id = DccIdentity::new_verifying_from_bytes(&bytes).unwrap();
+    let dcc_id = DccIdentity::new_verifying_from_bytes(bytes).unwrap();
     serializer.serialize_str(&dcc_id.verifying_key_as_pem_one_line())
 }
 
@@ -113,7 +113,7 @@ impl ContractSignRequest {
             provider_pubkey: provider_pubkey_bytes.to_vec(),
             offering_id,
             region_name,
-            contract_id: contract_id,
+            contract_id,
             instance_config,
             payment_amount,
             duration_seconds,
