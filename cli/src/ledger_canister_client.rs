@@ -135,6 +135,30 @@ impl LedgerCanister {
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
+    pub async fn contract_sign_request(
+        &self,
+        requester_pubkey_bytes: &[u8],
+        payload_bytes: &[u8],
+        payload_sig_bytes: &[u8],
+    ) -> Result<String, String> {
+        let args = Encode!(&requester_pubkey_bytes, &payload_bytes, &payload_sig_bytes)
+            .map_err(|e| e.to_string())?;
+        let response = self.call_update("contract_sign_request", &args).await?;
+        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
+    }
+
+    pub async fn contract_sign_reply(
+        &self,
+        provider_pubkey_bytes: &[u8],
+        payload_bytes: &[u8],
+        payload_sig_bytes: &[u8],
+    ) -> Result<String, String> {
+        let args = Encode!(&provider_pubkey_bytes, &payload_bytes, &payload_sig_bytes)
+            .map_err(|e| e.to_string())?;
+        let response = self.call_update("contract_sign_reply", &args).await?;
+        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
+    }
+
     pub async fn get_check_in_nonce(&self) -> Vec<u8> {
         let args = Encode!(&()).expect("Failed to encode args");
         let response = self

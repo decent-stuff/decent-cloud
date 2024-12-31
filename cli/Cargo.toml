@@ -25,6 +25,7 @@ clap.workspace = true
 data-encoding.workspace = true
 dcc-common = { path = "../common" }
 decent_cloud_canister = { path = "../ic-canister" }
+dialoguer.workspace = true
 dirs.workspace = true
 ed25519-dalek.workspace = true
 filetime.workspace = true

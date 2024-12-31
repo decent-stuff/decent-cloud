@@ -28,7 +28,7 @@ pub fn parse_args() -> clap::ArgMatches {
                 .help("Local Decent Cloud Ledger directory"),
         )
         .subcommand(
-            Command::new("keygen")
+    Command::new("keygen")
                 .arg_required_else_help(true)
                 .about("Generate a new key pair.")
                 .arg(
@@ -50,7 +50,7 @@ pub fn parse_args() -> clap::ArgMatches {
                 ),
         )
         .subcommand(
-            Command::new("account")
+    Command::new("account")
                 .arg_required_else_help(true)
                 .about("Account management commands.")
                 .arg(
@@ -85,7 +85,7 @@ pub fn parse_args() -> clap::ArgMatches {
                 ),
         )
         .subcommand(
-            Command::new("np")
+    Command::new("np")
                 .arg_required_else_help(true)
                 .about("Node Provider management commands.")
                 .arg(
@@ -147,7 +147,7 @@ pub fn parse_args() -> clap::ArgMatches {
                 ),
         )
         .subcommand(
-            Command::new("user")
+    Command::new("user")
                 .arg_required_else_help(true)
                 .about("User management commands.")
                 .arg(
@@ -171,7 +171,7 @@ pub fn parse_args() -> clap::ArgMatches {
                 ),
         )
         .subcommand(
-            Command::new("ledger_local")
+    Command::new("ledger_local")
                 .about("Work with the local Decent Cloud Ledger.")
                 .arg(
                     Arg::new("list_entries_raw")
@@ -186,8 +186,8 @@ pub fn parse_args() -> clap::ArgMatches {
                     ),
         )
         .subcommand(
-            Command::new("ledger_remote")
-                // .arg_required_else_help(true)
+    Command::new("ledger_remote")
+                .arg_required_else_help(true)
                 .about("Work with the remote Decent Cloud Ledger.")
                 .arg(
                     Arg::new("data-fetch")
@@ -231,48 +231,101 @@ pub fn parse_args() -> clap::ArgMatches {
                 )
         )
         .subcommand(
-            Command::new("offering")
-                .arg_required_else_help(true)
-                .about("Offering management commands.")
-                .arg(
-                    Arg::new("list")
-                        .long("list")
-                        .help("List all offerings")
-                        .action(ArgAction::SetTrue)
-                        .conflicts_with("query"),
-                    )
-                .arg(
-                    Arg::new("query")
-                        .long("query")
-                        .help("Search for offerings that match the provided query")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .conflicts_with("list"),
+        Command::new("offering")
+            .arg_required_else_help(true)
+            .about("Offering management commands.")
+            .arg(
+                Arg::new("list")
+                    .long("list")
+                    .help("List all offerings")
+                    .action(ArgAction::SetTrue)
+                    .conflicts_with("query"),
                 )
+            .arg(
+                Arg::new("query")
+                    .long("query")
+                    .help("Search for offerings that match the provided query")
+                    .action(ArgAction::Set)
+                    .num_args(1)
+                    .conflicts_with("list"),
+            )
+        )
+        .subcommand(
+            Command::new("contract")
+            .visible_alias("contracts")
+            .arg_required_else_help(true)
+            .about("Contract management commands.")
+            .subcommand(
+                Command::new("list-open")
+                .about("List all open contracts")
                 .arg(
-                    Arg::new("contract-request")
-                        .long("contract-request")
-                        .help("Request to sign a contract with the given offering ID")
-                        .action(ArgAction::Set)
-                        .value_name("offering-id")
-                        .num_args(1)
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("contracts-list-open")
-                        .long("contracts-list-open")
+                    Arg::new("list-open")
+                        .long("list-open")
                         .help("List all open contracts")
                         .action(ArgAction::SetTrue),
+                ),
+            )
+            .subcommand(
+                Command::new("sign-request")
+                .about("Request to sign a contract")
+                .arg(
+                    Arg::new("offering-id")
+                        .long("offering-id")
+                        .help("Specify the offering ID for the contract sign request")
+                        .required_unless_present_any(["interactive"])
+                        .action(ArgAction::Set)
+                        .num_args(1),
                 )
                 .arg(
-                    Arg::new("contract-reply")
-                        .long("contract-reply")
-                        .help("Reply to a contract request, accept or reject")
+                    Arg::new("requester-ssh-pubkey")
+                        .long("requester-ssh-pubkey")
+                        .help("Public key for the user, in SSH format")
                         .action(ArgAction::Set)
                         .num_args(1)
-                        .value_name("is-accepted")
-                        .requires("contract-id")
-                        .requires("identity"),
+                        .required_unless_present_any(["interactive"]),
+                )
+                .arg(
+                    Arg::new("requester-contact")
+                        .long("requester-contact")
+                        .help("Contact information for the user")
+                        .action(ArgAction::Set)
+                        .num_args(1)
+                        .required_unless_present_any(["interactive"]),
+                )
+                .arg(
+                    Arg::new("provider-pubkey-pem")
+                        .long("provider-pubkey-pem")
+                        .help("Public key of the provider, as a PEM string")
+                        .action(ArgAction::Set)
+                        .num_args(1)
+                        .required_unless_present_any(["interactive"]),
+                )
+                .arg(
+                    Arg::new("memo")
+                        .long("memo")
+                        .help("Memo for the contract-sign request")
+                        .action(ArgAction::Set)
+                        .num_args(1)
+                        .required_unless_present_any(["interactive"]),
+                )
+                .arg(
+                    Arg::new("interactive")
+                    .long("interactive")
+                    .short('i')
+                    .help("Interactive mode")
+                    .action(ArgAction::SetTrue),
+                )
+            )
+            .subcommand(
+                Command::new("sign-reply")
+                .about("Reply to a contract-sign request")
+                .arg(
+                    Arg::new("provider-pubkey-pem")
+                        .long("provider-pubkey-pem")
+                        .help("Public key of the provider, as a PEM string")
+                        .action(ArgAction::Set)
+                        .num_args(1)
+                        .required_unless_present_any(["interactive"]),
                 )
                 .arg(
                     Arg::new("contract-id")
@@ -281,6 +334,31 @@ pub fn parse_args() -> clap::ArgMatches {
                         .action(ArgAction::Set)
                         .num_args(1),
                 )
+                .arg(
+                    Arg::new("accept")
+                        .long("accept")
+                        .help("Reply to a contract-sign request, accept")
+                        .action(ArgAction::SetTrue)
+                        .requires("contract-id")
+                        .requires("identity"),
+                )
+                .arg(
+                    Arg::new("reject")
+                        .long("reject")
+                        .help("Reply to a contract-sign request, reject")
+                        .action(ArgAction::SetTrue)
+                        .requires("contract-id")
+                        .requires("identity"),
+                )
+                .arg(
+                    Arg::new("memo")
+                        .long("memo")
+                        .help("Memo for the contract-sign request")
+                        .action(ArgAction::Set)
+                        .num_args(1)
+                        .required_unless_present_any(["interactive"]),
+                )
+            )
         )
         .get_matches()
 }

@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, io::Error};
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
 use ledger_map::{warn, LedgerMap};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -62,16 +62,27 @@ pub enum ContractSignRequest {
     V1(ContractSignRequestV1),
 }
 
+// Custom serializer for public keys
+fn serialize_pubkey<S>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let dcc_id = DccIdentity::new_verifying_from_bytes(&bytes).unwrap();
+    serializer.serialize_str(&dcc_id.verifying_key_as_pem_one_line())
+}
+
 // Struct for requesting a contract signature, version 1. Future versions can be added below
 #[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ContractSignRequestV1 {
-    requester_pubkey_bytes: Vec<u8>, // Who is making this request?
+    #[serde(serialize_with = "serialize_pubkey")]
+    requester_pubkey: Vec<u8>, // Who is making this request?
     requester_ssh_pubkey: String, // The ssh key that will be given access to the instance, preferably in ed25519 key format https://en.wikipedia.org/wiki/Ssh-keygen
     requester_contact: String,    // Where can the requester be contacted by the provider, if needed
-    provider_pubkey_bytes: Vec<u8>, // To which provider is this targeted?
+    #[serde(serialize_with = "serialize_pubkey")]
+    provider_pubkey: Vec<u8>, // To which provider is this targeted?
     offering_id: String,          // Requester would like to contract this particular offering id
     region_name: Option<String>,  // Optional region name
-    instance_id: Option<String>, // Optional instance id that can be provided to alter the particular instance that requester already controls
+    contract_id: Option<String>,  // Optional contract id, if an existing contract is being extended
     instance_config: Option<String>, // Optional configuration for the instance deployment, e.g. cloud-init
     payment_amount: u64,             // How much is the requester offering to pay for the contract
     duration_seconds: u64, // For how many SECONDS would the requester like to sign the contract; 1 hour = 3600 seconds, 1 day = 86400 seconds
@@ -82,13 +93,13 @@ pub struct ContractSignRequestV1 {
 impl ContractSignRequest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        requester_pubkey_bytes: Vec<u8>,
+        requester_pubkey_bytes: &[u8],
         requester_ssh_pubkey: String,
         requester_contact: String,
         provider_pubkey_bytes: &[u8],
         offering_id: String,
         region_name: Option<String>,
-        instance_id: Option<String>,
+        contract_id: Option<String>,
         instance_config: Option<String>,
         payment_amount: u64,
         duration_seconds: u64,
@@ -96,13 +107,13 @@ impl ContractSignRequest {
         request_memo: String,
     ) -> Self {
         ContractSignRequest::V1(ContractSignRequestV1 {
-            requester_pubkey_bytes,
+            requester_pubkey: requester_pubkey_bytes.to_vec(),
             requester_ssh_pubkey,
             requester_contact,
-            provider_pubkey_bytes: provider_pubkey_bytes.to_vec(),
+            provider_pubkey: provider_pubkey_bytes.to_vec(),
             offering_id,
             region_name,
-            instance_id,
+            contract_id: contract_id,
             instance_config,
             payment_amount,
             duration_seconds,
@@ -119,7 +130,7 @@ impl ContractSignRequest {
 
     pub fn requester_pubkey_bytes(&self) -> &[u8] {
         match self {
-            ContractSignRequest::V1(v1) => &v1.requester_pubkey_bytes,
+            ContractSignRequest::V1(v1) => &v1.requester_pubkey,
         }
     }
 
@@ -137,7 +148,7 @@ impl ContractSignRequest {
 
     pub fn provider_pubkey_bytes(&self) -> &[u8] {
         match self {
-            ContractSignRequest::V1(v1) => &v1.provider_pubkey_bytes,
+            ContractSignRequest::V1(v1) => &v1.provider_pubkey,
         }
     }
 
@@ -147,9 +158,9 @@ impl ContractSignRequest {
         }
     }
 
-    pub fn instance_id(&self) -> Option<&String> {
+    pub fn contract_id(&self) -> Option<&String> {
         match self {
-            ContractSignRequest::V1(v1) => v1.instance_id.as_ref(),
+            ContractSignRequest::V1(v1) => v1.contract_id.as_ref(),
         }
     }
 

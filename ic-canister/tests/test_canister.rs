@@ -648,7 +648,7 @@ fn contract_sign_request(
 ) -> Result<String, String> {
     let requester_pubkey_bytes = requester_dcc_id.to_bytes_verifying();
     let req = ContractSignRequest::new(
-        requester_pubkey_bytes.clone(),
+        &requester_pubkey_bytes,
         "invalid test ssh key".to_string(),
         "invalid test contact info".to_string(),
         provider_pubkey_bytes,

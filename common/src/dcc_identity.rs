@@ -56,6 +56,16 @@ impl DccIdentity {
         Ok(DccIdentity::Ed25519(None, *ed25519_verifying_key))
     }
 
+    pub fn new_signing_from_pem(pem_string: &str) -> Result<Self, CryptoError> {
+        let signing_key = Self::signing_key_from_pem(pem_string)?;
+        DccIdentity::new_signing(&signing_key)
+    }
+
+    pub fn new_verifying_from_pem(pem_string: &str) -> Result<Self, CryptoError> {
+        let verifying_key = Self::verifying_key_from_pem(pem_string)?;
+        DccIdentity::new_verifying(&verifying_key)
+    }
+
     pub fn new_from_seed(seed: &[u8]) -> Result<Self, CryptoError> {
         let signing_key = Self::generate_ed25519_signing_key_from_seed(seed);
         DccIdentity::new_signing(&signing_key)
@@ -278,11 +288,13 @@ impl DccIdentity {
         let mut file = fs_err::File::open(file_path)?;
         let mut pem_string = String::new();
         file.read_to_string(&mut pem_string)?;
-        let pem = pem::parse(pem_string)?;
 
-        // let secret_key = Self::from_der(&pem.contents())?;
+        Self::signing_key_from_pem(&pem_string)
+    }
+
+    pub fn signing_key_from_pem(pem_string: &str) -> Result<SigningKey, CryptoError> {
+        let pem = pem::parse(pem_string)?;
         let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_der(pem.contents())?;
-        // let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_pem(&pem_string)?;
         Ok(key)
     }
 
@@ -292,7 +304,19 @@ impl DccIdentity {
         let mut pem_string = String::new();
         file.read_to_string(&mut pem_string)?;
 
-        let key = ed25519_dalek::pkcs8::DecodePublicKey::from_public_key_pem(&pem_string)?;
+        Self::verifying_key_from_pem(&pem_string)
+    }
+
+    pub fn verifying_key_from_pem(pem_string: &str) -> Result<VerifyingKey, CryptoError> {
+        let pem_string = if pem_string.starts_with("-----BEGIN PUBLIC KEY-----") {
+            pem_string
+        } else {
+            &format!(
+                "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----",
+                pem_string
+            )
+        };
+        let key = ed25519_dalek::pkcs8::DecodePublicKey::from_public_key_pem(pem_string)?;
         Ok(key)
     }
 

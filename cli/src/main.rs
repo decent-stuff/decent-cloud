@@ -7,6 +7,7 @@ use base64::Engine;
 use bip39::Seed;
 use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
+use dcc_common::ContractSignRequest;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data,
     offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get,
@@ -491,6 +492,180 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         dcc_id,
                         &offering.as_json_string_pretty().unwrap_or_default()
                     );
+                }
+            }
+
+            Ok(())
+        }
+        Some(("contract", arg_matches)) => {
+            match arg_matches.subcommand() {
+                Some(("list-open", _arg_matches)) => {
+                    println!("Listing all open contracts...");
+                }
+                Some(("sign-request", arg_matches)) => {
+                    let interactive_mode = arg_matches.get_flag("interactive");
+                    loop {
+                        let identity;
+                        let offering_id;
+                        let requester_ssh_pubkey;
+                        let requester_contact;
+                        let provider_pubkey_pem;
+                        let memo;
+
+                        if interactive_mode {
+                            println!();
+                            identity = match &identity_name {
+                                Some(name) => name.clone(),
+                                None => dialoguer::Input::<String>::new()
+                                    .with_prompt("Please enter the identity name")
+                                    .allow_empty(false)
+                                    .show_default(false)
+                                    .interact()
+                                    .unwrap(),
+                            };
+                            offering_id = match arg_matches.get_one::<String>("offering-id") {
+                                Some(s) => s.clone(),
+                                None => dialoguer::Input::<String>::new()
+                                    .with_prompt("Please enter the offering id")
+                                    .allow_empty(false)
+                                    .show_default(false)
+                                    .interact()
+                                    .unwrap_or_default(),
+                            };
+                            requester_ssh_pubkey = match arg_matches.get_one::<String>("requester-ssh-pubkey") {
+                                Some(s) => s.clone(),
+                                None => dialoguer::Input::<String>::new()
+                                    .with_prompt("Please enter your ssh public key, which will be granted access to the contract")
+                                    .allow_empty(false)
+                                    .show_default(false)
+                                    .interact()
+                                    .unwrap_or_default(),
+                            };
+                            requester_contact =
+                                match arg_matches.get_one::<String>("requester-contact") {
+                                    Some(s) => s.clone(),
+                                    None => dialoguer::Input::<String>::new()
+                                        .with_prompt(
+                                            "Enter your contact information (this will be public)",
+                                        )
+                                        .allow_empty(false)
+                                        .show_default(false)
+                                        .interact()
+                                        .unwrap_or_default(),
+                                };
+                            provider_pubkey_pem =
+                                match arg_matches.get_one::<String>("provider-pubkey-pem") {
+                                    Some(s) => s.clone(),
+                                    None => match dialoguer::Editor::new().edit(
+                                        "# Enter the provider's public key below, as a PEM string",
+                                    ) {
+                                        Ok(Some(content)) => content,
+                                        Ok(None) => {
+                                            println!("No input received.");
+                                            continue;
+                                        }
+                                        Err(err) => {
+                                            eprintln!("Error opening editor: {}", err);
+                                            continue;
+                                        }
+                                    },
+                                };
+                            memo = match arg_matches.get_one::<String>("memo") {
+                                Some(s) => s.clone(),
+                                None => dialoguer::Input::<String>::new()
+                                    .with_prompt(
+                                        "Please enter a memo for the contract (this will be public)",
+                                    )
+                                    .allow_empty(true)
+                                    .show_default(false)
+                                    .interact()
+                                    .unwrap_or_default(),
+                            };
+                        } else {
+                            identity = identity_name.clone().expect("You must specify an identity");
+                            offering_id = arg_matches
+                                .get_one::<String>("offering-id")
+                                .unwrap()
+                                .to_string();
+                            requester_ssh_pubkey = arg_matches
+                                .get_one::<String>("requester-ssh-pubkey")
+                                .expect("You must specify your ssh pubkey")
+                                .clone();
+                            requester_contact = arg_matches
+                                .get_one::<String>("requester-contact")
+                                .expect("You must specify your contact info")
+                                .clone();
+                            provider_pubkey_pem = arg_matches
+                                .get_one::<String>("provider-pubkey-pem")
+                                .expect("You must specify the provider's pubkey")
+                                .clone();
+                            memo = arg_matches
+                                .get_one::<String>("memo")
+                                .cloned()
+                                .unwrap_or_default();
+                        };
+                        let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+                        let provider_dcc_ident =
+                            match DccIdentity::new_verifying_from_pem(&provider_pubkey_pem) {
+                                Ok(ident) => ident,
+                                Err(e) => {
+                                    eprintln!("ERROR: Failed to parse provider pubkey: {}", e);
+                                    continue;
+                                }
+                            };
+                        let provider_pubkey_bytes = provider_dcc_ident.to_bytes_verifying();
+
+                        let requester_pubkey_bytes = dcc_id.to_bytes_verifying();
+                        let req = ContractSignRequest::new(
+                            &requester_pubkey_bytes,
+                            requester_ssh_pubkey,
+                            requester_contact,
+                            &provider_pubkey_bytes,
+                            offering_id.clone(),
+                            None,
+                            None,
+                            None,
+                            100,
+                            3600,
+                            None,
+                            memo.clone(),
+                        );
+                        println!("The following contract sign request will be sent:");
+                        println!("{}", serde_json::to_string_pretty(&req)?);
+                        if dialoguer::Confirm::new()
+                            .with_prompt("Is this correct? If so, press enter to send.")
+                            .default(false)
+                            .show_default(true)
+                            .interact()
+                            .unwrap()
+                        {
+                            let payload_bytes = borsh::to_vec(&req).unwrap();
+                            let payload_sig_bytes = dcc_id.sign(&payload_bytes)?.to_bytes();
+                            let ic_auth = dcc_to_ic_auth(&dcc_id);
+                            let canister = ledger_canister(ic_auth).await?;
+
+                            let response = canister
+                                .contract_sign_request(
+                                    &requester_pubkey_bytes,
+                                    &payload_bytes,
+                                    &payload_sig_bytes,
+                                )
+                                .await;
+
+                            match response {
+                                Ok(response) => {
+                                    println!("Contract sign request successful: {}", response);
+                                }
+                                Err(e) => {
+                                    println!("Contract sign request failed: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+                Some(("sign-reply", arg_matches)) => {}
+                _ => {
+                    println!("Unknown contract subcommand, use --help");
                 }
             }
             Ok(())
