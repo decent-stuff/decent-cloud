@@ -1,364 +1,257 @@
-use clap::{Arg, ArgAction, Command};
+use clap::{Args, Parser, Subcommand};
 
-pub fn parse_args() -> clap::ArgMatches {
-    Command::new("dcc")
-        .about("Decent Cloud Cli")
-        .version("0.1.0")
-        .subcommand_required(true)
-        .arg_required_else_help(true)
-        .author("Decent Cloud Development Team")
-        .arg(
-            Arg::new("network")
-                .long("network")
-                .action(ArgAction::Set)
-                .help("Which IC network to use, e.g., ic, local"),
-        )
-        .arg(
-            Arg::new("identity")
-                .long("identity")
-                .global(true)
-                .help("Identity name for the account")
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new("local-ledger-dir")
-                .long("local-ledger-dir")
-                .action(ArgAction::Set)
-                .global(true)
-                .help("Local Decent Cloud Ledger directory"),
-        )
-        .subcommand(
-    Command::new("keygen")
-                .arg_required_else_help(true)
-                .about("Generate a new key pair.")
-                .arg(
-                    Arg::new("mnemonic")
-                        .long("mnemonic")
-                        .help("Use the following mnemonic to generate a new key pair")
-                        .conflicts_with("generate")
-                        .action(ArgAction::Set)
-                        .num_args(0..)
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("generate")
-                        .long("generate")
-                        .conflicts_with("mnemonic")
-                        .help("Generate a random new mnemonic")
-                        .action(ArgAction::SetTrue)
-                        .requires("identity"),
-                ),
-        )
-        .subcommand(
-    Command::new("account")
-                .arg_required_else_help(true)
-                .about("Account management commands.")
-                .arg(
-                    Arg::new("balance")
-                        .long("balance")
-                        .help("Balance of the account")
-                        .action(ArgAction::SetTrue)
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("transfer-to")
-                        .long("transfer-to")
-                        .help("Transfer funds to another account")
-                        .value_name("another-account-principal")
-                        .action(ArgAction::Set)
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("amount-e9s")
-                        .long("amount-e9s")
-                        .help("Amount to transfer, in e9s")
-                        .value_name("amount-in-token-en9s")
-                        .action(ArgAction::Set),
-                )
-                .arg(
-                    Arg::new("amount-dct")
-                        .long("amount-dct")
-                        .help("Amount to transfer, in DC tokens")
-                        .conflicts_with("amount-e9s")
-                        .value_name("amount-in-tokens")
-                        .action(ArgAction::Set),
-                ),
-        )
-        .subcommand(
-    Command::new("np")
-                .arg_required_else_help(true)
-                .about("Node Provider management commands.")
-                .arg(
-                    Arg::new("list")
-                        .long("list")
-                        .help("List all node provider identities")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("balances")
-                        .long("balances")
-                        .help("Get balances of all node provider identities")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("register")
-                        .long("register")
-                        .help("Register a node provider in the Decent Cloud Ledger, making it part of the network")
-                        .action(ArgAction::SetTrue)
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("check-in")
-                        .long("check-in")
-                        .help("Check-in Node Provider at the Decent Cloud Ledger, marking that a NP is available and accepting new requests")
-                        .action(ArgAction::SetTrue)
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("check-in-memo")
-                        .long("check-in-memo")
-                        .help("Provide the given memo value for the check-in")
-                        .action(ArgAction::Set)
-                )
-                .arg(
-                    Arg::new("check-in-nonce")
-                        .long("check-in-nonce")
-                        .help("Get the Node Provider check-in nonce at the Decent Cloud Ledger")
-                        .action(ArgAction::SetTrue)
-                )
-                .arg(
-                    Arg::new("update-profile")
-                        .long("update-profile")
-                        .help("Update Node Provider profile, from the provided profile description file")
-                        .action(ArgAction::Set)
-                        .value_name("file-path")
-                        .num_args(1)
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("update-offering")
-                        .long("update-offering")
-                        .help("Update Node Provider offering, from the provided offering description file")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .value_name("file-path")
-                        .conflicts_with("update-profile")
-                        .requires("identity"),
-                ),
-        )
-        .subcommand(
-    Command::new("user")
-                .arg_required_else_help(true)
-                .about("User management commands.")
-                .arg(
-                    Arg::new("list")
-                        .long("list")
-                        .help("List all user identities")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("balances")
-                        .long("balances")
-                        .help("Get balances of all user identities")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("register")
-                        .long("register")
-                        .help("Register user at the Decent Cloud Ledger")
-                        .action(ArgAction::SetTrue)
-                        .requires("identity"),
-                ),
-        )
-        .subcommand(
-    Command::new("ledger_local")
-                .about("Work with the local Decent Cloud Ledger.")
-                .arg(
-                    Arg::new("list_entries_raw")
-                        .long("list_entries_raw")
-                        .action(ArgAction::SetTrue)
-                        .help("List raw ledger entries")
-                    )
-                .arg(Arg::new("list_entries")
-                        .long("list_entries")
-                        .action(ArgAction::SetTrue)
-                        .help("List ledger entries")
-                    ),
-        )
-        .subcommand(
-    Command::new("ledger_remote")
-                .arg_required_else_help(true)
-                .about("Work with the remote Decent Cloud Ledger.")
-                .arg(
-                    Arg::new("data-fetch")
-                        .long("data-fetch")
-                        .visible_aliases(["fetch", "pull"])
-                        .action(ArgAction::SetTrue)
-                        .help("Sync data from the ledger"),
-                )
-                .arg(
-                    Arg::new("data-push-authorize")
-                        .long("data-push-authorize")
-                        .visible_aliases(["push-authorize", "push-auth"])
-                        .help("Authorize push to the Decent Cloud Ledger")
-                        .action(ArgAction::SetTrue)
-                        .requires("identity"),
-                    )
-                .arg(
-                    Arg::new("data-push")
-                        .long("data-push")
-                        .visible_aliases(["push"])
-                        .help("Push the ledger entries to the Decent Cloud Ledger")
-                        .action(ArgAction::SetTrue)
-                        .requires("identity")
-                    )
-                .arg(
-                    Arg::new("canister_function")
-                        .action(ArgAction::Set)
-                        .help("Canister function to call"),
-                )
-                .arg(
-                    Arg::new("dir")
-                        .long("dir")
-                        .action(ArgAction::Set)
-                        .help("Prefix directory"),
-                )
-                .arg(
-                    Arg::new("network")
-                        .long("network")
-                        .action(ArgAction::Set)
-                        .help("Which IC network to use"),
-                )
-        )
-        .subcommand(
-        Command::new("offering")
-            .arg_required_else_help(true)
-            .about("Offering management commands.")
-            .arg(
-                Arg::new("list")
-                    .long("list")
-                    .help("List all offerings")
-                    .action(ArgAction::SetTrue)
-                    .conflicts_with("query"),
-                )
-            .arg(
-                Arg::new("query")
-                    .long("query")
-                    .help("Search for offerings that match the provided query")
-                    .action(ArgAction::Set)
-                    .num_args(1)
-                    .conflicts_with("list"),
-            )
-        )
-        .subcommand(
-            Command::new("contract")
-            .visible_alias("contracts")
-            .arg_required_else_help(true)
-            .about("Contract management commands.")
-            .subcommand(
-                Command::new("list-open")
-                .about("List all open contracts")
-                .arg(
-                    Arg::new("list-open")
-                        .long("list-open")
-                        .help("List all open contracts")
-                        .action(ArgAction::SetTrue),
-                ),
-            )
-            .subcommand(
-                Command::new("sign-request")
-                .about("Request to sign a contract")
-                .arg(
-                    Arg::new("offering-id")
-                        .long("offering-id")
-                        .help("Specify the offering ID for the contract sign request")
-                        .required_unless_present_any(["interactive"])
-                        .action(ArgAction::Set)
-                        .num_args(1),
-                )
-                .arg(
-                    Arg::new("requester-ssh-pubkey")
-                        .long("requester-ssh-pubkey")
-                        .help("Public key for the user, in SSH format")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .required_unless_present_any(["interactive"]),
-                )
-                .arg(
-                    Arg::new("requester-contact")
-                        .long("requester-contact")
-                        .help("Contact information for the user")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .required_unless_present_any(["interactive"]),
-                )
-                .arg(
-                    Arg::new("provider-pubkey-pem")
-                        .long("provider-pubkey-pem")
-                        .help("Public key of the provider, as a PEM string")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .required_unless_present_any(["interactive"]),
-                )
-                .arg(
-                    Arg::new("memo")
-                        .long("memo")
-                        .help("Memo for the contract-sign request")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .required_unless_present_any(["interactive"]),
-                )
-                .arg(
-                    Arg::new("interactive")
-                    .long("interactive")
-                    .short('i')
-                    .help("Interactive mode")
-                    .action(ArgAction::SetTrue),
-                )
-            )
-            .subcommand(
-                Command::new("sign-reply")
-                .about("Reply to a contract-sign request")
-                .arg(
-                    Arg::new("provider-pubkey-pem")
-                        .long("provider-pubkey-pem")
-                        .help("Public key of the provider, as a PEM string")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .required_unless_present_any(["interactive"]),
-                )
-                .arg(
-                    Arg::new("contract-id")
-                        .long("contract-id")
-                        .help("Contract ID to use")
-                        .action(ArgAction::Set)
-                        .num_args(1),
-                )
-                .arg(
-                    Arg::new("accept")
-                        .long("accept")
-                        .help("Reply to a contract-sign request, accept")
-                        .action(ArgAction::SetTrue)
-                        .requires("contract-id")
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("reject")
-                        .long("reject")
-                        .help("Reply to a contract-sign request, reject")
-                        .action(ArgAction::SetTrue)
-                        .requires("contract-id")
-                        .requires("identity"),
-                )
-                .arg(
-                    Arg::new("memo")
-                        .long("memo")
-                        .help("Memo for the contract-sign request")
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .required_unless_present_any(["interactive"]),
-                )
-            )
-        )
-        .get_matches()
+#[derive(Parser)]
+#[command(
+    name = "dcc",
+    about = "Decent Cloud CLI",
+    version = "0.1.0",
+    author = "Decent Cloud Development Team",
+    subcommand_required = true,
+    arg_required_else_help = true
+)]
+pub struct Cli {
+    /// Which IC network to use, e.g., ic, local
+    #[arg(long, global = true)]
+    pub network: Option<String>,
+
+    /// Identity name for the account
+    #[arg(long, global = true)]
+    pub identity: Option<String>,
+
+    /// Local Decent Cloud Ledger directory
+    #[arg(long, global = true)]
+    pub local_ledger_dir: Option<String>,
+
+    /// Pick which subcommand to use
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Generate key pairs
+    Keygen(KeygenArgs),
+    /// Account management commands
+    Account(AccountArgs),
+    /// Node Provider management commands
+    Np(NpArgs),
+    /// User management commands
+    User(UserArgs),
+    /// Work with the local Decent Cloud Ledger
+    LedgerLocal(LedgerLocalArgs),
+    /// Work with the remote Decent Cloud Ledger
+    LedgerRemote(LedgerRemoteArgs),
+    /// Offering management commands
+    Offering(OfferingArgs),
+    /// Contract management commands
+    #[command(subcommand)]
+    Contract(ContractCommands),
+}
+
+#[derive(Args)]
+pub struct KeygenArgs {
+    /// Use the given mnemonic
+    #[arg(
+        long,
+        conflicts_with = "generate",
+        requires = "identity",
+        num_args = 12
+    )]
+    pub mnemonic: Vec<String>,
+
+    /// Generate a random mnemonic
+    #[arg(long, requires = "identity")]
+    pub generate: bool,
+}
+
+#[derive(Args)]
+pub struct AccountArgs {
+    /// Balance of the account
+    #[arg(long, requires = "identity")]
+    pub balance: bool,
+
+    /// Transfer funds to another account
+    #[arg(long, requires = "identity")]
+    pub transfer_to: Option<String>,
+
+    /// Amount to transfer, in e9s
+    #[arg(long, conflicts_with = "amount_dct")]
+    pub amount_e9s: Option<String>,
+
+    /// Amount to transfer, in DC tokens
+    #[arg(long)]
+    pub amount_dct: Option<String>,
+}
+
+#[derive(Args)]
+pub struct NpArgs {
+    /// List all node provider identities
+    #[arg(long)]
+    pub list: bool,
+
+    /// Get balances of all node provider identities
+    #[arg(long)]
+    pub balances: bool,
+
+    /// Register a node provider in the ledger
+    #[arg(long, requires = "identity")]
+    pub register: bool,
+
+    /// Check-in Node Provider
+    #[arg(long, requires = "identity")]
+    pub check_in: bool,
+
+    /// Provide a memo value for check-in
+    #[arg(long)]
+    pub check_in_memo: Option<String>,
+
+    /// Get the Node Provider check-in nonce
+    #[arg(long)]
+    pub check_in_nonce: bool,
+
+    /// Update Node Provider profile
+    #[arg(long, requires = "identity")]
+    pub update_profile: Option<String>,
+
+    /// Update Node Provider offering
+    #[arg(long, conflicts_with = "update_profile", requires = "identity")]
+    pub update_offering: Option<String>,
+}
+
+#[derive(Args)]
+pub struct UserArgs {
+    /// List all user identities
+    #[arg(long)]
+    pub list: bool,
+
+    /// Get balances of all user identities
+    #[arg(long)]
+    pub balances: bool,
+
+    /// Register user at the ledger
+    #[arg(long, requires = "identity")]
+    pub register: bool,
+}
+
+#[derive(Args)]
+pub struct LedgerLocalArgs {
+    /// List raw ledger entries
+    #[arg(long)]
+    pub list_entries_raw: bool,
+
+    /// List ledger entries
+    #[arg(long)]
+    pub list_entries: bool,
+}
+
+#[derive(Args)]
+pub struct LedgerRemoteArgs {
+    /// Sync data from the ledger
+    #[arg(long, visible_aliases = ["fetch", "pull"])]
+    pub data_fetch: bool,
+
+    /// Authorize push to the ledger
+    #[arg(long, visible_aliases = ["push-authorize", "push-auth"], requires = "identity")]
+    pub data_push_authorize: bool,
+
+    /// Push the ledger entries to the ledger
+    #[arg(long, visible_aliases = ["push"], requires = "identity")]
+    pub data_push: bool,
+
+    /// Canister function to call
+    #[arg(long)]
+    pub canister_function: Option<String>,
+
+    /// Prefix directory
+    #[arg(long)]
+    pub dir: Option<String>,
+
+    /// Which IC network to use
+    #[arg(long)]
+    pub network: Option<String>,
+}
+
+#[derive(Args)]
+pub struct OfferingArgs {
+    /// List all offerings
+    #[arg(long, conflicts_with = "query")]
+    pub list: bool,
+
+    /// Search for offerings with the provided query
+    #[arg(long, conflicts_with = "list")]
+    pub query: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum ContractCommands {
+    /// List all open contracts
+    ListOpen(ListOpenArgs),
+    /// Request to sign a contract
+    SignRequest(SignRequestArgs),
+    /// Reply to a contract-sign request
+    SignReply(SignReplyArgs),
+}
+
+#[derive(Args)]
+pub struct ListOpenArgs {
+    #[arg(long)]
+    pub list_open: bool,
+}
+
+#[derive(Args)]
+pub struct SignRequestArgs {
+    /// Specify the offering ID for the contract sign request
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub offering_id: Option<String>,
+
+    /// Public key for the user, in SSH format
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub requester_ssh_pubkey: Option<String>,
+
+    /// Contact information for the user
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub requester_contact: Option<String>,
+
+    /// Public key of the provider, as a PEM string
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub provider_pubkey_pem: Option<String>,
+
+    /// Memo for the contract-sign request
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub memo: Option<String>,
+
+    /// Interactive mode
+    #[arg(long, short = 'i')]
+    pub interactive: bool,
+}
+
+#[derive(Args)]
+pub struct SignReplyArgs {
+    /// Public key of the provider, as a PEM string
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub provider_pubkey_pem: Option<String>,
+
+    /// Contract ID to use
+    #[arg(long)]
+    pub contract_id: Option<String>,
+
+    /// Accept the contract-sign request
+    #[arg(long, requires = "contract_id", requires = "identity")]
+    pub accept: bool,
+
+    /// Reject the contract-sign request
+    #[arg(long, requires = "contract_id", requires = "identity")]
+    pub reject: bool,
+
+    /// Memo for the contract-sign request
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub memo: Option<String>,
+
+    /// Interactive mode
+    #[arg(long, short = 'i')]
+    pub interactive: bool,
+}
+
+pub fn parse_args() -> Cli {
+    Cli::parse()
 }

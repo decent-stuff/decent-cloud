@@ -1,6 +1,7 @@
 mod argparse;
 mod keygen;
 
+use argparse::{Commands, ContractCommands};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -38,24 +39,22 @@ const PUSH_BLOCK_SIZE: u64 = 1024 * 1024;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_logger()?;
 
-    let args = argparse::parse_args();
+    let cli = argparse::parse_args();
 
-    let ledger_path = match args.get_one::<String>("local-ledger-dir") {
-        Some(value) => PathBuf::from(value),
-        None => dirs::home_dir()
+    let ledger_path = cli.local_ledger_dir.map(PathBuf::from).unwrap_or_else(|| {
+        dirs::home_dir()
             .expect("Could not get home directory")
             .join(".dcc")
             .join("ledger")
-            .join("main.bin"),
-    };
+            .join("main.bin")
+    });
+
     let ledger_local =
         LedgerMap::new_with_path(None, Some(ledger_path)).expect("Failed to load the local ledger");
     refresh_caches_from_ledger(&ledger_local).expect("Failed to get balances");
 
-    let network = args
-        .get_one::<String>("network")
-        .cloned()
-        .unwrap_or("ic".to_string());
+    let network = cli.network.unwrap_or_else(|| "ic".to_string());
+
     let canister_id = match network.as_str() {
         "local" => IcPrincipal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai")?,
         "mainnet-eu" => IcPrincipal::from_text("tlvs5-oqaaa-aaaas-aaabq-cai")?,
@@ -71,16 +70,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ledger_canister = |identity| async {
         LedgerCanister::new(canister_id, identity, network_url.to_string()).await
     };
-    let identity_name = args.get_one::<String>("identity").cloned();
+    let identity_name = cli.identity.clone();
 
-    Ok(match args.subcommand() {
-        Some(("keygen", arg_matches)) => {
+    match cli.command {
+        Commands::Keygen(ref keygen_args) => {
             let identity = identity_name.expect("is present");
 
-            let mnemonic = if arg_matches.contains_id("mnemonic") {
-                let mnemonic_string = arg_matches
-                    .get_many::<String>("mnemonic")
-                    .expect("contains mnemonic")
+            let mnemonic = if keygen_args.generate {
+                let mnemonic =
+                    bip39::Mnemonic::new(bip39::MnemonicType::Words12, bip39::Language::English);
+                info!("Mnemonic:\n{}", mnemonic);
+                mnemonic
+            } else if !keygen_args.mnemonic.is_empty() {
+                let length = keygen_args.mnemonic.len();
+                if length != 12 && length != 24 {
+                    panic!("Mnemonic must be exactly 12 or 24 words, but got {length}.");
+                }
+                let mnemonic_string = keygen_args
+                    .mnemonic
+                    .iter()
                     .map(|s| s.into())
                     .collect::<Vec<_>>();
                 if mnemonic_string.len() < 12 {
@@ -89,11 +97,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     keygen::mnemonic_from_strings(mnemonic_string)?
                 }
-            } else if arg_matches.get_flag("generate") {
-                let mnemonic =
-                    bip39::Mnemonic::new(bip39::MnemonicType::Words12, bip39::Language::English);
-                info!("Mnemonic:\n{}", mnemonic);
-                mnemonic
             } else {
                 panic!("Neither mnemonic nor generate specified");
             };
@@ -103,13 +106,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Generated identity: {}", dcc_identity);
             dcc_identity.save_to_dir(&identity)
         }
-        Some(("account", arg_matches)) => {
+        Commands::Account(ref account_args) => {
             let identities_dir = DccIdentity::identities_dir();
             let identity = identity_name.expect("is present");
             let dcc_identity = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
             let account = dcc_identity.as_icrc_compatible_account();
 
-            if arg_matches.get_flag("balance") {
+            if account_args.balance {
                 println!(
                     "Account {} balance {}",
                     account,
@@ -117,11 +120,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
 
-            if let Some(transfer_to_account) = arg_matches.get_one::<String>("transfer-to") {
+            if let Some(transfer_to_account) = &account_args.transfer_to {
                 let transfer_to_account = IcrcCompatibleAccount::from(transfer_to_account);
-                let transfer_amount_e9s = match arg_matches.get_one::<String>("amount-dct") {
+                let transfer_amount_e9s = match &account_args.amount_dct {
                     Some(value) => value.parse::<TokenAmount>()? * DC_TOKEN_DECIMALS_DIV,
-                    None => match arg_matches.get_one::<String>("amount-e9s") {
+                    None => match &account_args.amount_e9s {
                         Some(value) => value.parse::<TokenAmount>()?,
                         None => {
                             panic!("You must specify either --amount-dct or --amount-e9s")
@@ -164,10 +167,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         }
-        Some(("np", arg_matches)) => {
-            if arg_matches.get_flag("list") || arg_matches.get_flag("balances") {
-                list_identities(arg_matches.get_flag("balances"))?;
-            } else if arg_matches.contains_id("register") {
+        Commands::Np(ref np_args) => {
+            if np_args.list || np_args.balances {
+                list_identities(np_args.balances)?;
+            } else if np_args.register {
                 let identity = identity_name.expect("You must specify an identity");
                 let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                 let ic_auth = dcc_to_ic_auth(&dcc_ident);
@@ -180,12 +183,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .node_provider_register(&pubkey_bytes, pubkey_signature.to_bytes().as_slice())
                     .await?;
                 println!("Register: {}", result);
-            } else if arg_matches.get_flag("check-in-nonce") {
+            } else if np_args.check_in_nonce {
                 let nonce_bytes = ledger_canister(None).await?.get_check_in_nonce().await;
                 let nonce_string = hex::encode(&nonce_bytes);
 
                 println!("0x{}", nonce_string);
-            } else if arg_matches.contains_id("check-in") {
+            } else if np_args.check_in {
                 let identity = identity_name.expect("You must specify an identity");
 
                 let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
@@ -220,13 +223,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     nonce_string,
                     nonce_bytes.len()
                 );
-                let check_in_memo = match arg_matches.get_one::<String>("check-in-memo").cloned() {
-                    Some(memo) => memo,
-                    None => {
-                        println!("No memo specified, did you know that you can specify one? Try out --check-in-memo");
-                        String::new()
-                    }
-                };
+                let check_in_memo = np_args.check_in_memo.clone().unwrap_or_else(|| {
+                    println!("No memo specified, did you know that you can specify one? Try out --check-in-memo");
+                    String::new()
+                });
                 let nonce_crypto_signature = dcc_ident.sign(nonce_bytes.as_ref())?;
                 let result = ledger_canister(ic_auth)
                     .await?
@@ -238,12 +238,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .await
                     .map_err(|e| format!("Check-in failed: {}", e))?;
                 info!("Check-in success: {}", result);
-            } else if arg_matches.contains_id("update-profile") {
+            } else if let Some(ref profile_file_name) = np_args.update_profile {
                 let identity = identity_name.expect("You must specify an identity");
-
-                let profile_file_name = arg_matches
-                    .get_one::<String>("update-profile")
-                    .expect("You must specify a profile file");
 
                 let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                 let ic_auth = dcc_to_ic_auth(&dcc_id);
@@ -262,11 +258,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .await
                     .map_err(|e| format!("Update profile failed: {}", e))?;
                 info!("Profile update response: {}", result);
-            } else if arg_matches.contains_id("update-offering") {
+            } else if let Some(ref offering_file_name) = np_args.update_offering {
                 let identity = identity_name.expect("You must specify an identity");
-                let offering_file_name = arg_matches
-                    .get_one::<String>("update-offering")
-                    .expect("You must specify an offering file");
                 let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                 let ic_auth = dcc_to_ic_auth(&dcc_id);
 
@@ -289,10 +282,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         }
-        Some(("user", arg_matches)) => {
-            if arg_matches.get_flag("list") || arg_matches.get_flag("balances") {
-                list_identities(arg_matches.get_flag("balances"))?
-            } else if arg_matches.get_flag("register") {
+        Commands::User(ref user_args) => {
+            if user_args.list || user_args.balances {
+                list_identities(user_args.balances)?
+            } else if user_args.register {
                 let identity = identity_name.expect("You must specify an identity");
                 let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                 let ic_auth = dcc_to_ic_auth(&dcc_id);
@@ -316,8 +309,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(())
         }
-        Some(("ledger_local", arg_matches)) => {
-            if arg_matches.get_flag("list_entries") {
+        Commands::LedgerLocal(ref local_args) => {
+            if local_args.list_entries {
                 println!("Entries:");
                 for entry in ledger_local.iter(None) {
                     match entry.label() {
@@ -330,7 +323,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         _ => println!("{}", entry),
                     };
                 }
-            } else if arg_matches.get_flag("list_entries_raw") {
+            } else if local_args.list_entries_raw {
                 println!("Raw Entries:");
                 for entry in ledger_local.iter_raw() {
                     let (blk_header, ledger_block) = entry?;
@@ -340,17 +333,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(())
         }
-        Some(("ledger_remote", arg_matches)) => {
-            let local_ledger_path = match arg_matches.get_one::<String>("dir") {
-                Some(value) => PathBuf::from(value),
+        Commands::LedgerRemote(ref remote_args) => {
+            let local_ledger_path = match remote_args.dir {
+                Some(ref value) => PathBuf::from(value),
                 None => dirs::home_dir()
                     .expect("Could not get home directory")
                     .join(".dcc")
                     .join("ledger")
                     .join("main.bin"),
             };
-            let push_auth = arg_matches.get_flag("data-push-authorize");
-            let push = arg_matches.get_flag("data-push");
+            let push_auth = remote_args.data_push_authorize;
+            let push = remote_args.data_push;
             if push_auth || push {
                 let identity = identity_name.expect("You must specify an identity");
 
@@ -374,8 +367,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return ledger_data_push(&canister, local_ledger_path).await;
             }
 
-            let canister_function = match arg_matches.get_one::<String>("canister_function") {
-                Some(value) => value,
+            let canister_function = match remote_args.canister_function {
+                Some(ref value) => value,
                 None => {
                     println!("Available canister functions:");
                     for f in ledger_canister(None).await?.list_functions_updates() {
@@ -480,10 +473,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         }
-        Some(("offering", arg_matches)) => {
-            let query = arg_matches.get_one::<String>("query").cloned();
-            if arg_matches.get_flag("list") || query.is_some() {
-                let query = query.unwrap_or_default();
+        Commands::Offering(ref offering_args) => {
+            let query = offering_args.query.clone().unwrap_or_default();
+            if offering_args.list || !query.is_empty() {
                 let offerings = do_get_matching_offerings(&ledger_local, &query);
                 println!("Found {} matching offerings:", offerings.len());
                 for (dcc_id, offering) in offerings {
@@ -497,181 +489,172 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         }
-        Some(("contract", arg_matches)) => {
-            match arg_matches.subcommand() {
-                Some(("list-open", _arg_matches)) => {
-                    println!("Listing all open contracts...");
-                }
-                Some(("sign-request", arg_matches)) => {
-                    let interactive_mode = arg_matches.get_flag("interactive");
-                    loop {
-                        let identity;
-                        let offering_id;
-                        let requester_ssh_pubkey;
-                        let requester_contact;
-                        let provider_pubkey_pem;
-                        let memo;
+        Commands::Contract(ref contract_args) => match contract_args {
+            ContractCommands::ListOpen(_list_open_args) => {
+                println!("Listing all open contracts...");
+                Ok(())
+            }
+            ContractCommands::SignRequest(sign_req_args) => {
+                println!("Request to sign a contract...");
+                loop {
+                    let identity;
+                    let offering_id;
+                    let requester_ssh_pubkey;
+                    let requester_contact;
+                    let provider_pubkey_pem;
+                    let memo;
 
-                        if interactive_mode {
-                            println!();
-                            identity = match &identity_name {
-                                Some(name) => name.clone(),
-                                None => dialoguer::Input::<String>::new()
-                                    .with_prompt("Please enter the identity name")
-                                    .allow_empty(false)
-                                    .show_default(false)
-                                    .interact()
-                                    .unwrap(),
-                            };
-                            offering_id = match arg_matches.get_one::<String>("offering-id") {
-                                Some(s) => s.clone(),
-                                None => dialoguer::Input::<String>::new()
-                                    .with_prompt("Please enter the offering id")
-                                    .allow_empty(false)
-                                    .show_default(false)
-                                    .interact()
-                                    .unwrap_or_default(),
-                            };
-                            requester_ssh_pubkey = match arg_matches.get_one::<String>("requester-ssh-pubkey") {
-                                Some(s) => s.clone(),
-                                None => dialoguer::Input::<String>::new()
-                                    .with_prompt("Please enter your ssh public key, which will be granted access to the contract")
-                                    .allow_empty(false)
-                                    .show_default(false)
-                                    .interact()
-                                    .unwrap_or_default(),
-                            };
-                            requester_contact =
-                                match arg_matches.get_one::<String>("requester-contact") {
-                                    Some(s) => s.clone(),
-                                    None => dialoguer::Input::<String>::new()
-                                        .with_prompt(
-                                            "Enter your contact information (this will be public)",
-                                        )
-                                        .allow_empty(false)
-                                        .show_default(false)
-                                        .interact()
-                                        .unwrap_or_default(),
-                                };
-                            provider_pubkey_pem =
-                                match arg_matches.get_one::<String>("provider-pubkey-pem") {
-                                    Some(s) => s.clone(),
-                                    None => match dialoguer::Editor::new().edit(
-                                        "# Enter the provider's public key below, as a PEM string",
-                                    ) {
-                                        Ok(Some(content)) => content,
-                                        Ok(None) => {
-                                            println!("No input received.");
-                                            continue;
-                                        }
-                                        Err(err) => {
-                                            eprintln!("Error opening editor: {}", err);
-                                            continue;
-                                        }
-                                    },
-                                };
-                            memo = match arg_matches.get_one::<String>("memo") {
-                                Some(s) => s.clone(),
-                                None => dialoguer::Input::<String>::new()
-                                    .with_prompt(
-                                        "Please enter a memo for the contract (this will be public)",
-                                    )
-                                    .allow_empty(true)
-                                    .show_default(false)
-                                    .interact()
-                                    .unwrap_or_default(),
-                            };
-                        } else {
-                            identity = identity_name.clone().expect("You must specify an identity");
-                            offering_id = arg_matches
-                                .get_one::<String>("offering-id")
-                                .unwrap()
-                                .to_string();
-                            requester_ssh_pubkey = arg_matches
-                                .get_one::<String>("requester-ssh-pubkey")
-                                .expect("You must specify your ssh pubkey")
-                                .clone();
-                            requester_contact = arg_matches
-                                .get_one::<String>("requester-contact")
-                                .expect("You must specify your contact info")
-                                .clone();
-                            provider_pubkey_pem = arg_matches
-                                .get_one::<String>("provider-pubkey-pem")
-                                .expect("You must specify the provider's pubkey")
-                                .clone();
-                            memo = arg_matches
-                                .get_one::<String>("memo")
-                                .cloned()
-                                .unwrap_or_default();
+                    if sign_req_args.interactive {
+                        println!();
+                        identity = match &cli.identity {
+                            Some(name) => name.clone(),
+                            None => dialoguer::Input::<String>::new()
+                                .with_prompt("Please enter the identity name")
+                                .allow_empty(false)
+                                .show_default(false)
+                                .interact()
+                                .unwrap(),
                         };
-                        let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
-                        let provider_dcc_ident =
-                            match DccIdentity::new_verifying_from_pem(&provider_pubkey_pem) {
-                                Ok(ident) => ident,
-                                Err(e) => {
-                                    eprintln!("ERROR: Failed to parse provider pubkey: {}", e);
+                        offering_id = match &sign_req_args.offering_id {
+                            Some(s) => s.clone(),
+                            None => dialoguer::Input::<String>::new()
+                                .with_prompt("Please enter the offering id")
+                                .allow_empty(false)
+                                .show_default(false)
+                                .interact()
+                                .unwrap_or_default(),
+                        };
+                        requester_ssh_pubkey = match &sign_req_args.requester_ssh_pubkey {
+                            Some(s) => s.clone(),
+                            None => dialoguer::Input::<String>::new()
+                                .with_prompt("Please enter your ssh public key, which will be granted access to the contract")
+                                .allow_empty(false)
+                                .show_default(false)
+                                .interact()
+                                .unwrap_or_default(),
+                        };
+                        requester_contact = match &sign_req_args.requester_contact {
+                            Some(s) => s.clone(),
+                            None => dialoguer::Input::<String>::new()
+                                .with_prompt("Enter your contact information (this will be public)")
+                                .allow_empty(false)
+                                .show_default(false)
+                                .interact()
+                                .unwrap_or_default(),
+                        };
+                        provider_pubkey_pem = match &sign_req_args.provider_pubkey_pem {
+                            Some(s) => s.clone(),
+                            None => match dialoguer::Editor::new()
+                                .edit("# Enter the provider's public key below, as a PEM string")
+                            {
+                                Ok(Some(content)) => content,
+                                Ok(None) => {
+                                    println!("No input received.");
                                     continue;
                                 }
-                            };
-                        let provider_pubkey_bytes = provider_dcc_ident.to_bytes_verifying();
-
-                        let requester_pubkey_bytes = dcc_id.to_bytes_verifying();
-                        let req = ContractSignRequest::new(
-                            &requester_pubkey_bytes,
-                            requester_ssh_pubkey,
-                            requester_contact,
-                            &provider_pubkey_bytes,
-                            offering_id.clone(),
-                            None,
-                            None,
-                            None,
-                            100,
-                            3600,
-                            None,
-                            memo.clone(),
-                        );
-                        println!("The following contract sign request will be sent:");
-                        println!("{}", serde_json::to_string_pretty(&req)?);
-                        if dialoguer::Confirm::new()
-                            .with_prompt("Is this correct? If so, press enter to send.")
-                            .default(false)
-                            .show_default(true)
-                            .interact()
-                            .unwrap()
-                        {
-                            let payload_bytes = borsh::to_vec(&req).unwrap();
-                            let payload_sig_bytes = dcc_id.sign(&payload_bytes)?.to_bytes();
-                            let ic_auth = dcc_to_ic_auth(&dcc_id);
-                            let canister = ledger_canister(ic_auth).await?;
-
-                            let response = canister
-                                .contract_sign_request(
-                                    &requester_pubkey_bytes,
-                                    &payload_bytes,
-                                    &payload_sig_bytes,
+                                Err(err) => {
+                                    eprintln!("Error opening editor: {}", err);
+                                    continue;
+                                }
+                            },
+                        };
+                        memo = match &sign_req_args.memo {
+                            Some(s) => s.clone(),
+                            None => dialoguer::Input::<String>::new()
+                                .with_prompt(
+                                    "Please enter a memo for the contract (this will be public)",
                                 )
-                                .await;
+                                .allow_empty(true)
+                                .show_default(false)
+                                .interact()
+                                .unwrap_or_default(),
+                        };
+                    } else {
+                        identity = cli.identity.clone().expect("You must specify an identity");
+                        offering_id = sign_req_args
+                            .offering_id
+                            .clone()
+                            .expect("You must specify an offering id");
+                        requester_ssh_pubkey = sign_req_args
+                            .requester_ssh_pubkey
+                            .clone()
+                            .expect("You must specify your ssh pubkey");
+                        requester_contact = sign_req_args
+                            .requester_contact
+                            .clone()
+                            .expect("You must specify your contact info");
+                        provider_pubkey_pem = sign_req_args
+                            .provider_pubkey_pem
+                            .clone()
+                            .expect("You must specify the provider's pubkey");
+                        memo = sign_req_args.memo.clone().unwrap_or_default();
+                    };
+                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+                    let provider_dcc_ident =
+                        match DccIdentity::new_verifying_from_pem(&provider_pubkey_pem) {
+                            Ok(ident) => ident,
+                            Err(e) => {
+                                eprintln!("ERROR: Failed to parse provider pubkey: {}", e);
+                                continue;
+                            }
+                        };
+                    let provider_pubkey_bytes = provider_dcc_ident.to_bytes_verifying();
 
-                            match response {
-                                Ok(response) => {
-                                    println!("Contract sign request successful: {}", response);
-                                }
-                                Err(e) => {
-                                    println!("Contract sign request failed: {}", e);
-                                }
+                    let requester_pubkey_bytes = dcc_id.to_bytes_verifying();
+                    let req = ContractSignRequest::new(
+                        &requester_pubkey_bytes,
+                        requester_ssh_pubkey,
+                        requester_contact,
+                        &provider_pubkey_bytes,
+                        offering_id.clone(),
+                        None,
+                        None,
+                        None,
+                        100,
+                        3600,
+                        None,
+                        memo.clone(),
+                    );
+                    println!("The following contract sign request will be sent:");
+                    println!("{}", serde_json::to_string_pretty(&req)?);
+                    if dialoguer::Confirm::new()
+                        .with_prompt("Is this correct? If so, press enter to send.")
+                        .default(false)
+                        .show_default(true)
+                        .interact()
+                        .unwrap()
+                    {
+                        let payload_bytes = borsh::to_vec(&req).unwrap();
+                        let payload_sig_bytes = dcc_id.sign(&payload_bytes)?.to_bytes();
+                        let ic_auth = dcc_to_ic_auth(&dcc_id);
+                        let canister = ledger_canister(ic_auth).await?;
+
+                        let response = canister
+                            .contract_sign_request(
+                                &requester_pubkey_bytes,
+                                &payload_bytes,
+                                &payload_sig_bytes,
+                            )
+                            .await;
+
+                        match response {
+                            Ok(response) => {
+                                println!("Contract sign request successful: {}", response);
+                            }
+                            Err(e) => {
+                                println!("Contract sign request failed: {}", e);
                             }
                         }
                     }
                 }
-                Some(("sign-reply", arg_matches)) => {}
-                _ => {
-                    println!("Unknown contract subcommand, use --help");
-                }
             }
-            Ok(())
-        }
-        _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable
-    }?)
+            ContractCommands::SignReply(_sign_reply_args) => {
+                println!("Reply to a contract-sign request...");
+                unimplemented!();
+            }
+        },
+    }?;
+    Ok(())
 }
 
 fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
