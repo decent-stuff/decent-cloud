@@ -55,7 +55,7 @@ pub struct KeygenArgs {
         long,
         conflicts_with = "generate",
         requires = "identity",
-        num_args = 12
+        num_args = 12..=24
     )]
     pub mnemonic: Vec<String>,
 

@@ -1,4 +1,5 @@
 use candid::{Decode, Encode};
+use dcc_common::{ContractId, ContractReqSerialized};
 use ic_agent::{export::Principal, identity::BasicIdentity, Agent};
 
 type ResultString = Result<String, String>;
@@ -157,6 +158,22 @@ impl LedgerCanister {
             .map_err(|e| e.to_string())?;
         let response = self.call_update("contract_sign_reply", &args).await?;
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
+    }
+
+    pub async fn contracts_list_pending(
+        &self,
+        pubkey_bytes: Option<Vec<u8>>,
+    ) -> Vec<(ContractId, ContractReqSerialized)> {
+        let args = Encode!(&pubkey_bytes).map_err(|e| e.to_string()).unwrap();
+        let response = self
+            .call_query("contracts_list_pending", &args)
+            .await
+            .unwrap();
+        Decode!(
+            response.as_slice(),
+            Vec<(ContractId, ContractReqSerialized)>
+        )
+        .unwrap()
     }
 
     pub async fn get_check_in_nonce(&self) -> Vec<u8> {

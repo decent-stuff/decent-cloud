@@ -6,15 +6,16 @@ use argparse::{Commands, ContractCommands};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use bip39::Seed;
+use borsh::BorshDeserialize;
 use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
-use dcc_common::ContractSignRequest;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data,
     offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get,
     CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor, TokenAmount,
     DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
+use dcc_common::{ContractSignRequest, ContractSignRequestPayload};
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
 use fs_err::OpenOptions;
@@ -492,6 +493,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Contract(ref contract_args) => match contract_args {
             ContractCommands::ListOpen(_list_open_args) => {
                 println!("Listing all open contracts...");
+                // A user may provide the identity (public key), but doesn't have to
+                let pubkey_bytes = cli.identity.map(|name| {
+                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&name)).unwrap();
+                    dcc_id.to_bytes_verifying()
+                });
+                let canister = ledger_canister(None).await?;
+                let contracts_open = canister.contracts_list_pending(pubkey_bytes).await;
+                if contracts_open.is_empty() {
+                    println!("No open contracts");
+                } else {
+                    for (contract_id, contract_req_bytes) in contracts_open {
+                        println!("{}", hex::encode(contract_id));
+                        let contract_req =
+                            ContractSignRequestPayload::try_from_slice(&contract_req_bytes)
+                                .unwrap();
+                        let contract_req =
+                            contract_req.deserialize_contract_sign_request().unwrap();
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&contract_req).unwrap_or_default()
+                        );
+                    }
+                }
                 Ok(())
             }
             ContractCommands::SignRequest(sign_req_args) => {
