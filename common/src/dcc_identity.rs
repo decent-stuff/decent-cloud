@@ -270,6 +270,13 @@ impl DccIdentity {
         let identity_dir = Self::identities_dir().join(identity);
 
         let public_pem_file_path = identity_dir.join("public.pem");
+        if public_pem_file_path.exists() {
+            return Err(format!(
+                "Refusing to overwrite existing public key file at {}",
+                public_pem_file_path.display()
+            )
+            .into());
+        }
         self.write_verifying_key_to_pem_file(&public_pem_file_path)?;
 
         match self {
