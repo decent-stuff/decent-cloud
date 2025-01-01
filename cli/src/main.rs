@@ -77,12 +77,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Keygen(ref keygen_args) => {
-            let identity = identity_name.expect("is present");
+            let identity =
+                identity_name.expect("Identity must be specified for this command, use --identity");
 
             let mnemonic = if keygen_args.generate {
                 let mnemonic =
                     bip39::Mnemonic::new(bip39::MnemonicType::Words12, bip39::Language::English);
-                info!("Mnemonic:\n{}", mnemonic);
+                info!("Generated mnemonic:\n{}", mnemonic);
                 mnemonic
             } else if !keygen_args.mnemonic.is_empty() {
                 let length = keygen_args.mnemonic.len();
@@ -111,7 +112,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Account(ref account_args) => {
             let identities_dir = DccIdentity::identities_dir();
-            let identity = identity_name.expect("is present");
+            let identity =
+                identity_name.expect("Identity must be specified for this command, use --identity");
             let dcc_identity = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
             let account = dcc_identity.as_icrc_compatible_account();
 
@@ -174,7 +176,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match np_cmd {
                 NpCommands::List(list_args) => list_identities(list_args.balances)?,
                 NpCommands::Register => {
-                    let identity = identity_name.expect("You must specify an identity");
+                    let identity = identity_name
+                        .expect("Identity must be specified for this command, use --identity");
                     let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                     let ic_auth = dcc_to_ic_auth(&dcc_ident);
 
@@ -233,7 +236,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             nonce_bytes.len()
                         );
                         let check_in_memo = check_in_args.memo.clone().unwrap_or_else(|| {
-                        println!("No memo specified, did you know that you can specify one? Try out --check-in-memo");
+                        println!("No memo specified, did you know that you can specify one? Try out --memo");
                         String::new()
                     });
                         let nonce_crypto_signature = dcc_ident.sign(nonce_bytes.as_ref())?;
