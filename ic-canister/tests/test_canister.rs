@@ -658,7 +658,10 @@ fn contract_sign_request(
         None,
         None,
         100,
-        3600,
+        vec![PaymentEntryWithAmount {
+            e: PaymentEntry::new("on_demand", "hour", 1),
+            amount_e9s: 100,
+        }],
         None,
         memo,
     );

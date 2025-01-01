@@ -339,6 +339,45 @@ impl DccIdentity {
             Self::new_verifying(&verifying_key)
         }
     }
+
+    pub fn display_type(&self) -> &str {
+        match self {
+            DccIdentity::Invalid => "[Invalid DccIdentity]",
+            DccIdentity::Ed25519(None, _) => "[Ed25519 verifying]",
+            DccIdentity::Ed25519(Some(_), _) => "[Ed25519 signing]",
+        }
+    }
+
+    pub fn display_verifying_key_as_ic_identity(&self) -> String {
+        match self {
+            DccIdentity::Invalid => "".to_string(),
+            DccIdentity::Ed25519(_, _) => self.to_ic_principal().to_string(),
+        }
+    }
+
+    pub fn display_verifying_key_as_pem_one_line(&self) -> String {
+        match self {
+            DccIdentity::Invalid => "".to_string(),
+            DccIdentity::Ed25519(_, _) => self.verifying_key_as_pem_one_line(),
+        }
+    }
+
+    pub fn display_as_pem_one_line(&self) -> String {
+        format!(
+            "{} {}",
+            self.display_type(),
+            self.display_verifying_key_as_pem_one_line()
+        )
+    }
+
+    pub fn display_as_ic_and_pem_one_line(&self) -> String {
+        format!(
+            "{} IC identity {} PEM {}",
+            self.display_type(),
+            self.display_verifying_key_as_ic_identity(),
+            self.display_verifying_key_as_pem_one_line()
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -414,12 +453,12 @@ impl From<&str> for CryptoError {
 
 impl std::fmt::Display for DccIdentity {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            DccIdentity::Invalid => write!(f, "[Invalid] ")?,
-            DccIdentity::Ed25519(None, _) => write!(f, "[Ed25519 verifying] ")?,
-            DccIdentity::Ed25519(Some(_), _) => write!(f, "[Ed25519 signing] ")?,
-        }
-        write!(f, "{}", self.to_ic_principal())
+        write!(
+            f,
+            "{} {}",
+            self.display_type(),
+            self.display_verifying_key_as_ic_identity()
+        )
     }
 }
 

@@ -71,6 +71,38 @@ where
     serializer.serialize_str(&dcc_id.verifying_key_as_pem_one_line())
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct PaymentEntry {
+    pub pricing_model: String,    // E.g. on_demand, reserved, ...
+    pub time_period_unit: String, // E.g. hour, day
+    pub quantity: u64,            // number of units
+}
+
+impl PaymentEntry {
+    pub fn new<S: ToString>(pricing_model: S, period: S, quantity: u64) -> Self {
+        PaymentEntry {
+            pricing_model: pricing_model.to_string(),
+            time_period_unit: period.to_string(),
+            quantity,
+        }
+    }
+}
+
+// This struct is added to work around a clap issue.
+// Clap needs one value produced by a value_parser to avoid the following mismatch:
+// Mismatch between definition and access of `payment_entries_json`. Could not downcast to dcc_common::contract_sign_request::PaymentEntry, need to downcast to alloc::vec::Vec<dcc_common::contract_sign_request::PaymentEntry>
+#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct PaymentEntries(pub Vec<PaymentEntry>);
+
+// Struct for preparing payment on the CLI, which makes it easier to calculate the total
+// amount
+#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+pub struct PaymentEntryWithAmount {
+    #[serde(flatten)]
+    pub e: PaymentEntry,
+    pub amount_e9s: TokenAmountE9s, // total amount
+}
+
 // Struct for requesting a contract signature, version 1. Future versions can be added below
 #[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ContractSignRequestV1 {
@@ -85,7 +117,7 @@ pub struct ContractSignRequestV1 {
     contract_id: Option<String>,  // Optional contract id, if an existing contract is being extended
     instance_config: Option<String>, // Optional configuration for the instance deployment, e.g. cloud-init
     payment_amount_e9s: u64,         // How much is the requester offering to pay for the contract
-    duration_seconds: u64, // For how many SECONDS would the requester like to sign the contract; 1 hour = 3600 seconds, 1 day = 86400 seconds
+    payment_entries: Vec<PaymentEntryWithAmount>,
     start_timestamp: Option<u64>, // Optionally, only start contract at this unix time (in seconds) UTC. This can be in the past or in the future. Default is now.
     request_memo: String, // Reference to this particular request; arbitrary text. Can be used e.g. for administrative purposes
 }
@@ -102,7 +134,7 @@ impl ContractSignRequest {
         contract_id: Option<String>,
         instance_config: Option<String>,
         payment_amount_e9s: u64,
-        duration_seconds: u64,
+        payment_entries: Vec<PaymentEntryWithAmount>,
         start_timestamp: Option<u64>,
         request_memo: String,
     ) -> Self {
@@ -116,7 +148,7 @@ impl ContractSignRequest {
             contract_id,
             instance_config,
             payment_amount_e9s,
-            duration_seconds,
+            payment_entries,
             start_timestamp,
             request_memo,
         })
@@ -170,13 +202,7 @@ impl ContractSignRequest {
         }
     }
 
-    pub fn rent_period_seconds(&self) -> u64 {
-        match self {
-            ContractSignRequest::V1(v1) => v1.duration_seconds,
-        }
-    }
-
-    pub fn rent_start_timestamp(&self) -> Option<u64> {
+    pub fn contract_start_timestamp(&self) -> Option<u64> {
         match self {
             ContractSignRequest::V1(v1) => v1.start_timestamp,
         }

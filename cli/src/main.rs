@@ -14,7 +14,9 @@ use dcc_common::{
     CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor,
     TokenAmountE9s, DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
-use dcc_common::{ContractSignReply, ContractSignRequest};
+use dcc_common::{
+    ContractSignReply, ContractSignRequest, PaymentEntries, PaymentEntry, PaymentEntryWithAmount,
+};
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
 use fs_err::OpenOptions;
@@ -25,6 +27,7 @@ use icrc_ledger_types::{
 };
 use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
 use log::{info, Level, LevelFilter, Metadata, Record};
+use np_offering::Offering;
 use std::time::SystemTime;
 use std::{
     collections::HashMap,
@@ -489,12 +492,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 OfferingCommands::List => "",
                 OfferingCommands::Query(query_args) => &query_args.query,
             };
-            let offerings = do_get_matching_offerings(&ledger_local, &query);
+            let offerings = do_get_matching_offerings(&ledger_local, query);
             println!("Found {} matching offerings:", offerings.len());
             for (dcc_id, offering) in offerings {
                 println!(
                     "{} ==>\n{}",
-                    dcc_id,
+                    dcc_id.display_as_ic_and_pem_one_line(),
                     &offering.as_json_string_pretty().unwrap_or_default()
                 );
             }
@@ -529,7 +532,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!();
                     let i = sign_req_args.interactive;
                     let identity = prompt_input("Please enter the identity name", &cli.identity, i);
-                    let offering_id = prompt_input(
+                    let instance_id = prompt_input(
                         "Please enter the offering id",
                         &sign_req_args.offering_id,
                         i,
@@ -551,15 +554,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "# Enter the provider's public key below, as a PEM string",
                                 i,
                             )
+                            .lines()
+                            .map(|line| {
+                                line.split_once('#')
+                                    .map(|line| line.0)
+                                    .unwrap_or(line)
+                                    .trim()
+                                    .to_string()
+                            })
+                            .filter(|line| !line.is_empty())
+                            .collect::<Vec<String>>()
+                            .join("\n")
                         });
-                    let memo = prompt_input(
-                        "Please enter a memo for the contract (this will be public)",
-                        &sign_req_args.memo,
-                        i,
-                    );
-
-                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
-                    let provider_dcc_ident =
+                    let provider_dcc_id =
                         match DccIdentity::new_verifying_from_pem(&provider_pubkey_pem) {
                             Ok(ident) => ident,
                             Err(e) => {
@@ -567,7 +574,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 continue;
                             }
                         };
-                    let provider_pubkey_bytes = provider_dcc_ident.to_bytes_verifying();
+                    let provider_pubkey_bytes = provider_dcc_id.to_bytes_verifying();
+                    // Find the offering with the given id, from the provider
+                    let offerings = do_get_matching_offerings(
+                        &ledger_local,
+                        &format!("instance_types.id = \"{instance_id}\""),
+                    )
+                    .into_iter()
+                    .filter(|o| o.0.to_bytes_verifying() == provider_pubkey_bytes)
+                    .collect::<Vec<(DccIdentity, Offering)>>();
+
+                    let offering = match offerings.len() {
+                        0 => {
+                            eprintln!(
+                                "ERROR: No offering found for the provider {provider_dcc_id} and id: {instance_id}"
+                            );
+                            continue;
+                        }
+                        1 => &offerings[0].1,
+                        _ => {
+                            eprintln!("ERROR: Provider {provider_dcc_id} has multiple offerings with id: {instance_id}");
+                            continue;
+                        }
+                    };
+
+                    let payment_entries = prompt_for_payment_entries(
+                        &sign_req_args.payment_entries_json,
+                        offering,
+                        &instance_id,
+                    );
+
+                    let payment_amount_e9s = payment_entries.iter().map(|e| e.amount_e9s).sum();
+
+                    let memo = prompt_input(
+                        "Please enter a memo for the contract (this will be public)",
+                        &sign_req_args.memo,
+                        i,
+                    );
+
+                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
                     let requester_pubkey_bytes = dcc_id.to_bytes_verifying();
                     let req = ContractSignRequest::new(
@@ -575,19 +620,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         requester_ssh_pubkey,
                         requester_contact,
                         &provider_pubkey_bytes,
-                        offering_id.clone(),
+                        instance_id.clone(),
                         None,
                         None,
                         None,
-                        100,
-                        3600,
+                        payment_amount_e9s,
+                        payment_entries,
                         None,
                         memo.clone(),
                     );
                     println!("The following contract sign request will be sent:");
                     println!("{}", serde_json::to_string_pretty(&req)?);
                     if dialoguer::Confirm::new()
-                        .with_prompt("Is this correct? If so, press enter to send.")
+                        .with_prompt("Is this correct? If yes, press enter to send.")
                         .default(false)
                         .show_default(true)
                         .interact()
@@ -614,6 +659,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("Contract sign request failed: {}", e);
                             }
                         }
+                    } else {
+                        println!("Contract sign request canceled.");
+                        break;
                     }
                 }
                 Ok(())
@@ -707,7 +755,7 @@ fn prompt_input<S: ToString>(
                     .interact()
                     .unwrap_or_default()
             } else {
-                panic!("CLI argument required for: {}", prompt_message)
+                panic!("CLI argument required: {}", prompt_message)
             }
         }
     }
@@ -725,7 +773,7 @@ fn prompt_bool(prompt_message: &str, cli_arg_value: Option<bool>, interactive: b
                     .interact()
                     .unwrap_or_default()
             } else {
-                panic!("CLI argument required for: {}", prompt_message)
+                panic!("CLI argument required: {}", prompt_message)
             }
         }
     }
@@ -745,8 +793,66 @@ fn prompt_editor(prompt_message: &str, interactive: bool) -> String {
             }
         }
     } else {
-        panic!("CLI argument required for: {}", prompt_message);
+        panic!("CLI argument required: {}", prompt_message);
     }
+}
+
+/// We only allow one payment entry at a time, but this can be easily changed later in the CLI
+fn prompt_for_payment_entries(
+    payment_entries_json: &Option<PaymentEntries>,
+    offering: &Offering,
+    instance_id: &str,
+) -> Vec<PaymentEntryWithAmount> {
+    let pricing: HashMap<String, HashMap<String, String>> = offering.instance_pricing(instance_id);
+
+    let get_total_price = |model: &str, time_period_unit: &str, quantity: u64| -> TokenAmountE9s {
+        pricing
+            .get(model)
+            .and_then(|units| units.get(time_period_unit))
+            .map(|amount| amount.parse::<TokenAmountE9s>().unwrap() * quantity)
+            .unwrap()
+    };
+    let mut payment_entries: Vec<_> = payment_entries_json
+        .clone()
+        .map(|entries| {
+            entries
+                .0
+                .into_iter()
+                .map(|e| PaymentEntryWithAmount {
+                    e: e.clone(),
+                    amount_e9s: get_total_price(&e.pricing_model, &e.time_period_unit, e.quantity),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if payment_entries.is_empty() {
+        let models = pricing.keys().collect::<Vec<_>>();
+        let model = models[dialoguer::Select::new()
+            .with_prompt("Please select instance pricing model (ESC to exit)")
+            .items(&models)
+            .default(0)
+            .interact()
+            .expect("Failed to read input")];
+        let units = pricing[model].keys().collect::<Vec<_>>();
+        let time_period_unit = units[dialoguer::Select::new()
+            .with_prompt("Please select time period unit")
+            .items(&units)
+            .report(true)
+            .default(0)
+            .interact()
+            .expect("Failed to read input")];
+        let quantity = dialoguer::Input::<u64>::new()
+            .with_prompt("Please enter the number of units")
+            .default(1)
+            .interact()
+            .expect("Failed to read input");
+        payment_entries.push(PaymentEntryWithAmount {
+            e: PaymentEntry::new(model, time_period_unit, quantity),
+            amount_e9s: get_total_price(model, time_period_unit, quantity),
+        });
+    }
+    payment_entries
 }
 
 fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
