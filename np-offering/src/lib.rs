@@ -56,7 +56,7 @@ pub struct SLA {
     pub uptime: Option<String>,
     pub measurement_period: Option<String>,
     pub support: Option<Support>,
-    pub downtime_compensation: Option<Vec<Compensation>>,
+    pub downtime_compensation: Option<Vec<DowntimeCompensation>>,
     pub maintenance: Option<Maintenance>,
 }
 
@@ -75,7 +75,7 @@ pub struct ResponseTime {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct Compensation {
+pub struct DowntimeCompensation {
     pub less_than: Option<String>,
     pub more_than: Option<String>,
     pub credit_percentage: Option<u8>,
@@ -365,6 +365,12 @@ impl Offering {
 
     pub fn deserialize(data: &[u8]) -> Result<Offering, String> {
         serde_json::from_slice(data).map_err(|e| e.to_string())
+    }
+
+    pub fn instance_pricing(&self, instance_id: &str) -> HashMap<String, HashMap<String, String>> {
+        self.get_instance_with_id(instance_id)
+            .and_then(|instance_type| instance_type.pricing)
+            .unwrap_or_default()
     }
 }
 
