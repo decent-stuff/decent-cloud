@@ -211,7 +211,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // If the local ledger is older than 1 minute, refresh it automatically before proceeding
                         // If needed, the local ledger can also be refreshed manually from the command line
                         if local_ledger_file_mtime
-                            < SystemTime::now() - std::time::Duration::from_secs(60)
+                            < SystemTime::now() - std::time::Duration::from_secs(10)
                         {
                             info!("Local ledger is older than 1 minute, refreshing...");
                             let canister = ledger_canister(None).await?;
