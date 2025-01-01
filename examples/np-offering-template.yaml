@@ -59,9 +59,9 @@ defaults:
           size: 50 GB
         pricing:
           on_demand:
-            hour: "0.05"
+            hour: 500_000_000
           reserved:
-            year: "10"
+            year: 10_000_000_000
         tags:
           - low-cost
           - small-instance

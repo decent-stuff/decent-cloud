@@ -23,10 +23,10 @@ defaults:
           size: 2 GB
         pricing:
           on_demand:
-            hour: "0.01"
+            hour: 10_000_000
           reserved:
-            year: "10"
-            three_year: "20"
+            year: 1_000_000_000
+            three_year: 2_000_000_000
         metadata:
           optimized_for: general
           availability: medium
