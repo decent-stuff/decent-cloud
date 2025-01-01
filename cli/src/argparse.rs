@@ -34,7 +34,8 @@ pub enum Commands {
     /// Account management commands
     Account(AccountArgs),
     /// Node Provider management commands
-    Np(NpArgs),
+    #[command(subcommand)]
+    Np(NpCommands),
     /// User management commands
     User(UserArgs),
     /// Work with the local Decent Cloud Ledger
@@ -84,39 +85,58 @@ pub struct AccountArgs {
     pub amount_dct: Option<String>,
 }
 
-#[derive(Args)]
-pub struct NpArgs {
+#[derive(Subcommand)]
+pub enum NpCommands {
     /// List all node provider identities
-    #[arg(long)]
-    pub list: bool,
+    List(ListArgs),
 
+    /// Register a node provider in the ledger
+    Register,
+
+    /// Check-in Node Provider
+    CheckIn(CheckInArgs),
+
+    /// Update Node Provider profile
+    UpdateProfile(UpdateProfileArgs),
+
+    /// Update Node Provider offering
+    UpdateOffering(UpdateOfferingArgs),
+}
+
+#[derive(Args)]
+pub struct ListArgs {
     /// Get balances of all node provider identities
     #[arg(long)]
     pub balances: bool,
 
-    /// Register a node provider in the ledger
-    #[arg(long, requires = "identity")]
-    pub register: bool,
+    /// Only local identities
+    #[arg(long)]
+    pub local: bool,
+}
 
-    /// Check-in Node Provider
-    #[arg(long, requires = "identity")]
-    pub check_in: bool,
+#[derive(Args)]
+pub struct CheckInArgs {
+    /// Only print the Node Provider check-in nonce
+    #[arg(long, visible_aliases = ["nonce"])]
+    pub only_nonce: bool,
 
     /// Provide a memo value for check-in
     #[arg(long)]
-    pub check_in_memo: Option<String>,
+    pub memo: Option<String>,
+}
 
-    /// Get the Node Provider check-in nonce
-    #[arg(long)]
-    pub check_in_nonce: bool,
-
-    /// Update Node Provider profile
+#[derive(Args)]
+pub struct UpdateProfileArgs {
+    /// Update Node Provider profile with data from the provided file
     #[arg(long, requires = "identity")]
-    pub update_profile: Option<String>,
+    pub profile_file: String,
+}
 
-    /// Update Node Provider offering
-    #[arg(long, conflicts_with = "update_profile", requires = "identity")]
-    pub update_offering: Option<String>,
+#[derive(Args)]
+pub struct UpdateOfferingArgs {
+    /// Update Node Provider offering with data from the provided file
+    #[arg(long, requires = "identity")]
+    pub offering_file: String,
 }
 
 #[derive(Args)]
