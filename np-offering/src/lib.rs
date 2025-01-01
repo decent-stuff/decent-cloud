@@ -2,7 +2,7 @@ use np_json_search::value_matches_with_parents;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_yaml_ng::{self, Value as YamlValue};
-use std::{collections::HashMap, fmt};
+use std::collections::HashMap;
 
 // Define the Offering enum with version-specific variants
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -396,21 +396,21 @@ impl CloudProviderOfferingV0_1_0 {
     }
 }
 
-impl fmt::Display for Offering {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Offering {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Offering::V0_1_0(offering) => write!(f, "{}", offering),
         }
     }
 }
 
-impl fmt::Display for CloudProviderOfferingV0_1_0 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for CloudProviderOfferingV0_1_0 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match serde_yaml_ng::to_string(self) {
             Ok(yaml_str) => write!(f, "{}", yaml_str),
             Err(e) => {
                 write!(f, "Failed to format CloudProviderOfferingV0_1_0: {}", e)?;
-                Err(fmt::Error)
+                Err(std::fmt::Error)
             }
         }
     }
