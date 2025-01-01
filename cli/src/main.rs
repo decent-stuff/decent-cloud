@@ -1,7 +1,7 @@
 mod argparse;
 mod keygen;
 
-use argparse::{Commands, ContractCommands};
+use argparse::{Commands, ContractCommands, OfferingCommands};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -473,18 +473,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         }
-        Commands::Offering(ref offering_args) => {
-            let query = offering_args.query.clone().unwrap_or_default();
-            if offering_args.list || !query.is_empty() {
-                let offerings = do_get_matching_offerings(&ledger_local, &query);
-                println!("Found {} matching offerings:", offerings.len());
-                for (dcc_id, offering) in offerings {
-                    println!(
-                        "{} ==>\n{}",
-                        dcc_id,
-                        &offering.as_json_string_pretty().unwrap_or_default()
-                    );
-                }
+        Commands::Offering(ref cmd) => {
+            let query = match cmd {
+                OfferingCommands::List => "",
+                OfferingCommands::Query(query_args) => &query_args.query,
+            };
+            let offerings = do_get_matching_offerings(&ledger_local, &query);
+            println!("Found {} matching offerings:", offerings.len());
+            for (dcc_id, offering) in offerings {
+                println!(
+                    "{} ==>\n{}",
+                    dcc_id,
+                    &offering.as_json_string_pretty().unwrap_or_default()
+                );
             }
 
             Ok(())

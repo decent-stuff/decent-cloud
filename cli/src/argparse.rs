@@ -42,7 +42,8 @@ pub enum Commands {
     /// Work with the remote Decent Cloud Ledger
     LedgerRemote(LedgerRemoteArgs),
     /// Offering management commands
-    Offering(OfferingArgs),
+    #[command(subcommand)]
+    Offering(OfferingCommands),
     /// Contract management commands
     #[command(subcommand)]
     Contract(ContractCommands),
@@ -171,15 +172,19 @@ pub struct LedgerRemoteArgs {
     pub network: Option<String>,
 }
 
-#[derive(Args)]
-pub struct OfferingArgs {
-    /// List all offerings
-    #[arg(long, conflicts_with = "query")]
-    pub list: bool,
+#[derive(Subcommand)]
+pub enum OfferingCommands {
+    /// List all open offerings
+    List,
 
-    /// Search for offerings with the provided query
-    #[arg(long, conflicts_with = "list")]
-    pub query: Option<String>,
+    /// Search for offerings that match the provided query
+    Query(OfferingQueryArgs),
+}
+
+#[derive(Args)]
+pub struct OfferingQueryArgs {
+    /// Search for offerings that match the provided query
+    pub query: String,
 }
 
 #[derive(Subcommand)]
