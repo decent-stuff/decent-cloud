@@ -13,7 +13,7 @@ use candid::types::number::Nat;
 use candid::CandidType;
 use dcc_common::{
     account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer,
-    nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmount,
+    nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmountE9s,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -99,12 +99,12 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
             balance: balance_from_after.into(),
         });
     }
-    let balance_from_after: TokenAmount = balance_from_after - amount;
+    let balance_from_after: TokenAmountE9s = balance_from_after - amount;
     let to: IcrcCompatibleAccount = arg.to.into();
 
     LEDGER_MAP.with(|ledger| {
         let fee = nat_to_balance(&arg.fee.unwrap_or_default());
-        let balance_to_after: TokenAmount = if to.is_minting_account() {
+        let balance_to_after: TokenAmountE9s = if to.is_minting_account() {
             if fee != 0 {
                 return Err(Icrc1TransferError::BadFee {
                     expected_fee: 0u32.into(),
@@ -150,7 +150,7 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
 // test only
 pub fn _mint_tokens_for_test(
     account: Icrc1Account,
-    amount: TokenAmount,
+    amount: TokenAmountE9s,
     memo: Option<Icrc1Memo>,
 ) -> Nat {
     if !dcc_common::is_test_config() {

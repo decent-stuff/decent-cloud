@@ -114,7 +114,7 @@ impl RecentCache {
 
 #[cfg(test)]
 mod tests {
-    use crate::{account_balance_get, get_timestamp_ns, TokenAmount, MINTING_ACCOUNT};
+    use crate::{account_balance_get, get_timestamp_ns, TokenAmountE9s, MINTING_ACCOUNT};
 
     use super::*;
     use candid::Principal;
@@ -203,7 +203,7 @@ mod tests {
     fn test_parse_ledger_block() {
         RecentCache::clear_cache();
 
-        fn create_dummy_funds_transfer(to: u64, amount: TokenAmount) -> FundsTransfer {
+        fn create_dummy_funds_transfer(to: u64, amount: TokenAmountE9s) -> FundsTransfer {
             let account = crate::IcrcCompatibleAccount {
                 owner: Principal::from_slice(&to.to_be_bytes()),
                 subaccount: None,
@@ -225,7 +225,7 @@ mod tests {
         // Create a dummy LedgerBlock
         let mut entries = Vec::new();
         for i in 0..103 {
-            let transfer = create_dummy_funds_transfer(i, (i + 1) as TokenAmount);
+            let transfer = create_dummy_funds_transfer(i, (i + 1) as TokenAmountE9s);
             let entry = ledger_map::LedgerEntry::new(
                 LABEL_DC_TOKEN_TRANSFER,
                 transfer.to_tx_id(),

@@ -1,4 +1,4 @@
-use crate::TokenAmount;
+use crate::TokenAmountE9s;
 use icrc_ledger_types::icrc1::account::Account;
 use std::{cell::RefCell, time::Duration};
 
@@ -30,6 +30,6 @@ pub(crate) fn get_commit_interval() -> Duration {
     COMMIT_INTERVAL.with(|commit_interval| *commit_interval)
 }
 
-pub fn ledger_get_account_balance(_account: Account) -> Result<TokenAmount, String> {
+pub fn ledger_get_account_balance(_account: Account) -> Result<TokenAmountE9s, String> {
     Ok(0)
 }

@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info, AHashMap, DccIdentity,
-    TokenAmount, LABEL_CONTRACT_SIGN_REQUEST,
+    TokenAmountE9s, LABEL_CONTRACT_SIGN_REQUEST,
 };
 
 pub type ContractId = Vec<u8>;
@@ -52,8 +52,8 @@ pub fn contracts_cache_open_remove(contract_id: &[u8]) {
     })
 }
 
-pub fn contract_sign_fee_e9s(contract_value: TokenAmount) -> TokenAmount {
-    contract_value / 100
+pub fn contract_sign_fee_e9s(contract_value_e9s: TokenAmountE9s) -> TokenAmountE9s {
+    contract_value_e9s / 100
 }
 
 // Main struct for Offering Request
@@ -84,7 +84,7 @@ pub struct ContractSignRequestV1 {
     region_name: Option<String>,  // Optional region name
     contract_id: Option<String>,  // Optional contract id, if an existing contract is being extended
     instance_config: Option<String>, // Optional configuration for the instance deployment, e.g. cloud-init
-    payment_amount: u64,             // How much is the requester offering to pay for the contract
+    payment_amount_e9s: u64,         // How much is the requester offering to pay for the contract
     duration_seconds: u64, // For how many SECONDS would the requester like to sign the contract; 1 hour = 3600 seconds, 1 day = 86400 seconds
     start_timestamp: Option<u64>, // Optionally, only start contract at this unix time (in seconds) UTC. This can be in the past or in the future. Default is now.
     request_memo: String, // Reference to this particular request; arbitrary text. Can be used e.g. for administrative purposes
@@ -101,7 +101,7 @@ impl ContractSignRequest {
         region_name: Option<String>,
         contract_id: Option<String>,
         instance_config: Option<String>,
-        payment_amount: u64,
+        payment_amount_e9s: u64,
         duration_seconds: u64,
         start_timestamp: Option<u64>,
         request_memo: String,
@@ -115,16 +115,16 @@ impl ContractSignRequest {
             region_name,
             contract_id,
             instance_config,
-            payment_amount,
+            payment_amount_e9s,
             duration_seconds,
             start_timestamp,
             request_memo,
         })
     }
 
-    pub fn payment_amount(&self) -> u64 {
+    pub fn payment_amount_e9s(&self) -> u64 {
         match self {
-            ContractSignRequest::V1(v1) => v1.payment_amount,
+            ContractSignRequest::V1(v1) => v1.payment_amount_e9s,
         }
     }
 
@@ -241,7 +241,7 @@ pub fn do_contract_sign_request(
 
     let contract_req = ContractSignRequest::try_from_slice(&request_serialized).unwrap();
 
-    let fees = contract_sign_fee_e9s(contract_req.payment_amount());
+    let fees = contract_sign_fee_e9s(contract_req.payment_amount_e9s());
 
     let payload = ContractSignRequestPayload::new(&request_serialized, &crypto_signature).unwrap();
     let payload_bytes = borsh::to_vec(&payload).unwrap();

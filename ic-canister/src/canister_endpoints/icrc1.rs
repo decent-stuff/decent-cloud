@@ -1,6 +1,6 @@
 use crate::canister_backend::icrc1::*;
 use candid::Nat;
-use dcc_common::TokenAmount;
+use dcc_common::TokenAmountE9s;
 #[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -61,7 +61,7 @@ fn icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
 #[ic_cdk::update]
 fn mint_tokens_for_test(
     account: Icrc1Account,
-    amount: TokenAmount,
+    amount: TokenAmountE9s,
     memo: Option<Icrc1Memo>,
 ) -> Nat {
     _mint_tokens_for_test(account, amount, memo)

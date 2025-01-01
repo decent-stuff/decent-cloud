@@ -1,6 +1,6 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reward_e9s_per_block,
-    warn, DccIdentity, TokenAmount, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
+    warn, DccIdentity, TokenAmountE9s, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -12,7 +12,7 @@ use ic_cdk::println;
 use ledger_map::LedgerMap;
 use np_offering::Offering;
 
-fn np_offering_update_fee_e9s() -> TokenAmount {
+fn np_offering_update_fee_e9s() -> TokenAmountE9s {
     reward_e9s_per_block() / 10000
 }
 

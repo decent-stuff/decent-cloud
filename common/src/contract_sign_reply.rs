@@ -140,7 +140,7 @@ pub fn do_contract_sign_reply(
     let payload = ContractSignReplyPayload::new(reply_serialized, crypto_signature);
     let payload_serialized = borsh::to_vec(&payload).unwrap();
 
-    let fees = contract_sign_fee_e9s(cs_req.payment_amount());
+    let fees = contract_sign_fee_e9s(cs_req.payment_amount_e9s());
     charge_fees_to_account_and_bump_reputation(ledger, &dcc_id, &dcc_id, fees)?;
 
     ledger.upsert(

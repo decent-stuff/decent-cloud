@@ -15,8 +15,8 @@ use std::cell::RefCell;
 
 use crate::{
     account_balance_add, account_balance_get, account_balance_sub, get_timestamp_ns,
-    ledger_add_reputation_change, slice_to_32_bytes_array, DccIdentity, TokenAmount, TransferError,
-    LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
+    ledger_add_reputation_change, slice_to_32_bytes_array, DccIdentity, TokenAmountE9s,
+    TransferError, LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
 };
 
 thread_local! {
@@ -65,7 +65,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
     ledger: &mut LedgerMap,
     dcc_id_charge: &DccIdentity,
     dcc_id_bump_reputation: &DccIdentity,
-    amount_e9s: TokenAmount,
+    amount_e9s: TokenAmountE9s,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
@@ -90,7 +90,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
         Ok(_) => Ok(ledger_add_reputation_change(
             ledger,
             dcc_id_bump_reputation,
-            amount_e9s.min(i64::MAX as TokenAmount) as i64,
+            amount_e9s.min(i64::MAX as TokenAmountE9s) as i64,
         )?),
         Err(e) => {
             info!("Failed to charge fees: {}", e);
@@ -102,7 +102,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
 pub fn charge_fees_to_account_no_bump_reputation(
     ledger: &mut LedgerMap,
     dcc_identity: &DccIdentity,
-    amount_e9s: TokenAmount,
+    amount_e9s: TokenAmountE9s,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
@@ -293,13 +293,13 @@ impl std::fmt::Display for IcrcCompatibleAccount {
 pub struct FundsTransferV1 {
     pub from: IcrcCompatibleAccount,
     pub to: IcrcCompatibleAccount,
-    pub fee: Option<TokenAmount>,
+    pub fee: Option<TokenAmountE9s>,
     pub fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
     pub created_at_time: Option<u64>,
     pub memo: Vec<u8>,
-    pub amount: TokenAmount,
-    pub balance_from_after: TokenAmount,
-    pub balance_to_after: TokenAmount,
+    pub amount: TokenAmountE9s,
+    pub balance_from_after: TokenAmountE9s,
+    pub balance_to_after: TokenAmountE9s,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
@@ -313,13 +313,13 @@ impl FundsTransfer {
     pub fn new(
         from: IcrcCompatibleAccount,
         to: IcrcCompatibleAccount,
-        fee: Option<TokenAmount>,
+        fee: Option<TokenAmountE9s>,
         fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
         created_at_time: Option<u64>,
         memo: Vec<u8>,
-        amount: TokenAmount,
-        balance_from_after: TokenAmount,
-        balance_to_after: TokenAmount,
+        amount: TokenAmountE9s,
+        balance_from_after: TokenAmountE9s,
+        balance_to_after: TokenAmountE9s,
     ) -> Self {
         FundsTransfer::V1(FundsTransferV1 {
             from,
@@ -346,7 +346,7 @@ impl FundsTransfer {
         }
     }
 
-    pub fn fee(&self) -> Option<TokenAmount> {
+    pub fn fee(&self) -> Option<TokenAmountE9s> {
         match self {
             FundsTransfer::V1(ft) => ft.fee,
         }
@@ -370,19 +370,19 @@ impl FundsTransfer {
         }
     }
 
-    pub fn amount(&self) -> TokenAmount {
+    pub fn amount(&self) -> TokenAmountE9s {
         match self {
             FundsTransfer::V1(ft) => ft.amount,
         }
     }
 
-    pub fn balance_from_after(&self) -> TokenAmount {
+    pub fn balance_from_after(&self) -> TokenAmountE9s {
         match self {
             FundsTransfer::V1(ft) => ft.balance_from_after,
         }
     }
 
-    pub fn balance_to_after(&self) -> TokenAmount {
+    pub fn balance_to_after(&self) -> TokenAmountE9s {
         match self {
             FundsTransfer::V1(ft) => ft.balance_to_after,
         }

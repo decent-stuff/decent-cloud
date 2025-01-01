@@ -5,26 +5,26 @@ use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use ledger_map::LedgerError;
 
 use crate::Icrc1Account;
-use crate::TokenAmount;
+use crate::TokenAmountE9s;
 use candid::Nat;
 
 #[derive(Debug)]
 pub enum TransferError {
     BadFee {
-        expected_fee: TokenAmount,
+        expected_fee: TokenAmountE9s,
     },
     BadBurn {
-        min_burn_amount: TokenAmount,
+        min_burn_amount: TokenAmountE9s,
     },
     InsufficientFunds {
         account: Icrc1Account,
-        current_balance: TokenAmount,
-        requested_amount: TokenAmount,
+        current_balance: TokenAmountE9s,
+        requested_amount: TokenAmountE9s,
     },
     // From amount does not match to amount
     AmountMismatch {
-        from_amount: TokenAmount,
-        to_amount: TokenAmount,
+        from_amount: TokenAmountE9s,
+        to_amount: TokenAmountE9s,
     },
     TooOld,
     CreatedInFuture {

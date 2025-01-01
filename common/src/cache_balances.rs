@@ -1,15 +1,15 @@
 use crate::account_transfers::IcrcCompatibleAccount;
-use crate::{AHashMap, TokenAmount, DC_TOKEN_DECIMALS_DIV};
+use crate::{AHashMap, TokenAmountE9s, DC_TOKEN_DECIMALS_DIV};
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use std::{cell::RefCell, collections::HashMap};
 
 thread_local! {
-    static ACCOUNT_BALANCES: RefCell<AHashMap<IcrcCompatibleAccount, TokenAmount>> = RefCell::new(HashMap::default());
+    static ACCOUNT_BALANCES: RefCell<AHashMap<IcrcCompatibleAccount, TokenAmountE9s>> = RefCell::new(HashMap::default());
 }
 
-pub fn account_balance_get(account: &IcrcCompatibleAccount) -> TokenAmount {
+pub fn account_balance_get(account: &IcrcCompatibleAccount) -> TokenAmountE9s {
     ACCOUNT_BALANCES.with(|balances| {
         let balances = balances.borrow();
         balances.get(account).copied().unwrap_or_default()
@@ -20,22 +20,22 @@ pub fn account_balance_get_as_string(account: &IcrcCompatibleAccount) -> String 
     amount_as_string(account_balance_get(account))
 }
 
-pub fn amount_as_string(amount: TokenAmount) -> String {
+pub fn amount_as_string(amount: TokenAmountE9s) -> String {
     if amount == 0 {
         return "0.0".to_string();
     }
     format!(
         "{}.{}",
-        amount / DC_TOKEN_DECIMALS_DIV as TokenAmount,
-        amount % DC_TOKEN_DECIMALS_DIV as TokenAmount
+        amount / DC_TOKEN_DECIMALS_DIV as TokenAmountE9s,
+        amount % DC_TOKEN_DECIMALS_DIV as TokenAmountE9s
     )
 }
 
 #[allow(dead_code)]
 pub fn account_balance_sub(
     account: &IcrcCompatibleAccount,
-    amount: TokenAmount,
-) -> anyhow::Result<TokenAmount> {
+    amount: TokenAmountE9s,
+) -> anyhow::Result<TokenAmountE9s> {
     ACCOUNT_BALANCES.with(|balances| {
         let mut balances = balances.borrow_mut();
         let balance = balances.entry(account.clone()).or_default();
@@ -49,8 +49,8 @@ pub fn account_balance_sub(
 
 pub fn account_balance_add(
     account: &IcrcCompatibleAccount,
-    amount: TokenAmount,
-) -> anyhow::Result<TokenAmount> {
+    amount: TokenAmountE9s,
+) -> anyhow::Result<TokenAmountE9s> {
     ACCOUNT_BALANCES.with(|balances| {
         let mut balances = balances.borrow_mut();
         let balance = balances.entry(account.clone()).or_default();
@@ -82,12 +82,12 @@ mod tests {
         assert_eq!(account_balance_get(&account_1), 0);
         assert_eq!(
             account_balance_add(&account_1, 100u32.into()).unwrap(),
-            100u32 as TokenAmount
+            100u32 as TokenAmountE9s
         );
-        assert_eq!(account_balance_get(&account_1), 100u32 as TokenAmount);
+        assert_eq!(account_balance_get(&account_1), 100u32 as TokenAmountE9s);
         assert_eq!(
             account_balance_sub(&account_1, 50u32.into()).unwrap(),
-            50u32 as TokenAmount
+            50u32 as TokenAmountE9s
         );
         assert_eq!(
             account_balance_sub(&account_1, 100u32.into())
@@ -97,11 +97,11 @@ mod tests {
         );
         assert_eq!(
             account_balance_sub(&account_1, 50u32.into()).unwrap(),
-            0u32 as TokenAmount
+            0u32 as TokenAmountE9s
         );
         assert_eq!(
             account_balance_sub(&account_1, 0u32.into()).unwrap(),
-            0u32 as TokenAmount
+            0u32 as TokenAmountE9s
         );
         assert_eq!(
             account_balance_sub(&account_1, 1u32.into())
@@ -111,9 +111,9 @@ mod tests {
         );
         assert_eq!(
             account_balance_add(&account_1, 100u32.into()).unwrap(),
-            100u32 as TokenAmount
+            100u32 as TokenAmountE9s
         );
         account_balances_clear();
-        assert_eq!(account_balance_get(&account_1), 0u32 as TokenAmount);
+        assert_eq!(account_balance_get(&account_1), 0u32 as TokenAmountE9s);
     }
 }

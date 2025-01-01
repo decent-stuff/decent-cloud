@@ -11,8 +11,8 @@ use chrono::DateTime;
 use dcc_common::{
     account_balance_get_as_string, amount_as_string, cursor_from_data,
     offerings::do_get_matching_offerings, refresh_caches_from_ledger, reputation_get,
-    CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor, TokenAmount,
-    DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
+    CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor,
+    TokenAmountE9s, DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
 use dcc_common::{ContractSignReply, ContractSignRequest};
 use decent_cloud::ledger_canister_client::LedgerCanister;
@@ -123,9 +123,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(transfer_to_account) = &account_args.transfer_to {
                 let transfer_to_account = IcrcCompatibleAccount::from(transfer_to_account);
                 let transfer_amount_e9s = match &account_args.amount_dct {
-                    Some(value) => value.parse::<TokenAmount>()? * DC_TOKEN_DECIMALS_DIV,
+                    Some(value) => value.parse::<TokenAmountE9s>()? * DC_TOKEN_DECIMALS_DIV,
                     None => match &account_args.amount_e9s {
-                        Some(value) => value.parse::<TokenAmount>()?,
+                        Some(value) => value.parse::<TokenAmountE9s>()?,
                         None => {
                             panic!("You must specify either --amount-dct or --amount-e9s")
                         }
