@@ -1,6 +1,12 @@
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use borsh::BorshDeserialize;
 use candid::{Decode, Encode};
-use dcc_common::{ContractId, ContractReqSerialized};
+use dcc_common::{
+    ContractId, ContractReqSerialized, ContractSignRequest, ContractSignRequestPayload,
+};
 use ic_agent::{export::Principal, identity::BasicIdentity, Agent};
+use serde::Serialize;
 
 type ResultString = Result<String, String>;
 
@@ -162,8 +168,8 @@ impl LedgerCanister {
 
     pub async fn contracts_list_pending(
         &self,
-        pubkey_bytes: Option<Vec<u8>>,
-    ) -> Vec<(ContractId, ContractReqSerialized)> {
+        pubkey_bytes: &Option<Vec<u8>>,
+    ) -> Vec<OpenContractTuple> {
         let args = Encode!(&pubkey_bytes).map_err(|e| e.to_string()).unwrap();
         let response = self
             .call_query("contracts_list_pending", &args)
@@ -174,6 +180,15 @@ impl LedgerCanister {
             Vec<(ContractId, ContractReqSerialized)>
         )
         .unwrap()
+        .into_iter()
+        .map(|(contract_id, payload)| OpenContractTuple {
+            contract_id_base64: BASE64.encode(&contract_id),
+            contract_req: ContractSignRequestPayload::try_from_slice(&payload)
+                .unwrap()
+                .deserialize_contract_sign_request()
+                .unwrap(),
+        })
+        .collect()
     }
 
     pub async fn get_check_in_nonce(&self) -> Vec<u8> {
@@ -221,5 +236,8 @@ impl LedgerCanister {
     }
 }
 
-// let canister_id = create_a_canister().await.unwrap();
-// eprintln!("{}", canister_id);
+#[derive(Serialize)]
+pub struct OpenContractTuple {
+    pub contract_id_base64: String,
+    pub contract_req: ContractSignRequest,
+}

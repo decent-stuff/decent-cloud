@@ -6,7 +6,6 @@ use argparse::{Commands, ContractCommands};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use bip39::Seed;
-use borsh::BorshDeserialize;
 use candid::{Decode, Encode, Nat, Principal as IcPrincipal};
 use chrono::DateTime;
 use dcc_common::{
@@ -15,7 +14,7 @@ use dcc_common::{
     CursorDirection, DccIdentity, FundsTransfer, IcrcCompatibleAccount, LedgerCursor, TokenAmount,
     DATA_PULL_BYTES_BEFORE_LEN, DC_TOKEN_DECIMALS_DIV, LABEL_DC_TOKEN_TRANSFER,
 };
-use dcc_common::{ContractSignRequest, ContractSignRequestPayload};
+use dcc_common::{ContractSignReply, ContractSignRequest};
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
 use fs_err::OpenOptions;
@@ -499,20 +498,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     dcc_id.to_bytes_verifying()
                 });
                 let canister = ledger_canister(None).await?;
-                let contracts_open = canister.contracts_list_pending(pubkey_bytes).await;
+                let contracts_open = canister.contracts_list_pending(&pubkey_bytes).await;
                 if contracts_open.is_empty() {
                     println!("No open contracts");
                 } else {
-                    for (contract_id, contract_req_bytes) in contracts_open {
-                        println!("{}", hex::encode(contract_id));
-                        let contract_req =
-                            ContractSignRequestPayload::try_from_slice(&contract_req_bytes)
-                                .unwrap();
-                        let contract_req =
-                            contract_req.deserialize_contract_sign_request().unwrap();
+                    for open_contract in contracts_open {
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(&contract_req).unwrap_or_default()
+                            serde_json::to_string_pretty(&open_contract).unwrap_or_default()
                         );
                     }
                 }
@@ -521,98 +514,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ContractCommands::SignRequest(sign_req_args) => {
                 println!("Request to sign a contract...");
                 loop {
-                    let identity;
-                    let offering_id;
-                    let requester_ssh_pubkey;
-                    let requester_contact;
-                    let provider_pubkey_pem;
-                    let memo;
+                    println!();
+                    let i = sign_req_args.interactive;
+                    let identity = prompt_input("Please enter the identity name", &cli.identity, i);
+                    let offering_id = prompt_input(
+                        "Please enter the offering id",
+                        &sign_req_args.offering_id,
+                        i,
+                    );
+                    let requester_ssh_pubkey=prompt_input(
+                        "Please enter your ssh public key, which will be granted access to the contract",
+                        &sign_req_args.requester_ssh_pubkey, i
+                    );
+                    let requester_contact = prompt_input(
+                        "Enter your contact information (this will be public)",
+                        &sign_req_args.requester_contact,
+                        i,
+                    );
+                    let provider_pubkey_pem = sign_req_args
+                        .provider_pubkey_pem
+                        .clone()
+                        .unwrap_or_else(|| {
+                            prompt_editor(
+                                "# Enter the provider's public key below, as a PEM string",
+                                i,
+                            )
+                        });
+                    let memo = prompt_input(
+                        "Please enter a memo for the contract (this will be public)",
+                        &sign_req_args.memo,
+                        i,
+                    );
 
-                    if sign_req_args.interactive {
-                        println!();
-                        identity = match &cli.identity {
-                            Some(name) => name.clone(),
-                            None => dialoguer::Input::<String>::new()
-                                .with_prompt("Please enter the identity name")
-                                .allow_empty(false)
-                                .show_default(false)
-                                .interact()
-                                .unwrap(),
-                        };
-                        offering_id = match &sign_req_args.offering_id {
-                            Some(s) => s.clone(),
-                            None => dialoguer::Input::<String>::new()
-                                .with_prompt("Please enter the offering id")
-                                .allow_empty(false)
-                                .show_default(false)
-                                .interact()
-                                .unwrap_or_default(),
-                        };
-                        requester_ssh_pubkey = match &sign_req_args.requester_ssh_pubkey {
-                            Some(s) => s.clone(),
-                            None => dialoguer::Input::<String>::new()
-                                .with_prompt("Please enter your ssh public key, which will be granted access to the contract")
-                                .allow_empty(false)
-                                .show_default(false)
-                                .interact()
-                                .unwrap_or_default(),
-                        };
-                        requester_contact = match &sign_req_args.requester_contact {
-                            Some(s) => s.clone(),
-                            None => dialoguer::Input::<String>::new()
-                                .with_prompt("Enter your contact information (this will be public)")
-                                .allow_empty(false)
-                                .show_default(false)
-                                .interact()
-                                .unwrap_or_default(),
-                        };
-                        provider_pubkey_pem = match &sign_req_args.provider_pubkey_pem {
-                            Some(s) => s.clone(),
-                            None => match dialoguer::Editor::new()
-                                .edit("# Enter the provider's public key below, as a PEM string")
-                            {
-                                Ok(Some(content)) => content,
-                                Ok(None) => {
-                                    println!("No input received.");
-                                    continue;
-                                }
-                                Err(err) => {
-                                    eprintln!("Error opening editor: {}", err);
-                                    continue;
-                                }
-                            },
-                        };
-                        memo = match &sign_req_args.memo {
-                            Some(s) => s.clone(),
-                            None => dialoguer::Input::<String>::new()
-                                .with_prompt(
-                                    "Please enter a memo for the contract (this will be public)",
-                                )
-                                .allow_empty(true)
-                                .show_default(false)
-                                .interact()
-                                .unwrap_or_default(),
-                        };
-                    } else {
-                        identity = cli.identity.clone().expect("You must specify an identity");
-                        offering_id = sign_req_args
-                            .offering_id
-                            .clone()
-                            .expect("You must specify an offering id");
-                        requester_ssh_pubkey = sign_req_args
-                            .requester_ssh_pubkey
-                            .clone()
-                            .expect("You must specify your ssh pubkey");
-                        requester_contact = sign_req_args
-                            .requester_contact
-                            .clone()
-                            .expect("You must specify your contact info");
-                        provider_pubkey_pem = sign_req_args
-                            .provider_pubkey_pem
-                            .clone()
-                            .expect("You must specify the provider's pubkey");
-                        memo = sign_req_args.memo.clone().unwrap_or_default();
-                    };
                     let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                     let provider_dcc_ident =
                         match DccIdentity::new_verifying_from_pem(&provider_pubkey_pem) {
@@ -653,17 +586,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let ic_auth = dcc_to_ic_auth(&dcc_id);
                         let canister = ledger_canister(ic_auth).await?;
 
-                        let response = canister
+                        match canister
                             .contract_sign_request(
                                 &requester_pubkey_bytes,
                                 &payload_bytes,
                                 &payload_sig_bytes,
                             )
-                            .await;
-
-                        match response {
+                            .await
+                        {
                             Ok(response) => {
                                 println!("Contract sign request successful: {}", response);
+                                break;
                             }
                             Err(e) => {
                                 println!("Contract sign request failed: {}", e);
@@ -671,14 +604,137 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
+                Ok(())
             }
-            ContractCommands::SignReply(_sign_reply_args) => {
+            ContractCommands::SignReply(sign_reply_args) => {
                 println!("Reply to a contract-sign request...");
-                unimplemented!();
+                loop {
+                    let i = sign_reply_args.interactive;
+                    let identity = prompt_input("Please enter the identity name", &cli.identity, i);
+                    let contract_id = prompt_input(
+                        "Please enter the contract id, as a base64 encoded string",
+                        &sign_reply_args.contract_id,
+                        i,
+                    );
+                    let accept = prompt_bool(
+                        "Do you accept the contract?",
+                        sign_reply_args.sign_accept,
+                        i,
+                    );
+                    let response_text = prompt_input(
+                        "Please enter a response text for the contract (this will be public)",
+                        &sign_reply_args.response_text,
+                        i,
+                    );
+                    let response_details = prompt_input(
+                        "Please enter a response details for the contract (this will be public)",
+                        &sign_reply_args.response_details,
+                        i,
+                    );
+
+                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity)).unwrap();
+                    let provider_pubkey_bytes = dcc_id.to_bytes_verifying();
+                    let ic_auth = dcc_to_ic_auth(&dcc_id);
+                    let canister = ledger_canister(ic_auth).await?;
+
+                    let contracts_open = canister
+                        .contracts_list_pending(&Some(provider_pubkey_bytes.clone()))
+                        .await;
+                    let open_contract = contracts_open
+                        .iter()
+                        .find(|c| c.contract_id_base64 == contract_id)
+                        .unwrap();
+
+                    let contract_id_bytes = BASE64.decode(contract_id.as_bytes()).unwrap();
+
+                    let reply = ContractSignReply::new(
+                        open_contract.contract_req.requester_pubkey_bytes().to_vec(),
+                        open_contract.contract_req.request_memo(),
+                        contract_id_bytes,
+                        accept,
+                        &response_text,
+                        &response_details,
+                    );
+
+                    let payload_bytes = borsh::to_vec(&reply).unwrap();
+                    let signature = dcc_id.sign(&payload_bytes)?.to_vec();
+
+                    match canister
+                        .contract_sign_reply(&provider_pubkey_bytes, &payload_bytes, &signature)
+                        .await
+                    {
+                        Ok(_) => {
+                            println!("Contract sign reply sent successfully.");
+                            break;
+                        }
+                        Err(e) => {
+                            println!("Error sending contract sign reply: {:?}", e);
+                        }
+                    }
+                }
+                Ok(())
             }
         },
     }?;
     Ok(())
+}
+
+fn prompt_input<S: ToString>(
+    prompt_message: &str,
+    cli_arg_value: &Option<S>,
+    interactive: bool,
+) -> String {
+    match cli_arg_value {
+        Some(value) => value.to_string(),
+        None => {
+            if interactive {
+                dialoguer::Input::<String>::new()
+                    .with_prompt(prompt_message)
+                    .allow_empty(false)
+                    .show_default(false)
+                    .interact()
+                    .unwrap_or_default()
+            } else {
+                panic!("CLI argument required for: {}", prompt_message)
+            }
+        }
+    }
+}
+
+fn prompt_bool(prompt_message: &str, cli_arg_value: Option<bool>, interactive: bool) -> bool {
+    match cli_arg_value {
+        Some(value) => value,
+        None => {
+            if interactive {
+                dialoguer::Confirm::new()
+                    .with_prompt(prompt_message)
+                    .default(false)
+                    .show_default(true)
+                    .interact()
+                    .unwrap_or_default()
+            } else {
+                panic!("CLI argument required for: {}", prompt_message)
+            }
+        }
+    }
+}
+
+fn prompt_editor(prompt_message: &str, interactive: bool) -> String {
+    if interactive {
+        match dialoguer::Editor::new().edit(prompt_message) {
+            Ok(Some(content)) => content,
+            Ok(None) => {
+                println!("No input received.");
+                String::new()
+            }
+            Err(err) => {
+                eprintln!("Error opening editor: {}", err);
+                String::new()
+            }
+        }
+    } else {
+        panic!("CLI argument required for: {}", prompt_message);
+    }
 }
 
 fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {

@@ -221,34 +221,34 @@ pub struct SignRequestArgs {
     pub memo: Option<String>,
 
     /// Interactive mode
-    #[arg(long, short = 'i')]
+    #[arg(long, short = 'i', default_value_t = false)]
     pub interactive: bool,
 }
 
 #[derive(Args)]
 pub struct SignReplyArgs {
-    /// Public key of the provider, as a PEM string
+    /// Public key of the original requester, as a PEM string
     #[arg(long, required_unless_present_any(["interactive"]))]
     pub provider_pubkey_pem: Option<String>,
 
-    /// Contract ID to use
-    #[arg(long)]
+    /// Contract ID of the request that we are replying to
+    #[arg(long, required_unless_present_any(["interactive"]))]
     pub contract_id: Option<String>,
 
-    /// Accept the contract-sign request
-    #[arg(long, requires = "contract_id", requires = "identity")]
-    pub accept: bool,
+    /// True/False to mark whether the signing was accepted or rejected by the provider
+    #[arg(long, requires = "identity", required_unless_present_any(["interactive"]), visible_alias = "accept")]
+    pub sign_accept: Option<bool>,
 
-    /// Reject the contract-sign request
-    #[arg(long, requires = "contract_id", requires = "identity")]
-    pub reject: bool,
-
-    /// Memo for the contract-sign request
+    /// Thank you note, or similar on success. Reason the request failed on failure.
     #[arg(long, required_unless_present_any(["interactive"]))]
-    pub memo: Option<String>,
+    pub response_text: Option<String>,
+
+    /// Instructions or a link to the detailed instructions: describing next steps, further information, etc.
+    #[arg(long, required_unless_present_any(["interactive"]))]
+    pub response_details: Option<String>,
 
     /// Interactive mode
-    #[arg(long, short = 'i')]
+    #[arg(long, short = 'i', default_value_t = false)]
     pub interactive: bool,
 }
 
