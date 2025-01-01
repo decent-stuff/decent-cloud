@@ -25,7 +25,7 @@ pub fn amount_as_string(amount: TokenAmountE9s) -> String {
         return "0.0".to_string();
     }
     format!(
-        "{}.{}",
+        "{}.{:0>9}",
         amount / DC_TOKEN_DECIMALS_DIV as TokenAmountE9s,
         amount % DC_TOKEN_DECIMALS_DIV as TokenAmountE9s
     )
