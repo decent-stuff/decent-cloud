@@ -282,7 +282,7 @@ pub fn do_contract_sign_request(
     ).map(|_| {
         contracts_cache_open_add(contract_id.to_vec(), contract_req.clone());
         format!(
-            "Contract signing req 0x{} submitted! Thank you. You have been charged {} tokens as a fee, and your reputation has been bumped accordingly. Please wait for a response.",
+            "Contract signing req 0x{} submitted! Thank you. You have been charged {} tokens as a fee, and your reputation has been bumped accordingly. Please check back for a response from the provider.",
             hex::encode(contract_id),
             amount_as_string(fees)
         )
