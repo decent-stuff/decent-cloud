@@ -657,6 +657,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                             Err(e) => {
                                 println!("Contract sign request failed: {}", e);
+                                if dialoguer::Confirm::new()
+                                    .with_prompt("Do you want to retry?")
+                                    .default(true)
+                                    .show_default(true)
+                                    .interact()
+                                    .unwrap()
+                                {
+                                    continue;
+                                } else {
+                                    break;
+                                }
                             }
                         }
                     } else {
@@ -809,7 +820,12 @@ fn prompt_for_payment_entries(
         pricing
             .get(model)
             .and_then(|units| units.get(time_period_unit))
-            .map(|amount| amount.parse::<TokenAmountE9s>().unwrap() * quantity)
+            .map(|amount| {
+                amount
+                    .parse::<TokenAmountE9s>()
+                    .expect("Failed to parse the offering price as TokenAmountE9s")
+                    * quantity
+            })
             .unwrap()
     };
     let mut payment_entries: Vec<_> = payment_entries_json
