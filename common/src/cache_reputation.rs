@@ -1,4 +1,4 @@
-use crate::{AHashMap, DccIdentity, LABEL_REPUTATION_CHANGE};
+use crate::{AHashMap, DccIdentity, LABEL_REPUTATION_CHANGE, MAX_REPUTATION_INCREASE_PER_TX};
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
@@ -50,6 +50,7 @@ pub fn ledger_add_reputation_change(
     if dcc_identity.is_minting_account() {
         warn!("Attempted to add reputation change to minting account");
     } else {
+        let delta = delta.min(MAX_REPUTATION_INCREASE_PER_TX);
         let entry = ReputationChange::new_single(dcc_identity.to_bytes_verifying(), delta);
         let entry_bytes = borsh::to_vec(&entry)?;
 
