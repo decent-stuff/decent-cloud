@@ -504,20 +504,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 loop {
                     println!();
                     let i = sign_req_args.interactive;
-                    let identity = prompt_input("Please enter the identity name", &cli.identity, i);
+                    let identity =
+                        prompt_input("Please enter the identity name", &cli.identity, i, false);
                     let instance_id = prompt_input(
                         "Please enter the offering id",
                         &sign_req_args.offering_id,
                         i,
+                        false,
                     );
                     let requester_ssh_pubkey=prompt_input(
                         "Please enter your ssh public key, which will be granted access to the contract",
-                        &sign_req_args.requester_ssh_pubkey, i
+                        &sign_req_args.requester_ssh_pubkey, i, false
                     );
                     let requester_contact = prompt_input(
                         "Enter your contact information (this will be public)",
                         &sign_req_args.requester_contact,
                         i,
+                        true,
                     );
                     let provider_pubkey_pem = sign_req_args
                         .provider_pubkey_pem
@@ -583,6 +586,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "Please enter a memo for the contract (this will be public)",
                         &sign_req_args.memo,
                         i,
+                        true,
                     );
 
                     let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
@@ -654,11 +658,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Reply to a contract-sign request...");
                 loop {
                     let i = sign_reply_args.interactive;
-                    let identity = prompt_input("Please enter the identity name", &cli.identity, i);
+                    let identity =
+                        prompt_input("Please enter the identity name", &cli.identity, i, false);
                     let contract_id = prompt_input(
                         "Please enter the contract id, as a base64 encoded string",
                         &sign_reply_args.contract_id,
                         i,
+                        false,
                     );
                     let accept = prompt_bool(
                         "Do you accept the contract?",
@@ -669,11 +675,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "Please enter a response text for the contract (this will be public)",
                         &sign_reply_args.response_text,
                         i,
+                        true,
                     );
                     let response_details = prompt_input(
                         "Please enter a response details for the contract (this will be public)",
                         &sign_reply_args.response_details,
                         i,
+                        true,
                     );
 
                     let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity)).unwrap();
@@ -687,7 +695,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let open_contract = contracts_open
                         .iter()
                         .find(|c| c.contract_id_base64 == contract_id)
-                        .unwrap();
+                        .expect("Provided contract id not found");
 
                     let contract_id_bytes = BASE64.decode(contract_id.as_bytes()).unwrap();
 
@@ -727,6 +735,7 @@ fn prompt_input<S: ToString>(
     prompt_message: &str,
     cli_arg_value: &Option<S>,
     interactive: bool,
+    allow_empty: bool,
 ) -> String {
     match cli_arg_value {
         Some(value) => value.to_string(),
@@ -734,7 +743,7 @@ fn prompt_input<S: ToString>(
             if interactive {
                 dialoguer::Input::<String>::new()
                     .with_prompt(prompt_message)
-                    .allow_empty(false)
+                    .allow_empty(allow_empty)
                     .show_default(false)
                     .interact()
                     .unwrap_or_default()
@@ -795,6 +804,7 @@ fn prompt_for_payment_entries(
             .and_then(|units| units.get(time_period_unit))
             .map(|amount| {
                 amount
+                    .replace("_", "")
                     .parse::<TokenAmountE9s>()
                     .expect("Failed to parse the offering price as TokenAmountE9s")
                     * quantity
