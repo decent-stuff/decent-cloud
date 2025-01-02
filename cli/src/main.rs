@@ -29,7 +29,7 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferError as Icrc1TransferError,
 };
 use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
-use log::{info, Level, LevelFilter, Metadata, Record};
+use log::{info, Level};
 use np_offering::Offering;
 use std::time::SystemTime;
 use std::{
@@ -44,7 +44,7 @@ const PUSH_BLOCK_SIZE: u64 = 1024 * 1024;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = argparse::parse_args();
-    init_logger(cli.verbose)?;
+    init_logger(cli.verbose);
 
     let ledger_path = cli.local_ledger_dir.map(PathBuf::from).unwrap_or_else(|| {
         dirs::home_dir()
@@ -1009,7 +1009,7 @@ async fn ledger_data_fetch(
         None
     };
 
-    println!(
+    info!(
         "Fetching data from the Ledger canister {}, with local cursor: {} and bytes before: {:?}",
         ledger_canister.canister_id(),
         cursor_local,
@@ -1020,7 +1020,7 @@ async fn ledger_data_fetch(
         .await?;
     let cursor_remote = LedgerCursor::new_from_string(cursor_remote);
     let offset_remote = cursor_remote.position;
-    println!(
+    info!(
         "Ledger canister returned position {:0x}, full cursor: {}",
         offset_remote, cursor_remote
     );
@@ -1032,9 +1032,9 @@ async fn ledger_data_fetch(
         .into());
     }
     if data.len() <= 64 {
-        println!("Data: {} bytes ==> {:?}", data.len(), data);
+        info!("Data: {} bytes ==> {:?}", data.len(), data);
     } else {
-        println!(
+        info!(
             "Data: {} bytes ==> {:?}...",
             data.len(),
             &data[..64.min(data.len())]
@@ -1050,7 +1050,7 @@ async fn ledger_data_fetch(
     }
     if offset_remote + cursor_remote.response_bytes > cursor_local.position {
         ledger_file.write_all(&data).unwrap();
-        println!(
+        info!(
             "Wrote {} bytes at offset 0x{:0x} of file {}",
             data.len(),
             offset_remote,
@@ -1092,11 +1092,11 @@ pub async fn ledger_data_push(
     let cursor_remote: LedgerCursor = remote_metadata.into();
 
     if cursor_local.data_end_position <= cursor_remote.data_end_position {
-        println!("Nothing to push");
+        info!("Nothing to push");
         return Ok(());
     }
 
-    println!(
+    info!(
         "Data end position local {} remote {} ==> {} bytes to push",
         cursor_local.data_end_position,
         cursor_remote.data_end_position,
@@ -1123,45 +1123,26 @@ pub async fn ledger_data_push(
             PUSH_BLOCK_SIZE.min(cursor_local.data_end_position.saturating_sub(position)) as usize;
         let mut buf = vec![0u8; buf_size];
         persistent_storage_read(position, &mut buf).map_err(|e| e.to_string())?;
-        println!(
+        info!(
             "Pushing block of {} bytes at position {}",
             buf_size, position,
         );
         let args = Encode!(&cursor_push.to_urlenc_string(), &buf).map_err(|e| e.to_string())?;
         let result = ledger_canister.call_update("data_push", &args).await?;
         let result = Decode!(&result, Result<String, String>).map_err(|e| e.to_string())??;
-        println!("Response from pushing at position {}: {}", position, result);
+        info!("Response from pushing at position {}: {}", position, result);
     }
 
     Ok(())
 }
 
-struct SimpleStderrLogger;
-
-impl log::Log for SimpleStderrLogger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= Level::Debug
-    }
-
-    fn log(&self, record: &Record) {
-        if self.enabled(record.metadata()) {
-            eprintln!("{} - {}", record.level(), record.args());
+pub fn init_logger(verbose: bool) {
+    if std::env::var("RUST_LOG").is_err() {
+        if verbose {
+            std::env::set_var("RUST_LOG", "debug");
+        } else {
+            std::env::set_var("RUST_LOG", "info");
         }
     }
-
-    fn flush(&self) {}
-}
-
-static LOGGER: SimpleStderrLogger = SimpleStderrLogger;
-
-pub fn init_logger(verbose: bool) -> anyhow::Result<()> {
-    log::set_logger(&LOGGER)
-        .map(|()| {
-            if verbose {
-                log::set_max_level(LevelFilter::Debug)
-            } else {
-                log::set_max_level(LevelFilter::Info)
-            }
-        })
-        .map_err(|e| anyhow::anyhow!(e))
+    pretty_env_logger::init();
 }
