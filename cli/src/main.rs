@@ -16,6 +16,7 @@ use dcc_common::{
 };
 use dcc_common::{
     ContractSignReply, ContractSignRequest, PaymentEntries, PaymentEntry, PaymentEntryWithAmount,
+    LABEL_NP_REGISTER, LABEL_USER_REGISTER,
 };
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use decent_cloud_canister::DC_TOKEN_TRANSFER_FEE_E9S;
@@ -145,7 +146,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Np(ref np_cmd) => {
             match np_cmd {
-                NpCommands::List(list_args) => list_identities(list_args.balances)?,
+                NpCommands::List(list_args) => {
+                    if list_args.only_local {
+                        list_local_identities(list_args.balances)?
+                    } else {
+                        list_identities(&ledger_local, list_args.balances)?
+                    }
+                }
                 NpCommands::Register => {
                     let identity = identity_name
                         .expect("Identity must be specified for this command, use --identity");
@@ -272,7 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::User(ref user_args) => {
             if user_args.list || user_args.balances {
-                list_identities(user_args.balances)?
+                list_local_identities(user_args.balances)?
             } else if user_args.register {
                 let identity = identity_name.expect("You must specify an identity");
                 let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
@@ -846,7 +853,7 @@ fn prompt_for_payment_entries(
     payment_entries
 }
 
-fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn list_local_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
     let identities_dir = DccIdentity::identities_dir();
     println!("Available identities at {}:", identities_dir.display());
     let mut identities: Vec<_> = fs_err::read_dir(identities_dir)?
@@ -868,24 +875,8 @@ fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Err
             let identity_name = identity_name.to_string_lossy();
             match DccIdentity::load_from_dir(&path) {
                 Ok(dcc_identity) => {
-                    if include_balances {
-                        println!(
-                            "{} => {}, reputation {}, balance {}",
-                            identity_name,
-                            dcc_identity,
-                            reputation_get(dcc_identity.to_bytes_verifying()),
-                            account_balance_get_as_string(
-                                &dcc_identity.as_icrc_compatible_account()
-                            )
-                        );
-                    } else {
-                        println!(
-                            "{} => {} reputation {}",
-                            identity_name,
-                            dcc_identity,
-                            reputation_get(dcc_identity.to_bytes_verifying())
-                        );
-                    }
+                    print!("{} => ", identity_name);
+                    println_identity(&dcc_identity, include_balances);
                 }
                 Err(e) => {
                     println!("{} => Error: {}", identity_name, e);
@@ -894,6 +885,40 @@ fn list_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Err
         }
     }
     Ok(())
+}
+
+fn list_identities(
+    ledger: &LedgerMap,
+    show_balances: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("\n# Registered providers");
+    for entry in ledger.iter(Some(LABEL_NP_REGISTER)) {
+        let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
+        println_identity(&dcc_id, show_balances);
+    }
+    println!("\n# Registered users");
+    for entry in ledger.iter(Some(LABEL_USER_REGISTER)) {
+        let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
+        println_identity(&dcc_id, show_balances);
+    }
+    Ok(())
+}
+
+fn println_identity(dcc_id: &DccIdentity, show_balance: bool) {
+    if show_balance {
+        println!(
+            "{}, reputation {}, balance {}",
+            dcc_id.display_as_ic_and_pem_one_line(),
+            reputation_get(dcc_id.to_bytes_verifying()),
+            account_balance_get_as_string(&dcc_id.as_icrc_compatible_account())
+        );
+    } else {
+        println!(
+            "{} reputation {}",
+            dcc_id.display_as_ic_and_pem_one_line(),
+            reputation_get(dcc_id.to_bytes_verifying())
+        );
+    }
 }
 
 fn dcc_to_ic_auth(dcc_identity: &DccIdentity) -> Option<BasicIdentity> {

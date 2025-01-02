@@ -106,8 +106,8 @@ pub struct ListArgs {
     pub balances: bool,
 
     /// Only local identities
-    #[arg(long)]
-    pub local: bool,
+    #[arg(long, visible_aliases = ["local"])]
+    pub only_local: bool,
 }
 
 #[derive(Args)]
