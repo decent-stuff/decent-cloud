@@ -257,12 +257,10 @@ pub fn set_fees_sink_accounts(accounts: Option<Vec<IcrcCompatibleAccount>>) {
 }
 
 pub fn fees_sink_accounts() -> Vec<IcrcCompatibleAccount> {
-    FEES_SINK_ACCOUNTS.with(
-        |fees_sink_accounts| match fees_sink_accounts.borrow().as_ref() {
-            Some(accounts) => accounts.clone(),
-            None => vec![MINTING_ACCOUNT.clone()],
-        },
-    )
+    FEES_SINK_ACCOUNTS.with(|sink_accounts| match sink_accounts.borrow().as_ref() {
+        Some(accounts) => accounts.clone(),
+        None => vec![MINTING_ACCOUNT.clone()],
+    })
 }
 
 fn full_account_checksum(owner: &[u8], subaccount: &[u8]) -> String {

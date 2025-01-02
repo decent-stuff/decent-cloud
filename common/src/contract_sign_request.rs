@@ -116,7 +116,7 @@ pub struct ContractSignRequestV1 {
     region_name: Option<String>,  // Optional region name
     contract_id: Option<String>,  // Optional contract id, if an existing contract is being extended
     instance_config: Option<String>, // Optional configuration for the instance deployment, e.g. cloud-init
-    payment_amount_e9s: u64,         // How much is the requester offering to pay for the contract
+    payment_amount_e9s: TokenAmountE9s, // How much is the requester offering to pay for the contract
     payment_entries: Vec<PaymentEntryWithAmount>,
     start_timestamp: Option<u64>, // Optionally, only start contract at this unix time (in seconds) UTC. This can be in the past or in the future. Default is now.
     request_memo: String, // Reference to this particular request; arbitrary text. Can be used e.g. for administrative purposes
@@ -133,7 +133,7 @@ impl ContractSignRequest {
         region_name: Option<String>,
         contract_id: Option<String>,
         instance_config: Option<String>,
-        payment_amount_e9s: u64,
+        payment_amount_e9s: TokenAmountE9s,
         payment_entries: Vec<PaymentEntryWithAmount>,
         start_timestamp: Option<u64>,
         request_memo: String,

@@ -92,14 +92,14 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
         arg.from_subaccount.map(|subaccount| subaccount.to_vec()),
     );
 
-    let balance_from_after = account_balance_get(&from);
+    let balance_from = account_balance_get(&from);
     let amount = nat_to_balance(&arg.amount);
-    if balance_from_after < amount {
+    if balance_from < amount {
         return Err(Icrc1TransferError::InsufficientFunds {
-            balance: balance_from_after.into(),
+            balance: balance_from.into(),
         });
     }
-    let balance_from_after: TokenAmountE9s = balance_from_after - amount;
+    let balance_from_after = balance_from - amount;
     let to: IcrcCompatibleAccount = arg.to.into();
 
     LEDGER_MAP.with(|ledger| {
