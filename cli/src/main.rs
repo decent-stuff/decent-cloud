@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let network = cli.network.unwrap_or_else(|| "ic".to_string());
 
-    let canister_id = match network.as_str() {
+    let ledger_canister_id = match network.as_str() {
         "local" => IcPrincipal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai")?,
         "mainnet-eu" => IcPrincipal::from_text("tlvs5-oqaaa-aaaas-aaabq-cai")?,
         "mainnet-01" | "ic" => IcPrincipal::from_text("ggi4a-wyaaa-aaaai-actqq-cai")?,
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => panic!("unknown network: {}", network),
     };
     let ledger_canister = |identity| async {
-        LedgerCanister::new(canister_id, identity, network_url.to_string()).await
+        LedgerCanister::new(ledger_canister_id, identity, network_url.to_string()).await
     };
     let identity_name = cli.identity.clone();
 
@@ -112,61 +112,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let identities_dir = DccIdentity::identities_dir();
             let identity =
                 identity_name.expect("Identity must be specified for this command, use --identity");
-            let dcc_identity = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
-            let account = dcc_identity.as_icrc_compatible_account();
-
-            if account_args.balance {
-                println!(
-                    "Account {} balance {}",
-                    account,
-                    account_balance_get_as_string(&account)
-                );
-            }
-
-            if let Some(transfer_to_account) = &account_args.transfer_to {
-                let transfer_to_account = IcrcCompatibleAccount::from(transfer_to_account);
-                let transfer_amount_e9s = match &account_args.amount_dct {
-                    Some(value) => value.parse::<TokenAmountE9s>()? * DC_TOKEN_DECIMALS_DIV,
-                    None => match &account_args.amount_e9s {
-                        Some(value) => value.parse::<TokenAmountE9s>()?,
-                        None => {
-                            panic!("You must specify either --amount-dct or --amount-e9s")
-                        }
-                    },
-                };
-                println!(
-                    "Transferring {} tokens from {} \t to account {}",
-                    amount_as_string(transfer_amount_e9s),
-                    account,
-                    transfer_to_account,
-                );
-                let ic_auth = dcc_to_ic_auth(&dcc_identity);
-                let canister = ledger_canister(ic_auth).await?;
-                let transfer_args = TransferArg {
-                    amount: transfer_amount_e9s.into(),
-                    fee: Some(DC_TOKEN_TRANSFER_FEE_E9S.into()),
-                    from_subaccount: None,
-                    to: transfer_to_account.into(),
-                    created_at_time: None,
-                    memo: None,
-                };
-                let args = Encode!(&transfer_args).map_err(|e| e.to_string())?;
-                let result = canister.call_update("icrc1_transfer", &args).await?;
-                let response =
-                    Decode!(&result, Result<Nat, Icrc1TransferError>).map_err(|e| e.to_string())?;
-
-                match response {
-                    Ok(response) => {
-                        println!(
-                            "Transfer request successful, will be included in block: {}",
-                            response
-                        );
+            let from_dcc_id = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
+            let to_principal_string = &account_args
+                .transfer_to
+                .clone()
+                .expect("You must specify --transfer-to");
+            let to_icrc1_account = IcrcCompatibleAccount::from(to_principal_string);
+            let transfer_amount_e9s = match &account_args.amount_dct {
+                Some(value) => (value.parse::<f64>()? * (DC_TOKEN_DECIMALS_DIV as f64)).round()
+                    as TokenAmountE9s,
+                None => match &account_args.amount_e9s {
+                    Some(value) => value.parse::<TokenAmountE9s>()?,
+                    None => {
+                        panic!("You must specify either --amount-dct or --amount-e9s")
                     }
-                    Err(e) => {
-                        println!("Transfer error: {}", e);
-                    }
-                }
-            }
+                },
+            };
+
+            println!(
+                "{}",
+                handle_funds_transfer(
+                    network_url,
+                    ledger_canister_id,
+                    &from_dcc_id,
+                    &to_icrc1_account,
+                    transfer_amount_e9s,
+                )
+                .await?
+            );
 
             Ok(())
         }
@@ -736,8 +709,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .contract_sign_reply(&provider_pubkey_bytes, &payload_bytes, &signature)
                         .await
                     {
-                        Ok(_) => {
-                            println!("Contract sign reply sent successfully.");
+                        Ok(response) => {
+                            println!("Contract sign reply sent successfully: {}", response);
                             break;
                         }
                         Err(e) => {
@@ -930,6 +903,49 @@ fn dcc_to_ic_auth(dcc_identity: &DccIdentity) -> Option<BasicIdentity> {
             let cursor = std::io::Cursor::new(pem_key.as_bytes());
             BasicIdentity::from_pem(cursor).expect("failed to parse pem key")
         })
+}
+
+pub async fn handle_funds_transfer(
+    network_url: &str,
+    ledger_canister_id: IcPrincipal,
+    from_dcc_id: &DccIdentity,
+    to_icrc1_account: &IcrcCompatibleAccount,
+    transfer_amount_e9s: TokenAmountE9s,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let from_icrc1_account = from_dcc_id.as_icrc_compatible_account();
+    let from_ic_auth = dcc_to_ic_auth(from_dcc_id);
+
+    println!(
+        "Transferring {} tokens from {} \t to account {}",
+        amount_as_string(transfer_amount_e9s),
+        from_icrc1_account,
+        to_icrc1_account,
+    );
+
+    let canister =
+        LedgerCanister::new(ledger_canister_id, from_ic_auth, network_url.to_string()).await?;
+    let transfer_args = TransferArg {
+        amount: transfer_amount_e9s.into(),
+        fee: Some(DC_TOKEN_TRANSFER_FEE_E9S.into()),
+        from_subaccount: None,
+        to: to_icrc1_account.into(),
+        created_at_time: None,
+        memo: None,
+    };
+    let args = Encode!(&transfer_args).map_err(|e| e.to_string())?;
+    let result = canister.call_update("icrc1_transfer", &args).await?;
+    let response = Decode!(&result, Result<Nat, Icrc1TransferError>).map_err(|e| e.to_string())?;
+
+    match response {
+        Ok(block_num) => Ok(format!(
+            "Transfer request successful, will be included in block: {}",
+            block_num
+        )),
+        Err(e) => Err(Box::<dyn std::error::Error>::from(format!(
+            "Transfer error: {}",
+            e
+        ))),
+    }
 }
 
 async fn ledger_data_fetch(
