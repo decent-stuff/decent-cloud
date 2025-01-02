@@ -397,6 +397,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     print!("{}", table);
                 }
+                LedgerRemoteCommands::GetRegistrationFee => {
+                    let canister = ledger_canister(None).await?;
+                    let noargs = Encode!(&()).expect("Failed to encode args");
+                    let response = canister.call_query("get_registration_fee", &noargs).await?;
+                    let fee_e9s = Decode!(response.as_slice(), u64).map_err(|e| e.to_string())?;
+                    println!("Registration fee: {}", amount_as_string(fee_e9s));
+                }
                 LedgerRemoteCommands::GetCheckInNonce => {
                     let nonce_bytes = ledger_canister(None).await?.get_check_in_nonce().await;
                     println!("{}", hex::encode(nonce_bytes));

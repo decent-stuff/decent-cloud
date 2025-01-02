@@ -183,6 +183,9 @@ pub enum LedgerRemoteCommands {
     /// Show metadata
     Metadata,
 
+    /// Get the registration fee
+    GetRegistrationFee,
+
     /// Get nonce that is used as the seed for the check-in
     GetCheckInNonce,
 
