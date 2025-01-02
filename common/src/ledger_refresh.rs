@@ -6,7 +6,8 @@ use crate::{
     reputations_apply_changes, reputations_clear, AHashMap, ContractSignRequest,
     ContractSignRequestPayload, ReputationAge, ReputationChange, CACHE_TXS_NUM_COMMITTED,
     LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER,
-    LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, PRINCIPAL_MAP,
+    LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, LABEL_USER_REGISTER,
+    PRINCIPAL_MAP,
 };
 use borsh::BorshDeserialize;
 use candid::Principal;
@@ -71,9 +72,9 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                     RecentCache::add_entry(num_txs, transfer.into());
                     num_txs += 1;
                 }
-                LABEL_NP_REGISTER => {
+                LABEL_NP_REGISTER | LABEL_USER_REGISTER => {
                     if let Ok(dcc_identity) =
-                        dcc_identity::DccIdentity::new_verifying_from_bytes(entry.value())
+                        dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
                     {
                         principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
                     }

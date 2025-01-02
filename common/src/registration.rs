@@ -25,6 +25,12 @@ pub fn get_pubkey_from_principal(principal: Principal) -> Vec<u8> {
     })
 }
 
+pub fn set_pubkey_for_principal(principal: Principal, pubkey_bytes: Vec<u8>) {
+    PRINCIPAL_MAP.with(|principal_map| {
+        principal_map.borrow_mut().insert(principal, pubkey_bytes);
+    })
+}
+
 pub fn account_registration_fee_e9s() -> TokenAmountE9s {
     reward_e9s_per_block() / 100
 }
@@ -55,10 +61,7 @@ pub fn do_account_register(
     };
 
     // Update the cache of principal -> pubkey, for quick search
-    PRINCIPAL_MAP.with(|p| {
-        p.borrow_mut()
-            .insert(dcc_id.to_ic_principal(), pubkey_bytes.clone())
-    });
+    set_pubkey_for_principal(dcc_id.to_ic_principal(), pubkey_bytes.clone());
 
     // Store the pubkey in the ledger
     ledger
