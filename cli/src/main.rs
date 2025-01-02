@@ -85,15 +85,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bip39::Mnemonic::new(bip39::MnemonicType::Words12, bip39::Language::English);
                 info!("Generated mnemonic:\n{}", mnemonic);
                 mnemonic
-            } else if !keygen_args.mnemonic.is_empty() {
-                let length = keygen_args.mnemonic.len();
-                if length != 12 && length != 24 {
-                    panic!("Mnemonic must be exactly 12 or 24 words, but got {length}.");
-                }
+            } else if keygen_args.mnemonic.is_some() {
                 let mnemonic_string = keygen_args
                     .mnemonic
-                    .iter()
-                    .map(|s| s.into())
+                    .clone()
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .map(String::from)
                     .collect::<Vec<_>>();
                 if mnemonic_string.len() < 12 {
                     let reader = BufReader::new(io::stdin());
@@ -351,6 +349,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         Commands::LedgerRemote(ref remote_args) => {
+            // TODO: Switch to subcommands
             let local_ledger_path = match remote_args.dir {
                 Some(ref value) => PathBuf::from(value),
                 None => dirs::home_dir()

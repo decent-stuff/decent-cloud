@@ -53,14 +53,9 @@ pub enum Commands {
 
 #[derive(Args)]
 pub struct KeygenArgs {
-    /// Use the given mnemonic
-    #[arg(
-        long,
-        conflicts_with = "generate",
-        requires = "identity",
-        num_args = 12..=24
-    )]
-    pub mnemonic: Vec<String>,
+    /// BIP39 compatible mnemonic, 12 to 24 words
+    #[arg(long, conflicts_with = "generate", requires = "identity")]
+    pub mnemonic: Option<String>,
 
     /// Generate a random mnemonic
     #[arg(long, requires = "identity")]
