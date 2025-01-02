@@ -3,10 +3,10 @@ use crate::DC_TOKEN_LOGO;
 use borsh::BorshDeserialize;
 use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{
-    account_registration_fee_e9s, reward_e9s_per_block_recalculate, ContractId,
-    ContractReqSerialized, ContractSignReply, ContractSignRequest, ContractSignRequestPayload,
-    DccIdentity, PaymentEntry, PaymentEntryWithAmount, TokenAmountE9s, BLOCK_INTERVAL_SECS,
-    FIRST_BLOCK_TIMESTAMP_NS, MINTING_ACCOUNT_ICRC1,
+    reward_e9s_per_block_recalculate, ContractId, ContractReqSerialized, ContractSignReply,
+    ContractSignRequest, ContractSignRequestPayload, DccIdentity, PaymentEntry,
+    PaymentEntryWithAmount, TokenAmountE9s, BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS,
+    MINTING_ACCOUNT_ICRC1,
 };
 use decent_cloud_canister::*;
 use flate2::bufread::ZlibDecoder;
@@ -535,15 +535,10 @@ fn test_np_registration_and_check_in() {
         0u64
     );
 
-    // At this point NP1 did not register, but NP2 did.
-    // Registration sets the initial reputation (can be reconsidered in the future).
-    // However, check-in and periodic reward distribution does not increase reputation!
+    // Registration itself does not affect the reputation.
     reward_e9s_per_block_recalculate();
     assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
-    assert_eq!(
-        identity_reputation_get(&p, c, &np2.to_bytes_verifying()) as TokenAmountE9s,
-        account_registration_fee_e9s()
-    );
+    assert_eq!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()), 0);
 }
 
 #[test]
@@ -583,12 +578,12 @@ fn test_reputation() {
 
     test_ffwd_to_next_block(ts_ns, &p, c);
 
-    assert!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()) > 0);
-    assert!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()) > 0);
-    assert!(identity_reputation_get(&p, c, &np3.to_bytes_verifying()) > 0);
+    assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
+    assert_eq!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()), 0);
+    assert_eq!(identity_reputation_get(&p, c, &np3.to_bytes_verifying()), 0);
 
-    assert!(identity_reputation_get(&p, c, &u1.to_bytes_verifying()) > 0);
-    assert!(identity_reputation_get(&p, c, &u2.to_bytes_verifying()) > 0);
+    assert_eq!(identity_reputation_get(&p, c, &u1.to_bytes_verifying()), 0);
+    assert_eq!(identity_reputation_get(&p, c, &u2.to_bytes_verifying()), 0);
 }
 
 // FIXME: add tests for profile update
@@ -795,7 +790,7 @@ fn test_offerings() {
         "Here are some details",
     );
     let res = contract_sign_reply(&p, c, &np1, &u1, &reply).unwrap();
-    assert_eq!(res, "Contract signing reply submitted! Thank you. You have been charged 0.1 tokens as a fee, and your reputation has been bumped accordingly");
+    assert_eq!(res, "Contract signing reply submitted! Thank you. You have been charged 0.000000001 tokens as a fee, and your reputation has been bumped accordingly");
 
     let pending_contracts = contracts_list_pending(&p, c, None);
     assert_eq!(pending_contracts.len(), 0);

@@ -1,5 +1,5 @@
 use crate::{
-    amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info, info,
+    amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, info,
     reward_e9s_per_block, AHashMap, DccIdentity, TokenAmountE9s,
 };
 use candid::Principal;
@@ -48,12 +48,7 @@ pub fn do_account_register(
             dcc_id.to_ic_principal(),
             label
         );
-        charge_fees_to_account_and_bump_reputation(
-            ledger,
-            &dcc_id,
-            &dcc_id,
-            amount as TokenAmountE9s,
-        )?;
+        charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, amount as TokenAmountE9s)?;
         amount
     } else {
         0
