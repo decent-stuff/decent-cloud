@@ -106,7 +106,7 @@ pub const MAX_PUBKEY_BYTES: usize = 32;
 pub const MEMO_BYTES_MAX: usize = 32;
 /// Reduction of reputations for all accounts, based on time (per block), in parts per million
 pub const REPUTATION_AGING_PPM: u64 = 1_000;
-pub const MAX_REPUTATION_INCREASE_PER_TX: i64 = DC_TOKEN_DECIMALS_DIV as i64 / 1000;
+pub const MAX_REPUTATION_INCREASE_PER_TX: i64 = DC_TOKEN_DECIMALS_DIV as i64 * 10; // Max 10 DC tokens per transaction
 pub const REWARD_HALVING_AFTER_BLOCKS: u64 = 210_000; // halve the rewards every 210000 reward distributions
 pub const DATA_PULL_BYTES_BEFORE_LEN: u16 = 16; // How many bytes before the pulled data should be compared as a quick sanity check
 

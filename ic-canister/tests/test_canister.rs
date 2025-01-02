@@ -110,10 +110,10 @@ fn upgrade_test_canister(pic: &PocketIc, can: Principal) -> Result<(), pocket_ic
     pic.upgrade_canister(can, CANISTER_WASM.clone(), no_args, None)
 }
 
-fn get_account_balance(pic: &PocketIc, can: Principal, account: &Icrc1Account) -> Nat {
+fn get_account_balance(pic: &PocketIc, can: &Principal, account: &Icrc1Account) -> Nat {
     query_check_and_decode!(
         pic,
-        can,
+        *can,
         "icrc1_balance_of",
         encode_one(account).expect("failed to encode"),
         Nat
@@ -322,9 +322,9 @@ fn user_register(
     (dcc_identity, result)
 }
 
-fn identity_reputation_get(pic: &PocketIc, can: Principal, identity: &Vec<u8>) -> u64 {
-    let args = Encode!(&identity).unwrap();
-    query_check_and_decode!(pic, can, "get_identity_reputation", args, u64)
+fn get_id_reputation(pic: &PocketIc, can: &Principal, dcc_id: &DccIdentity) -> u64 {
+    let args = Encode!(&dcc_id.to_bytes_verifying()).unwrap();
+    query_check_and_decode!(pic, *can, "get_identity_reputation", args, u64)
 }
 
 fn np_check_in(
@@ -374,11 +374,11 @@ fn test_balances_and_transfers() {
     let account_b = icrc1_account_from_slice(b"B");
 
     assert_eq!(
-        get_account_balance(&pic, c, &account_a),
+        get_account_balance(&pic, &c, &account_a),
         0u64 as TokenAmountE9s
     );
     assert_eq!(
-        get_account_balance(&pic, c, &account_b),
+        get_account_balance(&pic, &c, &account_b),
         0u64 as TokenAmountE9s
     );
 
@@ -388,9 +388,9 @@ fn test_balances_and_transfers() {
     let response = mint_tokens_for_test(&pic, c, &account_a, amount_mint);
     println!("mint_tokens_for_test response: {:?}", response);
 
-    assert_eq!(get_account_balance(&pic, c, &account_a), amount_mint);
+    assert_eq!(get_account_balance(&pic, &c, &account_a), amount_mint);
     assert_eq!(
-        get_account_balance(&pic, c, &account_b),
+        get_account_balance(&pic, &c, &account_b),
         0u64 as TokenAmountE9s
     );
 
@@ -401,18 +401,18 @@ fn test_balances_and_transfers() {
     println!("icrc1_transfer response: {:?}", response);
 
     assert_eq!(
-        get_account_balance(&pic, c, &account_a),
+        get_account_balance(&pic, &c, &account_a),
         amount_mint - amount_send - DC_TOKEN_TRANSFER_FEE_E9S
     );
-    assert_eq!(get_account_balance(&pic, c, &account_b), amount_send);
+    assert_eq!(get_account_balance(&pic, &c, &account_b), amount_send);
 
     upgrade_test_canister(&pic, c).expect("Canister upgrade failed");
 
     assert_eq!(
-        get_account_balance(&pic, c, &account_a),
+        get_account_balance(&pic, &c, &account_a),
         amount_mint - amount_send - DC_TOKEN_TRANSFER_FEE_E9S
     );
-    assert_eq!(get_account_balance(&pic, c, &account_b), amount_send);
+    assert_eq!(get_account_balance(&pic, &c, &account_b), amount_send);
 }
 
 fn commit(pic: &PocketIc, can: Principal) {
@@ -443,7 +443,7 @@ fn test_np_registration_and_check_in() {
     // np_past now has 50 * 100 = 5000 tokens
     let amount: TokenAmountE9s = 5000u32 as TokenAmountE9s * DC_TOKEN_DECIMALS_DIV;
     assert_eq!(
-        get_account_balance(&p, c, &np_past.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np_past.as_icrc_compatible_account().into()),
         amount
     );
 
@@ -451,7 +451,7 @@ fn test_np_registration_and_check_in() {
     let (np1, reg1) = np_register(&p, c, b"np1", 0);
     assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500000000".to_string());
     assert_eq!(
-        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np1.as_icrc_compatible_account().into()),
         0u64
     );
 
@@ -460,8 +460,8 @@ fn test_np_registration_and_check_in() {
     commit(&p, c);
 
     // Initial reputation is 0
-    assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
-    assert_eq!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np1), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np2), 0);
 
     let np_past_acct = np_past.as_icrc_compatible_account().into();
     let np2_acct = np2.as_icrc_compatible_account().into();
@@ -471,11 +471,11 @@ fn test_np_registration_and_check_in() {
     assert!(response.is_ok());
 
     assert_eq!(
-        get_account_balance(&p, c, &np_past.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np_past.as_icrc_compatible_account().into()),
         amount - amount_send - DC_TOKEN_TRANSFER_FEE_E9S
     );
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np2.as_icrc_compatible_account().into()),
         amount_send
     );
 
@@ -483,7 +483,7 @@ fn test_np_registration_and_check_in() {
     let (np1, reg1) = np_register(&p, c, b"np1", 0);
     assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 and requested 500000000".to_string());
     assert_eq!(
-        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np1.as_icrc_compatible_account().into()),
         0u64
     );
 
@@ -494,18 +494,18 @@ fn test_np_registration_and_check_in() {
         "Registration complete! Thank you. You have been charged 0.500000000 tokens".to_string()
     );
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np2.as_icrc_compatible_account().into()),
         9500000000u64
     );
 
     upgrade_test_canister(&p, c).expect("Canister upgrade failed");
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np2.as_icrc_compatible_account().into()),
         9500000000u64
     );
 
     assert_eq!(
-        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np1.as_icrc_compatible_account().into()),
         0u64
     );
 
@@ -520,25 +520,25 @@ fn test_np_registration_and_check_in() {
     // Now np2 got a reward of 50 tokens distributed to it
     // The balance is 50 (reward) + 10 (np_past transfer) - 0.5 (reg fee) - 0.5 (check in) = 59000000000 e9s
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np2.as_icrc_compatible_account().into()),
         59000000000u64
     );
 
     upgrade_test_canister(&p, c).expect("Canister upgrade failed");
     assert_eq!(
-        get_account_balance(&p, c, &np2.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np2.as_icrc_compatible_account().into()),
         59000000000u64
     );
 
     assert_eq!(
-        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        get_account_balance(&p, &c, &np1.as_icrc_compatible_account().into()),
         0u64
     );
 
     // Registration itself does not affect the reputation.
     reward_e9s_per_block_recalculate();
-    assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
-    assert_eq!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np1), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np2), 0);
 }
 
 #[test]
@@ -578,12 +578,12 @@ fn test_reputation() {
 
     test_ffwd_to_next_block(ts_ns, &p, c);
 
-    assert_eq!(identity_reputation_get(&p, c, &np1.to_bytes_verifying()), 0);
-    assert_eq!(identity_reputation_get(&p, c, &np2.to_bytes_verifying()), 0);
-    assert_eq!(identity_reputation_get(&p, c, &np3.to_bytes_verifying()), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np1), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np2), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np3), 0);
 
-    assert_eq!(identity_reputation_get(&p, c, &u1.to_bytes_verifying()), 0);
-    assert_eq!(identity_reputation_get(&p, c, &u2.to_bytes_verifying()), 0);
+    assert_eq!(get_id_reputation(&p, &c, &u1), 0);
+    assert_eq!(get_id_reputation(&p, &c, &u2), 0);
 }
 
 // FIXME: add tests for profile update
@@ -639,8 +639,9 @@ fn contract_sign_request(
     can: &Principal,
     requester_dcc_id: &DccIdentity,
     provider_pubkey_bytes: &[u8],
-    offering_id: String,
+    offering_id: &str,
     memo: String,
+    amount: TokenAmountE9s,
 ) -> Result<String, String> {
     let requester_pubkey_bytes = requester_dcc_id.to_bytes_verifying();
     let req = ContractSignRequest::new(
@@ -648,14 +649,14 @@ fn contract_sign_request(
         "invalid test ssh key".to_string(),
         "invalid test contact info".to_string(),
         provider_pubkey_bytes,
-        offering_id,
+        offering_id.to_string(),
         None,
         None,
         None,
-        100,
+        amount,
         vec![PaymentEntryWithAmount {
             e: PaymentEntry::new("on_demand", "hour", 1),
-            amount_e9s: 100,
+            amount_e9s: amount,
         }],
         None,
         memo,
@@ -674,12 +675,12 @@ fn contract_sign_request(
 
 fn contracts_list_pending(
     pic: &PocketIc,
-    can: Principal,
+    can: &Principal,
     pubkey_bytes: Option<Vec<u8>>,
 ) -> Vec<(ContractId, ContractReqSerialized)> {
     query_check_and_decode!(
         pic,
-        can,
+        *can,
         "contracts_list_pending",
         Encode!(&pubkey_bytes).unwrap(),
         Vec<(ContractId, ContractReqSerialized)>
@@ -688,14 +689,14 @@ fn contracts_list_pending(
 
 fn contract_sign_reply(
     pic: &PocketIc,
-    can: Principal,
+    can: &Principal,
     replier_dcc_id: &DccIdentity,
     requester_dcc_id: &DccIdentity,
     reply: &ContractSignReply,
 ) -> Result<String, String> {
     let payload_bytes = borsh::to_vec(reply).unwrap();
     let payload_sig_bytes = replier_dcc_id.sign(&payload_bytes).unwrap().to_bytes();
-    update_check_and_decode!(pic, can, requester_dcc_id.to_ic_principal(), "contract_sign_reply", Encode!(
+    update_check_and_decode!(pic, *can, requester_dcc_id.to_ic_principal(), "contract_sign_reply", Encode!(
         &replier_dcc_id.to_bytes_verifying(),
         &payload_bytes,
         &payload_sig_bytes
@@ -754,11 +755,58 @@ fn test_offerings() {
     let search_results = offering_search(&p, c, "memory < 512MB");
     assert_eq!(search_results.len(), 0);
 
-    // Sign a contract
+    // Test for contract signing
     let offering_id = offering.matches_search("memory >= 512MB")[0].clone();
     assert_eq!(offering_id, "xxx-small");
 
     let u1 = user_register(&p, c, b"u1", 2 * DC_TOKEN_DECIMALS_DIV).0;
+
+    assert_eq!(get_id_reputation(&p, &c, &u1), 0);
+    assert_eq!(get_id_reputation(&p, &c, &np1), 0);
+
+    // Test the rejection of a contract signing
+    contract_req_sign_flow(&p, &c, &np1, &u1, &offering_id, false);
+
+    // Test the acceptance of a contract signing
+    contract_req_sign_flow(&p, &c, &np1, &u1, &offering_id, true);
+    let np1_rep = get_id_reputation(&p, &c, &np1);
+    let u1_rep = get_id_reputation(&p, &c, &u1);
+
+    let pending_contracts = contracts_list_pending(&p, &c, None);
+    assert_eq!(pending_contracts.len(), 0);
+    let pending_contracts = contracts_list_pending(&p, &c, Some(np1.to_bytes_verifying()));
+    assert_eq!(pending_contracts.len(), 0);
+    test_ffwd_to_next_block(ts_ns, &p, c);
+
+    let pending_contracts = contracts_list_pending(&p, &c, None);
+    assert_eq!(pending_contracts.len(), 0);
+    let pending_contracts = contracts_list_pending(&p, &c, Some(np1.to_bytes_verifying()));
+    assert_eq!(pending_contracts.len(), 0);
+
+    assert_eq!(get_id_reputation(&p, &c, &np1), np1_rep);
+    assert_eq!(get_id_reputation(&p, &c, &u1), u1_rep);
+}
+
+fn contract_req_sign_flow(
+    p: &PocketIc,
+    c: &Principal,
+    np1: &DccIdentity,
+    u1: &DccIdentity,
+    offering_id: &str,
+    accept: bool,
+) {
+    if accept {
+        println!("Testing an accept of a contract signing");
+    } else {
+        println!("Testing a rejection of a contract signing");
+    }
+    let np1_balance_before = get_account_balance(&p, c, &np1.as_icrc_compatible_account().into());
+    let np1_rep_before = get_id_reputation(&p, c, &np1);
+    let u1_balance_before = get_account_balance(&p, c, &u1.as_icrc_compatible_account().into());
+    let u1_rep_before = get_id_reputation(&p, c, &u1);
+
+    let contract_amount: TokenAmountE9s = 1_000_000_000;
+    let contract_step_fee = contract_amount / 100; // 1% fee
     contract_sign_request(
         &p,
         &c,
@@ -766,8 +814,23 @@ fn test_offerings() {
         &np1.to_bytes_verifying(),
         offering_id,
         "test_memo".to_string(),
+        contract_amount,
     )
     .unwrap();
+
+    assert_eq!(
+        get_account_balance(&p, c, &u1.as_icrc_compatible_account().into()),
+        u1_balance_before.clone() - contract_step_fee
+    );
+    assert_eq!(
+        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        np1_balance_before
+    );
+    assert_eq!(get_id_reputation(&p, c, &np1), np1_rep_before);
+    assert_eq!(
+        get_id_reputation(&p, c, &u1),
+        u1_rep_before + contract_step_fee
+    );
 
     let pending_contracts = contracts_list_pending(&p, c, None);
     assert_eq!(pending_contracts.len(), 1);
@@ -785,21 +848,40 @@ fn test_offerings() {
         np1.to_bytes_verifying(),
         "test_memo_wrong",
         contract_id,
-        true,
+        accept,
         "Thank you for signing up",
         "Here are some details",
     );
     let res = contract_sign_reply(&p, c, &np1, &u1, &reply).unwrap();
-    assert_eq!(res, "Contract signing reply submitted! Thank you. You have been charged 0.000000001 tokens as a fee, and your reputation has been bumped accordingly");
+    assert_eq!(res, "Contract signing reply submitted! Thank you. You have been charged 0.010000000 tokens as a fee, and your reputation has been bumped accordingly");
 
-    let pending_contracts = contracts_list_pending(&p, c, None);
-    assert_eq!(pending_contracts.len(), 0);
-    let pending_contracts = contracts_list_pending(&p, c, Some(np1.to_bytes_verifying()));
-    assert_eq!(pending_contracts.len(), 0);
-    test_ffwd_to_next_block(ts_ns, &p, c);
-
-    let pending_contracts = contracts_list_pending(&p, c, None);
-    assert_eq!(pending_contracts.len(), 0);
-    let pending_contracts = contracts_list_pending(&p, c, Some(np1.to_bytes_verifying()));
-    assert_eq!(pending_contracts.len(), 0);
+    if accept {
+        assert_eq!(
+            get_account_balance(&p, c, &u1.as_icrc_compatible_account().into()),
+            u1_balance_before - 2 * contract_step_fee - contract_amount
+        );
+        assert_eq!(
+            get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+            np1_balance_before + contract_amount
+        );
+        assert_eq!(
+            get_id_reputation(&p, c, &np1),
+            np1_rep_before + contract_step_fee
+        );
+        assert_eq!(
+            get_id_reputation(&p, c, &u1),
+            u1_rep_before + contract_step_fee
+        );
+    } else {
+        assert_eq!(
+            get_account_balance(&p, c, &u1.as_icrc_compatible_account().into()),
+            u1_balance_before - contract_step_fee
+        );
+        assert_eq!(
+            get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+            np1_balance_before - contract_step_fee
+        );
+        assert_eq!(get_id_reputation(&p, c, &np1), np1_rep_before);
+        assert_eq!(get_id_reputation(&p, c, &u1), u1_rep_before);
+    }
 }

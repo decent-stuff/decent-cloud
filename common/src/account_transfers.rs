@@ -14,9 +14,10 @@ use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 
 use crate::{
-    account_balance_add, account_balance_get, account_balance_sub, get_timestamp_ns,
-    ledger_add_reputation_change, slice_to_32_bytes_array, DccIdentity, TokenAmountE9s,
-    TransferError, LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
+    account_balance_add, account_balance_get, account_balance_sub, amount_as_string,
+    get_pubkey_from_principal, get_timestamp_ns, ledger_add_reputation_change,
+    slice_to_32_bytes_array, DccIdentity, TokenAmountE9s, TransferError, LABEL_DC_TOKEN_TRANSFER,
+    MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
 };
 
 thread_local! {
@@ -63,34 +64,33 @@ pub fn ledger_funds_transfer(
 
 pub fn charge_fees_to_account_and_bump_reputation(
     ledger: &mut LedgerMap,
-    dcc_id_charge: &DccIdentity,
-    dcc_id_bump_reputation: &DccIdentity,
+    dcc_id: &DccIdentity,
     amount_e9s: TokenAmountE9s,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
     }
-    let balance_from_after =
-        account_balance_get(&dcc_id_charge.as_icrc_compatible_account()) - amount_e9s;
+    let from_icrc1_account = dcc_id.as_icrc_compatible_account();
+    let balance_from_before = account_balance_get(&from_icrc1_account);
     match ledger_funds_transfer(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
-            dcc_id_charge.as_icrc_compatible_account(),
+            from_icrc1_account,
             MINTING_ACCOUNT,
             amount_e9s.into(),
             Some(fees_sink_accounts()),
             Some(get_timestamp_ns()),
             vec![],
             0,
-            balance_from_after,
+            balance_from_before.saturating_sub(amount_e9s),
             0,
         ),
     ) {
         Ok(_) => Ok(ledger_add_reputation_change(
             ledger,
-            dcc_id_bump_reputation,
-            amount_e9s.min(i64::MAX as TokenAmountE9s) as i64,
+            dcc_id,
+            amount_e9s as i64,
         )?),
         Err(e) => {
             info!("Failed to charge fees: {}", e);
@@ -101,30 +101,102 @@ pub fn charge_fees_to_account_and_bump_reputation(
 
 pub fn charge_fees_to_account_no_bump_reputation(
     ledger: &mut LedgerMap,
-    dcc_identity: &DccIdentity,
+    dcc_id_charge: &DccIdentity,
     amount_e9s: TokenAmountE9s,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
     }
-    let balance_from_after =
-        account_balance_get(&dcc_identity.as_icrc_compatible_account()) - amount_e9s;
+    let from_icrc1_account = dcc_id_charge.as_icrc_compatible_account();
+    let balance_from_before = account_balance_get(&from_icrc1_account);
     match ledger_funds_transfer(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
-            dcc_identity.as_icrc_compatible_account(),
+            from_icrc1_account,
             MINTING_ACCOUNT,
             Some(amount_e9s),
             Some(fees_sink_accounts()),
             Some(get_timestamp_ns()),
             vec![],
             0,
-            balance_from_after,
+            balance_from_before.saturating_sub(amount_e9s),
             0,
         ),
     ) {
         Ok(_) => Ok(()),
+        Err(e) => {
+            info!("Failed to charge fees: {}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
+pub enum IncreaseReputation {
+    None,
+    Sender,
+    Recipient,
+}
+
+pub fn do_funds_transfer(
+    ledger: &mut LedgerMap,
+    from_dcc_id: &DccIdentity,
+    to_icrc1_account: &IcrcCompatibleAccount,
+    transfer_amount_e9s: TokenAmountE9s,
+    fees_amount_e9s: TokenAmountE9s,
+    memo: &[u8],
+    increase_reputation: IncreaseReputation,
+) -> Result<String, String> {
+    let from_icrc1_account = from_dcc_id.as_icrc_compatible_account();
+
+    if transfer_amount_e9s == 0 {
+        return Ok("Nothing to transfer".to_string());
+    }
+    let balance_from_before = account_balance_get(&from_icrc1_account);
+    let balance_to_before = account_balance_get(to_icrc1_account);
+    if balance_from_before < transfer_amount_e9s + fees_amount_e9s {
+        return Err(format!(
+            "Not enough funds to transfer: {} < {} + {}",
+            balance_from_before, transfer_amount_e9s, fees_amount_e9s
+        ));
+    }
+    let balance_from_after = balance_from_before - transfer_amount_e9s - fees_amount_e9s;
+    match ledger_funds_transfer(
+        ledger,
+        FundsTransfer::new(
+            from_icrc1_account.clone(),
+            to_icrc1_account.clone(),
+            Some(fees_amount_e9s),
+            Some(fees_sink_accounts()),
+            Some(get_timestamp_ns()),
+            memo.to_vec(),
+            transfer_amount_e9s,
+            balance_from_after,
+            balance_to_before + transfer_amount_e9s,
+        ),
+    ) {
+        Ok(_) => {
+            let response = format!(
+                "Transferred {} tokens from {} \t to account {}, and charged fees {} tokens",
+                amount_as_string(transfer_amount_e9s),
+                from_icrc1_account,
+                to_icrc1_account,
+                amount_as_string(fees_amount_e9s)
+            );
+            match increase_reputation {
+                IncreaseReputation::None => (),
+                IncreaseReputation::Sender => {
+                    ledger_add_reputation_change(ledger, from_dcc_id, fees_amount_e9s as i64)?;
+                }
+                IncreaseReputation::Recipient => {
+                    let to_dcc_identity = to_icrc1_account
+                        .to_dcc_identity()
+                        .expect("Failed to get dcc identity from icrc1 account");
+                    ledger_add_reputation_change(ledger, &to_dcc_identity, fees_amount_e9s as i64)?;
+                }
+            }
+            Ok(response)
+        }
         Err(e) => {
             info!("Failed to charge fees: {}", e);
             Err(e.to_string())
@@ -200,6 +272,14 @@ impl IcrcCompatibleAccount {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
         borsh::from_slice(bytes)
+    }
+
+    pub fn to_dcc_identity(&self) -> Option<DccIdentity> {
+        let owner_bytes = get_pubkey_from_principal(self.owner);
+        if owner_bytes.is_empty() {
+            return None;
+        }
+        DccIdentity::new_verifying_from_bytes(&owner_bytes).ok()
     }
 }
 
