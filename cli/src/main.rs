@@ -41,9 +41,8 @@ const PUSH_BLOCK_SIZE: u64 = 1024 * 1024;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    init_logger()?;
-
     let cli = argparse::parse_args();
+    init_logger(cli.verbose)?;
 
     let ledger_path = cli.local_ledger_dir.map(PathBuf::from).unwrap_or_else(|| {
         dirs::home_dir()
@@ -1137,7 +1136,7 @@ struct SimpleStderrLogger;
 
 impl log::Log for SimpleStderrLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= Level::Info
+        metadata.level() <= Level::Debug
     }
 
     fn log(&self, record: &Record) {
@@ -1151,8 +1150,14 @@ impl log::Log for SimpleStderrLogger {
 
 static LOGGER: SimpleStderrLogger = SimpleStderrLogger;
 
-pub fn init_logger() -> anyhow::Result<()> {
+pub fn init_logger(verbose: bool) -> anyhow::Result<()> {
     log::set_logger(&LOGGER)
-        .map(|()| log::set_max_level(LevelFilter::Info))
+        .map(|()| {
+            if verbose {
+                log::set_max_level(LevelFilter::Debug)
+            } else {
+                log::set_max_level(LevelFilter::Info)
+            }
+        })
         .map_err(|e| anyhow::anyhow!(e))
 }

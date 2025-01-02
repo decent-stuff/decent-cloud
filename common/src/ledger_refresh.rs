@@ -13,7 +13,7 @@ use candid::Principal;
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
-use ledger_map::{info, warn, LedgerMap};
+use ledger_map::{debug, warn, LedgerMap};
 use std::collections::HashMap;
 
 pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
@@ -109,6 +109,6 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
     }
     CACHE_TXS_NUM_COMMITTED.with(|n| *n.borrow_mut() = num_txs);
     PRINCIPAL_MAP.with(|p| *p.borrow_mut() = principals);
-    info!("Refreshed caches from {} ledger blocks", replayed_blocks);
+    debug!("Refreshed caches from {} ledger blocks", replayed_blocks);
     Ok(())
 }

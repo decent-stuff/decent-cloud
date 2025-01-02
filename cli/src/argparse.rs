@@ -23,6 +23,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub local_ledger_dir: Option<String>,
 
+    /// Verbose logging
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+
     /// Pick which subcommand to use
     #[command(subcommand)]
     pub command: Commands,
