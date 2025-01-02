@@ -120,7 +120,6 @@ pub fn do_contract_sign_reply(
 ) -> Result<String, String> {
     let provider_dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
     provider_dcc_id.verify_bytes(&reply_serialized, &crypto_signature)?;
-    let provider_icrc1 = provider_dcc_id.as_icrc_compatible_account();
 
     fn_info!("{}", provider_dcc_id);
 
@@ -163,7 +162,7 @@ pub fn do_contract_sign_reply(
         do_funds_transfer(
             ledger,
             &requester_dcc_id,
-            &provider_icrc1,
+            &provider_dcc_id,
             cs_req.payment_amount_e9s(),
             fees_e9s,
             cs_req.request_memo().as_bytes(),

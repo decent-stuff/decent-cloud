@@ -141,19 +141,20 @@ pub enum IncreaseReputation {
 pub fn do_funds_transfer(
     ledger: &mut LedgerMap,
     from_dcc_id: &DccIdentity,
-    to_icrc1_account: &IcrcCompatibleAccount,
+    to_dcc_id: &DccIdentity,
     transfer_amount_e9s: TokenAmountE9s,
     fees_amount_e9s: TokenAmountE9s,
     memo: &[u8],
     increase_reputation: IncreaseReputation,
 ) -> Result<String, String> {
     let from_icrc1_account = from_dcc_id.as_icrc_compatible_account();
+    let to_icrc1_account = to_dcc_id.as_icrc_compatible_account();
 
     if transfer_amount_e9s == 0 {
         return Ok("Nothing to transfer".to_string());
     }
     let balance_from_before = account_balance_get(&from_icrc1_account);
-    let balance_to_before = account_balance_get(to_icrc1_account);
+    let balance_to_before = account_balance_get(&to_icrc1_account);
     if balance_from_before < transfer_amount_e9s + fees_amount_e9s {
         return Err(format!(
             "Not enough funds to transfer: {} < {} + {}",
@@ -189,10 +190,7 @@ pub fn do_funds_transfer(
                     ledger_add_reputation_change(ledger, from_dcc_id, fees_amount_e9s as i64)?;
                 }
                 IncreaseReputation::Recipient => {
-                    let to_dcc_identity = to_icrc1_account
-                        .to_dcc_identity()
-                        .expect("Failed to get dcc identity from icrc1 account");
-                    ledger_add_reputation_change(ledger, &to_dcc_identity, fees_amount_e9s as i64)?;
+                    ledger_add_reputation_change(ledger, to_dcc_id, fees_amount_e9s as i64)?;
                 }
             }
             Ok(response)
