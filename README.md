@@ -1,34 +1,36 @@
 # Install dependencies
 
-Install `cargo` by following https://rustup.rs/ -- it should be something along the lines of:
+Install `cargo` by following [rustup](https://rustup.rs/) instructions. Typically:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-To run end-to-end tests, we use [cargo-make](https://github.com/sagiegurari/cargo-make), which you can install by running
+For end-to-end tests, we use [cargo-make](https://github.com/sagiegurari/cargo-make). Install it by running:
 
 ```bash
 cargo install --force cargo-make
 ```
 
-Python is only used to build the whitepaper. We use `pixi` as a dependency manager for Python.
+Python is used solely to build the whitepaper. We use `pixi` as a Python dependency manager.
 
-Install `pixi` by following https://pixi.sh/latest/ -- the installation should be something along the lines of:
+Install `pixi` by following [pixi.sh](https://pixi.sh/latest/). Typically:
 
 ```bash
 curl -fsSL https://pixi.sh/install.sh | bash
 ```
 
-After that you can install all project dependencies with a simple `pixi install` in the project root.
+After installation, you can install all project dependencies with a simple `pixi install` in the project root.
 
 # Current Status
 
-The project is already usable, and it's in active development. Please open a GitHub issue if you notice problems.
+The project is already usable and is under active development. If you encounter problems, please open a GitHub [issue](https://github.com/decent-stuff/decent-cloud/issues) or start a conversation in our [discussions](https://github.com/orgs/decent-stuff/discussions).
 
-At the moment the main development is on Linux (Ubuntu 24.04), where all testing is also done. MacOS should similarly work without problems.
+Currently, main development and testing happens on Linux (Ubuntu 24.04). MacOS should work without issues. The `dc` binary also builds for Windows via [cross](https://github.com/cross-rs/cross):
 
-Also, the `dc` binary should build for Windows without problems by build with [cross](https://github.com/cross-rs/cross): `cross build --release --target x86_64-pc-windows-gnu`.
+```bash
+cross build --release --target x86_64-pc-windows-gnu
+```
 
 Example of built release binaries:
 
@@ -37,13 +39,13 @@ Example of built release binaries:
 -rwxr-xr-x 2 ubuntu ubuntu 20445254 Dez 20 22:11 target/x86_64-pc-windows-gnu/release/dc.exe
 ```
 
-Release binaries are still not published on GitHub -- please feel free to contribute by adding a GitHub workflow that publishes release binaries.
+Release binaries are not yet published on GitHub. Contributions are welcome — for example, consider adding a GitHub workflow that publishes these release binaries.
 
 # Usage
 
 ## Key generation
 
-### Option 1 (recommended): key generation with the `dc` cli tool:
+### Option 1 (recommended): key generation with the `dc` CLI tool:
 
 ```bash
 cargo run --bin dc -- keygen --generate --identity <id-slug>
@@ -55,155 +57,166 @@ cargo run --bin dc -- keygen --generate --identity <id-slug>
 ```
 cargo run --bin dc -- keygen --generate --identity my-provider
 [...]
-INFO - Mnemonic: <some words that you should save in a very safe place>
-INFO - Generated identity: [Ed25519 signing] rb26m-cxrhj-t63qa-xg33g-hvla2-pr25n-nmc5y-rc2la-v4zuv-fjkec-wqe
+INFO  dc >  Generated mnemonic: <some words that you should save in a very safe place>
+INFO  dc >  Generated identity: [Ed25519 signing] rb26m-cxrhj-t63qa-xg33g-hvla2-pr25n-nmc5y-rc2la-v4zuv-fjkec-wqe
 ```
 
 </details>
+
+Make sure you keep the mnemonic in a safe place, as it can be used to recreate the exact same identity.
 
 <details>
 <summary>Option 2 (alternative): key generation with openssl</summary>
 
-For node provider:
-
 ```bash
-mkdir -p $HOME/.dcc/identities/np
-openssl genpkey -algorithm ED25519 -out $HOME/.dcc/identities/np/private.pem
-```
-
-For user:
-
-```bash
-mkdir -p $HOME/.dcc/identities/user
-openssl genpkey -algorithm ED25519 -out $HOME/.dcc/identities/user/private.pem
+mkdir -p $HOME/.dcc/identity/my-id
+openssl genpkey -algorithm ED25519 -out $HOME/.dcc/identity/my-id/private.pem
 ```
 
 </details>
 
+Locally generated identities must be registered in the Ledger to interact with other users.
+
 ## Registering an account in the DecentCloud Ledger Canister
 
-You first need to get some DC tokens to pay for the registration fee. You can buy tokens for example on [icpswap](https://app.icpswap.com/swap?input=ryjl3-tyaaa-aaaaa-aaaba-cai&output=ggi4a-wyaaa-aaaai-actqq-cai).
-The registration fee should be 0.5 tokens or less. You can get the latest registration fee on the [ICP Dashboard](https://dashboard.internetcomputer.org/canister/gplx4-aqaaa-aaaai-actra-cai)
+To prevent excessive account creation, a registration fee is required.
+To get initial tokens, you can use [icpswap](https://app.icpswap.com/swap?input=ryjl3-tyaaa-aaaaa-aaaba-cai&output=ggi4a-wyaaa-aaaai-actqq-cai).
+The registration fee is 0.5 DC tokens at the time of this writing and will decrease after each halving.
+You can check the current fee on the [ICP Dashboard](https://dashboard.internetcomputer.org/canister/gplx4-aqaaa-aaaai-actra-cai) or via CLI:
 
-After sending funds to the principal of your generated identity, you can register a node provider account with:
-
+```bash
+❯ cargo run --bin dc -- ledger-remote get-registration-fee
+[...]
+Registration fee: 0.500000000
 ```
-cargo run --bin dc -- np --identity my-provider --register
+
+After obtaining DCT on the principal of your generated identity, you can register a node provider account:
+
+```bash
+cargo run --bin dc -- np register --identity my-provider
 [...]
 INFO - Registering principal: my-provider as [Ed25519 signing] rb26m-cxrhj-t63qa-xg33g-hvla2-pr25n-nmc5y-rc2la-v4zuv-fjkec-wqe
 ```
 
-Or a user account can be similarly registered with: `cargo run --bin dc -- user --identity my-user --register`
+Or register a user account similarly:
+
+```bash
+cargo run --bin dc -- user register --identity my-user
+```
 
 ## Participating in the periodic token distribution
 
-The Decent Cloud platform utilizes a periodic token distribution mechanism, driven by a dual-token system designed to balance platform operations and incentivize participant behavior. Below is an overview of the periodic token distribution model:
+The Decent Cloud platform uses a periodic token distribution mechanism to balance operations and incentivize participant behavior.
 
-1. **Token Minting**:
+1. **Token Minting**
 
    - New tokens, called Decentralized Cloud Tokens (DCT), are minted approximately every 10 minutes with the creation of a new block.
-   - The initial block generates 50 tokens, and the number of minted tokens reduces by half every 210,000 blocks, following a deflationary model similar to Bitcoin. This ensures a capped total supply of approximately 21 million DCT.
+   - The initial block generates 50 tokens, and the number of minted tokens is halved every 210,000 blocks (similar to Bitcoin), ensuring a capped total supply of about 21 million DCT.
 
-2. **Distribution Mechanism**:
+2. **Distribution Mechanism**
 
-   - Minted tokens are allocated fairly with every new block to all participants who paid the participation fee.
-   - If there are no participants in a block, the reward is carried over to the next block.
+   - Minted tokens are allocated with each new block to participants who paid the participation fee.
+   - If there are no participants in a block, the reward carries over to the next block.
 
-3. **Eligibility and Fees**:
+3. **Eligibility and Fees**
 
-   - Participants must pay a registration fee equivalent to 1/100th of the block reward (0.5 DCT until the first halving) to be eligible for token rewards. These fees are directed to a transparent, DAO-controlled wallet for funding platform development.
+   - Participants must pay a registration fee equal to 1/100th of the block reward (0.5 DCT until the first halving) to be eligible for token rewards. Fees are directed to a DAO-controlled wallet, funding platform development.
 
-4. **Incentives and Stability**:
+4. **Incentives and Stability**
 
-   - The model promotes stability and aligns supply with demand. Developers use DCT to rent nodes, creating inherent demand for the token. Node providers may retain DCT in anticipation of price increases, further stabilizing the market, or sell the tokens to cover their expenses.
-   - Upcoming governance through a Decentralized Autonomous Organization (DAO) ensures flexibility in addressing market volatility and adapting the reward system as necessary.
+   - The model promotes stability by aligning supply with demand. Developers use DCT to rent nodes, creating a built-in demand. Node providers may hold onto DCT anticipating price increases or sell tokens to cover operational costs.
+   - A Decentralized Autonomous Organization (DAO) will govern the system, allowing flexibility to address market volatility and adjust the reward system as needed.
 
-5. **Transparency and Compliance**:
-   - All token operations are governed by smart contracts and adhere to relevant regulatory standards. This ensures secure and transparent transactions while fostering community trust.
+5. **Transparency and Compliance**
+   - All token operations are governed by smart contracts and comply with relevant regulations. This ensures secure, transparent transactions that build community trust.
 
-The periodic distribution model reflects our commitment to equitable resource allocation, incentivizing long-term participation, and maintaining economic stability within the ecosystem.
+This periodic distribution model underscores our commitment to fair resource allocation, long-term participation, and economic stability within the ecosystem. For technical details, please see the whitepaper at our [website](https://decent-cloud.org/).
 
-For more technical details, refer to the whitepaper that can be found on the project[website](https://decent-cloud.org/).
+Any provider can participate. For example:
 
-Example of participation:
-
-```
-cargo run --bin dc -- np --check-in my-provider --check-in-memo "Oh yeah! I'm getting DCT!"
+```bash
+cargo run --bin dc -- np check-in --identity my-id --memo "Oh yeah! I'm getting free DCT!"
 ```
 
-In the future, the memos will be shown on the project dashboard (help is welcome!).
+In the future, these memos will appear on the project dashboard, so be creative — contributions are always welcome!
 
-Note that the above operation will synchronize the entire ledger to your local machine, ensuring the upstream ledger remains secure from malicious modifications. As the ledger is a cryptographically protected blockchain, maintaining multiple copies enhances protection against any tampering with its history.
+Note that there is no fundamental difference between a user and a provider; the same identity can be both.
 
-You can also manually fetch the ledger by running `cargo run --bin dc -- ledger_remote fetch`
+Another note: the check-in operation first synchronizes the entire ledger to your local machine, keeping the upstream ledger secure from modifications. The ledger is cryptographically protected, and having multiple copies adds security against tampering, similar to `git`.
+
+You can also manually fetch the ledger by running:
+
+```bash
+cargo run --bin dc -- ledger-remote fetch
+```
 
 ## Updating a Provider Profile
 
-Node provider profile can be prepared locally, as a yaml file. Please check [the template in the repository](https://github.com/decent-stuff/decent-cloud/blob/main/examples/np-profile-template.yaml), and make changes locally. You can check yaml validity on [some online websites](https://www.yamllint.com/) if you have problems.
+Prepare your node provider profile locally as a YAML file. Check out [the template in the repository](https://github.com/decent-stuff/decent-cloud/blob/main/examples/np-profile-template.yaml), then edit it to your needs. If you run into issues, you can validate YAML on [some online tools](https://www.yamllint.com/).
 
-When ready, update the provider profile in the canister with:
+When ready, update your provider profile in the canister:
 
+```bash
+cargo run --bin dc -- np update-profile --identity my-provider --profile-file my-provider-profile.yaml
 ```
-cargo run --bin dc -- np --update-profile my-provider my-provider-profile.yaml
-```
 
-You need to pay a fee for this operation, to prevent DOS attacks.
+A small fee is required for this operation to prevent DoS attacks.
 
 ## Updating Provider Offering
 
-Similar to the profile, each provider can have an offering prepared locally, as a yaml file, and then published. Please refer to the [the template in the repository](https://github.com/decent-stuff/decent-cloud/blob/main/examples/np-offering-template.yaml).
+Similar to the profile, you can prepare your offering locally as a YAML file, then publish it. Refer to [the template in the repository](https://github.com/decent-stuff/decent-cloud/blob/main/examples/np-offering-template.yaml).
 
-When ready, update the provider offering with:
+When ready, update the provider offering:
 
+```bash
+cargo run --bin dc -- np update-offering --identity my-provider --offering-file my-provider-offering.yaml
 ```
-cargo run --bin dc -- np --update-profile my-provider my-provider-offering.yaml
-```
 
-You need to pay a fee for this operation, to prevent DOS attacks.
+Again, a small fee is required for this operation, preventing DoS attacks.
 
 ## User contracting an offering
 
-Search for suitable offerings, preferably after running `ledger_remote fetch` to get the latest offerings:
+Run `ledger_remote fetch` to get the latest offerings, then search for suitable ones:
 
-```
-cargo run --bin dc -- offering --query 'memory >= 512MB AND storage.size > 1gb'
-```
-
-This will give you the list of DC principals and their matching offerings. From the offerings, inspect the offerings and take the instance id from your preferred one.
-You should also check the reputation and historical data for the provider (FIXME: add CLI and an example).
-
-After finding the id:
-
-```
-cargo run --bin dc -- offering --contract-request <offering-id>
+```bash
+cargo run --bin dc -- offering query 'memory >= 512MB AND storage.size > 1gb'
 ```
 
-This gives you the contract-id that you can query later to check for the status.
+Or list all offerings:
 
-To which the provider needs to reply with:
-
-```
-cargo run --bin dc -- offering --contract-reply <contract-id>
+```bash
+cargo run --bin dc -- offering list
 ```
 
-The provider can accept or reject the request, based on the user reputation, and the supplied payment amount.
-Once the provider accepts the request, they allocate the machine and provide access details to the user.
+You will see the DC principals and their associated offerings. Inspect them, grab the instance ID, and review the provider’s reputation and historical data (e.g., `cargo run --bin dc -- np list --balances`).
 
-Accepting the request increases the reputation of both the provider and the user, which helps future users pick reputable providers, or providers to pick and select users.
+After you find the right offering, you can run something like:
 
-All the above should also be doable through the WebUI. Help is welcome!
-
-FIXME: implement refunds and reducing the reputation of malicious actors.
-
-## Provider replying to a user request
-
-List open user contract requests, and find contract ids.
-
-```
-cargo run --bin dc -- offering --contracts-list-open
+```bash
+cargo run --bin dc -- contract sign-request --offering-id xxx-small --identity my-user --requester-ssh-pubkey "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbPVy5BWvjp6bm1wanPbH+hkPuOrx4AjUoczADfYpcx test-ssh-user" --requester-contact "https://github.com/orgs/decent-stuff/discussions/5" --memo "Oh yeah I'm signing a contract!" --provider-pubkey-pem MCowBQYDK2VwAyEAbxvOReOGb95hG/zXWheKtofsAP86+Q/bfVsPsgscQBE= --interactive
 ```
 
-Accept or reject user requests.
+If you provide `--interactive`, the CLI will prompt for missing arguments instead of failing with an error.
+
+After confirmation, it sends a contract sign request. Both you and the provider can periodically check for open contract requests:
+
+```bash
+cargo run --bin dc -- contract list-open
+```
+
+To complete the contract signing, the provider must confirm (or reject) the contract:
+
+```bash
+cargo run --bin dc --  contract sign-reply --identity my-provider --contract-id <contract-id-base64> --sign-accept true --response-text "It works!" --interactive
+```
+
+The provider may accept or reject the request based on user reputation or other factors.
+
+- If rejected, the user is refunded minus the transaction fee, and the rejection is recorded in the ledger.
+- If accepted, the user pays the full amount plus a transaction fee, and the provider allocates resources and supplies access details. Both parties’ reputations increase, helping other users and providers make informed choices.
+
+All of this will also be accessible via a WebUI in the future; contributions are welcome!
+_(FIXME: implement refunds in case of user dissatisfaction and accordingly adjust reputation for such providers.)_
 
 # Developer notes
 
@@ -216,7 +229,7 @@ You can run unit tests with:
 cargo test
 ```
 
-Or you can run the complete suite of unit tests and the canister tests using PocketIC, with [cargo-make](https://github.com/sagiegurari/cargo-make):
+Or run the complete suite of unit tests and the canister tests using PocketIC, with [cargo-make](https://github.com/sagiegurari/cargo-make):
 
 ```bash
 cargo make
@@ -227,35 +240,34 @@ cargo make
 <details>
 <summary>Build whitepaper</summary>
 
-There is a Python build script that uses a docker image with LaTeX and mermaid.js to build the whitepaper PDF.
-
-You can invoke the build script with:
+A Python build script uses a Docker image with LaTeX and mermaid.js to build the whitepaper PDF:
 
 ```bash
 pixi run python3 ./docs/whitepaper/build.py
 ```
 
-The result PDF document will be at `build/docs/whitepaper/whitepaper.pdf`.
+The resulting PDF will be at `build/docs/whitepaper/whitepaper.pdf`.
 
 </details>
 
 <details>
 <summary>Update CI image</summary>
 
-There is a CI workflow that you can manually trigger on GitHub to refresh the CI build image: https://github.com/decent-stuff/decent-cloud/actions/workflows/build-container-image.yaml
+A GitHub workflow can be manually triggered to refresh the CI build image:
+[CI build image](https://github.com/decent-stuff/decent-cloud/actions/workflows/build-container-image.yaml)
 
-If that fails, you can build the image locally and push it manually.
+If it fails, you can build the image locally and push it:
 
-```
+```bash
 docker build .github/container/ --tag ghcr.io/decent-stuff/decent-cloud/ci-image:latest
 docker push ghcr.io/decent-stuff/decent-cloud/ci-image:latest
 ```
 
-If `docker push` fails with `denied: denied` or similar error, refresh the ghcr token at https://github.com/settings/tokens?page=1 and run
+If `docker push` fails with `denied: denied`, refresh your ghcr token at [GitHub settings/tokens](https://github.com/settings/tokens?page=1) and run:
 
-```
+```bash
 docker login ghcr.io
-username: yanliu38
+username: <your-username>
 password: <generated token>
 ```
 
