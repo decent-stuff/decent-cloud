@@ -1,7 +1,9 @@
 mod argparse;
 mod keygen;
 
-use argparse::{Commands, ContractCommands, NpCommands, OfferingCommands, UserCommands};
+use argparse::{
+    Commands, ContractCommands, LedgerRemoteCommands, NpCommands, OfferingCommands, UserCommands,
+};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -342,83 +344,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(())
         }
-        Commands::LedgerRemote(ref remote_args) => {
+        Commands::LedgerRemote(ref subcmd) => {
             // TODO: Switch to subcommands
-            let local_ledger_path = match remote_args.dir {
-                Some(ref value) => PathBuf::from(value),
-                None => dirs::home_dir()
-                    .expect("Could not get home directory")
-                    .join(".dcc")
-                    .join("ledger")
-                    .join("main.bin"),
-            };
-            let push_auth = remote_args.data_push_authorize;
-            let push = remote_args.data_push;
-            if push_auth || push {
-                let identity = identity_name
-                    .expect("Identity must be specified for this command, use --identity");
+            let local_ledger_path = ledger_local
+                .get_file_path()
+                .expect("Failed to get local ledger path");
 
-                let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+            match subcmd {
+                LedgerRemoteCommands::DataFetch => {
+                    let canister = ledger_canister(None).await?;
+                    return ledger_data_fetch(&canister, local_ledger_path).await;
+                }
+                LedgerRemoteCommands::DataPushAuthorize | LedgerRemoteCommands::DataPush => {
+                    let identity = identity_name
+                        .expect("Identity must be specified for this command, use --identity");
 
-                if push_auth {
+                    let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+
+                    let push_auth = *subcmd == LedgerRemoteCommands::DataPushAuthorize;
+
+                    if push_auth {
+                        let ic_auth = dcc_to_ic_auth(&dcc_ident);
+                        let canister = ledger_canister(ic_auth).await?;
+                        let args = Encode!(&()).map_err(|e| e.to_string())?;
+                        let result = canister.call_update("data_push_auth", &args).await?;
+                        let response = Decode!(&result, Result<String, String>)
+                            .map_err(|e| e.to_string())??;
+
+                        println!("Push auth: {}", response);
+                    }
+
+                    // After authorizing, we can push the data
                     let ic_auth = dcc_to_ic_auth(&dcc_ident);
                     let canister = ledger_canister(ic_auth).await?;
-                    let args = Encode!(&()).map_err(|e| e.to_string())?;
-                    let result = canister.call_update("data_push_auth", &args).await?;
-                    let response =
-                        Decode!(&result, Result<String, String>).map_err(|e| e.to_string())??;
 
-                    println!("Push auth: {}", response);
+                    return ledger_data_push(&canister, local_ledger_path).await;
                 }
-
-                // After authorizing, we can push the data
-                let ic_auth = dcc_to_ic_auth(&dcc_ident);
-                let canister = ledger_canister(ic_auth).await?;
-
-                return ledger_data_push(&canister, local_ledger_path).await;
-            }
-
-            let canister_function = match remote_args.canister_function {
-                Some(ref value) => value,
-                None => {
-                    println!("Available canister functions:");
-                    for f in ledger_canister(None).await?.list_functions_updates() {
-                        println!("UPDATE:\t{}", f);
-                    }
-                    for f in ledger_canister(None).await?.list_functions_queries() {
-                        println!("QUERY:\t{}", f);
-                    }
-                    return Ok(());
-                }
-            };
-            println!("Calling canister function: {}", canister_function);
-
-            fn log_with_level(log_entry: serde_json::Value, log_level: Level) {
-                let timestamp_ns = log_entry["timestamp"].as_u64().unwrap_or_default();
-                let timestamp_s = (timestamp_ns / 1_000_000_000) as i64;
-                // Create DateTime from the timestamp
-                let dt = DateTime::from_timestamp(timestamp_s, 0).unwrap_or_default();
-                println!(
-                    "{} [{}] - {}",
-                    dt.format("%Y-%m-%dT%H:%M:%S"),
-                    log_level,
-                    log_entry["message"]
-                        .as_str()
-                        .expect("Invalid message field")
-                );
-            }
-
-            match canister_function.as_str() {
-                "init_ledger_map" => {
-                    let canister = ledger_canister(None).await?;
-                    println!("{}", canister.init_ledger_map().await?);
-                }
-                "data_fetch" | "fetch" => {
-                    let canister = ledger_canister(None).await?;
-                    ledger_data_fetch(&canister, local_ledger_path).await?;
-                    println!("Done fetching data from the Ledger canister");
-                }
-                "metadata" => {
+                LedgerRemoteCommands::Metadata => {
                     let canister = ledger_canister(None).await?;
 
                     let mut table = Table::new("{:<}  {:<}");
@@ -435,11 +397,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     print!("{}", table);
                 }
-                "get_check_in_nonce" => {
+                LedgerRemoteCommands::GetCheckInNonce => {
                     let nonce_bytes = ledger_canister(None).await?.get_check_in_nonce().await;
                     println!("{}", hex::encode(nonce_bytes));
                 }
-                "get_logs_debug" => {
+                LedgerRemoteCommands::GetLogsDebug => {
                     println!("Ledger canister DEBUG logs:");
                     for entry in serde_json::from_str::<Vec<serde_json::Value>>(
                         &ledger_canister(None).await?.get_logs_debug().await?,
@@ -449,7 +411,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         log_with_level(entry, Level::Debug);
                     }
                 }
-                "get_logs_info" => {
+                LedgerRemoteCommands::GetLogsInfo => {
                     println!("Ledger canister INFO logs:");
                     for entry in serde_json::from_str::<Vec<serde_json::Value>>(
                         &ledger_canister(None).await?.get_logs_info().await?,
@@ -459,7 +421,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         log_with_level(entry, Level::Info);
                     }
                 }
-                "get_logs_warn" => {
+                LedgerRemoteCommands::GetLogsWarn => {
                     println!("Ledger canister WARN logs:");
                     for entry in serde_json::from_str::<Vec<serde_json::Value>>(
                         &ledger_canister(None).await?.get_logs_warn().await?,
@@ -469,7 +431,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         log_with_level(entry, Level::Warn);
                     }
                 }
-                "get_logs_error" => {
+                LedgerRemoteCommands::GetLogsError => {
                     println!("Ledger canister ERROR logs:");
                     for entry in serde_json::from_str::<Vec<serde_json::Value>>(
                         &ledger_canister(None).await?.get_logs_error().await?,
@@ -479,8 +441,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         log_with_level(entry, Level::Error);
                     }
                 }
-                _ => panic!("Unknown canister function: {}", canister_function),
-            };
+            }
+
+            fn log_with_level(log_entry: serde_json::Value, log_level: Level) {
+                let timestamp_ns = log_entry["timestamp"].as_u64().unwrap_or_default();
+                let timestamp_s = (timestamp_ns / 1_000_000_000) as i64;
+                // Create DateTime from the timestamp
+                let dt = DateTime::from_timestamp(timestamp_s, 0).unwrap_or_default();
+                println!(
+                    "{} [{}] - {}",
+                    dt.format("%Y-%m-%dT%H:%M:%S"),
+                    log_level,
+                    log_entry["message"]
+                        .as_str()
+                        .expect("Invalid message field")
+                );
+            }
 
             Ok(())
         }
@@ -917,14 +893,14 @@ fn list_identities(
     if identity_type == ListIdentityType::Providers || identity_type == ListIdentityType::All {
         println!("\n# Registered providers");
         for entry in ledger.iter(Some(LABEL_NP_REGISTER)) {
-            let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
+            let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
             println_identity(&dcc_id, show_balances);
         }
     }
     if identity_type == ListIdentityType::Users || identity_type == ListIdentityType::All {
         println!("\n# Registered users");
         for entry in ledger.iter(Some(LABEL_USER_REGISTER)) {
-            let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
+            let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
             println_identity(&dcc_id, show_balances);
         }
     }

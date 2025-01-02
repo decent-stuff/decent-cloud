@@ -33,6 +33,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
 pub enum Commands {
     /// Generate key pairs
     Keygen(KeygenArgs),
@@ -45,9 +46,11 @@ pub enum Commands {
     #[command(subcommand)]
     User(UserCommands),
     /// Work with the local Decent Cloud Ledger
+    #[command(arg_required_else_help = true)]
     LedgerLocal(LedgerLocalArgs),
     /// Work with the remote Decent Cloud Ledger
-    LedgerRemote(LedgerRemoteArgs),
+    #[command(subcommand)]
+    LedgerRemote(LedgerRemoteCommands),
     /// Offering management commands
     #[command(subcommand)]
     Offering(OfferingCommands),
@@ -87,6 +90,7 @@ pub struct AccountArgs {
 }
 
 #[derive(Subcommand)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
 pub enum NpCommands {
     /// List all node provider identities
     List(ListArgs),
@@ -141,6 +145,7 @@ pub struct UpdateOfferingArgs {
 }
 
 #[derive(Subcommand)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
 pub enum UserCommands {
     /// List all user identities
     List(ListArgs),
@@ -160,34 +165,42 @@ pub struct LedgerLocalArgs {
     pub list_entries: bool,
 }
 
-#[derive(Args)]
-pub struct LedgerRemoteArgs {
+#[derive(Subcommand, PartialEq)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
+pub enum LedgerRemoteCommands {
     /// Sync data from the ledger
-    #[arg(long, visible_aliases = ["fetch", "pull"])]
-    pub data_fetch: bool,
+    #[command(visible_aliases = ["fetch", "pull"])]
+    DataFetch,
 
     /// Authorize push to the ledger
-    #[arg(long, visible_aliases = ["push-authorize", "push-auth"], requires = "identity")]
-    pub data_push_authorize: bool,
+    #[command(visible_aliases = ["push-authorize", "push-auth"])]
+    DataPushAuthorize,
 
     /// Push the ledger entries to the ledger
-    #[arg(long, visible_aliases = ["push"], requires = "identity")]
-    pub data_push: bool,
+    #[command(visible_aliases= ["push"])]
+    DataPush,
 
-    /// Canister function to call
-    #[arg(long)]
-    pub canister_function: Option<String>,
+    /// Show metadata
+    Metadata,
 
-    /// Prefix directory
-    #[arg(long)]
-    pub dir: Option<String>,
+    /// Get nonce that is used as the seed for the check-in
+    GetCheckInNonce,
 
-    /// Which IC network to use
-    #[arg(long)]
-    pub network: Option<String>,
+    /// Get DEBUG logs from the ledger canister
+    GetLogsDebug,
+
+    /// Get INFO logs from the ledger canister
+    GetLogsInfo,
+
+    /// Get WARNING logs from the ledger canister
+    GetLogsWarn,
+
+    /// Get ERROR logs from the ledger canister
+    GetLogsError,
 }
 
 #[derive(Subcommand)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
 pub enum OfferingCommands {
     /// List all open offerings
     List,
@@ -203,6 +216,7 @@ pub struct OfferingQueryArgs {
 }
 
 #[derive(Subcommand)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
 pub enum ContractCommands {
     /// List all open contracts
     ListOpen(ListOpenArgs),

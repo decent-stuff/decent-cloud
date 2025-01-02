@@ -68,29 +68,6 @@ impl LedgerCanister {
             .map_err(|e| e.to_string())
     }
 
-    pub fn list_functions_updates(&self) -> Vec<String> {
-        vec![
-            "init_ledger_map".to_string(),
-            "node_provider_register".to_string(),
-            "node_provider_check_in".to_string(),
-            "node_provider_update_profile".to_string(),
-            "data_push".to_string(),
-            "data_push_auth".to_string(),
-        ]
-    }
-
-    pub fn list_functions_queries(&self) -> Vec<String> {
-        vec![
-            "get_check_in_nonce".to_string(),
-            "data_fetch".to_string(),
-            "metadata".to_string(),
-            "get_logs_debug".to_string(),
-            "get_logs_info".to_string(),
-            "get_logs_warn".to_string(),
-            "get_logs_error".to_string(),
-        ]
-    }
-
     pub async fn init_ledger_map(&self) -> Result<String, String> {
         let args = Encode!(&()).map_err(|e| e.to_string())?;
         let response = self.call_update("init_ledger_map", &args).await?;
