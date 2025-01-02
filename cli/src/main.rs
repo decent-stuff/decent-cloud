@@ -1,7 +1,7 @@
 mod argparse;
 mod keygen;
 
-use argparse::{Commands, ContractCommands, NpCommands, OfferingCommands};
+use argparse::{Commands, ContractCommands, NpCommands, OfferingCommands, UserCommands};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -149,7 +149,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if list_args.only_local {
                         list_local_identities(list_args.balances)?
                     } else {
-                        list_identities(&ledger_local, list_args.balances)?
+                        list_identities(
+                            &ledger_local,
+                            ListIdentityType::Providers,
+                            list_args.balances,
+                        )?
                     }
                 }
                 NpCommands::Register => {
@@ -177,7 +181,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         println!("0x{}", nonce_string);
                     } else {
-                        let identity = identity_name.expect("You must specify an identity");
+                        let identity = identity_name
+                            .expect("Identity must be specified for this command, use --identity");
 
                         let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                         let ic_auth = dcc_to_ic_auth(&dcc_ident);
@@ -230,7 +235,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 NpCommands::UpdateProfile(update_profile_args) => {
-                    let identity = identity_name.expect("You must specify an identity");
+                    let identity = identity_name
+                        .expect("Identity must be specified for this command, use --identity");
 
                     let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                     let ic_auth = dcc_to_ic_auth(&dcc_id);
@@ -252,7 +258,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     info!("Profile update response: {}", result);
                 }
                 NpCommands::UpdateOffering(update_offering_args) => {
-                    let identity = identity_name.expect("You must specify an identity");
+                    let identity = identity_name
+                        .expect("Identity must be specified for this command, use --identity");
                     let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
                     let ic_auth = dcc_to_ic_auth(&dcc_id);
 
@@ -276,28 +283,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(())
         }
-        Commands::User(ref user_args) => {
-            if user_args.list || user_args.balances {
-                list_local_identities(user_args.balances)?
-            } else if user_args.register {
-                let identity = identity_name.expect("You must specify an identity");
-                let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
-                let ic_auth = dcc_to_ic_auth(&dcc_id);
-
-                let canister = ledger_canister(ic_auth).await?;
-                let pubkey_bytes = dcc_id.to_bytes_verifying();
-                let pubkey_signature = dcc_id.sign(&pubkey_bytes)?;
-                let args = Encode!(&pubkey_bytes, &pubkey_signature.to_bytes())?;
-                let result = canister.call_update("user_register", &args).await?;
-                let response =
-                    Decode!(&result, Result<String, String>).map_err(|e| e.to_string())?;
-
-                match response {
-                    Ok(response) => {
-                        println!("Registration successful: {}", response);
+        Commands::User(ref user_cmd) => {
+            match user_cmd {
+                UserCommands::List(list_args) => {
+                    if list_args.only_local {
+                        list_local_identities(list_args.balances)?
+                    } else {
+                        list_identities(&ledger_local, ListIdentityType::Users, list_args.balances)?
                     }
-                    Err(e) => {
-                        println!("Registration failed: {}", e);
+                }
+                UserCommands::Register => {
+                    let identity = identity_name
+                        .expect("Identity must be specified for this command, use --identity");
+                    let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+                    let ic_auth = dcc_to_ic_auth(&dcc_id);
+
+                    let canister = ledger_canister(ic_auth).await?;
+                    let pubkey_bytes = dcc_id.to_bytes_verifying();
+                    let pubkey_signature = dcc_id.sign(&pubkey_bytes)?;
+                    let args = Encode!(&pubkey_bytes, &pubkey_signature.to_bytes())?;
+                    let result = canister.call_update("user_register", &args).await?;
+                    let response =
+                        Decode!(&result, Result<String, String>).map_err(|e| e.to_string())?;
+
+                    match response {
+                        Ok(response) => {
+                            println!("Registration successful: {}", response);
+                        }
+                        Err(e) => {
+                            println!("Registration failed: {}", e);
+                        }
                     }
                 }
             }
@@ -340,7 +355,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let push_auth = remote_args.data_push_authorize;
             let push = remote_args.data_push;
             if push_auth || push {
-                let identity = identity_name.expect("You must specify an identity");
+                let identity = identity_name
+                    .expect("Identity must be specified for this command, use --identity");
 
                 let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
@@ -886,19 +902,31 @@ fn list_local_identities(include_balances: bool) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+#[derive(PartialEq)]
+enum ListIdentityType {
+    Providers,
+    Users,
+    All,
+}
+
 fn list_identities(
     ledger: &LedgerMap,
+    identity_type: ListIdentityType,
     show_balances: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("\n# Registered providers");
-    for entry in ledger.iter(Some(LABEL_NP_REGISTER)) {
-        let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
-        println_identity(&dcc_id, show_balances);
+    if identity_type == ListIdentityType::Providers || identity_type == ListIdentityType::All {
+        println!("\n# Registered providers");
+        for entry in ledger.iter(Some(LABEL_NP_REGISTER)) {
+            let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
+            println_identity(&dcc_id, show_balances);
+        }
     }
-    println!("\n# Registered users");
-    for entry in ledger.iter(Some(LABEL_USER_REGISTER)) {
-        let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
-        println_identity(&dcc_id, show_balances);
+    if identity_type == ListIdentityType::Users || identity_type == ListIdentityType::All {
+        println!("\n# Registered users");
+        for entry in ledger.iter(Some(LABEL_USER_REGISTER)) {
+            let dcc_id = DccIdentity::new_verifying_from_bytes(&entry.key()).unwrap();
+            println_identity(&dcc_id, show_balances);
+        }
     }
     Ok(())
 }

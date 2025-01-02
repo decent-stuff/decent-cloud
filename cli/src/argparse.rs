@@ -42,7 +42,8 @@ pub enum Commands {
     #[command(subcommand)]
     Np(NpCommands),
     /// User management commands
-    User(UserArgs),
+    #[command(subcommand)]
+    User(UserCommands),
     /// Work with the local Decent Cloud Ledger
     LedgerLocal(LedgerLocalArgs),
     /// Work with the remote Decent Cloud Ledger
@@ -105,7 +106,7 @@ pub enum NpCommands {
 
 #[derive(Args)]
 pub struct ListArgs {
-    /// Get balances of all node provider identities
+    /// Include balances in the listing of node identities
     #[arg(long)]
     pub balances: bool,
 
@@ -139,19 +140,13 @@ pub struct UpdateOfferingArgs {
     pub offering_file: String,
 }
 
-#[derive(Args)]
-pub struct UserArgs {
+#[derive(Subcommand)]
+pub enum UserCommands {
     /// List all user identities
-    #[arg(long)]
-    pub list: bool,
+    List(ListArgs),
 
-    /// Get balances of all user identities
-    #[arg(long)]
-    pub balances: bool,
-
-    /// Register user at the ledger
-    #[arg(long, requires = "identity")]
-    pub register: bool,
+    /// Register a user identity in the ledger
+    Register,
 }
 
 #[derive(Args)]
