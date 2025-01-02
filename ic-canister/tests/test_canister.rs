@@ -800,17 +800,17 @@ fn contract_req_sign_flow(
     } else {
         println!("Testing a rejection of a contract signing");
     }
-    let np1_balance_before = get_account_balance(&p, c, &np1.as_icrc_compatible_account().into());
-    let np1_rep_before = get_id_reputation(&p, c, &np1);
-    let u1_balance_before = get_account_balance(&p, c, &u1.as_icrc_compatible_account().into());
-    let u1_rep_before = get_id_reputation(&p, c, &u1);
+    let np1_balance_before = get_account_balance(p, c, &np1.as_icrc_compatible_account().into());
+    let np1_rep_before = get_id_reputation(p, c, np1);
+    let u1_balance_before = get_account_balance(p, c, &u1.as_icrc_compatible_account().into());
+    let u1_rep_before = get_id_reputation(p, c, u1);
 
     let contract_amount: TokenAmountE9s = 1_000_000_000;
     let contract_step_fee = contract_amount / 100; // 1% fee
     contract_sign_request(
-        &p,
-        &c,
-        &u1,
+        p,
+        c,
+        u1,
         &np1.to_bytes_verifying(),
         offering_id,
         "test_memo".to_string(),
@@ -819,23 +819,23 @@ fn contract_req_sign_flow(
     .unwrap();
 
     assert_eq!(
-        get_account_balance(&p, c, &u1.as_icrc_compatible_account().into()),
+        get_account_balance(p, c, &u1.as_icrc_compatible_account().into()),
         u1_balance_before.clone() - contract_step_fee
     );
     assert_eq!(
-        get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+        get_account_balance(p, c, &np1.as_icrc_compatible_account().into()),
         np1_balance_before
     );
-    assert_eq!(get_id_reputation(&p, c, &np1), np1_rep_before);
+    assert_eq!(get_id_reputation(p, c, np1), np1_rep_before);
     assert_eq!(
-        get_id_reputation(&p, c, &u1),
+        get_id_reputation(p, c, u1),
         u1_rep_before + contract_step_fee
     );
 
-    let pending_contracts = contracts_list_pending(&p, c, None);
+    let pending_contracts = contracts_list_pending(p, c, None);
     assert_eq!(pending_contracts.len(), 1);
 
-    let pending_contracts = contracts_list_pending(&p, c, Some(np1.to_bytes_verifying()));
+    let pending_contracts = contracts_list_pending(p, c, Some(np1.to_bytes_verifying()));
     assert_eq!(pending_contracts.len(), 1);
 
     let (contract_id, contract_req_bytes) = pending_contracts[0].clone();
@@ -852,36 +852,36 @@ fn contract_req_sign_flow(
         "Thank you for signing up",
         "Here are some details",
     );
-    let res = contract_sign_reply(&p, c, &np1, &u1, &reply).unwrap();
+    let res = contract_sign_reply(p, c, np1, u1, &reply).unwrap();
     assert_eq!(res, "Contract signing reply submitted! Thank you. You have been charged 0.010000000 tokens as a fee, and your reputation has been bumped accordingly");
 
     if accept {
         assert_eq!(
-            get_account_balance(&p, c, &u1.as_icrc_compatible_account().into()),
+            get_account_balance(p, c, &u1.as_icrc_compatible_account().into()),
             u1_balance_before - 2 * contract_step_fee - contract_amount
         );
         assert_eq!(
-            get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+            get_account_balance(p, c, &np1.as_icrc_compatible_account().into()),
             np1_balance_before + contract_amount
         );
         assert_eq!(
-            get_id_reputation(&p, c, &np1),
+            get_id_reputation(p, c, np1),
             np1_rep_before + contract_step_fee
         );
         assert_eq!(
-            get_id_reputation(&p, c, &u1),
+            get_id_reputation(p, c, u1),
             u1_rep_before + contract_step_fee
         );
     } else {
         assert_eq!(
-            get_account_balance(&p, c, &u1.as_icrc_compatible_account().into()),
+            get_account_balance(p, c, &u1.as_icrc_compatible_account().into()),
             u1_balance_before - contract_step_fee
         );
         assert_eq!(
-            get_account_balance(&p, c, &np1.as_icrc_compatible_account().into()),
+            get_account_balance(p, c, &np1.as_icrc_compatible_account().into()),
             np1_balance_before - contract_step_fee
         );
-        assert_eq!(get_id_reputation(&p, c, &np1), np1_rep_before);
-        assert_eq!(get_id_reputation(&p, c, &u1), u1_rep_before);
+        assert_eq!(get_id_reputation(p, c, np1), np1_rep_before);
+        assert_eq!(get_id_reputation(p, c, u1), u1_rep_before);
     }
 }
