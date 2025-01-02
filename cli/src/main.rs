@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mnemonic = if keygen_args.generate {
                 let mnemonic =
                     bip39::Mnemonic::new(bip39::MnemonicType::Words12, bip39::Language::English);
-                info!("Generated mnemonic:\n{}", mnemonic);
+                info!("Generated mnemonic: {}", mnemonic);
                 mnemonic
             } else if keygen_args.mnemonic.is_some() {
                 let mnemonic_string = keygen_args
