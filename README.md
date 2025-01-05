@@ -1,6 +1,8 @@
 # Introduction
 
-Ever wish you could mix and match AWS, on-prem GPUs from your neighbor, and everything in between—without juggling multiple logins, payment methods, or vendor lock-ins? **Decent Cloud** is here to simplify that. It’s a peer-to-peer platform where anyone can rent out idle capacity—including GPUs, web servers, and SaaP—or lease cloud resources on-demand, all through a single unified interface. From everyday users wanting a hassle-free way to deploy apps, to providers looking to earn extra income from underutilized hardware, this project aims to open the gates wide.
+Ever wish you could mix and match AWS, on-prem GPUs from your neighbor, and everything in between—without juggling multiple logins, payment methods, or vendor lock-ins?
+
+**Decent Cloud** is here to simplify that. It’s a peer-to-peer platform where anyone can rent out idle capacity—including GPUs, web servers, and SaaP—or lease cloud resources on-demand, all through a single unified interface. From everyday users wanting a hassle-free way to deploy apps, to providers looking to earn extra income from underutilized hardware, this project aims to open the gates wide.
 
 Decent Cloud is fully open source, with decisions driven by the community instead of VCs and large capital owners. The project is also supported by a token model that has no elaborate ICO, for maximum fairness. **DC Tokens** are minted every ten minutes, just like Bitcoin, and can be claimed by registered providers. In contrast to Bitcoin, there’s no Proof of Work (PoW), making the project entirely green. Participation in reward distribution simply requires checking in (proving the provider is present) and paying a small participation fee. Think of it as a constantly refreshing pool of rewards (AirDrop), rather than a one-off fundraising event.
 
