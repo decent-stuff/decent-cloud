@@ -1,26 +1,10 @@
-# Install dependencies
+# Introduction
 
-Install `cargo` by following [rustup](https://rustup.rs/) instructions. Typically:
+Ever wish you could mix and match AWS, on-prem GPUs from your neighbor, and everything in between—without juggling multiple logins, payment methods, or vendor lock-ins? **Decent Cloud** is here to simplify that. It’s a peer-to-peer platform where anyone can rent out idle capacity—including GPUs, web servers, and SaaP—or lease cloud resources on-demand, all through a single unified interface. From everyday users wanting a hassle-free way to deploy apps, to providers looking to earn extra income from underutilized hardware, this project aims to open the gates wide.
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+Decent Cloud is fully open source, with decisions driven by the community instead of VCs and large capital owners. The project is also supported by a token model that has no elaborate ICO, for maximum fairness. **DC Tokens** are minted every ten minutes, just like Bitcoin, and can be claimed by registered providers. In contrast to Bitcoin, there’s no Proof of Work (PoW), making the project entirely green. Participation in reward distribution simply requires checking in (proving the provider is present) and paying a small participation fee. Think of it as a constantly refreshing pool of rewards (AirDrop), rather than a one-off fundraising event.
 
-For end-to-end tests, we use [cargo-make](https://github.com/sagiegurari/cargo-make). Install it by running:
-
-```bash
-cargo install --force cargo-make
-```
-
-Python is used solely to build the whitepaper. We use `pixi` as a Python dependency manager.
-
-Install `pixi` by following [pixi.sh](https://pixi.sh/latest/). Typically:
-
-```bash
-curl -fsSL https://pixi.sh/install.sh | bash
-```
-
-After installation, you can install all project dependencies with a simple `pixi install` in the project root.
+If that piques your curiosity, read on to learn how to get involved, earn tokens, and help shape the future of decentralized cloud services.
 
 # Current Status
 
@@ -218,7 +202,34 @@ The provider may accept or reject the request based on user reputation or other 
 All of this will also be accessible via a WebUI in the future; contributions are welcome!
 _(FIXME: implement refunds in case of user dissatisfaction and accordingly adjust reputation for such providers.)_
 
-# Developer notes
+# Developer and contribution notes
+
+<details>
+<summary>Install dependencies</summary>
+
+Install `cargo` by following [rustup](https://rustup.rs/) instructions. Along the lines of:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+For end-to-end tests, we use [cargo-make](https://github.com/sagiegurari/cargo-make). Install it by running:
+
+```bash
+cargo install --force cargo-make
+```
+
+Python is used solely to build the whitepaper. We use `pixi` as a Python dependency manager.
+
+Install `pixi` by following [pixi.sh](https://pixi.sh/latest/). Along the lines of:
+
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash
+```
+
+After installation, you can install all project dependencies with a simple `pixi install` in the project root.
+
+</details>
 
 <details>
 <summary>Running tests</summary>
