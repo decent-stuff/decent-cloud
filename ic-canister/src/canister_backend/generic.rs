@@ -3,9 +3,9 @@ use borsh::BorshDeserialize;
 use candid::Principal;
 use dcc_common::cache_transactions::RecentCache;
 use dcc_common::{
-    account_balance_get, account_registration_fee_e9s, cursor_from_data, get_account_from_pubkey,
-    get_pubkey_from_principal, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
-    reward_e9s_per_block_recalculate, rewards_applied_np_count, rewards_distribute,
+    account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
+    get_account_from_pubkey, get_pubkey_from_principal, refresh_caches_from_ledger, reputation_get,
+    reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
     rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, FundsTransfer,
     LedgerCursor, TokenAmountE9s, BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED,
     DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER,
@@ -38,6 +38,40 @@ thread_local! {
     #[cfg(target_arch = "wasm32")]
     static TIMER_IDS: RefCell<Vec<ic_cdk_timers::TimerId>> = const { RefCell::new(Vec::new()) };
     static COMMIT_INTERVAL: Duration = const { Duration::from_secs(BLOCK_INTERVAL_SECS) };
+    pub(crate) static LAST_TOKEN_VALUE_USD_E6: RefCell<u64> = const { RefCell::new(1_000_000) }; // 6 decimal places
+    pub(crate) static NUM_PROVIDERS: RefCell<u64> = const { RefCell::new(0) };
+    pub(crate) static NUM_OFFERINGS: RefCell<u64> = const { RefCell::new(0) };
+}
+
+pub fn update_last_token_value_usd_e6(new_value: u64) {
+    LAST_TOKEN_VALUE_USD_E6
+        .with(|last_token_value_usd_e6| *last_token_value_usd_e6.borrow_mut() = new_value);
+}
+
+pub fn get_last_token_value_usd_e6() -> u64 {
+    LAST_TOKEN_VALUE_USD_E6.with(|last_token_value_usd_e6| *last_token_value_usd_e6.borrow())
+}
+
+pub fn refresh_last_token_value_usd_e6() {
+    // FIXME: Get the Token value from ICPSwap and KongSwap
+    let token_value = 1_000_000;
+    update_last_token_value_usd_e6(token_value);
+}
+
+pub fn set_num_providers(num_providers: u64) {
+    NUM_PROVIDERS.with(|n| *n.borrow_mut() = num_providers);
+}
+
+pub fn get_num_providers() -> u64 {
+    NUM_PROVIDERS.with(|n| *n.borrow())
+}
+
+pub fn set_num_offerings(num_offerings: u64) {
+    NUM_OFFERINGS.with(|n| *n.borrow_mut() = num_offerings);
+}
+
+pub fn get_num_offerings() -> u64 {
+    NUM_OFFERINGS.with(|n| *n.borrow())
 }
 
 pub(crate) fn get_commit_interval() -> Duration {
@@ -45,6 +79,7 @@ pub(crate) fn get_commit_interval() -> Duration {
 }
 
 fn ledger_periodic_task() {
+    refresh_last_token_value_usd_e6();
     LEDGER_MAP.with(|ledger| {
         let ledger = &mut ledger.borrow_mut();
         match rewards_distribute(ledger) {
@@ -469,11 +504,23 @@ pub(crate) fn _metadata() -> Vec<(String, MetadataValue)> {
                 "ledger:authorized_pusher",
                 authorized_pusher.map(|s| s.to_string()).unwrap_or_default(),
             ),
-            MetadataValue::entry("ledger:reward_e9s_per_block", reward_e9s_per_block()),
-            MetadataValue::entry("ledger:rewards_pending_e9s", rewards_pending_e9s(&ledger)),
             MetadataValue::entry(
-                "ledger:rewards_applied_np_count",
-                rewards_applied_np_count(&ledger) as u64,
+                "ledger:token_value_in_usd_e6",
+                get_last_token_value_usd_e6(),
+            ),
+            MetadataValue::entry("ledger:total_providers", get_num_providers()),
+            MetadataValue::entry("ledger:total_offerings", get_num_offerings()),
+            MetadataValue::entry(
+                "ledger:blocks_until_next_halving",
+                blocks_until_next_halving(),
+            ),
+            MetadataValue::entry(
+                "ledger:current_block_validators",
+                rewards_current_block_checked_in(&ledger) as u64,
+            ),
+            MetadataValue::entry(
+                "ledger:current_block_rewards_e9s",
+                rewards_pending_e9s(&ledger),
             ),
         ]
     })

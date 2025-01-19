@@ -96,6 +96,13 @@ pub fn reward_e9s_per_block() -> TokenAmountE9s {
     REWARD_E9S_PER_BLOCK.with(|reward| *reward.borrow())
 }
 
+pub fn blocks_until_next_halving() -> u64 {
+    let elapsed_secs_since_reward_distribution =
+        (get_timestamp_ns().saturating_sub(FIRST_BLOCK_TIMESTAMP_NS)) / 1_000_000_000;
+    let reward_rounds = elapsed_secs_since_reward_distribution / BLOCK_INTERVAL_SECS;
+    (REWARD_HALVING_AFTER_BLOCKS - reward_rounds % REWARD_HALVING_AFTER_BLOCKS) as u64
+}
+
 pub fn get_last_rewards_distribution_ts(ledger: &LedgerMap) -> Result<u64, String> {
     match ledger.get(LABEL_REWARD_DISTRIBUTION, KEY_LAST_REWARD_DISTRIBUTION_TS) {
         Ok(value_bytes) => Ok(u64::from_le_bytes(
@@ -257,7 +264,7 @@ pub fn do_node_provider_check_in(
         })?)
 }
 
-pub fn rewards_applied_np_count(ledger: &LedgerMap) -> usize {
+pub fn rewards_current_block_checked_in(ledger: &LedgerMap) -> usize {
     ledger.next_block_iter(Some(LABEL_NP_CHECK_IN)).count()
 }
 
