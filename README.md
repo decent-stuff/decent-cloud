@@ -12,7 +12,22 @@ If that piques your curiosity, read on to learn how to get involved, earn tokens
 
 The project is already usable and is under active development. If you encounter problems, please open a GitHub [issue](https://github.com/decent-stuff/decent-cloud/issues) or start a conversation in our [discussions](https://github.com/orgs/decent-stuff/discussions).
 
-Currently, main development and testing happens on Linux (Ubuntu 24.04). MacOS should work without issues. The `dc` binary also builds for Windows via [cross](https://github.com/cross-rs/cross):
+Currently, main development and testing happens on Linux (Ubuntu 24.04). MacOS should work without issues.
+These are the steps for building on Ubuntu 22.04 or newer, after freshly installing the OS:
+
+```bash
+sudo apt update -y
+sudo apt install build-essential curl git
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+git clone https://github.com/decent-stuff/decent-cloud.git
+cd decent-cloud/
+cargo build --release
+```
+
+After this step, the `dc` binary will be in `target/release/dc`.
+
+The `dc` binary also builds for Windows via [cross](https://github.com/cross-rs/cross):
 
 ```bash
 cross build --release --target x86_64-pc-windows-gnu
