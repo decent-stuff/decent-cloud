@@ -759,7 +759,7 @@ dependencies = [
  "ic-canister-log",
  "ic-cdk",
  "ic-cdk-timers",
- "ic-certification 2.6.0",
+ "ic-certification 3.0.2",
  "ic-metrics-encoder",
  "icrc-ledger-types",
  "ledger-map",
@@ -797,11 +797,11 @@ dependencies = [
 
 [[package]]
 name = "derp"
-version = "0.0.14"
+version = "0.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9b84cfd9b6fa437e498215e5625e9e3ae3bf9bb54d623028a181c40820db169"
+checksum = "071e692e5a98cc563dd1ccb9fcc1a019c92717d88d7bae0d88d7d0ca2b8e1e0c"
 dependencies = [
- "untrusted 0.7.1",
+ "untrusted",
 ]
 
 [[package]]
@@ -1117,9 +1117,9 @@ dependencies = [
 
 [[package]]
 name = "fs-err"
-version = "3.0.0"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bb60e7409f34ef959985bc9d9c5ee8f5db24ee46ed9775850548021710f807f"
+checksum = "1f89bda4c2a21204059a977ed3bfe746677dfd137b83c339e702b0ac91d482aa"
 dependencies = [
  "autocfg",
 ]
@@ -1967,7 +1967,7 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 [[package]]
 name = "ledger-map"
 version = "0.4.0"
-source = "git+https://github.com/decent-stuff/ledger-map.git?branch=main#21a6bae55bb8703105f3c515834d0ff77a5a0685"
+source = "git+https://github.com/decent-stuff/ledger-map.git?branch=main#c1582f58cd45094cfc0d7a2cc5f771c943e4d37a"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2694,7 +2694,7 @@ dependencies = [
  "getrandom",
  "libc",
  "spin",
- "untrusted 0.9.0",
+ "untrusted",
  "windows-sys 0.52.0",
 ]
 
@@ -2790,7 +2790,7 @@ checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
 dependencies = [
  "ring",
  "rustls-pki-types",
- "untrusted 0.9.0",
+ "untrusted",
 ]
 
 [[package]]
@@ -3660,12 +3660,6 @@ name = "unsafe-libyaml"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
-name = "untrusted"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "untrusted"
