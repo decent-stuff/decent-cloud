@@ -114,7 +114,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let identities_dir = DccIdentity::identities_dir();
             let identity =
                 identity_name.expect("Identity must be specified for this command, use --identity");
-            let from_dcc_id = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
+            let dcc_id = DccIdentity::load_from_dir(&identities_dir.join(identity))?;
+            if account_args.balance {
+                let ic_account = dcc_id.as_icrc_compatible_account();
+                println!(
+                    "Account balance: {}",
+                    account_balance_get_as_string(&ic_account)
+                );
+                return Ok(());
+            }
             let to_principal_string = &account_args
                 .transfer_to
                 .clone()
@@ -136,7 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 handle_funds_transfer(
                     network_url,
                     ledger_canister_id,
-                    &from_dcc_id,
+                    &dcc_id,
                     &to_icrc1_account,
                     transfer_amount_e9s,
                 )
