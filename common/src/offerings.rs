@@ -1,6 +1,6 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reward_e9s_per_block,
-    warn, DccIdentity, TokenAmountE9s, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
+    warn, AHashMap, DccIdentity, TokenAmountE9s, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -11,6 +11,23 @@ use function_name::named;
 use ic_cdk::println;
 use ledger_map::LedgerMap;
 use np_offering::Offering;
+use std::cell::RefCell;
+
+thread_local! {
+    pub static NUM_OFFERINGS_PER_PROVIDER: RefCell<AHashMap<Vec<u8>, u64>> = RefCell::new(AHashMap::default());
+    pub static NUM_OFFERINGS_TOTAL: RefCell<u64> = const { RefCell::new(0) };
+}
+
+pub fn set_offering_num_per_provider(pubkey_bytes: Vec<u8>, num: u64) {
+    NUM_OFFERINGS_PER_PROVIDER.with(|map| {
+        map.borrow_mut().insert(pubkey_bytes, num);
+        NUM_OFFERINGS_TOTAL.with(|total| *total.borrow_mut() = map.borrow().values().sum());
+    });
+}
+
+pub fn get_num_offerings() -> u64 {
+    NUM_OFFERINGS_TOTAL.with(|n| *n.borrow())
+}
 
 fn np_offering_update_fee_e9s() -> TokenAmountE9s {
     reward_e9s_per_block() / 10000
@@ -66,6 +83,13 @@ pub fn do_node_provider_update_offering(
 
     let payload = UpdateOfferingPayload::new(&offering_serialized, &crypto_signature_bytes)?;
     let payload_bytes = borsh::to_vec(&payload).unwrap();
+
+    let num_offering_instances = payload
+        .offering()
+        .map(|o| o.get_all_instance_ids().len())
+        .unwrap_or(0);
+
+    set_offering_num_per_provider(pubkey_bytes.clone(), num_offering_instances as u64);
 
     let fees = np_offering_update_fee_e9s();
     charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, fees)?;

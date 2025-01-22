@@ -100,7 +100,8 @@ pub fn blocks_until_next_halving() -> u64 {
     let elapsed_secs_since_reward_distribution =
         (get_timestamp_ns().saturating_sub(FIRST_BLOCK_TIMESTAMP_NS)) / 1_000_000_000;
     let reward_rounds = elapsed_secs_since_reward_distribution / BLOCK_INTERVAL_SECS;
-    (REWARD_HALVING_AFTER_BLOCKS - reward_rounds % REWARD_HALVING_AFTER_BLOCKS) as u64
+
+    REWARD_HALVING_AFTER_BLOCKS - reward_rounds % REWARD_HALVING_AFTER_BLOCKS
 }
 
 pub fn get_last_rewards_distribution_ts(ledger: &LedgerMap) -> Result<u64, String> {

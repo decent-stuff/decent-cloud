@@ -3,11 +3,12 @@ use crate::cache_transactions::RecentCache;
 use crate::{
     account_balance_add, account_balance_sub, account_balances_clear, contracts_cache_open_add,
     contracts_cache_open_remove, dcc_identity, error, reputations_apply_aging,
-    reputations_apply_changes, reputations_clear, AHashMap, ContractSignRequest,
-    ContractSignRequestPayload, ReputationAge, ReputationChange, CACHE_TXS_NUM_COMMITTED,
+    reputations_apply_changes, reputations_clear, set_num_providers, set_num_users,
+    set_offering_num_per_provider, AHashMap, ContractSignRequest, ContractSignRequestPayload,
+    ReputationAge, ReputationChange, UpdateOfferingPayload, CACHE_TXS_NUM_COMMITTED,
     LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER,
-    LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, LABEL_USER_REGISTER,
-    PRINCIPAL_MAP,
+    LABEL_NP_OFFERING, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
+    LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
 use borsh::BorshDeserialize;
 use candid::Principal;
@@ -25,6 +26,8 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
     account_balances_clear();
     reputations_clear();
     let mut num_txs = 0u64;
+    let mut num_providers = 0u64;
+    let mut num_users = 0u64;
     let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
     for block in ledger.iter_raw() {
         let (_blk_head, block) = block?;
@@ -76,6 +79,33 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                     if let Ok(dcc_identity) =
                         dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
                     {
+                        if entry.label() == LABEL_NP_REGISTER {
+                            num_providers += 1;
+                        } else if entry.label() == LABEL_USER_REGISTER {
+                            num_users += 1;
+                        }
+                        principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
+                    }
+                }
+                LABEL_NP_OFFERING => {
+                    if let Ok(dcc_identity) =
+                        dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
+                    {
+                        match UpdateOfferingPayload::deserialize_unchecked(entry.value()) {
+                            Ok(payload) => {
+                                set_offering_num_per_provider(
+                                    entry.key().to_vec(),
+                                    payload
+                                        .offering()
+                                        .map(|o| o.get_all_instance_ids().len() as u64)
+                                        .unwrap_or_default(),
+                                );
+                            }
+                            Err(e) => {
+                                warn!("Failed to deserialize offering payload: {}", e);
+                                continue;
+                            }
+                        }
                         principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
                     }
                 }
@@ -110,6 +140,8 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
     }
     CACHE_TXS_NUM_COMMITTED.with(|n| *n.borrow_mut() = num_txs);
     PRINCIPAL_MAP.with(|p| *p.borrow_mut() = principals);
+    set_num_providers(num_providers);
+    set_num_users(num_users);
     debug!("Refreshed caches from {} ledger blocks", replayed_blocks);
     Ok(())
 }

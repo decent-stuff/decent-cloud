@@ -4,13 +4,14 @@ use candid::Principal;
 use dcc_common::cache_transactions::RecentCache;
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
-    get_account_from_pubkey, get_pubkey_from_principal, refresh_caches_from_ledger, reputation_get,
-    reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
-    rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, FundsTransfer,
-    LedgerCursor, TokenAmountE9s, BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED,
-    DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER,
-    LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER,
-    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, MAX_RESPONSE_BYTES_NON_REPLICATED,
+    get_account_from_pubkey, get_num_offerings, get_num_providers, get_pubkey_from_principal,
+    refresh_caches_from_ledger, reputation_get, reward_e9s_per_block_recalculate,
+    rewards_current_block_checked_in, rewards_distribute, rewards_pending_e9s, set_test_config,
+    ContractId, ContractReqSerialized, FundsTransfer, LedgerCursor, TokenAmountE9s,
+    BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN,
+    LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
+    LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
 use flate2::{write::ZlibEncoder, Compression};
 use ic_cdk::println;
@@ -39,8 +40,6 @@ thread_local! {
     static TIMER_IDS: RefCell<Vec<ic_cdk_timers::TimerId>> = const { RefCell::new(Vec::new()) };
     static COMMIT_INTERVAL: Duration = const { Duration::from_secs(BLOCK_INTERVAL_SECS) };
     pub(crate) static LAST_TOKEN_VALUE_USD_E6: RefCell<u64> = const { RefCell::new(1_000_000) }; // 6 decimal places
-    pub(crate) static NUM_PROVIDERS: RefCell<u64> = const { RefCell::new(0) };
-    pub(crate) static NUM_OFFERINGS: RefCell<u64> = const { RefCell::new(0) };
 }
 
 pub fn update_last_token_value_usd_e6(new_value: u64) {
@@ -56,22 +55,6 @@ pub fn refresh_last_token_value_usd_e6() {
     // FIXME: Get the Token value from ICPSwap and KongSwap
     let token_value = 1_000_000;
     update_last_token_value_usd_e6(token_value);
-}
-
-pub fn set_num_providers(num_providers: u64) {
-    NUM_PROVIDERS.with(|n| *n.borrow_mut() = num_providers);
-}
-
-pub fn get_num_providers() -> u64 {
-    NUM_PROVIDERS.with(|n| *n.borrow())
-}
-
-pub fn set_num_offerings(num_offerings: u64) {
-    NUM_OFFERINGS.with(|n| *n.borrow_mut() = num_offerings);
-}
-
-pub fn get_num_offerings() -> u64 {
-    NUM_OFFERINGS.with(|n| *n.borrow())
 }
 
 pub(crate) fn get_commit_interval() -> Duration {

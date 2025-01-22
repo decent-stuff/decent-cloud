@@ -372,6 +372,12 @@ impl Offering {
             .and_then(|instance_type| instance_type.pricing)
             .unwrap_or_default()
     }
+
+    pub fn get_all_instance_ids(&self) -> Vec<String> {
+        match self {
+            Offering::V0_1_0(offering) => offering.get_all_instance_ids(),
+        }
+    }
 }
 
 impl CloudProviderOfferingV0_1_0 {
@@ -399,6 +405,25 @@ impl CloudProviderOfferingV0_1_0 {
             }
         }
         None
+    }
+
+    pub fn get_all_instance_ids(&self) -> Vec<String> {
+        let mut ids = Vec::new();
+        for region in &self.regions {
+            if let Some(machine_spec) = &region.machine_spec {
+                for instance_type in &machine_spec.instance_types {
+                    ids.push(instance_type.id.clone());
+                }
+            }
+        }
+        if let Some(default_spec) = &self.defaults {
+            if let Some(machine_spec) = &default_spec.machine_spec {
+                for instance_type in &machine_spec.instance_types {
+                    ids.push(instance_type.id.clone());
+                }
+            }
+        }
+        ids
     }
 }
 

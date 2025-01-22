@@ -1,6 +1,7 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, info,
-    reward_e9s_per_block, AHashMap, DccIdentity, TokenAmountE9s,
+    reward_e9s_per_block, AHashMap, DccIdentity, TokenAmountE9s, LABEL_NP_REGISTER,
+    LABEL_USER_REGISTER,
 };
 use candid::Principal;
 use function_name::named;
@@ -13,6 +14,32 @@ use std::collections::HashMap;
 
 thread_local! {
     pub static PRINCIPAL_MAP: RefCell<AHashMap<Principal, Vec<u8>>> = RefCell::new(HashMap::default());
+    pub static NUM_PROVIDERS: RefCell<u64> = const { RefCell::new(0) };
+    pub static NUM_USERS: RefCell<u64> = const { RefCell::new(0) };
+}
+
+pub fn get_num_users() -> u64 {
+    NUM_USERS.with(|n| *n.borrow())
+}
+
+pub fn set_num_users(num_users: u64) {
+    NUM_USERS.with(|n| *n.borrow_mut() = num_users);
+}
+
+pub fn get_num_providers() -> u64 {
+    NUM_PROVIDERS.with(|n| *n.borrow())
+}
+
+pub fn set_num_providers(num_providers: u64) {
+    NUM_PROVIDERS.with(|n| *n.borrow_mut() = num_providers);
+}
+
+pub fn inc_num_providers() {
+    NUM_PROVIDERS.with(|n| *n.borrow_mut() += 1);
+}
+
+pub fn inc_num_users() {
+    NUM_USERS.with(|n| *n.borrow_mut() += 1);
 }
 
 pub fn get_pubkey_from_principal(principal: Principal) -> Vec<u8> {
@@ -62,6 +89,12 @@ pub fn do_account_register(
 
     // Update the cache of principal -> pubkey, for quick search
     set_pubkey_for_principal(dcc_id.to_ic_principal(), pubkey_bytes.clone());
+
+    if label == LABEL_USER_REGISTER {
+        inc_num_users();
+    } else if label == LABEL_NP_REGISTER {
+        inc_num_providers();
+    }
 
     // Store the pubkey in the ledger
     ledger
