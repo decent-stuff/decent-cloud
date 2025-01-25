@@ -34,15 +34,15 @@ jobs:
         include:
           - os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
-            binary_name: decent-cloud
+            binary_name: dc
             asset_name: decent-cloud-linux-amd64
           - os: macos-latest
             target: x86_64-apple-darwin
-            binary_name: decent-cloud
+            binary_name: dc
             asset_name: decent-cloud-darwin-amd64
           - os: ubuntu-20.04
             target: x86_64-pc-windows-gnu
-            binary_name: decent-cloud.exe
+            binary_name: dc.exe
             asset_name: decent-cloud-windows-amd64.exe
 
     runs-on: ${{ matrix.os }}
@@ -64,9 +64,9 @@ jobs:
         run: |
           if [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ]; then
             cargo install cross --git https://github.com/cross-rs/cross
-            cross build --release --target ${{ matrix.target }} -p dc
+            cross build --release --target ${{ matrix.target }} --bin dc
           else
-            cargo build --release --target ${{ matrix.target }} -p dc
+            cargo build --release --target ${{ matrix.target }} --bin dc
           fi
 
       - name: Prepare binary
