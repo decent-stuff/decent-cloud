@@ -1,6 +1,7 @@
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
+pub mod account_transfer_approvals;
 pub mod account_transfers;
 pub mod account_transfers_errors;
 pub mod cache_balances;
@@ -17,6 +18,7 @@ pub mod profiles;
 pub mod registration;
 pub mod rewards;
 
+pub use account_transfer_approvals::*;
 pub use account_transfers::*;
 pub use account_transfers_errors::TransferError;
 pub use cache_balances::*;
@@ -84,6 +86,7 @@ pub const ED25519_SIGNATURE_LENGTH: usize = 64;
 pub const ED25519_SIGN_CONTEXT: &[u8] = b"decent-cloud";
 pub const FETCH_SIZE_BYTES_DEFAULT: u64 = 1024 * 1024;
 pub const KEY_LAST_REWARD_DISTRIBUTION_TS: &[u8] = b"LastRewardNs";
+pub const LABEL_DC_TOKEN_APPROVAL: &str = "DCTokenApproval";
 pub const LABEL_DC_TOKEN_TRANSFER: &str = "DCTokenTransfer";
 pub const LABEL_NP_CHECK_IN: &str = "NPCheckIn";
 pub const LABEL_NP_OFFERING: &str = "NPOffering";
