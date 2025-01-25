@@ -9,8 +9,8 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,20 +32,6 @@ jobs:
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           cat git-cliff/CHANGELOG.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            ## Changelog
-            ${{ steps.changelog.outputs.changelog }}
-          draft: false
-          prerelease: false
 
   build-release:
     needs: create-release
@@ -97,19 +83,26 @@ jobs:
             cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
           fi
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}
-          asset_name: ${{ matrix.asset_name }}
-          asset_content_type: application/octet-stream
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## Changelog
+            ${{ needs.create-release.outputs.changelog }}
+          files: |
+            ${{ matrix.asset_name }}
+          draft: false
+          prerelease: false
 
   update-version:
     needs: [create-release, build-release]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
