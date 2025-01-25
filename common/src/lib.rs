@@ -115,6 +115,11 @@ pub const DATA_PULL_BYTES_BEFORE_LEN: u16 = 16; // How many bytes before the pul
 // python3 -c "from datetime import datetime; print(int(datetime.strptime('2024-01-01 00:00:00', '%Y-%m-%d %H:%M:%S').timestamp()), '* 1_000_000_000')"
 pub const FIRST_BLOCK_TIMESTAMP_NS: u64 = 1704063600 * 1_000_000_000;
 
+// Transaction deduplication window (24 hours in nanoseconds)
+pub const TX_WINDOW: u64 = 24 * 60 * 60 * 1_000_000_000;
+// Permitted time drift for transactions (2 minutes in nanoseconds)
+pub const PERMITTED_DRIFT: u64 = 2 * 60 * 1_000_000_000;
+
 pub type TokenAmountE9s = u64;
 
 pub fn nat_to_balance(nat: &Nat) -> TokenAmountE9s {
