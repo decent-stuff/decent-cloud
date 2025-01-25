@@ -116,7 +116,9 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use PAT instead of GITHUB_TOKEN for PR creation to avoid error
+          # Error: GitHub Actions is not permitted to create or approve pull requests.
+          token: ${{ secrets.DC_REPO_WRITE }}
           commit-message: "chore: bump version to ${{ needs.create-release.outputs.version }}"
           title: "chore: bump version to ${{ needs.create-release.outputs.version }}"
           body: |
