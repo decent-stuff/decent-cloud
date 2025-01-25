@@ -1,159 +1,27 @@
+mod test_utils;
 use candid::{encode_one, Nat, Principal};
-use dcc_common::{BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS, PERMITTED_DRIFT, TX_WINDOW};
-use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
+use dcc_common::{PERMITTED_DRIFT, TX_WINDOW};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use once_cell::sync::Lazy;
-use pocket_ic::{PocketIc, WasmResult};
-use std::path::{Path, PathBuf};
-use std::process::Command;
-
-fn workspace_dir() -> PathBuf {
-    let output = std::process::Command::new(env!("CARGO"))
-        .arg("locate-project")
-        .arg("--workspace")
-        .arg("--message-format=plain")
-        .output()
-        .unwrap()
-        .stdout;
-    let cargo_path = Path::new(std::str::from_utf8(&output).unwrap().trim());
-    cargo_path.parent().unwrap().to_path_buf()
-}
-
-static CANISTER_WASM: Lazy<Vec<u8>> = Lazy::new(|| {
-    let mut path = workspace_dir();
-    Command::new("dfx")
-        .arg("build")
-        .current_dir(path.join("ic-canister"))
-        .output()
-        .unwrap();
-    path.push("target/wasm32-unknown-unknown/release/decent_cloud_canister.wasm");
-    fs_err::read(path).unwrap()
-});
-
-macro_rules! query_check_and_decode {
-    ($pic:expr, $can:expr, $method_name:expr, $method_arg:expr, $decode_type:ty) => {{
-        let reply = $pic
-            .query_call(
-                $can,
-                Principal::anonymous(),
-                $method_name,
-                $method_arg.clone(),
-            )
-            .expect("Failed to run query call on the canister");
-        let reply = match reply {
-            WasmResult::Reply(reply) => reply,
-            WasmResult::Reject(_) => panic!("Received a reject"),
-        };
-
-        candid::decode_one::<$decode_type>(&reply).expect("Failed to decode")
-    }};
-}
-
-macro_rules! update_check_and_decode {
-    ($pic:expr, $can:expr, $sender:expr, $method_name:expr, $method_arg:expr, $decode_type:ty) => {{
-        let reply = $pic
-            .update_call($can, $sender, $method_name, $method_arg.clone())
-            .expect("Failed to run update call on the canister");
-        let reply = match reply {
-            WasmResult::Reply(reply) => reply,
-            WasmResult::Reject(_) => panic!("Received a reject"),
-        };
-
-        candid::decode_one::<$decode_type>(&reply).expect("Failed to decode")
-    }};
-}
-
-fn create_test_canister() -> (PocketIc, Principal) {
-    let pic = PocketIc::new();
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, 20_000_000_000_000);
-
-    pic.install_canister(
-        canister_id,
-        CANISTER_WASM.clone(),
-        encode_one(true).expect("failed to encode"),
-        None,
-    );
-
-    // Ensure deterministic timestamp
-    let ts_ns = FIRST_BLOCK_TIMESTAMP_NS + 100 * BLOCK_INTERVAL_SECS * 1_000_000_000;
-    let ts_1 = encode_one(ts_ns).unwrap();
-    update_check_and_decode!(
-        pic,
-        canister_id,
-        Principal::anonymous(),
-        "set_timestamp_ns",
-        ts_1,
-        ()
-    );
-
-    (pic, canister_id)
-}
-
-fn get_timestamp_ns(pic: &PocketIc, can: Principal) -> u64 {
-    query_check_and_decode!(pic, can, "get_timestamp_ns", encode_one(()).unwrap(), u64)
-}
-
-fn mint_tokens_for_test(
-    pic: &PocketIc,
-    can_id: Principal,
-    acct: &Icrc1Account,
-    amount: u64,
-) -> Nat {
-    update_check_and_decode!(
-        pic,
-        can_id,
-        acct.owner,
-        "mint_tokens_for_test",
-        candid::encode_args((acct, amount, None::<Option<Memo>>)).unwrap(),
-        Nat
-    )
-}
-
-fn get_account_balance(pic: &PocketIc, can: &Principal, account: &Icrc1Account) -> Nat {
-    query_check_and_decode!(
-        pic,
-        *can,
-        "icrc1_balance_of",
-        encode_one(account).expect("failed to encode"),
-        Nat
-    )
-}
-
-fn get_transfer_fee(pic: &PocketIc, can: &Principal) -> Nat {
-    query_check_and_decode!(
-        pic,
-        *can,
-        "icrc1_fee",
-        encode_one(()).expect("failed to encode"),
-        Nat
-    )
-}
+use pocket_ic::WasmResult;
+use test_utils::{create_test_account, create_test_subaccount, TestContext};
 
 #[test]
 fn test_basic_transfer() {
-    let (pic, can_id) = create_test_canister();
-
-    let from = Icrc1Account {
-        owner: Principal::from_slice(&[1; 29]),
-        subaccount: None,
-    };
-    let to = Icrc1Account {
-        owner: Principal::from_slice(&[2; 29]),
-        subaccount: None,
-    };
+    let ctx = TestContext::new();
+    let from = create_test_account(1);
+    let to = create_test_account(2);
 
     // Mint some tokens to the sender
-    mint_tokens_for_test(&pic, can_id, &from, 1_000_000_000);
+    ctx.mint_tokens_for_test(&from, 1_000_000_000);
 
     // Get current timestamp and fee
-    let ts = get_timestamp_ns(&pic, can_id);
-    let fee = get_transfer_fee(&pic, &can_id);
+    let ts = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
 
     // Perform transfer
     let transfer_arg = TransferArg {
         from_subaccount: None,
-        to: to.clone(),
+        to,
         amount: 500_000_000u64.into(),
         fee: Some(fee),
         created_at_time: Some(ts),
@@ -161,8 +29,8 @@ fn test_basic_transfer() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -172,35 +40,28 @@ fn test_basic_transfer() {
     assert!(result.is_ok());
 
     // Check balances
-    let from_balance = get_account_balance(&pic, &can_id, &from);
-    let to_balance = get_account_balance(&pic, &can_id, &to);
+    let from_balance = ctx.get_account_balance(&from);
+    let to_balance = ctx.get_account_balance(&to);
     assert_eq!(from_balance, <u64 as Into<Nat>>::into(499_000_000u64)); // Original - amount - fee
     assert_eq!(to_balance, <u64 as Into<Nat>>::into(500_000_000u64));
 }
 
 #[test]
 fn test_duplicate_transaction() {
-    let (pic, can_id) = create_test_canister();
-
-    let from = Icrc1Account {
-        owner: Principal::from_slice(&[3; 29]),
-        subaccount: None,
-    };
-    let to = Icrc1Account {
-        owner: Principal::from_slice(&[4; 29]),
-        subaccount: None,
-    };
+    let ctx = TestContext::new();
+    let from = create_test_account(3);
+    let to = create_test_account(4);
 
     // Mint tokens
-    mint_tokens_for_test(&pic, can_id, &from, 2_000_000_000);
+    ctx.mint_tokens_for_test(&from, 2_000_000_000);
 
     // Get current timestamp and fee
-    let ts = get_timestamp_ns(&pic, can_id);
-    let fee = get_transfer_fee(&pic, &can_id);
+    let ts = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
 
     let transfer_arg = TransferArg {
         from_subaccount: None,
-        to: to.clone(),
+        to,
         amount: 500_000_000u64.into(),
         fee: Some(fee),
         created_at_time: Some(ts),
@@ -209,8 +70,8 @@ fn test_duplicate_transaction() {
 
     // First transfer should succeed
     let result1 = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg.clone()).unwrap(),
@@ -220,8 +81,8 @@ fn test_duplicate_transaction() {
 
     // Same transfer should fail as duplicate
     let result2 = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -235,29 +96,22 @@ fn test_duplicate_transaction() {
 
 #[test]
 fn test_transaction_timing() {
-    let (pic, can_id) = create_test_canister();
-
-    let from = Icrc1Account {
-        owner: Principal::from_slice(&[5; 29]),
-        subaccount: None,
-    };
-    let to = Icrc1Account {
-        owner: Principal::from_slice(&[6; 29]),
-        subaccount: None,
-    };
+    let ctx = TestContext::new();
+    let from = create_test_account(5);
+    let to = create_test_account(6);
 
     // Mint tokens
-    mint_tokens_for_test(&pic, can_id, &from, 2_000_000_000);
+    ctx.mint_tokens_for_test(&from, 2_000_000_000);
 
     // Get current timestamp and fee
-    let now = get_timestamp_ns(&pic, can_id);
-    let fee = get_transfer_fee(&pic, &can_id);
+    let now = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
 
     // Test too old transaction
     let old_time = now - TX_WINDOW - PERMITTED_DRIFT - 1;
     let transfer_arg = TransferArg {
         from_subaccount: None,
-        to: to.clone(),
+        to,
         amount: 500_000_000u64.into(),
         fee: Some(fee.clone()),
         created_at_time: Some(old_time),
@@ -265,8 +119,8 @@ fn test_transaction_timing() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -278,7 +132,7 @@ fn test_transaction_timing() {
     let future_time = now + PERMITTED_DRIFT + 1;
     let transfer_arg = TransferArg {
         from_subaccount: None,
-        to: to.clone(),
+        to,
         amount: 500_000_000u64.into(),
         fee: Some(fee),
         created_at_time: Some(future_time),
@@ -286,8 +140,8 @@ fn test_transaction_timing() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -301,23 +155,16 @@ fn test_transaction_timing() {
 
 #[test]
 fn test_insufficient_funds() {
-    let (pic, can_id) = create_test_canister();
-
-    let from = Icrc1Account {
-        owner: Principal::from_slice(&[7; 29]),
-        subaccount: None,
-    };
-    let to = Icrc1Account {
-        owner: Principal::from_slice(&[8; 29]),
-        subaccount: None,
-    };
+    let ctx = TestContext::new();
+    let from = create_test_account(7);
+    let to = create_test_account(8);
 
     // Mint small amount
-    mint_tokens_for_test(&pic, can_id, &from, 1_000_000);
+    ctx.mint_tokens_for_test(&from, 1_000_000);
 
     // Get current timestamp and fee
-    let ts = get_timestamp_ns(&pic, can_id);
-    let fee = get_transfer_fee(&pic, &can_id);
+    let ts = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
 
     // Try to transfer more than available
     let transfer_arg = TransferArg {
@@ -330,8 +177,8 @@ fn test_insufficient_funds() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -346,10 +193,10 @@ fn test_insufficient_funds() {
 
 #[test]
 fn test_metadata() {
-    let (pic, can_id) = create_test_canister();
+    let ctx = TestContext::new();
     let metadata = query_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         "icrc1_metadata",
         encode_one(()).unwrap(),
         Vec<(
@@ -366,10 +213,10 @@ fn test_metadata() {
 
 #[test]
 fn test_supported_standards() {
-    let (pic, can_id) = create_test_canister();
+    let ctx = TestContext::new();
     let standards = query_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         "icrc1_supported_standards",
         encode_one(()).unwrap(),
         Vec<decent_cloud_canister::canister_backend::icrc1::Icrc1StandardRecord>
@@ -379,35 +226,51 @@ fn test_supported_standards() {
 
 #[test]
 fn test_minting_account() {
-    let (pic, can_id) = create_test_canister();
+    let ctx = TestContext::new();
     let minting_account = query_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         "icrc1_minting_account",
         encode_one(()).unwrap(),
-        Option<Icrc1Account>
+        Option<icrc_ledger_types::icrc1::account::Account>
     );
     assert!(minting_account.is_some());
 }
 
 #[test]
 fn test_basic_info() {
-    let (pic, can_id) = create_test_canister();
+    let ctx = TestContext::new();
 
-    let name = query_check_and_decode!(pic, can_id, "icrc1_name", encode_one(()).unwrap(), String);
+    let name = query_check_and_decode!(
+        ctx.pic,
+        ctx.canister_id,
+        "icrc1_name",
+        encode_one(()).unwrap(),
+        String
+    );
     assert!(!name.is_empty());
 
-    let symbol =
-        query_check_and_decode!(pic, can_id, "icrc1_symbol", encode_one(()).unwrap(), String);
+    let symbol = query_check_and_decode!(
+        ctx.pic,
+        ctx.canister_id,
+        "icrc1_symbol",
+        encode_one(()).unwrap(),
+        String
+    );
     assert!(!symbol.is_empty());
 
-    let decimals =
-        query_check_and_decode!(pic, can_id, "icrc1_decimals", encode_one(()).unwrap(), u8);
+    let decimals = query_check_and_decode!(
+        ctx.pic,
+        ctx.canister_id,
+        "icrc1_decimals",
+        encode_one(()).unwrap(),
+        u8
+    );
     assert_eq!(decimals, 9);
 
     let total_supply = query_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         "icrc1_total_supply",
         encode_one(()).unwrap(),
         Nat
@@ -417,28 +280,21 @@ fn test_basic_info() {
 
 #[test]
 fn test_fee_handling() {
-    let (pic, can_id) = create_test_canister();
-
-    let from = Icrc1Account {
-        owner: Principal::from_slice(&[9; 29]),
-        subaccount: None,
-    };
-    let to = Icrc1Account {
-        owner: Principal::from_slice(&[10; 29]),
-        subaccount: None,
-    };
+    let ctx = TestContext::new();
+    let from = create_test_account(9);
+    let to = create_test_account(10);
 
     // Mint tokens
-    mint_tokens_for_test(&pic, can_id, &from, 2_000_000_000);
+    ctx.mint_tokens_for_test(&from, 2_000_000_000);
 
     // Get current timestamp and fee
-    let ts = get_timestamp_ns(&pic, can_id);
-    let correct_fee = get_transfer_fee(&pic, &can_id);
+    let ts = ctx.get_timestamp_ns();
+    let correct_fee = ctx.get_transfer_fee();
 
     // Test wrong fee
     let transfer_arg = TransferArg {
         from_subaccount: None,
-        to: to.clone(),
+        to,
         amount: 1_000_000u64.into(),
         fee: Some(12345u64.into()), // Wrong fee
         created_at_time: Some(ts),
@@ -446,8 +302,8 @@ fn test_fee_handling() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -469,8 +325,8 @@ fn test_fee_handling() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         from.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -481,33 +337,29 @@ fn test_fee_handling() {
 
 #[test]
 fn test_minting_account_transfers() {
-    let (pic, can_id) = create_test_canister();
-
-    let regular_account = Icrc1Account {
-        owner: Principal::from_slice(&[11; 29]),
-        subaccount: None,
-    };
+    let ctx = TestContext::new();
+    let regular_account = create_test_account(11);
 
     // Get minting account
     let minting_account = query_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         "icrc1_minting_account",
         encode_one(()).unwrap(),
-        Option<Icrc1Account>
+        Option<icrc_ledger_types::icrc1::account::Account>
     )
     .unwrap();
 
     // Get current timestamp
-    let ts = get_timestamp_ns(&pic, can_id);
+    let ts = ctx.get_timestamp_ns();
 
     // Mint tokens to regular account
-    mint_tokens_for_test(&pic, can_id, &regular_account, 2_000_000_000);
+    ctx.mint_tokens_for_test(&regular_account, 2_000_000_000);
 
     // Test transfer to minting account (burn) with zero fee
     let transfer_arg = TransferArg {
         from_subaccount: None,
-        to: minting_account.clone(),
+        to: minting_account,
         amount: 1_000_000u64.into(),
         fee: Some(0u64.into()), // Burn should have no fee
         created_at_time: Some(ts),
@@ -515,8 +367,8 @@ fn test_minting_account_transfers() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         regular_account.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -529,14 +381,14 @@ fn test_minting_account_transfers() {
         from_subaccount: None,
         to: minting_account,
         amount: 1_000_000u64.into(),
-        fee: Some(get_transfer_fee(&pic, &can_id)),
+        fee: Some(ctx.get_transfer_fee()),
         created_at_time: Some(ts),
         memo: None,
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         regular_account.owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -550,24 +402,17 @@ fn test_minting_account_transfers() {
 
 #[test]
 fn test_subaccount_transfers() {
-    let (pic, can_id) = create_test_canister();
-
-    let owner = Principal::from_slice(&[12; 29]);
-    let from = Icrc1Account {
-        owner,
-        subaccount: Some([1; 32]),
-    };
-    let to = Icrc1Account {
-        owner,
-        subaccount: Some([2; 32]),
-    };
+    let ctx = TestContext::new();
+    let owner = create_test_account(12).owner;
+    let from = create_test_subaccount(owner, 1);
+    let to = create_test_subaccount(owner, 2);
 
     // Mint to first subaccount
-    mint_tokens_for_test(&pic, can_id, &from, 2_000_000_000);
+    ctx.mint_tokens_for_test(&from, 2_000_000_000);
 
     // Get current timestamp and fee
-    let ts = get_timestamp_ns(&pic, can_id);
-    let fee = get_transfer_fee(&pic, &can_id);
+    let ts = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
 
     // Transfer between subaccounts
     let transfer_arg = TransferArg {
@@ -580,8 +425,8 @@ fn test_subaccount_transfers() {
     };
 
     let result = update_check_and_decode!(
-        pic,
-        can_id,
+        ctx.pic,
+        ctx.canister_id,
         owner,
         "icrc1_transfer",
         candid::encode_one(transfer_arg).unwrap(),
@@ -590,8 +435,8 @@ fn test_subaccount_transfers() {
     assert!(result.is_ok());
 
     // Verify balances
-    let from_balance = get_account_balance(&pic, &can_id, &from);
-    let to_balance = get_account_balance(&pic, &can_id, &to);
+    let from_balance = ctx.get_account_balance(&from);
+    let to_balance = ctx.get_account_balance(&to);
     assert_eq!(
         from_balance,
         Nat::from(2_000_000_000u64) - Nat::from(1_000_000u64) - fee
