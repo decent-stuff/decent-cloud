@@ -12,9 +12,26 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Get version from tag
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Install git-cliff
+        uses: orhun/git-cliff-action@v2
+        with:
+          config: cliff.toml
+          args: --current --strip header
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          git-cliff --current --strip header >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
@@ -24,6 +41,9 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref_name }}
+          body: |
+            ## Changelog
+            ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
 
