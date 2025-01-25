@@ -214,10 +214,16 @@ fn test_icrc1_compatibility() {
             no_args.clone(),
             Vec<Icrc1StandardRecord>
         ),
-        vec![Icrc1StandardRecord {
-            name: "ICRC-1".to_string(),
-            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
-        }]
+        vec![
+            Icrc1StandardRecord {
+                name: "ICRC-1".to_string(),
+                url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
+            },
+            Icrc1StandardRecord {
+                name: "ICRC-2".to_string(),
+                url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
+            }
+        ]
     );
     // The following two methods are tested in test_balances_and_transfers()
     // icrc1_balance_of : (Account) -> (nat) query;
