@@ -11,11 +11,11 @@ use hmac::{Hmac, Mac};
 use ic_cdk::println;
 use pkcs8::der::zeroize::Zeroizing;
 use std::error::Error;
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use std::io::Read;
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use std::io::Write;
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use std::path::PathBuf;
 
 use crate::ED25519_SIGN_CONTEXT;
@@ -218,7 +218,7 @@ impl DccIdentity {
             .replace('\n', "")
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn write_verifying_key_to_pem_file(&self, file_path: &PathBuf) -> Result<(), CryptoError> {
         let pem_string = self.verifying_key_as_pem();
 
@@ -246,7 +246,7 @@ impl DccIdentity {
         Ok(pem::encode(&pem_obj))
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn write_signing_key_to_pem_file(&self, file_path: &PathBuf) -> Result<(), CryptoError> {
         let pem_string = self.signing_key_as_pem_string()?;
 
@@ -257,7 +257,7 @@ impl DccIdentity {
         Ok(())
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn identities_dir() -> PathBuf {
         dirs::home_dir()
             .expect("Failed to find home directory")
@@ -265,7 +265,7 @@ impl DccIdentity {
             .join("identity")
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn save_to_dir(&self, identity: &str) -> Result<(), CryptoError> {
         let identity_dir = Self::identities_dir().join(identity);
 
@@ -290,7 +290,7 @@ impl DccIdentity {
         Ok(())
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     fn read_signing_key_from_pem_file(file_path: &PathBuf) -> Result<SigningKey, CryptoError> {
         let mut file = fs_err::File::open(file_path)?;
         let mut pem_string = String::new();
@@ -305,7 +305,7 @@ impl DccIdentity {
         Ok(key)
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     fn read_verifying_key_from_pem_file(file_path: &PathBuf) -> Result<VerifyingKey, CryptoError> {
         let mut file = fs_err::File::open(file_path)?;
         let mut pem_string = String::new();
@@ -327,7 +327,7 @@ impl DccIdentity {
         Ok(key)
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn load_from_dir(identity_dir: &PathBuf) -> Result<Self, CryptoError> {
         let identity_dir = if identity_dir.is_absolute() {
             identity_dir.to_path_buf()
