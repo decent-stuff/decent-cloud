@@ -21,18 +21,16 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
-        id: changelog
         uses: orhun/git-cliff-action@v2
         with:
           config: cliff.toml
           args: --current --strip header
-          output: CHANGES.md
 
       - name: Read changelog
-        id: read_changelog
+        id: changelog
         run: |
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          cat CHANGES.md >> $GITHUB_OUTPUT
+          cat git-cliff/CHANGELOG.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
@@ -45,7 +43,7 @@ jobs:
           release_name: Release ${{ github.ref_name }}
           body: |
             ## Changelog
-            ${{ steps.read_changelog.outputs.changelog }}
+            ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
 
