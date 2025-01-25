@@ -64,9 +64,9 @@ jobs:
         run: |
           if [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ]; then
             cargo install cross --git https://github.com/cross-rs/cross
-            cross build --release --target ${{ matrix.target }} -p cli
+            cross build --release --target ${{ matrix.target }} -p dc
           else
-            cargo build --release --target ${{ matrix.target }} -p cli
+            cargo build --release --target ${{ matrix.target }} -p dc
           fi
 
       - name: Prepare binary
