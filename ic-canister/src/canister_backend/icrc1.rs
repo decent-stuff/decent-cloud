@@ -10,21 +10,86 @@ use ic_cdk::println;
 use crate::canister_backend::generic::LEDGER_MAP;
 use crate::DC_TOKEN_LOGO;
 use candid::types::number::Nat;
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use dcc_common::{
     account_balance_get, fees_sink_accounts, get_timestamp_ns, ledger_funds_transfer,
-    nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmountE9s,
+    nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmountE9s, PERMITTED_DRIFT,
+    TX_WINDOW,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use icrc_ledger_types::icrc1::transfer::{Memo as Icrc1Memo, TransferError as Icrc1TransferError};
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 
 use crate::{
     DC_TOKEN_DECIMALS, DC_TOKEN_NAME, DC_TOKEN_SYMBOL, DC_TOKEN_TOTAL_SUPPLY,
     DC_TOKEN_TRANSFER_FEE_E9S, MEMO_BYTES_MAX, MINTING_ACCOUNT, MINTING_ACCOUNT_ICRC1,
 };
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+// Store transactions with their timestamps for cleanup
+thread_local! {
+    static RECENT_TRANSACTIONS: RefCell<HashMap<Vec<u8>, u64>> = RefCell::new(HashMap::new());
+}
+
+fn compute_tx_hash(caller: Principal, arg: &TransferArg) -> Vec<u8> {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(caller.as_slice());
+    hasher.update(arg.from_subaccount.unwrap_or([0; 32]));
+    hasher.update(arg.to.owner.as_slice());
+    hasher.update(arg.to.subaccount.unwrap_or([0; 32]));
+    hasher.update(arg.amount.0.to_bytes_be());
+    if let Some(fee) = &arg.fee {
+        hasher.update(fee.0.to_bytes_be());
+    }
+    if let Some(memo) = &arg.memo {
+        hasher.update(&memo.0);
+    }
+    if let Some(created_at_time) = arg.created_at_time {
+        hasher.update(created_at_time.to_be_bytes());
+    }
+    hasher.finalize().to_vec()
+}
+
+fn cleanup_old_transactions(now: u64) {
+    RECENT_TRANSACTIONS.with(|transactions| {
+        let mut txs = transactions.borrow_mut();
+        txs.retain(|_, timestamp| *timestamp > now.saturating_sub(TX_WINDOW));
+    });
+}
+
+fn check_duplicate_transaction(
+    caller: Principal,
+    arg: &TransferArg,
+    now: u64,
+) -> Option<Icrc1TransferError> {
+    // Skip deduplication if created_at_time is not set
+    arg.created_at_time?;
+
+    let tx_hash = compute_tx_hash(caller, arg);
+
+    // First cleanup old transactions
+    cleanup_old_transactions(now);
+
+    RECENT_TRANSACTIONS.with(|transactions| {
+        let mut txs = transactions.borrow_mut();
+
+        // Check if this transaction already exists
+        if txs.get(&tx_hash).is_some() {
+            Some(Icrc1TransferError::Duplicate {
+                duplicate_of: Nat::from(0u32), // We don't track the original tx index
+            })
+        } else {
+            // Add new transaction
+            txs.insert(tx_hash, now);
+            None
+        }
+    })
+}
 
 pub fn _icrc1_metadata() -> Vec<(String, MetadataValue)> {
     vec![
@@ -83,6 +148,21 @@ pub fn _icrc1_minting_account() -> Option<Icrc1Account> {
     Some(MINTING_ACCOUNT_ICRC1)
 }
 
+fn validate_transaction_time(created_at_time: Option<u64>) -> Result<(), Icrc1TransferError> {
+    if let Some(created_at) = created_at_time {
+        let now = get_timestamp_ns();
+        // Check if transaction is too old
+        if created_at < now.saturating_sub(TX_WINDOW + PERMITTED_DRIFT) {
+            return Err(Icrc1TransferError::TooOld);
+        }
+        // Check if transaction is created in future
+        if created_at > now + PERMITTED_DRIFT {
+            return Err(Icrc1TransferError::CreatedInFuture { ledger_time: now });
+        }
+    }
+    Ok(())
+}
+
 pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     if let Some(memo) = &arg.memo {
         if memo.0.len() > MEMO_BYTES_MAX {
@@ -91,6 +171,15 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     }
 
     let caller_principal = caller();
+    let now = get_timestamp_ns();
+
+    // Validate transaction timing
+    validate_transaction_time(arg.created_at_time)?;
+
+    // Check for duplicate transaction
+    if let Some(err) = check_duplicate_transaction(caller_principal, &arg, now) {
+        return Err(err);
+    }
     let from = IcrcCompatibleAccount::new(
         caller_principal,
         arg.from_subaccount.map(|subaccount| subaccount.to_vec()),
@@ -131,8 +220,9 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
         };
         // It's safe to subtract here because we checked above that the balance will not be negative
         let balance_from_after = balance_from_after.saturating_sub(fee);
+        let mut ledger_ref = ledger.borrow_mut();
         ledger_funds_transfer(
-            &mut ledger.borrow_mut(),
+            &mut ledger_ref,
             FundsTransfer::new(
                 from,
                 to,
@@ -147,7 +237,8 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
         )
         .unwrap_or_else(|err| ic_cdk::trap(&err.to_string()));
 
-        Ok(ledger.borrow().get_blocks_count().into())
+        let block_count = ledger_ref.get_blocks_count();
+        Ok(block_count.into())
     })
 }
 
@@ -167,8 +258,9 @@ pub fn _mint_tokens_for_test(
             account, amount
         );
         let balance_to_after = account_balance_get(&account.into()) + amount;
+        let mut ledger_ref = ledger.borrow_mut();
         ledger_funds_transfer(
-            &mut ledger.borrow_mut(),
+            &mut ledger_ref,
             FundsTransfer::new(
                 MINTING_ACCOUNT,
                 account.into(),
@@ -183,7 +275,7 @@ pub fn _mint_tokens_for_test(
         )
         .unwrap_or_else(|err| ic_cdk::trap(&err.to_string()));
 
-        ledger.borrow().get_blocks_count().into()
+        ledger_ref.get_blocks_count().into()
     })
 }
 
