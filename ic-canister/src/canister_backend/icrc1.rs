@@ -132,6 +132,10 @@ pub fn _icrc1_supported_standards() -> Vec<Icrc1StandardRecord> {
             name: "ICRC-1".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
         },
+        Icrc1StandardRecord {
+            name: "ICRC-2".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
+        },
         // Icrc1StandardRecord {
         //     name: "ICRC-3".to_string(),
         //     url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),

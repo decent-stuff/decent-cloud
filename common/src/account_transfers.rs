@@ -1,3 +1,9 @@
+use crate::{
+    account_balance_add, account_balance_get, account_balance_sub, amount_as_string,
+    get_pubkey_from_principal, get_timestamp_ns, ledger_add_reputation_change,
+    slice_to_32_bytes_array, DccIdentity, TokenAmountE9s, TransferError, LABEL_DC_TOKEN_TRANSFER,
+    MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -12,13 +18,6 @@ use icrc_ledger_types::{
 use ledger_map::{info, LedgerMap};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
-
-use crate::{
-    account_balance_add, account_balance_get, account_balance_sub, amount_as_string,
-    get_pubkey_from_principal, get_timestamp_ns, ledger_add_reputation_change,
-    slice_to_32_bytes_array, DccIdentity, TokenAmountE9s, TransferError, LABEL_DC_TOKEN_TRANSFER,
-    MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
-};
 
 thread_local! {
     static FEES_SINK_ACCOUNTS: RefCell<Option<Vec<IcrcCompatibleAccount>>> = const { RefCell::new(None) };

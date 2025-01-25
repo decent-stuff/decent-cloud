@@ -320,6 +320,63 @@ type TransferError = variant {
     GenericError : record { error_code : nat; message : text };
 };
 
+type ApproveArgs = record {
+    from_subaccount : opt blob;
+    spender : Account;
+    amount : nat;
+    expected_allowance : opt nat;
+    expires_at : opt nat64;
+    fee : opt nat;
+    memo : opt blob;
+    created_at_time : opt nat64;
+};
+
+type ApproveError = variant {
+    BadFee : record { expected_fee : nat };
+    InsufficientFunds : record { balance : nat };
+    AllowanceChanged : record { current_allowance : nat };
+    Expired : record { ledger_time : Timestamp };
+    TooOld;
+    CreatedInFuture : record { ledger_time : Timestamp };
+    Duplicate : record { duplicate_of : nat };
+    TemporarilyUnavailable;
+    GenericError : record { error_code : nat; message : text };
+};
+
+type TransferFromError = variant {
+    BadFee : record { expected_fee : nat };
+    BadBurn : record { min_burn_amount : nat };
+    // The [from] account does not hold enough funds for the transfer.
+    InsufficientFunds : record { balance : nat };
+    // The caller exceeded its allowance.
+    InsufficientAllowance : record { allowance : nat };
+    TooOld;
+    CreatedInFuture: record { ledger_time : nat64 };
+    Duplicate : record { duplicate_of : nat };
+    TemporarilyUnavailable;
+    GenericError : record { error_code : nat; message : text };
+};
+
+type TransferFromArgs = record {
+    spender_subaccount : opt blob;
+    from : Account;
+    to : Account;
+    amount : nat;
+    fee : opt nat;
+    memo : opt blob;
+    created_at_time : opt nat64;
+};
+
+type AllowanceArgs = record {
+    account : Account;
+    spender : Account;
+};
+
+type Allowance = record {
+    allowance : nat;
+    expires_at : opt Timestamp;
+};
+
 type MetadataValue = variant {
     Nat : nat;
     Int : int;
@@ -355,6 +412,11 @@ type OfferingEntry = record {
 };
 
 service : {
+    // ICRC-2 endpoints
+    icrc2_approve : (ApproveArgs) -> (variant { Ok : nat; Err : ApproveError });
+    icrc2_transfer_from : (TransferFromArgs) -> (variant { Ok : nat; Err : TransferFromError });
+    icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
+
     // Node Provider (NP) management operations
     // crypto_sig can be used to cryptographically verify the authenticity of the message
     node_provider_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);

@@ -1,3 +1,4 @@
+use crate::account_transfer_approvals::{approval_update, FundsTransferApproval};
 use crate::account_transfers::FundsTransfer;
 use crate::cache_transactions::RecentCache;
 use crate::{
@@ -6,9 +7,9 @@ use crate::{
     reputations_apply_changes, reputations_clear, set_num_providers, set_num_users,
     set_offering_num_per_provider, AHashMap, ContractSignRequest, ContractSignRequestPayload,
     ReputationAge, ReputationChange, UpdateOfferingPayload, CACHE_TXS_NUM_COMMITTED,
-    LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER,
-    LABEL_NP_OFFERING, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
-    LABEL_USER_REGISTER, PRINCIPAL_MAP,
+    LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_APPROVAL,
+    LABEL_DC_TOKEN_TRANSFER, LABEL_NP_OFFERING, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE,
+    LABEL_REPUTATION_CHANGE, LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
 use borsh::BorshDeserialize;
 use candid::Principal;
@@ -74,6 +75,18 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
 
                     RecentCache::add_entry(num_txs, transfer.into());
                     num_txs += 1;
+                }
+                LABEL_DC_TOKEN_APPROVAL => {
+                    let approval =
+                        FundsTransferApproval::deserialize(entry.value()).map_err(|e| {
+                            error!("Failed to deserialize approval {:?} ==> {:?}", entry, e);
+                            e
+                        })?;
+                    approval_update(
+                        approval.approver().into(),
+                        approval.spender().into(),
+                        approval.allowance(),
+                    );
                 }
                 LABEL_NP_REGISTER | LABEL_USER_REGISTER => {
                     if let Ok(dcc_identity) =
