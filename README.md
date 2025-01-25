@@ -8,6 +8,12 @@ Decent Cloud is fully open source, with decisions driven by the community instea
 
 If that piques your curiosity, read on to learn how to get involved, earn tokens, and help shape the future of decentralized cloud services.
 
+# Star the project
+
+If you like the project idea, please make sure to give us a star ⭐
+
+![Please star the project if you like it](https://github.com/decent-stuff/decent-cloud/blob/main/images/star_img.png "Please star ⭐ the project!")
+
 # Current Status
 
 The project is already usable and is under active development. If you encounter problems, please open a GitHub [issue](https://github.com/decent-stuff/decent-cloud/issues) or start a conversation in our [discussions](https://github.com/orgs/decent-stuff/discussions).
