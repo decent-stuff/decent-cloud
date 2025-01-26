@@ -412,11 +412,6 @@ type OfferingEntry = record {
 };
 
 service : {
-    // ICRC-2 endpoints
-    icrc2_approve : (ApproveArgs) -> (variant { Ok : nat; Err : ApproveError });
-    icrc2_transfer_from : (TransferFromArgs) -> (variant { Ok : nat; Err : TransferFromError });
-    icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
-
     // Node Provider (NP) management operations
     // crypto_sig can be used to cryptographically verify the authenticity of the message
     node_provider_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
@@ -462,6 +457,11 @@ service : {
     icrc1_balance_of : (Account) -> (nat) query;
     icrc1_transfer : (Icrc1TransferArgs) -> (variant { Ok : nat; Err : TransferError });
     icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;
+    // ICRC-2 endpoints
+    icrc2_approve : (ApproveArgs) -> (variant { Ok : nat; Err : ApproveError });
+    icrc2_transfer_from : (TransferFromArgs) -> (variant { Ok : nat; Err : TransferFromError });
+    icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
+    // ICRC-3 endpoints
     icrc3_get_archives : (Icrc3GetArchivesArgs) -> (Icrc3GetArchivesResult) query;
     icrc3_get_tip_certificate : () -> (opt Icrc3DataCertificate) query;
     icrc3_get_blocks : (vec GetBlocksArgs) -> (Icrc3GetBlocksResponse) query;
