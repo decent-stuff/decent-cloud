@@ -16,53 +16,59 @@ If you like the project idea, please make sure to give us a star ⭐
 
 # Current Status
 
-The project is already usable and is under active development. If you encounter problems, please open a GitHub [issue](https://github.com/decent-stuff/decent-cloud/issues) or start a conversation in our [discussions](https://github.com/orgs/decent-stuff/discussions).
+The project is already in decent state (pun intended). If you encounter problems, please open a GitHub [issue](https://github.com/decent-stuff/decent-cloud/issues) or start a conversation in our [discussions](https://github.com/orgs/decent-stuff/discussions).
 
-Currently, main development and testing happens on Linux (Ubuntu 24.04). MacOS should work without issues.
-These are the steps for building on Ubuntu 22.04 or newer, after freshly installing the OS:
-
-```bash
-sudo apt update -y
-sudo apt install build-essential curl git
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-git clone https://github.com/decent-stuff/decent-cloud.git
-cd decent-cloud/
-cargo build --release
-```
-
-After this step, the `dc` binary will be in `target/release/dc`.
-
-The `dc` binary also builds for Windows via [cross](https://github.com/cross-rs/cross):
-
-```bash
-cross build --release --target x86_64-pc-windows-gnu
-```
-
-Example of built release binaries:
-
-```
--rwxrwxr-x 2 ubuntu ubuntu 13637456 Dez 20 22:26 target/release/dc
--rwxr-xr-x 2 ubuntu ubuntu 20445254 Dez 20 22:11 target/x86_64-pc-windows-gnu/release/dc.exe
-```
-
-Release binaries are not yet published on GitHub. Contributions are welcome — for example, consider adding a GitHub workflow that publishes these release binaries.
+Main development and testing happens on Linux (Ubuntu 24.04), but MacOS and Windows versions should work without issues.
 
 # Usage
+
+## Getting started
+
+You can download the latest release binary for your platform in the following way:
+
+Linux (e.g. Ubuntu 20.04+):
+
+```bash
+mkdir $HOME/bin
+curl -L https://github.com/decent-stuff/decent-cloud/releases/latest/download/decent-cloud-linux-amd64 -o $HOME/bin/dc
+chmod +x $HOME/bin/dc
+```
+
+You likely also want to add `$HOME/bin` to your path, e.g. by adding the following to your shell rc file such as `~/.bashrc`:
+
+```bash
+# set PATH so it includes user's private bin if it exists
+if [ -d "$HOME/bin" ] ; then
+   export PATH="$HOME/bin:$PATH"
+fi
+```
+
+MacOS ARM64 (M1, M2, M3):
+
+```bash
+curl -L https://github.com/decent-stuff/decent-cloud/releases/latest/download/decent-cloud-darwin-arm64 -o /usr/local/bin/dc
+```
+
+Windows:
+
+```
+$download_url = "https://github.com/decent-stuff/decent-cloud/releases/latest/download/ decent-cloud-windows-amd64.exe"
+Invoke-WebRequest "$download_url" -OutFile "dc.exe"
+```
 
 ## Key generation
 
 ### Option 1 (recommended): key generation with the `dc` CLI tool:
 
 ```bash
-cargo run --bin dc -- keygen --generate --identity <id-slug>
+dc keygen --generate --identity <id-slug>
 ```
 
 <details>
 <summary>Example invocation and output:</summary>
 
 ```
-cargo run --bin dc -- keygen --generate --identity my-provider
+dc keygen --generate --identity my-provider
 [...]
 INFO  dc >  Generated mnemonic: <some words that you should save in a very safe place>
 INFO  dc >  Generated identity: [Ed25519 signing] rb26m-cxrhj-t63qa-xg33g-hvla2-pr25n-nmc5y-rc2la-v4zuv-fjkec-wqe
@@ -92,7 +98,7 @@ The registration fee is 0.5 DC tokens at the time of this writing and will decre
 You can check the current fee on the [ICP Dashboard](https://dashboard.internetcomputer.org/canister/gplx4-aqaaa-aaaai-actra-cai) or via CLI:
 
 ```bash
-❯ cargo run --bin dc -- ledger-remote get-registration-fee
+❯ dc ledger-remote get-registration-fee
 [...]
 Registration fee: 0.500000000
 ```
@@ -100,7 +106,7 @@ Registration fee: 0.500000000
 After obtaining DCT on the principal of your generated identity, you can register a node provider account:
 
 ```bash
-cargo run --bin dc -- np register --identity my-provider
+dc np register --identity my-provider
 [...]
 INFO - Registering principal: my-provider as [Ed25519 signing] rb26m-cxrhj-t63qa-xg33g-hvla2-pr25n-nmc5y-rc2la-v4zuv-fjkec-wqe
 ```
@@ -108,7 +114,7 @@ INFO - Registering principal: my-provider as [Ed25519 signing] rb26m-cxrhj-t63qa
 Or register a user account similarly:
 
 ```bash
-cargo run --bin dc -- user register --identity my-user
+dc user register --identity my-user
 ```
 
 ## Participating in the periodic token distribution
@@ -142,7 +148,7 @@ This periodic distribution model underscores our commitment to fair resource all
 Any provider can participate. For example:
 
 ```bash
-cargo run --bin dc -- np check-in --identity my-id --memo "Oh yeah! I'm getting free DCT!"
+dc np check-in --identity my-id --memo "Oh yeah! I'm getting free DCT!"
 ```
 
 In the future, these memos will appear on the project dashboard, so be creative — contributions are always welcome!
@@ -154,7 +160,7 @@ Another note: the check-in operation first synchronizes the entire ledger to you
 You can also manually fetch the ledger by running:
 
 ```bash
-cargo run --bin dc -- ledger-remote fetch
+dc ledger-remote fetch
 ```
 
 ## Updating a Provider Profile
@@ -164,7 +170,7 @@ Prepare your node provider profile locally as a YAML file. Check out [the templa
 When ready, update your provider profile in the canister:
 
 ```bash
-cargo run --bin dc -- np update-profile --identity my-provider --profile-file my-provider-profile.yaml
+dc np update-profile --identity my-provider --profile-file my-provider-profile.yaml
 ```
 
 A small fee is required for this operation to prevent DoS attacks.
@@ -176,7 +182,7 @@ Similar to the profile, you can prepare your offering locally as a YAML file, th
 When ready, update the provider offering:
 
 ```bash
-cargo run --bin dc -- np update-offering --identity my-provider --offering-file my-provider-offering.yaml
+dc np update-offering --identity my-provider --offering-file my-provider-offering.yaml
 ```
 
 Again, a small fee is required for this operation, preventing DoS attacks.
@@ -186,21 +192,21 @@ Again, a small fee is required for this operation, preventing DoS attacks.
 Run `ledger_remote fetch` to get the latest offerings, then search for suitable ones:
 
 ```bash
-cargo run --bin dc -- offering query 'memory >= 512MB AND storage.size > 1gb'
+dc offering query 'memory >= 512MB AND storage.size > 1gb'
 ```
 
 Or list all offerings:
 
 ```bash
-cargo run --bin dc -- offering list
+dc offering list
 ```
 
-You will see the DC principals and their associated offerings. Inspect them, grab the instance ID, and review the provider’s reputation and historical data (e.g., `cargo run --bin dc -- np list --balances`).
+You will see the DC principals and their associated offerings. Inspect them, grab the instance ID, and review the provider’s reputation and historical data (e.g., `dc np list --balances`).
 
 After you find the right offering, you can run something like:
 
 ```bash
-cargo run --bin dc -- contract sign-request --offering-id xxx-small --identity my-user --requester-ssh-pubkey "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbPVy5BWvjp6bm1wanPbH+hkPuOrx4AjUoczADfYpcx test-ssh-user" --requester-contact "https://github.com/orgs/decent-stuff/discussions/5" --memo "Oh yeah I'm signing a contract!" --provider-pubkey-pem MCowBQYDK2VwAyEAbxvOReOGb95hG/zXWheKtofsAP86+Q/bfVsPsgscQBE= --interactive
+dc contract sign-request --offering-id xxx-small --identity my-user --requester-ssh-pubkey "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbPVy5BWvjp6bm1wanPbH+hkPuOrx4AjUoczADfYpcx test-ssh-user" --requester-contact "https://github.com/orgs/decent-stuff/discussions/5" --memo "Oh yeah I'm signing a contract!" --provider-pubkey-pem MCowBQYDK2VwAyEAbxvOReOGb95hG/zXWheKtofsAP86+Q/bfVsPsgscQBE= --interactive
 ```
 
 If you provide `--interactive`, the CLI will prompt for missing arguments instead of failing with an error.
@@ -208,13 +214,13 @@ If you provide `--interactive`, the CLI will prompt for missing arguments instea
 After confirmation, it sends a contract sign request. Both you and the provider can periodically check for open contract requests:
 
 ```bash
-cargo run --bin dc -- contract list-open
+dc contract list-open
 ```
 
 To complete the contract signing, the provider must confirm (or reject) the contract:
 
 ```bash
-cargo run --bin dc --  contract sign-reply --identity my-provider --contract-id <contract-id-base64> --sign-accept true --response-text "It works!" --interactive
+dc contract sign-reply --identity my-provider --contract-id <contract-id-base64> --sign-accept true --response-text "It works!" --interactive
 ```
 
 The provider may accept or reject the request based on user reputation or other factors.
@@ -226,6 +232,40 @@ All of this will also be accessible via a WebUI in the future; contributions are
 _(FIXME: implement refunds in case of user dissatisfaction and accordingly adjust reputation for such providers.)_
 
 # Developer and contribution notes
+
+<details>
+<summary>Build binaries manually</summary>
+
+These are the steps for building on Ubuntu 20.04 or newer, and on MacOS, after freshly installing the OS:
+
+```bash
+sudo apt update -y
+sudo apt install build-essential curl git
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+git clone https://github.com/decent-stuff/decent-cloud.git
+cd decent-cloud/
+cargo build --release --bin dc
+```
+
+After this step, the `dc` binary will be in `target/release/dc`.
+
+The `dc` binary also builds for Windows via [cross](https://github.com/cross-rs/cross). After installing `cross`, just run:
+
+```bash
+cross build --release --target x86_64-pc-windows-gnu
+```
+
+Example of built release binaries:
+
+```
+-rwxrwxr-x 2 ubuntu ubuntu 13637456 Dez 20 22:26 target/release/dc
+-rwxr-xr-x 2 ubuntu ubuntu 20445254 Dez 20 22:11 target/x86_64-pc-windows-gnu/release/dc.exe
+```
+
+Release binaries are also published on GitHub.
+
+</details>
 
 <details>
 <summary>Install dependencies</summary>
