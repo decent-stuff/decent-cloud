@@ -11,7 +11,6 @@ pub enum Offering {
     // Future versions can be added here
 }
 
-// Main struct for Cloud Provider Offering version 0.1.0
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CloudProviderOfferingV0_1_0 {
     pub kind: String,

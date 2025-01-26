@@ -115,7 +115,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                                 );
                             }
                             Err(e) => {
-                                warn!("Failed to deserialize offering payload: {}", e);
+                                debug!("Failed to deserialize offering payload: {}", e);
                                 continue;
                             }
                         }

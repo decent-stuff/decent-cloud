@@ -1,3 +1,4 @@
+pub mod identity;
 pub mod ledger_canister_client;
 pub mod node_provider;
 

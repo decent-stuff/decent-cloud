@@ -1,15 +1,17 @@
+use crate::identity::dcc_to_ic_auth;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::BorshDeserialize;
 use candid::{Decode, Encode};
 use dcc_common::{
-    ContractId, ContractReqSerialized, ContractSignRequest, ContractSignRequestPayload,
+    ContractId, ContractReqSerialized, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
 };
 use ic_agent::{export::Principal, identity::BasicIdentity, Agent};
 use serde::Serialize;
 
 type ResultString = Result<String, String>;
 
+#[derive(Debug)]
 pub struct LedgerCanister {
     agent: Agent,
     // wallet_canister_id: Principal,
@@ -24,9 +26,9 @@ impl LedgerCanister {
         canister_id: Principal,
         identity: Option<BasicIdentity>,
         // network_name: String,
-        network_url: String,
+        network_url: &str,
     ) -> anyhow::Result<Self> {
-        let agent = Agent::builder().with_url(&network_url);
+        let agent = Agent::builder().with_url(network_url);
         let agent = match identity {
             Some(identity) => agent.with_identity(identity),
             None => agent,
@@ -41,8 +43,46 @@ impl LedgerCanister {
             // wallet_canister_id,
             canister_id,
             // network_name,
-            // network_url,
+            // network_url: network_url.to_string(),
         })
+    }
+
+    pub async fn new_with_identity(
+        network_url: &str,
+        canister_id: Principal,
+        identity: BasicIdentity,
+    ) -> anyhow::Result<Self> {
+        Self::new(
+            // wallet_canister_id,
+            canister_id,
+            Some(identity),
+            // network_name,
+            network_url,
+        )
+        .await
+    }
+
+    pub async fn new_with_dcc_id(
+        network_url: &str,
+        canister_id: Principal,
+        dcc_id: &DccIdentity,
+    ) -> anyhow::Result<Self> {
+        let ic_auth = dcc_to_ic_auth(dcc_id).unwrap();
+        Self::new_with_identity(network_url, canister_id, ic_auth).await
+    }
+
+    pub async fn new_without_identity(
+        network_url: &str,
+        canister_id: Principal,
+    ) -> anyhow::Result<Self> {
+        Self::new(
+            // wallet_canister_id,
+            canister_id,
+            None,
+            // network_name,
+            network_url,
+        )
+        .await
     }
 
     pub fn canister_id(&self) -> &Principal {
