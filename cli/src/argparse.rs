@@ -5,7 +5,7 @@ use dcc_common::PaymentEntries;
 #[command(
     name = "dcc",
     about = "Decent Cloud CLI",
-    version = "0.1.0",
+    version = env!("CARGO_PKG_VERSION"),
     author = "Decent Cloud Development Team",
     subcommand_required = true,
     arg_required_else_help = true
