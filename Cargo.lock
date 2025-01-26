@@ -661,7 +661,7 @@ checksum = "0e60eed09d8c01d3cee5b7d30acb059b76614c918fa0f992e0dd6eeb10daad6f"
 
 [[package]]
 name = "dcc-common"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "ahash",
  "anyhow",
@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "decent-cloud"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "ahash",
  "anyhow",
@@ -741,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "decent_cloud_canister"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "np-json-search"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "anyhow",
  "parse-size",
@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "np-offering"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "borsh",
  "fs-err",
@@ -2147,7 +2147,7 @@ dependencies = [
 
 [[package]]
 name = "np-profile"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "borsh",
  "fs-err",
