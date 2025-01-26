@@ -112,6 +112,7 @@ jobs:
           for toml in $(find . -name "Cargo.toml"); do
             sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "$toml"
           done
+          cargo check
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
@@ -122,7 +123,7 @@ jobs:
           commit-message: "chore: bump version to ${{ needs.create-release.outputs.version }}"
           title: "chore: bump version to ${{ needs.create-release.outputs.version }}"
           body: |
-            Updates version in Cargo.toml files to match the latest release.
+            Updates version in Cargo.toml+lock files to match the latest release.
 
             This PR was automatically created by the release workflow.
           branch: bump-version-${{ needs.create-release.outputs.version }}
