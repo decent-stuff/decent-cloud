@@ -10,17 +10,11 @@ use std::collections::BTreeMap;
 
 use crate::FundsTransfer;
 
-const CACHE_MAX_LENGTH: usize = 100_000; // Keep at most 100k entries with the highest ids in the cache
+const CACHE_MAX_LENGTH: usize = 100_000_000; // Keep at most 100M entries with the highest ids in the cache
 
 thread_local! {
-    /// Total count of transactions that were committed and are in stable memory
-    pub static CACHE_TXS_NUM_COMMITTED: RefCell<u64> = const { RefCell::new(0) };
-    /// Recently committed transactions, that can be served from the get_transactions endpoint
+    /// Recently committed transactions, to serve from the get_transactions endpoint
     static RECENT_CACHE: RefCell<BTreeMap<u64, Transaction>> = const { RefCell::new(BTreeMap::new()) };
-}
-
-pub fn get_ledger_txs_num_committed() -> u64 {
-    CACHE_TXS_NUM_COMMITTED.with(|n| *n.borrow())
 }
 
 /// Caches up to <CACHE_MAX_LENGTH> entries with the highest entry number.
@@ -37,17 +31,19 @@ impl RecentCache {
         })
     }
 
+    /// Append transaction to the cache
+    pub fn append_entry(tx: Transaction) {
+        RECENT_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let tx_num = cache.keys().next_back().unwrap_or(&0) + 1;
+            Self::_add_entry(&mut cache, tx_num, tx)
+        })
+    }
+
     fn _add_entry(cache: &mut BTreeMap<u64, Transaction>, tx_num: u64, tx: Transaction) {
         if cache.len() < CACHE_MAX_LENGTH || tx_num > *cache.keys().next().unwrap_or(&0) {
             // Only insert the entry if the cache is not full or if the new entry has a higher id than the minimal
             cache.insert(tx_num, tx);
-        }
-
-        // If the number of entries exceeds the maximum length, remove the oldest entries
-        while cache.len() > CACHE_MAX_LENGTH {
-            if let Some((&first_key, _)) = cache.iter().next() {
-                cache.remove(&first_key);
-            }
         }
     }
 
@@ -55,6 +51,11 @@ impl RecentCache {
         RECENT_CACHE.with(|cache| cache.borrow().keys().next().copied())
     }
 
+    pub fn get_max_tx_num() -> Option<u64> {
+        RECENT_CACHE.with(|cache| cache.borrow().keys().next_back().copied())
+    }
+
+    // Get the current size of the cache, in number of transactions
     pub fn get_num_entries() -> usize {
         RECENT_CACHE.with(|cache| cache.borrow().len())
     }
@@ -87,11 +88,6 @@ impl RecentCache {
         });
     }
 
-    // Get the current size of the cache
-    pub fn cache_size() -> usize {
-        RECENT_CACHE.with(|cache| cache.borrow().len())
-    }
-
     /// Parse transactions from a LedgerBlock and append transactions to the cache.
     /// tx_num_start is the lowest transaction number in the block.
     /// ledger_block is the LedgerBlock that contains the transactions.
@@ -106,6 +102,20 @@ impl RecentCache {
                     let tx: Transaction = transfer.into();
                     Self::_add_entry(&mut cache.borrow_mut(), tx_num, tx.clone());
                     tx_num += 1;
+                }
+            }
+        });
+    }
+
+    /// Ensure the cache does not exceed the maximum length.
+    pub fn ensure_cache_length() {
+        RECENT_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+
+            // If the number of entries exceeds the maximum length, remove the oldest entries
+            while cache.len() > CACHE_MAX_LENGTH {
+                if let Some((&first_key, _)) = cache.iter().next() {
+                    cache.remove(&first_key);
                 }
             }
         });
@@ -158,8 +168,10 @@ mod tests {
         for i in 0..CACHE_MAX_LENGTH + 10 {
             RecentCache::add_entry(i as u64, create_dummy_transaction(i as u64));
         }
+        assert!(RecentCache::get_num_entries() >= CACHE_MAX_LENGTH);
+        RecentCache::ensure_cache_length();
 
-        assert_eq!(RecentCache::cache_size(), CACHE_MAX_LENGTH);
+        assert_eq!(RecentCache::get_num_entries(), CACHE_MAX_LENGTH);
         assert_eq!(RecentCache::get_min_tx_num(), Some(10));
     }
 
@@ -181,10 +193,10 @@ mod tests {
         RecentCache::clear_cache();
         RecentCache::add_entry(1, create_dummy_transaction(1));
 
-        assert_eq!(RecentCache::cache_size(), 1);
+        assert_eq!(RecentCache::get_num_entries(), 1);
         let removed_tx = RecentCache::remove_transaction(1);
         assert!(removed_tx.is_some());
-        assert_eq!(RecentCache::cache_size(), 0);
+        assert_eq!(RecentCache::get_num_entries(), 0);
     }
 
     #[test]
@@ -194,9 +206,9 @@ mod tests {
             RecentCache::add_entry(i, create_dummy_transaction(i));
         }
 
-        assert_eq!(RecentCache::cache_size(), 5);
+        assert_eq!(RecentCache::get_num_entries(), 5);
         RecentCache::clear_cache();
-        assert_eq!(RecentCache::cache_size(), 0);
+        assert_eq!(RecentCache::get_num_entries(), 0);
     }
 
     #[test]
@@ -239,7 +251,7 @@ mod tests {
         // Pretend that the first free transaction number is 899
         RecentCache::parse_ledger_block(899, &ledger_block);
 
-        assert_eq!(RecentCache::cache_size(), 103);
+        assert_eq!(RecentCache::get_num_entries(), 103);
         assert_eq!(RecentCache::get_min_tx_num(), Some(899));
         assert!(RecentCache::get_transaction(898).is_none());
         assert!(RecentCache::get_transaction(899).is_some());

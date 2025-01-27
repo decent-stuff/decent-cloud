@@ -1,7 +1,10 @@
 mod test_utils;
 use candid::{encode_one, Nat, Principal};
 use dcc_common::{PERMITTED_DRIFT, TX_WINDOW};
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::{
+    icrc1::transfer::{Memo, TransferArg, TransferError},
+    icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse},
+};
 use pocket_ic::WasmResult;
 use test_utils::{create_test_account, create_test_subaccount, TestContext};
 
@@ -37,13 +40,92 @@ fn test_basic_transfer() {
         Result<Nat, TransferError>
     );
 
-    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 1u32);
 
     // Check balances
     let from_balance = ctx.get_account_balance(&from);
     let to_balance = ctx.get_account_balance(&to);
     assert_eq!(from_balance, <u64 as Into<Nat>>::into(499_000_000u64)); // Original - amount - fee
     assert_eq!(to_balance, <u64 as Into<Nat>>::into(500_000_000u64));
+}
+
+#[test]
+fn test_multiple_transfers() {
+    let ctx = TestContext::new();
+    let from = create_test_account(1);
+    let to = create_test_account(2);
+
+    // Mint some tokens to the sender
+    let original_tokens = 1_000_000_000;
+    ctx.mint_tokens_for_test(&from, original_tokens);
+
+    // Get current timestamp and fee
+    let ts_ns = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
+    let mut total_sent = 0;
+    let mut total_fees = Nat::from(0u64);
+
+    let send_tx = |amount: u64| {
+        let transfer_arg = TransferArg {
+            from_subaccount: None,
+            to,
+            amount: amount.into(),
+            fee: Some(fee.clone()),
+            created_at_time: Some(ts_ns),
+            memo: None,
+        };
+        update_check_and_decode!(
+            ctx.pic,
+            ctx.canister_id,
+            from.owner,
+            "icrc1_transfer",
+            candid::encode_one(transfer_arg).unwrap(),
+            Result<Nat, TransferError>
+        )
+    };
+    let get_tx = |start: u64, length: u64| -> GetTransactionsResponse {
+        let get_tx_arg = GetTransactionsRequest {
+            start: start.into(),
+            length: length.into(),
+        };
+        query_check_and_decode!(
+            ctx.pic,
+            ctx.canister_id,
+            "get_transactions",
+            encode_one(get_tx_arg).unwrap(),
+            GetTransactionsResponse
+        )
+    };
+
+    for block_num in 1u64..=10 {
+        let send_amount = 1_000u64 + block_num;
+        let result = send_tx(send_amount);
+        assert_eq!(result.unwrap(), block_num);
+        total_sent += send_amount;
+        total_fees += fee.clone();
+    }
+
+    let get_tx_response1 = get_tx(10, 1);
+    assert_eq!(get_tx_response1.first_index, 10u64);
+    assert_eq!(get_tx_response1.log_length, 10u8);
+
+    assert_eq!(get_tx_response1.transactions.len(), 1);
+    assert_eq!(get_tx_response1.transactions[0].kind, "xfer".to_string());
+
+    ctx.ffwd_to_next_block(ts_ns);
+
+    // should get the same result
+    let get_tx_response2 = get_tx(10, 1);
+    assert_eq!(get_tx_response1, get_tx_response2);
+
+    // Check balances
+    let from_balance = ctx.get_account_balance(&from);
+    let to_balance = ctx.get_account_balance(&to);
+    assert_eq!(
+        from_balance,
+        Nat::from(original_tokens) - total_sent - total_fees
+    );
+    assert_eq!(to_balance, total_sent);
 }
 
 #[test]

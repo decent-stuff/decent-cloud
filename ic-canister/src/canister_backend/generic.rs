@@ -1,15 +1,12 @@
 use super::pre_icrc3::ledger_construct_hash_tree;
-use borsh::BorshDeserialize;
 use candid::Principal;
-use dcc_common::cache_transactions::RecentCache;
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
     get_account_from_pubkey, get_num_offerings, get_num_providers, get_pubkey_from_principal,
     refresh_caches_from_ledger, reputation_get, reward_e9s_per_block_recalculate,
     rewards_current_block_checked_in, rewards_distribute, rewards_pending_e9s, set_test_config,
-    ContractId, ContractReqSerialized, FundsTransfer, LedgerCursor, TokenAmountE9s,
-    BLOCK_INTERVAL_SECS, CACHE_TXS_NUM_COMMITTED, DATA_PULL_BYTES_BEFORE_LEN,
-    LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
+    ContractId, ContractReqSerialized, LedgerCursor, TokenAmountE9s, BLOCK_INTERVAL_SECS,
+    DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
     LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
     MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
@@ -21,7 +18,6 @@ use ledger_map::{error, info, warn, LedgerMap};
 use serde::Serialize;
 use std::cell::RefCell;
 use std::io::prelude::*;
-use std::ops::AddAssign;
 use std::time::Duration;
 
 thread_local! {
@@ -71,25 +67,7 @@ fn ledger_periodic_task() {
             // Intentionally don't panic. If needed, transactions can be replayed and corrected.
         }
 
-        let mut tx_num = CACHE_TXS_NUM_COMMITTED.with(|n| *n.borrow());
-        for entry in ledger.next_block_iter(Some(LABEL_DC_TOKEN_TRANSFER)) {
-            let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
-                .unwrap_or_else(|e| {
-                    ic_cdk::api::trap(&format!(
-                        "Failed to deserialize transfer {:?} ==> {:?}",
-                        entry, e
-                    ));
-                });
-            RecentCache::add_entry(tx_num, transfer.into());
-            tx_num += 1;
-        }
-
-        // Uncommitted transactions now get committed -- adjust the (cache) count of total committed transactions
-        let count_total_txs_uncommitted =
-            ledger.get_next_block_entries_count(Some(LABEL_DC_TOKEN_TRANSFER)) as u64;
-
-        CACHE_TXS_NUM_COMMITTED.with(|n| n.borrow_mut().add_assign(count_total_txs_uncommitted));
-
+        // Commit the block
         ledger.commit_block().unwrap_or_else(|e| {
             error!("Failed to commit ledger: {}", e);
         });
@@ -98,6 +76,9 @@ fn ledger_periodic_task() {
         // Borrowed from https://github.com/ldclabs/ic-sft/blob/4825d760811731476ffbbb1705295a6ad4aae58f/src/ic_sft_canister/src/store.rs#L193-L210
         let root_hash = ledger_construct_hash_tree(ledger).digest();
         ic_cdk::api::set_certified_data(&root_hash);
+
+        // Cleanup old transactions that are used for deduplication
+        crate::canister_backend::icrc1::cleanup_old_transactions();
     });
 }
 

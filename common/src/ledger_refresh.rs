@@ -6,10 +6,10 @@ use crate::{
     contracts_cache_open_remove, dcc_identity, error, reputations_apply_aging,
     reputations_apply_changes, reputations_clear, set_num_providers, set_num_users,
     set_offering_num_per_provider, AHashMap, ContractSignRequest, ContractSignRequestPayload,
-    ReputationAge, ReputationChange, UpdateOfferingPayload, CACHE_TXS_NUM_COMMITTED,
-    LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_APPROVAL,
-    LABEL_DC_TOKEN_TRANSFER, LABEL_NP_OFFERING, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE,
-    LABEL_REPUTATION_CHANGE, LABEL_USER_REGISTER, PRINCIPAL_MAP,
+    ReputationAge, ReputationChange, UpdateOfferingPayload, LABEL_CONTRACT_SIGN_REPLY,
+    LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER,
+    LABEL_NP_OFFERING, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
+    LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
 use borsh::BorshDeserialize;
 use candid::Principal;
@@ -26,7 +26,6 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
     let mut replayed_blocks = 0;
     account_balances_clear();
     reputations_clear();
-    let mut num_txs = 0u64;
     let mut num_providers = 0u64;
     let mut num_users = 0u64;
     let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
@@ -73,8 +72,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                         account_balance_add(transfer.to(), transfer.amount())?;
                     }
 
-                    RecentCache::add_entry(num_txs, transfer.into());
-                    num_txs += 1;
+                    RecentCache::append_entry(transfer.into());
                 }
                 LABEL_DC_TOKEN_APPROVAL => {
                     let approval =
@@ -151,10 +149,13 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
         }
         replayed_blocks += 1;
     }
-    CACHE_TXS_NUM_COMMITTED.with(|n| *n.borrow_mut() = num_txs);
     PRINCIPAL_MAP.with(|p| *p.borrow_mut() = principals);
     set_num_providers(num_providers);
     set_num_users(num_users);
-    debug!("Refreshed caches from {} ledger blocks", replayed_blocks);
+    debug!(
+        "Refreshed caches from {} ledger blocks, found {} transactions",
+        replayed_blocks,
+        RecentCache::get_max_tx_num().unwrap_or_default()
+    );
     Ok(())
 }

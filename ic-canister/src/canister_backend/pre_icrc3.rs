@@ -1,10 +1,7 @@
 use super::generic::LEDGER_MAP;
 use crate::canister_backend::generic::encode_to_cbor_bytes;
 use borsh::BorshDeserialize;
-use dcc_common::{
-    cache_transactions::RecentCache, get_ledger_txs_num_committed, FundsTransfer,
-    LABEL_DC_TOKEN_TRANSFER,
-};
+use dcc_common::{cache_transactions::RecentCache, FundsTransfer, LABEL_DC_TOKEN_TRANSFER};
 use ic_certification::{HashTreeNode, Label};
 use icrc_ledger_types::icrc3::blocks::DataCertificate as DataCertificatePreIcrc3;
 use icrc_ledger_types::icrc3::transactions::{
@@ -23,12 +20,6 @@ pub fn _get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
 
-    let count_total_txs_committed = get_ledger_txs_num_committed();
-    let count_total_txs_uncommitted = LEDGER_MAP.with(|ledger| {
-        ledger
-            .borrow()
-            .get_next_block_entries_count(Some(LABEL_DC_TOKEN_TRANSFER))
-    }) as u64;
     let mut txs = _get_committed_transactions(txs_from, txs_length);
     let txs_missing = txs_length.saturating_sub(txs.len() as u64);
     if txs_missing > 0 {
@@ -38,7 +29,7 @@ pub fn _get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse
     GetTransactionsResponse {
         // We don't have archived transactions in this implementation, so the first_index is always the requested tx number
         first_index: txs_from.into(),
-        log_length: (count_total_txs_committed + count_total_txs_uncommitted).into(),
+        log_length: RecentCache::get_max_tx_num().unwrap_or_default().into(),
         transactions: txs,
         archived_transactions: vec![],
     }
