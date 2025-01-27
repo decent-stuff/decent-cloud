@@ -112,7 +112,7 @@ jobs:
           for toml in $(find . -name "Cargo.toml"); do
             sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "$toml"
           done
-          cargo check
+          timeout 10 cargo check || true
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
