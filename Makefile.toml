@@ -1,30 +1,47 @@
 [env]
 RUST_BACKTRACE = "1"
+CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE = "Makefile.toml"
 
 [config]
 default_to_workspace = false
-init_task = "dfx-start"
 end_task = "dfx-stop"
 on_error_task = "dfx-stop"
 unstable_features = ["CTRL_C_HANDLING"]
 
+[tasks.default]
+#dependencies = ["canister-tests", "format", "canister", "dfx-stop", "clippy", "clippy-canister", "build", "test"]
+run_task = [
+   { name="canister-tests" },
+   { name="format" },
+   { name="canister" },
+   { name="dfx-stop" },
+   { name="clippy" },
+   { name="clippy-canister" },
+   { name="build" },
+   { name="test" }
+]
+
+[tasks.canister-tests]
+command = "cargo"
+args = ["test"]
+cwd = "./ic-canister/"
+
 [tasks.dfx-start]
-script = '''
+script = ['''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
 cd ic-canister
-for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done;
+for i in {1..10}; do dfx stop && break; sleep 1; dfx killall; sleep 1; pkill -9 -f versions || true; done;
 dfx start --background --clean
 while true; do
     dfx ping local && break;
     sleep 1;
 done;
 dfx canister create --all
-'''
+''']
 
 [tasks.format]
-dependencies = ["dfx-start"]
 install_crate = "rustfmt"
 command = "cargo"
 args = ["fmt", "--", "--emit=files"]
@@ -36,41 +53,28 @@ args = ["build", "--all"]
 cwd = "./ic-canister/"
 
 [tasks.clippy]
-dependencies = ["dfx-start"]
 command = "cargo"
 args = ["clippy", "--tests"]
 
 [tasks.clippy-canister]
-dependencies = ["dfx-start"]
 command = "cargo"
 args = ["clippy", "--tests", "--target=wasm32-unknown-unknown"]
 cwd = "./ic-canister/"
 
 [tasks.build]
-dependencies = ["dfx-start"]
 command = "cargo"
 args = ["build"]
 
-
 [tasks.test]
-dependencies = ["dfx-start", "build", "canister"]
+dependencies = ["build", "canister"]
+command = "cargo"
+args = ["test"]
 
 [tasks.dfx-stop]
-script = '''
+script = ['''
 #!/usr/bin/env bash
 set -eExuo pipefail
 
 ( cd ./ic-canister && for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done; )
-'''
+''']
 
-[tasks.all]
-dependencies = [
-    "format",
-    "dfx-start",
-    "canister",
-    "clippy",
-    "clippy-canister",
-    "build",
-    "test",
-    "dfx-stop",
-]

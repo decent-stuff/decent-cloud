@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use crate::FundsTransfer;
 
-const CACHE_MAX_LENGTH: usize = 100_000_000; // Keep at most 100M entries with the highest ids in the cache
+const CACHE_MAX_LENGTH: usize = 1_000_000; // Keep at most 1M entries with the highest ids in the cache
 
 thread_local! {
     /// Recently committed transactions, to serve from the get_transactions endpoint
