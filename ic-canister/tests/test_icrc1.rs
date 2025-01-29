@@ -415,6 +415,26 @@ fn test_fee_handling() {
         Result<Nat, TransferError>
     );
     assert!(result.is_ok());
+
+    // Test with no fee
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to,
+        amount: 1_000_000u64.into(),
+        fee: None,
+        created_at_time: Some(ts),
+        memo: None,
+    };
+
+    let result = update_check_and_decode!(
+        ctx.pic,
+        ctx.canister_id,
+        from.owner,
+        "icrc1_transfer",
+        candid::encode_one(transfer_arg).unwrap(),
+        Result<Nat, TransferError>
+    );
+    assert!(result.is_ok());
 }
 
 #[test]

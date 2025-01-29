@@ -191,7 +191,7 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     let to: IcrcCompatibleAccount = arg.to.into();
 
     LEDGER_MAP.with(|ledger| {
-        let fee = nat_to_balance(&arg.fee.unwrap_or_default());
+        let fee = nat_to_balance(&arg.fee.unwrap_or(Nat::from(DC_TOKEN_TRANSFER_FEE_E9S)));
         let balance_to_after: TokenAmountE9s = if to.is_minting_account() {
             if fee != 0 {
                 return Err(Icrc1TransferError::BadFee {
