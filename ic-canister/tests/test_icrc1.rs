@@ -545,3 +545,113 @@ fn test_subaccount_transfers() {
     );
     assert_eq!(to_balance, <u64 as Into<Nat>>::into(1_000_000u64));
 }
+
+#[test]
+fn test_zero_amount_transfer() {
+    let ctx = TestContext::new();
+    let from = create_test_account(13);
+    let to = create_test_account(14);
+
+    // Mint tokens
+    ctx.mint_tokens_for_test(&from, 1_000_000);
+
+    // Get current timestamp and fee
+    let ts = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
+
+    // Try to transfer zero amount
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to,
+        amount: 0u64.into(),
+        fee: Some(fee),
+        created_at_time: Some(ts),
+        memo: None,
+    };
+
+    let result = update_check_and_decode!(
+        ctx.pic,
+        ctx.canister_id,
+        from.owner,
+        "icrc1_transfer",
+        candid::encode_one(transfer_arg).unwrap(),
+        Result<Nat, TransferError>
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+#[should_panic(
+    expected = "Error from Canister lxzze-o7777-77777-aaaaa-cai: Canister called `ic0.trap` with message: the memo field is too large."
+)]
+fn test_max_memo_size() {
+    let ctx = TestContext::new();
+    let from = create_test_account(15);
+    let to = create_test_account(16);
+
+    // Mint tokens
+    ctx.mint_tokens_for_test(&from, 1_000_000);
+
+    // Get current timestamp and fee
+    let ts = ctx.get_timestamp_ns();
+    let fee = ctx.get_transfer_fee();
+
+    // Create memo that exceeds maximum size
+    let large_memo = vec![0u8; 33]; // MEMO_BYTES_MAX is typically 32
+
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to,
+        amount: 100_000u64.into(),
+        fee: Some(fee),
+        created_at_time: Some(ts),
+        memo: Some(Memo(large_memo.into())),
+    };
+
+    let result = update_check_and_decode!(
+        ctx.pic,
+        ctx.canister_id,
+        from.owner,
+        "icrc1_transfer",
+        candid::encode_one(transfer_arg).unwrap(),
+        Result<Nat, TransferError>
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_self_transfer() {
+    let ctx = TestContext::new();
+    let account = create_test_account(17);
+    let fee = ctx.get_transfer_fee().0.to_u64_digits()[0];
+
+    // Mint tokens
+    ctx.mint_tokens_for_test(&account, 1_000_000u64 + fee);
+
+    // Get current timestamp and fee
+    let ts = ctx.get_timestamp_ns();
+
+    // Transfer to self
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to: account,
+        amount: 100_000u64.into(),
+        fee: None,
+        created_at_time: Some(ts),
+        memo: None,
+    };
+
+    let result = update_check_and_decode!(
+        ctx.pic,
+        ctx.canister_id,
+        account.owner,
+        "icrc1_transfer",
+        candid::encode_one(transfer_arg).unwrap(),
+        Result<Nat, TransferError>
+    );
+    assert!(result.is_ok());
+
+    // Verify balance (should only be reduced by fee)
+    let balance = ctx.get_account_balance(&account);
+    assert_eq!(balance, Nat::from(1_000_000u64));
+}
