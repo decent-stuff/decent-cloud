@@ -406,10 +406,10 @@ fn test_offerings() {
     assert_eq!(test_get_id_reputation(&ctx, &np1), 0);
 
     // Test the rejection of a contract signing
-    contract_req_sign_flow(&ctx, &np1, &u1, &offering_id, false);
+    contract_req_sign_flow(&ctx, &np1, &u1, &offering_id, "memo1".to_owned(), false);
 
     // Test the acceptance of a contract signing
-    contract_req_sign_flow(&ctx, &np1, &u1, &offering_id, true);
+    contract_req_sign_flow(&ctx, &np1, &u1, &offering_id, "memo2".to_owned(), true);
     let np1_rep = test_get_id_reputation(&ctx, &np1);
     let u1_rep = test_get_id_reputation(&ctx, &u1);
 
@@ -433,6 +433,7 @@ fn contract_req_sign_flow(
     np1: &DccIdentity,
     u1: &DccIdentity,
     offering_id: &str,
+    memo: String,
     accept: bool,
 ) {
     if accept {
@@ -452,7 +453,7 @@ fn contract_req_sign_flow(
         u1,
         &np1.to_bytes_verifying(),
         offering_id,
-        "test_memo".to_string(),
+        memo,
         contract_amount,
     )
     .unwrap();

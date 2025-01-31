@@ -55,6 +55,10 @@ impl RecentCache {
         RECENT_CACHE.with(|cache| cache.borrow().keys().next_back().copied())
     }
 
+    pub fn get_next_tx_num() -> u64 {
+        RecentCache::get_max_tx_num().unwrap_or(0) + 1
+    }
+
     // Get the current size of the cache, in number of transactions
     pub fn get_num_entries() -> usize {
         RECENT_CACHE.with(|cache| cache.borrow().len())

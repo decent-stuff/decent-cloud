@@ -40,7 +40,7 @@ fn test_basic_transfer() {
         Result<Nat, TransferError>
     );
 
-    assert_eq!(result.unwrap(), 1u32);
+    assert_eq!(result.unwrap(), 2u32); // Initial mint + transfer
 
     // Check balances
     let from_balance = ctx.get_account_balance(&from);
@@ -97,7 +97,8 @@ fn test_multiple_transfers() {
         )
     };
 
-    for block_num in 1u64..=10 {
+    // Initial mint is transaction 1
+    for block_num in 2u64..=10 {
         let send_amount = 1_000u64 + block_num;
         let result = send_tx(send_amount);
         assert_eq!(result.unwrap(), block_num);
@@ -406,7 +407,7 @@ fn test_fee_handling() {
         amount: 1_000_000u64.into(),
         fee: Some(correct_fee),
         created_at_time: Some(ts),
-        memo: None,
+        memo: Some(Memo("tx1".as_bytes().to_vec().into())),
     };
 
     let result = update_check_and_decode!(
@@ -426,7 +427,7 @@ fn test_fee_handling() {
         amount: 1_000_000u64.into(),
         fee: None,
         created_at_time: Some(ts),
-        memo: None,
+        memo: Some(Memo("tx2".as_bytes().to_vec().into())),
     };
 
     let result = update_check_and_decode!(

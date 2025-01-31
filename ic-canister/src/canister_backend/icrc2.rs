@@ -111,18 +111,18 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
         args.expires_at,
         DC_TOKEN_TRANSFER_FEE_E9S,
         args.memo.map(|m| m.0.to_vec()).unwrap_or_default(),
+        args.created_at_time.unwrap_or(now),
     );
 
-    LEDGER_MAP.with(|ledger| {
-        let mut ledger = ledger.borrow_mut();
-        approval
-            .add_to_ledger(&mut ledger)
-            .map(|_| ledger.get_blocks_count().into())
-            .map_err(|e| ApproveError::GenericError {
-                error_code: 0u32.into(),
-                message: e.to_string(),
-            })
-    })
+    LEDGER_MAP
+        .with(|ledger| {
+            let mut ledger = ledger.borrow_mut();
+            approval.add_to_ledger(&mut ledger)
+        })
+        .map_err(|e| ApproveError::GenericError {
+            error_code: 133u32.into(),
+            message: e.to_string(),
+        })
 }
 
 pub fn _icrc2_transfer_from(args: TransferFromArgs) -> Result<Nat, TransferFromError> {

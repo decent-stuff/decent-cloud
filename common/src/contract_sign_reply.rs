@@ -170,7 +170,12 @@ pub fn do_contract_sign_reply(
         )?;
     } else {
         // Else, charge the provider the response fee, and revert the requester's reputation
-        charge_fees_to_account_no_bump_reputation(ledger, &provider_dcc_id, fees_e9s)?;
+        charge_fees_to_account_no_bump_reputation(
+            ledger,
+            &provider_dcc_id,
+            fees_e9s,
+            cs_req.request_memo(),
+        )?;
         ledger_add_reputation_change(ledger, &requester_dcc_id, -(fees_e9s as i64))?;
     }
 

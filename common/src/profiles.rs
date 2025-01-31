@@ -68,7 +68,7 @@ pub fn do_node_provider_update_profile(
     let payload_bytes = borsh::to_vec(&payload).unwrap();
 
     let fees = np_profile_update_fee_e9s();
-    charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, fees)?;
+    charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, fees, "update-profile")?;
 
     // Store the original signed payload in the ledger, to enable future verification
     ledger

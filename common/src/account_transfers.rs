@@ -1,13 +1,14 @@
 use crate::{
     account_balance_add, account_balance_get, account_balance_sub, amount_as_string,
     get_pubkey_from_principal, get_timestamp_ns, ledger_add_reputation_change,
-    slice_to_32_bytes_array, DccIdentity, TokenAmountE9s, TransferError, DC_TOKEN_TRANSFER_FEE_E9S,
-    LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
+    slice_to_32_bytes_array, AHashMap, DccIdentity, RecentCache, TokenAmountE9s, TransferError,
+    DC_TOKEN_TRANSFER_FEE_E9S, LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
+    TX_WINDOW,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use candid::{CandidType, Deserialize, Principal};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use data_encoding::BASE32;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
@@ -19,18 +20,57 @@ use ledger_map::{info, LedgerMap};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 
+pub struct RecentTx {
+    tx_num: u64,
+    timestamp: u64,
+}
+
 thread_local! {
     static FEES_SINK_ACCOUNTS: RefCell<Option<Vec<IcrcCompatibleAccount>>> = const { RefCell::new(None) };
+    // Store transactions with their timestamps for cleanup
+    static RECENT_TRANSACTIONS: RefCell<AHashMap<[u8; 32], RecentTx>> = RefCell::new(AHashMap::default());
+}
+
+pub fn recent_transactions_cleanup() {
+    RECENT_TRANSACTIONS.with(|transactions| {
+        let now = get_timestamp_ns();
+        let mut txs = transactions.borrow_mut();
+        txs.retain(|_, recent_tx| recent_tx.timestamp > now.saturating_sub(TX_WINDOW));
+    });
+}
+
+fn recent_transaction_find(tx_hash: &[u8; 32]) -> u64 {
+    RECENT_TRANSACTIONS.with(|transactions| {
+        // Check if this transaction already exists
+        match transactions.borrow().get(tx_hash) {
+            Some(recent_tx) => recent_tx.tx_num,
+            None => 0,
+        }
+    })
+}
+
+fn recent_transaction_add(tx_hash: &[u8; 32], tx_num: u64, timestamp: u64) {
+    RECENT_TRANSACTIONS.with(|transactions| {
+        let mut txs = transactions.borrow_mut();
+        txs.insert(*tx_hash, RecentTx { tx_num, timestamp });
+    });
 }
 
 pub fn ledger_funds_transfer(
     ledger: &mut LedgerMap,
     transfer: FundsTransfer,
-) -> Result<(), TransferError> {
-    info!("{}", transfer);
+) -> Result<Nat, TransferError> {
     let amount = transfer.amount();
     let transfer_bytes = transfer.to_bytes()?;
     let transfer_id = transfer.to_tx_id();
+
+    // Check for duplicate transaction
+    let duplicate_tx = recent_transaction_find(&transfer_id);
+    if duplicate_tx > 0 {
+        return Err(TransferError::Duplicate {
+            duplicate_of_block: Nat::from(duplicate_tx),
+        });
+    }
     if !transfer.from().is_minting_account() {
         let balance_from = account_balance_get(transfer.from());
         let amount_withdraw_from = amount + transfer.fee().unwrap_or_default();
@@ -58,13 +98,22 @@ pub fn ledger_funds_transfer(
         error_code: 10144u64.into(),
         message: e.to_string(),
     })?;
-    Ok(())
+    let new_tx_num = RecentCache::get_next_tx_num();
+    recent_transaction_add(
+        &transfer_id,
+        new_tx_num,
+        transfer.created_at_time().unwrap_or(get_timestamp_ns()),
+    );
+
+    RecentCache::add_entry(new_tx_num, transfer.into());
+    Ok(Nat::from(new_tx_num))
 }
 
 pub fn charge_fees_to_account_and_bump_reputation(
     ledger: &mut LedgerMap,
     dcc_id: &DccIdentity,
     amount_e9s: TokenAmountE9s,
+    memo: &str,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
@@ -80,7 +129,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
             amount_e9s.into(),
             Some(fees_sink_accounts()),
             Some(get_timestamp_ns()),
-            vec![],
+            memo.as_bytes().to_vec(),
             0,
             balance_from_before.saturating_sub(amount_e9s),
             0,
@@ -102,6 +151,7 @@ pub fn charge_fees_to_account_no_bump_reputation(
     ledger: &mut LedgerMap,
     dcc_id_charge: &DccIdentity,
     amount_e9s: TokenAmountE9s,
+    memo: &str,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
@@ -117,7 +167,7 @@ pub fn charge_fees_to_account_no_bump_reputation(
             Some(amount_e9s),
             Some(fees_sink_accounts()),
             Some(get_timestamp_ns()),
-            vec![],
+            memo.as_bytes().to_vec(),
             0,
             balance_from_before.saturating_sub(amount_e9s),
             0,
@@ -473,7 +523,20 @@ impl FundsTransfer {
 
     pub fn to_tx_id(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        hasher.update(self.to_bytes().unwrap());
+        hasher.update(self.from().owner.as_slice());
+        hasher.update(self.from().subaccount.clone().unwrap_or([0; 32].to_vec()));
+        hasher.update(self.to().owner.as_slice());
+        hasher.update(self.to().subaccount.clone().unwrap_or([0; 32].to_vec()));
+        hasher.update(self.amount().to_be_bytes());
+        if let Some(fee) = &self.fee() {
+            hasher.update(fee.to_be_bytes());
+        }
+        if !self.memo().is_empty() {
+            hasher.update(self.memo());
+        }
+        if let Some(created_at_time) = self.created_at_time() {
+            hasher.update(created_at_time.to_be_bytes());
+        }
         hasher.finalize().into()
     }
 }

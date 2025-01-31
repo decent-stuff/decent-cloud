@@ -287,7 +287,12 @@ pub fn do_contract_sign_request(
     let payload = ContractSignRequestPayload::new(&request_serialized, &crypto_signature).unwrap();
     let payload_bytes = borsh::to_vec(&payload).unwrap();
 
-    charge_fees_to_account_and_bump_reputation(ledger, &dcc_id, fees_e9s)?;
+    charge_fees_to_account_and_bump_reputation(
+        ledger,
+        &dcc_id,
+        fees_e9s,
+        contract_req.request_memo(),
+    )?;
 
     let contract_id = payload.calc_contract_id();
     ledger.upsert(

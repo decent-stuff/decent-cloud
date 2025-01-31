@@ -3,11 +3,12 @@ use candid::Principal;
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
     get_account_from_pubkey, get_num_offerings, get_num_providers, get_pubkey_from_principal,
-    refresh_caches_from_ledger, reputation_get, reward_e9s_per_block_recalculate,
-    rewards_current_block_checked_in, rewards_distribute, rewards_pending_e9s, set_test_config,
-    ContractId, ContractReqSerialized, LedgerCursor, TokenAmountE9s, BLOCK_INTERVAL_SECS,
-    DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
-    LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    recent_transactions_cleanup, refresh_caches_from_ledger, reputation_get,
+    reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
+    rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
+    RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS, DATA_PULL_BYTES_BEFORE_LEN,
+    LABEL_CONTRACT_SIGN_REQUEST, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE,
+    LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
     MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
 use flate2::{write::ZlibEncoder, Compression};
@@ -78,7 +79,8 @@ fn ledger_periodic_task() {
         ic_cdk::api::set_certified_data(&root_hash);
 
         // Cleanup old transactions that are used for deduplication
-        crate::canister_backend::icrc1::cleanup_old_transactions();
+        recent_transactions_cleanup();
+        RecentCache::ensure_cache_length();
     });
 }
 

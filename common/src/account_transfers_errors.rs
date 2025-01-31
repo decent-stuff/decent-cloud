@@ -1,7 +1,7 @@
 #[cfg(target_arch = "wasm32")]
 #[allow(unused_imports)]
 use ic_cdk::println;
-use icrc_ledger_types::icrc1::transfer::BlockIndex;
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferError as Icrc1TransferError};
 use ledger_map::LedgerError;
 
 use crate::Icrc1Account;
@@ -54,6 +54,62 @@ pub enum TransferError {
         error_code: Nat,
         message: String,
     },
+}
+
+impl From<TransferError> for Icrc1TransferError {
+    fn from(e: TransferError) -> Icrc1TransferError {
+        match e {
+            TransferError::BadFee { expected_fee } => Icrc1TransferError::BadFee {
+                expected_fee: expected_fee.into(),
+            },
+            TransferError::BadBurn { min_burn_amount } => Icrc1TransferError::BadBurn {
+                min_burn_amount: min_burn_amount.into(),
+            },
+            TransferError::InsufficientFunds {
+                current_balance, ..
+            } => Icrc1TransferError::InsufficientFunds {
+                balance: current_balance.into(),
+            },
+            TransferError::AmountMismatch {
+                from_amount,
+                to_amount,
+            } => Icrc1TransferError::GenericError {
+                error_code: Nat::from(1u8),
+                message: format!("Amount mismatch: from {} to {}", from_amount, to_amount),
+            },
+            TransferError::TooOld => Icrc1TransferError::TooOld {},
+            TransferError::CreatedInFuture { ledger_time } => {
+                Icrc1TransferError::CreatedInFuture { ledger_time }
+            }
+            TransferError::TemporarilyUnavailable => Icrc1TransferError::TemporarilyUnavailable {},
+            TransferError::Duplicate { duplicate_of_block } => Icrc1TransferError::Duplicate {
+                duplicate_of: duplicate_of_block,
+            },
+            TransferError::LedgerError { message }
+            | TransferError::SerdeError { message }
+            | TransferError::BalanceError { message } => Icrc1TransferError::GenericError {
+                error_code: Nat::from(2u8),
+                message,
+            },
+            TransferError::InvalidFeePayer { fee_payer_index } => {
+                Icrc1TransferError::GenericError {
+                    error_code: Nat::from(3u8),
+                    message: format!("Invalid fee payer index: {}", fee_payer_index),
+                }
+            }
+            TransferError::TooManyAccounts { max_accounts } => Icrc1TransferError::GenericError {
+                error_code: Nat::from(4u8),
+                message: format!("Too many accounts. Maximum allowed: {}", max_accounts),
+            },
+            TransferError::GenericError {
+                error_code,
+                message,
+            } => Icrc1TransferError::GenericError {
+                error_code,
+                message,
+            },
+        }
+    }
 }
 
 impl std::fmt::Display for TransferError {

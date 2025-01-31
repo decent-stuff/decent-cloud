@@ -1,8 +1,16 @@
-use crate::{AHashMap, IcrcCompatibleAccount, TokenAmountE9s, LABEL_DC_TOKEN_APPROVAL};
+use crate::{
+    AHashMap, IcrcCompatibleAccount, RecentCache, TokenAmountE9s, DC_TOKEN_TRANSFER_FEE_E9S,
+    LABEL_DC_TOKEN_APPROVAL,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use icrc_ledger_types::{icrc1::account::Account, icrc2::allowance::Allowance};
+use candid::Nat;
+use icrc_ledger_types::{
+    icrc1::{account::Account, transfer::Memo},
+    icrc2::allowance::Allowance,
+    icrc3::transactions::{Approve, Transaction},
+};
 use ledger_map::{LedgerError, LedgerMap};
 use sha2::Digest;
 
@@ -36,6 +44,7 @@ pub struct FundsTransferApprovalV1 {
     expires_at: Option<u64>,
     fee: TokenAmountE9s,
     memo: Vec<u8>,
+    created_at_time: u64,
 }
 
 impl FundsTransferApprovalV1 {
@@ -46,6 +55,7 @@ impl FundsTransferApprovalV1 {
         expires_at: Option<u64>,
         fee: TokenAmountE9s,
         memo: Vec<u8>,
+        created_at_time: u64,
     ) -> Self {
         Self {
             approver,
@@ -54,6 +64,7 @@ impl FundsTransferApprovalV1 {
             expires_at,
             fee,
             memo,
+            created_at_time,
         }
     }
 
@@ -113,6 +124,7 @@ impl FundsTransferApproval {
         expires_at: Option<u64>,
         fee: TokenAmountE9s,
         memo: Vec<u8>,
+        created_at_time: u64,
     ) -> Self {
         Self::V1(FundsTransferApprovalV1 {
             approver,
@@ -121,6 +133,7 @@ impl FundsTransferApproval {
             expires_at,
             fee,
             memo,
+            created_at_time,
         })
     }
 
@@ -134,12 +147,15 @@ impl FundsTransferApproval {
         borsh::from_slice(bytes)
     }
 
-    pub fn add_to_ledger(&self, ledger: &mut LedgerMap) -> Result<(), LedgerError> {
+    pub fn add_to_ledger(&self, ledger: &mut LedgerMap) -> Result<Nat, LedgerError> {
         ledger.upsert(
             LABEL_DC_TOKEN_APPROVAL,
             self.to_tx_id(),
             borsh::to_vec(self).unwrap(),
-        )
+        )?;
+        let new_tx_num = RecentCache::get_next_tx_num();
+        RecentCache::add_entry(new_tx_num, self.into());
+        Ok(new_tx_num.into())
     }
 
     pub fn approver(&self) -> &IcrcCompatibleAccount {
@@ -159,6 +175,18 @@ impl FundsTransferApproval {
             FundsTransferApproval::V1(v1) => v1.allowance(),
         }
     }
+
+    pub fn memo(&self) -> &[u8] {
+        match self {
+            FundsTransferApproval::V1(v1) => &v1.memo,
+        }
+    }
+
+    pub fn created_at_time(&self) -> u64 {
+        match self {
+            FundsTransferApproval::V1(v1) => v1.created_at_time,
+        }
+    }
 }
 
 impl std::fmt::Display for FundsTransferApproval {
@@ -169,23 +197,29 @@ impl std::fmt::Display for FundsTransferApproval {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn ledger_funds_transfer_approve(
-    ledger: &mut LedgerMap,
-    approver: &IcrcCompatibleAccount,
-    spender: &IcrcCompatibleAccount,
-    allowance: TokenAmountE9s,
-    expires_at: Option<u64>,
-    fee: TokenAmountE9s,
-    memo: Vec<u8>,
-) -> Result<(), LedgerError> {
-    let approval = FundsTransferApproval::new(
-        approver.clone(),
-        spender.clone(),
-        allowance,
-        expires_at,
-        fee,
-        memo,
-    );
-    approval.add_to_ledger(ledger)
+impl From<&FundsTransferApproval> for Transaction {
+    fn from(fta: &FundsTransferApproval) -> Self {
+        let allowance = fta.allowance();
+        Transaction {
+            kind: "transfer".into(),
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: Some(Approve {
+                from: fta.approver().into(),
+                spender: fta.spender().into(),
+                amount: allowance.allowance,
+                expected_allowance: None,
+                expires_at: allowance.expires_at,
+                memo: if fta.memo().is_empty() {
+                    None
+                } else {
+                    Some(Memo(fta.memo().to_vec().into()))
+                },
+                fee: Some(DC_TOKEN_TRANSFER_FEE_E9S.into()),
+                created_at_time: Some(fta.created_at_time()),
+            }),
+            timestamp: fta.created_at_time(),
+        }
+    }
 }

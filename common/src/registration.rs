@@ -81,7 +81,21 @@ pub fn do_account_register(
             dcc_id.to_ic_principal(),
             label
         );
-        charge_fees_to_account_no_bump_reputation(ledger, &dcc_id, amount as TokenAmountE9s)?;
+        charge_fees_to_account_no_bump_reputation(
+            ledger,
+            &dcc_id,
+            amount as TokenAmountE9s,
+            format!(
+                "register-{}",
+                dcc_id
+                    .to_ic_principal()
+                    .to_string()
+                    .split_once('-')
+                    .expect("Invalid principal")
+                    .0
+            )
+            .as_str(),
+        )?;
         amount
     } else {
         0
