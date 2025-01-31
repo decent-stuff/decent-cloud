@@ -110,7 +110,10 @@ fn test_multiple_transfers() {
     assert_eq!(get_tx_response1.log_length, 10u8);
 
     assert_eq!(get_tx_response1.transactions.len(), 1);
-    assert_eq!(get_tx_response1.transactions[0].kind, "xfer".to_string());
+    assert_eq!(
+        get_tx_response1.transactions[0].kind,
+        "transfer".to_string()
+    );
 
     ctx.ffwd_to_next_block(ts_ns);
 

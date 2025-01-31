@@ -530,7 +530,7 @@ impl From<FundsTransfer> for Transaction {
             }
         } else {
             Transaction {
-                kind: "xfer".into(),
+                kind: "transfer".into(),
                 mint: None,
                 burn: None,
                 transfer: Some(Transfer {
