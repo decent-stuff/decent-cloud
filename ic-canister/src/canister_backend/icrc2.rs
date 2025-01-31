@@ -3,6 +3,7 @@ use candid::Nat;
 use dcc_common::{
     account_balance_get, approval_get, approval_update, get_timestamp_ns, ledger_funds_transfer,
     nat_to_balance, FundsTransfer, FundsTransferApproval, IcrcCompatibleAccount, TokenAmountE9s,
+    MEMO_BYTES_MAX,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc1::account::Account;
@@ -29,6 +30,16 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
             error_code: 1u32.into(),
             message: "Cannot approve transfers to self".to_string(),
         });
+    }
+
+    // Check the size of the memo
+    if let Some(memo) = &args.memo {
+        if memo.0.len() > MEMO_BYTES_MAX {
+            return Err(ApproveError::GenericError {
+                error_code: 2u32.into(),
+                message: "Memo too large".to_string(),
+            });
+        }
     }
 
     // Check if caller has sufficient balance for fee
@@ -92,7 +103,11 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
         args.amount
             .min(TokenAmountE9s::MAX.into())
             .0
-            .to_u64_digits()[0],
+            .to_u64_digits()
+            .iter()
+            .next()
+            .cloned()
+            .unwrap_or_default(),
         args.expires_at,
         DC_TOKEN_TRANSFER_FEE_E9S,
         args.memo.map(|m| m.0.to_vec()).unwrap_or_default(),
@@ -120,7 +135,7 @@ pub fn _icrc2_transfer_from(args: TransferFromArgs) -> Result<Nat, TransferFromE
     let from: IcrcCompatibleAccount = args.from.into();
     let to: IcrcCompatibleAccount = args.to.into();
     let amount = nat_to_balance(&args.amount);
-    let fee = nat_to_balance(&args.fee.unwrap_or_default());
+    let fee = nat_to_balance(&args.fee.unwrap_or(DC_TOKEN_TRANSFER_FEE_E9S.into()));
 
     // Check allowance
     let approval = approval_get(from.clone().into(), spender);
