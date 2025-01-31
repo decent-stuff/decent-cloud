@@ -1,8 +1,8 @@
 use crate::{
     account_balance_add, account_balance_get, account_balance_sub, amount_as_string,
     get_pubkey_from_principal, get_timestamp_ns, ledger_add_reputation_change,
-    slice_to_32_bytes_array, DccIdentity, TokenAmountE9s, TransferError, LABEL_DC_TOKEN_TRANSFER,
-    MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
+    slice_to_32_bytes_array, DccIdentity, TokenAmountE9s, TransferError, DC_TOKEN_TRANSFER_FEE_E9S,
+    LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -538,7 +538,7 @@ impl From<FundsTransfer> for Transaction {
                     to: ft.to().into(),
                     spender: None,
                     amount: ft.amount().into(),
-                    fee: None,
+                    fee: Some(DC_TOKEN_TRANSFER_FEE_E9S.into()),
                     memo: None,
                     created_at_time: ft.created_at_time(),
                 }),
