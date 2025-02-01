@@ -108,7 +108,7 @@ fn test_multiple_transfers() {
 
     let get_tx_response1 = get_tx(10, 1);
     assert_eq!(get_tx_response1.first_index, 10u64);
-    assert_eq!(get_tx_response1.log_length, 10u8);
+    assert_eq!(get_tx_response1.log_length, 11u8);
 
     assert_eq!(get_tx_response1.transactions.len(), 1);
     assert_eq!(

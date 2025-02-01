@@ -29,7 +29,7 @@ pub fn _get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse
     GetTransactionsResponse {
         // We don't have archived transactions in this implementation, so the first_index is always the requested tx number
         first_index: txs_from.into(),
-        log_length: RecentCache::get_max_tx_num().unwrap_or_default().into(),
+        log_length: candid::Nat::from(RecentCache::get_next_tx_num()),
         transactions: txs,
         archived_transactions: vec![],
     }
