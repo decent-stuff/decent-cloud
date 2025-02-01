@@ -581,7 +581,7 @@ impl From<FundsTransfer> for Transaction {
                 kind: "burn".into(),
                 mint: None,
                 burn: Some(Burn {
-                    amount: ft.amount().into(),
+                    amount: (ft.amount() + ft.fee().unwrap_or_default()).into(),
                     from: ft.from().into(),
                     spender: None,
                     memo: None,
