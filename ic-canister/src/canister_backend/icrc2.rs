@@ -104,8 +104,7 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
             .min(TokenAmountE9s::MAX.into())
             .0
             .to_u64_digits()
-            .iter()
-            .next()
+            .first()
             .cloned()
             .unwrap_or_default(),
         args.expires_at,
