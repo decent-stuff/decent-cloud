@@ -246,21 +246,23 @@ pub fn do_node_provider_check_in(
             amount_as_string(amount as TokenAmountE9s),
             dcc_id.to_ic_principal()
         );
+        let mut fee_memo = format!(
+            "check-in-{}-{}-{}",
+            dcc_id
+                .to_ic_principal()
+                .to_text()
+                .split_once('-')
+                .expect("Invalid principal")
+                .0,
+            ledger.get_blocks_count(),
+            memo
+        );
+        fee_memo.truncate(MEMO_BYTES_MAX);
         charge_fees_to_account_no_bump_reputation(
             ledger,
             &dcc_id,
             amount as TokenAmountE9s,
-            &format!(
-                "check-in-{}-{}-{}",
-                dcc_id
-                    .to_ic_principal()
-                    .to_text()
-                    .split_once('-')
-                    .expect("Invalid principal")
-                    .0,
-                ledger.get_blocks_count(),
-                memo
-            )[..MEMO_BYTES_MAX],
+            &fee_memo,
         )?;
         amount
     } else {
