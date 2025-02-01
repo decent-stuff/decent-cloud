@@ -20,12 +20,7 @@ pub fn _get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
 
-    let mut txs = _get_committed_transactions(txs_from, txs_length);
-    let txs_missing = txs_length.saturating_sub(txs.len() as u64);
-    if txs_missing > 0 {
-        let txs_uncommitted = _get_uncommitted_transactions(txs_missing);
-        txs.extend(txs_uncommitted);
-    }
+    let txs = _get_committed_transactions(txs_from, txs_length);
     GetTransactionsResponse {
         // We don't have archived transactions in this implementation, so the first_index is always the requested tx number
         first_index: txs_from.into(),
