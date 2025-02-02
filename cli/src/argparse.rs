@@ -76,6 +76,10 @@ pub struct AccountArgs {
     #[arg(long, requires = "identity")]
     pub balance: bool,
 
+    /// List all accounts in the local ledger
+    #[arg(long, visible_aliases = ["list-accounts"])]
+    pub list_all: bool,
+
     /// Transfer funds to another account
     #[arg(long, requires = "identity")]
     pub transfer_to: Option<String>,
@@ -163,6 +167,10 @@ pub struct LedgerLocalArgs {
     /// List ledger entries
     #[arg(long)]
     pub list_entries: bool,
+
+    /// List all accounts in the local ledger
+    #[arg(long)]
+    pub list_accounts: bool,
 }
 
 #[derive(Subcommand, PartialEq)]

@@ -16,7 +16,7 @@ const PUSH_BLOCK_SIZE: u64 = 1024 * 1024;
 
 pub async fn ledger_data_fetch(
     ledger_canister: &LedgerCanister,
-    ledger_local: &LedgerMap,
+    ledger_local: &mut LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let ledger_file_path = ledger_local
         .get_file_path()
@@ -99,6 +99,10 @@ pub async fn ledger_data_fetch(
     }
     // Set the modified time to the current time, to mark that the data is up-to-date
     filetime::set_file_mtime(ledger_file_path, std::time::SystemTime::now().into())?;
+
+    if !data.is_empty() {
+        ledger_local.refresh_ledger()?;
+    }
 
     Ok(())
 }

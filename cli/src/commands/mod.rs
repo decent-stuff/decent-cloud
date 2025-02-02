@@ -45,7 +45,14 @@ pub async fn handle_command(
     match command {
         Commands::Keygen(args) => handle_keygen_command(args, identity).await,
         Commands::Account(args) => {
-            handle_account_command(args, network_url, ledger_canister_id, identity).await
+            handle_account_command(
+                args,
+                network_url,
+                ledger_canister_id,
+                identity,
+                &ledger_local,
+            )
+            .await
         }
         Commands::Np(args) => {
             handle_np_command(

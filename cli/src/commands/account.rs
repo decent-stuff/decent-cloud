@@ -1,5 +1,7 @@
 use crate::argparse::AccountArgs;
+use crate::identity::{list_identities, ListIdentityType};
 use crate::ledger::handle_funds_transfer;
+use crate::LedgerMap;
 use candid::Principal as IcPrincipal;
 use dcc_common::{
     account_balance_get_as_string, DccIdentity, IcrcCompatibleAccount, TokenAmountE9s,
@@ -12,7 +14,12 @@ pub async fn handle_account_command(
     network_url: &str,
     ledger_canister_id: IcPrincipal,
     identity: Option<String>,
+    ledger_local: &LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if account_args.list_all {
+        return list_identities(ledger_local, ListIdentityType::All, true);
+    }
+
     let identity = identity.expect("Identity must be specified for this command, use --identity");
     let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 

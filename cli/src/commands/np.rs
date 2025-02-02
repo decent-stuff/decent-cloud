@@ -14,7 +14,7 @@ pub async fn handle_np_command(
     network_url: &str,
     ledger_canister_id: candid::Principal,
     identity: Option<String>,
-    ledger_local: LedgerMap,
+    mut ledger_local: LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match np_cmd {
         NpCommands::List(list_args) => {
@@ -73,7 +73,7 @@ pub async fn handle_np_command(
                     let canister =
                         LedgerCanister::new_without_identity(network_url, ledger_canister_id)
                             .await?;
-                    ledger_data_fetch(&canister, &ledger_local).await?;
+                    ledger_data_fetch(&canister, &mut ledger_local).await?;
 
                     dcc_common::refresh_caches_from_ledger(&ledger_local)
                         .expect("Loading balances from ledger failed");

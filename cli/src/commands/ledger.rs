@@ -1,4 +1,5 @@
 use crate::argparse::{LedgerLocalArgs, LedgerRemoteCommands};
+use crate::identity::{list_identities, ListIdentityType};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use candid::{Decode, Encode};
@@ -15,7 +16,9 @@ pub async fn handle_ledger_local_command(
     local_args: LedgerLocalArgs,
     ledger_local: LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if local_args.list_entries {
+    if local_args.list_accounts {
+        return list_identities(&ledger_local, ListIdentityType::All, true);
+    } else if local_args.list_entries {
         println!("Entries:");
         for entry in ledger_local.iter(None) {
             match entry.label() {
@@ -44,7 +47,7 @@ pub async fn handle_ledger_remote_command(
     network_url: &str,
     ledger_canister_id: candid::Principal,
     identity: Option<String>,
-    ledger_local: LedgerMap,
+    mut ledger_local: LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let local_ledger_path = ledger_local
         .get_file_path()
@@ -54,7 +57,7 @@ pub async fn handle_ledger_remote_command(
         LedgerRemoteCommands::DataFetch => {
             let canister =
                 LedgerCanister::new_without_identity(network_url, ledger_canister_id).await?;
-            return crate::ledger::ledger_data_fetch(&canister, &ledger_local).await;
+            return crate::ledger::ledger_data_fetch(&canister, &mut ledger_local).await;
         }
         LedgerRemoteCommands::DataPushAuthorize | LedgerRemoteCommands::DataPush => {
             let identity =
