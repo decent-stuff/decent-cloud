@@ -15,4 +15,6 @@ target/
 .vscode/settings.json
 .pixi
 .cache/cargo-make/
+node_modules/
+dist/
 whitepaper.pdf

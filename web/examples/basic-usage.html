@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Decent Cloud Web Client Example</title>
+</head>
+<body>
+    <h1>Decent Cloud Web Client Example</h1>
+    <button id="fetchData">Fetch Ledger Data</button>
+    <button id="clearData">Clear Storage</button>
+    <pre id="output"></pre>
+
+    <script type="module">
+        import { DecentCloudWebClient } from '../dist/index.js';
+
+        // Initialize the client
+        const client = new DecentCloudWebClient(
+            "https://icp-api.io",
+            "ggi4a-wyaaa-aaaai-actqq-cai"
+        );
+
+        // Setup UI handlers
+        document.getElementById('fetchData').addEventListener('click', async () => {
+            try {
+                await client.fetchLedgerData();
+                const position = client.getCurrentPosition();
+                document.getElementById('output').textContent =
+                    `Successfully fetched data. Current position: ${position}`;
+            } catch (error) {
+                document.getElementById('output').textContent =
+                    `Error: ${error.message}`;
+            }
+        });
+
+        // Fetch latest ledger data
+        await client.fetchLedgerData();
+
+        // Get current position
+        const position = client.getCurrentPosition();
+        console.log(`Current ledger position: ${position}`);
+    </script>
+</body>
+</html>

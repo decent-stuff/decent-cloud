@@ -1,0 +1,22 @@
+{
+  "name": "@decent-stuff/web-agent",
+  "version": "0.1.0",
+  "description": "Decent Cloud Web Browser Agent / Client",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@dfinity/agent": "2.2.0",
+    "@dfinity/candid": "2.2.0",
+    "@dfinity/principal": "2.2.0",
+    "@decent-stuff/ledger-map": "0.4.2"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "@types/node": "22.13.0"
+  }
+}
