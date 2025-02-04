@@ -1,0 +1,23 @@
+[package]
+name = "web"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "decent_cloud_web"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+# [target.'cfg(target_arch = "wasm32")'.dependencies]
+dcc-common = { path = "../common" }
+decent-cloud = { path = "../cli" }
+getrandom.workspace = true
+js-sys.workspace = true
+ledger-map = { git = "https://github.com/decent-stuff/ledger-map.git", branch = "main", features = [
+    "browser",
+] }
+wasm-bindgen-test.workspace = true
+wasm-bindgen.workspace = true
+web-sys.workspace = true

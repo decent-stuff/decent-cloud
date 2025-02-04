@@ -7,6 +7,7 @@ members = [
     "np-offering",
     "np-profile",
     "np-json-search",
+    "web",
 ]
 
 [workspace.package]
@@ -40,16 +41,20 @@ flate2 = "1.0"
 filetime = "0.2"
 fs-err = "3.1.0"
 function_name = "0.3"
+getrandom = { version = "0.3", default-features = false, features = [
+    "wasm_js",
+] }
 hex = "0.4"
 hmac = "0.12"
 ic-agent = "0.39.3"
 ic-canister-log = "0.2"
 ic-cdk = "0.17"
+ic-cdk-timers = { version = "0.11.0" }
 ic-certification = "3.0.2"
 ic-metrics-encoder = "1.1"
-ic-cdk-timers = "0.11"
 icrc-ledger-types = "0.1"
 indexmap = "2.7"
+js-sys = { version = "0.3.77" }
 # ledger-map = { path = "../ledger-map", features = [ "ic" ] }
 ledger-map = { git = "https://github.com/decent-stuff/ledger-map.git", branch = "main", features = [
     "ic",
@@ -78,4 +83,7 @@ tabular = "0.2"
 tempfile = "3.16"
 tiny-bip39 = "2.0"
 tokio = { version = "1.43", features = ["full"] }
+wasm-bindgen = { version = "0.2.100" }
+wasm-bindgen-test = { version = "0.3" }
+web-sys = { version = "0.3.77", features = ["Storage", "Window", "console"] }
 which = "7.0"
