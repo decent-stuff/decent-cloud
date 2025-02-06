@@ -1,11 +1,14 @@
 use crate::{info, LedgerEntry, LedgerMap};
-use dcc_common::{cursor_from_data, CursorDirection, LedgerCursor};
+use dcc_common::{cursor_from_data, CursorDirection, LedgerCursor, DATA_PULL_BYTES_BEFORE_LEN};
+use decent_cloud::ledger_canister_client::LedgerCanister;
+use ic_agent::export::Principal;
 use js_sys::{Array, Uint8Array};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct WasmLedgerMap {
     inner: LedgerMap,
+    canister: LedgerCanister,
 }
 
 #[wasm_bindgen]
@@ -77,10 +80,19 @@ impl WasmLedgerMapEntry {
 #[wasm_bindgen]
 impl WasmLedgerMap {
     #[wasm_bindgen(constructor)]
-    pub fn new(labels_to_index: Option<Vec<String>>) -> Result<WasmLedgerMap, JsValue> {
+    pub async fn new(labels_to_index: Option<Vec<String>>) -> Result<WasmLedgerMap, JsValue> {
         let inner =
             LedgerMap::new(labels_to_index).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        Ok(WasmLedgerMap { inner })
+        Ok(WasmLedgerMap {
+            inner,
+            canister: LedgerCanister::new(
+                Principal::from_text("ggi4a-wyaaa-aaaai-actqq-cai").unwrap(),
+                None,
+                "https://icp-api.io",
+            )
+            .await
+            .unwrap(),
+        })
     }
 
     pub fn upsert(&mut self, label: &str, key: &[u8], value: &[u8]) -> Result<(), JsValue> {
@@ -169,6 +181,50 @@ impl WasmLedgerMap {
             self.inner.get_next_block_start_pos(),
             self.inner.get_next_block_start_pos(),
         );
-        ledger_cursor_local
+        // ledger_cursor_local
+
+        let bytes_before = if ledger_cursor_local.position > DATA_PULL_BYTES_BEFORE_LEN as u64 {
+            let mut buf = vec![0u8; DATA_PULL_BYTES_BEFORE_LEN as usize];
+            ledger_map::platform_specific::persistent_storage_read(
+                ledger_cursor_local.position - DATA_PULL_BYTES_BEFORE_LEN as u64,
+                &mut buf,
+            )
+            .expect("Failed to read from persistent storage");
+            Some(buf)
+        } else {
+            None
+        };
+
+        info!(
+            "Fetching data from the Ledger canister {}, with local cursor: {} and bytes before: {:?}",
+            ledger_canister.canister_id(),
+            ledger_cursor_local,
+            hex::encode(bytes_before.as_ref().unwrap_or(&vec![])),
+        );
+        let (cursor_remote, data) = ledger_canister
+            .data_fetch(Some(ledger_cursor_local.to_request_string()), bytes_before)
+            .await?;
+        let cursor_remote = LedgerCursor::new_from_string(cursor_remote);
+        let offset_remote = cursor_remote.position;
+        info!(
+            "Ledger canister returned position {:0x}, full cursor: {}",
+            offset_remote, cursor_remote
+        );
+        if offset_remote < cursor_local.position {
+            return Err(format!(
+                "Ledger canister has less data than available locally {} < {} bytes",
+                offset_remote, cursor_local.position
+            )
+            .into());
+        }
+        if data.len() <= 64 {
+            info!("Data: {} bytes ==> {:?}", data.len(), data);
+        } else {
+            info!(
+                "Data: {} bytes ==> {:?}...",
+                data.len(),
+                &data[..64.min(data.len())]
+            );
+        }
     }
 }

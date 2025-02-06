@@ -3895,9 +3895,12 @@ dependencies = [
  "dcc-common",
  "decent-cloud",
  "getrandom 0.3.1",
+ "hex",
+ "ic-agent",
  "js-sys",
  "ledger-map",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
 ]

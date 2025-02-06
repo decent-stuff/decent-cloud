@@ -14,10 +14,13 @@ crate-type = ["cdylib", "rlib"]
 dcc-common = { path = "../common" }
 decent-cloud = { path = "../cli" }
 getrandom.workspace = true
+hex.workspace = true
+ic-agent.workspace = true
 js-sys.workspace = true
 ledger-map = { git = "https://github.com/decent-stuff/ledger-map.git", branch = "main", features = [
     "browser",
 ] }
+wasm-bindgen-futures.workspace = true
 wasm-bindgen-test.workspace = true
 wasm-bindgen.workspace = true
 web-sys.workspace = true
