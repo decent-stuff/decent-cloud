@@ -1,55 +1,64 @@
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::println;
-use std::{cell::RefCell, collections::HashMap, io::Error};
-
-use borsh::{BorshDeserialize, BorshSerialize};
-use function_name::named;
-use ledger_map::{warn, LedgerMap};
-use serde::{Deserialize, Serialize, Serializer};
-use sha2::{Digest, Sha256};
-
 use crate::{
     account_balance_get, amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info,
     AHashMap, DccIdentity, TokenAmountE9s, LABEL_CONTRACT_SIGN_REQUEST,
 };
+use borsh::{BorshDeserialize, BorshSerialize};
+use function_name::named;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::println;
+use ledger_map::{warn, LedgerMap};
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize, Serializer};
+use sha2::{Digest, Sha256};
+use std::io::Error;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub type ContractId = Vec<u8>;
 pub type ContractReqSerialized = Vec<u8>;
 
-thread_local! {
-    /// Key is a 32-byte contract id
-    /// Value is a ContractSignRequest
-    static CONTRACTS_CACHE_OPEN: RefCell<AHashMap<Vec<u8>, ContractSignRequest>> = RefCell::new(HashMap::default());
+/// Key is a 32-byte contract id
+/// Value is a ContractSignRequest
+static CONTRACTS_OPEN_CACHE: OnceCell<Arc<Mutex<AHashMap<Vec<u8>, ContractSignRequest>>>> =
+    OnceCell::new();
+
+pub fn contracts_open_cache_init() {
+    if CONTRACTS_OPEN_CACHE.get().is_none() {
+        CONTRACTS_OPEN_CACHE
+            .set(Arc::new(Mutex::new(AHashMap::default())))
+            .expect("Failed to initialize CONTRACTS_OPEN_CACHE");
+    }
+}
+
+pub fn contracts_cache_get_open(
+) -> tokio::sync::MutexGuard<'static, AHashMap<Vec<u8>, ContractSignRequest>> {
+    CONTRACTS_OPEN_CACHE
+        .get()
+        .expect("CONTRACTS_OPEN_CACHE not initialized")
+        .blocking_lock()
 }
 
 pub fn contracts_cache_get_open_for_provider(
     filter_provider_pubkey_bytes: Option<Vec<u8>>,
 ) -> Vec<(Vec<u8>, ContractSignRequest)> {
-    CONTRACTS_CACHE_OPEN.with(|contracts| {
-        contracts
-            .borrow()
-            .iter()
-            .filter(move |(_, req)| match &filter_provider_pubkey_bytes {
-                None => true, // No filter ==> include all entries
-                Some(filter_provider_pubkey_bytes) => {
-                    req.provider_pubkey_bytes() == filter_provider_pubkey_bytes
-                }
-            })
-            .map(|(key, req)| (key.clone(), req.clone()))
-            .collect()
-    })
+    contracts_cache_get_open()
+        .iter()
+        .filter(move |(_, req)| match &filter_provider_pubkey_bytes {
+            None => true, // No filter ==> include all entries
+            Some(filter_provider_pubkey_bytes) => {
+                req.provider_pubkey_bytes() == filter_provider_pubkey_bytes
+            }
+        })
+        .map(|(key, req)| (key.clone(), req.clone()))
+        .collect()
 }
 
 pub fn contracts_cache_open_add(contract_id: Vec<u8>, req: ContractSignRequest) {
-    CONTRACTS_CACHE_OPEN.with(|contracts| {
-        contracts.borrow_mut().insert(contract_id, req);
-    })
+    contracts_cache_get_open().insert(contract_id.clone(), req.clone());
 }
 
 pub fn contracts_cache_open_remove(contract_id: &[u8]) {
-    CONTRACTS_CACHE_OPEN.with(|contracts| {
-        contracts.borrow_mut().remove(contract_id);
-    })
+    contracts_cache_get_open().remove(contract_id);
 }
 
 pub fn contract_sign_fee_e9s(contract_value_e9s: TokenAmountE9s) -> TokenAmountE9s {

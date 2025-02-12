@@ -12,28 +12,40 @@ use icrc_ledger_types::{
     icrc3::transactions::{Approve, Transaction},
 };
 use ledger_map::{LedgerError, LedgerMap};
+use once_cell::sync::OnceCell;
 use sha2::Digest;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-thread_local! {
-    static APPROVALS: std::cell::RefCell<AHashMap<(Account, Account), Allowance>> = std::cell::RefCell::new(AHashMap::default());
+static APPROVALS: OnceCell<Arc<Mutex<AHashMap<(Account, Account), Allowance>>>> = OnceCell::new();
+
+pub(crate) fn approvals_cache_init() {
+    if APPROVALS.get().is_none() {
+        APPROVALS
+            .set(Arc::new(Mutex::new(AHashMap::default())))
+            .unwrap();
+    }
+}
+
+fn approvals_cache_lock(
+) -> tokio::sync::MutexGuard<'static, AHashMap<(Account, Account), Allowance>> {
+    APPROVALS
+        .get()
+        .expect("APPROVALS not initialized")
+        .blocking_lock()
 }
 
 pub fn approval_update(account: Account, spender: Account, allowance: Allowance) {
-    APPROVALS.with(|approvals| {
-        let mut approvals = approvals.borrow_mut();
-        if allowance.allowance > 0u32 {
-            approvals.insert((account, spender), allowance);
-        } else {
-            approvals.remove(&(account, spender));
-        }
-    })
+    let mut approvals = approvals_cache_lock();
+    if allowance.allowance > 0u32 {
+        approvals.insert((account, spender), allowance);
+    } else {
+        approvals.remove(&(account, spender));
+    }
 }
 
 pub fn approval_get(account: Account, spender: Account) -> Option<Allowance> {
-    APPROVALS.with(|approvals| {
-        let approvals = approvals.borrow();
-        approvals.get(&(account, spender)).cloned()
-    })
+    approvals_cache_lock().get(&(account, spender)).cloned()
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]

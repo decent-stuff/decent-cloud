@@ -4,42 +4,52 @@ use borsh::{BorshDeserialize, BorshSerialize};
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::{warn, LedgerError, LedgerMap};
+use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
-use std::{cell::RefCell, collections::HashMap};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-thread_local! {
-    static REPUTATIONS: RefCell<AHashMap<Vec<u8>, u64>> = RefCell::new(HashMap::default());
+static REPUTATIONS: OnceCell<Arc<Mutex<AHashMap<Vec<u8>, u64>>>> = OnceCell::new();
+
+pub fn reputations_cache_init() {
+    if REPUTATIONS.get().is_none() {
+        REPUTATIONS
+            .set(Arc::new(Mutex::new(AHashMap::default())))
+            .unwrap();
+    }
+}
+
+pub fn reputations_lock() -> tokio::sync::MutexGuard<'static, AHashMap<Vec<u8>, u64>> {
+    REPUTATIONS
+        .get()
+        .expect("REPUTATIONS not initialized")
+        .blocking_lock()
 }
 
 pub fn reputation_get<S: AsRef<[u8]>>(verifying_pk: S) -> u64 {
-    REPUTATIONS.with(|reputations| {
-        let reputations = reputations.borrow();
-        match reputations.get(verifying_pk.as_ref()) {
-            Some(rep) => *rep,
-            None => 0,
-        }
-    })
+    reputations_lock()
+        .get(verifying_pk.as_ref())
+        .copied()
+        .unwrap_or(0)
 }
 
 pub fn reputations_apply_changes(changes: &ReputationChange) {
-    REPUTATIONS.with(|reputations| {
-        let mut reputations = reputations.borrow_mut();
-        for (verifying_pk, delta) in changes.changes() {
-            let reputation = reputations.entry(verifying_pk.clone()).or_default();
-            *reputation = (*reputation as i64 + delta).max(0) as u64;
-        }
-    });
+    let mut reputations = reputations_lock();
+
+    for (verifying_pk, delta) in changes.changes() {
+        let reputation = reputations.entry(verifying_pk.clone()).or_default();
+        *reputation = (*reputation as i64 + delta).max(0) as u64;
+    }
 }
 
 pub fn reputations_apply_aging(reputation_age: &ReputationAge) {
-    REPUTATIONS.with(|reputations| {
-        let mut reputations = reputations.borrow_mut();
-        for entry in reputations.iter_mut() {
-            let delta = ((*entry.1) as u128 * reputation_age.reductions_ppm() as u128 / 1_000_000)
-                .clamp(0, 100) as u64;
-            *entry.1 = (*entry.1).saturating_sub(delta);
-        }
-    });
+    let mut reputations = reputations_lock();
+
+    for entry in reputations.iter_mut() {
+        let delta = ((*entry.1) as u128 * reputation_age.reductions_ppm() as u128 / 1_000_000)
+            .clamp(0, 100) as u64;
+        *entry.1 = (*entry.1).saturating_sub(delta);
+    }
 }
 
 pub fn ledger_add_reputation_change(
@@ -65,7 +75,8 @@ pub fn ledger_add_reputation_change(
 
 #[allow(dead_code)]
 pub fn reputations_clear() {
-    REPUTATIONS.with(|reputations| reputations.borrow_mut().clear());
+    reputations_cache_init();
+    reputations_lock().clear();
 }
 
 type Identifier = Vec<u8>;

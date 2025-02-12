@@ -137,3 +137,15 @@ pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> IcrcCompatibleAccount {
         .unwrap_or_else(|_| panic!("Failed to parse pubkey {}", hex::encode(pubkey_bytes)));
     dcc_ident.as_icrc_compatible_account()
 }
+
+pub fn common_global_vars_init() {
+    account_balances_cache_init();
+    account_transfers_cache_init();
+    approvals_cache_init();
+    contracts_open_cache_init();
+    platform_specific::platform_specific_init();
+    recent_cache_init();
+    registrations_cache_init();
+    reputations_cache_init();
+    reward_e9s_per_block_cache_init();
+}

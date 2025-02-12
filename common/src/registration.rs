@@ -9,53 +9,79 @@ use function_name::named;
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
-use std::cell::RefCell;
+use once_cell::sync::OnceCell;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-thread_local! {
-    pub static PRINCIPAL_MAP: RefCell<AHashMap<Principal, Vec<u8>>> = RefCell::new(HashMap::default());
-    pub static NUM_PROVIDERS: RefCell<u64> = const { RefCell::new(0) };
-    pub static NUM_USERS: RefCell<u64> = const { RefCell::new(0) };
+static PRINCIPAL_MAP: OnceCell<Arc<Mutex<AHashMap<Principal, Vec<u8>>>>> = OnceCell::new();
+pub static NUM_PROVIDERS: OnceCell<Arc<Mutex<u64>>> = OnceCell::new();
+pub static NUM_USERS: OnceCell<Arc<Mutex<u64>>> = OnceCell::new();
+
+pub fn registrations_cache_init() {
+    if PRINCIPAL_MAP.get().is_none() {
+        PRINCIPAL_MAP
+            .set(Arc::new(Mutex::new(HashMap::default())))
+            .ok();
+    }
+    if NUM_PROVIDERS.get().is_none() {
+        NUM_PROVIDERS.set(Arc::new(Mutex::new(0))).ok();
+    }
+    if NUM_USERS.get().is_none() {
+        NUM_USERS.set(Arc::new(Mutex::new(0))).ok();
+    }
 }
 
-pub fn get_num_users() -> u64 {
-    NUM_USERS.with(|n| *n.borrow())
+pub fn principal_map_lock() -> tokio::sync::MutexGuard<'static, AHashMap<Principal, Vec<u8>>> {
+    PRINCIPAL_MAP
+        .get()
+        .expect("PRINCIPAL_MAP not initialized")
+        .blocking_lock()
+}
+
+pub fn num_providers_lock() -> tokio::sync::MutexGuard<'static, u64> {
+    NUM_PROVIDERS
+        .get()
+        .expect("NUM_PROVIDERS not initialized")
+        .blocking_lock()
+}
+
+pub fn num_users_lock() -> tokio::sync::MutexGuard<'static, u64> {
+    NUM_USERS
+        .get()
+        .expect("NUM_USERS not initialized")
+        .blocking_lock()
 }
 
 pub fn set_num_users(num_users: u64) {
-    NUM_USERS.with(|n| *n.borrow_mut() = num_users);
+    *num_users_lock() = num_users;
 }
 
 pub fn get_num_providers() -> u64 {
-    NUM_PROVIDERS.with(|n| *n.borrow())
+    *num_providers_lock()
 }
 
-pub fn set_num_providers(num_providers: u64) {
-    NUM_PROVIDERS.with(|n| *n.borrow_mut() = num_providers);
+pub fn num_providers_set(num_providers: u64) {
+    *num_providers_lock() = num_providers;
 }
 
 pub fn inc_num_providers() {
-    NUM_PROVIDERS.with(|n| *n.borrow_mut() += 1);
+    *num_providers_lock() += 1;
 }
 
 pub fn inc_num_users() {
-    NUM_USERS.with(|n| *n.borrow_mut() += 1);
+    *num_users_lock() += 1;
 }
 
 pub fn get_pubkey_from_principal(principal: Principal) -> Vec<u8> {
-    PRINCIPAL_MAP.with(|principal_map| {
-        principal_map
-            .borrow()
-            .get(&principal)
-            .cloned()
-            .unwrap_or_default()
-    })
+    principal_map_lock()
+        .get(&principal)
+        .cloned()
+        .unwrap_or_default()
 }
 
 pub fn set_pubkey_for_principal(principal: Principal, pubkey_bytes: Vec<u8>) {
-    PRINCIPAL_MAP.with(|principal_map| {
-        principal_map.borrow_mut().insert(principal, pubkey_bytes);
-    })
+    principal_map_lock().insert(principal, pubkey_bytes);
 }
 
 pub fn account_registration_fee_e9s() -> TokenAmountE9s {

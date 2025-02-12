@@ -6,6 +6,7 @@ use candid::{Decode, Encode};
 use chrono::DateTime;
 use dcc_common::{DccIdentity, FundsTransfer, LABEL_DC_TOKEN_TRANSFER};
 use decent_cloud::ledger_canister_client::LedgerCanister;
+use futures::{pin_mut, stream::StreamExt};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::LedgerMap;
 use log::Level;
@@ -33,7 +34,9 @@ pub async fn handle_ledger_local_command(
         }
     } else if local_args.list_entries_raw {
         println!("Raw Entries:");
-        for entry in ledger_local.iter_raw() {
+        let stream = ledger_local.iter_raw();
+        pin_mut!(stream);
+        while let Some(entry) = stream.next().await {
             let (blk_header, ledger_block) = entry?;
             println!("{}", blk_header);
             println!("{}", ledger_block)

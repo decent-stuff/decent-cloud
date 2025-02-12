@@ -8,6 +8,8 @@ thread_local! {
     static CURRENT_TIMESTAMP_NANOS: RefCell<u64> = const { RefCell::new(0) };
 }
 
+pub fn platform_specific_init() {}
+
 pub fn is_test_config() -> bool {
     TEST_CONFIG.with(|test_config| *test_config.borrow())
 }

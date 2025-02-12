@@ -12,7 +12,9 @@ use function_name::named;
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
-use std::cell::RefCell;
+use once_cell::sync::OnceCell;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub fn check_in_fee_e9s() -> TokenAmountE9s {
     reward_e9s_per_block() / 100
@@ -68,32 +70,40 @@ fn calc_token_rewards_e9_since_timestamp_ns(last_reward_distribution_ts_ns: u64)
         / BLOCK_INTERVAL_SECS as TokenAmountE9s
 }
 
-thread_local! {
-    static REWARD_E9S_PER_BLOCK: RefCell<TokenAmountE9s> = const { RefCell::new(0) };
+pub static REWARD_E9S_PER_BLOCK: OnceCell<Arc<Mutex<TokenAmountE9s>>> = OnceCell::new();
+
+pub fn reward_e9s_per_block_cache_init() {
+    if REWARD_E9S_PER_BLOCK.get().is_none() {
+        REWARD_E9S_PER_BLOCK.set(Arc::new(Mutex::new(0))).unwrap();
+    }
 }
 
 pub fn reward_e9s_per_block_recalculate() {
-    REWARD_E9S_PER_BLOCK.with(|reward| {
-        let elapsed_secs_since_reward_distribution =
-            (get_timestamp_ns().saturating_sub(FIRST_BLOCK_TIMESTAMP_NS)) / 1_000_000_000;
-        let reward_rounds = elapsed_secs_since_reward_distribution / BLOCK_INTERVAL_SECS;
-        let mut reward_amount_e9 = 50 * DC_TOKEN_DECIMALS_DIV;
-        for _ in 0..reward_rounds / REWARD_HALVING_AFTER_BLOCKS {
-            reward_amount_e9 /= 2;
-        }
+    let elapsed_secs_since_reward_distribution =
+        (get_timestamp_ns().saturating_sub(FIRST_BLOCK_TIMESTAMP_NS)) / 1_000_000_000;
+    let reward_rounds = elapsed_secs_since_reward_distribution / BLOCK_INTERVAL_SECS;
+    let mut reward_amount_e9 = 50 * DC_TOKEN_DECIMALS_DIV;
+    for _ in 0..reward_rounds / REWARD_HALVING_AFTER_BLOCKS {
+        reward_amount_e9 /= 2;
+    }
 
-        info!(
-            "Reward per block set to: {} tokens ({} reward rounds)",
-            amount_as_string(reward_amount_e9),
-            reward_rounds
-        );
-
-        reward.replace(reward_amount_e9);
-    })
+    info!(
+        "Reward per block set to: {} tokens ({} reward rounds)",
+        amount_as_string(reward_amount_e9),
+        reward_rounds
+    );
+    *REWARD_E9S_PER_BLOCK
+        .get()
+        .expect("REWARD_E9S_PER_BLOCK not initialized")
+        .blocking_lock() = reward_amount_e9;
 }
 
 pub fn reward_e9s_per_block() -> TokenAmountE9s {
-    REWARD_E9S_PER_BLOCK.with(|reward| *reward.borrow())
+    REWARD_E9S_PER_BLOCK
+        .get()
+        .expect("REWARD_E9S_PER_BLOCK not initialized")
+        .blocking_lock()
+        .clone()
 }
 
 pub fn blocks_until_next_halving() -> u64 {

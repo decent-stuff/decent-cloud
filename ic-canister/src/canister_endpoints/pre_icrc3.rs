@@ -8,8 +8,8 @@ use icrc_ledger_types::icrc3::blocks::DataCertificate as DataCertificatePreIcrc3
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
 
 #[ic_cdk::query]
-fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
-    pre_icrc3::_get_transactions(req)
+async fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
+    pre_icrc3::_get_transactions(req).await
 }
 
 // #[ic_cdk::query]

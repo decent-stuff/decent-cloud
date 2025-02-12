@@ -4,6 +4,7 @@ use serde_json::Value;
 
 #[test]
 fn test_zero_reward_period_elapsed() {
+    reward_e9s_per_block_cache_init();
     set_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS);
     reward_e9s_per_block_recalculate();
     assert_eq!(
@@ -14,6 +15,7 @@ fn test_zero_reward_period_elapsed() {
 
 #[test]
 fn test_single_reward_period() {
+    reward_e9s_per_block_cache_init();
     let base_ts = FIRST_BLOCK_TIMESTAMP_NS;
     let after_one_period = base_ts + BLOCK_INTERVAL_SECS * 1_000_000_000;
     set_timestamp_ns(after_one_period);
@@ -26,6 +28,7 @@ fn test_single_reward_period() {
 
 #[test]
 fn test_partial_reward_period() {
+    reward_e9s_per_block_cache_init();
     let base_ts = FIRST_BLOCK_TIMESTAMP_NS;
     let partway_period = base_ts + BLOCK_INTERVAL_SECS / 2 * 1_000_000_000;
     set_timestamp_ns(partway_period);
@@ -38,6 +41,7 @@ fn test_partial_reward_period() {
 
 #[test]
 fn test_immediate_before_halving() {
+    reward_e9s_per_block_cache_init();
     let base_ts = FIRST_BLOCK_TIMESTAMP_NS;
     let before_halving =
         base_ts + (REWARD_HALVING_AFTER_BLOCKS * BLOCK_INTERVAL_SECS - 1) * 1_000_000_000; // Just before halving
@@ -51,6 +55,7 @@ fn test_immediate_before_halving() {
 
 #[test]
 fn test_at_halving_point() {
+    reward_e9s_per_block_cache_init();
     let base_ts = FIRST_BLOCK_TIMESTAMP_NS;
     let at_halving = base_ts + 210000 * BLOCK_INTERVAL_SECS * 1_000_000_000; // At halving
     set_timestamp_ns(at_halving);
@@ -64,6 +69,7 @@ fn test_at_halving_point() {
 
 #[test]
 fn test_after_several_halvings() {
+    reward_e9s_per_block_cache_init();
     let base_ts = FIRST_BLOCK_TIMESTAMP_NS;
     let long_after = base_ts + 5 * 210000 * BLOCK_INTERVAL_SECS * 1_000_000_000; // After several halvings
     set_timestamp_ns(long_after);
@@ -77,6 +83,7 @@ fn test_after_several_halvings() {
 
 #[test]
 fn test_rewards_per_time_period() {
+    reward_e9s_per_block_cache_init();
     assert_eq!(
         calc_token_rewards_e9_since_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS),
         0
@@ -117,7 +124,7 @@ fn log_init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-fn new_temp_ledger(labels_to_index: Option<Vec<String>>) -> LedgerMap {
+async fn new_temp_ledger(labels_to_index: Option<Vec<String>>) -> LedgerMap {
     log_init();
     info!("Create temp ledger");
     // Create a temporary directory for the test
@@ -127,6 +134,7 @@ fn new_temp_ledger(labels_to_index: Option<Vec<String>>) -> LedgerMap {
         .join("test_ledger_store.bin");
 
     LedgerMap::new_with_path(labels_to_index, Some(file_path))
+        .await
         .expect("Failed to create a test temp ledger")
 }
 
@@ -134,9 +142,9 @@ fn new_temp_ledger(labels_to_index: Option<Vec<String>>) -> LedgerMap {
 //     Account::from(Principal::from_slice(desc))
 // }
 
-#[test]
-fn test_get_last_rewards_distribution_ts() {
-    let mut test_ledger = new_temp_ledger(None);
+#[tokio::test]
+async fn test_get_last_rewards_distribution_ts() {
+    let mut test_ledger = new_temp_ledger(None).await;
 
     let result = get_last_rewards_distribution_ts(&test_ledger);
     assert_eq!(result.unwrap(), FIRST_BLOCK_TIMESTAMP_NS);
@@ -155,9 +163,9 @@ fn test_get_last_rewards_distribution_ts() {
     assert_eq!(result.unwrap(), 1234567890);
 }
 
-#[test]
-fn test_rewards_distribute_no_eligible_nps() {
-    let mut test_ledger = new_temp_ledger(None);
+#[tokio::test]
+async fn test_rewards_distribute_no_eligible_nps() {
+    let mut test_ledger = new_temp_ledger(None).await;
     set_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 1_000_000_000);
 
     // Insert initial data
@@ -179,9 +187,9 @@ fn test_rewards_distribute_no_eligible_nps() {
     );
 }
 
-#[test]
-fn test_rewards_distribute_with_eligible_nps() {
-    let mut test_ledger = new_temp_ledger(None);
+#[tokio::test]
+async fn test_rewards_distribute_with_eligible_nps() {
+    let mut test_ledger = new_temp_ledger(None).await;
     let mut last_ts_ns = FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 1_000_000_000;
     set_timestamp_ns(last_ts_ns);
 

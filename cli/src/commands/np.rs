@@ -76,6 +76,7 @@ pub async fn handle_np_command(
                     ledger_data_fetch(&canister, &mut ledger_local).await?;
 
                     dcc_common::refresh_caches_from_ledger(&ledger_local)
+                        .await
                         .expect("Loading balances from ledger failed");
                 }
                 // The local ledger needs to be refreshed to get the latest nonce

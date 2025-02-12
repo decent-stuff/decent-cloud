@@ -7,7 +7,7 @@
 #[allow(unused_imports)]
 use ic_cdk::println;
 
-use crate::canister_backend::generic::LEDGER_MAP;
+use super::generic::ledger_map_lock;
 use crate::DC_TOKEN_LOGO;
 use crate::{
     DC_TOKEN_DECIMALS, DC_TOKEN_NAME, DC_TOKEN_SYMBOL, DC_TOKEN_TOTAL_SUPPLY,
@@ -125,45 +125,42 @@ pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     let balance_from_after = balance_from - amount;
     let to: IcrcCompatibleAccount = arg.to.into();
 
-    LEDGER_MAP.with(|ledger| {
-        let fee = nat_to_balance(&arg.fee.unwrap_or(Nat::from(DC_TOKEN_TRANSFER_FEE_E9S)));
-        let balance_to_after: TokenAmountE9s = if to.is_minting_account() {
-            if fee != 0 {
-                return Err(Icrc1TransferError::BadFee {
-                    expected_fee: 0u32.into(),
-                });
-            }
-            let min_burn_amount = DC_TOKEN_TRANSFER_FEE_E9S.min(balance_from_after);
-            if amount < min_burn_amount {
-                return Err(Icrc1TransferError::BadBurn {
-                    min_burn_amount: min_burn_amount.into(),
-                });
-            }
-            0
-        } else {
-            if fee != DC_TOKEN_TRANSFER_FEE_E9S {
-                return Err(Icrc1TransferError::BadFee {
-                    expected_fee: DC_TOKEN_TRANSFER_FEE_E9S.into(),
-                });
-            }
-            account_balance_get(&to) + amount
-        };
-        // It's safe to subtract here because we checked above that the balance will not be negative
-        let balance_from_after = balance_from_after.saturating_sub(fee);
-        let mut ledger_ref = ledger.borrow_mut();
-        let transfer = FundsTransfer::new(
-            from,
-            to,
-            Some(fee),
-            Some(fees_sink_accounts()),
-            Some(arg.created_at_time.unwrap_or(get_timestamp_ns())),
-            arg.memo.unwrap_or_default().0.into_vec(),
-            amount,
-            balance_from_after,
-            balance_to_after,
-        );
-        ledger_funds_transfer(&mut ledger_ref, transfer.clone()).map_err(|e| e.into())
-    })
+    let fee = nat_to_balance(&arg.fee.unwrap_or(Nat::from(DC_TOKEN_TRANSFER_FEE_E9S)));
+    let balance_to_after: TokenAmountE9s = if to.is_minting_account() {
+        if fee != 0 {
+            return Err(Icrc1TransferError::BadFee {
+                expected_fee: 0u32.into(),
+            });
+        }
+        let min_burn_amount = DC_TOKEN_TRANSFER_FEE_E9S.min(balance_from_after);
+        if amount < min_burn_amount {
+            return Err(Icrc1TransferError::BadBurn {
+                min_burn_amount: min_burn_amount.into(),
+            });
+        }
+        0
+    } else {
+        if fee != DC_TOKEN_TRANSFER_FEE_E9S {
+            return Err(Icrc1TransferError::BadFee {
+                expected_fee: DC_TOKEN_TRANSFER_FEE_E9S.into(),
+            });
+        }
+        account_balance_get(&to) + amount
+    };
+    // It's safe to subtract here because we checked above that the balance will not be negative
+    let balance_from_after = balance_from_after.saturating_sub(fee);
+    let transfer = FundsTransfer::new(
+        from,
+        to,
+        Some(fee),
+        Some(fees_sink_accounts()),
+        Some(arg.created_at_time.unwrap_or(get_timestamp_ns())),
+        arg.memo.unwrap_or_default().0.into_vec(),
+        amount,
+        balance_from_after,
+        balance_to_after,
+    );
+    ledger_funds_transfer(&mut *ledger_map_lock(), transfer.clone()).map_err(|e| e.into())
 }
 
 // test only
@@ -176,29 +173,26 @@ pub fn _mint_tokens_for_test(
         ic_cdk::trap("invalid request");
     }
 
-    LEDGER_MAP.with(|ledger| {
-        println!(
-            "mint_tokens_for_test: account {} minted {}",
-            account, amount
-        );
-        let balance_to_after = account_balance_get(&account.into()) + amount;
-        let mut ledger_ref = ledger.borrow_mut();
-        ledger_funds_transfer(
-            &mut ledger_ref,
-            FundsTransfer::new(
-                MINTING_ACCOUNT,
-                account.into(),
-                None,
-                None,
-                Some(get_timestamp_ns()),
-                memo.unwrap_or_default().0.into_vec(),
-                amount,
-                0,
-                balance_to_after,
-            ),
-        )
-        .unwrap_or_else(|err| ic_cdk::trap(&err.to_string()))
-    })
+    println!(
+        "mint_tokens_for_test: account {} minted {}",
+        account, amount
+    );
+    let balance_to_after = account_balance_get(&account.into()) + amount;
+    ledger_funds_transfer(
+        &mut *ledger_map_lock(),
+        FundsTransfer::new(
+            MINTING_ACCOUNT,
+            account.into(),
+            None,
+            None,
+            Some(get_timestamp_ns()),
+            memo.unwrap_or_default().0.into_vec(),
+            amount,
+            0,
+            balance_to_after,
+        ),
+    )
+    .unwrap_or_else(|err| ic_cdk::trap(&err.to_string()))
 }
 
 pub type Icrc1Subaccount = [u8; 32];

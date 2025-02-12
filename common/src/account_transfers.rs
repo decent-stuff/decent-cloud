@@ -17,43 +17,62 @@ use icrc_ledger_types::{
     icrc3::transactions::{Burn, Mint, Transaction, Transfer},
 };
 use ledger_map::{info, LedgerMap};
+use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
-use std::cell::RefCell;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
+#[derive(Debug)]
 pub struct RecentTx {
     tx_num: u64,
     timestamp: u64,
 }
 
-thread_local! {
-    static FEES_SINK_ACCOUNTS: RefCell<Option<Vec<IcrcCompatibleAccount>>> = const { RefCell::new(None) };
-    // Store transactions with their timestamps for cleanup
-    static RECENT_TRANSACTIONS: RefCell<AHashMap<[u8; 32], RecentTx>> = RefCell::new(AHashMap::default());
+static FEES_SINK_ACCOUNTS: OnceCell<Arc<Mutex<Vec<IcrcCompatibleAccount>>>> = OnceCell::new();
+static RECENT_TRANSACTIONS: OnceCell<Arc<Mutex<AHashMap<[u8; 32], RecentTx>>>> = OnceCell::new();
+
+pub(crate) fn account_transfers_cache_init() {
+    if FEES_SINK_ACCOUNTS.get().is_none() {
+        FEES_SINK_ACCOUNTS
+            .set(Arc::new(Mutex::new(Vec::new())))
+            .unwrap();
+    }
+    if RECENT_TRANSACTIONS.get().is_none() {
+        RECENT_TRANSACTIONS
+            .set(Arc::new(Mutex::new(AHashMap::default())))
+            .unwrap();
+    }
+}
+
+fn fees_sink_accounts_lock() -> tokio::sync::MutexGuard<'static, Vec<IcrcCompatibleAccount>> {
+    FEES_SINK_ACCOUNTS
+        .get()
+        .expect("FEES_SINK_ACCOUNTS not initialized")
+        .blocking_lock()
+}
+
+fn recent_transactions_lock() -> tokio::sync::MutexGuard<'static, AHashMap<[u8; 32], RecentTx>> {
+    RECENT_TRANSACTIONS
+        .get()
+        .expect("RECENT_TRANSACTIONS not initialized")
+        .blocking_lock()
 }
 
 pub fn recent_transactions_cleanup() {
-    RECENT_TRANSACTIONS.with(|transactions| {
-        let now = get_timestamp_ns();
-        let mut txs = transactions.borrow_mut();
-        txs.retain(|_, recent_tx| recent_tx.timestamp > now.saturating_sub(TX_WINDOW));
-    });
+    let now = get_timestamp_ns();
+    recent_transactions_lock()
+        .retain(|_, recent_tx| recent_tx.timestamp > now.saturating_sub(TX_WINDOW));
 }
 
 fn recent_transaction_find(tx_hash: &[u8; 32]) -> u64 {
-    RECENT_TRANSACTIONS.with(|transactions| {
-        // Check if this transaction already exists
-        match transactions.borrow().get(tx_hash) {
-            Some(recent_tx) => recent_tx.tx_num,
-            None => 0,
-        }
-    })
+    recent_transactions_lock()
+        .get(tx_hash)
+        .map(|recent_tx| recent_tx.tx_num)
+        .unwrap_or(0)
 }
 
 fn recent_transaction_add(tx_hash: &[u8; 32], tx_num: u64, timestamp: u64) {
-    RECENT_TRANSACTIONS.with(|transactions| {
-        let mut txs = transactions.borrow_mut();
-        txs.insert(*tx_hash, RecentTx { tx_num, timestamp });
-    });
+    recent_transactions_lock().insert(*tx_hash, RecentTx { tx_num, timestamp });
 }
 
 pub fn ledger_funds_transfer(
@@ -378,16 +397,11 @@ impl From<&IcrcCompatibleAccount> for Icrc1Account {
 }
 
 pub fn set_fees_sink_accounts(accounts: Option<Vec<IcrcCompatibleAccount>>) {
-    FEES_SINK_ACCOUNTS.with(|fees_sink_accounts| {
-        *fees_sink_accounts.borrow_mut() = accounts;
-    });
+    *fees_sink_accounts_lock() = accounts.unwrap_or(vec![MINTING_ACCOUNT.clone()]).clone();
 }
 
 pub fn fees_sink_accounts() -> Vec<IcrcCompatibleAccount> {
-    FEES_SINK_ACCOUNTS.with(|sink_accounts| match sink_accounts.borrow().as_ref() {
-        Some(accounts) => accounts.clone(),
-        None => vec![MINTING_ACCOUNT.clone()],
-    })
+    fees_sink_accounts_lock().clone()
 }
 
 fn full_account_checksum(owner: &[u8], subaccount: &[u8]) -> String {

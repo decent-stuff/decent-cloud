@@ -6,18 +6,18 @@ use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 
 #[ic_cdk::init]
-fn init(enable_test_config: Option<bool>) {
-    _init(enable_test_config)
+async fn init(enable_test_config: Option<bool>) {
+    _init(enable_test_config).await
 }
 
 #[ic_cdk::pre_upgrade]
-fn pre_upgrade() {
-    _pre_upgrade()
+async fn pre_upgrade() {
+    _pre_upgrade().await
 }
 
 #[ic_cdk::post_upgrade]
-fn post_upgrade(enable_test_config: Option<bool>) {
-    _post_upgrade(enable_test_config)
+async fn post_upgrade(enable_test_config: Option<bool>) {
+    _post_upgrade(enable_test_config).await
 }
 
 #[ic_cdk::query]
@@ -121,11 +121,11 @@ fn node_provider_list_checked_in() -> Result<Vec<String>, String> {
 }
 
 #[ic_cdk::query]
-fn data_fetch(
+async fn data_fetch(
     cursor: Option<String>,
     bytes_before: Option<Vec<u8>>,
 ) -> Result<(String, Vec<u8>), String> {
-    _data_fetch(cursor, bytes_before)
+    _data_fetch(cursor, bytes_before).await
 }
 
 #[ic_cdk::update]
@@ -134,13 +134,13 @@ fn data_push_auth() -> Result<String, String> {
 }
 
 #[ic_cdk::update]
-fn data_push(cursor: String, data: Vec<u8>) -> Result<String, String> {
-    _data_push(cursor, data)
+async fn data_push(cursor: String, data: Vec<u8>) -> Result<String, String> {
+    _data_push(cursor, data).await
 }
 
 #[ic_cdk::query]
-fn metadata() -> Vec<(String, MetadataValue)> {
-    _metadata()
+async fn metadata() -> Vec<(String, MetadataValue)> {
+    _metadata().await
 }
 
 #[ic_cdk::update]

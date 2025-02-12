@@ -11,22 +11,43 @@ use function_name::named;
 use ic_cdk::println;
 use ledger_map::LedgerMap;
 use np_offering::Offering;
-use std::cell::RefCell;
+use once_cell::sync::OnceCell;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-thread_local! {
-    pub static NUM_OFFERINGS_PER_PROVIDER: RefCell<AHashMap<Vec<u8>, u64>> = RefCell::new(AHashMap::default());
-    pub static NUM_OFFERINGS_TOTAL: RefCell<u64> = const { RefCell::new(0) };
+pub static NUM_OFFERINGS_PER_PROVIDER: OnceCell<Arc<Mutex<AHashMap<Vec<u8>, u64>>>> =
+    OnceCell::new();
+pub static NUM_OFFERINGS_TOTAL: OnceCell<Arc<Mutex<u64>>> = OnceCell::new();
+
+pub fn init_num_offerings_provider() {
+    NUM_OFFERINGS_PER_PROVIDER
+        .set(Arc::new(Mutex::new(AHashMap::default())))
+        .unwrap();
+    NUM_OFFERINGS_TOTAL.set(Arc::new(Mutex::new(0))).unwrap();
+}
+
+fn num_offerings_provider_lock() -> tokio::sync::MutexGuard<'static, AHashMap<Vec<u8>, u64>> {
+    NUM_OFFERINGS_PER_PROVIDER
+        .get()
+        .expect("NUM_OFFERINGS_PER_PROVIDER not initialized")
+        .blocking_lock()
+}
+
+fn num_offerings_total_lock() -> tokio::sync::MutexGuard<'static, u64> {
+    NUM_OFFERINGS_TOTAL
+        .get()
+        .expect("NUM_OFFERINGS_TOTAL not initialized")
+        .blocking_lock()
 }
 
 pub fn set_offering_num_per_provider(pubkey_bytes: Vec<u8>, num: u64) {
-    NUM_OFFERINGS_PER_PROVIDER.with(|map| {
-        map.borrow_mut().insert(pubkey_bytes, num);
-        NUM_OFFERINGS_TOTAL.with(|total| *total.borrow_mut() = map.borrow().values().sum());
-    });
+    let mut map = num_offerings_provider_lock();
+    map.insert(pubkey_bytes, num);
+    *num_offerings_total_lock() = map.values().sum();
 }
 
 pub fn get_num_offerings() -> u64 {
-    NUM_OFFERINGS_TOTAL.with(|n| *n.borrow())
+    *num_offerings_total_lock()
 }
 
 fn np_offering_update_fee_e9s() -> TokenAmountE9s {

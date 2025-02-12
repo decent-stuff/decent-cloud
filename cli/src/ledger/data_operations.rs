@@ -24,8 +24,10 @@ pub async fn ledger_data_fetch(
 
     let cursor_local = {
         cursor_from_data(
-            ledger_map::partition_table::get_data_partition().start_lba,
-            ledger_map::platform_specific::persistent_storage_size_bytes(),
+            ledger_map::partition_table::get_data_partition()
+                .await
+                .start_lba,
+            ledger_map::platform_specific::persistent_storage_size_bytes().await,
             ledger_local.get_next_block_start_pos(),
             ledger_local.get_next_block_start_pos(),
         )
@@ -36,7 +38,8 @@ pub async fn ledger_data_fetch(
         persistent_storage_read(
             cursor_local.position - DATA_PULL_BYTES_BEFORE_LEN as u64,
             &mut buf,
-        )?;
+        )
+        .await?;
         Some(buf)
     } else {
         None
@@ -101,7 +104,7 @@ pub async fn ledger_data_fetch(
     filetime::set_file_mtime(ledger_file_path, std::time::SystemTime::now().into())?;
 
     if !data.is_empty() {
-        ledger_local.refresh_ledger()?;
+        ledger_local.refresh_ledger().await?;
     }
 
     Ok(())
@@ -112,10 +115,13 @@ pub async fn ledger_data_push(
     local_ledger_path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let ledger_local = LedgerMap::new_with_path(Some(vec![]), Some(local_ledger_path))
+        .await
         .expect("Failed to create LedgerMap");
     let cursor_local = cursor_from_data(
-        ledger_map::partition_table::get_data_partition().start_lba,
-        ledger_map::platform_specific::persistent_storage_size_bytes(),
+        ledger_map::partition_table::get_data_partition()
+            .await
+            .start_lba,
+        ledger_map::platform_specific::persistent_storage_size_bytes().await,
         ledger_local.get_next_block_start_pos(),
         ledger_local.get_next_block_start_pos(),
     );
@@ -154,7 +160,9 @@ pub async fn ledger_data_push(
         let buf_size =
             PUSH_BLOCK_SIZE.min(cursor_local.data_end_position.saturating_sub(position)) as usize;
         let mut buf = vec![0u8; buf_size];
-        persistent_storage_read(position, &mut buf).map_err(|e| e.to_string())?;
+        persistent_storage_read(position, &mut buf)
+            .await
+            .map_err(|e| e.to_string())?;
         info!(
             "Pushing block of {} bytes at position {}",
             buf_size, position,

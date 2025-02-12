@@ -5,16 +5,32 @@ use borsh::BorshDeserialize;
 use ic_cdk::println;
 use icrc_ledger_types::icrc3::transactions::Transaction;
 use ledger_map::LedgerBlock;
-use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
+use tokio::sync::Mutex;
 
 use crate::FundsTransfer;
 
 const CACHE_MAX_LENGTH: usize = 1_000_000; // Keep at most 1M entries with the highest ids in the cache
 
-thread_local! {
-    /// Recently committed transactions, to serve from the get_transactions endpoint
-    static RECENT_CACHE: RefCell<BTreeMap<u64, Transaction>> = const { RefCell::new(BTreeMap::new()) };
+use once_cell::sync::OnceCell;
+
+/// Recently committed transactions, to serve from the get_transactions endpoint
+static RECENT_CACHE: OnceCell<Arc<Mutex<BTreeMap<u64, Transaction>>>> = OnceCell::new();
+
+/// Initialize the RECENT_CACHE
+pub fn recent_cache_init() {
+    if RECENT_CACHE.get().is_none() {
+        RECENT_CACHE
+            .set(Arc::new(Mutex::new(BTreeMap::new())))
+            .expect("Failed to initialize RECENT_CACHE");
+    }
+}
+
+fn recent_cache_lock() -> tokio::sync::MutexGuard<'static, BTreeMap<u64, Transaction>> {
+    RECENT_CACHE
+        .get()
+        .expect("RECENT_CACHE not initialized")
+        .blocking_lock()
 }
 
 /// Caches up to <CACHE_MAX_LENGTH> entries with the highest entry number.
@@ -25,19 +41,14 @@ pub struct RecentCache {}
 impl RecentCache {
     /// Add a transaction to the cache, if the transaction is sufficiently enough
     pub fn add_entry(tx_num: u64, tx: Transaction) {
-        RECENT_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            Self::_add_entry(&mut cache, tx_num, tx)
-        })
+        Self::_add_entry(&mut *recent_cache_lock(), tx_num, tx)
     }
 
     /// Append transaction to the cache
     pub fn append_entry(tx: Transaction) {
-        RECENT_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            let tx_num = cache.keys().next_back().unwrap_or(&0) + 1;
-            Self::_add_entry(&mut cache, tx_num, tx)
-        })
+        let mut cache = recent_cache_lock();
+        let tx_num = cache.keys().next_back().unwrap_or(&0) + 1;
+        Self::_add_entry(&mut cache, tx_num, tx)
     }
 
     fn _add_entry(cache: &mut BTreeMap<u64, Transaction>, tx_num: u64, tx: Transaction) {
@@ -48,11 +59,11 @@ impl RecentCache {
     }
 
     pub fn get_min_tx_num() -> Option<u64> {
-        RECENT_CACHE.with(|cache| cache.borrow().keys().next().copied())
+        recent_cache_lock().keys().next().copied()
     }
 
     pub fn get_max_tx_num() -> Option<u64> {
-        RECENT_CACHE.with(|cache| cache.borrow().keys().next_back().copied())
+        recent_cache_lock().keys().next_back().copied()
     }
 
     pub fn get_next_tx_num() -> u64 {
@@ -61,35 +72,31 @@ impl RecentCache {
 
     // Get the current size of the cache, in number of transactions
     pub fn get_num_entries() -> usize {
-        RECENT_CACHE.with(|cache| cache.borrow().len())
+        recent_cache_lock().len()
     }
 
     // Get a transaction from the cache
     pub fn get_transaction(tx_num: u64) -> Option<Transaction> {
-        RECENT_CACHE.with(|cache| cache.borrow().get(&tx_num).cloned())
+        recent_cache_lock().get(&tx_num).cloned()
     }
 
     // Get a range of transactions from the cache
     pub fn get_transactions(tx_num_start: u64, tx_num_end: u64) -> Vec<Transaction> {
-        RECENT_CACHE.with(|cache| {
-            cache
-                .borrow()
-                .range(tx_num_start..tx_num_end)
-                .map(|(_k, v)| v.clone())
-                .collect()
-        })
+        recent_cache_lock()
+            .range(tx_num_start..tx_num_end)
+            .map(|(_k, v)| v.clone())
+            .collect()
     }
 
     // Remove a transaction from the cache
     pub fn remove_transaction(tx_num: u64) -> Option<Transaction> {
-        RECENT_CACHE.with(|cache| cache.borrow_mut().remove(&tx_num))
+        recent_cache_lock().remove(&tx_num)
     }
 
     // Clear the entire cache
     pub fn clear_cache() {
-        RECENT_CACHE.with(|cache| {
-            cache.borrow_mut().clear();
-        });
+        recent_cache_init();
+        recent_cache_lock().clear();
     }
 
     /// Parse transactions from a LedgerBlock and append transactions to the cache.
@@ -98,31 +105,28 @@ impl RecentCache {
     /// Returns the parsed transactions.
     pub fn parse_ledger_block(tx_num_start: u64, ledger_block: &LedgerBlock) {
         let mut tx_num = tx_num_start;
-        RECENT_CACHE.with(|cache| {
-            for entry in ledger_block.entries() {
-                if entry.label() == LABEL_DC_TOKEN_TRANSFER {
-                    let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
-                        .expect("Failed to deserialize funds transfer");
-                    let tx: Transaction = transfer.into();
-                    Self::_add_entry(&mut cache.borrow_mut(), tx_num, tx.clone());
-                    tx_num += 1;
-                }
+        let mut cache = recent_cache_lock();
+        for entry in ledger_block.entries() {
+            if entry.label() == LABEL_DC_TOKEN_TRANSFER {
+                let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
+                    .expect("Failed to deserialize funds transfer");
+                let tx: Transaction = transfer.into();
+                Self::_add_entry(&mut *cache, tx_num, tx.clone());
+                tx_num += 1;
             }
-        });
+        }
     }
 
     /// Ensure the cache does not exceed the maximum length.
     pub fn ensure_cache_length() {
-        RECENT_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
+        let mut cache = recent_cache_lock();
 
-            // If the number of entries exceeds the maximum length, remove the oldest entries
-            while cache.len() > CACHE_MAX_LENGTH {
-                if let Some((&first_key, _)) = cache.iter().next() {
-                    cache.remove(&first_key);
-                }
+        // If the number of entries exceeds the maximum length, remove the oldest entries
+        while cache.len() > CACHE_MAX_LENGTH {
+            if let Some((&first_key, _)) = cache.iter().next() {
+                cache.remove(&first_key);
             }
-        });
+        }
     }
 }
 

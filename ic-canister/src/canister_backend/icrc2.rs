@@ -1,4 +1,5 @@
-use crate::{canister_backend::generic::LEDGER_MAP, DC_TOKEN_TRANSFER_FEE_E9S};
+use super::generic::ledger_map_lock;
+use crate::DC_TOKEN_TRANSFER_FEE_E9S;
 use candid::Nat;
 use dcc_common::{
     account_balance_get, approval_get, approval_update, get_timestamp_ns, ledger_funds_transfer,
@@ -113,11 +114,8 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
         args.created_at_time.unwrap_or(now),
     );
 
-    LEDGER_MAP
-        .with(|ledger| {
-            let mut ledger = ledger.borrow_mut();
-            approval.add_to_ledger(&mut ledger)
-        })
+    approval
+        .add_to_ledger(&mut *ledger_map_lock())
         .map_err(|e| ApproveError::GenericError {
             error_code: 133u32.into(),
             message: e.to_string(),
@@ -176,30 +174,28 @@ pub fn _icrc2_transfer_from(args: TransferFromArgs) -> Result<Nat, TransferFromE
     );
 
     // Execute transfer
-    LEDGER_MAP.with(|ledger| {
-        let mut ledger = ledger.borrow_mut();
-        let balance_from_after = balance - amount - fee;
-        let balance_to_after = account_balance_get(&to) + amount;
+    let balance_from_after = balance - amount - fee;
+    let balance_to_after = account_balance_get(&to) + amount;
 
-        let transfer = FundsTransfer::new(
-            from.clone(),
-            to.clone(),
-            Some(fee),
-            None,
-            Some(args.created_at_time.unwrap_or(get_timestamp_ns())),
-            args.memo.map(|m| m.0.to_vec()).unwrap_or_default(),
-            amount,
-            balance_from_after,
-            balance_to_after,
-        );
+    let transfer = FundsTransfer::new(
+        from.clone(),
+        to.clone(),
+        Some(fee),
+        None,
+        Some(args.created_at_time.unwrap_or(get_timestamp_ns())),
+        args.memo.map(|m| m.0.to_vec()).unwrap_or_default(),
+        amount,
+        balance_from_after,
+        balance_to_after,
+    );
 
-        ledger_funds_transfer(&mut ledger, transfer)
-            .map(|_| ledger.get_blocks_count().into())
-            .map_err(|e| TransferFromError::GenericError {
-                error_code: 0u32.into(),
-                message: e.to_string(),
-            })
-    })
+    let mut ledger = ledger_map_lock();
+    ledger_funds_transfer(&mut ledger, transfer)
+        .map(|_| ledger.get_blocks_count().into())
+        .map_err(|e| TransferFromError::GenericError {
+            error_code: 0u32.into(),
+            message: e.to_string(),
+        })
 }
 
 pub fn _icrc2_allowance(args: AllowanceArgs) -> Allowance {

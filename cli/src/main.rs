@@ -22,10 +22,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .join("main.bin")
     });
 
-    let ledger_local =
-        LedgerMap::new_with_path(None, Some(ledger_path)).expect("Failed to load the local ledger");
+    let ledger_local = LedgerMap::new_with_path(None, Some(ledger_path))
+        .await
+        .expect("Failed to load the local ledger");
 
-    dcc_common::refresh_caches_from_ledger(&ledger_local).expect("Failed to get balances");
+    dcc_common::refresh_caches_from_ledger(&ledger_local)
+        .await
+        .expect("Failed to get balances");
 
     commands::handle_command(cli.command, ledger_local).await?;
 
