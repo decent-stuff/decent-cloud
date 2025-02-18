@@ -72,10 +72,10 @@ serde_json = { version = "1.0.138", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 sha2 = "0.10"
 strsim = "0.11"
-strum = { version = "0.27.0", features = ["derive"] }
-strum_macros = "0.27.0"
+strum = { version = "0.27.1", features = ["derive"] }
+strum_macros = "0.27.1"
 tabular = "0.2"
-tempfile = "3.16"
+tempfile = "3.17"
 tiny-bip39 = "2.0"
 tokio = { version = "1.43", features = ["full"] }
 which = "7.0"
