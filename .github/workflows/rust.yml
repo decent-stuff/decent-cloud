@@ -23,15 +23,6 @@ jobs:
           echo "dfxvm requires the default version to be set once after starting the container (bug!)"
           dfxvm default 0.24.2
           dfx --version
-      - name: Clone Ledger Map
-        shell: bash
-        run: |
-          set -eExuo pipefail
-          (
-            cd ..
-            git clone --depth 1 https://github.com/decent-stuff/ledger-map.git
-            cd -
-          )
       - name: Build and test
         env:
           # dfx requires XDG_DATA_HOME to be set
