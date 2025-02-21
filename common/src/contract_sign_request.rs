@@ -1,4 +1,4 @@
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 use ic_cdk::println;
 use std::{cell::RefCell, collections::HashMap, io::Error};
 

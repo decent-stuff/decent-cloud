@@ -1,4 +1,4 @@
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
 pub mod account_transfer_approvals;

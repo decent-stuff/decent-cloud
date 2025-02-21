@@ -10,7 +10,7 @@ use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use data_encoding::BASE32;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 use ic_cdk::println;
 use icrc_ledger_types::{
     icrc1::account::Account as Icrc1Account,

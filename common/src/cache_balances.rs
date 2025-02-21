@@ -1,6 +1,6 @@
 use crate::account_transfers::IcrcCompatibleAccount;
 use crate::{AHashMap, TokenAmountE9s, DC_TOKEN_DECIMALS_DIV};
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use std::{cell::RefCell, collections::HashMap};

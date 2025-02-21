@@ -1,6 +1,6 @@
 use crate::{AHashMap, DccIdentity, LABEL_REPUTATION_CHANGE, MAX_REPUTATION_INCREASE_PER_TX};
 use borsh::{BorshDeserialize, BorshSerialize};
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::{warn, LedgerError, LedgerMap};

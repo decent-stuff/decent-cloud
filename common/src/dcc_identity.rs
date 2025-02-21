@@ -6,7 +6,7 @@ use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512, Signature, SigningKey, VerifyingKey};
 use hmac::{Hmac, Mac};
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use pkcs8::der::zeroize::Zeroizing;

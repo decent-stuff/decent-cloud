@@ -1,6 +1,6 @@
 use crate::LABEL_DC_TOKEN_TRANSFER;
 use borsh::BorshDeserialize;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::icrc3::transactions::Transaction;

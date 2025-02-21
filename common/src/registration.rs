@@ -5,7 +5,7 @@ use crate::{
 };
 use candid::Principal;
 use function_name::named;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
