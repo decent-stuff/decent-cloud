@@ -421,6 +421,11 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
             );
             let cursor = LedgerCursor::new_from_string(cursor);
             persistent_storage_write(cursor.position, &data);
+            persistent_storage_write(
+                cursor.position + data.len() as u64,
+                &vec![0u8; size_of::<ledger_map::ledger_entry::LedgerBlockHeader>()],
+            );
+
             let refresh = if cursor.more {
                 "; ledger NOT refreshed".to_string()
             } else {
