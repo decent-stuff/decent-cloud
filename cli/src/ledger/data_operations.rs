@@ -22,6 +22,7 @@ pub async fn ledger_data_fetch(
         .get_file_path()
         .expect("failed to open the local ledger path");
 
+    // FIXME: needs to be adjusted to fetch data multiple times if needed, right now it only does it once
     let cursor_local = {
         cursor_from_data(
             ledger_map::partition_table::get_data_partition().start_lba,
@@ -96,6 +97,9 @@ pub async fn ledger_data_fetch(
             offset_remote,
             ledger_file_path.display()
         );
+        ledger_file
+            .write_all(&[0u8; size_of::<ledger_map::ledger_entry::LedgerBlockHeader>()])
+            .unwrap();
     }
     // Set the modified time to the current time, to mark that the data is up-to-date
     filetime::set_file_mtime(ledger_file_path, std::time::SystemTime::now().into())?;
