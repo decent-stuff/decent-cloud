@@ -96,6 +96,21 @@ dc np register --identity my-provider
 
 See the [Getting Started Guide](docs/getting-started.md) for next steps, or check the [Mining & Validation Guide](docs/mining-and-validation.md) to learn how to earn rewards.
 
+## 🔗 Related Projects
+
+- **LedgerMap**: The backing ledger implementation
+
+  - GitHub: [github.com/decent-stuff/ledger-map](https://github.com/decent-stuff/ledger-map/)
+  - NPM Package: [@decent-stuff/ledger-map](https://www.npmjs.com/package/@decent-stuff/ledger-map)
+
+- **Frontend Website**: The official Decent Cloud web interface
+
+  - GitHub: [github.com/decent-stuff/website](https://github.com/decent-stuff/website/)
+
+- **Client Libraries**:
+  - Console Client: Available in this repository under `/cli` and published on GitHub as release binaries
+  - Browser Client: [@decent-stuff/dc-client](https://www.npmjs.com/package/@decent-stuff/dc-client) NPM package
+
 ## 🌐 Project Status
 
 The project is in active development. Main development and testing happens on Linux (Ubuntu 24.04), but MacOS and Windows versions work without issues.
