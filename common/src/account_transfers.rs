@@ -17,6 +17,7 @@ use icrc_ledger_types::{
     icrc3::transactions::{Burn, Mint, Transaction, Transfer},
 };
 use ledger_map::{info, LedgerMap};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 
@@ -251,7 +252,7 @@ pub fn do_funds_transfer(
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct IcrcCompatibleAccount {
     pub owner: Principal,
     pub subaccount: Option<Vec<u8>>,
@@ -414,7 +415,7 @@ impl std::fmt::Display for IcrcCompatibleAccount {
     }
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct FundsTransferV1 {
     pub from: IcrcCompatibleAccount,
     pub to: IcrcCompatibleAccount,
@@ -427,7 +428,7 @@ pub struct FundsTransferV1 {
     pub balance_to_after: TokenAmountE9s,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum FundsTransfer {
     V1(FundsTransferV1),
 }

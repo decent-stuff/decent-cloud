@@ -12,6 +12,7 @@ use icrc_ledger_types::{
     icrc3::transactions::{Approve, Transaction},
 };
 use ledger_map::{LedgerError, LedgerMap};
+use serde::Serialize;
 use sha2::Digest;
 
 thread_local! {
@@ -36,7 +37,7 @@ pub fn approval_get(account: Account, spender: Account) -> Option<Allowance> {
     })
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct FundsTransferApprovalV1 {
     approver: IcrcCompatibleAccount,
     spender: IcrcCompatibleAccount,
@@ -111,7 +112,7 @@ impl std::fmt::Display for FundsTransferApprovalV1 {
     }
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum FundsTransferApproval {
     V1(FundsTransferApprovalV1),
 }

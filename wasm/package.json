@@ -1,0 +1,57 @@
+{
+  "name": "@decent-stuff/dc-client",
+  "version": "0.1.0",
+  "description": "WebAssembly module for interacting with Decent Cloud ledger",
+  "main": "dist/dc-client.js",
+  "module": "dist/dc-client.mjs",
+  "types": "dist/dc-client.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "clean": "rimraf dist",
+    "prepare": "npm run clean && npm run build",
+    "prepublishOnly": "npm test",
+    "test": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack test --node",
+    "format": "prettier --write \"**/*.{js,ts,json,md}\"",
+    "lint": "eslint . --ext .js,.ts"
+  },
+  "keywords": [
+    "decent-cloud",
+    "ledger",
+    "wasm",
+    "internet-computer",
+    "icp",
+    "dfinity",
+    "icrc"
+  ],
+  "author": "Decent Cloud Team",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "22.13.5",
+    "@typescript-eslint/eslint-plugin": "8.24.1",
+    "@typescript-eslint/parser": "8.24.1",
+    "eslint": "9.21.0",
+    "eslint-config-prettier": "10.0.1",
+    "prettier": "3.5.2",
+    "rimraf": "6.0.1",
+    "typescript": "5.7.3",
+    "wasm-pack": "0.13.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/decent-stuff/decent-cloud.git"
+  },
+  "bugs": {
+    "url": "https://github.com/decent-stuff/decent-cloud/issues"
+  },
+  "homepage": "https://github.com/decent-stuff/decent-cloud#readme"
+}

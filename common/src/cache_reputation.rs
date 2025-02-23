@@ -4,6 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::{warn, LedgerError, LedgerMap};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{cell::RefCell, collections::HashMap};
 
@@ -70,13 +71,13 @@ pub fn reputations_clear() {
 
 type Identifier = Vec<u8>;
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ReputationChangeV1 {
     changes: Vec<(Identifier, i64)>,
 }
 
 /// Represents a list of reputation changes on specific principals
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum ReputationChange {
     V1(ReputationChangeV1),
 }
@@ -104,12 +105,12 @@ impl ReputationChange {
 }
 
 /// Reductions of account reputations, applied to all accounts
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ReputationAgeV1 {
     age_reductions_ppm: u64,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum ReputationAge {
     V1(ReputationAgeV1),
 }

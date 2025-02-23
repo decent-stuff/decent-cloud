@@ -109,6 +109,10 @@ impl ContractSignReplyPayload {
             ContractSignReplyPayload::V1(payload) => payload.crypto_signature.as_slice(),
         }
     }
+
+    pub fn deserialize_contract_sign_reply(&self) -> Result<ContractSignReply, String> {
+        ContractSignReply::try_from_slice(self.payload_serialized()).map_err(|e| e.to_string())
+    }
 }
 
 #[named]

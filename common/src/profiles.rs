@@ -44,7 +44,7 @@ impl UpdateProfilePayload {
         UpdateProfilePayload::try_from_slice(data).map_err(|e| e.to_string())
     }
 
-    pub fn profile(&self) -> Result<Profile, String> {
+    pub fn deserialize_update_profile(&self) -> Result<Profile, String> {
         match self {
             UpdateProfilePayload::V1(payload) => Profile::try_from_slice(&payload.profile_bytes)
                 .map(|v| v.compute_json_value())
@@ -96,7 +96,7 @@ pub fn do_node_provider_get_profile(
         // Don't check the signature to save time
         Ok(data) => UpdateProfilePayload::deserialize_unchecked(&data)
             .ok()?
-            .profile()
+            .deserialize_update_profile()
             .ok()
             .map(|profile| NodeProviderProfileWithReputation {
                 profile,

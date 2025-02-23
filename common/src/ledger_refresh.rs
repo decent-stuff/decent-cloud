@@ -5,18 +5,24 @@ use crate::{
     account_balance_add, account_balance_sub, account_balances_clear, contracts_cache_open_add,
     contracts_cache_open_remove, dcc_identity, error, reputations_apply_aging,
     reputations_apply_changes, reputations_clear, set_num_providers, set_num_users,
-    set_offering_num_per_provider, AHashMap, ContractSignRequest, ContractSignRequestPayload,
-    ReputationAge, ReputationChange, UpdateOfferingPayload, LABEL_CONTRACT_SIGN_REPLY,
+    set_offering_num_per_provider, AHashMap, CheckInPayload, ContractSignReplyPayload,
+    ContractSignRequest, ContractSignRequestPayload, DccIdentity, ReputationAge, ReputationChange,
+    UpdateOfferingPayload, UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY,
     LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER,
-    LABEL_NP_OFFERING, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
-    LABEL_USER_REGISTER, PRINCIPAL_MAP,
+    LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER,
+    LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    PRINCIPAL_MAP,
 };
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use borsh::BorshDeserialize;
 use candid::Principal;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
-use ledger_map::{debug, warn, LedgerMap};
+use ledger_map::{debug, warn, LedgerBlock, LedgerEntry, LedgerMap};
+use serde::Serialize;
+use serde_json::Value;
 use std::collections::HashMap;
 
 pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
@@ -158,4 +164,257 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
         RecentCache::get_max_tx_num().unwrap_or_default()
     );
     Ok(())
+}
+
+#[derive(Serialize)]
+pub struct LedgerEntryAsJson {
+    pub label: String,
+    pub key: String,
+    pub value: Value,
+}
+
+impl LedgerEntryAsJson {
+    fn from_dc_token_approval(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_DC_TOKEN_APPROVAL.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: serde_json::to_value(
+                FundsTransferApproval::try_from_slice(entry.value()).unwrap(),
+            )
+            .unwrap(),
+        }
+    }
+
+    fn from_dc_token_transfer(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_DC_TOKEN_TRANSFER.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: serde_json::to_value(FundsTransfer::try_from_slice(entry.value()).unwrap())
+                .unwrap(),
+        }
+    }
+
+    fn from_np_check_in(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
+        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
+        LedgerEntryAsJson {
+            label: LABEL_NP_CHECK_IN.to_string(),
+            key: dcc_id.to_string(),
+            value: match CheckInPayload::try_from_slice(entry.value()) {
+                Ok(payload) => serde_json::json!({
+                    "parent_hash": BASE64.encode(parent_hash),
+                    "signature": BASE64.encode(payload.nonce_signature()),
+                    "verified": match dcc_id.verify_bytes(parent_hash, payload.nonce_signature()) {
+                        Ok(()) => "true".into(),
+                        Err(e) => {
+                            format!("Signature verification failed: {}", e)
+                        }
+                    },
+                    "memo": payload.memo(),
+                }),
+                Err(e) => {
+                    serde_json::json!(format!(
+                        "Failed to deserialize check in payload: {} ({})",
+                        BASE64.encode(entry.value()),
+                        e
+                    ))
+                }
+            },
+        }
+    }
+
+    fn from_np_offering(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_NP_OFFERING.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: match UpdateOfferingPayload::try_from_slice(entry.value()) {
+                Ok(payload) => match payload.deserialize_update_offering() {
+                    Ok(offering) => serde_json::to_value(&offering).unwrap(),
+                    Err(e) => {
+                        serde_json::json!(format!(
+                            "Failed to deserialize update offering payload: {} ({})",
+                            BASE64.encode(entry.value()),
+                            e
+                        ))
+                    }
+                },
+                Err(e) => {
+                    serde_json::json!(format!(
+                        "Failed to deserialize update offering payload: {} ({})",
+                        BASE64.encode(entry.value()),
+                        e
+                    ))
+                }
+            },
+        }
+    }
+
+    fn from_np_profile(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_NP_PROFILE.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: match UpdateProfilePayload::try_from_slice(entry.value()) {
+                Ok(payload) => match payload.deserialize_update_profile() {
+                    Ok(profile) => serde_json::to_value(&profile).unwrap(),
+                    Err(e) => {
+                        serde_json::json!(format!(
+                            "Failed to deserialize update profile payload: {} ({})",
+                            BASE64.encode(entry.value()),
+                            e
+                        ))
+                    }
+                },
+                Err(e) => {
+                    serde_json::json!(format!(
+                        "Failed to deserialize update profile payload: {} ({})",
+                        BASE64.encode(entry.value()),
+                        e
+                    ))
+                }
+            },
+        }
+    }
+
+    fn from_account_register(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
+        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
+        LedgerEntryAsJson {
+            label: entry.label().to_string(),
+            key: dcc_id.to_string(),
+            value: serde_json::json!({
+                "parent_hash": BASE64.encode(parent_hash),
+                "signature": BASE64.encode(entry.value()),
+                "verified": match dcc_id.verify_bytes(parent_hash, entry.value()) {
+                    Ok(()) => "true".into(),
+                    Err(e) => {
+                        format!("Signature verification failed: {}", e)
+                    }
+                },
+            }),
+        }
+    }
+
+    fn from_reputation_age(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_REPUTATION_AGE.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: serde_json::to_value(ReputationAge::try_from_slice(entry.value()).unwrap())
+                .unwrap(),
+        }
+    }
+
+    fn from_reputation_change(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_REPUTATION_CHANGE.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: serde_json::to_value(ReputationChange::try_from_slice(entry.value()).unwrap())
+                .unwrap(),
+        }
+    }
+
+    fn from_reward_distribution(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_REWARD_DISTRIBUTION.to_string(),
+            key: match std::str::from_utf8(entry.key()) {
+                Ok(s) => s.to_string(),
+                Err(_) => BASE64.encode(entry.key()),
+            },
+            value: serde_json::to_value(u64::from_le_bytes(
+                <[u8; 8]>::try_from_slice(entry.value())
+                    .map_err(|e| {
+                        format!(
+                            "Failed to deserialize reward distribution value: {} ({})",
+                            BASE64.encode(entry.value()),
+                            e
+                        )
+                    })
+                    .unwrap(),
+            ))
+            .unwrap(),
+        }
+    }
+
+    fn from_generic(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: entry.label().to_string(),
+            key: BASE64.encode(entry.key()),
+            value: serde_json::to_value(BASE64.encode(entry.value())).unwrap(),
+        }
+    }
+
+    fn from_contract_sign_request(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_CONTRACT_SIGN_REQUEST.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: match ContractSignRequestPayload::try_from_slice(entry.value()) {
+                Ok(payload) => match payload.deserialize_contract_sign_request() {
+                    Ok(contract_req) => serde_json::to_value(&contract_req).unwrap(),
+                    Err(e) => {
+                        serde_json::json!(format!(
+                            "Failed to deserialize contract sign request: {} ({})",
+                            BASE64.encode(entry.value()),
+                            e
+                        ))
+                    }
+                },
+                Err(e) => {
+                    serde_json::json!(format!(
+                        "Failed to deserialize contract sign request payload: {} ({})",
+                        BASE64.encode(entry.value()),
+                        e
+                    ))
+                }
+            },
+        }
+    }
+
+    fn from_contract_sign_reply(entry: &LedgerEntry) -> Self {
+        LedgerEntryAsJson {
+            label: LABEL_CONTRACT_SIGN_REPLY.to_string(),
+            key: BASE64.encode(entry.key()),
+            value: match ContractSignReplyPayload::try_from_slice(entry.value()) {
+                Ok(payload) => match payload.deserialize_contract_sign_reply() {
+                    Ok(contract_reply) => serde_json::to_value(&contract_reply).unwrap(),
+                    Err(e) => {
+                        serde_json::json!(format!(
+                            "Failed to deserialize contract sign reply: {} ({})",
+                            BASE64.encode(entry.value()),
+                            e
+                        ))
+                    }
+                },
+                Err(e) => {
+                    serde_json::json!(format!(
+                        "Failed to deserialize contract sign reply payload: {} ({})",
+                        BASE64.encode(entry.value()),
+                        e
+                    ))
+                }
+            },
+        }
+    }
+}
+
+pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<LedgerEntryAsJson> {
+    let mut entries = vec![];
+    for entry in block.entries() {
+        entries.push(match entry.label() {
+            LABEL_DC_TOKEN_APPROVAL => LedgerEntryAsJson::from_dc_token_approval(entry),
+            LABEL_DC_TOKEN_TRANSFER => LedgerEntryAsJson::from_dc_token_transfer(entry),
+            LABEL_NP_CHECK_IN => LedgerEntryAsJson::from_np_check_in(entry, block.parent_hash()),
+            LABEL_NP_OFFERING => LedgerEntryAsJson::from_np_offering(entry),
+            LABEL_NP_PROFILE => LedgerEntryAsJson::from_np_profile(entry),
+            LABEL_NP_REGISTER => {
+                LedgerEntryAsJson::from_account_register(entry, block.parent_hash())
+            }
+            LABEL_REPUTATION_AGE => LedgerEntryAsJson::from_reputation_age(entry),
+            LABEL_REPUTATION_CHANGE => LedgerEntryAsJson::from_reputation_change(entry),
+            LABEL_REWARD_DISTRIBUTION => LedgerEntryAsJson::from_reward_distribution(entry),
+            LABEL_USER_REGISTER => {
+                LedgerEntryAsJson::from_account_register(entry, block.parent_hash())
+            }
+            LABEL_CONTRACT_SIGN_REQUEST => LedgerEntryAsJson::from_contract_sign_request(entry),
+            LABEL_CONTRACT_SIGN_REPLY => LedgerEntryAsJson::from_contract_sign_reply(entry),
+            _ => LedgerEntryAsJson::from_generic(entry),
+        })
+    }
+    entries
 }

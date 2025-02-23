@@ -430,6 +430,7 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
                 "; ledger NOT refreshed".to_string()
             } else {
                 LEDGER_MAP.with(|ledger| {
+                    // TODO: Entire ledger is iterated twice, effectively. It should be possible to do this in a single go.
                     if let Err(e) = ledger.borrow_mut().refresh_ledger() {
                         error!("Failed to refresh ledger: {}", e)
                     }

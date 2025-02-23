@@ -1,0 +1,43 @@
+[package]
+name = "decent-cloud-wasm"
+version = "0.1.0"
+authors = ["Decent Cloud Team"]
+edition = "2021"
+description = "WebAssembly module for interacting with Decent Cloud ledger"
+license = "Apache-2.0"
+repository = "https://github.com/decent-stuff/decent-cloud"
+
+[lib]
+name = "decent_cloud_wasm"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O4"]
+
+[dependencies]
+base64 = { workspace = true }
+candid = { workspace = true }
+dcc-common = { path = "../common", features = ["browser"] }
+getrandom = { version = "0.3", default-features = false, features = [
+    "wasm_js",
+] }
+hex = { workspace = true }
+wasm-bindgen = { version = "0.2.100", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4.50"
+js-sys = "0.3.77"
+ledger-map = { workspace = true, features = ["browser"] }
+web-sys = { version = "0.3.77", features = ["Storage", "Window", "console"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6.5"
+console_error_panic_hook = "0.1.7"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"

@@ -12,19 +12,20 @@ use function_name::named;
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
+use serde::Serialize;
 use std::cell::RefCell;
 
 pub fn check_in_fee_e9s() -> TokenAmountE9s {
     reward_e9s_per_block() / 100
 }
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize)]
 pub struct CheckInPayloadV1 {
     memo: String, // Memo can for example be shown on a dashboard, as an arbitrary personal message
     nonce_signature: Vec<u8>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize)]
 pub enum CheckInPayload {
     V1(CheckInPayloadV1),
 }

@@ -1,0 +1,149 @@
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+// Ensure we're in the right directory
+const wasmDir = __dirname;
+process.chdir(wasmDir);
+
+// Helper function to ensure directory exists
+function ensureDirectoryExists(dir) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+// Helper function to copy file with error handling
+function copyFile(src, dest) {
+  try {
+    fs.copyFileSync(src, dest);
+    console.log(`Copied ${path.basename(src)} to ${path.relative(wasmDir, dest)}`);
+  } catch (error) {
+    console.error(`Failed to copy ${src}: ${error.message}`);
+    throw error;
+  }
+}
+
+console.log('🚀 Building WASM module...');
+
+async function main() {
+  try {
+    // Ensure dist directory exists and is empty
+    const distDir = path.join(wasmDir, 'dist');
+    if (fs.existsSync(distDir)) {
+      fs.rmSync(distDir, { recursive: true });
+    }
+    ensureDirectoryExists(distDir);
+
+    // Run wasm-pack build with specific configuration
+    console.log('Running wasm-pack build...');
+    execSync('wasm-pack build --target bundler --out-dir dist --out-name dc-client --release', {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        RUSTFLAGS: '-C opt-level=s --cfg getrandom_backend="wasm_js"',
+        WASM_PACK_ARGS: '--verbose',
+      },
+    });
+
+    // Clean up unnecessary files
+    console.log('Cleaning up dist directory...');
+    const filesToRemove = ['.gitignore', 'README.md', 'package.json'];
+
+    filesToRemove.forEach(file => {
+      const filePath = path.join(distDir, file);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`Removed ${file}`);
+      }
+    });
+
+    // Copy necessary files
+    console.log('Copying additional files...');
+    const filesToCopy = [
+      ['index.d.ts', 'dist/dc-client.d.ts'],
+      ['agent_js_wrapper.js', 'dist/agent_js_wrapper.js'],
+      ['canister_idl.js', 'dist/canister_idl.js'],
+    ];
+
+    filesToCopy.forEach(([src, dest]) => {
+      copyFile(path.join(wasmDir, src), path.join(wasmDir, dest));
+    });
+
+    // Wait for wasm-pack to create the snippets directory
+    const snippetsDir = path.join(distDir, 'snippets');
+    let retries = 0;
+    while (!fs.existsSync(snippetsDir) && retries < 10) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      retries++;
+    }
+
+    if (fs.existsSync(snippetsDir)) {
+      // Find the generated snippets subdirectory
+      const snippetSubdirs = fs.readdirSync(snippetsDir);
+      const wasmSnippetDir = snippetSubdirs.find(dir => dir.startsWith('decent-cloud-wasm-'));
+
+      if (wasmSnippetDir) {
+        // Copy canister_idl.js to the snippets directory
+        const snippetDestPath = path.join(snippetsDir, wasmSnippetDir, 'canister_idl.js');
+        copyFile(path.join(wasmDir, 'canister_idl.js'), snippetDestPath);
+      }
+    }
+
+    // Create the main entry points
+    console.log('Creating entry points...');
+    const entryContent = `
+import { __wbg_set_wasm } from './dc-client_bg.js';
+import * as wasm from './dc-client_bg.js';
+export * from './agent_js_wrapper.js';
+
+let initialized = false;
+
+export async function initialize() {
+  if (!initialized) {
+    const response = await fetch(new URL('./dc-client_bg.wasm', import.meta.url));
+    const wasmModule = await WebAssembly.instantiate(await response.arrayBuffer(), {
+      './dc-client_bg.js': wasm,
+    });
+    __wbg_set_wasm(wasmModule.instance.exports);
+    const result = await wasmModule.instance.exports.initialize();
+    initialized = true;
+    return result;
+  }
+  return 'WASM module already initialized';
+}
+
+// Re-export all wasm functions with initialization
+${fs
+  .readFileSync(path.join(distDir, 'dc-client.d.ts'), 'utf8')
+  .split('\n')
+  .filter(line => line.startsWith('export function'))
+  .map(line => {
+    const funcName = line.match(/export function (\w+)/)[1];
+    if (funcName === 'initialize') return ''; // Skip initialize as we define it manually
+    return `
+export async function ${funcName}(...args) {
+  await initialize();
+  return wasm.${funcName}(...args);
+}`;
+  })
+  .join('\n')}
+
+export { wasm };
+`.trim();
+
+    fs.writeFileSync(path.join(distDir, 'dc-client.js'), entryContent);
+    fs.writeFileSync(path.join(distDir, 'dc-client.mjs'), entryContent);
+    console.log('Created dc-client.js and dc-client.mjs');
+
+    console.log('✨ Build completed successfully!');
+  } catch (error) {
+    console.error('❌ Build failed:', error);
+    process.exit(1);
+  }
+}
+
+main().catch(error => {
+  console.error('❌ Build failed:', error);
+  process.exit(1);
+});

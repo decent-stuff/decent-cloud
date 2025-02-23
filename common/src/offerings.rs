@@ -65,6 +65,10 @@ impl UpdateOfferingPayload {
         UpdateOfferingPayload::try_from_slice(data).map_err(|e| e.to_string())
     }
 
+    pub fn deserialize_update_offering(&self) -> Result<Offering, String> {
+        Offering::new_from_bytes(self.payload_serialized(), "json")
+    }
+
     pub fn offering(&self) -> Result<Offering, String> {
         Offering::new_from_bytes(self.payload_serialized(), "json")
     }
