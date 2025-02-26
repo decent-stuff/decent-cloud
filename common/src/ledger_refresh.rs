@@ -171,6 +171,7 @@ pub struct LedgerEntryAsJson {
     pub label: String,
     pub key: Value,
     pub value: Value,
+    pub description: String,
 }
 
 impl LedgerEntryAsJson {
@@ -182,6 +183,7 @@ impl LedgerEntryAsJson {
                 FundsTransferApproval::try_from_slice(entry.value()).unwrap(),
             )
             .unwrap(),
+            description: "ICRC2 FundsTransferApproval".to_string(),
         }
     }
 
@@ -191,6 +193,7 @@ impl LedgerEntryAsJson {
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(FundsTransfer::try_from_slice(entry.value()).unwrap())
                 .unwrap(),
+            description: "ICRC1 FundsTransfer".to_string(),
         }
     }
 
@@ -219,6 +222,7 @@ impl LedgerEntryAsJson {
                     ))
                 }
             },
+            description: "Provider CheckIn".to_string(),
         }
     }
 
@@ -245,6 +249,7 @@ impl LedgerEntryAsJson {
                     ))
                 }
             },
+            description: "Provider Offering Update".to_string(),
         }
     }
 
@@ -271,6 +276,7 @@ impl LedgerEntryAsJson {
                     ))
                 }
             },
+            description: "Provider Profile Update".to_string(),
         }
     }
 
@@ -289,6 +295,7 @@ impl LedgerEntryAsJson {
                     }
                 },
             }),
+            description: "Account Register".to_string(),
         }
     }
 
@@ -298,6 +305,7 @@ impl LedgerEntryAsJson {
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(ReputationAge::try_from_slice(entry.value()).unwrap())
                 .unwrap(),
+            description: "ReputationAge".to_string(),
         }
     }
 
@@ -307,6 +315,7 @@ impl LedgerEntryAsJson {
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(ReputationChange::try_from_slice(entry.value()).unwrap())
                 .unwrap(),
+            description: "ReputationChange".to_string(),
         }
     }
 
@@ -329,6 +338,7 @@ impl LedgerEntryAsJson {
                     .unwrap(),
             ))
             .unwrap(),
+            description: "RewardDistribution".to_string(),
         }
     }
 
@@ -337,6 +347,7 @@ impl LedgerEntryAsJson {
             label: entry.label().to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(BASE64.encode(entry.value())).unwrap(),
+            description: "Generic".to_string(),
         }
     }
 
@@ -363,6 +374,7 @@ impl LedgerEntryAsJson {
                     ))
                 }
             },
+            description: "Contract Sign Request".to_string(),
         }
     }
 
@@ -389,6 +401,7 @@ impl LedgerEntryAsJson {
                     ))
                 }
             },
+            description: "Contract Sign Reply".to_string(),
         }
     }
 }
