@@ -32,9 +32,22 @@ class LedgerStorage {
    * @param {number} offset The offset to read from
    * @param {number} length The number of bytes to read
    * @returns {Uint8Array} The data read from storage
+   * @throws {Error} If reading from storage fails
    */
   readOffset(offset, length) {
-    return wasm.ledger_storage_read_offset(offset, length);
+    const result = wasm.ledger_storage_read_offset(offset, length);
+
+    // Handle the Result type
+    if (result && typeof result === 'object') {
+      if ('Ok' in result) {
+        return result.Ok;
+      } else if ('Err' in result) {
+        throw new Error(`Failed to read storage: ${result.Err}`);
+      }
+    }
+
+    // Fallback for backward compatibility
+    return result;
   }
 
   /**
@@ -246,6 +259,24 @@ export { configureAgent as configure, queryCanister, updateCanister, fetchDataWi
 export async function ledger_storage_clear() {
   await initialize();
   return wasm.ledger_storage_clear();
+}
+
+// Export the storage read function with proper error handling
+export async function ledger_storage_read_offset(offset, length) {
+  await initialize();
+  const result = wasm.ledger_storage_read_offset(offset, length);
+
+  // Handle the Result type
+  if (result && typeof result === 'object') {
+    if ('Ok' in result) {
+      return result.Ok;
+    } else if ('Err' in result) {
+      throw new Error(`Failed to read storage: ${result.Err}`);
+    }
+  }
+
+  // Fallback for backward compatibility
+  return result;
 }
 
 export async function ledger_get_value(label, key) {

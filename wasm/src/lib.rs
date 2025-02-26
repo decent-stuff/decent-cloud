@@ -49,26 +49,38 @@ extern "C" {
 #[wasm_bindgen]
 pub async fn initialize() -> String {
     console_error_panic_hook::set_once();
+
     // Initialize storage as the very first thing
     #[cfg(target_arch = "wasm32")]
     ledger_storage::ensure_storage_is_initialized();
-    // ledger_storage::init_ephemeral_storage_from_persistent();
-    // Fetch Ledger data
-    // Extract the ledger data from thread-local storage.
-    // This requires that LedgerMap implements Default (or that you can otherwise replace it).
-    let mut ledger_data = LEDGER_MAP.with(|ledger| std::mem::take(&mut *ledger.borrow_mut()));
-    // Now call your async function on the extracted ledger.
-    ledger_data_fetch(&mut ledger_data).await.unwrap();
 
-    let ledger_blocks = ledger_data.get_blocks_count();
-    // Put the updated ledger data back.
-    LEDGER_MAP.with(|ledger| {
-        *ledger.borrow_mut() = ledger_data;
-    });
-    format!(
-        "Ledger initialized successfully, loaded {} blocks",
-        ledger_blocks
-    )
+    // Extract the ledger data from thread-local storage
+    let mut ledger_data = LEDGER_MAP.with(|ledger| std::mem::take(&mut *ledger.borrow_mut()));
+
+    // Fetch ledger data with proper error handling
+    match ledger_data_fetch(&mut ledger_data).await {
+        Ok(_) => {
+            let ledger_blocks = ledger_data.get_blocks_count();
+
+            // Put the updated ledger data back
+            LEDGER_MAP.with(|ledger| {
+                *ledger.borrow_mut() = ledger_data;
+            });
+
+            format!(
+                "Ledger initialized successfully, loaded {} blocks",
+                ledger_blocks
+            )
+        }
+        Err(e) => {
+            // Still put the ledger data back even if there was an error
+            LEDGER_MAP.with(|ledger| {
+                *ledger.borrow_mut() = ledger_data;
+            });
+
+            format!("Ledger initialization error: {}", e)
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -83,10 +95,15 @@ pub fn ledger_storage_size_bytes() -> u64 {
 }
 
 #[wasm_bindgen]
-pub fn ledger_storage_read_offset(offset: u64, len: u64) -> Vec<u8> {
+pub fn ledger_storage_read_offset(offset: u64, len: u64) -> Result<Vec<u8>, String> {
     let mut buf = vec![0u8; len as usize];
-    ledger_storage::persistent_storage_read(offset, &mut buf).expect("Failed to read storage");
-    buf
+    match ledger_storage::persistent_storage_read(offset, &mut buf) {
+        Ok(_) => Ok(buf),
+        Err(e) => Err(format!(
+            "Failed to read storage at offset {}: {}",
+            offset, e
+        )),
+    }
 }
 
 #[wasm_bindgen]
@@ -125,34 +142,71 @@ pub async fn ledger_data_fetch(
         cursor_local,
         hex::encode(bytes_before.as_ref().unwrap_or(&vec![])),
     );
-    let result_js = fetchDataWithCache(
+    // Use proper error handling for fetchDataWithCache
+    let result_js = match fetchDataWithCache(
         cursor_local.to_request_string(),
         bytes_before,
         false, // Don't bypass cache by default
     )
     .await
-    .expect("Failed to fetch data");
+    {
+        Ok(result) => result,
+        Err(e) => {
+            info!("Failed to fetch data: {:?}", e);
+            return Err(format!("Failed to fetch data from canister: {:?}", e).into());
+        }
+    };
 
-    // Extract the "Ok" property from the returned object.
-    let ok_js = Reflect::get(&result_js, &JsValue::from_str("Ok"))
-        .expect("Expected an 'Ok' property in the result");
+    // Extract the "Ok" property from the returned object with proper error handling
+    let ok_js = match Reflect::get(&result_js, &JsValue::from_str("Ok")) {
+        Ok(js_value) => js_value,
+        Err(e) => {
+            info!("Failed to extract 'Ok' property from result: {:?}", e);
+            return Err("Invalid response format from canister".into());
+        }
+    };
 
     // Convert the Ok property to an array.
     let ok_array = Array::from(&ok_js);
 
     // The first element is the cursor string.
-    let cursor_remote = ok_array
-        .get(0)
-        .as_string()
-        .expect("Expected the first element to be a string");
+    // Safely extract the cursor string with better error handling
+    let cursor_remote = match ok_array.get(0).as_string() {
+        Some(cursor) => cursor,
+        None => {
+            info!("Invalid cursor format received from canister");
+            return Err("Invalid cursor format received from canister".into());
+        }
+    };
 
     // The second element is the data as a Uint8Array.
     let data_js = ok_array.get(1);
+    // Validate that we actually got data
+    if data_js.is_undefined() || data_js.is_null() {
+        info!("No data received from canister");
+        return Err("No data received from canister".into());
+    }
     let data_u8array = Uint8Array::new(&data_js);
     let data = data_u8array.to_vec();
 
     info!("Ledger canister returned {} bytes", data.len());
-    let cursor_remote = LedgerCursor::new_from_string(cursor_remote);
+
+    // Create a LedgerCursor from the string with proper error handling
+    // The new_from_string method calls unwrap() internally which can panic
+    let cursor_remote = match cursor_remote.parse::<LedgerCursor>() {
+        Ok(cursor) => cursor,
+        Err(e) => {
+            info!("Failed to parse cursor string: {}", e);
+            return Err(format!("Failed to parse cursor string: {}", e).into());
+        }
+    };
+
+    // Add validation to ensure the cursor is valid
+    if cursor_remote.position == 0 && data.len() > 0 {
+        info!("Invalid cursor position: 0 with non-empty data");
+        return Err("Invalid cursor position received from canister".into());
+    }
+
     let offset_remote = cursor_remote.position;
     info!(
         "Ledger canister returned position {:0x}, full cursor: {}",
@@ -183,7 +237,16 @@ pub async fn ledger_data_fetch(
     if !data.is_empty() {
         // TODO: All ledger blocks are effectively iterated twice here, it should be possible to do this in a single go
         ledger_local.refresh_ledger()?;
-        refresh_caches_from_ledger(ledger_local).unwrap();
+
+        // Add proper error handling for refresh_caches_from_ledger
+        match refresh_caches_from_ledger(ledger_local) {
+            Ok(_) => info!("Successfully refreshed caches from ledger"),
+            Err(e) => {
+                info!("Warning: Failed to refresh caches from ledger: {}", e);
+                // We don't return an error here as the main operation succeeded
+                // Just log the warning and continue
+            }
+        }
     }
 
     Ok(())
@@ -208,7 +271,17 @@ pub fn ledger_cursor_local_as_str() -> String {
 pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
     LEDGER_MAP.with(|ledger| {
         let ledger = ledger.borrow();
-        let (block_header, block) = ledger.get_block_at_offset(block_offset)?;
+
+        // Get block with proper error handling
+        let (block_header, block) = match ledger.get_block_at_offset(block_offset) {
+            Ok(result) => result,
+            Err(e) => {
+                return Err(format!(
+                    "Failed to get block at offset {}: {}",
+                    block_offset, e
+                ))
+            }
+        };
 
         #[derive(Serialize)]
         struct LedgerBlockHeaderAsJson {
@@ -224,16 +297,24 @@ pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
             block: Vec<LedgerEntryAsJson>,
         }
 
+        // Serialize block header with proper error handling
+        let header_json = match serde_json::to_string(&LedgerBlockHeaderAsJson {
+            block_header,
+            parent_block_hash: BASE64.encode(block.parent_hash()),
+            offset: block.get_offset(),
+        }) {
+            Ok(json) => json,
+            Err(e) => return Err(format!("Failed to serialize block header: {}", e)),
+        };
+
+        // Parse entries and serialize the full block
+        let entries = ledger_block_parse_entries(&block);
+
         serde_json::to_string(&LedgerBlockAsJson {
-            block_header: serde_json::to_string(&LedgerBlockHeaderAsJson {
-                block_header,
-                parent_block_hash: BASE64.encode(block.parent_hash()),
-                offset: block.get_offset(),
-            })
-            .unwrap(),
-            block: ledger_block_parse_entries(&block),
+            block_header: header_json,
+            block: entries,
         })
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("Failed to serialize block: {}", e))
     })
 }
 
