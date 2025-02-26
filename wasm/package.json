@@ -1,6 +1,6 @@
 {
   "name": "@decent-stuff/dc-client",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "WebAssembly module for interacting with Decent Cloud ledger",
   "main": "dist/dc-client.js",
   "module": "dist/dc-client.mjs",
