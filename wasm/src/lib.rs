@@ -203,7 +203,7 @@ pub async fn ledger_data_fetch(
     };
 
     // Add validation to ensure the cursor is valid
-    if cursor_remote.position == 0 && data.len() > 0 {
+    if cursor_remote.position == 0 && !data.is_empty() {
         info!("Invalid cursor position: 0 with non-empty data");
         return Err("Invalid cursor position received from canister".into());
     }
