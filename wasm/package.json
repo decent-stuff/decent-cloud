@@ -7,7 +7,8 @@
   "types": "dist/dc-client.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "demo"
   ],
   "scripts": {
     "build": "node build.js",

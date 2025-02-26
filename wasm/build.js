@@ -64,6 +64,8 @@ async function main() {
       ['index.d.ts', 'dist/dc-client.d.ts'],
       ['agent_js_wrapper.js', 'dist/agent_js_wrapper.js'],
       ['canister_idl.js', 'dist/canister_idl.js'],
+      ['client.js', 'dist/dc-client.js'],
+      ['client.js', 'dist/dc-client.mjs'],
     ];
 
     filesToCopy.forEach(([src, dest]) => {
@@ -90,51 +92,8 @@ async function main() {
       }
     }
 
-    // Create the main entry points
-    console.log('Creating entry points...');
-    const entryContent = `
-import { __wbg_set_wasm } from './dc-client_bg.js';
-import * as wasm from './dc-client_bg.js';
-export * from './agent_js_wrapper.js';
-
-let initialized = false;
-
-export async function initialize() {
-  if (!initialized) {
-    const response = await fetch(new URL('./dc-client_bg.wasm', import.meta.url));
-    const wasmModule = await WebAssembly.instantiate(await response.arrayBuffer(), {
-      './dc-client_bg.js': wasm,
-    });
-    __wbg_set_wasm(wasmModule.instance.exports);
-    const result = await wasmModule.instance.exports.initialize();
-    initialized = true;
-    return result;
-  }
-  return 'WASM module already initialized';
-}
-
-// Re-export all wasm functions with initialization
-${fs
-  .readFileSync(path.join(distDir, 'dc-client.d.ts'), 'utf8')
-  .split('\n')
-  .filter(line => line.startsWith('export function'))
-  .map(line => {
-    const funcName = line.match(/export function (\w+)/)[1];
-    if (funcName === 'initialize') return ''; // Skip initialize as we define it manually
-    return `
-export async function ${funcName}(...args) {
-  await initialize();
-  return wasm.${funcName}(...args);
-}`;
-  })
-  .join('\n')}
-
-export { wasm };
-`.trim();
-
-    fs.writeFileSync(path.join(distDir, 'dc-client.js'), entryContent);
-    fs.writeFileSync(path.join(distDir, 'dc-client.mjs'), entryContent);
-    console.log('Created dc-client.js and dc-client.mjs');
+    // We're now using client.js as the main entry point
+    console.log('Using client.js as the main entry point');
 
     console.log('✨ Build completed successfully!');
   } catch (error) {
