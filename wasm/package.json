@@ -8,7 +8,8 @@
   "files": [
     "dist",
     "README.md",
-    "demo"
+    "demo",
+    "!demo/node_modules"
   ],
   "scripts": {
     "build": "node build.js",

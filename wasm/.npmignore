@@ -1,0 +1,6 @@
+# Ignore node_modules in the demo directory
+demo/node_modules/
+
+# Ignore development files
+.eslintrc.json
+.prettierrc
