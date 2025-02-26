@@ -132,7 +132,7 @@ We welcome contributions! See our [Development Guide](docs/development.md) for:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the APACHE 2 License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
