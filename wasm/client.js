@@ -190,40 +190,14 @@ class DecentCloudClient {
    */
   async initialize() {
     if (!initialized) {
-      try {
-        const response = await fetch(new URL('./dc-client_bg.wasm', import.meta.url));
-        const wasmBuffer = await response.arrayBuffer();
-
-        // Patch the wasm object to handle TextDecoder errors
-        const originalStringNew = wasm.__wbindgen_string_new;
-        if (originalStringNew) {
-          wasm.__wbindgen_string_new = function (ptr, len) {
-            try {
-              return originalStringNew(ptr, len);
-            } catch (e) {
-              if (e instanceof TypeError && e.message.includes('TextDecoder.decode')) {
-                console.warn('Handled TextDecoder error during initialization');
-                return ''; // Return empty string instead of failing
-              }
-              throw e;
-            }
-          };
-        }
-
-        const wasmModule = await WebAssembly.instantiate(wasmBuffer, {
-          './dc-client_bg.js': wasm,
-        });
-
-        __wbg_set_wasm(wasmModule.instance.exports);
-        const result = await wasmModule.instance.exports.initialize();
-        initialized = true;
-        return result;
-      } catch (error) {
-        console.error('Error during WASM initialization:', error);
-        // Even if there was an error, mark as initialized to prevent repeated failures
-        initialized = true;
-        return `WASM initialization error: ${error.message}`;
-      }
+      const response = await fetch(new URL('./dc-client_bg.wasm', import.meta.url));
+      const wasmModule = await WebAssembly.instantiate(await response.arrayBuffer(), {
+        './dc-client_bg.js': wasm,
+      });
+      __wbg_set_wasm(wasmModule.instance.exports);
+      const result = await wasmModule.instance.exports.initialize();
+      initialized = true;
+      return result;
     }
     return 'WASM module already initialized';
   }
