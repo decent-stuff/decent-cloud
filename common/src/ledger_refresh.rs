@@ -169,7 +169,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
 #[derive(Serialize)]
 pub struct LedgerEntryAsJson {
     pub label: String,
-    pub key: String,
+    pub key: Value,
     pub value: Value,
 }
 
@@ -177,7 +177,7 @@ impl LedgerEntryAsJson {
     fn from_dc_token_approval(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_DC_TOKEN_APPROVAL.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(
                 FundsTransferApproval::try_from_slice(entry.value()).unwrap(),
             )
@@ -188,7 +188,7 @@ impl LedgerEntryAsJson {
     fn from_dc_token_transfer(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_DC_TOKEN_TRANSFER.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(FundsTransfer::try_from_slice(entry.value()).unwrap())
                 .unwrap(),
         }
@@ -198,7 +198,7 @@ impl LedgerEntryAsJson {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         LedgerEntryAsJson {
             label: LABEL_NP_CHECK_IN.to_string(),
-            key: dcc_id.to_string(),
+            key: Value::String(dcc_id.to_string()),
             value: match CheckInPayload::try_from_slice(entry.value()) {
                 Ok(payload) => serde_json::json!({
                     "parent_hash": BASE64.encode(parent_hash),
@@ -225,7 +225,7 @@ impl LedgerEntryAsJson {
     fn from_np_offering(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_NP_OFFERING.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: match UpdateOfferingPayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_update_offering() {
                     Ok(offering) => serde_json::to_value(&offering).unwrap(),
@@ -251,7 +251,7 @@ impl LedgerEntryAsJson {
     fn from_np_profile(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_NP_PROFILE.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: match UpdateProfilePayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_update_profile() {
                     Ok(profile) => serde_json::to_value(&profile).unwrap(),
@@ -278,7 +278,7 @@ impl LedgerEntryAsJson {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         LedgerEntryAsJson {
             label: entry.label().to_string(),
-            key: dcc_id.to_string(),
+            key: Value::String(dcc_id.to_string()),
             value: serde_json::json!({
                 "parent_hash": BASE64.encode(parent_hash),
                 "signature": BASE64.encode(entry.value()),
@@ -295,7 +295,7 @@ impl LedgerEntryAsJson {
     fn from_reputation_age(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_REPUTATION_AGE.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(ReputationAge::try_from_slice(entry.value()).unwrap())
                 .unwrap(),
         }
@@ -304,7 +304,7 @@ impl LedgerEntryAsJson {
     fn from_reputation_change(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_REPUTATION_CHANGE.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(ReputationChange::try_from_slice(entry.value()).unwrap())
                 .unwrap(),
         }
@@ -313,10 +313,10 @@ impl LedgerEntryAsJson {
     fn from_reward_distribution(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_REWARD_DISTRIBUTION.to_string(),
-            key: match std::str::from_utf8(entry.key()) {
+            key: Value::String(match std::str::from_utf8(entry.key()) {
                 Ok(s) => s.to_string(),
                 Err(_) => BASE64.encode(entry.key()),
-            },
+            }),
             value: serde_json::to_value(u64::from_le_bytes(
                 <[u8; 8]>::try_from_slice(entry.value())
                     .map_err(|e| {
@@ -335,7 +335,7 @@ impl LedgerEntryAsJson {
     fn from_generic(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: entry.label().to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(BASE64.encode(entry.value())).unwrap(),
         }
     }
@@ -343,7 +343,7 @@ impl LedgerEntryAsJson {
     fn from_contract_sign_request(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_CONTRACT_SIGN_REQUEST.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: match ContractSignRequestPayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_contract_sign_request() {
                     Ok(contract_req) => serde_json::to_value(&contract_req).unwrap(),
@@ -369,7 +369,7 @@ impl LedgerEntryAsJson {
     fn from_contract_sign_reply(entry: &LedgerEntry) -> Self {
         LedgerEntryAsJson {
             label: LABEL_CONTRACT_SIGN_REPLY.to_string(),
-            key: BASE64.encode(entry.key()),
+            key: Value::String(BASE64.encode(entry.key())),
             value: match ContractSignReplyPayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_contract_sign_reply() {
                     Ok(contract_reply) => serde_json::to_value(&contract_reply).unwrap(),

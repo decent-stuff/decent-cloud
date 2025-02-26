@@ -73,9 +73,9 @@ class LedgerOperations {
   }
 
   /**
-   * Get a ledger block as JSON
+   * Get a ledger block header and data as JSON
    * @param {bigint} blockOffset The block offset
-   * @returns {string} The ledger block as a JSON string
+   * @returns {string} The ledger block header and data (entries) as a JSON string
    */
   getBlockAsJson(blockOffset) {
     const result = wasm.ledger_get_block_as_json(blockOffset);

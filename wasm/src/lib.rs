@@ -12,6 +12,7 @@ use ledger_map::platform_specific as ledger_storage;
 use ledger_map::platform_specific_wasm32_browser as ledger_storage;
 use ledger_map::{info, LedgerMap};
 use serde::Serialize;
+use serde_json::Value;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
@@ -295,12 +296,12 @@ pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
 
         #[derive(Serialize)]
         struct LedgerBlockAsJson {
-            block_header: String,
+            block_header: Value,
             block: Vec<LedgerEntryAsJson>,
         }
 
         // Serialize block header with proper error handling
-        let header_json = match serde_json::to_string(&LedgerBlockHeaderAsJson {
+        let header_json = match serde_json::to_value(&LedgerBlockHeaderAsJson {
             block_version: block_header.block_version(),
             jump_bytes_prev: block_header.jump_bytes_prev_block(),
             jump_bytes_next: block_header.jump_bytes_next_block(),

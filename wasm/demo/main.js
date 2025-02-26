@@ -56,19 +56,8 @@ async function initDemo() {
       }
 
       // Extract the block header and contents
-      let block_header, ledger_block;
-
-      if (typeof parsedResult.block_header === 'string') {
-        try {
-          block_header = JSON.parse(parsedResult.block_header);
-        } catch (e) {
-          block_header = parsedResult.block_header;
-        }
-      } else {
-        block_header = parsedResult.block_header;
-      }
-
-      ledger_block = parsedResult.block;
+      const block_header = parsedResult.block_header;
+      const ledger_block = parsedResult.block;
 
       displayJSON('wasmBlockHeader', block_header);
       displayJSON('wasmBlockContents', ledger_block);
