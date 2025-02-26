@@ -290,7 +290,7 @@ pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
             jump_bytes_next: u32,
             parent_block_hash: String,
             offset: u64,
-            timestamp: u64,
+            timestamp_ns: u64,
         }
 
         #[derive(Serialize)]
@@ -306,7 +306,7 @@ pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
             jump_bytes_next: block_header.jump_bytes_next_block(),
             parent_block_hash: BASE64.encode(block.parent_hash()),
             offset: block.get_offset(),
-            timestamp: block.timestamp(),
+            timestamp_ns: block.timestamp(),
         }) {
             Ok(json) => json,
             Err(e) => return Err(format!("Failed to serialize block header: {}", e)),
