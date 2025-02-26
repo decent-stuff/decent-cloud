@@ -10,7 +10,7 @@ use js_sys::{Array, Reflect, Uint8Array};
 use ledger_map::platform_specific as ledger_storage;
 #[cfg(target_arch = "wasm32")]
 use ledger_map::platform_specific_wasm32_browser as ledger_storage;
-use ledger_map::{info, ledger_entry::LedgerBlockHeader, LedgerMap};
+use ledger_map::{info, LedgerMap};
 use serde::Serialize;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
@@ -285,10 +285,12 @@ pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
 
         #[derive(Serialize)]
         struct LedgerBlockHeaderAsJson {
-            #[serde(flatten)]
-            block_header: LedgerBlockHeader,
+            block_version: u32,
+            jump_bytes_prev: i32,
+            jump_bytes_next: u32,
             parent_block_hash: String,
             offset: u64,
+            timestamp: u64,
         }
 
         #[derive(Serialize)]
@@ -299,9 +301,12 @@ pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
 
         // Serialize block header with proper error handling
         let header_json = match serde_json::to_string(&LedgerBlockHeaderAsJson {
-            block_header,
+            block_version: block_header.block_version(),
+            jump_bytes_prev: block_header.jump_bytes_prev_block(),
+            jump_bytes_next: block_header.jump_bytes_next_block(),
             parent_block_hash: BASE64.encode(block.parent_hash()),
             offset: block.get_offset(),
+            timestamp: block.timestamp(),
         }) {
             Ok(json) => json,
             Err(e) => return Err(format!("Failed to serialize block header: {}", e)),
