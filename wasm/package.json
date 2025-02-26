@@ -1,6 +1,6 @@
 {
   "name": "@decent-stuff/dc-client",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "WebAssembly module for interacting with Decent Cloud ledger",
   "main": "dist/dc-client.js",
   "module": "dist/dc-client.mjs",
@@ -32,6 +32,8 @@
   "author": "Decent Cloud Team",
   "license": "Apache-2.0",
   "devDependencies": {
+    "@dfinity/agent": "^2.3.0",
+    "@dfinity/principal": "^2.3.0",
     "@types/node": "22.13.5",
     "@typescript-eslint/eslint-plugin": "8.24.1",
     "@typescript-eslint/parser": "8.24.1",
