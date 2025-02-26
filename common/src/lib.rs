@@ -137,3 +137,19 @@ pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> IcrcCompatibleAccount {
         .unwrap_or_else(|_| panic!("Failed to parse pubkey {}", hex::encode(pubkey_bytes)));
     dcc_ident.as_icrc_compatible_account()
 }
+
+pub mod serialize_to_string_or_base64 {
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use base64::Engine;
+    use serde::Serializer;
+
+    pub fn serialize<S>(memo: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match String::from_utf8(memo.to_vec()) {
+            Ok(memo_str) => serializer.serialize_str(&memo_str),
+            Err(_) => serializer.serialize_str(&BASE64.encode(memo)),
+        }
+    }
+}

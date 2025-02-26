@@ -1,6 +1,6 @@
 use crate::{
-    AHashMap, IcrcCompatibleAccount, RecentCache, TokenAmountE9s, DC_TOKEN_TRANSFER_FEE_E9S,
-    LABEL_DC_TOKEN_APPROVAL,
+    serialize_to_string_or_base64, AHashMap, IcrcCompatibleAccount, RecentCache, TokenAmountE9s,
+    DC_TOKEN_TRANSFER_FEE_E9S, LABEL_DC_TOKEN_APPROVAL,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -44,6 +44,7 @@ pub struct FundsTransferApprovalV1 {
     allowance: TokenAmountE9s,
     expires_at: Option<u64>,
     fee: TokenAmountE9s,
+    #[serde(with = "serialize_to_string_or_base64")]
     memo: Vec<u8>,
     created_at_time: u64,
 }

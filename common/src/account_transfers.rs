@@ -1,9 +1,9 @@
 use crate::{
     account_balance_add, account_balance_get, account_balance_sub, amount_as_string,
     get_pubkey_from_principal, get_timestamp_ns, ledger_add_reputation_change,
-    slice_to_32_bytes_array, AHashMap, DccIdentity, RecentCache, TokenAmountE9s, TransferError,
-    DC_TOKEN_TRANSFER_FEE_E9S, LABEL_DC_TOKEN_TRANSFER, MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL,
-    TX_WINDOW,
+    serialize_to_string_or_base64, slice_to_32_bytes_array, AHashMap, DccIdentity, RecentCache,
+    TokenAmountE9s, TransferError, DC_TOKEN_TRANSFER_FEE_E9S, LABEL_DC_TOKEN_TRANSFER,
+    MINTING_ACCOUNT, MINTING_ACCOUNT_PRINCIPAL, TX_WINDOW,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -422,6 +422,7 @@ pub struct FundsTransferV1 {
     pub fee: Option<TokenAmountE9s>,
     pub fees_accounts: Option<Vec<IcrcCompatibleAccount>>,
     pub created_at_time: Option<u64>,
+    #[serde(with = "serialize_to_string_or_base64")]
     pub memo: Vec<u8>,
     pub amount: TokenAmountE9s,
     pub balance_from_after: TokenAmountE9s,
