@@ -215,7 +215,7 @@ Reputation Health = (Increases ÷ Total Interactions) × 100%
 
 </div>
 
-> 📊 **Insight**: A participant with 100 increases (+100 points) and 2 decreases (-20 points) has a net score of +80, but more importantly, a 98% positive interaction rate.
+> 📊 **Insight**: A participant with 100 increases of 1 reputation point each (+100 points total) and 2 decreases of 10 points each (-20 points total) has a net reputation score of +80, but more importantly, a 98% positive interaction rate.
 
 ---
 
