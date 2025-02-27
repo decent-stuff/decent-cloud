@@ -1,17 +1,23 @@
 # Mining and Validation Guide
 
-This guide explains how to participate in the Decent Cloud network as a miner/validator and the benefits of doing so.
+This guide explains how to participate in the Decent Cloud network as a miner/validator, why it matters for our tamper-proof ledger, and how you can benefit from doing so.
+
+Because the [reputation ledger](reputation.md) is central to Decent Cloud, validators maintain a complete copy of the blockchain, including reputation data and all other transactions. By cryptographically signing the hash of this entire ledger, you prove that you possess the most up-to-date and unaltered record. This process safeguards the network against tampering and ensures reliable reputation tracking.
 
 ## Overview
 
-Unlike traditional blockchain networks that use Proof of Work, Decent Cloud uses a more environmentally friendly validation mechanism. Validators participate in block creation and token distribution through regular check-ins, making the system more energy-efficient and accessible.
+Decent Cloud uses an environmentally friendly validation process instead of traditional Proof of Work. Validators confirm that the shared ledger has not been tampered with, create a local copy, and receive an equal share of block rewards. This design helps to:
+
+- Improve security by increasing the number of full ledger copies
+- Remain energy-efficient
+- Offer easy onboarding for participants
 
 ## Benefits
 
 ### For Validators
 
 - 🪙 Earn DCT tokens through regular participation
-- 💰 Share in block rewards (50 DCT every 10 minutes)
+- 💰 Share in block rewards (50 DCT every 10 minutes, halving every 210,000 blocks)
 - 🌱 Participate in an eco-friendly system
 - 🏗️ Help build a decentralized cloud infrastructure
 - 🎯 Low barrier to entry compared to traditional mining
@@ -54,8 +60,8 @@ Share this output in the [community discussions](https://github.com/orgs/decent-
 1. **Get Initial Tokens**
 
    - Receive initial transfer from community members, or
-   - Purchase tokens on [KongSwap](https://www.kongswap.io/swap?from=cngnf-vqaaa-aaaar-qag4q-cai&to=ggi4a-wyaaa-aaaai-actqq-cai)
-   - Required: minimum 0.5 DCT for registration, plus 0.5 DCT per check-in (validation)
+   - Purchase tokens e.g. on [KongSwap](https://www.kongswap.io/swap?from=cngnf-vqaaa-aaaar-qag4q-cai&to=ggi4a-wyaaa-aaaai-actqq-cai)
+   - Required: minimum 0.5 DCT for registration, plus 0.5 DCT per validation
 
 2. **Register as Provider**
 
@@ -67,12 +73,12 @@ Registration fee: 0.5 DCT (one-time)
 
 ## Participation
 
-### Regular Check-ins
+### Validation (mining)
 
-A check-in will automatically pull the complete ledger, which provides you with the latest ledger hash, necessary for the check-in process. The more people with the complete ledger, the better the security.
+By running the validation command, you automatically fetch the latest ledger and sign its hash, proving you have a full, unaltered copy. The more validators that run this process, the safer the network—and the reputation system—becomes.
 
 ```bash
-dc np check-in --identity my-validator --memo "Your optional memo"
+dc np validate --identity my-validator --memo "Your optional memo"
 ```
 
 - Cost: 0.5 DCT per block
@@ -84,23 +90,20 @@ dc np check-in --identity my-validator --memo "Your optional memo"
 
 1. **Automation**
 
-   - Set up automated check-ins
-   - Monitor system health
-   - Keep sufficient token balance
-   - Track participation status
+   - Schedule regular validations
+   - Keep an eye on system health
+   - Ensure you always have enough token balance
 
 2. **Token Management**
 
    - Maintain reserve for fees
-   - Monitor rewards
-   - Plan reinvestment strategy
-   - Keep track of earnings
+   - Track your rewards over time
+   - Plan any reinvestments in validation or other services
 
 3. **Community Engagement**
-   - Participate in discussions
-   - Share experiences
-   - Help new validators
-   - Suggest improvements
+   - Participate in forums and discussions
+   - Collaborate with fellow validators
+   - Contribute ideas for platform improvements
 
 ## Monitoring
 
@@ -128,28 +131,27 @@ dc account --identity my-validator
 ### Block Rewards
 
 - 50 DCT per block
-- Approximately every 10 minutes
-- Equal distribution among participants
+- Every 10 minutes
 - Halving schedule similar to Bitcoin
+- Equal distribution among all active validators
 
 ### Costs
 
 - Registration: 0.5 DCT (one-time)
-- Check-in: 0.5 DCT per block
+- Validation: 0.5 DCT per block
 - Transaction fees: Minimal
 
 ### ROI Considerations
 
-- Regular participation required
-- Rewards based on total participants
-- Network growth potential
-- Token value appreciation
+- Consistent participation is key
+- Rewards depend on total validators
+- Future network growth may affect token value
 
 ## Tips for Success
 
 1. **Consistent Participation**
 
-   - Regular check-ins
+   - Regular validations
    - Maintain adequate token balance
    - Monitor system performance
    - Stay updated with changes
