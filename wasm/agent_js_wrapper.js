@@ -69,8 +69,10 @@ async function getCachedData(key) {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const result = request.result;
-      if (result && Date.now() - result.timestamp < 600000) {
+      const age = Date.now() - result.timestamp;
+      if (result && age < 600000) {
         // 10 minutes
+        console.log(`[Cache] Found cached data, age: ${Math.round(age / 1000)} seconds`);
         resolve(result.data);
       } else {
         resolve(null);
@@ -91,7 +93,7 @@ async function setCachedData(key, data) {
     });
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => resolve(request.data);
   });
 }
 
@@ -102,8 +104,6 @@ export async function fetchDataWithCache(cursor, bytesBefore, bypassCache = fals
   if (!bypassCache) {
     const cachedData = await getCachedData(cacheKey);
     if (cachedData) {
-      const age = Math.round((Date.now() - cachedData.timestamp) / 1000);
-      console.log(`[Cache] Found cached data, age: ${age} seconds`);
       return cachedData;
     } else {
       console.log('[Cache] No valid cached data found or cache expired');
