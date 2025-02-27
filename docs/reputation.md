@@ -312,7 +312,7 @@ dc reputation --export --format json --identity my-id > my_reputation.json
   <tr>
     <td>Unexpected reputation drop</td>
     <td>Dispute filed against you</td>
-    <td>Check dispute notifications in <code>dc notifications</code></td>
+    <td>Check disputes in <code>dc reputation --history</code></td>
   </tr>
   <tr>
     <td>Cannot view reputation</td>
