@@ -4,7 +4,7 @@ A peer-to-peer platform for decentralized cloud resource sharing and management.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.2.1-blue)
 [![Documentation](https://img.shields.io/badge/docs-latest-green.svg)](docs/)
 [![Discussions](https://img.shields.io/github/discussions/decent-stuff/decent-cloud)](https://github.com/orgs/decent-stuff/discussions)
 
@@ -25,13 +25,14 @@ What makes Decent Cloud truly stand out is its unique reputation system, which t
 
 ## 📚 Documentation
 
-- [Installation Guide](docs/installation.md) - Platform installation instructions
-- [Getting Started](docs/getting-started.md) - Quick start guide
-- [User Guide](docs/user-guide.md) - Comprehensive guide for users
-- [Provider Guide](docs/provider-guide.md) - Complete guide for providers
-- [Mining & Validation](docs/mining-and-validation.md) - How to participate and earn rewards
-- [Token Distribution](docs/token-distribution.md) - Token system explanation
-- [Development Guide](docs/development.md) - Contributing and development setup
+- [Getting Started](docs/getting-started.md) - A quick introduction to Decent Cloud for new users, including basic setup steps.
+- [Installation Guide](docs/installation.md) - Detailed platform installation instructions (OS specifics, requirements, etc.).
+- [User Guide](docs/user-guide.md) - A comprehensive guide for end-users (developers, operators) on how to interact with the platform.
+- [Provider Guide](docs/provider-guide.md) - In-depth documentation for providers on how to offer resources (e.g., servers, GPUs).
+- [Reputation Guide](docs/reputation.md) - Explanation of the unique, blockchain-based reputation system.
+- [Mining & Validation](docs/mining-and-validation.md) - Instructions on how to participate in securing the network and earning rewards.
+- [Token Distribution](docs/token-distribution.md) - An outline of how tokens are created, rewarded, and circulated within the ecosystem.
+- [Development Guide](docs/development.md) - Steps for contributors, including environment setup, testing, and best practices.
 
 ## 🚀 Quick Start
 
@@ -109,7 +110,7 @@ See the [Getting Started Guide](docs/getting-started.md) for next steps, or chec
 
   - GitHub: [github.com/decent-stuff/website](https://github.com/decent-stuff/website/)
 
-- **Client Libraries**:
+- **Decent-Cloud**: This repository, Internet Computer canister and the client code
   - Console Client: Available in this repository under `/cli` and published on GitHub as release binaries
   - Browser Client: [@decent-stuff/dc-client](https://www.npmjs.com/package/@decent-stuff/dc-client) NPM package
 

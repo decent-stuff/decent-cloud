@@ -1,6 +1,22 @@
-www# Development Guide
+# Development Guide
 
 This guide covers everything you need to know about developing and contributing to the Decent Cloud project.
+
+Note that the Decent Cloud project is split across three repositories:
+
+- **LedgerMap**: The backing ledger implementation
+
+  - GitHub: [github.com/decent-stuff/ledger-map](https://github.com/decent-stuff/ledger-map/)
+  - NPM Package: [@decent-stuff/ledger-map](https://www.npmjs.com/package/@decent-stuff/ledger-map)
+
+- **Decent-Cloud**: This repository, Internet Computer canister and the client code
+
+  - Console Client: Available in this repository under `/cli` and published on GitHub as release binaries
+  - Browser Client: [@decent-stuff/dc-client](https://www.npmjs.com/package/@decent-stuff/dc-client) NPM package
+
+- **Frontend Website**: The official Decent Cloud web interface
+
+  - GitHub: [github.com/decent-stuff/website](https://github.com/decent-stuff/website/)
 
 ## Development Environment Setup
 
