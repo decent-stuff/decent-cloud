@@ -10,7 +10,9 @@ A peer-to-peer platform for decentralized cloud resource sharing and management.
 
 ## 🌟 Overview
 
-Decent Cloud revolutionizes cloud resource sharing by enabling anyone to rent out or lease cloud resources—from GPUs to web servers—through a unified interface. It eliminates vendor lock-in and simplifies cloud resource management through a decentralized approach.
+Decent Cloud revolutionizes cloud resource sharing by enabling anyone to rent or lease computing assets—from GPUs to web servers and web services—all through a single, unified interface. It eliminates vendor lock-in and streamlines cloud management with a decentralized approach.
+
+What makes Decent Cloud truly stand out is its unique reputation system, which ties credibility directly to transaction fees. Paying these fees is the only way to build a strong reputation, and delivering poor service can quickly damage it—just as in real life. This tamper-proof ledger provides a transparent history of participant reputations, making it simple to identify reliable providers and maintain accountability across the platform.
 
 ### ✨ Key Features
 
