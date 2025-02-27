@@ -180,13 +180,13 @@ Provider Reputation: -10 points (== +1 from the payment -11 for the dispute)
 
 When a developer and provider work together regularly:
 
-1. Developer contracts services monthly for 500 DCT each
+1. Developer contracts services monthly for 500 DCT each month
 2. Provider consistently delivers excellent service
 3. After 12 months of successful transactions:
 
 ```
-Developer Reputation: +12 points
-Provider Reputation: +12 points
+Developer Reputation: 12 * 5 = +60 points
+Provider Reputation: 12 * 5 = +60 points
 Trust Level: High
 ```
 
