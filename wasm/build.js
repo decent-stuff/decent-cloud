@@ -1,8 +1,11 @@
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Ensure we're in the right directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const wasmDir = __dirname;
 process.chdir(wasmDir);
 
@@ -76,7 +79,9 @@ async function main() {
     const snippetsDir = path.join(distDir, 'snippets');
     let retries = 0;
     while (!fs.existsSync(snippetsDir) && retries < 10) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => {
+        setTimeout(resolve, 100);
+      });
       retries++;
     }
 

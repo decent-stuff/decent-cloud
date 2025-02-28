@@ -1,0 +1,6 @@
+{
+  "devDependencies": {
+    "eslint-plugin-promise": "^7.2.1",
+    "globals": "^16.0.0"
+  }
+}

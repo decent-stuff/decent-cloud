@@ -99,7 +99,7 @@ class LedgerOperations {
   getValue(label, key) {
     try {
       return wasm.ledger_get_value(label, key);
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -128,7 +128,7 @@ class LedgerOperations {
    * @returns {Promise<any>} A promise that resolves with the transactions
    */
   async getTransactions() {
-    return wasm.get_transactions();
+    return await wasm.get_transactions();
   }
 }
 
@@ -151,7 +151,7 @@ class CanisterInteraction {
    * @returns {Promise<any>} A promise that resolves with the result
    */
   async callQuery(methodName, args) {
-    return queryCanister(methodName, args);
+    return await queryCanister(methodName, args);
   }
 
   /**
@@ -162,7 +162,7 @@ class CanisterInteraction {
    * @returns {Promise<any>} A promise that resolves with the result
    */
   async callUpdate(methodName, args, identity) {
-    return updateCanister(methodName, args, identity);
+    return await updateCanister(methodName, args, identity);
   }
 }
 
@@ -249,7 +249,7 @@ export {
 // Export the initialize function for backward compatibility
 export async function initialize() {
   const client = new DecentCloudClient();
-  return client.initialize();
+  return await client.initialize();
 }
 
 // Export the original functions from agent_js_wrapper.js for backward compatibility
@@ -283,7 +283,7 @@ export async function ledger_get_value(label, key) {
   await initialize();
   try {
     return wasm.ledger_get_value(label, key);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
