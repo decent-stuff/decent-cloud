@@ -64,6 +64,24 @@ async function getAgent(identity) {
   return agent;
 }
 
+async function setCachedData(key, data) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([storeName], 'readwrite');
+    const store = transaction.objectStore(storeName);
+
+    const record = {
+      key,
+      data,
+      timestamp: Date.now(),
+    };
+
+    const request = store.put(record);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
 async function getCachedData(key) {
   const db = await initDB();
   return new Promise((resolve, reject) => {
@@ -74,33 +92,13 @@ async function getCachedData(key) {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const result = request.result;
-      const now = Date.now();
-      if (result && now - result.timestamp < 600000) {
-        // 10 minutes
-        console.log(
-          `[Cache] Found cached data, age: ${Math.round((now - result.timestamp) / 1000)} seconds`
-        );
+      // Check if record exists and hasn't expired (10 minutes).
+      if (result && Date.now() - result.timestamp < 600000) {
         resolve(result.data);
       } else {
         resolve(null);
       }
     };
-  });
-}
-
-async function setCachedData(key, data) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.put({
-      key,
-      data,
-      timestamp: Date.now(),
-    });
-
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.data);
   });
 }
 
@@ -124,7 +122,7 @@ export async function fetchDataWithCache(cursor, bytesBefore, bypassCache = fals
     const result = await queryCanister('data_fetch', [[cursor], [bytesBefore]], {});
     console.log('[Cache] Successfully fetched fresh data, updating cache');
     await setCachedData(cacheKey, result);
-    return result;
+    return await getCachedData(cacheKey);
   } catch (error) {
     console.error('Error in fetchDataWithCache:', error);
     throw error;
