@@ -74,10 +74,12 @@ async function getCachedData(key) {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const result = request.result;
-      const age = Date.now() - result.timestamp;
-      if (result && age < 600000) {
+      const now = Date.now();
+      if (result && now - result.timestamp < 600000) {
         // 10 minutes
-        console.log(`[Cache] Found cached data, age: ${Math.round(age / 1000)} seconds`);
+        console.log(
+          `[Cache] Found cached data, age: ${Math.round((now - result.timestamp) / 1000)} seconds`
+        );
         resolve(result.data);
       } else {
         resolve(null);

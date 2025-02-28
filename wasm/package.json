@@ -1,6 +1,6 @@
 {
   "name": "@decent-stuff/dc-client",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "WebAssembly module for interacting with Decent Cloud ledger",
   "main": "dist/dc-client.js",
   "module": "dist/dc-client.mjs",
@@ -46,7 +46,9 @@
     "rimraf": "6.0.1",
     "typescript": "5.7.3",
     "typescript-eslint": "^8.25.0",
-    "wasm-pack": "0.13.1"
+    "wasm-pack": "0.13.1",
+    "eslint-plugin-promise": "^7.2.1",
+    "globals": "^16.0.0"
   },
   "engines": {
     "node": ">=16.0.0"
