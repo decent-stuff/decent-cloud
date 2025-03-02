@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useState, useRef} from "react";
 import HeaderSection from "@/components/ui/header";
 
 const features = [
@@ -25,28 +25,49 @@ const features = [
 ];
 
 const FeaturesSection = () => {
-
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [isPaused, setIsPaused] = useState(false);
+    const [scrollPosition, setScrollPosition] = useState(0);
+
+    // Track touch movement for manual scrolling
+    const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
     useEffect(() => {
-        const handleTouchStart = () => setIsPaused(true);
-        const handleTouchEnd = () => setIsPaused(false);
+        if (!scrollContainerRef.current) return;
+
+        const container = scrollContainerRef.current;
+
+        const handleTouchStart = (e: TouchEvent) => {
+            setIsPaused(true);
+            setTouchStartX(e.touches[0].clientX);
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (isPaused && touchStartX !== null) {
+                const touchDelta = e.touches[0].clientX - touchStartX;
+                setScrollPosition(prev => prev + touchDelta);
+                setTouchStartX(e.touches[0].clientX);
+            }
+        };
+
+        const handleTouchEnd = () => {
+            setIsPaused(false);
+            setTouchStartX(null);
+            setScrollPosition(0);
+        };
 
         // Add event listeners for mobile touch interactions
-        const cards = document.querySelectorAll('.feature-card');
-        cards.forEach((card) => {
-            card.addEventListener('touchstart', handleTouchStart);
-            card.addEventListener('touchend', handleTouchEnd);
-        });
+        container.addEventListener('touchstart', handleTouchStart);
+        container.addEventListener('touchmove', handleTouchMove);
+        container.addEventListener('touchend', handleTouchEnd);
 
         return () => {
             // Cleanup event listeners
-            cards.forEach((card) => {
-                card.removeEventListener('touchstart', handleTouchStart);
-                card.removeEventListener('touchend', handleTouchEnd);
-            });
+            container.removeEventListener('touchstart', handleTouchStart);
+            container.removeEventListener('touchmove', handleTouchMove);
+            container.removeEventListener('touchend', handleTouchEnd);
         };
-    }, []);
+    }, [isPaused, touchStartX]);
 
     return (
         <section id="features" className="pt-20 text-white">
@@ -62,12 +83,24 @@ const FeaturesSection = () => {
                     className="relative overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)] py-12 -my-4"
                 >
                     <div
-                        className="flex gap-8 flex-nowrap w-max"
+                        ref={scrollContainerRef}
+                        className={`flex gap-8 flex-nowrap w-max ${isPaused ? 'overflow-x-auto no-animation' : 'overflow-hidden'}`}
                         style={{
-                            animationPlayState: isPaused ? 'paused' : 'running'
+                            transform: isPaused ? `translateX(${scrollPosition}px)` : undefined,
+                            transition: isPaused ? 'none' : 'transform 0.3s ease'
                         }}
                         onMouseEnter={() => setIsPaused(true)}
-                        onMouseLeave={() => setIsPaused(false)}
+                        onMouseLeave={() => {
+                            setIsPaused(false);
+                            setScrollPosition(0);
+                        }}
+                        onWheel={(e) => {
+                            if (isPaused && scrollContainerRef.current) {
+                                e.preventDefault();
+                                const newPosition = scrollPosition - e.deltaY;
+                                setScrollPosition(newPosition);
+                            }
+                        }}
                     >
                         {[...Array(3)].map((_, idx) => (
                             <React.Fragment key={idx}>
@@ -98,8 +131,26 @@ const FeaturesSection = () => {
                     }
                 }
 
-                .flex {
+                .flex:not(.no-animation) {
                     animation: move-left 30s linear infinite;
+                }
+
+                .flex {
+                    scrollbar-width: thin;
+                    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+                }
+
+                .flex::-webkit-scrollbar {
+                    height: 6px;
+                }
+
+                .flex::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+
+                .flex::-webkit-scrollbar-thumb {
+                    background-color: rgba(255, 255, 255, 0.3);
+                    border-radius: 10px;
                 }
             `}</style>
         </section>
