@@ -28,7 +28,7 @@ const HeroSection = () => {
                         initial={{ opacity: 0, y: 20 }}
                         transition={{ duration: 0.5, delay: 0.2 }}
                     >
-                        Where the sky&apos;s not the limit, it&apos;s just the beginning!
+                        Airbnb of cloud services
                     </motion.p>
 
                     <motion.h2
