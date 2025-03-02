@@ -1,0 +1,8 @@
+/* styles/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import '~@fortawesome/fontawesome-free/css/all.min.css';
+
+/* You can also add custom global styles below */
