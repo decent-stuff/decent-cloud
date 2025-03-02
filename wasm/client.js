@@ -169,7 +169,7 @@ class CanisterInteraction {
 /**
  * Main client class for interacting with Decent Cloud
  */
-class DecentCloudClient {
+class DecentCloudClientWasm {
   /**
    * Create a new DecentCloudClient instance
    * @param {Object} config Optional configuration options
@@ -230,17 +230,17 @@ class DecentCloudClient {
 /**
  * Create a new DecentCloudClient instance
  * @param {Object} config Optional configuration options
- * @returns {DecentCloudClient} A new DecentCloudClient instance
+ * @returns {DecentCloudClientWasm} A new DecentCloudClient instance
  */
 export function createClient(config = {}) {
-  return new DecentCloudClient(config);
+  return new DecentCloudClientWasm(config);
 }
 
 // For backward compatibility, also export the original functions
 export {
   wasm,
   initialized,
-  DecentCloudClient,
+  DecentCloudClientWasm,
   LedgerStorage,
   LedgerOperations,
   CanisterInteraction,
@@ -248,7 +248,7 @@ export {
 
 // Export the initialize function for backward compatibility
 export async function initialize() {
-  const client = new DecentCloudClient();
+  const client = new DecentCloudClientWasm();
   return await client.initialize();
 }
 
@@ -314,17 +314,17 @@ export async function ledger_get_block_as_json(blockOffset) {
 
 export async function get_transactions() {
   await initialize();
-  return wasm.get_transactions();
+  return await wasm.get_transactions();
 }
 
 export async function call_query_canister(methodName, args) {
   await initialize();
-  const client = new DecentCloudClient();
-  return client.canister.callQuery(methodName, args);
+  const client = new DecentCloudClientWasm();
+  return await client.canister.callQuery(methodName, args);
 }
 
 export async function call_update_canister(methodName, args, identity) {
   await initialize();
-  const client = new DecentCloudClient();
-  return client.canister.callUpdate(methodName, args, identity);
+  const client = new DecentCloudClientWasm();
+  return await client.canister.callUpdate(methodName, args, identity);
 }
