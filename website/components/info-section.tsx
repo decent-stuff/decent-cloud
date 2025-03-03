@@ -32,8 +32,8 @@ const infoSections = [
     title: "What makes it safe?",
     icon: "💰",
     content: `It's actually safer than most if not all other marketplaces.<br/><br/>
-    • <strong>Security:</strong> Rather than relying on a behind-the-scenes database that can be hacked, with DC tokens, all financial transactions are recorded on the blockchain, so there is no possibility of a fraud or a rug pull.
-    • <strong>Transparency:</strong> No reviews, reputation, or transactions can be changed behind the scenes.
+    • <strong>Security:</strong> Rather than relying on a behind-the-scenes database that can be hacked, with DC tokens, all financial transactions are recorded on the blockchain, so there is no possibility of a fraud or a rug pull.<br/>
+    • <strong>Transparency:</strong> No reviews, reputation, or transactions can be changed behind the scenes.<br/>
     • <strong>Governance:</strong> Platform is permissionless and DAO-controlled, so all decisions are made by the community<br/>
     • <strong>Open Source:</strong> Anyone can contribute to the project, or fork it and continue running their own Decent Cloud.
     `,
@@ -42,7 +42,7 @@ const infoSections = [
     title: "What drives the value of DCT?",
     icon: "📈",
     content: `What drives the value of DCT:<br/><br/>
-    • <strong>Demand:</strong> All fees are paid in DCT, and conversion is automatic so there is no overhead to the user. Services or resources can also be paid in DCT.<br/>
+    • <strong>Demand:</strong> While rented services and resources can be paid either in fiat or DCT, fees are automatically converted and paid in DCT, which drives demand and reduces supply of DCT.<br/>
     • <strong>Supply:</strong> DC tokens can be acquired by renting services or resources, or by validating the ledger.<br/>
     `,
   },
