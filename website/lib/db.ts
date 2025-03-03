@@ -13,33 +13,67 @@ export interface LedgerEntry {
     blockOffset: number,
 }
 
-// Create a Dexie database class
+
+// Create a Dexie database class with a dedicated store for the last entry
 class LedgerDatabase extends Dexie {
-    ledgerEntries!: Table<LedgerEntry, string>; // 'string' is the type of the primary key
+    ledgerEntries!: Table<LedgerEntry, string>;
+    lastLedgerEntry!: Table<LedgerEntry, string>; // Store for quick access to the entry with the highest timestamp
+
+    // Constant key used for the "last entry" in the dedicated store
+    private readonly lastEntryKey = 'lastEntry';
 
     constructor() {
         super('DecentCloudLedgerDB');
 
-        // Define the schema for the database
-        this.version(1).stores({
-            ledgerEntries: 'key' // Primary key is 'key'
+        // Define both stores in a single version declaration
+        this.version(2).stores({
+            ledgerEntries: 'key, timestamp_ns, blockOffset',
+            lastLedgerEntry: 'key'
         });
     }
 
     // Method to add or update a ledger entry
     async addOrUpdateEntry(entry: LedgerEntry): Promise<string> {
-        // Add timestamp if not provided
+        // Assign timestamp if not provided
         if (!entry.timestamp_ns) {
             entry.timestamp_ns = Date.now();
         }
 
         // Put will add if the key doesn't exist, or update if it does
-        return await this.ledgerEntries.put(entry);
+        await this.ledgerEntries.put(entry);
+
+        // Retrieve current last entry from the dedicated store
+        const currentLast = await this.lastLedgerEntry.get(this.lastEntryKey);
+        // Update the last entry if this entry is newer
+        if (
+            !currentLast ||
+            (entry.timestamp_ns && (!currentLast.timestamp_ns || entry.timestamp_ns > currentLast.timestamp_ns))
+        ) {
+            await this.lastLedgerEntry.put({ ...entry }, this.lastEntryKey);
+        }
+        return entry.key;
     }
 
     // Method to add or update multiple entries at once
     async bulkAddOrUpdate(entries: LedgerEntry[]): Promise<void> {
         await this.ledgerEntries.bulkPut(entries);
+        // Determine the entry with the highest timestamp from the new entries
+        const maxEntry = entries.reduce((prev, curr) =>
+            (!prev || (curr.timestamp_ns && prev.timestamp_ns && curr.timestamp_ns > prev.timestamp_ns))
+                ? curr
+                : prev,
+            null as LedgerEntry | null
+        );
+
+        if (maxEntry) {
+            const currentLast = await this.lastLedgerEntry.get(this.lastEntryKey);
+            if (
+                !currentLast ||
+                (maxEntry.timestamp_ns && (!currentLast.timestamp_ns || maxEntry.timestamp_ns > currentLast.timestamp_ns))
+            ) {
+                await this.lastLedgerEntry.put({ ...maxEntry }, this.lastEntryKey);
+            }
+        }
     }
 
     // Method to get all ledger entries
@@ -52,14 +86,35 @@ class LedgerDatabase extends Dexie {
         return await this.ledgerEntries.get(key);
     }
 
+
     // Method to delete an entry
     async deleteEntry(key: string): Promise<void> {
-        await this.ledgerEntries.delete(key);
+        // Check if the entry to be deleted is the current "last entry"
+        const currentLast = await this.lastLedgerEntry.get(this.lastEntryKey);
+        if (currentLast && currentLast.key === key) {
+            await this.ledgerEntries.delete(key);
+            // Recalculate the new last entry by ordering by timestamp_ns and taking the last one
+            const newLast = await this.ledgerEntries.orderBy('timestamp_ns').last();
+            if (newLast) {
+                await this.lastLedgerEntry.put({ ...newLast }, this.lastEntryKey);
+            } else {
+                // No entries left: clear the lastLedgerEntry store
+                await this.lastLedgerEntry.delete(this.lastEntryKey);
+            }
+        } else {
+            await this.ledgerEntries.delete(key);
+        }
     }
 
     // Method to clear all entries
     async clearAllEntries(): Promise<void> {
         await this.ledgerEntries.clear();
+        await this.lastLedgerEntry.clear();
+    }
+
+    // Method to get the ledger entry with the highest timestamp (quick access)
+    async getLastEntry(): Promise<LedgerEntry | null> {
+        return (await this.lastLedgerEntry.get(this.lastEntryKey)) || null;
     }
 }
 

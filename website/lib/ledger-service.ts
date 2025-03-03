@@ -110,7 +110,7 @@ class LedgerService {
             while (hasMoreBlocks && blockCount < MAX_BLOCKS) {
                 try {
                     // Get block + block header as JSON string
-                    const blockResult = this.client!.ledger.getBlockAsJson(blockOffset);
+                    const blockResult = await this.client!.ledger.getBlockAsJson(blockOffset);
 
                     // Parse the result
                     let parsedResult: BlockResult;
@@ -177,6 +177,53 @@ class LedgerService {
     // Get all entries from the local database
     async getAllEntries(): Promise<LedgerEntry[]> {
         return await db.getAllEntries();
+    }
+
+    // Get the parent block hash for the last entry in the ledger
+    async getLastEntryParentBlockHash(): Promise<string | null> {
+        try {
+            // First try to get the last entry by blockOffset
+            const entry = await db.getLastEntry();
+
+            if (entry?.parentBlockHash) {
+                return entry.parentBlockHash;
+            }
+
+            // If no entry found or no parent block hash, try to fetch new entries
+            console.log("No parent block hash found in database, fetching new entries...");
+            const entries = await this.fetchAndStoreLatestEntries();
+
+            // If we got new entries, try to get the last one again
+            if (entries.length > 0) {
+                // Find the entry with the highest blockOffset
+                const latestEntry = entries.reduce((latest, current) =>
+                    current.blockOffset > latest.blockOffset ? current : latest,
+                    entries[0]
+                );
+
+                if (latestEntry?.parentBlockHash) {
+                    return latestEntry.parentBlockHash;
+                }
+            }
+
+            return null;
+        } catch (error) {
+            console.error("Error getting parent block hash:", error);
+            return null;
+        }
+    }
+
+    async getNextBlockOffset(): Promise<bigint | null> {
+        try {
+            const entry = await db.getLastEntry();
+            if (entry) {
+                return BigInt(entry.blockOffset) + BigInt(entry.blockSize);
+            }
+            return null;
+        } catch (error) {
+            console.error("Error getting next block offset:", error);
+            return null;
+        }
     }
 
     // Get a specific entry by key from the local database

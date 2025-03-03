@@ -3,7 +3,7 @@ import React, { ReactNode } from "react";
 
 interface HeaderSectionProps {
     title: string;
-    subtitle: ReactNode;
+    subtitle?: ReactNode;
 }
 
 const HeaderSection: React.FC<HeaderSectionProps> = ({ title, subtitle }) => {
@@ -18,9 +18,11 @@ const HeaderSection: React.FC<HeaderSectionProps> = ({ title, subtitle }) => {
             <h3 className="text-2xl md:text-3xl font-bold text-center mb-4">
                 {title}
             </h3>
-            <div className="text-gray-300 max-w-2xl mx-auto text-lg md:text-xl">
-                {subtitle}
-            </div>
+            {subtitle && (
+                <div className="text-gray-300 max-w-2xl mx-auto text-lg md:text-xl">
+                    {subtitle}
+                </div>
+            )}
         </motion.div>
     );
 };

@@ -7,6 +7,8 @@ import HeaderSection from '@/components/ui/header';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
+import { ValidationResult } from '@/lib/blockchain-validator';
+import { BlockchainValidator } from '@/components/blockchain-validator';
 
 // Mock data for demonstration purposes
 const mockValidators = [
@@ -72,6 +74,7 @@ export default function ValidatorsPage() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   // Check authentication status
   useEffect(() => {
@@ -127,12 +130,13 @@ export default function ValidatorsPage() {
       : <FontAwesomeIcon icon={faSortDown} className="ml-1 text-blue-400" />;
   };
 
+  const handleValidationComplete = (result: ValidationResult) => {
+    setValidationResult(result);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <HeaderSection
-        title="Validator Leaderboard"
-        subtitle="See the top-performing validators on the Decent Cloud network"
-      />
+      <HeaderSection title="Validation Dashboard" />
 
         <div className="bg-white/10 p-6 rounded-lg backdrop-blur-sm mb-6">
           <div className="mb-6">
@@ -146,6 +150,23 @@ export default function ValidatorsPage() {
                 This is a demonstration page with mock data. In the future, this will display real-time data from validators on the network.
               </p>
             </div>
+          </div>
+
+          {/* Blockchain Validation Section */}
+          <div className="mt-8 bg-white/10 p-6 rounded-lg backdrop-blur-sm">
+            <h3 className="text-xl font-semibold mb-2 text-white">Blockchain Validation</h3>
+            <p className="text-white/90 mb-4">
+              As a validator, you can participate in blockchain validation by checking in with the network.
+              This helps maintain the integrity and security of the Decent Cloud network.
+            </p>
+
+            {/* Use the refactored BlockchainValidator component */}
+            <BlockchainValidator
+              defaultMemo="I Validated DC Ledger from the website!"
+              darkMode={true}
+              renderAsCard={false}
+              onValidationComplete={handleValidationComplete}
+            />
           </div>
 
           {/* Top 3 Validators */}
