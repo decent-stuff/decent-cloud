@@ -42,14 +42,16 @@ class LedgerDatabase extends Dexie {
         // Put will add if the key doesn't exist, or update if it does
         await this.ledgerEntries.put(entry);
 
-        // Retrieve current last entry from the dedicated store
-        const currentLast = await this.lastLedgerEntry.get(this.lastEntryKey);
-        // Update the last entry if this entry is newer
-        if (
-            !currentLast ||
-            (entry.timestamp_ns && (!currentLast.timestamp_ns || entry.timestamp_ns > currentLast.timestamp_ns))
-        ) {
-            await this.lastLedgerEntry.put({ ...entry }, this.lastEntryKey);
+        if (entry.key !== null) {
+            console.debug('addOrUpdateEntry setting max entry:', entry);
+            // Update the last entry if this entry is newer
+            const currentLast = await this.lastLedgerEntry.get(this.lastEntryKey);
+            const new_ts = entry?.timestamp_ns;
+            const prev_ts = currentLast?.timestamp_ns;
+            if (new_ts !== undefined && (prev_ts === undefined || new_ts > prev_ts)) {
+                entry.key = this.lastEntryKey;
+                await this.lastLedgerEntry.put(entry, this.lastEntryKey);
+            }
         }
         return entry.key;
     }
@@ -59,19 +61,21 @@ class LedgerDatabase extends Dexie {
         await this.ledgerEntries.bulkPut(entries);
         // Determine the entry with the highest timestamp from the new entries
         const maxEntry = entries.reduce((prev, curr) =>
-            (!prev || (curr.timestamp_ns && prev.timestamp_ns && curr.timestamp_ns > prev.timestamp_ns))
+            (!prev || (curr.parentBlockHash && curr.timestamp_ns && prev.timestamp_ns && curr.timestamp_ns > prev.timestamp_ns))
                 ? curr
                 : prev,
             null as LedgerEntry | null
         );
 
+        console.debug('bulkAddOrUpdate setting max entry:', maxEntry);
+
         if (maxEntry) {
             const currentLast = await this.lastLedgerEntry.get(this.lastEntryKey);
-            if (
-                !currentLast ||
-                (maxEntry.timestamp_ns && (!currentLast.timestamp_ns || maxEntry.timestamp_ns > currentLast.timestamp_ns))
-            ) {
-                await this.lastLedgerEntry.put({ ...maxEntry }, this.lastEntryKey);
+            const new_ts = maxEntry?.timestamp_ns;
+            const prev_ts = currentLast?.timestamp_ns;
+            if (new_ts !== undefined && (prev_ts === undefined || new_ts > prev_ts)) {
+                maxEntry.key = this.lastEntryKey;
+                await this.lastLedgerEntry.put(maxEntry, this.lastEntryKey);
             }
         }
     }
