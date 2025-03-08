@@ -40,22 +40,23 @@ export function configure(config) {
   agent = null;
 }
 
-async function getAgent(identity) {
+function getAgent(identity) {
   if (!agent) {
     try {
       if (identity) {
-        agent = await HttpAgent.create({
+        agent = HttpAgent.createSync({
           host: defaultConfig.networkUrl,
+          shouldFetchRootKey: true,
           identity,
         });
         console.log('Agent created with identity:', identity);
       } else {
-        agent = await HttpAgent.create({
+        agent = HttpAgent.createSync({
           host: defaultConfig.networkUrl,
+          shouldFetchRootKey: true,
         });
         console.log('Agent created without identity');
       }
-      await agent.fetchRootKey();
     } catch (error) {
       console.error(`Failed to initialize ${identity || 'anonymous'} HttpAgent`);
       throw error;
@@ -65,9 +66,9 @@ async function getAgent(identity) {
 }
 
 async function setCachedData(key, data) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readwrite');
+  try {
+    const db = await initDB();
+    const transaction = db.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
 
     const record = {
@@ -76,53 +77,64 @@ async function setCachedData(key, data) {
       timestamp: Date.now(),
     };
 
-    const request = store.put(record);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
-  });
+    console.debug(`[Cache] Setting cached data for key: ${key} -> ${JSON.stringify(record)}`);
+    return await store.put(record);
+  } catch (error) {
+    console.error(`[Cache] Error setting cached data for key: ${key}`, error);
+    throw error;
+  }
 }
 
 async function getCachedData(key) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readonly');
+  try {
+    const db = await initDB();
+    const transaction = db.transaction(storeName, 'readonly');
     const store = transaction.objectStore(storeName);
-    const request = store.get(key);
 
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const result = request.result;
-      // Check if record exists and hasn't expired (10 minutes).
-      if (result && Date.now() - result.timestamp < 600000) {
-        resolve(result.data);
-      } else {
-        resolve(null);
-      }
-    };
-  });
+    // Await the record directly (assuming a promise-based API)
+    const record = await store.get(key);
+    console.debug(`[Cache] Fetching data for key: ${key} -> ${JSON.stringify(record)}`);
+
+    // Return data only if it exists and is less than 10 minutes old (600000 ms)
+    if (record && Date.now() - record.timestamp < 600000) {
+      return record.data;
+    } else {
+      return null;
+    }
+  } catch (error) {
+    console.error(`[Cache] Error getting cached data for key: ${key}`, error);
+    throw error;
+  }
 }
 
 export async function fetchDataWithCache(cursor, bytesBefore, bypassCache = false) {
   const cacheKey = `data_fetch_${cursor}`;
-  console.log(`[Cache] Fetching data for cursor: ${cursor}${bypassCache ? ' (bypass cache)' : ''}`);
 
-  if (!bypassCache) {
+  if (bypassCache) {
+    console.log(`[Cache] Fetching data with no cache for cursor: ${cursor}`);
+  } else {
+    console.log(`[Cache] Checking cache for cursor: ${cursor}`);
     const cachedData = await getCachedData(cacheKey);
     if (cachedData) {
+      console.debug(
+        `[Cache] Using cached data for cursor: ${cursor} -> ${JSON.stringify(cachedData)}`
+      );
       return cachedData;
     } else {
       console.log('[Cache] No valid cached data found or cache expired');
     }
-  } else {
-    console.log('[Cache] Bypassing cache as requested');
   }
 
   console.log('[Cache] Fetching fresh data from canister');
   try {
-    const result = await queryCanister('data_fetch', [[cursor], [bytesBefore]], {});
-    console.log('[Cache] Successfully fetched fresh data, updating cache');
-    await setCachedData(cacheKey, result);
-    return await getCachedData(cacheKey);
+    let result = await queryCanister('data_fetch', [[cursor], [bytesBefore]], {});
+    console.log(
+      `[Cache] Successfully fetched fresh data for cursor: ${cursor}, updating cache -> ${JSON.stringify(result)}`
+    );
+    if (result.Ok) {
+      await setCachedData(cacheKey, result);
+    }
+    return result;
   } catch (error) {
     console.error('Error in fetchDataWithCache:', error);
     throw error;
@@ -131,7 +143,7 @@ export async function fetchDataWithCache(cursor, bytesBefore, bypassCache = fals
 
 export async function queryCanister(methodName, args, options = {}) {
   try {
-    const currentAgent = await getAgent();
+    const currentAgent = getAgent();
     const canisterId = options.canisterId || defaultConfig.canisterId;
 
     const actor = Actor.createActor(idlFactory, {
@@ -152,7 +164,7 @@ export async function queryCanister(methodName, args, options = {}) {
 
 export async function updateCanister(methodName, args, identity, options = {}) {
   try {
-    let currentAgent = await getAgent(identity);
+    let currentAgent = getAgent(identity);
     const canisterId = options.canisterId || defaultConfig.canisterId;
 
     const actor = Actor.createActor(idlFactory, {
