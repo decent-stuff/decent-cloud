@@ -31,52 +31,45 @@ function displayJSON(elementId, data, error = false) {
 
 // Initialize the demo
 async function initDemo() {
+  console.log('Initializing demo...');
+
+  // Create a client instance
+  const client = createClient();
+
+  // Initialize the client
+  await client.initialize();
+
+  // Get block as JSON using the new class-based API
+  const blockResult = client.ledger.getBlockAsJson(BigInt(0));
+  console.log('Block result type:', typeof blockResult, blockResult);
+
   try {
-    console.log('Initializing demo...');
-
-    // Create a client instance
-    const client = createClient();
-
-    // Initialize the client
-    const result = await client.initialize();
-    console.info(`Initialization result: ${result}`);
-    displayString('wasmInit', result);
-
-    // Get block as JSON using the new class-based API
-    const blockResult = client.ledger.getBlockAsJson(BigInt(0));
-    console.log('Block result type:', typeof blockResult, blockResult);
-
-    try {
-      // Parse the result if it's a string
-      let parsedResult;
-      if (typeof blockResult === 'string') {
-        parsedResult = JSON.parse(blockResult);
-      } else {
-        parsedResult = blockResult;
-      }
-
-      // Extract the block header and contents
-      const block_header = parsedResult.block_header;
-      const ledger_block = parsedResult.block;
-
-      displayJSON('wasmBlockHeader', block_header);
-      displayJSON('wasmBlockContents', ledger_block);
-    } catch (error) {
-      console.error('Error processing block result:', error, blockResult);
-      displayJSON(
-        'wasmBlockHeader',
-        { error: 'Failed to process block header: ' + error.message },
-        true
-      );
-      displayJSON(
-        'wasmBlockContents',
-        { error: 'Failed to process block contents: ' + error.message },
-        true
-      );
+    // Parse the result if it's a string
+    let parsedResult;
+    if (typeof blockResult === 'string') {
+      parsedResult = JSON.parse(blockResult);
+    } else {
+      parsedResult = blockResult;
     }
+
+    // Extract the block header and contents
+    const block_header = parsedResult.block_header;
+    const ledger_block = parsedResult.block;
+
+    displayJSON('wasmBlockHeader', block_header);
+    displayJSON('wasmBlockContents', ledger_block);
   } catch (error) {
-    console.error('Failed to initialize demo:', error);
-    displayJSON('wasmInit', `Initialization Error: ${error.message}`, true);
+    console.error('Error processing block result:', error, blockResult);
+    displayJSON(
+      'wasmBlockHeader',
+      { error: 'Failed to process block header: ' + error.message },
+      true
+    );
+    displayJSON(
+      'wasmBlockContents',
+      { error: 'Failed to process block contents: ' + error.message },
+      true
+    );
   }
 }
 

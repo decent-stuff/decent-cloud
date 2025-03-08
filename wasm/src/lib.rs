@@ -10,7 +10,7 @@ use js_sys::{Array, Reflect, Uint8Array};
 use ledger_map::platform_specific as ledger_storage;
 #[cfg(target_arch = "wasm32")]
 use ledger_map::platform_specific_wasm32_browser as ledger_storage;
-use ledger_map::{info, LedgerMap};
+use ledger_map::{error, info, warn, LedgerMap};
 use serde::Serialize;
 use serde_json::Value;
 use std::cell::RefCell;
@@ -48,7 +48,7 @@ extern "C" {
 }
 
 #[wasm_bindgen]
-pub async fn initialize() -> String {
+pub async fn initialize() {
     console_error_panic_hook::set_once();
 
     // Initialize storage as the very first thing
@@ -68,7 +68,7 @@ pub async fn initialize() -> String {
                 *ledger.borrow_mut() = ledger_data;
             });
 
-            format!(
+            info!(
                 "Ledger initialized successfully, loaded {} blocks",
                 ledger_blocks
             )
@@ -79,7 +79,7 @@ pub async fn initialize() -> String {
                 *ledger.borrow_mut() = ledger_data;
             });
 
-            format!("Ledger initialization error: {}", e)
+            error!("Ledger initialization error: {}", e)
         }
     }
 }
@@ -151,9 +151,12 @@ pub async fn ledger_data_fetch(
     )
     .await
     {
-        Ok(result) => result,
+        Ok(result) => {
+            info!("Success fetchDataWithCache: {:?}", result);
+            result
+        }
         Err(e) => {
-            info!("Failed to fetch data: {:?}", e);
+            warn!("Failed to fetch data: {:?}", e);
             return Err(format!("Failed to fetch data from canister: {:?}", e).into());
         }
     };

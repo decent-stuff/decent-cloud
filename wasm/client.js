@@ -195,9 +195,9 @@ class DecentCloudClientWasm {
         './dc-client_bg.js': wasm,
       });
       __wbg_set_wasm(wasmModule.instance.exports);
-      const result = await wasmModule.instance.exports.initialize();
+      await wasmModule.instance.exports.initialize();
       initialized = true;
-      return result;
+      return;
     }
     return 'WASM module already initialized';
   }
@@ -318,13 +318,11 @@ export async function get_transactions() {
 }
 
 export async function call_query_canister(methodName, args) {
-  await initialize();
-  const client = new DecentCloudClientWasm();
-  return await client.canister.callQuery(methodName, args);
+  const canister = new CanisterInteraction();
+  return await canister.callQuery(methodName, args);
 }
 
 export async function call_update_canister(methodName, args, identity) {
-  await initialize();
-  const client = new DecentCloudClientWasm();
-  return await client.canister.callUpdate(methodName, args, identity);
+  const canister = new CanisterInteraction();
+  return await canister.callUpdate(methodName, args, identity);
 }
