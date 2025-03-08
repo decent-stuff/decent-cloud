@@ -51,7 +51,7 @@ async function main() {
 
     // Clean up unnecessary files
     console.log('Cleaning up dist directory...');
-    const filesToRemove = ['.gitignore', 'README.md', 'package.json'];
+    const filesToRemove = ['.gitignore'];
 
     filesToRemove.forEach(file => {
       const filePath = path.join(distDir, file);
@@ -61,6 +61,37 @@ async function main() {
       }
     });
 
+    // Read the main package.json to get version and other metadata
+    console.log('Reading package.json for metadata...');
+    const mainPackageJsonPath = path.join(wasmDir, 'package.json');
+    const mainPackageJson = JSON.parse(fs.readFileSync(mainPackageJsonPath, 'utf8'));
+
+    // Create a proper package.json in the dist directory
+    console.log('Creating package.json in dist directory...');
+    const packageJson = {
+      name: mainPackageJson.name,
+      version: mainPackageJson.version,
+      description: mainPackageJson.description,
+      main: 'dc-client.js',
+      module: 'dc-client.mjs',
+      types: 'dc-client.d.ts',
+      type: 'module',
+      files: ['*.js', '*.mjs', '*.d.ts', '*.wasm', 'snippets', 'LICENSE'],
+      keywords: mainPackageJson.keywords,
+      author: mainPackageJson.author,
+      license: mainPackageJson.license,
+      repository: mainPackageJson.repository,
+      bugs: mainPackageJson.bugs,
+      homepage: mainPackageJson.homepage,
+    };
+
+    fs.writeFileSync(
+      path.join(distDir, 'package.json'),
+      JSON.stringify(packageJson, null, 2),
+      'utf8'
+    );
+    console.log('Created package.json in dist directory');
+
     // Copy necessary files
     console.log('Copying additional files...');
     const filesToCopy = [
@@ -69,6 +100,7 @@ async function main() {
       ['canister_idl.js', 'dist/canister_idl.js'],
       ['client.js', 'dist/dc-client.js'],
       ['client.js', 'dist/dc-client.mjs'],
+      ['LICENSE', 'dist/LICENSE'],
     ];
 
     filesToCopy.forEach(([src, dest]) => {
