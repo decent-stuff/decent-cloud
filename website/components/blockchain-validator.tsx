@@ -80,9 +80,7 @@ export function BlockchainValidator({
       setIsLoading(true);
       setError(undefined);
 
-      // Fetch the latest entries
-      // await ledgerService.fetchAndStoreLatestEntries();
-
+      // Get the parent block hash (which will fetch latest entries)
       const hash = await ledgerService.getLastEntryParentBlockHash();
       setParentBlockHash(hash);
     } catch (err) {
@@ -135,7 +133,13 @@ export function BlockchainValidator({
   const refreshData = async () => {
     setIsLoading(true);
     try {
+      // Ensure ledger service is initialized first
+      await ledgerService.initialize();
+
+      // Then fetch and store latest entries
       await ledgerService.fetchAndStoreLatestEntries();
+
+      // Get the parent block hash
       const hash = await ledgerService.getLastEntryParentBlockHash();
       setParentBlockHash(hash);
       setError(undefined);

@@ -11,7 +11,7 @@
     "prepare": ""
   },
   "dependencies": {
-    "@decent-stuff/dc-client": "^0.1.7",
+    "@decent-stuff/dc-client": "file:../wasm/dist",
     "@dfinity/agent": "^2.3.0",
     "@dfinity/auth-client": "^2.3.0",
     "@dfinity/candid": "^2.3.0",

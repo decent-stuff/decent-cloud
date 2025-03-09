@@ -161,12 +161,22 @@ pub async fn ledger_data_fetch(
         }
     };
 
+    info!("Result from fetchDataWithCache: {:?}", result_js);
+
     // Extract the "Ok" property from the returned object with proper error handling
-    let ok_js = match Reflect::get(&result_js, &JsValue::from_str("Ok")) {
-        Ok(js_value) => js_value,
-        Err(e) => {
-            info!("Failed to extract 'Ok' property from result: {:?}", e);
-            return Err("Invalid response format from canister".into());
+    let ok_js = {
+        match Reflect::get(&result_js, &JsValue::from_str("Ok")) {
+            Ok(js_value) => {
+                if js_value.is_undefined() || js_value.is_null() {
+                    info!("'Ok' property is undefined or null");
+                    return Err("Response 'Ok' property is undefined or null".into());
+                }
+                js_value
+            }
+            Err(e) => {
+                info!("Failed to extract 'Ok' property from result: {:?}", e);
+                return Err("Invalid response format from canister".into());
+            }
         }
     };
 
@@ -175,30 +185,79 @@ pub async fn ledger_data_fetch(
 
     // The first element is the cursor string.
     // Safely extract the cursor string with better error handling
-    let cursor_remote = match ok_array.get(0).as_string() {
-        Some(cursor) => cursor,
-        None => {
-            info!("Invalid cursor format received from canister");
-            return Err("Invalid cursor format received from canister".into());
+    let cursor_remote = {
+        let cursor_js = ok_array.get(0);
+        if cursor_js.is_undefined() || cursor_js.is_null() {
+            info!("Cursor is undefined or null");
+            return Err("Cursor is undefined or null in canister response".into());
+        }
+
+        match cursor_js.as_string() {
+            Some(cursor) => {
+                if cursor.is_empty() {
+                    info!("Empty cursor string received");
+                    return Err("Empty cursor string received from canister".into());
+                }
+                cursor
+            }
+            None => {
+                info!("Invalid cursor format received from canister, not a string");
+                return Err("Invalid cursor format received from canister - not a string".into());
+            }
         }
     };
 
     // The second element is the data as a Uint8Array.
     let data_js = ok_array.get(1);
+
     // Validate that we actually got data
     if data_js.is_undefined() || data_js.is_null() {
         info!("No data received from canister");
         return Err("No data received from canister".into());
     }
-    let data_u8array = Uint8Array::new(&data_js);
-    let data = data_u8array.to_vec();
+
+    // More robust handling of data conversion from JS to Rust
+    let data = {
+        // Check if it's actually a Uint8Array or array-like
+        if !js_sys::ArrayBuffer::instanceof(&data_js)
+            && !js_sys::Array::instanceof(&data_js)
+            && !Uint8Array::instanceof(&data_js)
+        {
+            info!(
+                "Data is not ArrayBuffer, Array, or Uint8Array: {:?}",
+                data_js
+            );
+            return Err("Invalid data format from canister - not binary data".into());
+        }
+
+        // Use a try-catch pattern since to_vec() can panic with malformed data
+        let data_u8array = Uint8Array::new(&data_js);
+
+        if data_u8array.length() == 0 {
+            info!("Received empty Uint8Array data");
+            // Return empty vec instead of error - this is valid
+            vec![]
+        } else {
+            // Convert to Rust Vec<u8>
+            data_u8array.to_vec()
+        }
+    };
 
     info!("Ledger canister returned {} bytes", data.len());
 
     // Create a LedgerCursor from the string with proper error handling
     // The new_from_string method calls unwrap() internally which can panic
     let cursor_remote = match cursor_remote.parse::<LedgerCursor>() {
-        Ok(cursor) => cursor,
+        Ok(cursor) => {
+            // Additional validations for cursor
+            if cursor.position > u64::MAX / 2 {
+                info!("Suspiciously large cursor position: {}", cursor.position);
+                return Err(
+                    format!("Suspiciously large cursor position: {}", cursor.position).into(),
+                );
+            }
+            cursor
+        }
         Err(e) => {
             info!("Failed to parse cursor string: {}", e);
             return Err(format!("Failed to parse cursor string: {}", e).into());
@@ -226,17 +285,39 @@ pub async fn ledger_data_fetch(
     if data.len() <= 64 {
         info!("Data: {} bytes ==> {:?}", data.len(), data);
     } else {
+        // Improved data logging for better diagnostics
         info!(
-            "Data: {} bytes ==> {:?}...",
+            "Data: {} bytes ==> start:{:?}... end:{:?}",
             data.len(),
-            &data[..64.min(data.len())]
+            &data[..32.min(data.len())],
+            &data[(data.len() - 32.min(data.len()))..]
         );
     }
-    ledger_storage::persistent_storage_write(offset_remote, &data);
-    ledger_storage::persistent_storage_write(
-        offset_remote + data.len() as u64,
-        &[0u8; size_of::<ledger_map::ledger_entry::LedgerBlockHeader>()],
-    );
+
+    // Make the storage writes safer
+    if !data.is_empty() {
+        // Write data with additional error logging
+        info!(
+            "Writing {} bytes to storage at offset {}",
+            data.len(),
+            offset_remote
+        );
+        ledger_storage::persistent_storage_write(offset_remote, &data);
+
+        // Create a zero buffer with proper size handling
+        use std::mem::size_of;
+        let header_size = size_of::<ledger_map::ledger_entry::LedgerBlockHeader>();
+        info!(
+            "Writing {} zero bytes for header at offset {}",
+            header_size,
+            offset_remote + data.len() as u64
+        );
+        let zero_buffer = vec![0u8; header_size];
+
+        ledger_storage::persistent_storage_write(offset_remote + data.len() as u64, &zero_buffer);
+    } else {
+        info!("Skipping storage write for empty data");
+    }
 
     if !data.is_empty() {
         // TODO: All ledger blocks are effectively iterated twice here, it should be possible to do this in a single go

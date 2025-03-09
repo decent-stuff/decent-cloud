@@ -110,30 +110,89 @@ async function getCachedData(key) {
 export async function fetchDataWithCache(cursor, bytesBefore, bypassCache = false) {
   const cacheKey = `data_fetch_${cursor}`;
 
+  // Add logging to help track cursor format issues
+  try {
+    console.log(
+      `[Cache] Cursor details - Type: ${typeof cursor}, Length: ${cursor.length}, Value: ${cursor}`
+    );
+
+    // Sanitize cursor value to catch potential issues early
+    if (typeof cursor !== 'string') {
+      console.warn(`[Cache] Cursor is not a string, converting: ${cursor}`);
+      cursor = String(cursor);
+    }
+
+    // Validate cursor format
+    if (cursor.includes('undefined') || cursor.includes('null')) {
+      console.warn(`[Cache] Suspicious cursor format: ${cursor}`);
+    }
+  } catch (e) {
+    console.warn(`[Cache] Cursor format error: ${e.message}`);
+  }
+
   if (bypassCache) {
     console.log(`[Cache] Fetching data with no cache for cursor: ${cursor}`);
   } else {
     console.log(`[Cache] Checking cache for cursor: ${cursor}`);
-    const cachedData = await getCachedData(cacheKey);
-    if (cachedData) {
-      console.debug(
-        `[Cache] Using cached data for cursor: ${cursor} -> ${JSON.stringify(cachedData)}`
-      );
-      return cachedData;
-    } else {
-      console.log('[Cache] No valid cached data found or cache expired');
+    try {
+      const cachedData = await getCachedData(cacheKey);
+      if (cachedData) {
+        console.debug(
+          `[Cache] Using cached data for cursor: ${cursor} -> ${JSON.stringify(cachedData)}`
+        );
+        return cachedData;
+      } else {
+        console.log('[Cache] No valid cached data found or cache expired');
+      }
+    } catch (cacheError) {
+      console.warn('[Cache] Error accessing cache, will fetch fresh data:', cacheError);
+      // Continue to fetch fresh data
     }
   }
 
   console.log('[Cache] Fetching fresh data from canister');
   try {
-    let result = await queryCanister('data_fetch', [[cursor], [bytesBefore]], {});
+    // Check binary data format
+    if (bytesBefore) {
+      console.log(
+        `[Cache] bytesBefore type: ${typeof bytesBefore}, length: ${bytesBefore.length || 'unknown'}`
+      );
+    }
+
+    // Wrap canister query with extra error handling
+    let result;
+    try {
+      result = await queryCanister('data_fetch', [[cursor], [bytesBefore]], {});
+
+      // Validate the result structure before processing
+      if (result && result.Ok && Array.isArray(result.Ok)) {
+        const binaryData = result.Ok[1];
+        if (binaryData) {
+          console.log(
+            `[Cache] Binary data type: ${binaryData.constructor ? binaryData.constructor.name : 'unknown'}, length: ${binaryData.length || binaryData.byteLength || 'unknown'}`
+          );
+        }
+      }
+    } catch (queryError) {
+      console.error(`[Cache] Error in data_fetch query: ${queryError.message}`, queryError);
+      if (queryError.message && queryError.message.includes('TextDecoder')) {
+        console.error('[Cache] TextDecoder error detected - possibly malformed binary data');
+      }
+      throw queryError;
+    }
+
     console.log(
       `[Cache] Successfully fetched fresh data for cursor: ${cursor}, updating cache -> ${JSON.stringify(result)}`
     );
-    if (result.Ok) {
-      await setCachedData(cacheKey, result);
+
+    if (result && result.Ok) {
+      try {
+        await setCachedData(cacheKey, result);
+      } catch (cacheError) {
+        console.warn('[Cache] Failed to cache data, but continuing:', cacheError);
+      }
     }
+
     return result;
   } catch (error) {
     console.error('Error in fetchDataWithCache:', error);
@@ -143,19 +202,78 @@ export async function fetchDataWithCache(cursor, bytesBefore, bypassCache = fals
 
 export async function queryCanister(methodName, args, options = {}) {
   try {
-    const currentAgent = getAgent();
+    // Input validation
+    if (!methodName || typeof methodName !== 'string') {
+      throw new Error(`Invalid method name: ${methodName}`);
+    }
+
+    if (!Array.isArray(args)) {
+      console.warn(`Args is not an array, converting: ${args}`);
+      args = [args]; // Convert to array to avoid errors
+    }
+
+    // Get agent with better error handling
+    let currentAgent;
+    try {
+      currentAgent = getAgent();
+    } catch (agentError) {
+      console.error('Failed to create agent:', agentError);
+      throw new Error(`Agent creation failed: ${agentError.message}`);
+    }
+
     const canisterId = options.canisterId || defaultConfig.canisterId;
 
-    const actor = Actor.createActor(idlFactory, {
-      agent: currentAgent,
-      canisterId,
-    });
+    // Create actor with better error handling
+    let actor;
+    try {
+      actor = Actor.createActor(idlFactory, {
+        agent: currentAgent,
+        canisterId,
+      });
+    } catch (actorError) {
+      console.error('Failed to create actor:', actorError);
+      throw new Error(`Actor creation failed: ${actorError.message}`);
+    }
 
     if (typeof actor[methodName] !== 'function') {
       throw new Error(`Method ${methodName} not found on the canister interface.`);
     }
 
-    return await actor[methodName](...args);
+    // Call method with better error handling
+    try {
+      const result = await actor[methodName](...args);
+
+      // Log success and return information about the result structure
+      if (methodName === 'data_fetch' && result && result.Ok) {
+        console.log(
+          `[Cache] data_fetch result structure: ${JSON.stringify({
+            hasOk: !!result.Ok,
+            isArray: Array.isArray(result.Ok),
+            length: Array.isArray(result.Ok) ? result.Ok.length : 'not array',
+            firstElementType:
+              Array.isArray(result.Ok) && result.Ok[0] ? typeof result.Ok[0] : 'n/a',
+            secondElementExists: Array.isArray(result.Ok) && result.Ok.length > 1,
+          })}`
+        );
+      }
+
+      return result;
+    } catch (callError) {
+      console.error(`Error calling method ${methodName}:`, callError);
+
+      // Provide more diagnostics for TextDecoder errors
+      if (callError.message && callError.message.includes('TextDecoder')) {
+        console.error(
+          '[CRITICAL] TextDecoder.decode failed - this is likely due to malformed binary data',
+          {
+            errorName: callError.name,
+            errorStack: callError.stack,
+          }
+        );
+      }
+
+      throw new Error(`Canister method call failed: ${callError.message}`);
+    }
   } catch (error) {
     console.error('Error in queryCanister:', error);
     throw error;

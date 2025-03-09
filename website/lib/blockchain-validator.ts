@@ -20,6 +20,9 @@ export async function validateBlockchain(
     memo: string = "Website validator",
 ): Promise<ValidationResult> {
     try {
+        // Ensure ledger service is initialized first
+        await ledgerService.initialize();
+
         // Get the latest parent block hash from the ledger service
         const parentBlockHash = await ledgerService.getLastEntryParentBlockHash();
 

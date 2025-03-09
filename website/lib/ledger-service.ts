@@ -190,7 +190,8 @@ class LedgerService {
             console.info(`Last entry: ${JSON.stringify(entry)}`);
 
             if (entry?.parentBlockHash) {
-                return entry.parentBlockHash;
+                const decodedHash = Buffer.from(entry.parentBlockHash, 'base64').toString('hex');
+                return decodedHash;
             }
             return null;
         } catch (error) {
