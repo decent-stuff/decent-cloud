@@ -80,6 +80,16 @@ class LedgerService {
         }, this.pollingFrequency);
     }
 
+    // Check if polling is currently active
+    isPollingActive(): boolean {
+        return this.pollingInterval !== null;
+    }
+
+    // Check if the service is initialized
+    getInitializationStatus(): boolean {
+        return this.isInitialized;
+    }
+
     // Stop polling for ledger updates
     stopPolling(): void {
         if (this.pollingInterval) {

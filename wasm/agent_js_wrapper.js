@@ -245,7 +245,7 @@ export async function queryCanister(methodName, args, options = {}) {
 
       // Log success and return information about the result structure
       if (methodName === 'data_fetch' && result && result.Ok) {
-        console.log(
+        console.debug(
           `[Cache] data_fetch result structure: ${JSON.stringify({
             hasOk: !!result.Ok,
             isArray: Array.isArray(result.Ok),
