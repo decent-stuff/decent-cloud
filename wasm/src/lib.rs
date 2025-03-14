@@ -3,7 +3,7 @@ use base64::Engine;
 use candid::Encode;
 use dcc_common::{
     cursor_from_data, ledger_block_parse_entries, refresh_caches_from_ledger, LedgerCursor,
-    LedgerEntryAsJson, DATA_PULL_BYTES_BEFORE_LEN,
+    WasmLedgerEntry, DATA_PULL_BYTES_BEFORE_LEN,
 };
 use js_sys::{Array, Reflect, Uint8Array};
 #[cfg(not(target_arch = "wasm32"))]
@@ -381,7 +381,7 @@ pub fn ledger_get_block_as_json(block_offset: u64) -> Result<String, String> {
         #[derive(Serialize)]
         struct LedgerBlockAsJson {
             block_header: Value,
-            block: Vec<LedgerEntryAsJson>,
+            block: Vec<WasmLedgerEntry>,
         }
 
         // Serialize block header with proper error handling

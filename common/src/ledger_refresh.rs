@@ -167,16 +167,16 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
 }
 
 #[derive(Serialize)]
-pub struct LedgerEntryAsJson {
+pub struct WasmLedgerEntry {
     pub label: String,
     pub key: Value,
     pub value: Value,
     pub description: String,
 }
 
-impl LedgerEntryAsJson {
+impl WasmLedgerEntry {
     fn from_dc_token_approval(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_DC_TOKEN_APPROVAL.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(
@@ -188,7 +188,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_dc_token_transfer(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_DC_TOKEN_TRANSFER.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(FundsTransfer::try_from_slice(entry.value()).unwrap())
@@ -199,7 +199,7 @@ impl LedgerEntryAsJson {
 
     fn from_np_check_in(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_NP_CHECK_IN.to_string(),
             key: Value::String(dcc_id.to_string()),
             value: match CheckInPayload::try_from_slice(entry.value()) {
@@ -227,7 +227,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_np_offering(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_NP_OFFERING.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: match UpdateOfferingPayload::try_from_slice(entry.value()) {
@@ -254,7 +254,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_np_profile(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_NP_PROFILE.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: match UpdateProfilePayload::try_from_slice(entry.value()) {
@@ -282,7 +282,7 @@ impl LedgerEntryAsJson {
 
     fn from_account_register(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: entry.label().to_string(),
             key: Value::String(dcc_id.to_string()),
             value: serde_json::json!({
@@ -300,7 +300,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_reputation_age(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_REPUTATION_AGE.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(ReputationAge::try_from_slice(entry.value()).unwrap())
@@ -310,7 +310,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_reputation_change(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_REPUTATION_CHANGE.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(ReputationChange::try_from_slice(entry.value()).unwrap())
@@ -320,7 +320,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_reward_distribution(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_REWARD_DISTRIBUTION.to_string(),
             key: Value::String(match std::str::from_utf8(entry.key()) {
                 Ok(s) => s.to_string(),
@@ -343,7 +343,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_generic(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: entry.label().to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: serde_json::to_value(BASE64.encode(entry.value())).unwrap(),
@@ -352,7 +352,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_contract_sign_request(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_CONTRACT_SIGN_REQUEST.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: match ContractSignRequestPayload::try_from_slice(entry.value()) {
@@ -379,7 +379,7 @@ impl LedgerEntryAsJson {
     }
 
     fn from_contract_sign_reply(entry: &LedgerEntry) -> Self {
-        LedgerEntryAsJson {
+        WasmLedgerEntry {
             label: LABEL_CONTRACT_SIGN_REPLY.to_string(),
             key: Value::String(BASE64.encode(entry.key())),
             value: match ContractSignReplyPayload::try_from_slice(entry.value()) {
@@ -406,27 +406,25 @@ impl LedgerEntryAsJson {
     }
 }
 
-pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<LedgerEntryAsJson> {
+pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
     let mut entries = vec![];
     for entry in block.entries() {
         entries.push(match entry.label() {
-            LABEL_DC_TOKEN_APPROVAL => LedgerEntryAsJson::from_dc_token_approval(entry),
-            LABEL_DC_TOKEN_TRANSFER => LedgerEntryAsJson::from_dc_token_transfer(entry),
-            LABEL_NP_CHECK_IN => LedgerEntryAsJson::from_np_check_in(entry, block.parent_hash()),
-            LABEL_NP_OFFERING => LedgerEntryAsJson::from_np_offering(entry),
-            LABEL_NP_PROFILE => LedgerEntryAsJson::from_np_profile(entry),
-            LABEL_NP_REGISTER => {
-                LedgerEntryAsJson::from_account_register(entry, block.parent_hash())
-            }
-            LABEL_REPUTATION_AGE => LedgerEntryAsJson::from_reputation_age(entry),
-            LABEL_REPUTATION_CHANGE => LedgerEntryAsJson::from_reputation_change(entry),
-            LABEL_REWARD_DISTRIBUTION => LedgerEntryAsJson::from_reward_distribution(entry),
+            LABEL_DC_TOKEN_APPROVAL => WasmLedgerEntry::from_dc_token_approval(entry),
+            LABEL_DC_TOKEN_TRANSFER => WasmLedgerEntry::from_dc_token_transfer(entry),
+            LABEL_NP_CHECK_IN => WasmLedgerEntry::from_np_check_in(entry, block.parent_hash()),
+            LABEL_NP_OFFERING => WasmLedgerEntry::from_np_offering(entry),
+            LABEL_NP_PROFILE => WasmLedgerEntry::from_np_profile(entry),
+            LABEL_NP_REGISTER => WasmLedgerEntry::from_account_register(entry, block.parent_hash()),
+            LABEL_REPUTATION_AGE => WasmLedgerEntry::from_reputation_age(entry),
+            LABEL_REPUTATION_CHANGE => WasmLedgerEntry::from_reputation_change(entry),
+            LABEL_REWARD_DISTRIBUTION => WasmLedgerEntry::from_reward_distribution(entry),
             LABEL_USER_REGISTER => {
-                LedgerEntryAsJson::from_account_register(entry, block.parent_hash())
+                WasmLedgerEntry::from_account_register(entry, block.parent_hash())
             }
-            LABEL_CONTRACT_SIGN_REQUEST => LedgerEntryAsJson::from_contract_sign_request(entry),
-            LABEL_CONTRACT_SIGN_REPLY => LedgerEntryAsJson::from_contract_sign_reply(entry),
-            _ => LedgerEntryAsJson::from_generic(entry),
+            LABEL_CONTRACT_SIGN_REQUEST => WasmLedgerEntry::from_contract_sign_request(entry),
+            LABEL_CONTRACT_SIGN_REPLY => WasmLedgerEntry::from_contract_sign_reply(entry),
+            _ => WasmLedgerEntry::from_generic(entry),
         })
     }
     entries
