@@ -183,29 +183,25 @@ async function main() {
     );
     console.log('Created package.json in dist directory');
 
-    const filesToCompile = [
-      ['db.ts', 'db.js'],
-      ['agent.ts', 'agent.js'],
-      ['ledger.ts', 'ledger.js'],
-    ];
-
-    filesToCompile.forEach(([src, dest]) => {
+    const filesToCompile = [['db.ts'], ['agent.ts'], ['ledger.ts']];
+    filesToCompile.forEach(([src]) => {
       // Check if the source file exists
       const srcPath = path.join(wasmDir, src);
+      const dest = path.basename(src, '.ts') + '.js';
       const dstPath = path.join(distDir, dest);
 
       if (!fs.existsSync(dstPath) || (fs.existsSync(srcPath) && isNewer(srcPath, dstPath))) {
         console.log(`🚀 Compiling ${srcPath} to ${dstPath}...`);
         try {
           execSync(
-            `tsc ${srcPath} --outDir ${path.dirname(dstPath)} --module es2020 --target es2020 --moduleResolution node`,
+            `tsc ${srcPath} --module es2020 --target es2020 --moduleResolution node --outDir ${distDir}`,
             {
               stdio: 'inherit',
             }
           );
 
           console.log(`✅ Compiled ${srcPath} to ${dstPath}`);
-          copyFile(srcPath, dstPath);
+          copyFile(srcPath, path.join(distDir, src));
         } catch (error) {
           console.error(`❌ Error compiling ${srcPath}: ${error.message}`);
           process.exit(1);
@@ -219,6 +215,9 @@ async function main() {
       ['canister_idl.js', 'canister_idl.js'],
       ['dc-client.js', 'dc-client.js'],
       ['dc-client.d.ts', 'dc-client.d.ts'],
+      ['db.ts', 'db.ts'],
+      ['agent.ts', 'agent.ts'],
+      ['ledger.ts', 'ledger.ts'],
       ['LICENSE', 'LICENSE'],
     ];
 
