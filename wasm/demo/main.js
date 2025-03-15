@@ -1,5 +1,11 @@
-import { createClient } from '../dist/dc-client.js';
+import { DecentCloudClient, DecentCloudLedger } from '@decent-stuff/dc-client';
 
+/**
+ * Display a string in the specified element
+ * @param {string} elementId The ID of the element to display the string in
+ * @param {string} string The string to display
+ * @param {boolean} error Whether the string is an error message
+ */
 function displayString(elementId, string, error = false) {
   const output = document.getElementById(elementId);
   if (error) {
@@ -10,6 +16,12 @@ function displayString(elementId, string, error = false) {
   output.textContent = string;
 }
 
+/**
+ * Display a JSON object in the specified element
+ * @param {string} elementId The ID of the element to display the JSON in
+ * @param {object} data The JSON object to display
+ * @param {boolean} error Whether the JSON is an error message
+ */
 function displayJSON(elementId, data, error = false) {
   const output = document.getElementById(elementId);
   if (error) {
@@ -29,48 +41,153 @@ function displayJSON(elementId, data, error = false) {
   );
 }
 
-// Initialize the demo
-async function initDemo() {
-  console.log('Initializing demo...');
+/**
+ * Class-based demo implementation
+ * This class demonstrates how to use the DecentCloudClient class
+ */
+class DecentCloudDemo {
+  constructor() {
+    this.client = null;
+    this.initialized = false;
+  }
 
-  // Create a client instance
-  const client = createClient();
+  /**
+   * Initialize the client
+   */
+  async initialize() {
+    try {
+      displayString('initStatus', 'Initializing client...');
 
-  // Initialize the client
-  await client.initialize();
+      // Create a client instance
+      this.client = new DecentCloudClient();
 
-  // Get block as JSON using the new class-based API
-  const blockResult = client.ledger.getBlockAsJson(BigInt(0));
-  console.log('Block result type:', typeof blockResult, blockResult);
+      console.log('Client created');
 
-  try {
-    // Parse the result if it's a string
-    let parsedResult;
-    if (typeof blockResult === 'string') {
-      parsedResult = JSON.parse(blockResult);
-    } else {
-      parsedResult = blockResult;
+      // Initialize the client
+      await this.client.initialize();
+
+      this.initialized = true;
+      displayString('initStatus', 'Client initialized successfully');
+
+      return true;
+    } catch (error) {
+      console.error('Error initializing client:', error);
+      displayString('initStatus', `Error initializing client: ${error.message}`, true);
+      return false;
+    }
+  }
+
+  /**
+   * Fetch ledger blocks
+   */
+  async fetchBlocks() {
+    if (!this.initialized) {
+      displayString('fetchStatus', 'Client not initialized', true);
+      return false;
     }
 
-    // Extract the block header and contents
-    const block_header = parsedResult.block_header;
-    const ledger_block = parsedResult.block;
+    try {
+      displayString('fetchStatus', 'Fetching ledger blocks...');
 
-    displayJSON('wasmBlockHeader', block_header);
-    displayJSON('wasmBlockContents', ledger_block);
-  } catch (error) {
-    console.error('Error processing block result:', error, blockResult);
-    displayJSON(
-      'wasmBlockHeader',
-      { error: 'Failed to process block header: ' + error.message },
-      true
-    );
-    displayJSON(
-      'wasmBlockContents',
-      { error: 'Failed to process block contents: ' + error.message },
-      true
-    );
+      // Fetch ledger blocks
+      const newBlocksCount = await DecentCloudLedger.fetchLedgerBlocks();
+
+      displayString('fetchStatus', `Fetched ${newBlocksCount} new blocks`);
+
+      return newBlocksCount;
+    } catch (error) {
+      console.error('Error fetching blocks:', error);
+      displayString('fetchStatus', `Error fetching blocks: ${error.message}`, true);
+      return false;
+    }
   }
+
+  /**
+   * Display the last fetched block
+   */
+  async displayLastBlock() {
+    if (!this.initialized) {
+      displayString('wasmBlockHeader', 'Client not initialized', true);
+      displayJSON('wasmBlockContents', { error: 'Client not initialized' }, true);
+      return false;
+    }
+
+    try {
+      // Get the last fetched block
+      const lastEntry = await DecentCloudLedger.getLastFetchedBlock();
+
+      if (lastEntry) {
+        displayString('wasmBlockHeader', 'Last fetched block:');
+        displayJSON('wasmBlockContents', lastEntry.ledgerEntry);
+        return true;
+      } else {
+        displayString('wasmBlockHeader', 'No blocks fetched yet');
+        displayJSON('wasmBlockContents', { message: 'No blocks fetched yet' });
+        return false;
+      }
+    } catch (error) {
+      console.error('Error displaying last block:', error);
+      displayString('wasmBlockHeader', `Error displaying last block: ${error.message}`, true);
+      displayJSON('wasmBlockContents', { error: error.message }, true);
+      return false;
+    }
+  }
+
+  /**
+   * Clear the ledger storage
+   */
+  async clearStorage() {
+    if (!this.initialized) {
+      displayString('clearStatus', 'Client not initialized', true);
+      return false;
+    }
+
+    try {
+      displayString('clearStatus', 'Clearing ledger storage...');
+
+      // Clear the ledger storage
+      await this.client.storage.clear();
+
+      displayString('clearStatus', 'Ledger storage cleared successfully');
+
+      // Update the display
+      displayString('wasmBlockHeader', 'No blocks fetched yet');
+      displayJSON('wasmBlockContents', { message: 'No blocks fetched yet' });
+
+      return true;
+    } catch (error) {
+      console.error('Error clearing storage:', error);
+      displayString('clearStatus', `Error clearing storage: ${error.message}`, true);
+      return false;
+    }
+  }
+}
+
+/**
+ * Initialize the demo
+ * This function is called when the page loads
+ */
+async function initDemo() {
+  console.log('Initializing class-based demo...');
+
+  // Create a demo instance
+  const demo = new DecentCloudDemo();
+
+  // Initialize the client
+  await demo.initialize();
+
+  // Set up event listeners for the buttons
+  document.getElementById('fetchButton').addEventListener('click', async () => {
+    await demo.fetchBlocks();
+    await demo.displayLastBlock();
+  });
+
+  document.getElementById('clearButton').addEventListener('click', async () => {
+    await demo.clearStorage();
+  });
+
+  // Display the last block if available
+  await demo.displayLastBlock();
 }
 
 // Initialize the demo when the page loads

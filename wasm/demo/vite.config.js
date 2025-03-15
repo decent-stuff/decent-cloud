@@ -19,10 +19,13 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    assetsInlineLimit: 1024 * 1024, // 1MB inline limit, adjust as needed
     commonjsOptions: {
       transformMixedEsModules: true,
     },
   },
+  // Configure Vite to properly handle WASM files
+  assetsInclude: ['**/*.wasm'],
   define: {
     // Add polyfill for global
     // Fixes the error "global is not defined" from the @dfinity/agent package

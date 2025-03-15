@@ -11,12 +11,12 @@
     "watch:all": "concurrently \"npm run dev\" \"npm run build:wasm -- --watch\""
   },
   "devDependencies": {
-    "vite": "6.1.1",
+    "vite": "6.2.2",
     "vite-plugin-wasm": "3.4.1",
     "concurrently": "9.1.2"
   },
   "dependencies": {
-    "@decent-stuff/dc-client": "file:..",
+    "@decent-stuff/dc-client": "file:../dist",
     "@dfinity/agent": "2.3.0",
     "@dfinity/principal": "2.3.0"
   }

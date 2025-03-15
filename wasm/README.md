@@ -21,10 +21,10 @@ npm install @decent-stuff/dc-client
 ### Basic Usage
 
 ```javascript
-import { createClient } from '@decent-stuff/dc-client';
+import { DecentCloudClient } from '@decent-stuff/dc-client';
 
 // Create a client instance
-const client = createClient();
+const client = new DecentCloudClient();
 
 // Initialize the client
 await client.initialize();
@@ -46,10 +46,10 @@ await client.storage.clear();
 You can configure the client with custom settings:
 
 ```javascript
-import { createClient } from '@decent-stuff/dc-client';
+import { DecentCloudClient } from '@decent-stuff/dc-client';
 
 // Create a client instance with custom configuration
-const client = createClient({
+const client = new DecentCloudClient({
   networkUrl: 'https://custom-icp-api.io',
   canisterId: 'your-canister-id',
 });

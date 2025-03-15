@@ -1,64 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DC Client Demo</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        .demo-section {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        .demo-section h2 {
-            margin-top: 0;
-        }
-        .output {
-            background: #f5f5f5;
-            padding: 10px;
-            border-radius: 4px;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
-        button {
-            background: #0066cc;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 5px;
-        }
-        button:hover {
-            background: #0052a3;
-        }
-        button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decent Cloud WASM Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .demo-section {
+      flex: 1;
+      min-width: 500px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow: auto;
+      max-height: 400px;
+    }
+    button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 10px 2px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .status {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+  </style>
 </head>
 <body>
-    <h1>Decent Cloud In-Browser Client Demo</h1>
+  <h1>Decent Cloud WASM Demo</h1>
+  <p>This demo demonstrates the functionality of the Decent Cloud WASM library.</p>
 
+  <div class="container">
+    <!-- Simple Demo -->
     <div class="demo-section">
-        <h2>Wasm block header</h2>
-        <div id="wasmBlockHeader" class="output"></div>
+      <h2>Simple Demo</h2>
+      <p>This demo automatically initializes the client and fetches ledger blocks on page load.</p>
+
+      <div class="status">
+        <strong>Initialization Status:</strong> <span id="initStatus">Initializing...</span>
+      </div>
+
+      <div class="status">
+        <strong>Fetch Status:</strong> <span id="fetchStatus">Waiting...</span>
+      </div>
+
+      <h3>Block Header</h3>
+      <pre id="wasmBlockHeader">Loading...</pre>
+
+      <h3>Block Contents</h3>
+      <pre id="wasmBlockContents">Loading...</pre>
     </div>
 
+    <!-- Class-based Demo -->
     <div class="demo-section">
-        <h2>Wasm block contents</h2>
-        <div id="wasmBlockContents" class="output"></div>
-    </div>
+      <h2>Class-based API Demo</h2>
+      <p>This demo uses the class-based API and allows manual interaction.</p>
 
-    <script type="module" src="./main.js"></script>
+      <div>
+        <button id="fetchButton">Fetch Blocks</button>
+        <button id="clearButton">Clear Storage</button>
+      </div>
+
+      <div class="status">
+        <strong>Initialization Status:</strong> <span id="initStatus">Initializing...</span>
+      </div>
+
+      <div class="status">
+        <strong>Fetch Status:</strong> <span id="fetchStatus">Waiting...</span>
+      </div>
+
+      <div class="status">
+        <strong>Clear Status:</strong> <span id="clearStatus">Waiting...</span>
+      </div>
+
+      <h3>Block Header</h3>
+      <pre id="wasmBlockHeader">Loading...</pre>
+
+      <h3>Block Contents</h3>
+      <pre id="wasmBlockContents">Loading...</pre>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
 </body>
 </html>

@@ -100,6 +100,7 @@ console.log('🚀 Building WASM module...');
 
 async function main() {
   try {
+    const gitRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
     const distDir = path.join(wasmDir, 'dist');
     ensureDirectoryExists(distDir);
 
@@ -108,12 +109,22 @@ async function main() {
     let needWasmBuild = true;
     if (fs.existsSync(wasmTarget)) {
       // Use the shell command to get Rust files newer than wasmTarget.
-      const newerRustFiles = getNewerRustFiles(wasmTarget, wasmDir);
+      const newerRustFiles = getNewerRustFiles(wasmTarget, gitRoot);
       const fsCheck = newerRustFiles.length > 0;
+      console.log(`Found ${newerRustFiles.length} newly modified Rust files:`, newerRustFiles);
 
       // Use Git commit timestamps.
       const wasmTargetMtime = fs.statSync(wasmTarget).mtimeMs;
       const gitLatestTime = getNewestGitRustFile();
+      if (gitLatestTime > wasmTargetMtime) {
+        console.log(
+          `Git commit time: ${new Date(gitLatestTime).toISOString()} is newer than wasmTargetMtime: ${new Date(wasmTargetMtime).toISOString()}`
+        );
+      } else {
+        console.log(
+          `Git commit time: ${new Date(gitLatestTime).toISOString()} is older than wasmTargetMtime: ${new Date(wasmTargetMtime).toISOString()}`
+        );
+      }
 
       needWasmBuild = fsCheck || gitLatestTime > wasmTargetMtime;
     }
@@ -155,7 +166,6 @@ async function main() {
       version: mainPackageJson.version,
       description: mainPackageJson.description,
       main: 'dc-client.js',
-      module: 'dc-client.mjs',
       types: 'dc-client.d.ts',
       type: 'module',
       files: ['*.js', '*.mjs', '*.ts', '*.d.ts', '*.wasm', 'snippets', 'LICENSE'],
@@ -178,7 +188,6 @@ async function main() {
     const filesToCopy = [
       ['canister_idl.js', 'canister_idl.js'],
       ['dc-client.js', 'dc-client.js'],
-      ['dc-client.js', 'dc-client.mjs'],
       ['dc-client.d.ts', 'dc-client.d.ts'],
       ['db.js', 'db.js'],
       ['db.ts', 'db.ts'],
@@ -188,15 +197,31 @@ async function main() {
       ['ledger.ts', 'ledger.ts'],
       ['LICENSE', 'LICENSE'],
     ];
-    for (const [src, dest] of filesToCopy) {
+
+    filesToCopy.forEach(([src, dest]) => {
+      // Check if the source file exists
+      const tsSrc = src.replace(/\.js$/, '.ts');
       const srcPath = path.join(wasmDir, src);
-      const destPath = path.join(distDir, dest);
-      if (fs.existsSync(srcPath) && isNewer(srcPath, destPath)) {
-        copyFile(srcPath, destPath);
-      } else {
-        console.log(`Skipping copy for ${src} as target is up to date.`);
+      const tsSrcPath = path.join(wasmDir, tsSrc);
+
+      if (fs.existsSync(tsSrcPath) && isNewer(tsSrcPath, srcPath)) {
+        console.log(`🚀 Compiling ${tsSrc} to ${src}...`);
+        try {
+          execSync(
+            `tsc ${tsSrcPath} --outDir ${path.dirname(srcPath)} --module es2020 --target es2020 --moduleResolution node`,
+            {
+              stdio: 'inherit',
+            }
+          );
+
+          console.log(`✨ Compiled ${tsSrc} to ${src}`);
+        } catch (error) {
+          console.error(`❌ Error compiling ${tsSrc}: ${error.message}`);
+          process.exit(1);
+        }
       }
-    }
+      copyFile(srcPath, path.join(distDir, dest));
+    });
 
     // Wait for wasm-pack to create the snippets directory.
     const snippetsDir = path.join(distDir, 'snippets');
