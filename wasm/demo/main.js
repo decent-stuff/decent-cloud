@@ -146,7 +146,7 @@ class DecentCloudDemo {
       displayString('clearStatus', 'Clearing ledger storage...');
 
       // Clear the ledger storage
-      await this.client.storage.clear();
+      await DecentCloudLedger.clearStorage();
 
       displayString('clearStatus', 'Ledger storage cleared successfully');
 

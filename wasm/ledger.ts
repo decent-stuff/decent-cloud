@@ -155,6 +155,18 @@ class Ledger {
             throw error;
         }
     }
+
+    /**
+     * Clear the ledger storage.
+     */
+    async clearStorage(): Promise<void> {
+        try {
+            await db.clearAllEntries();
+        } catch (error) {
+            console.error("Error clearing the ledger storage:", error);
+            throw error;
+        }
+    }
 }
 
 // Export a singleton instance of the Ledger.

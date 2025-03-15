@@ -21,7 +21,7 @@ npm install @decent-stuff/dc-client
 ### Basic Usage
 
 ```javascript
-import { DecentCloudClient } from '@decent-stuff/dc-client';
+import { DecentCloudClient, DecentCloudLedger } from '@decent-stuff/dc-client';
 
 // Create a client instance
 const client = new DecentCloudClient();
@@ -38,7 +38,7 @@ const lastBlock = await client.ledger.getLastFetchedBlock();
 console.log('Last fetched block:', lastBlock);
 
 // Clear the ledger storage
-await client.storage.clear();
+await DecentCloudLedger.clearStorage();
 ```
 
 ### Configuration
