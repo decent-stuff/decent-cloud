@@ -183,44 +183,49 @@ async function main() {
     );
     console.log('Created package.json in dist directory');
 
+    const filesToCompile = [
+      ['db.ts', 'db.js'],
+      ['agent.ts', 'agent.js'],
+      ['ledger.ts', 'ledger.js'],
+    ];
+
+    filesToCompile.forEach(([src, dest]) => {
+      // Check if the source file exists
+      const srcPath = path.join(wasmDir, src);
+      const dstPath = path.join(distDir, dest);
+
+      if (!fs.existsSync(dstPath) || (fs.existsSync(srcPath) && isNewer(srcPath, dstPath))) {
+        console.log(`🚀 Compiling ${srcPath} to ${dstPath}...`);
+        try {
+          execSync(
+            `tsc ${srcPath} --outDir ${path.dirname(dstPath)} --module es2020 --target es2020 --moduleResolution node`,
+            {
+              stdio: 'inherit',
+            }
+          );
+
+          console.log(`✅ Compiled ${srcPath} to ${dstPath}`);
+          copyFile(srcPath, dstPath);
+        } catch (error) {
+          console.error(`❌ Error compiling ${srcPath}: ${error.message}`);
+          process.exit(1);
+        }
+      }
+    });
+
     // Copy additional files only if their source is newer than the target.
     console.log('Copying additional files...');
     const filesToCopy = [
       ['canister_idl.js', 'canister_idl.js'],
       ['dc-client.js', 'dc-client.js'],
       ['dc-client.d.ts', 'dc-client.d.ts'],
-      ['db.js', 'db.js'],
-      ['db.ts', 'db.ts'],
-      ['agent.js', 'agent.js'],
-      ['agent.ts', 'agent.ts'],
-      ['ledger.js', 'ledger.js'],
-      ['ledger.ts', 'ledger.ts'],
       ['LICENSE', 'LICENSE'],
     ];
 
     filesToCopy.forEach(([src, dest]) => {
-      // Check if the source file exists
-      const tsSrc = src.replace(/\.js$/, '.ts');
       const srcPath = path.join(wasmDir, src);
-      const tsSrcPath = path.join(wasmDir, tsSrc);
-
-      if (fs.existsSync(tsSrcPath) && isNewer(tsSrcPath, srcPath)) {
-        console.log(`🚀 Compiling ${tsSrc} to ${src}...`);
-        try {
-          execSync(
-            `tsc ${tsSrcPath} --outDir ${path.dirname(srcPath)} --module es2020 --target es2020 --moduleResolution node`,
-            {
-              stdio: 'inherit',
-            }
-          );
-
-          console.log(`✨ Compiled ${tsSrc} to ${src}`);
-        } catch (error) {
-          console.error(`❌ Error compiling ${tsSrc}: ${error.message}`);
-          process.exit(1);
-        }
-      }
-      copyFile(srcPath, path.join(distDir, dest));
+      const dstPath = path.join(distDir, dest);
+      copyFile(srcPath, dstPath);
     });
 
     // Wait for wasm-pack to create the snippets directory.
