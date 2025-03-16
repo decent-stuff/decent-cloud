@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LedgerEntry } from "@decent-stuff/dc-client/db";
+import { LedgerBlock, LedgerEntry } from "@decent-stuff/dc-client/db";
 import { ledgerService } from "@/lib/ledger-service";
 
 interface LedgerTableProps {
@@ -10,12 +10,17 @@ interface LedgerTableProps {
   error?: string;
 }
 
+interface BlockWithEntries {
+  block: LedgerBlock;
+  entries: LedgerEntry[];
+}
+
 export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
   const [sortField, setSortField] = useState<keyof LedgerEntry>("key");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [localEntries, setLocalEntries] = useState<LedgerEntry[]>(
-    entries || []
-  );
+  const [blocksWithEntries, setBlocksWithEntries] = useState<
+    BlockWithEntries[]
+  >([]);
   const [localIsLoading, setLocalIsLoading] = useState<boolean>(
     isLoading || false
   );
@@ -33,21 +38,74 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
     return allLabels.filter((label) => label !== "DCTokenTransfer");
   });
 
-  // If entries are provided as props, use them
+  // If entries are provided as props, fetch the corresponding blocks
   useEffect(() => {
     if (entries) {
-      setLocalEntries(entries);
+      let isMounted = true;
 
-      // Update selected labels when entries change
-      const allLabels = getUniqueLabels(entries);
-      setSelectedLabels((prev) => {
-        // If we have no previous selection, select all except DCTokenTransfer
-        if (prev.length === 0) {
-          return allLabels.filter((label) => label !== "DCTokenTransfer");
+      const fetchBlocksForEntries = async () => {
+        try {
+          // Get all blocks
+          const allBlocks = await ledgerService.getAllBlocks();
+
+          // Create a map of blocks by offset for quick lookup
+          const blockMap = new Map(
+            allBlocks.map((block) => [block.blockOffset, block])
+          );
+
+          // Group entries by blockOffset
+          const entriesByBlock = entries.reduce((acc, entry) => {
+            if (!acc[entry.blockOffset]) {
+              acc[entry.blockOffset] = [];
+            }
+            acc[entry.blockOffset].push(entry);
+            return acc;
+          }, {} as Record<number, LedgerEntry[]>);
+
+          // Create BlockWithEntries using actual block data
+          const blocks: BlockWithEntries[] = Object.entries(entriesByBlock)
+            .map(([blockOffset, blockEntries]) => {
+              const block = blockMap.get(Number(blockOffset));
+              if (!block) return null; // Skip if block not found
+              return {
+                block,
+                entries: blockEntries,
+              };
+            })
+            .filter((block): block is BlockWithEntries => block !== null);
+
+          if (isMounted) {
+            setBlocksWithEntries(blocks);
+
+            // Update selected labels
+            const allLabels = getUniqueLabels(entries);
+            setSelectedLabels((prev) => {
+              if (prev.length === 0) {
+                return allLabels.filter((label) => label !== "DCTokenTransfer");
+              }
+              return prev;
+            });
+          }
+        } catch (err) {
+          if (isMounted) {
+            setLocalError(
+              err instanceof Error
+                ? err.message
+                : "Failed to fetch blocks for entries"
+            );
+          }
         }
-        // Otherwise keep current selection
-        return prev;
+      };
+
+      fetchBlocksForEntries().catch((err) => {
+        if (isMounted) {
+          console.error("Error fetching blocks for entries:", err);
+        }
       });
+
+      return () => {
+        isMounted = false;
+      };
     }
   }, [entries]);
 
@@ -65,27 +123,40 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
     }
   }, [error]);
 
-  // If no entries are provided, fetch them from the ledger service
+  // If no entries are provided, fetch blocks and their entries from the ledger service
   useEffect(() => {
     if (!entries) {
       let isMounted = true;
 
-      const fetchEntries = async () => {
+      const fetchBlocksAndEntries = async () => {
         try {
           if (!isMounted) return;
 
-          // Get all entries from the database
-          const allEntries = await ledgerService.getAllEntries();
+          // Get all blocks
+          const blocks = await ledgerService.getAllBlocks();
+
+          // For each block, get its entries and create BlockWithEntries objects
+          const blocksWithEntriesData = await Promise.all(
+            blocks.map(async (block) => {
+              const blockEntries = await ledgerService.getBlockEntries(
+                block.blockOffset
+              );
+              return {
+                block,
+                entries: blockEntries,
+              };
+            })
+          );
 
           if (isMounted) {
-            setLocalEntries(allEntries);
+            setBlocksWithEntries(blocksWithEntriesData);
           }
         } catch (err) {
           if (isMounted) {
             setLocalError(
               err instanceof Error
                 ? err.message
-                : "Failed to fetch ledger entries"
+                : "Failed to fetch ledger blocks and entries"
             );
           }
         } finally {
@@ -95,9 +166,9 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
         }
       };
 
-      fetchEntries().catch((err) => {
+      fetchBlocksAndEntries().catch((err) => {
         if (isMounted) {
-          console.error("Error fetching ledger entries:", err);
+          console.error("Error fetching ledger blocks and entries:", err);
         }
       });
 
@@ -134,7 +205,7 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
     if (label === "all") {
       // If "All Labels" is checked, select all labels
       if (checked) {
-        setSelectedLabels(getUniqueLabels(localEntries));
+        setSelectedLabels(getUniqueLabels(allEntries));
       } else {
         // If "All Labels" is unchecked, clear selection
         setSelectedLabels([]);
@@ -152,57 +223,70 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
   // Toggle all labels
   const toggleAllLabels = (checked: boolean) => {
     if (checked) {
-      setSelectedLabels(getUniqueLabels(localEntries));
+      setSelectedLabels(getUniqueLabels(allEntries));
     } else {
       setSelectedLabels([]);
     }
   };
 
+  // Get all entries from blocks for filtering
+  const allEntries = blocksWithEntries.flatMap((block) => block.entries);
+
   // Get unique labels for checkboxes
-  const uniqueLabels = getUniqueLabels(localEntries);
+  const uniqueLabels = getUniqueLabels(allEntries);
 
-  // Filter entries based on search term, filter field, and selected labels
-  const filteredEntries = localEntries.filter((entry) => {
-    // First filter by label if any are selected
-    if (
-      selectedLabels.length > 0 &&
-      !selectedLabels.includes(entry.label || "N/A")
-    ) {
-      return false;
-    }
+  // Filter blocks and their entries based on search term, filter field, and selected labels
+  const filteredBlocksWithEntries = blocksWithEntries
+    .map((blockWithEntries) => {
+      const filteredEntries = blockWithEntries.entries.filter((entry) => {
+        // First filter by label if any are selected
+        if (
+          selectedLabels.length > 0 &&
+          !selectedLabels.includes(entry.label || "N/A")
+        ) {
+          return false;
+        }
 
-    // Then filter by search term
-    if (!searchTerm) return true;
+        // Then filter by search term
+        if (!searchTerm) return true;
 
-    if (filterField === "all") {
-      // Search in all fields
-      return Object.values(entry).some((value) =>
-        String(value).toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    } else {
-      // Search in specific field
-      const fieldValue =
-        filterField === "key"
-          ? entry.key
-          : filterField === "label"
-          ? entry.label
-          : filterField === "description"
-          ? entry.description
-          : String(entry.value);
-      return String(fieldValue)
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-    }
-  });
+        if (filterField === "all") {
+          // Search in all fields including block information
+          const blockFields = {
+            parentBlockHash: blockWithEntries.block.parentBlockHash,
+            blockOffset: blockWithEntries.block.blockOffset,
+            timestampNs: blockWithEntries.block.timestampNs,
+          };
+          return (
+            Object.values(entry).some((value) =>
+              String(value).toLowerCase().includes(searchTerm.toLowerCase())
+            ) ||
+            Object.values(blockFields).some((value) =>
+              String(value).toLowerCase().includes(searchTerm.toLowerCase())
+            )
+          );
+        } else {
+          // Search in specific field
+          const fieldValue =
+            filterField === "key"
+              ? entry.key
+              : filterField === "label"
+              ? entry.label
+              : filterField === "description"
+              ? entry.description
+              : String(entry.value);
+          return String(fieldValue)
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase());
+        }
+      });
 
-  // Sort entries
-  const sortedEntries = [...filteredEntries].sort((a, b) => {
-    const aValue = String(a[sortField] || "");
-    const bValue = String(b[sortField] || "");
-    return sortDirection === "asc"
-      ? aValue.localeCompare(bValue)
-      : bValue.localeCompare(aValue);
-  });
+      return {
+        block: blockWithEntries.block,
+        entries: filteredEntries,
+      };
+    })
+    .filter((block) => block.entries.length > 0); // Only keep blocks that have matching entries
 
   // Format value
   const formatValue = (value: unknown) => {
@@ -240,14 +324,23 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
     );
   }
 
-  // Render empty state when there are no entries at all
-  if (localEntries.length === 0) {
+  // Render empty state when there are no blocks at all
+  if (blocksWithEntries.length === 0) {
     return (
       <div className="text-center p-8">
-        <p className="text-white/80">No ledger entries found.</p>
+        <p className="text-white/80">No ledger blocks found.</p>
       </div>
     );
   }
+
+  // Format timestamp
+  const formatTimestamp = (timestampNs: number | bigint) => {
+    const timestampMs =
+      typeof timestampNs === "bigint"
+        ? Number(timestampNs) / 1_000_000
+        : timestampNs / 1_000_000; // Convert nanoseconds to milliseconds
+    return new Date(timestampMs).toLocaleString();
+  };
 
   // Render table
   return (
@@ -340,98 +433,157 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
         </div>
 
         <div className="text-white/70 text-xs">
-          {filteredEntries.length} of {localEntries.length} entries
+          {filteredBlocksWithEntries.reduce(
+            (sum, block) => sum + block.entries.length,
+            0
+          )}{" "}
+          of {allEntries.length} entries in {filteredBlocksWithEntries.length}{" "}
+          of {blocksWithEntries.length} blocks
         </div>
       </div>
 
-      {filteredEntries.length === 0 ? (
+      {filteredBlocksWithEntries.length === 0 ? (
         <div className="text-center p-8 bg-gray-800/30 rounded-lg border border-gray-700">
           <p className="text-white/80">
             No entries match your search criteria. Try adjusting your filters.
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-700 table-fixed text-xs">
-            <thead className="bg-gray-800/50">
-              <tr>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer w-[20%]"
-                  onClick={() => handleSort("key")}
-                >
-                  Key
-                  {sortField === "key" && (
-                    <span className="ml-1 text-blue-300">
-                      {sortDirection === "asc" ? "↑" : "↓"}
-                    </span>
-                  )}
-                </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer w-[15%]"
-                  onClick={() => handleSort("label")}
-                >
-                  Label
-                  {sortField === "label" && (
-                    <span className="ml-1 text-blue-300">
-                      {sortDirection === "asc" ? "↑" : "↓"}
-                    </span>
-                  )}
-                </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider w-[45%]"
-                >
-                  Value
-                </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer w-[20%]"
-                  onClick={() => handleSort("description")}
-                >
-                  Description
-                  {sortField === "description" && (
-                    <span className="ml-1 text-blue-300">
-                      {sortDirection === "asc" ? "↑" : "↓"}
-                    </span>
-                  )}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-gray-800/30 divide-y divide-gray-700">
-              {sortedEntries.map((entry) => (
-                <tr
-                  key={`${entry.blockOffset}-${entry.label}-${entry.key}`}
-                  className="hover:bg-gray-700/30"
-                >
-                  <td
-                    className="px-3 py-2 text-xs font-medium text-white truncate hover:text-clip hover:overflow-visible hover:whitespace-normal hover:z-10 hover:bg-gray-800"
-                    title={entry.key}
-                  >
-                    {entry.key}
-                  </td>
-                  <td
-                    className="px-3 py-2 text-xs text-blue-300 truncate hover:text-clip hover:overflow-visible hover:whitespace-normal hover:z-10 hover:bg-gray-800"
-                    title={entry.label || "N/A"}
-                  >
-                    {entry.label || "N/A"}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-white">
-                    <pre className="whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-xs bg-gray-800/50 p-2 rounded border border-gray-700">
-                      {formatValue(entry.value)}
-                    </pre>
-                  </td>
-                  <td
-                    className="px-3 py-2 text-xs text-white/80 truncate hover:text-clip hover:overflow-visible hover:whitespace-normal hover:z-10 hover:bg-gray-800"
-                    title={entry.description || "N/A"}
-                  >
-                    {entry.description || "N/A"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {[...filteredBlocksWithEntries]
+            .sort((a, b) => {
+              const aTime =
+                typeof a.block.timestampNs === "bigint"
+                  ? Number(a.block.timestampNs)
+                  : a.block.timestampNs;
+              const bTime =
+                typeof b.block.timestampNs === "bigint"
+                  ? Number(b.block.timestampNs)
+                  : b.block.timestampNs;
+              return bTime - aTime; // Sort descending (newest first)
+            })
+            .map((blockWithEntries) => (
+              <div
+                key={blockWithEntries.block.blockOffset}
+                className="bg-gray-800/30 rounded-lg border border-gray-700 overflow-hidden"
+              >
+                {/* Block Header */}
+                <div className="bg-gray-700/30 p-4">
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <span className="text-gray-400">Block Offset:</span>
+                      <span className="ml-2 text-white">
+                        {blockWithEntries.block.blockOffset}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Timestamp:</span>
+                      <span className="ml-2 text-white">
+                        {formatTimestamp(blockWithEntries.block.timestampNs)}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-gray-400">Parent Block Hash:</span>
+                      <span className="ml-2 text-white font-mono">
+                        {blockWithEntries.block.parentBlockHash}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Entries Table */}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-700 table-fixed text-xs">
+                    <thead className="bg-gray-800/50">
+                      <tr>
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer w-[20%]"
+                          onClick={() => handleSort("key")}
+                        >
+                          Key
+                          {sortField === "key" && (
+                            <span className="ml-1 text-blue-300">
+                              {sortDirection === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer w-[15%]"
+                          onClick={() => handleSort("label")}
+                        >
+                          Label
+                          {sortField === "label" && (
+                            <span className="ml-1 text-blue-300">
+                              {sortDirection === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider w-[45%]"
+                        >
+                          Value
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-xs font-medium text-white uppercase tracking-wider cursor-pointer w-[20%]"
+                          onClick={() => handleSort("description")}
+                        >
+                          Description
+                          {sortField === "description" && (
+                            <span className="ml-1 text-blue-300">
+                              {sortDirection === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-gray-800/30 divide-y divide-gray-700">
+                      {[...blockWithEntries.entries]
+                        .sort((a, b) => {
+                          const aValue = String(a[sortField] || "");
+                          const bValue = String(b[sortField] || "");
+                          return sortDirection === "asc"
+                            ? aValue.localeCompare(bValue)
+                            : bValue.localeCompare(aValue);
+                        })
+                        .map((entry) => (
+                          <tr
+                            key={`${entry.blockOffset}-${entry.label}-${entry.key}`}
+                            className="hover:bg-gray-700/30"
+                          >
+                            <td
+                              className="px-3 py-2 text-xs font-medium text-white truncate hover:overflow-visible hover:z-10 hover:bg-gray-800"
+                              title={entry.key}
+                            >
+                              {entry.key}
+                            </td>
+                            <td
+                              className="px-3 py-2 text-xs text-blue-300 truncate hover:overflow-visible hover:z-10 hover:bg-gray-800"
+                              title={entry.label || "N/A"}
+                            >
+                              {entry.label || "N/A"}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-white">
+                              <pre className="whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-xs bg-gray-800/50 p-2 rounded border border-gray-700">
+                                {formatValue(entry.value)}
+                              </pre>
+                            </td>
+                            <td
+                              className="px-3 py-2 text-xs text-white/80 truncate hover:overflow-visible hover:z-10 hover:bg-gray-800"
+                              title={entry.description || "N/A"}
+                            >
+                              {entry.description || "N/A"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
         </div>
       )}
     </div>
