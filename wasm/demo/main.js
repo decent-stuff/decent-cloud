@@ -1,4 +1,4 @@
-import { DecentCloudClient, DecentCloudLedger } from '@decent-stuff/dc-client';
+import { DecentCloudClient, decentCloudLedger } from '@decent-stuff/dc-client';
 
 /**
  * Display a string in the specified element
@@ -90,7 +90,7 @@ class DecentCloudDemo {
       displayString('fetchStatus', 'Fetching ledger blocks...');
 
       // Fetch ledger blocks
-      const fetchStatus = await DecentCloudLedger.fetchLedgerBlocks();
+      const fetchStatus = await decentCloudLedger.fetchLedgerBlocks();
       displayString('fetchStatus', fetchStatus);
     } catch (error) {
       console.error('Error fetching blocks:', error);
@@ -111,8 +111,8 @@ class DecentCloudDemo {
 
     try {
       // Get the last fetched block
-      const lastBlock = await DecentCloudLedger.getLastFetchedBlock();
-      const lastBlockEntries = await DecentCloudLedger.getBlockEntries(lastBlock.blockOffset);
+      const lastBlock = await decentCloudLedger.getLastFetchedBlock();
+      const lastBlockEntries = await decentCloudLedger.getBlockEntries(lastBlock.blockOffset);
 
       if (lastBlock) {
         displayJSON('wasmBlockHeader', lastBlock);
@@ -144,7 +144,7 @@ class DecentCloudDemo {
       displayString('clearStatus', 'Clearing ledger storage...');
 
       // Clear the ledger storage
-      await DecentCloudLedger.clearStorage();
+      await decentCloudLedger.clearStorage();
 
       displayString('clearStatus', 'Ledger storage cleared successfully');
 

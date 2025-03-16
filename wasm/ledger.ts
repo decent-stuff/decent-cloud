@@ -195,18 +195,6 @@ class Ledger {
     }
 }
 
-
-export function hexToUint8Array(hex: string): Uint8Array {
-    if (hex.length % 2 !== 0) {
-        throw new Error("Invalid hex string: must have an even length");
-    }
-    const uint8 = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-        uint8[i / 2] = parseInt(hex.substr(i, 2), 16);
-    }
-    return uint8;
-}
-
 export function base64ToUint8Array(b64string: string): Uint8Array {
     const binaryString = atob(b64string);
     const len = binaryString.length;
@@ -218,4 +206,4 @@ export function base64ToUint8Array(b64string: string): Uint8Array {
 }
 
 // Export a singleton instance of the Ledger.
-export const ledger = new Ledger();
+export const decentCloudLedger = new Ledger();

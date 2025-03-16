@@ -5,8 +5,8 @@
 import { __wbg_set_wasm } from './dc-client_bg.js';
 import * as wasmModule from './dc-client_bg.js';
 
-import { ledger as DecentCloudLedger } from './ledger';
-export { DecentCloudLedger };
+import { decentCloudLedger } from './ledger';
+export { decentCloudLedger };
 
 // Track initialization state and module path
 let initialized = false;

@@ -69,3 +69,50 @@ export class DecentCloudClient {
      */
     clearStorage(): Promise<void>;
 }
+
+import { LedgerBlock, LedgerEntry } from './db';
+
+/**
+ * Ledger class for managing ledger data and interactions.
+ */
+export class Ledger {
+    /**
+     * Initialize the ledger interface.
+     */
+    init(): Promise<void>;
+
+    /**
+     * Fetch new ledger blocks from the remote ledger canister.
+     * @returns {Promise<string>} Fetch result message.
+     */
+    fetchLedgerBlocks(): Promise<string>;
+
+    /**
+     * Retrieve all ledger entries stored in the local database.
+     * @returns {Promise<LedgerEntry[]>} An array of all ledger entries.
+     */
+    getAllEntries(): Promise<LedgerEntry[]>;
+
+    /**
+     * Retrieve entries for a specific block.
+     * @param blockOffset The offset of the block to retrieve entries for.
+     * @returns {Promise<LedgerEntry[]>} An array of ledger entries for the specified block.
+     */
+    getBlockEntries(blockOffset: number): Promise<LedgerEntry[]>;
+
+    /**
+     * Retrieve the last fetched ledger block entry.
+     * @returns {Promise<LedgerBlock | null>} The last ledger block or null if none exists.
+     */
+    getLastFetchedBlock(): Promise<LedgerBlock | null>;
+
+    /**
+     * Clear the ledger storage.
+     */
+    clearStorage(): Promise<void>;
+}
+
+/**
+ * Singleton instance of the Ledger class.
+ */
+export const decentCloudLedger: Ledger;
