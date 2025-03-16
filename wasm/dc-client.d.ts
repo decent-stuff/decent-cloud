@@ -74,6 +74,7 @@ export class DecentCloudClient {
 }
 
 import { LedgerBlock, LedgerEntry } from './db';
+export { LedgerBlock, LedgerEntry };
 
 /**
  * Ledger class for managing and interacting with the
