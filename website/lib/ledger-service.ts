@@ -188,7 +188,6 @@ class LedgerService {
                 // Find token transfer in the same block (reward)
                 const blockEntries = await this.getBlockEntries(entry.blockOffset);
                 const blockTransfers = blockEntries.filter(entry => entry.label === 'DCTokenTransfer');
-                console.log('blockTransfers', blockTransfers);
 
                 for (const transfer of blockTransfers) {
                     const transferValue = transfer.value as {
@@ -203,7 +202,6 @@ class LedgerService {
                     if (!transferValue || !transferValue.V1) continue;
 
                     const v1 = transferValue.V1;
-                    console.log('v1', v1, 'principal', principal);
                     // Check if this is a reward transfer from the minting account to this validator
                     if (v1.from && v1.from.owner === "zjbo4-sknjf-hfisk-oi4" &&
                         v1.to && v1.to.owner === principal) {
