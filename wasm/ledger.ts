@@ -2,7 +2,7 @@ import { db, LedgerBlock, LedgerEntry } from './db';
 import { canisterQueryLedgerData } from './agent';
 import { parseLedgerBlocks } from './dc-client.js';
 
-class Ledger {
+class DecentCloudLedger {
     /**
      * Initialize the ledger interface.
      * This includes initializing the WASM module, the database (if necessary),
@@ -206,4 +206,4 @@ export function base64ToUint8Array(b64string: string): Uint8Array {
 }
 
 // Export a singleton instance of the Ledger.
-export const decentCloudLedger = new Ledger();
+export const decentCloudLedger = new DecentCloudLedger();

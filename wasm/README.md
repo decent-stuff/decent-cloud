@@ -23,28 +23,28 @@ npm install @decent-stuff/dc-client
 ### Basic Usage
 
 ```typescript
-import { DecentCloudClient, DecentCloudLedger } from '@decent-stuff/dc-client';
+import { DecentCloudClient, decentCloudLedger } from '@decent-stuff/dc-client';
 
 // Initialize the client
 const client = new DecentCloudClient();
 await client.initialize();
 
 // Fetch new ledger blocks
-const fetchResult = await DecentCloudLedger.fetchLedgerBlocks();
+const fetchResult = await decentCloudLedger.fetchLedgerBlocks();
 console.log('Fetch result:', fetchResult);
 
 // Get the last fetched block
-const lastBlock = await DecentCloudLedger.getLastFetchedBlock();
+const lastBlock = await decentCloudLedger.getLastFetchedBlock();
 if (lastBlock) {
   console.log('Last block:', lastBlock);
 
   // Get entries for this block
-  const entries = await DecentCloudLedger.getBlockEntries(lastBlock.blockOffset);
+  const entries = await decentCloudLedger.getBlockEntries(lastBlock.blockOffset);
   console.log('Block entries:', entries);
 }
 
 // Clear local storage if needed
-await DecentCloudLedger.clearStorage();
+await decentCloudLedger.clearStorage();
 ```
 
 ### API Reference

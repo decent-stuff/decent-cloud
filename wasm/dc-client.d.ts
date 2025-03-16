@@ -1,7 +1,7 @@
 /**
  * Ledger entry data provided by the WASM module.
  */
-export interface LedgerEntryData {
+export interface RawJsonLedgerEntry {
     label: string;
     key: unknown;
     value: unknown;
@@ -12,7 +12,7 @@ export interface LedgerEntryData {
 /**
  * Ledger block header structure.
  */
-export interface BlockHeader {
+export interface RawJsonLedgerBlockHeader {
     block_version: number;
     jump_bytes_prev: number;
     jump_bytes_next: number;
@@ -25,9 +25,9 @@ export interface BlockHeader {
 /**
  * Ledger block data structure.
  */
-export interface BlockData {
-    block_header: BlockHeader;
-    block: LedgerEntryData[];
+export interface RawJsonLedgerBlock {
+    block_header: RawJsonLedgerBlockHeader;
+    block: RawJsonLedgerEntry[];
 }
 
 /**
@@ -39,7 +39,7 @@ export function initializeWasm(): Promise<void>;
  * Parse ledger blocks from raw binary input data.
  * @param {Uint8Array} inputData - The raw input data.
  * @param {bigint} [startOffset=0n] - The starting offset.
- * @returns {Promise<BlockData[]>} A promise that resolves to an array of ledger block data.
+ * @returns {Promise<RawJsonLedgerBlock[]>} A promise that resolves to an array of ledger block data.
  */
 export function parseLedgerBlocks(inputData, startOffset): Promise<void>;
 
@@ -49,7 +49,10 @@ export function parseLedgerBlocks(inputData, startOffset): Promise<void>;
 export function ledgerStorageClear(): Promise<void>;
 
 /**
- * Client class for interacting with the Decent Cloud ledger.
+ * Client class for interacting with the Decent Cloud Ledger Canister.
+ * This class provides methods for initializing the WASM module, parsing
+ * ledger blocks and converting them to JSON for showing in the UI, and
+ * for clearing the ledger storage.
  */
 export class DecentCloudClient {
     /**
@@ -62,7 +65,7 @@ export class DecentCloudClient {
      * @param inputData - The raw input data.
      * @param startOffset - The starting offset.
      */
-    getBlocks(inputData: Uint8Array, startOffset?: bigint): Promise<BlockData[]>;
+    getBlocks(inputData: Uint8Array, startOffset?: bigint): Promise<RawJsonLedgerBlock[]>;
 
     /**
      * Clear the ledger storage.
@@ -73,9 +76,10 @@ export class DecentCloudClient {
 import { LedgerBlock, LedgerEntry } from './db';
 
 /**
- * Ledger class for managing ledger data and interactions.
+ * Ledger class for managing and interacting with the
+ * in-browser ledger data snapshot stored as JSON in the local database.
  */
-export class Ledger {
+export class DecentCloudLedger {
     /**
      * Initialize the ledger interface.
      */
@@ -115,4 +119,4 @@ export class Ledger {
 /**
  * Singleton instance of the Ledger class.
  */
-export const decentCloudLedger: Ledger;
+export const decentCloudLedger: DecentCloudLedger;
