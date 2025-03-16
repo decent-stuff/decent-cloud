@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LedgerEntry } from "@/lib/db";
 import { ledgerService } from "@/lib/ledger-service";
 import { LedgerTable } from "@/components/ledger-table";
 import { Button } from "@/components/ui/button";
@@ -10,130 +9,32 @@ import HeaderSection from "@/components/ui/header";
 import Link from "next/link";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
+import { LedgerEntry } from "@decent-stuff/dc-client";
 
 export default function LedgerPage() {
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | undefined>();
-  const [isPolling, setIsPolling] = useState<boolean>(false);
-  const [pollingFrequency, setPollingFrequency] = useState<number>(10000); // 10 seconds
 
-  // Fetch ledger entries on component mount
+  // Load entries from the global service
   useEffect(() => {
-    let isMounted = true;
-
-    // Just fetch entries without initializing the service
-    // since it's already running globally
-    fetchEntries().catch((err) => {
-      if (isMounted) {
-        console.error("Error fetching entries:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch ledger entries"
-        );
-      }
-    });
-
-    // Check if global service is already polling
-    const checkGlobalPollingStatus = async () => {
-      if (ledgerService.isPollingActive()) {
-        setIsPolling(true);
-      }
-    };
-
-    void checkGlobalPollingStatus();
-
-    // Clean up on unmount (no need to stop the global service)
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Fetch ledger entries - includes fallback initialization if the global service hasn't initialized yet
-  const fetchEntries = async () => {
-    try {
-      setIsLoading(true);
-      setError(undefined);
-
-      // Check if the service is initialized, if not, initialize it
-      // This acts as a fallback in case the global service hasn't completed initialization
-      if (!ledgerService.getInitializationStatus()) {
-        console.log("Ledger service not initialized yet, initializing locally");
-        await ledgerService.initialize();
-      }
-
-      // Trigger a fresh fetch
-      await ledgerService.fetchAndStoreLatestEntries();
-
-      // Get all entries from the database
-      const allEntries = await ledgerService.getAllEntries();
-      setEntries(allEntries);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch ledger entries"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Toggle local UI polling state (doesn't affect global service)
-  const togglePolling = async () => {
-    if (isPolling) {
-      // Just update local UI state, don't stop the global service
-      setIsPolling(false);
-    } else {
-      setIsLoading(true);
+    const loadEntries = async () => {
       try {
-        // The global service is already running, so we just update the UI state
-        // This allows the page to display entries as if auto-sync is enabled
-        setIsPolling(true);
+        const currentEntries = await ledgerService.getAllEntries();
+        setEntries(currentEntries);
       } catch (err) {
-        console.error("Error handling polling state:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to update polling state"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  // Effect to update entries when polling is active
-  useEffect(() => {
-    let updateInterval: NodeJS.Timeout | null = null;
-
-    if (isPolling) {
-      // Set up a listener to update entries when new data is fetched
-      updateInterval = setInterval(async () => {
-        try {
-          const allEntries = await ledgerService.getAllEntries();
-          setEntries(allEntries);
-        } catch (err) {
-          console.error("Error updating entries during polling:", err);
-        }
-      }, pollingFrequency);
-    }
-
-    // Clean up the interval when polling is stopped or component unmounts
-    return () => {
-      if (updateInterval) {
-        clearInterval(updateInterval);
+        console.error("Error loading entries:", err);
+        setError(err instanceof Error ? err.message : "Failed to load entries");
       }
     };
-  }, [isPolling, pollingFrequency]);
 
-  // Handle polling frequency change for UI refresh rate only
-  // Global service polling frequency remains unchanged
-  const handleFrequencyChange = async (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const frequency = parseInt(e.target.value, 10);
-    setPollingFrequency(frequency);
+    // Initial load
+    void loadEntries();
 
-    // We now only update the UI refresh rate
-    // The global service continues to run at its configured frequency
-    console.info("UI refresh rate updated to", frequency, "ms");
-  };
+    // Set up periodic refresh
+    const interval = setInterval(loadEntries, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Clear all entries from the database
   const clearEntries = async () => {
@@ -193,40 +94,28 @@ export default function LedgerPage() {
           <div className="w-full flex justify-end mb-2">
             <h4 className="text-white text-sm font-medium">Data Controls</h4>
           </div>
-
           <Button
-            onClick={fetchEntries}
+            onClick={async () => {
+              setIsLoading(true);
+              try {
+                const currentEntries = await ledgerService.getAllEntries();
+                setEntries(currentEntries);
+              } catch (err) {
+                console.error("Error refreshing entries:", err);
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to refresh entries"
+                );
+              } finally {
+                setIsLoading(false);
+              }
+            }}
             disabled={isLoading}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
-            {isLoading ? "Synchronizing..." : "Synchronize Ledger"}
+            {isLoading ? "Refreshing..." : "Refresh Now"}
           </Button>
-
-          <Button
-            onClick={togglePolling}
-            variant={isPolling ? "destructive" : "default"}
-            className={
-              isPolling
-                ? "bg-red-600 hover:bg-red-700 text-white"
-                : "bg-green-600 hover:bg-green-700 text-white"
-            }
-          >
-            {isPolling ? "Hide Live Updates" : "Show Live Updates"}
-          </Button>
-
-          <div className="flex items-center bg-white/20 rounded px-3 py-2">
-            <span className="mr-2 text-sm text-white">UI refresh rate:</span>
-            <select
-              value={pollingFrequency}
-              onChange={handleFrequencyChange}
-              className="border rounded p-1 bg-white/90 text-gray-800"
-            >
-              <option value="5000">5 seconds</option>
-              <option value="10000">10 seconds</option>
-              <option value="30000">30 seconds</option>
-              <option value="60000">1 minute</option>
-            </select>
-          </div>
 
           <Button
             onClick={clearEntries}
@@ -242,23 +131,7 @@ export default function LedgerPage() {
                 <span className="font-medium">
                   <b>Synchronize Ledger</b>
                 </span>
-                : Manually refresh and display all available ledger data from
-                the local database
-              </li>
-              <li>
-                <span className="font-medium">
-                  <b>Show Live Updates</b>
-                </span>
-                : Display real-time updates as they are collected by the global
-                background service
-              </li>
-              <li>
-                <span className="font-medium">
-                  <b>UI Refresh Rate</b>
-                </span>
-                : How frequently the UI should check for and display new data
-                (does not affect how often the global service polls the
-                blockchain)
+                : Manually re-fetch ledger data
               </li>
               <li>
                 <span className="font-medium">

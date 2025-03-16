@@ -10,7 +10,7 @@ import {
   faSortUp,
   faSortDown,
 } from "@fortawesome/free-solid-svg-icons";
-import { ledgerService } from "@/lib/ledger-service";
+// import { ledgerService } from "@/lib/ledger-service";
 import HeaderSection from "@/components/ui/header";
 import { Card } from "@/components/ui/card";
 // import { useAuth } from "@/lib/auth-context";
@@ -81,70 +81,8 @@ export default function ValidatorsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   // const { isAuthenticated } = useAuth();
   // const router = useRouter();
-  const [error, setError] = useState<string | undefined>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [validationResult, setValidationResult] =
-    useState<ValidationResult | null>(null);
-
-  // Fetch ledger entries on component mount
-  useEffect(() => {
-    let isMounted = true;
-
-    fetchEntries().catch((err) => {
-      if (isMounted) {
-        console.error("Error fetching entries:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch ledger entries"
-        );
-      }
-    });
-
-    // Clean up on unmount
-    return () => {
-      isMounted = false;
-      ledgerService.stopPolling();
-    };
-  }, []);
-
-  // Fetch ledger entries
-  const fetchEntries = async () => {
-    try {
-      setIsLoading(true);
-      setError(undefined);
-
-      // Initialize the ledger service
-      await ledgerService.initialize();
-
-      // Fetch the latest entries
-      await ledgerService.fetchAndStoreLatestEntries();
-
-      // Get all entries from the database
-      // const allEntries = await ledgerService.getAllEntries();
-      // setEntries(allEntries);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch ledger entries"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // // Check authentication status
-  // useEffect(() => {
-  //   // Add a small delay to ensure auth state is properly loaded
-  //   const timer = setTimeout(() => {
-  //     setIsLoading(false);
-  //     if (!isAuthenticated) {
-  //       console.log("User not authenticated, redirecting to home page");
-  //       router.push("/");
-  //     } else {
-  //       console.log("User authenticated, staying on validators page");
-  //     }
-  //   }, 500);
-
-  //   return () => clearTimeout(timer);
-  // }, [isAuthenticated, router]);
+  const [isLoading] = useState(true);
+  const [setValidationResult] = useState<ValidationResult | null>(null);
 
   // Sort validators when sort parameters change
   useEffect(() => {
