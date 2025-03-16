@@ -339,6 +339,6 @@ export const idlFactory = ({ IDL }) => {
     user_register: IDL.Func([IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)], [ResultString], []),
   });
 };
-export const init = ({ IDL }) => {
+export const init = () => {
   return [];
 };
