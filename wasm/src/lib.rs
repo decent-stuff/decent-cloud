@@ -1,7 +1,9 @@
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use dcc_common::{ledger_block_parse_entries, WasmLedgerEntry, DATA_PULL_BYTES_BEFORE_LEN};
 #[cfg(target_arch = "wasm32")]
 use ledger_map::platform_specific_wasm32_browser as ledger_storage;
-use ledger_map::{warn, LedgerMap};
+use ledger_map::{info, warn, LedgerMap};
 use serde::Serialize;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
@@ -32,8 +34,9 @@ struct WasmLedgerBlockHeader {
     jump_bytes_prev: i32,
     jump_bytes_next: u32,
     parent_block_hash: String,
-    last_bytes: String,
     offset: u64,
+    fetch_compare_bytes: String,
+    fetch_offset: u64,
     timestamp_ns: u64,
 }
 
@@ -63,24 +66,32 @@ pub fn parse_ledger_blocks(
             };
 
             // Serialize block header with proper error handling
-            let offset = input_data_start_offset + block.get_offset();
             let block_end_offset = block.get_offset() + block_header.jump_bytes_next_block() as u64;
-            let last_bytes = if block_end_offset >= DATA_PULL_BYTES_BEFORE_LEN as u64 {
-                hex::encode(
+            if block_end_offset > input_data.len() as u64 {
+                info!(
+                    "Block end offset {} beyond the end of the input data length {}",
+                    block_end_offset,
+                    input_data.len()
+                );
+                break;
+            }
+            let fetch_compare_bytes = if block_end_offset >= DATA_PULL_BYTES_BEFORE_LEN as u64 {
+                BASE64.encode(
                     &input_data[(block_end_offset - DATA_PULL_BYTES_BEFORE_LEN as u64) as usize
                         ..block_end_offset as usize],
                 )
             } else {
                 "".to_string()
             };
+            let offset = input_data_start_offset + block.get_offset();
             let block_header = WasmLedgerBlockHeader {
                 block_version: block_header.block_version(),
                 jump_bytes_prev: block_header.jump_bytes_prev_block(),
                 jump_bytes_next: block_header.jump_bytes_next_block(),
                 parent_block_hash: hex::encode(block.parent_hash()),
-                // Using raw access to avoid method name issues
-                last_bytes,
                 offset,
+                fetch_compare_bytes,
+                fetch_offset: offset + block_header.jump_bytes_next_block() as u64,
                 timestamp_ns: block.timestamp(),
             };
 

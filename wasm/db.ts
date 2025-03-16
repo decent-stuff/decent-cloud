@@ -5,19 +5,16 @@ import Dexie, { Table } from 'dexie';
  * Uses Dexie as the IndexedDB wrapper
  */
 class LedgerDatabase extends Dexie {
+    ledgerBlocks!: Table<LedgerBlock, number>;
     ledgerEntries!: Table<LedgerEntry, string>;
-    lastLedgerEntry!: Table<LastLedgerEntry, string>; // Store for quick access to the entry with the highest timestamp
-
-    // Constant key used for the "last entry" in the dedicated store
-    private readonly lastEntryKey = 'lastEntry';
 
     constructor() {
         super('DecentCloudLedgerDB');
 
         // Define stores in a single version declaration
-        this.version(3).stores({
-            ledgerEntries: 'key, timestamp_ns, blockOffset',
-            lastLedgerEntry: 'key',
+        this.version(2).stores({
+            ledgerBlocks: 'blockOffset, timestampNs',
+            ledgerEntries: '[label+key], *blockOffset',
         });
     }
 
@@ -25,57 +22,25 @@ class LedgerDatabase extends Dexie {
      * Get the last ledger entry (with the highest timestamp)
      * @returns The last ledger entry or null if no entries exist
      */
-    async getLastEntry(): Promise<LastLedgerEntry | null> {
-        return (await this.lastLedgerEntry.get(this.lastEntryKey)) || null;
+    async getLastBlock(): Promise<LedgerBlock | null> {
+        return await this.ledgerBlocks.orderBy('timestampNs').last() || null;
     }
 
     /**
      * Add or update multiple ledger entries in a single transaction
      * Also updates the last entry if any of the new entries has a higher timestamp
-     * @param entries The ledger entries to add or update
+     * @param newBlocks The ledger blocks to add
+     * @param newEntries The ledger entries to add or update
      */
-    async bulkAddOrUpdate(entries: LedgerEntry[]): Promise<void> {
-        if (entries.length === 0) return;
+    async bulkAddOrUpdate(newBlocks: LedgerBlock[], newEntries: LedgerEntry[]): Promise<void> {
+        if (newEntries.length === 0) return;
 
-        await this.transaction('rw', [this.ledgerEntries, this.lastLedgerEntry], async () => {
+        await this.transaction('rw', [this.ledgerBlocks, this.ledgerEntries], async () => {
+            // Add or update all blocks
+            await this.ledgerBlocks.bulkPut(newBlocks);
             // Add or update all entries
-            await this.ledgerEntries.bulkPut(entries);
-
-            // Find the entry with the highest timestamp
-            const maxEntry = entries.reduce((prev, curr) =>
-                (!prev || (curr.parentBlockHash && curr.timestamp_ns && prev.timestamp_ns && curr.timestamp_ns > prev.timestamp_ns))
-                    ? curr
-                    : prev,
-                null as LedgerEntry | null
-            );
-
-            if (maxEntry) {
-                const currentLast = await this.lastLedgerEntry.get(this.lastEntryKey);
-                const new_ts = maxEntry?.timestamp_ns;
-                const prev_ts = currentLast?.ledgerEntry.timestamp_ns;
-
-                // Update the last entry if this entry has a higher timestamp
-                if (new_ts !== undefined && (prev_ts === undefined || new_ts > prev_ts)) {
-                    const lastEntry: LastLedgerEntry = {
-                        ledgerEntry: { ...maxEntry },
-                        bytesBefore: new Uint8Array(0) // This will be updated by the caller if needed
-                    };
-                    await this.lastLedgerEntry.put(lastEntry, this.lastEntryKey);
-                }
-            }
+            await this.ledgerEntries.bulkPut(newEntries);
         });
-    }
-
-    /**
-     * Update the bytesBefore field of the last entry
-     * @param bytesBefore The bytes before the last entry
-     */
-    async updateLastEntryBytes(bytesBefore: Uint8Array): Promise<void> {
-        const lastEntry = await this.getLastEntry();
-        if (lastEntry) {
-            lastEntry.bytesBefore = bytesBefore;
-            await this.lastLedgerEntry.put(lastEntry, this.lastEntryKey);
-        }
     }
 
     /**
@@ -84,6 +49,24 @@ class LedgerDatabase extends Dexie {
      */
     async getAllEntries(): Promise<LedgerEntry[]> {
         return await this.ledgerEntries.toArray();
+    }
+
+    /**
+     * Retrieve entries for a specific block.
+     *
+     * @param blockOffset The offset of the block to retrieve entries for.
+     * @returns {Promise<LedgerEntry[]>} An array of ledger entries for the specified block.
+     */
+    async getBlockEntries(blockOffset: number): Promise<LedgerEntry[]> {
+        try {
+            if (typeof blockOffset !== 'number') {
+                throw new Error(`blockOffset must be a number, got (${typeof blockOffset}) ${blockOffset} instead`);
+            }
+            return await this.ledgerEntries.where('blockOffset').equals(blockOffset).toArray();
+        } catch (error) {
+            console.error("Error retrieving ledger entries for block:", error);
+            throw error;
+        }
     }
 
     /**
@@ -99,9 +82,9 @@ class LedgerDatabase extends Dexie {
      * Clear all ledger entries from the database
      */
     async clearAllEntries(): Promise<void> {
-        await this.transaction('rw', [this.ledgerEntries, this.lastLedgerEntry], async () => {
+        await this.transaction('rw', [this.ledgerBlocks, this.ledgerEntries], async () => {
+            await this.ledgerBlocks.clear();
             await this.ledgerEntries.clear();
-            await this.lastLedgerEntry.clear();
         });
     }
 }
@@ -109,19 +92,20 @@ class LedgerDatabase extends Dexie {
 // Create and export a singleton instance of the database
 export const db = new LedgerDatabase();
 
+export interface LedgerBlock {
+    blockVersion: number;
+    blockSize: number;
+    parentBlockHash: string;
+    blockOffset: number;
+    fetchCompareBytes: string;
+    fetchOffset: number;
+    timestampNs: number;
+}
+
 export interface LedgerEntry {
     label: string;
     key: string;
     value: unknown;
     description: string;
-    timestamp_ns?: number;
-    blockVersion: number;
-    blockSize: number;
-    parentBlockHash: string;
     blockOffset: number;
-}
-
-export interface LastLedgerEntry {
-    ledgerEntry: LedgerEntry;
-    bytesBefore: Uint8Array;
 }

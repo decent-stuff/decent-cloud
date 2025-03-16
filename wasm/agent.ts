@@ -110,23 +110,7 @@ export async function queryCanister(
 
         // Call method with better error handling
         try {
-            const result = await actor[methodName](...args);
-
-            // Log success and return information about the result structure
-            if (methodName === 'data_fetch' && result && result.Ok) {
-                console.debug(
-                    `[Cache] data_fetch result structure: ${JSON.stringify({
-                        hasOk: !!result.Ok,
-                        isArray: Array.isArray(result.Ok),
-                        length: Array.isArray(result.Ok) ? result.Ok.length : 'not array',
-                        firstElementType:
-                            Array.isArray(result.Ok) && result.Ok[0] ? typeof result.Ok[0] : 'n/a',
-                        secondElementExists: Array.isArray(result.Ok) && result.Ok.length > 1,
-                    })}`
-                );
-            }
-
-            return result;
+            return await actor[methodName](...args);
         } catch (callError) {
             console.error(`Error calling method ${methodName}:`, callError);
 
@@ -198,7 +182,7 @@ interface LedgerDataResponse {
  * @param bytesBefore Optional bytes before the cursor
  * @returns The result of the query
  */
-export async function canisterQueryLedgerData(cursor: string, bytesBefore?: Uint8Array): Promise<LedgerDataResponse> {
+export async function canisterQueryLedgerData(cursor: string, bytesBefore?: [Uint8Array]): Promise<LedgerDataResponse> {
     // Add logging to help track cursor format issues
     try {
         // Sanitize cursor value to catch potential issues early

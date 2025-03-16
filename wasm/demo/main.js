@@ -90,11 +90,8 @@ class DecentCloudDemo {
       displayString('fetchStatus', 'Fetching ledger blocks...');
 
       // Fetch ledger blocks
-      const newBlocksCount = await DecentCloudLedger.fetchLedgerBlocks();
-
-      displayString('fetchStatus', `Fetched ${newBlocksCount} new blocks`);
-
-      return newBlocksCount;
+      const fetchStatus = await DecentCloudLedger.fetchLedgerBlocks();
+      displayString('fetchStatus', fetchStatus);
     } catch (error) {
       console.error('Error fetching blocks:', error);
       displayString('fetchStatus', `Error fetching blocks: ${error.message}`, true);
@@ -114,11 +111,12 @@ class DecentCloudDemo {
 
     try {
       // Get the last fetched block
-      const lastEntry = await DecentCloudLedger.getLastFetchedBlock();
+      const lastBlock = await DecentCloudLedger.getLastFetchedBlock();
+      const lastBlockEntries = await DecentCloudLedger.getBlockEntries(lastBlock.blockOffset);
 
-      if (lastEntry) {
-        displayString('wasmBlockHeader', 'Last fetched block:');
-        displayJSON('wasmBlockContents', lastEntry.ledgerEntry);
+      if (lastBlock) {
+        displayJSON('wasmBlockHeader', lastBlock);
+        displayJSON('wasmBlockContents', lastBlockEntries);
         return true;
       } else {
         displayString('wasmBlockHeader', 'No blocks fetched yet');
