@@ -175,6 +175,11 @@ async function main() {
       repository: mainPackageJson.repository,
       bugs: mainPackageJson.bugs,
       homepage: mainPackageJson.homepage,
+      dependencies: {
+        '@dfinity/agent': '^2.3.0',
+        '@dfinity/principal': '^2.3.0',
+        dexie: '^4.0.11',
+      },
     };
     fs.writeFileSync(
       path.join(distDir, 'package.json'),
