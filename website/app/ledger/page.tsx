@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { ledgerService } from "@/lib/ledger-service";
 import { LedgerTable } from "@/components/ledger-table";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import HeaderSection from "@/components/ui/header";
 import Link from "next/link";
@@ -13,7 +12,7 @@ import { LedgerEntry } from "@decent-stuff/dc-client";
 
 export default function LedgerPage() {
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | undefined>();
 
   // Load entries from the global service
@@ -36,18 +35,6 @@ export default function LedgerPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Clear all entries from the database
-  const clearEntries = async () => {
-    try {
-      await ledgerService.clearAllEntries();
-      setEntries([]);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to clear ledger entries"
-      );
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-4 mt-4">
@@ -67,81 +54,27 @@ export default function LedgerPage() {
       <div className="mb-6 bg-white/10 p-6 rounded-lg backdrop-blur-sm">
         <div className="mb-6">
           <h3 className="text-xl font-semibold mb-2 text-white">
-            Decent Cloud Ledger Browser
+            Decent Cloud Ledger Explorer
           </h3>
           <p className="text-white mb-4">
-            Welcome to the Decent Cloud Ledger Browser, a tool that provides
-            real-time access to blockchain data directly in your browser.
+            This is a tool that provides real-time access to the Decent Cloud
+            blockchain data directly from your browser.
           </p>
           <p className="text-white/90 mb-4">
-            This application demonstrates a complete implementation of the
-            Decent Cloud ledger and client interface, creating a full replica of
-            the DC ledger within your browser. The entire ledger contents are
+            It showcases a complete implementation of the Decent Cloud Ledger
+            and client interface in the browser. The entire ledger contents are
             available for exploration and analysis without requiring server-side
             processing. This approach provides outstanding performance and
             improves robustness and user experience.
           </p>
           <p className="text-white/90 mb-4">
             The browser-based ledger can be efficiently synchronized with the
-            main Decent Cloud ledger through lightweight data fetching. This
-            architecture empowers developers to build sophisticated applications
-            for data analysis, offering searches, and custom visualizations—all
-            leveraging modern browser technologies.
+            main Decent Cloud ledger dApp through lightweight incremental data
+            fetching. This architecture empowers developers to build
+            sophisticated applications for data analysis, offering searches,
+            custom visualizations, and other innovative features—all leveraging
+            modern browser technologies.
           </p>
-        </div>
-
-        <div className="flex flex-wrap gap-4 mb-4 justify-end">
-          <div className="w-full flex justify-end mb-2">
-            <h4 className="text-white text-sm font-medium">Data Controls</h4>
-          </div>
-          <Button
-            onClick={async () => {
-              setIsLoading(true);
-              try {
-                const currentEntries = await ledgerService.getAllEntries();
-                setEntries(currentEntries);
-              } catch (err) {
-                console.error("Error refreshing entries:", err);
-                setError(
-                  err instanceof Error
-                    ? err.message
-                    : "Failed to refresh entries"
-                );
-              } finally {
-                setIsLoading(false);
-              }
-            }}
-            disabled={isLoading}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {isLoading ? "Refreshing..." : "Refresh Now"}
-          </Button>
-
-          <Button
-            onClick={clearEntries}
-            variant="outline"
-            className="border-red-400 bg-red-500/20 text-white hover:bg-red-500/40"
-          >
-            Reset Local Cache
-          </Button>
-
-          <div className="w-full bg-blue-900/30 p-4 rounded-lg mb-4">
-            <ul className="text-white/90 text-sm list-disc pl-5 space-y-1">
-              <li>
-                <span className="font-medium">
-                  <b>Synchronize Ledger</b>
-                </span>
-                : Manually re-fetch ledger data
-              </li>
-              <li>
-                <span className="font-medium">
-                  <b>Reset Local Cache</b>
-                </span>
-                : Clear all locally stored ledger data (the global service will
-                begin collecting data again)
-              </li>
-            </ul>
-          </div>
         </div>
       </div>
 
