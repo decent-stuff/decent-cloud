@@ -1,5 +1,25 @@
 import { LedgerEntry, LedgerBlock, decentCloudLedger } from '@decent-stuff/dc-client';
 
+// Validator information interface
+export interface ValidatorInfo {
+    principal: string;
+    name?: string;
+    blocksValidated: number;
+    rewards: number;
+    stake: number;
+    lastValidation: number;
+    memo: string;
+}
+
+// Token transfer interface
+export interface TokenTransfer {
+    from: string;
+    to: string;
+    amount: number;
+    timestamp: number;
+    memo: string;
+}
+
 class LedgerService {
     private isInitialized = false;
     private pollingInterval: NodeJS.Timeout | null = null;
@@ -89,6 +109,127 @@ class LedgerService {
     async getEntry(key: string): Promise<LedgerEntry | undefined> {
         const entries = await this.getAllEntries();
         return entries.find(entry => entry.key === key);
+    }
+
+    // Get the last entry parent block hash
+    async getLastEntryParentBlockHash(): Promise<string | null> {
+        try {
+            const entries = await this.getAllEntries();
+            const checkInEntries = entries.filter(entry => entry.label === 'NPCheckIn');
+
+            if (checkInEntries.length === 0) {
+                return null;
+            }
+
+            // Sort by block offset to get the latest
+            checkInEntries.sort((a, b) => b.blockOffset - a.blockOffset);
+
+            const latestCheckIn = checkInEntries[0];
+            if (latestCheckIn.value && typeof latestCheckIn.value === 'object') {
+                const value = latestCheckIn.value as { parent_hash?: string };
+                return value.parent_hash || null;
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error getting last entry parent block hash:', error);
+            return null;
+        }
+    }
+
+    // Get all validator information
+    async getValidators(): Promise<ValidatorInfo[]> {
+        try {
+            const entries = await this.getAllEntries();
+            const blocks = await this.getAllBlocks();
+
+            // Get all NPCheckIn entries (validators)
+            const checkInEntries = entries.filter(entry => entry.label === 'NPCheckIn');
+
+            // Map to track validators by principal
+            const validatorMap = new Map<string, ValidatorInfo>();
+
+            // Process check-in entries
+            for (const entry of checkInEntries) {
+                const principalWords = (entry.key as string).split(' ');
+                const principal = principalWords[2] || entry.key;
+                const value = entry.value as {
+                    parent_hash?: string;
+                    signature?: string;
+                    verified?: string;
+                    memo?: string;
+                };
+
+                if (!value || typeof value !== 'object') continue;
+
+                // Find the block for this entry to get timestamp
+                const block = blocks.find(b => b.blockOffset === entry.blockOffset);
+                const timestamp = block ? block.timestampNs : 0;
+
+                // Get or create validator info
+                let validator = validatorMap.get(principal);
+                if (!validator) {
+                    validator = {
+                        principal,
+                        blocksValidated: 0,
+                        rewards: 0,
+                        stake: 0,
+                        lastValidation: 0,
+                        memo: ''
+                    };
+                    validatorMap.set(principal, validator);
+                }
+
+                // Update validator info
+                validator.blocksValidated++;
+                validator.lastValidation = Math.max(validator.lastValidation, timestamp);
+                validator.memo = value.memo || '';
+
+                // Find token transfer in the same block (reward)
+                const blockEntries = await this.getBlockEntries(entry.blockOffset);
+                const blockTransfers = blockEntries.filter(entry => entry.label === 'DCTokenTransfer');
+                console.log('blockTransfers', blockTransfers);
+
+                for (const transfer of blockTransfers) {
+                    const transferValue = transfer.value as {
+                        V1?: {
+                            from?: { owner: string; subaccount: null | string };
+                            to?: { owner: string; subaccount: null | string };
+                            amount?: number | string;
+                            created_at_time?: number;
+                            memo?: string;
+                        }
+                    };
+                    if (!transferValue || !transferValue.V1) continue;
+
+                    const v1 = transferValue.V1;
+                    console.log('v1', v1, 'principal', principal);
+                    // Check if this is a reward transfer from the minting account to this validator
+                    if (v1.from && v1.from.owner === "zjbo4-sknjf-hfisk-oi4" &&
+                        v1.to && v1.to.owner === principal) {
+
+                        // Convert to DCT - amount is in nano DCT (10^-12 DCT)
+                        const amountInDCT = typeof v1.amount === 'string'
+                            ? Number(BigInt(v1.amount)) / 1_000_000_000_000
+                            : Number(v1.amount) / 1_000_000_000_000;
+
+                        validator.rewards += amountInDCT;
+                    }
+                }
+            }
+
+            // Convert map to array and sort by blocks validated
+            return Array.from(validatorMap.values())
+                .sort((a, b) => b.blocksValidated - a.blocksValidated);
+        } catch (error) {
+            console.error('Error getting validators:', error);
+            return [];
+        }
+    }
+
+    // Fetch and store latest entries
+    async fetchAndStoreLatestEntries(): Promise<void> {
+        await decentCloudLedger.fetchLedgerBlocks();
     }
 
     // Clear all entries

@@ -102,11 +102,6 @@ export function BlockchainValidator({
       const validationResult = await validateBlockchain(memo);
       setResult(validationResult);
 
-      // Update parent block hash
-      if (validationResult.parentBlockHash) {
-        setParentBlockHash(validationResult.parentBlockHash);
-      }
-
       // Call the callback if provided
       if (onValidationComplete) {
         onValidationComplete(validationResult);
@@ -133,12 +128,6 @@ export function BlockchainValidator({
   const refreshData = async () => {
     setIsLoading(true);
     try {
-      // Ensure ledger service is initialized first
-      await ledgerService.initialize();
-
-      // Then fetch and store latest entries
-      await ledgerService.fetchAndStoreLatestEntries();
-
       // Get the parent block hash
       const hash = await ledgerService.getLastEntryParentBlockHash();
       setParentBlockHash(hash);
