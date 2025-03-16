@@ -258,12 +258,7 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
             timestampNs: blockWithEntries.block.timestampNs,
           };
           return (
-            Object.values(entry).some((value) =>
-              String(value).toLowerCase().includes(searchTerm.toLowerCase())
-            ) ||
-            Object.values(blockFields).some((value) =>
-              String(value).toLowerCase().includes(searchTerm.toLowerCase())
-            )
+            deepSearch(entry, searchTerm) || deepSearch(blockFields, searchTerm)
           );
         } else {
           // Search in specific field
@@ -588,4 +583,36 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
       )}
     </div>
   );
+}
+
+function deepSearch(obj: unknown, searchTerm: string): boolean {
+  const lowerTerm = searchTerm.toLowerCase();
+
+  // If the object is a primitive value, check it.
+  if (
+    typeof obj === "string" ||
+    typeof obj === "number" ||
+    typeof obj === "boolean"
+  ) {
+    return String(obj).toLowerCase().includes(lowerTerm);
+  }
+
+  // If it's an array, search through its elements.
+  if (Array.isArray(obj)) {
+    return obj.some((item) => deepSearch(item, searchTerm));
+  }
+
+  // If it's an object, check keys and values.
+  if (obj !== null && typeof obj === "object") {
+    // First, check if any key matches.
+    for (const key in obj) {
+      if (key.toLowerCase().includes(lowerTerm)) {
+        return true;
+      }
+    }
+    // Then, check if any value matches recursively.
+    return Object.values(obj).some((val) => deepSearch(val, searchTerm));
+  }
+
+  return false;
 }
