@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LedgerBlock, LedgerEntry } from "@decent-stuff/dc-client/db";
+import { LedgerBlock, LedgerEntry } from "@decent-stuff/dc-client";
 import { ledgerService } from "@/lib/ledger-service";
 
 interface LedgerTableProps {
