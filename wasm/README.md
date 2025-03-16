@@ -1,14 +1,16 @@
 # Decent Cloud WASM Library
 
-This library provides a WebAssembly-based client for interacting with the Decent Cloud ledger. It allows fetching ledger blocks from the remote ledger, processing them using WebAssembly, and storing them in a local IndexedDB database.
+A WebAssembly-powered client library for querying and managing Decent Cloud ledger data in the browser. This library provides efficient binary data processing, local caching via IndexedDB, and a clean TypeScript API.
 
 ## Features
 
-- Fetch ledger blocks from the remote ledger
-- Process binary data using WebAssembly
-- Store ledger data in IndexedDB for offline access
-- TypeScript support
-- Clean, modular API
+- 🚀 High-performance WASM-based ledger data processing
+- 💾 Local caching with IndexedDB for offline access
+- 🔄 Automatic synchronization with Decent Cloud ledger
+- 📦 Full TypeScript support
+- 🛠️ Clean, modular API
+- 🔍 Detailed block and entry inspection
+- 🏗️ Browser-based querying and analysis
 
 ## Installation
 
@@ -20,86 +22,95 @@ npm install @decent-stuff/dc-client
 
 ### Basic Usage
 
-```javascript
+```typescript
 import { DecentCloudClient, DecentCloudLedger } from '@decent-stuff/dc-client';
 
-// Create a client instance
-const client = new DecentCloudClient();
-
 // Initialize the client
+const client = new DecentCloudClient();
 await client.initialize();
 
-// Fetch ledger blocks
-const newBlocksCount = await client.ledger.fetchLedgerBlocks();
-console.log(`Fetched ${newBlocksCount} new blocks`);
+// Fetch new ledger blocks
+const fetchResult = await DecentCloudLedger.fetchLedgerBlocks();
+console.log('Fetch result:', fetchResult);
 
 // Get the last fetched block
-const lastBlock = await client.ledger.getLastFetchedBlock();
-console.log('Last fetched block:', lastBlock);
+const lastBlock = await DecentCloudLedger.getLastFetchedBlock();
+if (lastBlock) {
+  console.log('Last block:', lastBlock);
 
-// Clear the ledger storage
+  // Get entries for this block
+  const entries = await DecentCloudLedger.getBlockEntries(lastBlock.blockOffset);
+  console.log('Block entries:', entries);
+}
+
+// Clear local storage if needed
 await DecentCloudLedger.clearStorage();
 ```
 
-### Configuration
+### API Reference
 
-You can configure the client with custom settings:
+#### DecentCloudClient
 
-```javascript
-import { DecentCloudClient } from '@decent-stuff/dc-client';
+The main client class, primarily used for initialization:
 
-// Create a client instance with custom configuration
-const client = new DecentCloudClient({
-  networkUrl: 'https://custom-icp-api.io',
-  canisterId: 'your-canister-id',
-});
-
-// Initialize the client
-await client.initialize();
+```typescript
+class DecentCloudClient {
+  async initialize(): Promise<void>;
+  async clearStorage(): Promise<void>;
+}
 ```
 
-### Advanced Usage
+#### DecentCloudLedger
 
-For more advanced usage, you can access the underlying components directly:
+Static methods for ledger operations:
 
-```javascript
-import {
-  initialize,
-  fetchLedgerBlocks,
-  getLastFetchedBlock,
-  clearLedgerData,
-  db,
-} from '@decent-stuff/dc-client';
+```typescript
+class DecentCloudLedger {
+  static async fetchLedgerBlocks(): Promise<string>;
+  static async getAllEntries(): Promise<LedgerEntry[]>;
+  static async getBlockEntries(blockOffset: number): Promise<LedgerEntry[]>;
+  static async getLastFetchedBlock(): Promise<LedgerBlock | null>;
+  static async clearStorage(): Promise<void>;
+}
+```
 
-// Initialize the library
-await initialize();
+#### Types
 
-// Fetch ledger blocks
-const newBlocksCount = await fetchLedgerBlocks();
+```typescript
+interface LedgerBlock {
+  blockVersion: number;
+  blockSize: number;
+  parentBlockHash: string;
+  blockOffset: number;
+  fetchCompareBytes: string;
+  fetchOffset: number;
+  timestampNs: bigint;
+}
 
-// Get all ledger entries
-const allEntries = await db.getAllEntries();
-
-// Get a specific entry
-const entry = await db.getEntry('your-entry-key');
-
-// Clear all data
-await clearLedgerData();
+interface LedgerEntry {
+  blockOffset: number;
+  label: string;
+  key: string;
+  value?: string;
+  description?: string;
+}
 ```
 
 ## Architecture
 
-The library is organized into several modules:
+The library consists of several key components:
 
-- **client.js**: Main entry point and API
-- **wasm.ts**: WebAssembly interface
-- **ledger.ts**: Ledger operations
-- **db.ts**: Database operations
-- **agent.ts**: Internet Computer agent
+- **Client (dc-client.js)**: Main entry point and WASM initialization
+- **Ledger (ledger.ts)**: Core ledger operations and data processing
+- **Database (db.ts)**: IndexedDB interface using Dexie.js
+- **Agent (agent.ts)**: Decent Cloud ledger communication
+- **WASM Module**: High-performance binary data processing
+
+The library downloads Decent Cloud ledger data and enables efficient local querying and analysis directly in the browser. All data is cached in IndexedDB for offline access.
 
 ## Demo
 
-A demo application is included in the `demo` directory. To run it:
+A demo application showcasing the library's capabilities is included in the `demo` directory:
 
 ```bash
 cd demo
@@ -107,11 +118,9 @@ npm install
 npm run dev
 ```
 
-Then open your browser to the URL shown in the console.
+## Development
 
-## Building
-
-To build the library:
+### Building
 
 ```bash
 npm run build
@@ -119,13 +128,28 @@ npm run build
 
 This will:
 
-1. Compile the Rust code to WebAssembly
-2. Bundle the JavaScript files
-3. Generate TypeScript definitions
+1. Compile Rust code to WebAssembly
+2. Generate TypeScript definitions
+3. Bundle JavaScript modules
+4. Prepare distribution files
+
+### Testing
+
+```bash
+npm test          # Run all tests
+npm run test:browser  # Run browser-specific tests
+```
 
 ## Database
 
-The library uses [Dexie.js](https://dexie.org/) for IndexedDB access. See [DB_ALTERNATIVES.md](./DB_ALTERNATIVES.md) for an evaluation of alternatives.
+The library uses [Dexie.js](https://dexie.org/) for IndexedDB operations, providing:
+
+- Robust offline storage
+- Efficient querying
+- Transaction support
+- Schema versioning
+
+See [DB_ALTERNATIVES.md](./DB_ALTERNATIVES.md) for details on database selection.
 
 ## License
 
