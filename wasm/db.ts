@@ -12,7 +12,7 @@ class LedgerDatabase extends Dexie {
         super('DecentCloudLedgerDB');
 
         // Define stores in a single version declaration
-        this.version(2).stores({
+        this.version(3).stores({
             ledgerBlocks: 'blockOffset, timestampNs',
             ledgerEntries: '[label+key], *blockOffset',
         });
@@ -104,6 +104,7 @@ export interface LedgerBlock {
     blockVersion: number;
     blockSize: number;
     parentBlockHash: string;
+    blockHash: string;
     blockOffset: number;
     fetchCompareBytes: string;
     fetchOffset: number;

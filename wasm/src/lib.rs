@@ -34,6 +34,7 @@ struct WasmLedgerBlockHeader {
     jump_bytes_prev: i32,
     jump_bytes_next: u32,
     parent_block_hash: String,
+    block_hash: String,
     offset: u64,
     fetch_compare_bytes: String,
     fetch_offset: u64,
@@ -57,8 +58,8 @@ pub fn parse_ledger_blocks(
 
         let mut result = Vec::new();
         for iter in ledger.iter_raw_from_slice(&input_data) {
-            let (block_header, block) = match iter {
-                Ok((block_header, block)) => (block_header, block),
+            let (block_header, block, block_hash) = match iter {
+                Ok(val) => val,
                 Err(err) => {
                     warn!("Failed to parse ledger block: {}", err);
                     break;
@@ -89,6 +90,7 @@ pub fn parse_ledger_blocks(
                 jump_bytes_prev: block_header.jump_bytes_prev_block(),
                 jump_bytes_next: block_header.jump_bytes_next_block(),
                 parent_block_hash: hex::encode(block.parent_hash()),
+                block_hash: hex::encode(block_hash),
                 offset,
                 fetch_compare_bytes,
                 fetch_offset: offset + block_header.jump_bytes_next_block() as u64,

@@ -99,6 +99,7 @@ class DecentCloudLedger {
                         blockVersion: blockData.block_header.block_version,
                         blockSize: blockData.block.length,
                         parentBlockHash: blockData.block_header.parent_block_hash,
+                        blockHash: blockData.block_header.block_hash,
                         blockOffset: blockData.block_header.offset,
                         fetchCompareBytes: blockData.block_header.fetch_compare_bytes,
                         fetchOffset: blockData.block_header.fetch_offset,

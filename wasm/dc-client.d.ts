@@ -17,6 +17,7 @@ export interface RawJsonLedgerBlockHeader {
     jump_bytes_prev: number;
     jump_bytes_next: number;
     parent_block_hash: string;
+    block_hash: string;
     last_bytes: string;
     offset: number;
     timestamp_ns: number;
