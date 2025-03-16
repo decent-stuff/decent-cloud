@@ -52,6 +52,14 @@ class LedgerDatabase extends Dexie {
     }
 
     /**
+     * Get all ledger blocks
+     * @returns All ledger blocks
+     */
+    async getAllBlocks(): Promise<LedgerBlock[]> {
+        return await this.ledgerBlocks.toArray();
+    }
+
+    /**
      * Retrieve entries for a specific block.
      *
      * @param blockOffset The offset of the block to retrieve entries for.

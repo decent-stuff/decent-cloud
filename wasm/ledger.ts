@@ -153,6 +153,11 @@ class DecentCloudLedger {
         }
     }
 
+    // Get all blocks from the ledger
+    async getAllBlocks(): Promise<LedgerBlock[]> {
+        return await db.getAllBlocks();
+    }
+
     /**
      * Retrieve entries for a specific block.
      *

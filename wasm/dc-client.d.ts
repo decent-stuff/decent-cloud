@@ -97,6 +97,9 @@ export class DecentCloudLedger {
      */
     getAllEntries(): Promise<LedgerEntry[]>;
 
+    // Get all blocks from the ledger
+    getAllBlocks(): Promise<LedgerBlock[]>;
+
     /**
      * Retrieve entries for a specific block.
      * @param blockOffset The offset of the block to retrieve entries for.
