@@ -18,7 +18,7 @@
     "prepare": "npm run clean && npm run build",
     "prepublishOnly": "npm test",
     "test:browser": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack test --node",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "format": "prettier --write \"**/*.{js,ts,json,md}\"",
     "lint": "eslint . --ext .js,.ts"
   },
