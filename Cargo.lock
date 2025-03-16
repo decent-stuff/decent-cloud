@@ -2013,6 +2013,7 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 [[package]]
 name = "ledger-map"
 version = "0.4.3"
+source = "git+https://github.com/decent-stuff/ledger-map.git?branch=main#3c71e43e12e0687bcc78deddb0176cf0947ffd36"
 dependencies = [
  "ahash",
  "anyhow",
