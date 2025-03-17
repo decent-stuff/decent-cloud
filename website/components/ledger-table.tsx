@@ -483,6 +483,12 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
                         {blockWithEntries.block.parentBlockHash}
                       </span>
                     </div>
+                    <div>
+                      <span className="text-gray-400">Block Hash:</span>
+                      <span className="ml-2 text-white">
+                        {blockWithEntries.block.blockHash}
+                      </span>
+                    </div>
                   </div>
                 </div>
 

@@ -16,7 +16,7 @@ export function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
 
     // 4. Get first 32 bytes of HMAC output
     const keyMaterial = hmac.digest()
-    const seedBytes = keyMaterial.slice(0, 32)
+    const seedBytes = keyMaterial.subarray(0, 32)
 
     // Convert Buffer to ArrayBuffer for DFinity identity
     const privateKeyArrayBuffer = new Uint8Array(seedBytes).buffer

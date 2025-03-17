@@ -112,25 +112,10 @@ class LedgerService {
     }
 
     // Get the last entry parent block hash
-    async getLastEntryParentBlockHash(): Promise<string | null> {
+    async getLastBlockHash(): Promise<string | null> {
         try {
-            const entries = await this.getAllEntries();
-            const checkInEntries = entries.filter(entry => entry.label === 'NPCheckIn');
-
-            if (checkInEntries.length === 0) {
-                return null;
-            }
-
-            // Sort by block offset to get the latest
-            checkInEntries.sort((a, b) => b.blockOffset - a.blockOffset);
-
-            const latestCheckIn = checkInEntries[0];
-            if (latestCheckIn.value && typeof latestCheckIn.value === 'object') {
-                const value = latestCheckIn.value as { parent_hash?: string };
-                return value.parent_hash || null;
-            }
-
-            return null;
+            const lastBlock = await decentCloudLedger.getLastFetchedBlock();
+            return lastBlock?.blockHash || "";
         } catch (error) {
             console.error('Error getting last entry parent block hash:', error);
             return null;

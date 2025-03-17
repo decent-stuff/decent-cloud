@@ -178,7 +178,7 @@ export default function ValidatorsPage() {
           </p>
 
           <BlockchainValidator
-            defaultMemo="I Validated DC Ledger from the website!"
+            defaultMemo="Website Validation works!!1!"
             darkMode={true}
             renderAsCard={false}
             onValidationComplete={handleValidationComplete}

@@ -51,7 +51,7 @@ export function BlockchainValidator({
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [errorMessage, setError] = useState<string | undefined>();
   const [result, setResult] = useState<ValidationResult | null>(null);
-  const [parentBlockHash, setParentBlockHash] = useState<string | null>(null);
+  const [blockHash, setLastBlockHash] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Fetch ledger entries on component mount
@@ -81,8 +81,8 @@ export function BlockchainValidator({
       setError(undefined);
 
       // Get the parent block hash (which will fetch latest entries)
-      const hash = await ledgerService.getLastEntryParentBlockHash();
-      setParentBlockHash(hash);
+      const hash = await ledgerService.getLastBlockHash();
+      setLastBlockHash(hash);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to fetch ledger entries"
@@ -129,8 +129,8 @@ export function BlockchainValidator({
     setIsLoading(true);
     try {
       // Get the parent block hash
-      const hash = await ledgerService.getLastEntryParentBlockHash();
-      setParentBlockHash(hash);
+      const hash = await ledgerService.getLastBlockHash();
+      setLastBlockHash(hash);
       setError(undefined);
     } catch (error) {
       console.error("Error refreshing blockchain data:", error);
@@ -150,11 +150,12 @@ export function BlockchainValidator({
         <div className={`text-center py-4 ${darkMode ? "text-white/70" : ""}`}>
           Loading latest block data...
         </div>
-      ) : parentBlockHash ? (
+      ) : blockHash ? (
         <div className="space-y-4">
           <div className="space-y-2">
             <div className={`font-medium ${darkMode ? "text-white" : ""}`}>
-              Parent Block Hash
+              Latest Block Hash to Validate (confirm you have seen it and have a
+              copy of it):
             </div>
             <div
               className={`p-3 ${
@@ -163,15 +164,8 @@ export function BlockchainValidator({
                   : "bg-gray-100"
               } rounded-md break-all text-sm font-mono`}
             >
-              {parentBlockHash}
+              {blockHash}
             </div>
-            <p
-              className={`text-xs ${
-                darkMode ? "text-white/70" : "text-gray-500"
-              }`}
-            >
-              This is the hash of the parent block you are validating
-            </p>
           </div>
 
           <div className="space-y-2">
@@ -188,6 +182,8 @@ export function BlockchainValidator({
                 darkMode
                   ? "bg-white/10 border border-white/20 text-white"
                   : "border"
+              } ${
+                new TextEncoder().encode(memo).length > 32 ? "bg-red-500" : ""
               } rounded-md`}
             />
             <p
@@ -281,7 +277,7 @@ export function BlockchainValidator({
   const button = (
     <Button
       onClick={handleValidate}
-      disabled={isValidating || !parentBlockHash}
+      disabled={isValidating || !blockHash}
       className={`w-full ${
         darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
       }`}
