@@ -1,6 +1,8 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
-use dcc_common::{ledger_block_parse_entries, WasmLedgerEntry, DATA_PULL_BYTES_BEFORE_LEN};
+use dcc_common::{
+    ledger_block_parse_entries, DccIdentity, WasmLedgerEntry, DATA_PULL_BYTES_BEFORE_LEN,
+};
 #[cfg(target_arch = "wasm32")]
 use ledger_map::platform_specific_wasm32_browser as ledger_storage;
 use ledger_map::{info, warn, LedgerMap};
@@ -107,4 +109,13 @@ pub fn parse_ledger_blocks(
         }
         serde_json::to_string(&result).map_err(|e| e.to_string())
     })
+}
+
+#[wasm_bindgen]
+pub fn ed25519_sign(private_key: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, String> {
+    let dcc_id = DccIdentity::new_signing_from_der(&private_key)?;
+    dcc_id
+        .sign(&data)
+        .map(|sig| sig.to_vec())
+        .map_err(|e| e.to_string())
 }

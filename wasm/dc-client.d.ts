@@ -50,6 +50,14 @@ export function parseLedgerBlocks(inputData, startOffset): Promise<void>;
 export function ledgerStorageClear(): Promise<void>;
 
 /**
+ * Sign data using ed25519.
+ * @param {Uint8Array} secretKeyRaw - The private key, in raw format.
+ * @param {Uint8Array} data - The data to sign.
+ * @returns {Uint8Array} The signature.
+ */
+export function ed25519Sign(secretKeyRaw: Uint8Array, data: Uint8Array): Uint8Array;
+
+/**
  * Client class for interacting with the Decent Cloud Ledger Canister.
  * This class provides methods for initializing the WASM module, parsing
  * ledger blocks and converting them to JSON for showing in the UI, and

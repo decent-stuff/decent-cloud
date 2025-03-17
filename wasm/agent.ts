@@ -54,7 +54,7 @@ export function getAgent(identity?: Identity | null): HttpAgent {
 /**
  * Type for canister query options
  */
-interface CanisterQueryOptions {
+interface CanisterCallOptions {
     canisterId?: string;
 }
 
@@ -68,7 +68,7 @@ interface CanisterQueryOptions {
 export async function queryCanister(
     methodName: string,
     args: unknown[],
-    options: CanisterQueryOptions = {}
+    options: CanisterCallOptions = {}
 ): Promise<unknown> {
     try {
         // Input validation
@@ -146,7 +146,7 @@ export async function updateCanister(
     methodName: string,
     args: unknown[],
     identity: Identity,
-    options: CanisterQueryOptions = {}
+    options: CanisterCallOptions = {}
 ): Promise<unknown> {
     try {
         const currentAgent = getAgent(identity);

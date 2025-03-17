@@ -75,6 +75,16 @@ export async function parseLedgerBlocks(inputData, startOffset) {
 }
 
 /**
+ * Sign data using ed25519.
+ * @param {Uint8Array} secretKeyRaw - The private key, in raw format.
+ * @param {Uint8Array} data - The data to sign.
+ * @returns {Uint8Array} The signature.
+ */
+export function ed25519Sign(privateKeyRaw, data) {
+  return wasmModule.ed25519_sign(privateKeyRaw, data);
+}
+
+/**
  * Clear the ledger storage.
  * @returns {Promise<void>}
  */

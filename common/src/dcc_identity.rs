@@ -56,6 +56,16 @@ impl DccIdentity {
         Ok(DccIdentity::Ed25519(None, *ed25519_verifying_key))
     }
 
+    pub fn new_signing_from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
+        let signing_key = Self::signing_key_from_bytes(bytes)?;
+        DccIdentity::new_signing(&signing_key)
+    }
+
+    pub fn new_signing_from_der(der_key: &[u8]) -> Result<Self, CryptoError> {
+        let signing_key = Self::signing_key_from_der(der_key)?;
+        DccIdentity::new_signing(&signing_key)
+    }
+
     pub fn new_signing_from_pem(pem_string: &str) -> Result<Self, CryptoError> {
         let signing_key = Self::signing_key_from_pem(pem_string)?;
         DccIdentity::new_signing(&signing_key)
@@ -302,6 +312,20 @@ impl DccIdentity {
     pub fn signing_key_from_pem(pem_string: &str) -> Result<SigningKey, CryptoError> {
         let pem = pem::parse(pem_string)?;
         let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_der(pem.contents())?;
+        Ok(key)
+    }
+
+    pub fn signing_key_from_der(der_key: &[u8]) -> Result<SigningKey, CryptoError> {
+        let key = ed25519_dalek::pkcs8::DecodePrivateKey::from_pkcs8_der(der_key)?;
+        Ok(key)
+    }
+
+    pub fn signing_key_from_bytes(bytes: &[u8]) -> Result<SigningKey, CryptoError> {
+        if bytes.len() > MAX_PUBKEY_BYTES {
+            return Err("Provided public key too long".into());
+        }
+        let bytes = slice_to_32_bytes_array(bytes)?;
+        let key = SigningKey::from_bytes(bytes);
         Ok(key)
     }
 
