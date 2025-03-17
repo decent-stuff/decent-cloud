@@ -57,7 +57,7 @@ export async function validateBlockchain(
         const dataToSign = hexToUint8Array(lastBlockHash);
         console.log('Data to sign:', dataToSign);
         // Cast the buffer to ArrayBuffer to satisfy TypeScript
-        const signatureBytes = ed25519Sign(secretKeyRaw, dataToSign);
+        const signatureBytes = ed25519Sign(new Uint8Array(secretKeyRaw), dataToSign);
         console.log('Signature bytes:', signatureBytes);
 
         // Make the authenticated update call to node_provider_check_in
