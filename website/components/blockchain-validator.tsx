@@ -70,7 +70,6 @@ export function BlockchainValidator({
     // Clean up on unmount
     return () => {
       isMounted = false;
-      ledgerService.stopPolling();
     };
   }, []);
 

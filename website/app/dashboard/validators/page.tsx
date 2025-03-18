@@ -36,17 +36,6 @@ export default function ValidatorsPage() {
       try {
         setIsLoading(true);
         setError(null);
-
-        // Initialize ledger service
-        const initialized = await ledgerService.initialize();
-        if (!initialized) {
-          setError("Failed to initialize ledger service");
-          return;
-        }
-
-        // Start polling for updates
-        await ledgerService.startPolling();
-
         // Fetch validators
         const validatorData = await ledgerService.getValidators();
         setValidators(validatorData);
@@ -61,11 +50,6 @@ export default function ValidatorsPage() {
     }
 
     void initAndFetchValidators();
-
-    // Clean up on unmount
-    return () => {
-      ledgerService.stopPolling();
-    };
   }, []);
 
   // Get sorted validators based on current sort parameters
@@ -82,9 +66,6 @@ export default function ValidatorsPage() {
     try {
       setIsLoading(true);
       setError(null);
-
-      // Fetch latest ledger blocks
-      await ledgerService.fetchAndStoreLatestEntries();
 
       // Get updated validators
       const validatorData = await ledgerService.getValidators();
