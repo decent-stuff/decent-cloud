@@ -219,6 +219,7 @@ async function main() {
     const filesToCopy = [
       ['canister_idl.js', 'canister_idl.js'],
       ['dc-client.js', 'dc-client.js'],
+      ['dc-client-worker.js', 'dc-client-worker.js'],
       ['dc-client.d.ts', 'dc-client.d.ts'],
       ['db.ts', 'db.ts'],
       ['agent.ts', 'agent.ts'],
