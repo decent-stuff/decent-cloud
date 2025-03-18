@@ -183,45 +183,12 @@ interface LedgerDataResponse {
  * @returns The result of the query
  */
 export async function canisterQueryLedgerData(cursor: string, bytesBefore?: [Uint8Array]): Promise<LedgerDataResponse> {
-    // Add logging to help track cursor format issues
+    console.log('[Fetch] Fetching data from canister, with cursor:', cursor);
     try {
-        // Sanitize cursor value to catch potential issues early
-        if (typeof cursor !== 'string') {
-            console.warn(`[Fetch] Cursor is not a string, converting: ${cursor}`);
-            cursor = String(cursor);
-        }
-
-        // Validate cursor format
-        if (cursor.includes('undefined') || cursor.includes('null')) {
-            console.warn(`[Fetch] Suspicious cursor format: ${cursor}`);
-        }
-    } catch (e) {
-        console.warn(`[Fetch] Cursor format error: ${(e as Error).message}`);
-    }
-
-    console.log('[Fetch] Fetching data from canister');
-    try {
-        // Check binary data format
-        if (bytesBefore) {
-            console.log(
-                `[Fetch] bytesBefore type: ${typeof bytesBefore}, length: ${bytesBefore.length || 'unknown'}`
-            );
-        }
-
         // Wrap canister query with extra error handling
         let result: LedgerDataResponse;
         try {
             result = await queryCanister('data_fetch', [[cursor], bytesBefore || []], {}) as LedgerDataResponse;
-
-            // Validate the result structure before processing
-            if (result && result.Ok && Array.isArray(result.Ok)) {
-                const binaryData = result.Ok[1];
-                if (binaryData) {
-                    console.log(
-                        `[Fetch] Binary data type: ${binaryData.constructor ? binaryData.constructor.name : 'unknown'}, length: ${binaryData.length || binaryData.byteLength || 'unknown'}`
-                    );
-                }
-            }
         } catch (queryError) {
             console.error(`[Fetch] Error in data_fetch query: ${(queryError as Error).message}`, queryError);
             const errorMessage = (queryError as Error).message;
