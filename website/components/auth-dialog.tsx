@@ -89,6 +89,9 @@ export function AuthDialog() {
                     <br />
                     Credentials are securely stored only in your browser, and
                     deleted when logging out.
+                    <br />
+                    Seed phrase is a great way to start exploring without any
+                    commitments, since all data is fully in your browser.
                   </p>
                 </div>
               </div>
