@@ -224,14 +224,12 @@ export function BlockchainValidator({
             No parent block hash found. The blockchain data may still be
             loading.
           </p>
-          <p className="mt-2 text-sm">
-            This could be due to:
-            <ul className="list-disc pl-5 mt-1 text-left">
-              <li>The ledger service is still initializing</li>
-              <li>No blocks have been fetched from the network yet</li>
-              <li>Network connectivity issues</li>
-            </ul>
-          </p>
+          <p className="mt-2 text-sm">This could be due to:</p>
+          <ul className="list-disc pl-5 mt-1 text-left text-sm">
+            <li>The ledger service is still initializing</li>
+            <li>No blocks have been fetched from the network yet</li>
+            <li>Network connectivity issues</li>
+          </ul>
           <Button
             onClick={refreshData}
             className={`mt-3 ${

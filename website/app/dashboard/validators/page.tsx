@@ -154,9 +154,10 @@ export default function ValidatorsPage() {
           </h3>
           <p className="text-white/90 mb-4">
             As a validator, you can validate the blockchain tip (latest hash)
-            and in return receive a reward. This ensures that no one modified
-            the history of the blockchain, including transactions, reputations,
-            etc.
+            and in return receive a reward.
+            <br />
+            This way you help ensure that the Decent Cloud Ledger is unaltered
+            and secure, including transactions, reputations, etc.
           </p>
 
           <BlockchainValidator
