@@ -1,4 +1,4 @@
-import { DecentCloudClient, decentCloudLedger } from '@decent-stuff/dc-client';
+import { DecentCloudClient, decentCloudLedger, db } from '@decent-stuff/dc-client';
 
 /**
  * Display a string in the specified element
@@ -42,8 +42,26 @@ function displayJSON(elementId, data, error = false) {
 }
 
 /**
- * Class-based demo implementation
- * This class demonstrates how to use the DecentCloudClient class
+ * Check for database errors and display them if present
+ * @returns {boolean} Whether an error was displayed
+ */
+function checkAndDisplayDatabaseError() {
+  const error = db.getError();
+  const errorDiv = document.querySelector('.status[style*="background-color: #ffeeee"]');
+
+  if (error) {
+    displayString('dbErrorStatus', `${error}`, true);
+    errorDiv.style.display = 'block';
+    return true;
+  } else {
+    displayString('dbErrorStatus', '');
+    errorDiv.style.display = 'none';
+    return false;
+  }
+}
+
+/**
+ * This class demonstrates how to use DecentCloudClient
  */
 class DecentCloudDemo {
   constructor() {
@@ -66,7 +84,12 @@ class DecentCloudDemo {
       // Initialize the client
       await this.client.initialize();
 
-      this.initialized = true;
+      // Check for database errors
+      if (checkAndDisplayDatabaseError()) {
+        displayString('initStatus', 'Client initialized with database errors', true);
+      } else {
+        this.initialized = true;
+      }
       displayString('initStatus', 'Client initialized successfully');
 
       return true;
@@ -91,7 +114,13 @@ class DecentCloudDemo {
 
       // Fetch ledger blocks
       const fetchStatus = await decentCloudLedger.fetchLedgerBlocks();
-      displayString('fetchStatus', fetchStatus);
+
+      // Check for database errors
+      if (checkAndDisplayDatabaseError()) {
+        displayString('fetchStatus', 'Error fetching blocks. See error details above.', true);
+      } else {
+        displayString('fetchStatus', fetchStatus);
+      }
     } catch (error) {
       console.error('Error fetching blocks:', error);
       displayString('fetchStatus', `Error fetching blocks: ${error.message}`, true);
@@ -110,11 +139,37 @@ class DecentCloudDemo {
     }
 
     try {
+      // Check for database errors first
+      if (checkAndDisplayDatabaseError()) {
+        displayString('wasmBlockHeader', 'Error displaying block. See error details above.', true);
+        displayJSON('wasmBlockContents', { error: 'Database error occurred' }, true);
+        return false;
+      }
+
       // Get the last fetched block
       const lastBlock = await decentCloudLedger.getLastFetchedBlock();
-      const lastBlockEntries = await decentCloudLedger.getBlockEntries(lastBlock.blockOffset);
+
+      // Check for database errors again after fetching the block
+      if (checkAndDisplayDatabaseError()) {
+        displayString('wasmBlockHeader', 'Error displaying block. See error details above.', true);
+        displayJSON('wasmBlockContents', { error: 'Database error occurred' }, true);
+        return false;
+      }
 
       if (lastBlock) {
+        const lastBlockEntries = await decentCloudLedger.getBlockEntries(lastBlock.blockOffset);
+
+        // Check for database errors after fetching block entries
+        if (checkAndDisplayDatabaseError()) {
+          displayString(
+            'wasmBlockHeader',
+            'Error displaying block entries. See error details above.',
+            true
+          );
+          displayJSON('wasmBlockContents', { error: 'Database error occurred' }, true);
+          return false;
+        }
+
         displayJSON('wasmBlockHeader', lastBlock);
         displayJSON('wasmBlockContents', lastBlockEntries);
         return true;
@@ -146,7 +201,12 @@ class DecentCloudDemo {
       // Clear the ledger storage
       await decentCloudLedger.clearStorage();
 
-      displayString('clearStatus', 'Ledger storage cleared successfully');
+      // Check for database errors
+      if (checkAndDisplayDatabaseError()) {
+        displayString('clearStatus', 'Error clearing storage. See error details above.', true);
+      } else {
+        displayString('clearStatus', 'Ledger storage cleared successfully');
+      }
 
       // Update the display
       displayString('wasmBlockHeader', 'No blocks fetched yet');
@@ -166,8 +226,6 @@ class DecentCloudDemo {
  * This function is called when the page loads
  */
 async function initDemo() {
-  console.log('Initializing class-based demo...');
-
   // Create a demo instance
   const demo = new DecentCloudDemo();
 

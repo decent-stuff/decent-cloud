@@ -72,13 +72,15 @@
       <pre id="wasmBlockContents">Loading...</pre>
     </div>
 
-    <!-- Class-based Demo -->
     <div class="demo-section">
       <p>This demo demonstrates how to use the DecentCloudClient package.</p>
 
       <div>
         <button id="fetchButton">Fetch Blocks</button>
         <button id="clearButton">Clear Storage</button>
+      </div>
+      <div class="status" style="background-color: #ffeeee; border: 1px solid #ffcccc; display: none;">
+        <strong>Database Error:</strong> <span id="dbErrorStatus"></span>
       </div>
 
       <div class="status">

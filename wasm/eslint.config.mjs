@@ -56,6 +56,6 @@ export default [
   },
   // Ignore dist and node_modules directories
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', 'node_modules/**', 'demo/dist/**', 'demo/node_modules/**'],
   },
 ];
