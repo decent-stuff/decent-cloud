@@ -87,11 +87,16 @@ export function AuthDialog() {
                     have the same identity as in the CLI, by reusing the same
                     seed phrase.
                     <br />
-                    Credentials are securely stored only in your browser, and
-                    deleted when logging out.
+                    Credentials are stored securely <b>in your browser only</b>,
+                    and deleted when you log out.
                     <br />
-                    Seed phrase is a great way to start exploring without any
-                    commitments, since all data is fully in your browser.
+                    Seed phrase is <b>a great way to start</b> exploring without
+                    any commitment, since no data leaves your browser for the
+                    registration.
+                    <br />
+                    Be careful about losing your seed phrase though, if you want
+                    to keep the identity or the funds on it! There is NO way to
+                    recover a lost seed phrase.
                   </p>
                 </div>
               </div>
