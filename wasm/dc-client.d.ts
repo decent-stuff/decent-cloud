@@ -103,6 +103,13 @@ export class DecentCloudLedger {
     getAllBlocks(): Promise<LedgerBlock[]>;
 
     /**
+     * Check if a particular provider principal is registered as a provider
+     * @param principal - The string principal of the provider to check.
+     * @returns {Promise<boolean>}
+     */
+    isProviderRegistered(principal: string): Promise<boolean>;
+
+    /**
      * Retrieve entries for a specific block.
      * @param blockOffset The offset of the block to retrieve entries for.
      * @returns {Promise<LedgerEntry[]>} An array of ledger entries for the specified block.

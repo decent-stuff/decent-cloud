@@ -1,6 +1,6 @@
 import { ledgerService } from './ledger-service';
 import { updateCanister } from './icp-utils';
-import { identityFromSeed } from './seed-auth';
+import { identityFromSeed } from '../lib/auth-context';
 import { ed25519Sign } from '@decent-stuff/dc-client';
 
 // Define the validation result interface
@@ -42,14 +42,14 @@ export async function validateBlockchain(
             };
         }
 
+        const dataToSign = hexToUint8Array(lastBlockHash);
+
         // Create identity from seed phrase
         const identity = identityFromSeed(storedSeedPhrase);
         // Get the public key bytes from the identity
         const secretKeyRaw = identity.getKeyPair().secretKey;
         const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-
         // Create a signature of the last block hash
-        const dataToSign = hexToUint8Array(lastBlockHash);
         // Cast the buffer to ArrayBuffer to satisfy TypeScript
         const signatureBytes = await ed25519Sign(new Uint8Array(secretKeyRaw), dataToSign);
 

@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { generateNewSeedPhrase, identityFromSeed } from "@/lib/seed-auth";
+import { generateNewSeedPhrase, identityFromSeed } from "@/lib/auth-context";
 
 interface SeedPhraseDialogProps {
   isOpen: boolean;

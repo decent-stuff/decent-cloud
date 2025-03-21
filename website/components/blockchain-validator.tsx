@@ -16,7 +16,12 @@ import {
 } from "@/lib/blockchain-validator";
 import { ledgerService } from "@/lib/ledger-service";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle, faSync } from "@fortawesome/free-solid-svg-icons";
+import {
+  faCheckCircle,
+  faSync,
+  faTriangleExclamation,
+} from "@fortawesome/free-solid-svg-icons";
+import { useAuth } from "@/lib/auth-context";
 
 export interface BlockchainValidatorProps {
   /** Default memo text */
@@ -47,12 +52,15 @@ export function BlockchainValidator({
   showHeader = true,
   renderAsCard = true,
 }: BlockchainValidatorProps) {
+  const { isAuthenticated, principal } = useAuth();
   const [memo, setMemo] = useState<string>(defaultMemo);
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [errorMessage, setError] = useState<string | undefined>();
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [blockHash, setLastBlockHash] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isProviderRegistered, setIsProviderRegistered] =
+    useState<boolean>(false);
 
   // Fetch ledger entries on component mount
   useEffect(() => {
@@ -130,6 +138,12 @@ export function BlockchainValidator({
       // Get the parent block hash
       const hash = await ledgerService.getLastBlockHash();
       setLastBlockHash(hash);
+      const isRegistered =
+        (isAuthenticated &&
+          principal &&
+          (await ledgerService.isProviderRegistered(principal.toText()))) ||
+        false;
+      setIsProviderRegistered(isRegistered);
       setError(undefined);
     } catch (error) {
       console.error("Error refreshing blockchain data:", error);
@@ -194,6 +208,41 @@ export function BlockchainValidator({
               {new TextEncoder().encode(memo).length} bytes
             </p>
           </div>
+          {isProviderRegistered ? (
+            <div
+              className={`p-4 rounded-md ${
+                darkMode
+                  ? "bg-green-900/30 text-green-400"
+                  : "bg-green-50 text-green-800"
+              } mb-4`}
+            >
+              <div className="mt-1">
+                Blockchain validation will proceed with the registered identity
+                `{principal?.toText()}`.
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`p-4 rounded-md ${
+                darkMode
+                  ? "bg-amber-900/30 text-amber-400"
+                  : "bg-amber-50 text-amber-800"
+              } mb-4`}
+            >
+              <div className="font-semibold">
+                <FontAwesomeIcon
+                  icon={faTriangleExclamation}
+                  className="mr-1 text-yellow-400"
+                />
+                Registration Required
+              </div>
+              <div className="mt-1">
+                Your current identity `{principal?.toText()}` is not yet
+                registered as a provider. It must be registered before you can
+                validate the blockchain.
+              </div>
+            </div>
+          )}
         </div>
       ) : errorMessage ? (
         <div
@@ -274,10 +323,15 @@ export function BlockchainValidator({
   const button = (
     <Button
       onClick={handleValidate}
-      disabled={isValidating || !blockHash}
+      disabled={isValidating || !blockHash || !isProviderRegistered}
       className={`w-full ${
         darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
       }`}
+      title={
+        !isProviderRegistered
+          ? "You must register as a provider before validating"
+          : ""
+      }
     >
       {isValidating ? "Validating..." : "Validate Blockchain"}
     </Button>

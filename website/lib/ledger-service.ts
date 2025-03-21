@@ -205,6 +205,18 @@ class LedgerService {
         );
     }
 
+    // Is a particular principal registered as a provider?
+    async isProviderRegistered(principal: string): Promise<boolean> {
+        return this.withErrorHandling(
+            'checking if provider is registered',
+            async () => {
+                const isRegistered = await decentCloudLedger.isProviderRegistered(principal);
+                return isRegistered || false;
+            },
+            false
+        );
+    }
+
     // Get all validator information
     async getValidators(): Promise<ValidatorInfo[]> {
         return this.withErrorHandling(

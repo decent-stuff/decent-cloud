@@ -270,6 +270,21 @@ class LedgerDatabase extends Dexie {
     }
 
     /**
+     * Retrieve entries with a specific label and a substring of the key.
+     */
+    async getEntriesByLabelAndKey(label: string, key: string): Promise<LedgerEntry[]> {
+        return this.withErrorHandling(
+            'get entries by label and key',
+            async () => {
+                const result = await this.ledgerEntries.where('label').equals(label).and((entry) => entry.key.includes(key)).toArray();
+                console.info(`Found NP Register ${result.length} entries for label ${label} and key ${key}`);
+                return result;
+            },
+            []
+        );
+    }
+
+    /**
      * Get a specific ledger entry by key
      * @param key The key of the entry to get
      * @returns The ledger entry or undefined if not found

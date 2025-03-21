@@ -213,6 +213,20 @@ class DecentCloudLedger {
         );
     }
 
+    // Check if a particular provider principal is registered as a provider
+    async isProviderRegistered(principal: string): Promise<boolean> {
+        console.log("Checking if provider is registered:", principal);
+        return this.withErrorHandling(
+            "checking if provider is registered",
+            async () => {
+                const entries = await db.getEntriesByLabelAndKey("NPRegister", principal);
+                console.log(`Found ${entries.length} registration entries for principal ${principal}`);
+                return entries.length > 0;
+            },
+            false
+        );
+    }
+
     /**
      * Retrieve entries for a specific block.
      *
