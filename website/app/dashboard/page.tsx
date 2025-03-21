@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import HeaderSection from "@/components/ui/header";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { fetchMetadata } from "@/lib/icp-utils";
 import { fetchUserBalances, fetchDctPrice } from "@/lib/token-utils";
 import Link from "next/link";
@@ -195,7 +194,6 @@ function extractDashboardData(
 
 export default function DashboardPage() {
   const { isAuthenticated, identity, principal, logout } = useAuth();
-  const router = useRouter();
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     dctPrice: 0,
     providerCount: 0,
@@ -260,14 +258,23 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header with user info and actions */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-8">
+      <div className="flex flex-col md:flex-row justify-center items-center mb-8">
         <HeaderSection
           title="Dashboard"
           subtitle={
-            isAuthenticated
-              ? "Welcome back to your Decent Cloud dashboard!"
-              : "Get a quick overview of Decent Cloud's current stats."
+            isAuthenticated ? (
+              "Your personal Decent Cloud dashboard!"
+            ) : (
+              <>
+                <Link
+                  href="/"
+                  className="text-blue-500 hover:text-blue-600 transition-colors"
+                >
+                  Sign in
+                </Link>{" "}
+                to see your personal dashboard data.
+              </>
+            )
           }
         />
 
@@ -296,32 +303,34 @@ export default function DashboardPage() {
             </Button>
           )}
 
-          <Link
-            href="https://www.kongswap.io/swap?from=ryjl3-tyaaa-aaaaa-aaaba-cai&to=ggi4a-wyaaa-aaaai-actqq-cai"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button
-              variant="outline"
-              className="bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-blue-500 hover:to-purple-500 flex items-center gap-2"
+          {isAuthenticated && identity && principal && (
+            <Link
+              href="https://www.kongswap.io/swap?from=ryjl3-tyaaa-aaaaa-aaaba-cai&to=ggi4a-wyaaa-aaaai-actqq-cai"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+              <Button
+                variant="outline"
+                className="bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-blue-500 hover:to-purple-500 flex items-center gap-2"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-              Top Up DCT
-            </Button>
-          </Link>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                  />
+                </svg>
+                Top Up DCT
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -480,7 +489,6 @@ export default function DashboardPage() {
                   >
                     {item.format(dashboardData[item.key])}
                   </div>
-
                   {/* Enhanced Tooltip */}
                   <div
                     className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 text-white text-xs rounded-lg p-3 shadow-xl border border-white/20
