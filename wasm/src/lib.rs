@@ -113,7 +113,7 @@ pub fn parse_ledger_blocks(
 
 #[wasm_bindgen]
 pub fn ed25519_sign(private_key: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, String> {
-    let dcc_id = DccIdentity::new_signing_from_der(&private_key)?;
+    let dcc_id = DccIdentity::new_signing_from_bytes(&private_key)?;
     dcc_id
         .sign(&data)
         .map(|sig| sig.to_vec())

@@ -1,7 +1,7 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
-import { GlobalLedgerService } from "@/components/global-ledger-service";
+import { GlobalLedgerComponent as GlobalLedgerComponent } from "@/components/global-ledger-component";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,7 +23,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-          <GlobalLedgerService />
+          <GlobalLedgerComponent />
           {children}
         </AuthProvider>
       </body>

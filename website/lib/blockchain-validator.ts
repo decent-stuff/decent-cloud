@@ -41,24 +41,17 @@ export async function validateBlockchain(
                 message: "Authentication required. Please log in first."
             };
         }
-        console.log('Seed phrase:', storedSeedPhrase);
 
         // Create identity from seed phrase
         const identity = identityFromSeed(storedSeedPhrase);
-        console.log('Identity created:', identity.getPrincipal().toString());
-
         // Get the public key bytes from the identity
         const secretKeyRaw = identity.getKeyPair().secretKey;
-        console.log('Secret key bytes:', secretKeyRaw);
         const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-        console.log('Public key bytes:', publicKeyBytes);
 
         // Create a signature of the last block hash
         const dataToSign = hexToUint8Array(lastBlockHash);
-        console.log('Data to sign:', dataToSign);
         // Cast the buffer to ArrayBuffer to satisfy TypeScript
         const signatureBytes = await ed25519Sign(new Uint8Array(secretKeyRaw), dataToSign);
-        console.log('Signature bytes:', signatureBytes);
 
         // Make the authenticated update call to node_provider_check_in
         try {
@@ -72,7 +65,7 @@ export async function validateBlockchain(
             if (result && typeof result === 'object' && 'Ok' in result) {
                 return {
                     success: true,
-                    message: `Blockchain validation successful with memo: ${memo}`,
+                    message: `Ledger validation response: ${result.Ok}`,
                     parentBlockHash: lastBlockHash
                 };
             } else if (result && typeof result === 'object' && 'Err' in result) {

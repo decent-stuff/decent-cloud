@@ -11,7 +11,9 @@
     "prepare": "",
     "prepublishOnly": "npm test"
   },
-  "localDependencies": {"@decent-stuff/dc-client": "file:../wasm/dist"},
+  "localDependencies": {
+    "@decent-stuff/dc-client": "file:../wasm/dist"
+  },
   "dependencies": {
     "@decent-stuff/dc-client": "^0.2.3",
     "@dfinity/agent": "^2.3.0",

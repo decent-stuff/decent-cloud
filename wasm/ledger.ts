@@ -4,16 +4,14 @@ import { parseLedgerBlocks } from './dc-client.js';
 
 class DecentCloudLedger {
     /**
-     * Initialize the ledger interface.
-     * This includes initializing the WASM module, the database (if necessary),
-     * and fetching new ledger entries from the remote (canister) ledger.
+     * Initialize the ledger interface and fetch new ledger
+     * entries from the remote (canister) ledger.
      */
     async init(): Promise<void> {
         console.log("Initializing Ledger interface...");
         // If your db module requires explicit initialization, call it here:
         // await db.initialize();
 
-        // Initialize the WASM module and fetch new ledger blocks.
         await this.fetchLedgerBlocks();
         console.log("Ledger interface initialization complete.");
     }

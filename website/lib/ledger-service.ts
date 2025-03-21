@@ -40,7 +40,7 @@ class LedgerService {
     }
 
     // Start polling for ledger updates
-    async startPolling(frequencyMs?: number): Promise<void> {
+    async setPollingInterval(frequencyMs?: number): Promise<void> {
         if (frequencyMs) {
             this.pollingFrequencyMs = frequencyMs;
         }

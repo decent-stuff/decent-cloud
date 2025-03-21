@@ -7,11 +7,11 @@ import { ledgerService } from "@/lib/ledger-service";
 const GLOBAL_POLLING_FREQUENCY = 30000; // 30 seconds (less frequent for background service)
 
 /**
- * GlobalLedgerService component that initializes and starts the ledger service
+ * GlobalLedgerComponent that initializes and starts the ledger service.
  * This component should be included in the root layout to ensure the ledger service
  * is running across all pages in the application
  */
-export function GlobalLedgerService() {
+export function GlobalLedgerComponent() {
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 5;
 
@@ -28,7 +28,7 @@ export function GlobalLedgerService() {
         }
 
         // Start polling with a longer interval for the global service
-        await ledgerService.startPolling(GLOBAL_POLLING_FREQUENCY);
+        await ledgerService.setPollingInterval(GLOBAL_POLLING_FREQUENCY);
 
         console.log("Global ledger service initialized and polling started");
         setRetryCount(0); // Reset retry count on success
