@@ -8,14 +8,55 @@ class LedgerDatabase extends Dexie {
     ledgerBlocks!: Table<LedgerBlock, number>;
     ledgerEntries!: Table<LedgerEntry, string>;
 
+    // Flag to track if auto-heal was attempted
+    private autoHealAttempted = false;
+
     constructor() {
         super('DecentCloudLedgerDB');
 
-        // Define stores in a single version declaration
-        this.version(3).stores({
-            ledgerBlocks: 'blockOffset, timestampNs',
-            ledgerEntries: '[label+key], *blockOffset',
-        });
+        try {
+            // Define stores in a single version declaration
+            this.version(3).stores({
+                ledgerBlocks: 'blockOffset, timestampNs',
+                ledgerEntries: '[label+key], *blockOffset',
+            });
+        } catch (error) {
+            // Auto-heal for primary key change errors
+            if (error instanceof Dexie.UpgradeError &&
+                error.message.includes('Not yet support for changing primary key') &&
+                !this.autoHealAttempted) {
+
+                console.warn('Detected primary key change error. Attempting auto-heal by deleting database...');
+
+                // Mark that we've attempted auto-heal to prevent infinite loops
+                this.autoHealAttempted = true;
+
+                // Use void operator to explicitly mark the promise as ignored
+                // This is acceptable in the constructor since we can't use async/await here
+                void this.performAutoHeal();
+
+                // Throw a more descriptive error to inform the caller
+                throw new Error('Database schema upgrade required. Auto-heal initiated. Please reload the application.');
+            } else {
+                // Re-throw other errors
+                throw error;
+            }
+        }
+    }
+
+    /**
+     * Perform the auto-heal process by deleting and recreating the database
+     */
+    async performAutoHeal(): Promise<void> {
+        try {
+            // Delete the database
+            await Dexie.delete('DecentCloudLedgerDB');
+            console.log('Database deleted successfully as part of auto-heal process.');
+
+            // The database will be recreated on next access
+        } catch (error) {
+            console.error('Error during database auto-heal:', error);
+        }
     }
 
     /**
@@ -94,6 +135,28 @@ class LedgerDatabase extends Dexie {
             await this.ledgerBlocks.clear();
             await this.ledgerEntries.clear();
         });
+    }
+
+    /**
+     * Explicitly delete the database and reset all data
+     * This can be called manually to resolve schema issues or for troubleshooting
+     * @returns Promise that resolves when the database has been deleted
+     */
+    async resetDatabase(): Promise<void> {
+        try {
+            // Close the current instance
+            this.close();
+
+            // Delete the database
+            await Dexie.delete('DecentCloudLedgerDB');
+            console.log('Database has been completely reset.');
+
+            // The database will be recreated on next access with the current schema
+            return Promise.resolve();
+        } catch (error: unknown) {
+            console.error('Error resetting database:', error);
+            return Promise.reject(error);
+        }
     }
 }
 

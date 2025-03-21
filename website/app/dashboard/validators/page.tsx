@@ -153,9 +153,10 @@ export default function ValidatorsPage() {
             Blockchain Validation
           </h3>
           <p className="text-white/90 mb-4">
-            As a validator, you can participate in blockchain validation by
-            checking in with the network. This helps maintain the integrity and
-            security of the Decent Cloud network.
+            As a validator, you can validate the blockchain tip (latest hash)
+            and in return receive a reward. This ensures that no one modified
+            the history of the blockchain, including transactions, reputations,
+            etc.
           </p>
 
           <BlockchainValidator
