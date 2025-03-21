@@ -235,7 +235,9 @@ pub fn do_node_provider_check_in(
     }
 
     // Check that the NP is already registered
-    ledger.get(LABEL_NP_REGISTER, &pubkey_bytes)?;
+    ledger
+        .get(LABEL_NP_REGISTER, &pubkey_bytes)
+        .map_err(|e| format!("Provider not yet registered in the Ledger: {}", e))?;
 
     // Verify the signature
     dcc_id.verify_bytes(&ledger.get_latest_block_hash(), &nonce_signature)?;
