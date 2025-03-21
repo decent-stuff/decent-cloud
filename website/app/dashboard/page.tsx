@@ -258,7 +258,7 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row justify-center items-center mb-8">
+      <div className="mb-8">
         <HeaderSection
           title="Dashboard"
           subtitle={
@@ -277,13 +277,43 @@ export default function DashboardPage() {
             )
           }
         />
+      </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 mt-4 md:mt-0">
-          {isAuthenticated && (
+      {/* Action Buttons - Moved to separate section to avoid header overlap */}
+      <div className="flex flex-col sm:flex-row justify-end gap-3 mb-8">
+        {isAuthenticated && (
+          <Button
+            onClick={() => logout()}
+            variant="outline"
+            className="bg-white/10 text-white hover:bg-white/20 flex items-center gap-2"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+            Sign Out
+          </Button>
+        )}
+
+        {isAuthenticated && identity && principal && (
+          <Link
+            href="https://www.kongswap.io/swap?from=ryjl3-tyaaa-aaaaa-aaaba-cai&to=ggi4a-wyaaa-aaaai-actqq-cai"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             <Button
-              onClick={() => logout()}
               variant="outline"
-              className="bg-white/10 text-white hover:bg-white/20 flex items-center gap-2"
+              className="bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-blue-500 hover:to-purple-500 flex items-center gap-2"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -296,42 +326,13 @@ export default function DashboardPage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                 />
               </svg>
-              Sign Out
+              Top Up DCT
             </Button>
-          )}
-
-          {isAuthenticated && identity && principal && (
-            <Link
-              href="https://www.kongswap.io/swap?from=ryjl3-tyaaa-aaaaa-aaaba-cai&to=ggi4a-wyaaa-aaaai-actqq-cai"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button
-                variant="outline"
-                className="bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-blue-500 hover:to-purple-500 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  />
-                </svg>
-                Top Up DCT
-              </Button>
-            </Link>
-          )}
-        </div>
+          </Link>
+        )}
       </div>
 
       {/* Principal ID display (only when authenticated) */}
@@ -415,7 +416,6 @@ export default function DashboardPage() {
                   {item.format(dashboardData[item.key])}
                 </div>
 
-                {/* Enhanced Tooltip */}
                 <div
                   className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 text-white text-xs rounded-lg p-3 shadow-xl border border-white/20
                   left-1/2 transform -translate-x-1/2 top-full mt-2 w-56 z-50 pointer-events-none backdrop-blur-sm"
@@ -489,7 +489,6 @@ export default function DashboardPage() {
                   >
                     {item.format(dashboardData[item.key])}
                   </div>
-                  {/* Enhanced Tooltip */}
                   <div
                     className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 text-white text-xs rounded-lg p-3 shadow-xl border border-white/20
                     left-1/2 transform -translate-x-1/2 top-full mt-2 w-56 z-50 pointer-events-none backdrop-blur-sm"
