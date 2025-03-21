@@ -6,8 +6,10 @@ import HeaderSection from "@/components/ui/header";
 import { motion } from "framer-motion";
 import { fetchMetadata } from "@/lib/icp-utils";
 import { fetchUserBalances, fetchDctPrice } from "@/lib/token-utils";
+import { sendFunds, getTopUpUrl } from "@/lib/token-transfer";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { SendFundsDialog } from "@/components/send-funds-dialog";
 
 interface DashboardData {
   dctPrice: number;
@@ -203,6 +205,14 @@ export default function DashboardPage() {
     blockReward: 0,
   });
 
+  // State for send funds dialog
+  const [sendFundsDialogOpen, setSendFundsDialogOpen] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<{
+    name: string;
+    balance?: number;
+    key: keyof DashboardData;
+  } | null>(null);
+
   // Fetch dashboard data
   useEffect(() => {
     let mounted = true;
@@ -303,35 +313,6 @@ export default function DashboardPage() {
             </svg>
             Sign Out
           </Button>
-        )}
-
-        {isAuthenticated && identity && principal && (
-          <Link
-            href="https://www.kongswap.io/swap?from=ryjl3-tyaaa-aaaaa-aaaba-cai&to=ggi4a-wyaaa-aaaai-actqq-cai"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button
-              variant="outline"
-              className="bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-blue-500 hover:to-purple-500 flex items-center gap-2"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-              Top Up DCT
-            </Button>
-          </Link>
         )}
       </div>
 
@@ -441,64 +422,173 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {dashboardItems
               .filter((item) => !item.showAlsoAnonymous)
-              .map((item, index) => (
-                <div
-                  key={index}
-                  onClick={() => {
-                    if (item.key === "userDctBalance") {
-                      window.open(
-                        "https://www.kongswap.io/swap?from=ryjl3-tyaaa-aaaaa-aaaba-cai&to=ggi4a-wyaaa-aaaai-actqq-cai",
-                        "_blank",
-                        "noopener,noreferrer"
-                      );
-                    }
-                  }}
-                  className={`group relative flex flex-col bg-gradient-to-r
-                    ${
-                      item.key === "userDctBalance"
-                        ? "from-purple-900/30 to-blue-900/30 border-purple-500/30"
-                        : item.key === "userIcpBalance"
-                        ? "from-amber-900/30 to-orange-900/30 border-amber-500/30"
-                        : "from-teal-900/30 to-emerald-900/30 border-teal-500/30"
-                    }
-                    rounded-xl p-4 hover:bg-white/10 hover:shadow-xl transition duration-300 ease-in-out shadow-lg border border-white/10
-                    ${
-                      item.key === "userDctBalance"
-                        ? "cursor-pointer"
-                        : "cursor-help"
-                    }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="font-medium text-white/80 text-base mb-1">
-                      {item.title}
-                    </div>
-                    {item.key === "userDctBalance" && (
-                      <div className="text-xs text-white/60 bg-white/10 px-2 py-0.5 rounded">
-                        Click to Top Up
+              .map((item, index) => {
+                // Determine token type based on the item key
+                const tokenType =
+                  item.key === "userDctBalance"
+                    ? "DCT"
+                    : item.key === "userIcpBalance"
+                    ? "ICP"
+                    : item.key === "userCkUsdcBalance"
+                    ? "USDC"
+                    : "USDT";
+
+                // Get token display name
+                const tokenName =
+                  item.key === "userDctBalance"
+                    ? "DCT"
+                    : item.key === "userIcpBalance"
+                    ? "ICP"
+                    : item.key === "userCkUsdcBalance"
+                    ? "ckUSDC"
+                    : "ckUSDT";
+
+                return (
+                  <div
+                    key={index}
+                    className={`group relative flex flex-col bg-gradient-to-r
+                      ${
+                        item.key === "userDctBalance"
+                          ? "from-purple-900/30 to-blue-900/30 border-purple-500/30"
+                          : item.key === "userIcpBalance"
+                          ? "from-amber-900/30 to-orange-900/30 border-amber-500/30"
+                          : "from-teal-900/30 to-emerald-900/30 border-teal-500/30"
+                      }
+                      rounded-xl p-4 hover:bg-white/10 hover:shadow-xl transition duration-300 ease-in-out shadow-lg border border-white/10`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="font-medium text-white/80 text-base mb-1">
+                        {item.title}
                       </div>
-                    )}
+                    </div>
+                    <div
+                      className={`font-bold text-xl mt-1 ${
+                        item.key === "userDctBalance"
+                          ? "text-purple-400"
+                          : item.key === "userIcpBalance"
+                          ? "text-amber-400"
+                          : "text-teal-400"
+                      }`}
+                    >
+                      {item.format(dashboardData[item.key])}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border-white/10 text-xs flex-1"
+                        onClick={() => {
+                          setSelectedToken({
+                            name: tokenName,
+                            balance: dashboardData[item.key] as number,
+                            key: item.key,
+                          });
+                          setSendFundsDialogOpen(true);
+                        }}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-3 w-3 mr-1"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                          />
+                        </svg>
+                        Send
+                      </Button>
+
+                      <Link
+                        href={getTopUpUrl(
+                          tokenType as "ICP" | "USDT" | "USDC" | "DCT"
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1"
+                      >
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={`w-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border-white/10 text-xs`}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-3 w-3 mr-1"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                            />
+                          </svg>
+                          Top Up
+                        </Button>
+                      </Link>
+                    </div>
+
+                    <div
+                      className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 text-white text-xs rounded-lg p-3 shadow-xl border border-white/20
+                      left-1/2 transform -translate-x-1/2 top-full mt-2 w-56 z-50 pointer-events-none backdrop-blur-sm"
+                    >
+                      {item.tooltip}
+                    </div>
                   </div>
-                  <div
-                    className={`font-bold text-xl mt-1 ${
-                      item.key === "userDctBalance"
-                        ? "text-purple-400"
-                        : item.key === "userIcpBalance"
-                        ? "text-amber-400"
-                        : "text-teal-400"
-                    }`}
-                  >
-                    {item.format(dashboardData[item.key])}
-                  </div>
-                  <div
-                    className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gray-900/95 text-white text-xs rounded-lg p-3 shadow-xl border border-white/20
-                    left-1/2 transform -translate-x-1/2 top-full mt-2 w-56 z-50 pointer-events-none backdrop-blur-sm"
-                  >
-                    {item.tooltip}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         </motion.div>
+      )}
+
+      {/* Send Funds Dialog */}
+      {selectedToken && (
+        <SendFundsDialog
+          isOpen={sendFundsDialogOpen}
+          onClose={() => {
+            setSendFundsDialogOpen(false);
+          }}
+          onSend={async (destinationAddress, amount) => {
+            if (!identity || !principal || !selectedToken) return;
+
+            // Determine token type
+            const tokenType =
+              selectedToken.key === "userDctBalance"
+                ? "DCT"
+                : selectedToken.key === "userIcpBalance"
+                ? "ICP"
+                : selectedToken.key === "userCkUsdcBalance"
+                ? "USDC"
+                : "USDT";
+
+            // Call the stub function
+            const result = await sendFunds({
+              destinationAddress,
+              amount,
+              tokenType: tokenType as "ICP" | "USDT" | "USDC" | "DCT",
+              identity,
+              principal,
+            });
+
+            // Show status message
+            if (result.success) {
+              alert(`Success: ${result.message}`);
+            } else {
+              alert(`Error: ${result.message}`);
+            }
+          }}
+          tokenName={selectedToken.name}
+          maxAmount={selectedToken.balance}
+        />
       )}
     </div>
   );
