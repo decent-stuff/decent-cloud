@@ -5,7 +5,7 @@ use crate::LedgerMap;
 use candid::Principal as IcPrincipal;
 use dcc_common::{
     account_balance_get_as_string, DccIdentity, IcrcCompatibleAccount, TokenAmountE9s,
-    DC_TOKEN_DECIMALS_DIV,
+    DC_TOKEN_DECIMALS_DIV, DC_TOKEN_SYMBOL,
 };
 use std::path::PathBuf;
 
@@ -25,8 +25,9 @@ pub async fn handle_account_command(
 
     println!("Account Principal ID: {}", dcc_id);
     println!(
-        "Account balance: {} DCT",
-        account_balance_get_as_string(&dcc_id.as_icrc_compatible_account())
+        "Account balance: {} {}",
+        account_balance_get_as_string(&dcc_id.as_icrc_compatible_account()),
+        DC_TOKEN_SYMBOL
     );
 
     if let Some(to_principal_string) = &account_args.transfer_to {

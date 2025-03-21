@@ -4,6 +4,7 @@ use ic_cdk::println;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferError as Icrc1TransferError};
 use ledger_map::LedgerError;
 
+use crate::amount_as_string;
 use crate::Icrc1Account;
 use crate::TokenAmountE9s;
 use candid::Nat;
@@ -127,8 +128,8 @@ impl std::fmt::Display for TransferError {
                 requested_amount,
             } => write!(
                 f,
-                "InsufficientFunds: account {} has {} and requested {}",
-                account, current_balance, requested_amount
+                "InsufficientFunds: account {} has {} e9s ({} tokens) and requested {} e9s ({} tokens)",
+                account, current_balance, amount_as_string(*current_balance), requested_amount, amount_as_string(*requested_amount)
             ),
             TransferError::AmountMismatch {
                 from_amount,

@@ -1,5 +1,5 @@
 use crate::account_transfers::IcrcCompatibleAccount;
-use crate::{AHashMap, TokenAmountE9s, DC_TOKEN_DECIMALS_DIV};
+use crate::{AHashMap, TokenAmountE9s, DC_TOKEN_DECIMALS_DIV, DC_TOKEN_SYMBOL};
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
@@ -22,12 +22,13 @@ pub fn account_balance_get_as_string(account: &IcrcCompatibleAccount) -> String 
 
 pub fn amount_as_string(amount: TokenAmountE9s) -> String {
     if amount == 0 {
-        return "0.0".to_string();
+        return format!("0.0 {}", DC_TOKEN_SYMBOL);
     }
     format!(
-        "{}.{:0>9}",
+        "{}.{:0>9} {}",
         amount / DC_TOKEN_DECIMALS_DIV as TokenAmountE9s,
-        amount % DC_TOKEN_DECIMALS_DIV as TokenAmountE9s
+        amount % DC_TOKEN_DECIMALS_DIV as TokenAmountE9s,
+        DC_TOKEN_SYMBOL
     )
 }
 

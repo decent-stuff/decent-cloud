@@ -175,7 +175,7 @@ fn test_rewards_distribute_no_eligible_nps() {
     let response: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
     assert_eq!(
         response[0].as_str().unwrap(),
-        "Distributing reward of 50.000000000 tokens: no eligible NPs"
+        "Distributing reward of 50.000000000 DC tokens: no eligible NPs"
     );
 }
 
@@ -213,8 +213,8 @@ fn test_rewards_distribute_with_eligible_nps() {
     // Response is a JSON array of strings
     let result: Value = serde_json::from_str(&result).unwrap();
     assert_eq!(
-        result[0],
-        "Distributing reward of 50.000000000 tokens to 1 NPs = 50.000000000 tokens per NP"
+        result[0].as_str().unwrap(),
+        "Distributing reward of 50.000000000 DC tokens to 1 NPs = 50.000000000 DC tokens per NP"
     );
 
     // Fast forward 42 blocks, there are rewards for 42 blocks that should be distributed
@@ -232,8 +232,8 @@ fn test_rewards_distribute_with_eligible_nps() {
     let result: Value = serde_json::from_str(&result).unwrap();
     // 50 tokens * 42 = 2100
     assert_eq!(
-        result[0],
-        "Distributing reward of 2100.000000000 tokens to 1 NPs = 2100.000000000 tokens per NP"
+        result[0].as_str().unwrap(),
+        "Distributing reward of 2100.000000000 DC tokens to 1 NPs = 2100.000000000 DC tokens per NP"
     );
 
     // Later on, both np1 and np2 should be eligible for rewards. Each should get 25 tokens
@@ -266,7 +266,7 @@ fn test_rewards_distribute_with_eligible_nps() {
     let result: Value = serde_json::from_str(&result).unwrap();
     // 50 tokens * 7 = 350
     assert_eq!(
-        result[0],
-        "Distributing reward of 350.000000000 tokens to 2 NPs = 175.000000000 tokens per NP"
+        result[0].as_str().unwrap(),
+        "Distributing reward of 350.000000000 DC tokens to 2 NPs = 175.000000000 DC tokens per NP"
     );
 }
