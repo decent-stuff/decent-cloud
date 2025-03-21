@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import {
   validateBlockchain,
+  registerProvider,
   ValidationResult,
 } from "@/lib/blockchain-validator";
 import { ledgerService } from "@/lib/ledger-service";
@@ -55,6 +56,7 @@ export function BlockchainValidator({
   const { isAuthenticated, principal } = useAuth();
   const [memo, setMemo] = useState<string>(defaultMemo);
   const [isValidating, setIsValidating] = useState<boolean>(false);
+  const [isRegistering, setIsRegistering] = useState<boolean>(false);
   const [errorMessage, setError] = useState<string | undefined>();
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [blockHash, setLastBlockHash] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function BlockchainValidator({
   useEffect(() => {
     let isMounted = true;
 
-    updateLastHash().catch((err) => {
+    refreshData().catch((err) => {
       if (isMounted) {
         console.error("Error fetching entries:", err);
         setError(
@@ -80,24 +82,6 @@ export function BlockchainValidator({
       isMounted = false;
     };
   }, []);
-
-  // Fetch ledger entries
-  const updateLastHash = async () => {
-    try {
-      setIsLoading(true);
-      setError(undefined);
-
-      // Get the parent block hash (which will fetch latest entries)
-      const hash = await ledgerService.getLastBlockHash();
-      setLastBlockHash(hash);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch ledger entries"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Handle validation
   const handleValidate = async () => {
@@ -128,6 +112,43 @@ export function BlockchainValidator({
       }
     } finally {
       setIsValidating(false);
+    }
+  };
+
+  // Handle registration
+  const handleRegister = async () => {
+    try {
+      setIsRegistering(true);
+      setResult(null);
+
+      // Register as a provider
+      const registrationResult = await registerProvider();
+      setResult(registrationResult);
+
+      // If registration was successful, refresh the data to update the isProviderRegistered state
+      if (registrationResult.success) {
+        await refreshData();
+      }
+
+      // Call the callback if provided
+      if (onValidationComplete) {
+        onValidationComplete(registrationResult);
+      }
+    } catch (error: unknown) {
+      console.error("Error during registration:", error);
+      const errorResult = {
+        success: false,
+        message: `Unexpected error during registration: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+      setResult(errorResult);
+
+      if (onValidationComplete) {
+        onValidationComplete(errorResult);
+      }
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -320,28 +341,43 @@ export function BlockchainValidator({
     </>
   );
 
-  const button = (
-    <Button
-      onClick={handleValidate}
-      disabled={isValidating || !blockHash || !isProviderRegistered}
-      className={`w-full ${
-        darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
-      }`}
-      title={
-        !isProviderRegistered
-          ? "You must register as a provider before validating"
-          : ""
-      }
-    >
-      {isValidating ? "Validating..." : "Validate Blockchain"}
-    </Button>
+  const buttons = (
+    <div className="flex flex-col space-y-2">
+      {!isProviderRegistered && (
+        <Button
+          onClick={handleRegister}
+          disabled={isRegistering || !blockHash}
+          className={`w-full ${
+            darkMode
+              ? "bg-green-600 hover:bg-green-700 text-white"
+              : "bg-green-500 hover:bg-green-600 text-white"
+          }`}
+        >
+          {isRegistering ? "Registering..." : "Register as Provider"}
+        </Button>
+      )}
+      <Button
+        onClick={handleValidate}
+        disabled={isValidating || !blockHash || !isProviderRegistered}
+        className={`w-full ${
+          darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
+        }`}
+        title={
+          !isProviderRegistered
+            ? "You must register as a provider before validating"
+            : ""
+        }
+      >
+        {isValidating ? "Validating..." : "Validate Blockchain"}
+      </Button>
+    </div>
   );
 
   if (!renderAsCard) {
     return (
       <div className={className}>
         <div className="space-y-4">{content}</div>
-        <div className="mt-4">{button}</div>
+        <div className="mt-4">{buttons}</div>
       </div>
     );
   }
@@ -363,7 +399,7 @@ export function BlockchainValidator({
         </CardHeader>
       )}
       <CardContent className="space-y-4">{content}</CardContent>
-      <CardFooter>{button}</CardFooter>
+      <CardFooter>{buttons}</CardFooter>
     </Card>
   );
 }

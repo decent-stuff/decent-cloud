@@ -2,12 +2,118 @@ import { ledgerService } from './ledger-service';
 import { updateCanister } from './icp-utils';
 import { identityFromSeed } from '../lib/auth-context';
 import { ed25519Sign } from '@decent-stuff/dc-client';
+import type { Identity } from '@dfinity/agent';
+
+// Define the result type for canister calls
+interface CanisterResult {
+    Ok?: string;
+    Err?: string;
+    [key: string]: unknown;
+}
+
+// Define additional data type for validation results
+type ValidationAdditionalData = {
+    parentBlockHash?: string;
+    [key: string]: string | undefined;
+};
 
 // Define the validation result interface
 export interface ValidationResult {
     success: boolean;
     message: string;
     parentBlockHash?: string;
+}
+
+/**
+ * Helper function to get authenticated identity from localStorage
+ * @returns Object containing identity and publicKeyBytes, or error result
+ */
+async function getAuthenticatedIdentity(): Promise<
+    | { success: true; identity: Identity; publicKeyBytes: Uint8Array; secretKeyRaw: Uint8Array }
+    | { success: false; result: ValidationResult }
+> {
+    const storedSeedPhrase = localStorage.getItem('seed_phrase');
+    if (!storedSeedPhrase) {
+        return {
+            success: false,
+            result: {
+                success: false,
+                message: "Authentication required. Please log in first."
+            }
+        };
+    }
+
+    // Create identity from seed phrase
+    const identity = identityFromSeed(storedSeedPhrase);
+    // Get the public key bytes from the identity
+    const secretKeyRaw = identity.getKeyPair().secretKey;
+    const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+
+    return {
+        success: true,
+        identity,
+        publicKeyBytes,
+        secretKeyRaw: new Uint8Array(secretKeyRaw)
+    };
+}
+
+/**
+ * Helper function to process canister result
+ * @param result The result from the canister call
+ * @param successPrefix Prefix for success message
+ * @param errorPrefix Prefix for error message
+ * @param additionalData Additional data to include in the result
+ * @returns Formatted ValidationResult
+ */
+function processCanisterResult(
+    result: unknown,
+    successPrefix: string,
+    errorPrefix: string,
+    additionalData: ValidationAdditionalData = {}
+): ValidationResult {
+    if (result && typeof result === 'object' && 'Ok' in result) {
+        return {
+            success: true,
+            message: `${successPrefix}: ${(result as CanisterResult).Ok}`,
+            ...additionalData
+        };
+    } else if (result && typeof result === 'object' && 'Err' in result) {
+        return {
+            success: false,
+            message: `${errorPrefix}: ${(result as { Err: string }).Err}`,
+            ...additionalData
+        };
+    } else {
+        return {
+            success: false,
+            message: `Unexpected response format: ${JSON.stringify(result)}`,
+            ...additionalData
+        };
+    }
+}
+
+/**
+ * Helper function to handle errors
+ * @param error The error object
+ * @param errorPrefix Prefix for error message
+ * @param additionalData Additional data to include in the result
+ * @returns Formatted ValidationResult with error details
+ */
+function handleError(
+    error: unknown,
+    errorPrefix: string,
+    additionalData: ValidationAdditionalData = {}
+): ValidationResult {
+    console.error(`${errorPrefix}:`, error);
+    const errorMessage = error instanceof Error
+        ? error.message
+        : String(error);
+
+    return {
+        success: false,
+        message: `${errorPrefix}: ${errorMessage}`,
+        ...additionalData
+    };
 }
 
 /**
@@ -33,25 +139,17 @@ export async function validateBlockchain(
             };
         }
 
-        // Get the identity from local storage
-        const storedSeedPhrase = localStorage.getItem('seed_phrase');
-        if (!storedSeedPhrase) {
-            return {
-                success: false,
-                message: "Authentication required. Please log in first."
-            };
+        // Get authenticated identity
+        const authResult = await getAuthenticatedIdentity();
+        if (!authResult.success) {
+            return authResult.result;
         }
 
+        const { identity, publicKeyBytes, secretKeyRaw } = authResult;
         const dataToSign = hexToUint8Array(lastBlockHash);
 
-        // Create identity from seed phrase
-        const identity = identityFromSeed(storedSeedPhrase);
-        // Get the public key bytes from the identity
-        const secretKeyRaw = identity.getKeyPair().secretKey;
-        const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
         // Create a signature of the last block hash
-        // Cast the buffer to ArrayBuffer to satisfy TypeScript
-        const signatureBytes = await ed25519Sign(new Uint8Array(secretKeyRaw), dataToSign);
+        const signatureBytes = await ed25519Sign(secretKeyRaw, dataToSign);
 
         // Make the authenticated update call to node_provider_check_in
         try {
@@ -61,48 +159,63 @@ export async function validateBlockchain(
                 identity
             );
 
-            // Parse the result
-            if (result && typeof result === 'object' && 'Ok' in result) {
-                return {
-                    success: true,
-                    message: `Ledger validation response: ${result.Ok}`,
-                    parentBlockHash: lastBlockHash
-                };
-            } else if (result && typeof result === 'object' && 'Err' in result) {
-                return {
-                    success: false,
-                    message: `Validation failed: ${(result as { Err: string }).Err}`,
-                    parentBlockHash: lastBlockHash
-                };
-            } else {
-                return {
-                    success: false,
-                    message: `Unexpected response format: ${JSON.stringify(result)}`,
-                    parentBlockHash: lastBlockHash
-                };
-            }
+            return processCanisterResult(
+                result,
+                'Ledger validation response',
+                'Validation failed',
+                { parentBlockHash: lastBlockHash }
+            );
         } catch (error: unknown) {
-            console.error('Error calling node_provider_check_in:', error);
-            const errorMessage = error instanceof Error
-                ? error.message
-                : String(error);
-
-            return {
-                success: false,
-                message: `Error during blockchain validation call: ${errorMessage}`,
-                parentBlockHash: lastBlockHash
-            };
+            return handleError(
+                error,
+                'Error during blockchain validation call',
+                { parentBlockHash: lastBlockHash }
+            );
         }
     } catch (error: unknown) {
-        console.error('Blockchain validation error:', error);
-        const errorMessage = error instanceof Error
-            ? error.message
-            : String(error);
+        return handleError(error, 'Error during blockchain validation');
+    }
+}
 
-        return {
-            success: false,
-            message: `Error during blockchain validation: ${errorMessage}`
-        };
+/**
+ * Registers the current user as a node provider
+ *
+ * This implementation makes an authenticated update call to the node_provider_register endpoint
+ * with a signature of the public key.
+ *
+ * @returns A promise that resolves to a ValidationResult
+ */
+export async function registerProvider(): Promise<ValidationResult> {
+    try {
+        // Get authenticated identity
+        const authResult = await getAuthenticatedIdentity();
+        if (!authResult.success) {
+            return authResult.result;
+        }
+
+        const { identity, publicKeyBytes, secretKeyRaw } = authResult;
+
+        // Sign the public key with itself to prove ownership
+        const signatureBytes = await ed25519Sign(secretKeyRaw, publicKeyBytes);
+
+        // Make the authenticated update call to node_provider_register
+        try {
+            const result = await updateCanister(
+                'node_provider_register',
+                [publicKeyBytes, signatureBytes],
+                identity
+            );
+
+            return processCanisterResult(
+                result,
+                'Registration successful',
+                'Registration failed'
+            );
+        } catch (error: unknown) {
+            return handleError(error, 'Error during provider registration');
+        }
+    } catch (error: unknown) {
+        return handleError(error, 'Error during provider registration');
     }
 }
 
