@@ -68,6 +68,43 @@ class LedgerDatabase extends Dexie {
                 this.setError(`Failed to ${operationName}: ${String(error)}`);
             }
 
+            // Check if this is a database schema error that could benefit from auto-healing
+            if (
+                typeof error === 'object' &&
+                error !== null &&
+                'name' in error &&
+                'message' in error &&
+                typeof error.name === 'string' &&
+                typeof error.message === 'string' &&
+                (
+                    (error.name === "DatabaseClosedError" &&
+                        error.message.includes('Not yet support for changing primary key')) ||
+                    (error.name === "VersionError" &&
+                        error.message.includes('Schema was extended')) ||
+                    (error.name === "InvalidStateError" &&
+                        error.message.includes('database schema'))
+                ) &&
+                !this.autoHealAttempted
+            ) {
+                console.warn(`Detected database schema issue during ${operationName}. Attempting auto-heal...`);
+
+                // Mark that we've attempted auto-heal to prevent infinite loops
+                this.autoHealAttempted = true;
+
+                // Perform auto-heal
+                await this.performAutoHeal();
+
+                console.warn('Auto-heal completed. Retrying operation...');
+
+                // Retry the operation after auto-heal
+                try {
+                    return await operation();
+                } catch (retryError) {
+                    console.error(`Error retrying ${operationName} after auto-heal:`, retryError);
+                    // Fall through to return default or rethrow
+                }
+            }
+
             // Return default value or rethrow based on whether defaultValue is provided
             if (arguments.length >= 3) {
                 return defaultValue as T;
