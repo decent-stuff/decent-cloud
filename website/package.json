@@ -1,6 +1,6 @@
 {
   "name": "decent-cloud-website",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 50200 -H 0.0.0.0",
@@ -15,7 +15,7 @@
     "@decent-stuff/dc-client": "file:../wasm/dist"
   },
   "dependencies": {
-    "@decent-stuff/dc-client": "^0.2.5",
+    "@decent-stuff/dc-client": "^0.2.6",
     "@dfinity/agent": "^2.3.0",
     "@dfinity/auth-client": "^2.3.0",
     "@dfinity/candid": "^2.3.0",
