@@ -195,7 +195,13 @@ function extractDashboardData(
 }
 
 export default function DashboardPage() {
-  const { isAuthenticated, identity, principal, logout } = useAuth();
+  const {
+    isAuthenticated,
+    currentIdentity,
+    identities,
+    switchIdentity,
+    logout,
+  } = useAuth();
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     dctPrice: 0,
     providerCount: 0,
@@ -226,8 +232,11 @@ export default function DashboardPage() {
         ]);
 
         let userBalances;
-        if (isAuthenticated && identity && principal) {
-          userBalances = await fetchUserBalances(identity, principal);
+        if (isAuthenticated && currentIdentity) {
+          userBalances = await fetchUserBalances(
+            currentIdentity.identity,
+            currentIdentity.principal
+          );
         }
 
         if (mounted) {
@@ -264,7 +273,7 @@ export default function DashboardPage() {
       mounted = false;
       clearInterval(intervalId);
     };
-  }, [isAuthenticated, identity, principal]);
+  }, [isAuthenticated, currentIdentity]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -281,9 +290,8 @@ export default function DashboardPage() {
 
       {/* Action Buttons - Moved to separate section to avoid header overlap */}
       <div className="flex flex-col sm:flex-row justify-end gap-3 mb-8">
-        {isAuthenticated ? (
+        <Link href={`/login?returnUrl=${encodeURIComponent("/dashboard")}`}>
           <Button
-            onClick={() => logout()}
             variant="outline"
             className="bg-white/10 text-white hover:bg-white/20 flex items-center gap-2"
           >
@@ -298,14 +306,16 @@ export default function DashboardPage() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
               />
             </svg>
-            Sign Out
+            {isAuthenticated ? "Add Identity" : "Sign In"}
           </Button>
-        ) : (
-          <Link href={`/login?returnUrl=${encodeURIComponent("/dashboard")}`}>
+        </Link>
+        {isAuthenticated && (
+          <>
             <Button
+              onClick={() => logout()}
               variant="outline"
               className="bg-white/10 text-white hover:bg-white/20 flex items-center gap-2"
             >
@@ -320,66 +330,119 @@ export default function DashboardPage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                 />
               </svg>
-              Sign In
+              Sign Out
             </Button>
-          </Link>
+          </>
         )}
       </div>
 
-      {/* Principal ID display (only when authenticated) */}
-      {isAuthenticated && principal && (
+      {/* Identity List (only when authenticated) */}
+      {isAuthenticated && identities.length > 0 && (
         <motion.div
           className="mb-8 bg-gradient-to-r from-gray-800/50 to-gray-700/50 rounded-xl p-4 border border-white/10 shadow-lg"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <h3 className="text-white/80 text-sm font-medium mb-1">
-                Your Principal ID
-              </h3>
-              <div className="flex items-center gap-2">
-                <span className="text-sm bg-white/10 px-3 py-1.5 rounded-lg font-mono text-white/90 overflow-x-auto max-w-full">
-                  {principal.toString()}
-                </span>
-                <button
-                  onClick={() => {
-                    navigator.clipboard
-                      .writeText(principal.toString())
-                      .then(() => {
-                        console.log("Principal ID copied to clipboard");
-                      })
-                      .catch((err) => {
-                        console.error("Failed to copy principal ID:", err);
-                      });
-                  }}
-                  className="bg-white/10 hover:bg-white/20 text-white/80 hover:text-white p-1.5 rounded-lg transition-colors"
-                  title="Copy Principal ID"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+          <div className="flex flex-col gap-4">
+            <h3 className="text-white/80 text-sm font-medium">
+              Your Identities
+            </h3>
+            <div className="grid gap-3">
+              {identities.map((identity) => {
+                const isCurrent =
+                  currentIdentity?.principal.toString() ===
+                  identity.principal.toString();
+                return (
+                  <div
+                    key={identity.principal.toString()}
+                    className={`w-full text-left p-3 rounded-lg transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      isCurrent
+                        ? "bg-white/20 border-2 border-white/30"
+                        : "bg-white/10 hover:bg-white/15 border border-white/10"
+                    }`}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="text-white/60 text-xs max-w-md">
-              Your unique identifier on the Internet Computer. This is used to
-              identify your account and assets.
+                    <button
+                      onClick={() => switchIdentity(identity.principal)}
+                      className="flex items-center gap-3 flex-1 text-left"
+                    >
+                      <div
+                        className={`text-lg ${
+                          isCurrent ? "text-white" : "text-white/70"
+                        }`}
+                      >
+                        {identity.type === "ii"
+                          ? "🔑"
+                          : identity.type === "nfid"
+                          ? "🎮"
+                          : "🌱"}
+                      </div>
+                      <div>
+                        <div
+                          className={`font-medium ${
+                            isCurrent ? "text-white" : "text-white/90"
+                          }`}
+                        >
+                          {identity.type === "ii"
+                            ? "Internet Identity"
+                            : identity.type === "nfid"
+                            ? "NFID"
+                            : "Seed Phrase"}
+                        </div>
+                        <div className="text-sm font-mono text-white/60">
+                          {identity.principal.toString()}
+                        </div>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      {isCurrent && (
+                        <span className="text-xs bg-white/20 px-2 py-1 rounded-full text-white/90">
+                          Current
+                        </span>
+                      )}
+                      <button
+                        onClick={() => {
+                          navigator.clipboard
+                            .writeText(identity.principal.toString())
+                            .then(() => {
+                              console.log("Principal ID copied to clipboard");
+                            })
+                            .catch((err) => {
+                              console.error(
+                                "Failed to copy principal ID:",
+                                err
+                              );
+                            });
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          isCurrent
+                            ? "text-white/80 hover:text-white bg-white/20 hover:bg-white/30"
+                            : "text-white/60 hover:text-white/80 bg-white/10 hover:bg-white/20"
+                        }`}
+                        title="Copy Principal ID"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </motion.div>
@@ -571,7 +634,7 @@ export default function DashboardPage() {
             setSendFundsDialogOpen(false);
           }}
           onSend={async (destinationAddress, amount) => {
-            if (!identity || !principal || !selectedToken) return;
+            if (!currentIdentity) return;
 
             // Determine token type
             const tokenType =
@@ -588,8 +651,8 @@ export default function DashboardPage() {
               destinationAddress,
               amount,
               tokenType: tokenType as "ICP" | "USDT" | "USDC" | "DCT",
-              identity,
-              principal,
+              identity: currentIdentity.identity,
+              principal: currentIdentity.principal,
             });
 
             // Show status message

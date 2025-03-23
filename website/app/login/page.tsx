@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AuthDialog } from "@/components/auth-dialog";
-import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const { isAuthenticated } = useAuth();
   const [returnUrl, setReturnUrl] = useState<string>("/dashboard");
 
   useEffect(() => {
@@ -17,12 +14,7 @@ export default function LoginPage() {
     if (returnParam) {
       setReturnUrl(decodeURIComponent(returnParam));
     }
-
-    // If user is already authenticated, redirect to the return URL
-    if (isAuthenticated) {
-      router.push(returnUrl);
-    }
-  }, [isAuthenticated, router, searchParams, returnUrl]);
+  }, [searchParams, returnUrl]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-900 to-gray-800">

@@ -8,10 +8,17 @@ import { Ed25519KeyIdentity } from "@dfinity/identity";
 import { generateMnemonic, mnemonicToSeedSync } from "bip39";
 import { createHmac } from "crypto";
 
+interface IdentityInfo {
+  identity: Identity;
+  principal: Principal;
+  type: 'ii' | 'nfid' | 'seedPhrase';
+  name?: string;
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
-  identity: Identity | null;
-  principal: Principal | null;
+  currentIdentity: IdentityInfo | null;
+  identities: IdentityInfo[];
   loginWithII: (returnUrl?: string) => Promise<void>;
   loginWithNFID: () => Promise<void>;
   loginWithSeedPhrase: (
@@ -19,57 +26,82 @@ interface AuthContextType {
     returnUrl?: string
   ) => Promise<void>;
   logout: () => Promise<void>;
+  switchIdentity: (principal: Principal) => void;
   showSeedPhrase: boolean;
   setShowSeedPhrase: (show: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
-  identity: null,
-  principal: null,
+  currentIdentity: null,
+  identities: [],
   loginWithII: async () => {},
   loginWithNFID: async () => {},
   loginWithSeedPhrase: async () => {},
   logout: async () => {},
+  switchIdentity: () => {},
   showSeedPhrase: false,
   setShowSeedPhrase: () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authClient, setAuthClient] = useState<AuthClient | null>(null);
-  const [identity, setIdentity] = useState<Identity | null>(null);
-  const [principal, setPrincipal] = useState<Principal | null>(null);
+  const [identities, setIdentities] = useState<IdentityInfo[]>([]);
+  const [currentIdentity, setCurrentIdentity] = useState<IdentityInfo | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showSeedPhrase, setShowSeedPhrase] = useState(false);
 
+  const addIdentity = (identity: Identity, type: IdentityInfo['type']) => {
+    const principal = identity.getPrincipal();
+    const newIdentity: IdentityInfo = {
+      identity,
+      principal,
+      type,
+    };
+
+    setIdentities(prev => {
+      const existing = prev.find(i => i.principal.toString() === principal.toString());
+      if (existing) {
+        // If the identity already exists, update its type if different
+        if (existing.type !== type) {
+          return prev.map(i => 
+            i.principal.toString() === principal.toString()
+              ? { ...i, type }
+              : i
+          );
+        }
+        return prev;
+      }
+      return [...prev, newIdentity];
+    });
+
+    if (!currentIdentity) {
+      setCurrentIdentity(newIdentity);
+      setIsAuthenticated(true);
+    }
+  };
+
   useEffect(() => {
     // Check if there's a seed phrase in localStorage
-    const storedSeedPhrase = localStorage.getItem("seed_phrase");
+    const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
 
-    if (storedSeedPhrase) {
+    for (const seedPhrase of storedSeedPhrases) {
       try {
-        // If there's a seed phrase, use it to authenticate
-        const identity = identityFromSeed(storedSeedPhrase);
-        setIdentity(identity);
-        setPrincipal(identity.getPrincipal());
-        setIsAuthenticated(true);
-        return;
+        const identity = identityFromSeed(seedPhrase);
+        addIdentity(identity, 'seedPhrase');
       } catch (error) {
         console.error("Failed to authenticate with stored seed phrase:", error);
-        localStorage.removeItem("seed_phrase");
       }
     }
 
-    // If no seed phrase or it failed, try with AuthClient
+    // Try with AuthClient
     void AuthClient.create().then(async (client) => {
       setAuthClient(client);
       const isAuthenticated = await client.isAuthenticated();
       if (isAuthenticated) {
         const identity = client.getIdentity();
-        setIdentity(identity);
-        setPrincipal(identity.getPrincipal());
+        addIdentity(identity, 'ii');
       }
-      setIsAuthenticated(isAuthenticated);
     });
   }, []);
 
@@ -80,9 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       identityProvider: "https://identity.ic0.app",
       onSuccess: () => {
         const identity = authClient.getIdentity();
-        setIdentity(identity);
-        setPrincipal(identity.getPrincipal());
-        setIsAuthenticated(true);
+        addIdentity(identity, 'ii');
         window.location.href = returnUrl;
       },
     });
@@ -95,9 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       identityProvider: "https://nfid.one",
       onSuccess: () => {
         const identity = authClient.getIdentity();
-        setIdentity(identity);
-        setPrincipal(identity.getPrincipal());
-        setIsAuthenticated(true);
+        addIdentity(identity, 'nfid');
         window.location.href = "/dashboard";
       },
     });
@@ -111,24 +139,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let seedPhrase: string;
 
       if (existingSeedPhrase) {
-        // Use existing seed phrase
         seedPhrase = existingSeedPhrase;
       } else {
-        // Generate new seed phrase
         seedPhrase = generateNewSeedPhrase();
-        // Store the new seed phrase securely
       }
-      localStorage.setItem("seed_phrase", seedPhrase);
+
+      // Store all seed phrases
+      const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
+      if (!storedSeedPhrases.includes(seedPhrase)) {
+        storedSeedPhrases.push(seedPhrase);
+        localStorage.setItem("seed_phrases", JSON.stringify(storedSeedPhrases));
+      }
+
       setShowSeedPhrase(true);
 
       const identity = identityFromSeed(seedPhrase);
-      setIdentity(identity);
-      setPrincipal(identity.getPrincipal());
-      setIsAuthenticated(true);
+      addIdentity(identity, 'seedPhrase');
       window.location.href = returnUrl;
     } catch (error) {
       console.error("Failed to login with seed phrase:", error);
-      throw error; // Re-throw to handle in UI
+      throw error;
+    }
+  };
+
+  const switchIdentity = (principal: Principal) => {
+    const identity = identities.find(i => i.principal.toString() === principal.toString());
+    if (identity) {
+      setCurrentIdentity(identity);
+      if (identity.type === 'ii' || identity.type === 'nfid') {
+        // When switching to an II or NFID identity, we need to create a new AuthClient
+        // with that identity's chain
+        void AuthClient.create().then(async (client) => {
+          setAuthClient(client);
+        });
+      }
     }
   };
 
@@ -138,21 +182,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setIsAuthenticated(false);
-    setIdentity(null);
-    setPrincipal(null);
-    localStorage.removeItem("seed_phrase");
+    setIdentities([]);
+    setCurrentIdentity(null);
+    localStorage.removeItem("seed_phrases");
   };
 
   return (
     <AuthContext.Provider
       value={{
         isAuthenticated,
-        identity,
-        principal,
+        currentIdentity,
+        identities,
         loginWithII,
         loginWithNFID,
         loginWithSeedPhrase,
         logout,
+        switchIdentity,
         showSeedPhrase,
         setShowSeedPhrase,
       }}
