@@ -65,15 +65,13 @@ function getNewerRustFiles(target, dir) {
 }
 
 /**
- * Retrieves the latest commit time (in ms) for any Rust file in the repository.
- * First, checks for uncommitted changes via `git status --porcelain`. If any Rust file
- * is modified, returns the current time; otherwise, uses git log.
+ * Retrieves the latest change time (in ms) for any dirty Rust file in the repository.
  *
  * @returns {number} Timestamp in milliseconds.
  */
 function getNewestGitRustFile() {
   try {
-    // Check for uncommitted changes for .rs files from the git repository root.
+    // Check for dirty changes for .rs files from the git repository root.
     const gitRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
     const status = execSync(`git -C ${gitRoot} status --porcelain`, { encoding: 'utf8' });
 
@@ -91,7 +89,7 @@ function getNewestGitRustFile() {
       });
     return newest;
   } catch (err) {
-    console.warn('Could not get latest rust commit time:', err);
+    console.warn('Could not get latest rust change time:', err);
     return 0;
   }
 }
@@ -113,16 +111,16 @@ async function main() {
       const fsCheck = newerRustFiles.length > 0;
       console.log(`Found ${newerRustFiles.length} newly modified Rust files:`, newerRustFiles);
 
-      // Use Git commit timestamps.
+      // Use Git change timestamps.
       const wasmTargetMtime = fs.statSync(wasmTarget).mtimeMs;
       const gitLatestTime = getNewestGitRustFile();
       if (gitLatestTime > wasmTargetMtime) {
         console.log(
-          `Git commit time: ${new Date(gitLatestTime).toISOString()} is newer than wasmTargetMtime: ${new Date(wasmTargetMtime).toISOString()}`
+          `Git change time: ${new Date(gitLatestTime).toISOString()} is newer than wasmTargetMtime: ${new Date(wasmTargetMtime).toISOString()}`
         );
       } else {
         console.log(
-          `Git commit time: ${new Date(gitLatestTime).toISOString()} is older than wasmTargetMtime: ${new Date(wasmTargetMtime).toISOString()}`
+          `No git changes of Rust files since wasmTargetMtime: ${new Date(wasmTargetMtime).toISOString()}`
         );
       }
 
