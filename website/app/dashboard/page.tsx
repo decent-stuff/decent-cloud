@@ -10,6 +10,7 @@ import { sendFunds, getTopUpUrl } from "@/lib/token-transfer";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SendFundsDialog } from "@/components/send-funds-dialog";
+import { Principal } from "@dfinity/principal";
 
 interface DashboardData {
   dctPrice: number;
@@ -200,7 +201,7 @@ export default function DashboardPage() {
     currentIdentity,
     identities,
     switchIdentity,
-    logout,
+    signOutIdentity,
   } = useAuth();
 
   const [dashboardData, setDashboardData] = useState<DashboardData>({
@@ -221,6 +222,12 @@ export default function DashboardPage() {
   } | null>(null);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [identityToSignOut, setIdentityToSignOut] = useState<Principal | null>(
+    null
+  );
+
+  // Dialog state for sign out confirmation
+  const [showSignOutDialog, setShowSignOutDialog] = useState(false);
 
   // Fetch dashboard data
   useEffect(() => {
@@ -315,10 +322,10 @@ export default function DashboardPage() {
             {isAuthenticated ? "Add Identity" : "Sign In"}
           </Button>
         </Link>
-        {isAuthenticated && (
+        {isAuthenticated && currentIdentity && (
           <>
             <Button
-              onClick={() => logout()}
+              onClick={() => signOutIdentity(currentIdentity.principal)}
               variant="outline"
               className="bg-white/10 text-white hover:bg-white/20 flex items-center gap-2"
             >
@@ -422,44 +429,22 @@ export default function DashboardPage() {
                               );
                             });
                         }}
-                        className={`p-1.5 rounded-lg transition-colors ${
-                          isCurrent
-                            ? "text-white/80 hover:text-white bg-white/20 hover:bg-white/30"
-                            : "text-white/60 hover:text-white/80 bg-white/10 hover:bg-white/20"
-                        }`}
+                        className="text-white/60 hover:text-white/90 transition-colors"
                         title="Copy Principal ID"
                       >
-                        {copiedId === identity.principal.toString() ? (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-                            />
-                          </svg>
-                        )}
+                        {copiedId === identity.principal.toString()
+                          ? "✓"
+                          : "📋"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIdentityToSignOut(identity.principal);
+                          setShowSignOutDialog(true);
+                        }}
+                        className="text-white/60 hover:text-red-400 transition-colors"
+                        title="Sign Out"
+                      >
+                        ⏻
                       </button>
                     </div>
                   </div>
@@ -468,6 +453,44 @@ export default function DashboardPage() {
             </div>
           </div>
         </motion.div>
+      )}
+
+      {/* Sign Out Confirmation Dialog */}
+      {showSignOutDialog && identityToSignOut && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full border border-white/10">
+            <h3 className="text-xl font-medium text-white mb-4">
+              Confirm Sign Out
+            </h3>
+            <p className="text-white/80 mb-6">
+              Are you sure you want to sign out this identity? You'll need to
+              sign in again to use it.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowSignOutDialog(false);
+                  setIdentityToSignOut(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (identityToSignOut) {
+                    signOutIdentity(identityToSignOut);
+                    setShowSignOutDialog(false);
+                    setIdentityToSignOut(null);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg bg-red-500/80 hover:bg-red-500 text-white transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Network Stats Section */}
