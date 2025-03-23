@@ -1,13 +1,13 @@
 "use client";
 
-import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 
 interface SendFundsDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSend: (destinationAddress: string, amount: string) => void;
+  onSend: (recipient: string, amount: string) => void;
   tokenName: string;
   maxAmount?: number;
 }
@@ -19,14 +19,14 @@ export function SendFundsDialog({
   tokenName,
   maxAmount,
 }: SendFundsDialogProps) {
-  const [destinationAddress, setDestinationAddress] = useState("");
+  const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const handleSend = () => {
     // Basic validation
-    if (!destinationAddress.trim()) {
-      setError("Destination address is required");
+    if (!recipient.trim()) {
+      setError("Recipient is required");
       return;
     }
 
@@ -48,10 +48,10 @@ export function SendFundsDialog({
 
     // Clear error and call onSend
     setError(null);
-    onSend(destinationAddress, amount);
+    onSend(recipient, amount);
 
     // Reset form
-    setDestinationAddress("");
+    setRecipient("");
     setAmount("");
     onClose();
   };
@@ -68,17 +68,17 @@ export function SendFundsDialog({
           <div className="space-y-4">
             <div>
               <label
-                htmlFor="destination"
+                htmlFor="recipient"
                 className="block text-sm font-medium text-white/80 mb-1"
               >
-                Destination Address
+                Recipient
               </label>
               <input
-                id="destination"
+                id="recipient"
                 type="text"
-                value={destinationAddress}
-                onChange={(e) => setDestinationAddress(e.target.value)}
-                placeholder="Enter destination address"
+                value={recipient}
+                onChange={(e) => setRecipient(e.target.value)}
+                placeholder="Enter recipient address"
                 className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded-md text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -125,17 +125,17 @@ export function SendFundsDialog({
               </div>
             )}
 
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="mt-6 flex justify-end space-x-4">
               <Button
-                onClick={onClose}
                 variant="outline"
-                className="bg-transparent border-white/20 text-white hover:bg-white/10"
+                onClick={onClose}
+                className="bg-transparent hover:bg-gray-800"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleSend}
-                className="bg-gradient-to-r from-blue-600 to-blue-400 text-white hover:from-blue-700 hover:to-blue-500"
+                className="bg-blue-500 hover:bg-blue-600"
               >
                 Send
               </Button>

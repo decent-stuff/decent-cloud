@@ -6,7 +6,7 @@ import HeaderSection from "@/components/ui/header";
 import { motion } from "framer-motion";
 import { fetchMetadata } from "@/lib/icp-utils";
 import { fetchUserBalances, fetchDctPrice } from "@/lib/token-utils";
-import { sendFunds, getTopUpUrl } from "@/lib/token-transfer";
+import { sendFunds, getTopUpUrl } from "@/lib/send-funds-utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SendFundsDialog } from "@/components/send-funds-dialog";
@@ -678,7 +678,7 @@ export default function DashboardPage() {
           onClose={() => {
             setSendFundsDialogOpen(false);
           }}
-          onSend={async (destinationAddress, amount) => {
+          onSend={async (recipient, amount) => {
             if (!currentIdentity) return;
 
             // Determine token type
@@ -693,7 +693,7 @@ export default function DashboardPage() {
 
             // Call the stub function
             const result = await sendFunds({
-              destinationAddress,
+              recipient: recipient,
               amount,
               tokenType: tokenType as "ICP" | "USDT" | "USDC" | "DCT",
               identity: currentIdentity.identity,
@@ -702,9 +702,9 @@ export default function DashboardPage() {
 
             // Show status message
             if (result.success) {
-              alert(`Success: ${result.message}`);
+              alert(`✅ Success: ${result.message}`);
             } else {
-              alert(`Error: ${result.message}`);
+              alert(`❌ Error: ${result.message}`);
             }
           }}
           tokenName={selectedToken.name}

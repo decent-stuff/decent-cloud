@@ -10,6 +10,19 @@ const TOKEN_CANISTERS = {
     DCT: 'ggi4a-wyaaa-aaaai-actqq-cai'
 } as const;
 
+export function getTokenCanisterId(tokenType: 'ICP' | 'USDT' | 'USDC' | 'DCT'): Principal {
+    switch (tokenType) {
+        case 'ICP':
+            return Principal.fromText(TOKEN_CANISTERS.ICP);
+        case 'USDT':
+            return Principal.fromText(TOKEN_CANISTERS.USDT);
+        case 'USDC':
+            return Principal.fromText(TOKEN_CANISTERS.USDC);
+        case 'DCT':
+            return Principal.fromText(TOKEN_CANISTERS.DCT);
+    }
+}
+
 const tokenDecimals: { [canisterId: string]: number } = {};
 
 // Create the Candid IDL factory for ICRC-1
@@ -55,19 +68,12 @@ const fromDecimals = (amount: bigint | number, decimals: number): number => {
 // Fetch balance for a specific token
 const fetchTokenBalance = async (
     canisterId: string,
-    tokenName: string,
     identity: Identity,
     principal: Principal
 ): Promise<number> => {
     try {
         const actor = await createTokenActor(canisterId, identity);
-
-        let numDecimals = tokenDecimals[canisterId];
-        if (numDecimals === undefined) {
-            numDecimals = (await actor.icrc1_decimals()) as number;
-            tokenDecimals[canisterId] = numDecimals;
-        }
-
+        const numDecimals = await fetchTokenDecimals(canisterId, identity);
         const balance = await actor.icrc1_balance_of({
             owner: principal,
             subaccount: []
@@ -83,6 +89,23 @@ const fetchTokenBalance = async (
     }
 };
 
+// Fetch number of decimals for a specific token
+export async function fetchTokenDecimals(canisterId: string, identity: Identity): Promise<number> {
+    try {
+        const actor = await createTokenActor(canisterId, identity);
+
+        let numDecimals = tokenDecimals[canisterId];
+        if (numDecimals === undefined) {
+            numDecimals = (await actor.icrc1_decimals()) as number;
+            tokenDecimals[canisterId] = numDecimals;
+        }
+        return numDecimals || 8;
+    } catch (error) {
+        console.error(`Error fetching decimals for canister ${canisterId}:`, error);
+        return 8;
+    }
+};
+
 // Fetch all token balances for a user
 export const fetchUserBalances = async (
     identity: Identity,
@@ -94,10 +117,10 @@ export const fetchUserBalances = async (
     dct: number;
 }> => {
     const [icp, ckUsdt, ckUsdc, dct] = await Promise.all([
-        fetchTokenBalance(TOKEN_CANISTERS.ICP, "ICP", identity, principal),
-        fetchTokenBalance(TOKEN_CANISTERS.USDT, "USDT", identity, principal),
-        fetchTokenBalance(TOKEN_CANISTERS.USDC, "USDC", identity, principal),
-        fetchTokenBalance(TOKEN_CANISTERS.DCT, "DCT", identity, principal)
+        fetchTokenBalance(TOKEN_CANISTERS.ICP, identity, principal),
+        fetchTokenBalance(TOKEN_CANISTERS.USDT, identity, principal),
+        fetchTokenBalance(TOKEN_CANISTERS.USDC, identity, principal),
+        fetchTokenBalance(TOKEN_CANISTERS.DCT, identity, principal)
     ]);
 
     return {

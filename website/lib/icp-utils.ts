@@ -1,5 +1,6 @@
 import { HttpAgent, Actor, Identity } from '@dfinity/agent';
 import { idlFactory as metadataIdl } from './metadata.js';
+import { Principal } from '@dfinity/principal';
 
 const defaultConfig = {
   networkUrl: 'https://icp-api.io',
@@ -8,6 +9,7 @@ const defaultConfig = {
 
 // Singleton agent instance
 let agent: HttpAgent | null = null;
+let currentIdentity: Identity | null = null;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000; // 3 seconds
@@ -15,7 +17,7 @@ const RETRY_DELAY = 3000; // 3 seconds
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export function getAgent(identity?: Identity | null): HttpAgent {
-  if (!agent) {
+  if (!agent || currentIdentity !== identity) {
     try {
       if (identity) {
         agent = HttpAgent.createSync({
@@ -24,6 +26,7 @@ export function getAgent(identity?: Identity | null): HttpAgent {
           identity: identity,
         });
         console.log('Agent created with identity:', identity.getPrincipal().toString());
+        currentIdentity = identity;
       } else {
         agent = HttpAgent.createSync({
           host: defaultConfig.networkUrl,
@@ -68,7 +71,7 @@ export async function fetchMetadata() {
 }
 
 interface CanisterCallOptions {
-  canisterId?: string;
+  canisterId?: Principal;
 }
 
 /**
