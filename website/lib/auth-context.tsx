@@ -144,11 +144,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithII = async (returnUrl = "/dashboard") => {
     if (!authClient) return;
 
+    // Define session duration (up to 30 days maximum)
+    const days = BigInt(1);
+    const hours = BigInt(24);
+    const nanoseconds = BigInt(3600000000000);
+    const maxTimeToLive = days * hours * nanoseconds;
+
     await authClient.login({
+      maxTimeToLive: maxTimeToLive,
       identityProvider: "https://identity.ic0.app",
       onSuccess: () => {
         const identity = authClient.getIdentity();
-        addIdentity(identity, 'ii');
+        addIdentity(identity, "ii");
         window.location.href = returnUrl;
       },
     });
