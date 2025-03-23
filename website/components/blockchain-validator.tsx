@@ -53,7 +53,8 @@ export function BlockchainValidator({
   showHeader = true,
   renderAsCard = true,
 }: BlockchainValidatorProps) {
-  const { isAuthenticated, principal } = useAuth();
+  const { isAuthenticated, currentIdentity } = useAuth();
+  const principal = currentIdentity?.principal;
   const [memo, setMemo] = useState<string>(defaultMemo);
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [isRegistering, setIsRegistering] = useState<boolean>(false);

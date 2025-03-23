@@ -7,7 +7,8 @@ import Link from "next/link";
 import { AuthDialog } from "./auth-dialog";
 
 export function AuthButtons() {
-  const { isAuthenticated, principal } = useAuth();
+  const { isAuthenticated, currentIdentity } = useAuth();
+  const principal = currentIdentity?.principal;
 
   if (isAuthenticated && principal) {
     return (

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthDialog } from "@/components/auth-dialog";
 
-export default function LoginPage() {
+function LoginContent() {
   const searchParams = useSearchParams();
   const [returnUrl, setReturnUrl] = useState<string>("/dashboard");
 
@@ -17,12 +17,20 @@ export default function LoginPage() {
   }, [searchParams, returnUrl]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-900 to-gray-800">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-xl shadow-2xl">
-        <div className="mt-8 flex justify-center">
-          <AuthDialog autoOpen={true} returnUrl={returnUrl} />
-        </div>
+    <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-xl shadow-2xl">
+      <div className="mt-8 flex justify-center">
+        <AuthDialog autoOpen={true} returnUrl={returnUrl} />
       </div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-900 to-gray-800">
+      <Suspense fallback={<div>Loading...</div>}>
+        <LoginContent />
+      </Suspense>
     </div>
   );
 }
