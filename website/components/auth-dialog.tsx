@@ -3,11 +3,21 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { SeedPhraseDialog } from "./seed-phrase-dialog";
 
-export function AuthDialog() {
-  const [isOpen, setIsOpen] = useState(false);
+interface AuthDialogProps {
+  autoOpen?: boolean;
+  returnUrl?: string;
+}
+
+export function AuthDialog({
+  autoOpen = false,
+  returnUrl = "/dashboard",
+}: AuthDialogProps) {
+  const [isOpen, setIsOpen] = useState(autoOpen);
+  const router = useRouter();
   const {
     loginWithII,
     loginWithSeedPhrase,
@@ -17,7 +27,7 @@ export function AuthDialog() {
 
   const handleInternetIdentity = async () => {
     setIsOpen(false);
-    await loginWithII();
+    await loginWithII(returnUrl);
   };
 
   const handleSeedPhrase = () => {
@@ -27,8 +37,7 @@ export function AuthDialog() {
 
   const handleSeedPhraseSubmit = async (phrase: string) => {
     try {
-      await loginWithSeedPhrase(phrase);
-      window.location.href = "/dashboard";
+      await loginWithSeedPhrase(phrase, returnUrl);
     } catch (error) {
       console.error("Login failed:", error);
       setShowSeedPhrase(true);
@@ -39,14 +48,27 @@ export function AuthDialog() {
     setShowSeedPhrase(false);
   };
 
+  // Handle dialog open state changes
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+
+    // If dialog is being closed and we're in autoOpen mode (on the login page),
+    // redirect to home page instead of showing an empty container
+    if (!open && autoOpen) {
+      router.back();
+    }
+  };
+
   return (
     <>
-      <Dialog.Root open={isOpen} onOpenChange={setIsOpen}>
-        <Dialog.Trigger asChild>
-          <Button className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-400 text-white font-medium hover:from-emerald-700 hover:to-emerald-500 transition-all duration-200 shadow-md hover:shadow-lg">
-            Register/Sign In
-          </Button>
-        </Dialog.Trigger>
+      <Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
+        {!autoOpen && (
+          <Dialog.Trigger asChild>
+            <Button className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-400 text-white font-medium hover:from-emerald-700 hover:to-emerald-500 transition-all duration-200 shadow-md hover:shadow-lg">
+              Register/Sign In
+            </Button>
+          </Dialog.Trigger>
+        )}
 
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" />

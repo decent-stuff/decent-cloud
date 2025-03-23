@@ -272,26 +272,16 @@ export default function DashboardPage() {
         <HeaderSection
           title="Dashboard"
           subtitle={
-            isAuthenticated ? (
-              "Your personal Decent Cloud dashboard!"
-            ) : (
-              <>
-                <Link
-                  href="/"
-                  className="text-blue-500 hover:text-blue-600 transition-colors"
-                >
-                  Sign in
-                </Link>{" "}
-                to see your personal dashboard data.
-              </>
-            )
+            isAuthenticated
+              ? "Your personal Decent Cloud dashboard!"
+              : "Please sign in to see your personal dashboard."
           }
         />
       </div>
 
       {/* Action Buttons - Moved to separate section to avoid header overlap */}
       <div className="flex flex-col sm:flex-row justify-end gap-3 mb-8">
-        {isAuthenticated && (
+        {isAuthenticated ? (
           <Button
             onClick={() => logout()}
             variant="outline"
@@ -313,6 +303,29 @@ export default function DashboardPage() {
             </svg>
             Sign Out
           </Button>
+        ) : (
+          <Link href={`/login?returnUrl=${encodeURIComponent("/dashboard")}`}>
+            <Button
+              variant="outline"
+              className="bg-white/10 text-white hover:bg-white/20 flex items-center gap-2"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                />
+              </svg>
+              Sign In
+            </Button>
+          </Link>
         )}
       </div>
 

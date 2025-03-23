@@ -12,9 +12,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   identity: Identity | null;
   principal: Principal | null;
-  loginWithII: () => Promise<void>;
+  loginWithII: (returnUrl?: string) => Promise<void>;
   loginWithNFID: () => Promise<void>;
-  loginWithSeedPhrase: (seedPhrase?: string) => Promise<void>;
+  loginWithSeedPhrase: (
+    seedPhrase?: string,
+    returnUrl?: string
+  ) => Promise<void>;
   logout: () => Promise<void>;
   showSeedPhrase: boolean;
   setShowSeedPhrase: (show: boolean) => void;
@@ -70,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const loginWithII = async () => {
+  const loginWithII = async (returnUrl = "/dashboard") => {
     if (!authClient) return;
 
     await authClient.login({
@@ -80,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIdentity(identity);
         setPrincipal(identity.getPrincipal());
         setIsAuthenticated(true);
-        window.location.href = "/dashboard";
+        window.location.href = returnUrl;
       },
     });
   };
@@ -100,7 +103,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const loginWithSeedPhrase = async (existingSeedPhrase?: string) => {
+  const loginWithSeedPhrase = async (
+    existingSeedPhrase?: string,
+    returnUrl = "/dashboard"
+  ) => {
     try {
       let seedPhrase: string;
 
@@ -119,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIdentity(identity);
       setPrincipal(identity.getPrincipal());
       setIsAuthenticated(true);
-      window.location.href = "/dashboard";
+      window.location.href = returnUrl;
     } catch (error) {
       console.error("Failed to login with seed phrase:", error);
       throw error; // Re-throw to handle in UI
@@ -135,9 +141,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIdentity(null);
     setPrincipal(null);
     localStorage.removeItem("seed_phrase");
-
-    // Redirect to home page after logout
-    window.location.href = "/";
   };
 
   return (
