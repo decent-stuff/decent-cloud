@@ -76,7 +76,6 @@ const fetchTokenBalance = async (
         // Convert balance to number before passing to fromE8s
         const balanceNum = typeof balance === 'bigint' ? balance : BigInt(String(balance));
         const tokenBalance = fromDecimals(balanceNum, numDecimals);
-        console.log(`Fetched ${tokenName} balance: ${tokenBalance} ${tokenName}`);
         return tokenBalance;
     } catch (error) {
         console.error(`Error fetching balance for canister ${canisterId}:`, error);

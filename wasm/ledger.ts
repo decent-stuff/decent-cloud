@@ -2,6 +2,26 @@ import { db, LedgerBlock, LedgerEntry } from './db';
 import { canisterQueryLedgerData } from './agent';
 import { parseLedgerBlocks } from './dc-client.js';
 
+// Types for ledger transaction entries
+interface Account {
+    owner: string;
+    subaccount: string | null;
+}
+
+interface TransactionV1 {
+    from: Account;
+    to: Account;
+    created_at_time: number;
+    memo: string;
+    amount: number;
+    balance_from_after: number;
+    balance_to_after: number;
+}
+
+interface LedgerTransactionEntry {
+    V1: TransactionV1;
+}
+
 class DecentCloudLedger {
     /**
      * Utility method to handle operations with consistent error handling
@@ -224,6 +244,59 @@ class DecentCloudLedger {
                 return entries.length > 0;
             },
             false
+        );
+    }
+
+    /**
+     * Get the balance of the specified account
+     * @param owner The owner of the account
+     * @param subaccount The subaccount of the account
+     * @returns {Promise<number>} The balance of the specified account
+     */
+    async getAccountBalance(owner: string | null, subaccount: string | null): Promise<number> {
+        return this.withErrorHandling(
+            "retrieving balance",
+            async () => {
+                if (!owner) return 0;
+                const entries: unknown[] = await db.getEntriesByLabel("DCTokenTransfer");
+                // Iterate in reverse order to find the latest balance
+                for (const rawEntry of entries.reverse()) {
+                    const entry = rawEntry as LedgerTransactionEntry;
+                    /* We are looking for balance_from_after or balance_to_after if the account is the "from" or "to"
+                    {
+                        "V1": {
+                            "from": {
+                                "owner": "yp4qz-xtz2x-66yql-yymle-guxye-matt3-os7u7-ctzvp-oig6d-feehe-6qe",
+                                "subaccount": null
+                            },
+                            "to": {
+                                "owner": "zjbo4-sknjf-hfisk-oi4",
+                                "subaccount": null
+                            },
+                            "fee": 500000000,
+                            "fees_accounts": [
+                                {
+                                    "owner": "zjbo4-sknjf-hfisk-oi4",
+                                    "subaccount": null
+                                }
+                            ],
+                            "created_at_time": 1742554245399975000,
+                            "memo": "check-in-yp4qz-287-Website Valid",
+                            "amount": 0,
+                            "balance_from_after": 158055499999997,
+                            "balance_to_after": 0
+                        }
+                    }
+                    */
+                    if (entry.V1.from.owner === owner && entry.V1.from.subaccount === subaccount) {
+                        return entry.V1.balance_from_after;
+                    } else if (entry.V1.to.owner === owner && entry.V1.to.subaccount === subaccount) {
+                        return entry.V1.balance_to_after;
+                    }
+                }
+                return 0;
+            },
+            0
         );
     }
 

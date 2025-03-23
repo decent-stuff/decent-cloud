@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import Navbar from "@/components/navbar";
 import HeroSection from "@/components/hero-section";
@@ -27,24 +27,22 @@ interface PageProps {
 
 export function Page({ dashboardData }: PageProps) {
   return (
-      <>
-        <div className="min-h-screen bg-animated text-white  px-6 sm:px-8 md:px-12 lg:px-22 xl:px-30">
-          <Navbar/>
-          <HeroSection/>
+    <>
+      <div className="min-h-screen bg-animated text-white  px-6 sm:px-8 md:px-12 lg:px-22 xl:px-30">
+        <Navbar />
+        <HeroSection />
 
-          <main className="container mx-auto py-10">
-            {dashboardData && (
-                  <DashboardSection dashboardData={dashboardData}/>
-            )}
+        <main className="container mx-auto py-10">
+          {dashboardData && <DashboardSection dashboardData={dashboardData} />}
 
-            <FeaturesSection/>
+          <FeaturesSection />
 
-            <InfoSection/>
+          <InfoSection />
 
-            <BenefitsSection/>
-          </main>
-        </div>
-        <Footer/>
-      </>
-  )
+          <BenefitsSection />
+        </main>
+      </div>
+      <Footer />
+    </>
+  );
 }

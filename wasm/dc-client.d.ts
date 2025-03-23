@@ -110,6 +110,14 @@ export class DecentCloudLedger {
     isProviderRegistered(principal: string): Promise<boolean>;
 
     /**
+     * Get the balance of the specified account
+     * @param owner The owner of the account
+     * @param subaccount The subaccount of the account
+     * @returns {Promise<number>} The balance of the specified account
+     */
+    getAccountBalance(owner: string | null, subaccount: string | null): Promise<number>;
+
+    /**
      * Retrieve entries for a specific block.
      * @param blockOffset The offset of the block to retrieve entries for.
      * @returns {Promise<LedgerEntry[]>} An array of ledger entries for the specified block.

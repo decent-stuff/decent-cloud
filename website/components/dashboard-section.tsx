@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import HeaderSection from "@/components/ui/header";
 import React from "react";
 import { useAuth } from "@/lib/auth-context";
+import { ledgerService } from "@/lib/ledger-service";
 
 interface DashboardData {
   dctPrice: number;
@@ -117,8 +118,28 @@ const DashboardSection: React.FC<DashboardSectionProps> = ({
 }) => {
   const { isAuthenticated, currentIdentity } = useAuth();
   const principal = currentIdentity?.principal;
+  const [dctBalance, setDctBalance] = React.useState<number | undefined>(
+    undefined
+  );
 
-  console.log("Refreshing Dashboard data:", dashboardData);
+  React.useEffect(() => {
+    const fetchBalance = async () => {
+      if (principal) {
+        try {
+          const balance = await ledgerService.getAccountBalance(
+            principal.toString(),
+            null
+          );
+          console.log("Fetched DCT balance from the local ledger:", balance);
+          setDctBalance(balance);
+        } catch (error) {
+          console.error("Failed to fetch DCT balance:", error);
+        }
+      }
+    };
+    void fetchBalance();
+  }, [principal]);
+
   return (
     <section id="dashboard">
       <HeaderSection
@@ -199,7 +220,11 @@ const DashboardSection: React.FC<DashboardSectionProps> = ({
                 {item.title}
               </div>
               <div className="text-blue-400 font-bold text-xl sm:text-2xl text-center mt-2">
-                {item.format(dashboardData[item.key])}
+                {item.format(
+                  item.key === "userDctBalance"
+                    ? dctBalance
+                    : dashboardData[item.key]
+                )}
               </div>
 
               {/* Tooltip */}

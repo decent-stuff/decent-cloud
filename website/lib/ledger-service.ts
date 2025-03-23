@@ -217,6 +217,15 @@ class LedgerService {
         );
     }
 
+    // Get the balance of a specific account
+    async getAccountBalance(owner: string | null, subaccount: string | null): Promise<number> {
+        return this.withErrorHandling(
+            'getting account balance',
+            async () => await decentCloudLedger.getAccountBalance(owner, subaccount),
+            0
+        );
+    }
+
     // Get all validator information
     async getValidators(): Promise<ValidatorInfo[]> {
         return this.withErrorHandling(

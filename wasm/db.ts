@@ -285,6 +285,19 @@ class LedgerDatabase extends Dexie {
     }
 
     /**
+     * Retrieve entries with a specific label.
+     * @param label The label of the entries to retrieve
+     * @returns {Promise<LedgerEntry[]>} An array of ledger entries with the specified label
+     */
+    async getEntriesByLabel(label: string): Promise<LedgerEntry[]> {
+        return this.withErrorHandling(
+            'get entries by label',
+            async () => await this.ledgerEntries.where('label').equals(label).toArray(),
+            []
+        );
+    }
+
+    /**
      * Get a specific ledger entry by key
      * @param key The key of the entry to get
      * @returns The ledger entry or undefined if not found
