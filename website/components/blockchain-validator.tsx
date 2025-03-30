@@ -259,9 +259,8 @@ export function BlockchainValidator({
                 Registration Required
               </div>
               <div className="mt-1">
-                Your current identity `{principal?.toText()}` is not yet
-                registered as a provider. It must be registered before you can
-                validate the blockchain.
+                Your current identity `{principal?.toText()}` may not be
+                registered as a provider. The validation may fail.
               </div>
             </div>
           )}
@@ -359,14 +358,14 @@ export function BlockchainValidator({
       )}
       <Button
         onClick={handleValidate}
-        disabled={isValidating || !blockHash || !isProviderRegistered}
+        disabled={isValidating || !blockHash}
         className={`w-full ${
           darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
         }`}
         title={
-          !isProviderRegistered
-            ? "You must register as a provider before validating"
-            : ""
+          isProviderRegistered
+            ? ""
+            : "You may not be registered as a provider yet, validation may fail."
         }
       >
         {isValidating ? "Validating..." : "Validate Blockchain"}

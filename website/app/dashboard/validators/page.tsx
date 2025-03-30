@@ -161,7 +161,7 @@ export default function ValidatorsPage() {
           </p>
 
           <BlockchainValidator
-            defaultMemo="Website Validation works!!1!"
+            defaultMemo="Validated from the website! 😎"
             darkMode={true}
             renderAsCard={false}
             onValidationComplete={handleValidationComplete}
