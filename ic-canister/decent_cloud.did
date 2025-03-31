@@ -429,8 +429,16 @@ service : {
     // FIXME
     // contract_extend
     // contract_cancel
+// User management operations
+user_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
 
-    // User management operations
+// Linked identity operations
+create_linked_record: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+add_secondary_identity: (primary_pubkey_bytes: vec nat8, secondary_pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+remove_secondary_identity: (primary_pubkey_bytes: vec nat8, secondary_pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+set_primary_identity: (old_primary_pubkey_bytes: vec nat8, new_primary_pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+list_linked_identities: (pubkey_bytes: vec nat8) -> (variant { Ok: vec vec nat8; Err: text }) query;
+authorize_operation: (primary_pubkey_bytes: vec nat8, signing_pubkey_bytes: vec nat8) -> (variant { Ok: bool; Err: text }) query;
     user_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
 
     // Check-in nonce that needs to be signed and sent for the check in
