@@ -288,6 +288,9 @@ class DecentCloudLedger {
                         }
                     }
                     */
+                    if (entry.V1 === undefined || entry.V1 === null) {
+                        continue;
+                    }
                     if (entry.V1.from.owner === owner && entry.V1.from.subaccount === subaccount) {
                         return entry.V1.balance_from_after;
                     } else if (entry.V1.to.owner === owner && entry.V1.to.subaccount === subaccount) {
