@@ -29,7 +29,13 @@ sudo apt update -y
 sudo apt install build-essential curl git
 ```
 
-2. **Node.js Setup**
+2. **Internet Computer SDK (dfx)**
+
+```bash
+sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+```
+
+3. **Node.js Setup**
    
 ```bash
 # Install NVM (Node Version Manager)
@@ -44,7 +50,7 @@ nvm use 22
 npm install --global jest rimraf
 ```
 
-3. **Rust Setup**
+4. **Rust Setup**
    
 Visit [rustup.rs](https://rustup.rs) or use:
 ```bash
@@ -55,13 +61,13 @@ source ~/.cargo/env
 curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 ```
 
-3. **Cargo Make**
+5. **Cargo Make**
 
 ```bash
 cargo install --force cargo-make
 ```
 
-4. **Python Environment**
+6. **Python Environment**
    Install `pixi` for Python dependency management:
 
 ```bash
