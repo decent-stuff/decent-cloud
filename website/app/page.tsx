@@ -3,9 +3,8 @@
 
 import { Page } from "@/components/app-page";
 import { fetchMetadata } from "../lib/icp-utils";
-import { fetchUserBalances, fetchDctPrice } from "../lib/token-utils";
+import { fetchDctPrice } from "../lib/token-utils";
 import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
 
 interface DashboardData {
   dctPrice: number;
@@ -14,10 +13,6 @@ interface DashboardData {
   blocksUntilHalving: number;
   validatorCount: number;
   blockReward: number;
-  userIcpBalance?: number;
-  userCkUsdcBalance?: number;
-  userCkUsdtBalance?: number;
-  userDctBalance?: number;
 }
 
 type MetadataValue =
@@ -28,18 +23,17 @@ type MetadataValue =
 
 type Metadata = Array<[string, MetadataValue]>;
 
-interface UserBalances {
-  icp: number;
-  ckUsdc: number;
-  ckUsdt: number;
-  dct: number;
-}
+function extractDashboardData(metadata: Metadata | null): DashboardData {
+  const defaultData: DashboardData = {
+    dctPrice: 0,
+    providerCount: 0,
+    totalBlocks: 0,
+    blocksUntilHalving: 0,
+    validatorCount: 0,
+    blockReward: 0,
+  };
 
-function extractDashboardData(
-  metadata: Metadata | null,
-  userBalances?: UserBalances
-): DashboardData | null {
-  if (!metadata) return null;
+  if (!metadata) return defaultData;
 
   const getValue = (key: string): string | number | null => {
     const entry = metadata.find(([k]) => k === key);
@@ -61,7 +55,7 @@ function extractDashboardData(
     return null;
   };
 
-  const data = {
+  return {
     dctPrice: (getValue("ledger:token_value_in_usd_e6") as number) || 0,
     providerCount: (getValue("ledger:total_providers") as number) || 0,
     totalBlocks: (getValue("ledger:num_blocks") as number) || 0,
@@ -71,28 +65,17 @@ function extractDashboardData(
       (getValue("ledger:current_block_validators") as number) || 0,
     blockReward: (getValue("ledger:current_block_rewards_e9s") as number) || 0,
   };
-
-  // Add user balances if available
-  if (userBalances) {
-    return {
-      ...data,
-      userIcpBalance: userBalances.icp,
-      userCkUsdcBalance: userBalances.ckUsdc,
-      userCkUsdtBalance: userBalances.ckUsdt,
-      userDctBalance: userBalances.dct,
-    };
-  }
-
-  return data;
 }
 
 export default function HomePage() {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(
-    null
-  );
-  const { isAuthenticated, currentIdentity } = useAuth();
-  const identity = currentIdentity?.identity;
-  const principal = currentIdentity?.principal;
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
+    dctPrice: 0,
+    providerCount: 0,
+    totalBlocks: 0,
+    blocksUntilHalving: 0,
+    validatorCount: 0,
+    blockReward: 0,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -104,17 +87,9 @@ export default function HomePage() {
           fetchDctPrice(),
         ]);
 
-        let userBalances;
-        if (isAuthenticated && identity && principal) {
-          userBalances = await fetchUserBalances(identity, principal);
-        }
-
         if (mounted) {
-          const baseData = extractDashboardData(metadata, userBalances);
-          if (baseData) {
-            // Override the metadata price with KongSwap price
-            baseData.dctPrice = dctPrice;
-          }
+          const baseData = extractDashboardData(metadata);
+          baseData.dctPrice = dctPrice; // Override with KongSwap price
           setDashboardData(baseData);
         }
       } catch (err) {
@@ -143,7 +118,7 @@ export default function HomePage() {
       mounted = false;
       clearInterval(intervalId);
     };
-  }, [isAuthenticated, identity, principal]);
+  }, []);
 
   return <Page dashboardData={dashboardData} />;
 }

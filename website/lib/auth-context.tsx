@@ -13,6 +13,15 @@ interface IdentityInfo {
   principal: Principal;
   type: "ii" | "nfid" | "seedPhrase";
   name?: string;
+  publicKeyBytes?: Uint8Array;
+  secretKeyRaw?: Uint8Array;
+}
+
+interface AuthenticatedIdentityResult {
+  success: true;
+  identity: Identity;
+  publicKeyBytes: Uint8Array;
+  secretKeyRaw: Uint8Array;
 }
 
 interface AuthContextType {
@@ -30,6 +39,7 @@ interface AuthContextType {
   signOutIdentity: (principal: Principal) => void;
   showSeedPhrase: boolean;
   setShowSeedPhrase: (show: boolean) => void;
+  getAuthenticatedIdentity: () => Promise<AuthenticatedIdentityResult | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -44,6 +54,7 @@ const AuthContext = createContext<AuthContextType>({
   signOutIdentity: () => {},
   showSeedPhrase: false,
   setShowSeedPhrase: () => {},
+  getAuthenticatedIdentity: async () => null
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -85,12 +96,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("seed_phrases", JSON.stringify(remainingSeedPhrases));
   };
 
-  const addIdentity = (identity: Identity, type: IdentityInfo["type"]) => {
+  const addIdentity = (
+    identity: Identity,
+    type: IdentityInfo["type"],
+    publicKeyBytes?: Uint8Array,
+    secretKeyRaw?: Uint8Array
+  ) => {
     const principal = identity.getPrincipal();
     const newIdentity: IdentityInfo = {
       identity,
       principal,
       type,
+      publicKeyBytes,
+      secretKeyRaw,
     };
 
     setIdentities((prev) => {
@@ -98,10 +116,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         (i) => i.principal.toString() === principal.toString()
       );
       if (existing) {
-        // If the identity already exists, update its type if different
-        if (existing.type !== type) {
+        // If the identity already exists, update its type and keys if different
+        if (existing.type !== type || !existing.publicKeyBytes || !existing.secretKeyRaw) {
           return prev.map((i) =>
-            i.principal.toString() === principal.toString() ? { ...i, type } : i
+            i.principal.toString() === principal.toString()
+              ? { ...i, type, publicKeyBytes, secretKeyRaw }
+              : i
           );
         }
         return prev;
@@ -115,6 +135,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const getAuthenticatedIdentity = async (): Promise<AuthenticatedIdentityResult | null> => {
+    if (!currentIdentity ||
+        currentIdentity.type !== "seedPhrase" ||
+        !currentIdentity.publicKeyBytes ||
+        !currentIdentity.secretKeyRaw) {
+      return null;
+    }
+
+    const { identity, publicKeyBytes, secretKeyRaw } = currentIdentity;
+    return {
+      success: true,
+      identity,
+      publicKeyBytes,
+      secretKeyRaw
+    };
+  };
+
   useEffect(() => {
     // Check if there's a seed phrase in localStorage
     const storedSeedPhrases = JSON.parse(
@@ -124,7 +161,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     for (const seedPhrase of storedSeedPhrases) {
       try {
         const identity = identityFromSeed(seedPhrase);
-        addIdentity(identity, "seedPhrase");
+        const keyPair = identity.getKeyPair();
+        const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+        const secretKeyRaw = new Uint8Array(keyPair.secretKey);
+        
+        addIdentity(identity, "seedPhrase", publicKeyBytes, secretKeyRaw);
       } catch (error) {
         console.error("Failed to authenticate with stored seed phrase:", error);
       }
@@ -199,7 +240,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setShowSeedPhrase(true);
 
       const identity = identityFromSeed(seedPhrase);
-      addIdentity(identity, "seedPhrase");
+      const keyPair = identity.getKeyPair();
+      const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+      const secretKeyRaw = new Uint8Array(keyPair.secretKey);
+      
+      addIdentity(identity, "seedPhrase", publicKeyBytes, secretKeyRaw);
       window.location.href = returnUrl;
     } catch (error) {
       console.error("Failed to login with seed phrase:", error);
@@ -248,6 +293,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOutIdentity,
         showSeedPhrase,
         setShowSeedPhrase,
+        getAuthenticatedIdentity
       }}
     >
       {children}
@@ -281,3 +327,6 @@ export function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
 export function useAuth() {
   return useContext(AuthContext);
 }
+
+export { type AuthenticatedIdentityResult };
+export { type IdentityInfo };

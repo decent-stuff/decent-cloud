@@ -53,7 +53,7 @@ export function BlockchainValidator({
   showHeader = true,
   renderAsCard = true,
 }: BlockchainValidatorProps) {
-  const { isAuthenticated, currentIdentity } = useAuth();
+  const { isAuthenticated, currentIdentity, getAuthenticatedIdentity } = useAuth();
   const principal = currentIdentity?.principal;
   const [memo, setMemo] = useState<string>(defaultMemo);
   const [isValidating, setIsValidating] = useState<boolean>(false);
@@ -90,8 +90,17 @@ export function BlockchainValidator({
       setIsValidating(true);
       setResult(null);
 
+      // Check if using seed-phrase based identity
+      if (currentIdentity?.type !== "seedPhrase") {
+        throw new Error(
+          "Blockchain validation requires a seed-phrase based identity. Please switch to or create a seed-phrase identity to continue."
+        );
+      }
+
+      const authResult = await getAuthenticatedIdentity();
+
       // Validate the blockchain
-      const validationResult = await validateBlockchain(memo);
+      const validationResult = await validateBlockchain(memo, authResult);
       setResult(validationResult);
 
       // Call the callback if provided
@@ -102,9 +111,7 @@ export function BlockchainValidator({
       console.error("Error during validation:", error);
       const errorResult = {
         success: false,
-        message: `Unexpected error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `${error instanceof Error ? error.message : String(error)}`,
       };
       setResult(errorResult);
 
@@ -122,8 +129,10 @@ export function BlockchainValidator({
       setIsRegistering(true);
       setResult(null);
 
+      const authResult = await getAuthenticatedIdentity();
+
       // Register as a provider
-      const registrationResult = await registerProvider();
+      const registrationResult = await registerProvider(authResult);
       setResult(registrationResult);
 
       // If registration was successful, refresh the data to update the isProviderRegistered state
@@ -358,12 +367,14 @@ export function BlockchainValidator({
       )}
       <Button
         onClick={handleValidate}
-        disabled={isValidating || !blockHash}
+        disabled={isValidating || !blockHash || currentIdentity?.type !== "seedPhrase"}
         className={`w-full ${
           darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
         }`}
         title={
-          isProviderRegistered
+          currentIdentity?.type !== "seedPhrase"
+            ? "Blockchain validation requires a seed-phrase based identity"
+            : isProviderRegistered
             ? ""
             : "You may not be registered as a provider yet, validation may fail."
         }
