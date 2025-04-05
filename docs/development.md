@@ -29,11 +29,30 @@ sudo apt update -y
 sudo apt install build-essential curl git
 ```
 
-2. **Rust Setup**
+2. **Node.js Setup**
+   
+```bash
+# Install NVM (Node Version Manager)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+source ~/.bashrc  # or restart your terminal
 
+# Install and use Node.js 22
+nvm install 22
+nvm use 22
+
+# Install required global npm packages
+npm install --global jest rimraf
+```
+
+3. **Rust Setup**
+   
+Visit [rustup.rs](https://rustup.rs) or use:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
+
+# Install wasm-pack for WebAssembly support
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 ```
 
 3. **Cargo Make**
