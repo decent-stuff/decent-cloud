@@ -3,9 +3,8 @@
 
 import { Page } from "@/components/app-page";
 import { fetchMetadata } from "../lib/icp-utils";
-import { fetchUserBalances, fetchDctPrice } from "../lib/token-utils";
+import { fetchDctPrice } from "../lib/token-utils";
 import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
 
 interface DashboardData {
   dctPrice: number;
