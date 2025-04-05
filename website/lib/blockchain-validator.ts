@@ -1,8 +1,7 @@
 import { ledgerService } from './ledger-service';
 import { updateCanister } from './icp-utils';
-import { identityFromSeed } from '../lib/auth-context';
 import { ed25519Sign } from '@decent-stuff/dc-client';
-import type { Identity } from '@dfinity/agent';
+import type { AuthenticatedIdentityResult } from '../lib/auth-context';
 
 // Define the result type for canister calls
 interface CanisterResult {
@@ -11,12 +10,6 @@ interface CanisterResult {
     [key: string]: unknown;
 }
 
-// Define additional data type for validation results
-type ValidationAdditionalData = {
-    parentBlockHash?: string;
-    [key: string]: string | undefined;
-};
-
 // Define the validation result interface
 export interface ValidationResult {
     success: boolean;
@@ -24,38 +17,11 @@ export interface ValidationResult {
     parentBlockHash?: string;
 }
 
-/**
- * Helper function to get authenticated identity from localStorage
- * @returns Object containing identity and publicKeyBytes, or error result
- */
-async function getAuthenticatedIdentity(): Promise<
-    | { success: true; identity: Identity; publicKeyBytes: Uint8Array; secretKeyRaw: Uint8Array }
-    | { success: false; result: ValidationResult }
-> {
-    const storedSeedPhrase = localStorage.getItem('seed_phrase');
-    if (!storedSeedPhrase) {
-        return {
-            success: false,
-            result: {
-                success: false,
-                message: "Authentication required. Please log in first."
-            }
-        };
-    }
-
-    // Create identity from seed phrase
-    const identity = identityFromSeed(storedSeedPhrase);
-    // Get the public key bytes from the identity
-    const secretKeyRaw = identity.getKeyPair().secretKey;
-    const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-
-    return {
-        success: true,
-        identity,
-        publicKeyBytes,
-        secretKeyRaw: new Uint8Array(secretKeyRaw)
-    };
-}
+// Define additional data type for validation results
+type ValidationAdditionalData = {
+    parentBlockHash?: string;
+    [key: string]: string | undefined;
+};
 
 /**
  * Helper function to process canister result
@@ -127,6 +93,7 @@ function handleError(
  */
 export async function validateBlockchain(
     memo: string = "Website validator",
+    authResult: AuthenticatedIdentityResult | null
 ): Promise<ValidationResult> {
     try {
         // Get the latest parent block hash from the ledger service
@@ -138,11 +105,12 @@ export async function validateBlockchain(
                 message: "No parent block hash found in the latest block"
             };
         }
-
-        // Get authenticated identity
-        const authResult = await getAuthenticatedIdentity();
-        if (!authResult.success) {
-            return authResult.result;
+        
+        if (!authResult) {
+            return {
+                success: false,
+                message: "Authentication required. Please log in with a seed-phrase based identity."
+            };
         }
 
         const { identity, publicKeyBytes, secretKeyRaw } = authResult;
@@ -185,12 +153,15 @@ export async function validateBlockchain(
  *
  * @returns A promise that resolves to a ValidationResult
  */
-export async function registerProvider(): Promise<ValidationResult> {
+export async function registerProvider(
+    authResult: AuthenticatedIdentityResult | null
+): Promise<ValidationResult> {
     try {
-        // Get authenticated identity
-        const authResult = await getAuthenticatedIdentity();
-        if (!authResult.success) {
-            return authResult.result;
+        if (!authResult) {
+            return {
+                success: false,
+                message: "Authentication required. Please log in with a seed-phrase based identity."
+            };
         }
 
         const { identity, publicKeyBytes, secretKeyRaw } = authResult;
