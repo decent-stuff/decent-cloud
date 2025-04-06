@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         (i) => i.principal.toString() === principal.toString()
       );
       if (existing) {
-        // If the identity already exists, update its type and keys if different
+        // If the identity already exists, update its type and keys if any part is different
         if (existing.type !== type || !existing.publicKeyBytes || !existing.secretKeyRaw) {
           return prev.map((i) =>
             i.principal.toString() === principal.toString()
@@ -185,11 +185,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithII = async (returnUrl = "/dashboard") => {
     if (!authClient) return;
 
-    // Define session duration (up to 30 days maximum)
-    const days = BigInt(1);
-    const hours = BigInt(24);
-    const nanoseconds = BigInt(3600000000000);
-    const maxTimeToLive = days * hours * nanoseconds;
+    // Define session duration: 1 day (it can be up to 30 days max)
+    const days = 1;
+    const maxTimeToLive = BigInt(days) * BigInt(24) * BigInt(3600000000000);
 
     await authClient.login({
       maxTimeToLive: maxTimeToLive,
