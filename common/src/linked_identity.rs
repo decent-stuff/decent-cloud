@@ -1,576 +1,260 @@
+use crate::{fn_info, AHashMap};
 use borsh::{BorshDeserialize, BorshSerialize};
+use candid::Principal;
 use function_name::named;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
-
-use crate::{fn_info, AHashMap, DccIdentity};
-
-// Label for storing LinkedIdentityRecord in the LedgerMap
-pub const LABEL_LINKED_IDENTITY: &str = "LinkedIdentity";
+use std::{cell::RefCell, collections::HashMap};
 
 // Maximum number of linked identities allowed per primary
 pub const MAX_LINKED_IDENTITIES: usize = 32;
 
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
-pub struct LinkedIdentityRecordV1 {
-    primary_identity: Vec<u8>, // Public key bytes of the primary identity
-    secondary_identities: Vec<Vec<u8>>, // List of public key bytes for secondary identities
-    created_at: u64,           // Timestamp when the record was created
-    last_updated_at: u64,      // Timestamp when the record was last updated
+thread_local! {
+    // A link from a secondary identity to its primary identity
+    pub static LINKED_PRINCIPALS_MAP: RefCell<AHashMap<Principal, Principal>> = RefCell::new(HashMap::default());
+}
+
+/// Get the primary principal for a given principal from the map
+pub fn get_linked_primary_principal(secondary_principal: &Principal) -> Option<Principal> {
+    LINKED_PRINCIPALS_MAP.with(|map| map.borrow().get(secondary_principal).copied())
+}
+
+/// Add secondary -> primary mappings to the map
+pub fn link_secondary_to_primary_principal(primary: Principal, secondaries: Vec<Principal>) {
+    LINKED_PRINCIPALS_MAP.with(|map| {
+        for secondary in secondaries {
+            map.borrow_mut().insert(secondary, primary);
+        }
+    });
+}
+
+/// Remove a secondary -> primary mapping from the map
+pub fn unlink_secondary_from_primary_principal(
+    primary: &Principal,
+    secondaries: &Vec<Principal>,
+) -> Vec<Principal> {
+    let mut removed = Vec::new();
+    LINKED_PRINCIPALS_MAP.with(|map| {
+        for secondary in secondaries {
+            // Check if the secondary principal is linked to the primary
+            match map.borrow().get(secondary) {
+                Some(linked_primary) if linked_primary == primary => {
+                    // Remove the mapping
+                    map.borrow_mut().remove(secondary);
+                    removed.push(*linked_primary)
+                }
+                _ => {} // Secondary principal not found or not linked to the primary
+            }
+        }
+    });
+    removed
+}
+
+pub fn principal_serialize(
+    principal: &Principal,
+    writer: &mut impl borsh::io::Write,
+) -> Result<(), borsh::io::Error> {
+    BorshSerialize::serialize(&principal.as_slice(), writer)
+}
+
+pub fn vec_principal_serialize(
+    principal: &[Principal],
+    writer: &mut impl borsh::io::Write,
+) -> Result<(), borsh::io::Error> {
+    BorshSerialize::serialize(
+        &principal.iter().map(|p| p.as_slice()).collect::<Vec<_>>(),
+        writer,
+    )
+}
+
+pub fn principal_deserialize(
+    reader: &mut impl borsh::io::Read,
+) -> Result<Principal, borsh::io::Error> {
+    let principal: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
+    Principal::try_from_slice(&principal).map_err(|_| {
+        borsh::io::Error::new(borsh::io::ErrorKind::InvalidData, "Invalid Principal bytes")
+    })
+}
+
+pub fn vec_principal_deserialize(
+    reader: &mut impl borsh::io::Read,
+) -> Result<Vec<Principal>, borsh::io::Error> {
+    let principals: Vec<Vec<u8>> = BorshDeserialize::deserialize_reader(reader)?;
+    principals
+        .into_iter()
+        .map(|p| Principal::try_from_slice(&p))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| {
+            borsh::io::Error::new(borsh::io::ErrorKind::InvalidData, "Invalid Principal bytes")
+        })
 }
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
-pub enum LinkedIdentityRecord {
-    V1(LinkedIdentityRecordV1),
+pub struct LinkedIcPrincipalsRecordV1 {
+    #[borsh(
+        serialize_with = "principal_serialize",
+        deserialize_with = "principal_deserialize"
+    )]
+    primary_principal: Principal, // IC Principal of the primary identity
+    #[borsh(
+        serialize_with = "vec_principal_serialize",
+        deserialize_with = "vec_principal_deserialize"
+    )]
+    secondary_principals: Vec<Principal>, // List of IC Principals of the secondary identities
+    created_at: u64,      // Timestamp when the record was created
+    last_updated_at: u64, // Timestamp when the record was last updated
 }
 
-impl LinkedIdentityRecord {
+#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
+pub enum LinkedIcIdsRecord {
+    V1(LinkedIcPrincipalsRecordV1),
+}
+
+impl LinkedIcIdsRecord {
     /// Creates a new LinkedIdentityRecord with the given primary identity
-    pub fn new(primary_identity: &DccIdentity, timestamp: u64) -> Self {
-        LinkedIdentityRecord::V1(LinkedIdentityRecordV1 {
-            primary_identity: primary_identity.to_bytes_verifying(),
-            secondary_identities: Vec::new(),
+    pub fn new(primary_principal: Principal, timestamp: u64) -> Self {
+        LinkedIcIdsRecord::V1(LinkedIcPrincipalsRecordV1 {
+            primary_principal,
+            secondary_principals: Vec::new(),
             created_at: timestamp,
             last_updated_at: timestamp,
         })
     }
 
-    /// Returns the primary identity public key bytes
-    pub fn primary_identity(&self) -> &[u8] {
+    /// Returns the primary identity principal
+    pub fn primary_principal(&self) -> &Principal {
         match self {
-            LinkedIdentityRecord::V1(record) => &record.primary_identity,
+            LinkedIcIdsRecord::V1(record) => &record.primary_principal,
         }
     }
 
-    /// Returns the list of secondary identity public key bytes
-    pub fn secondary_identities(&self) -> &[Vec<u8>] {
+    /// Returns the list of secondary principals
+    pub fn secondary_principals(&self) -> &[Principal] {
         match self {
-            LinkedIdentityRecord::V1(record) => &record.secondary_identities,
+            LinkedIcIdsRecord::V1(record) => &record.secondary_principals,
         }
     }
 
-    /// Returns the timestamp when the record was created
-    pub fn created_at(&self) -> u64 {
-        match self {
-            LinkedIdentityRecord::V1(record) => record.created_at,
-        }
-    }
-
-    /// Returns the timestamp when the record was last updated
-    pub fn last_updated_at(&self) -> u64 {
-        match self {
-            LinkedIdentityRecord::V1(record) => record.last_updated_at,
-        }
-    }
-
-    /// Adds a secondary identity to the record
-    pub fn add_secondary_identity(
+    /// Adds a secondary principal to the record
+    pub fn add_secondary_principal(
         &mut self,
-        secondary_identity: &DccIdentity,
+        secondary_principal: Principal,
         timestamp: u64,
     ) -> Result<(), String> {
         match self {
-            LinkedIdentityRecord::V1(record) => {
-                let secondary_bytes = secondary_identity.to_bytes_verifying();
-
-                // Check if the secondary identity is the same as the primary
-                if record.primary_identity == secondary_bytes {
-                    return Err("Cannot add primary identity as a secondary identity".to_string());
+            LinkedIcIdsRecord::V1(record) => {
+                // Check if the secondary principal is the same as the primary
+                if record.primary_principal == secondary_principal {
+                    return Err("Cannot add primary principal as a secondary principal".to_string());
                 }
 
-                // Check if the secondary identity is already in the list
-                if record
-                    .secondary_identities
-                    .iter()
-                    .any(|id| id == &secondary_bytes)
-                {
-                    return Err("Secondary identity already linked".to_string());
+                // Check if the secondary principal is already in the list
+                if record.secondary_principals.contains(&secondary_principal) {
+                    return Err("Secondary principal already linked".to_string());
                 }
 
                 // Check if we've reached the maximum number of linked identities
-                if record.secondary_identities.len() >= MAX_LINKED_IDENTITIES {
+                if record.secondary_principals.len() >= MAX_LINKED_IDENTITIES {
                     return Err(format!(
                         "Cannot add more than {} linked identities",
                         MAX_LINKED_IDENTITIES
                     ));
                 }
 
-                // Add the secondary identity
-                record.secondary_identities.push(secondary_bytes);
+                // Add the secondary principal
+                record.secondary_principals.push(secondary_principal);
                 record.last_updated_at = timestamp;
                 Ok(())
             }
         }
     }
 
-    /// Removes a secondary identity from the record
-    pub fn remove_secondary_identity(
+    /// Removes a secondary principal from the record
+    pub fn remove_secondary_principal(
         &mut self,
-        secondary_identity: &DccIdentity,
+        secondary_principal: Principal,
         timestamp: u64,
     ) -> Result<(), String> {
         match self {
-            LinkedIdentityRecord::V1(record) => {
-                let secondary_bytes = secondary_identity.to_bytes_verifying();
-
-                // Find the index of the secondary identity
-                let index = record
-                    .secondary_identities
+            LinkedIcIdsRecord::V1(record) => {
+                if let Some(pos) = record
+                    .secondary_principals
                     .iter()
-                    .position(|id| id == &secondary_bytes);
-
-                match index {
-                    Some(idx) => {
-                        // Remove the secondary identity
-                        record.secondary_identities.remove(idx);
-                        record.last_updated_at = timestamp;
-                        Ok(())
-                    }
-                    None => Err("Secondary identity not found".to_string()),
+                    .position(|p| p == &secondary_principal)
+                {
+                    record.secondary_principals.remove(pos);
+                    record.last_updated_at = timestamp;
+                    Ok(())
+                } else {
+                    Err("Secondary principal not found".to_string())
                 }
             }
         }
     }
-
-    /// Checks if the given identity is authorized to act on behalf of the primary identity
-    pub fn is_authorized(&self, identity: &DccIdentity) -> bool {
-        let identity_bytes = identity.to_bytes_verifying();
-
-        // Check if the identity is the primary
-        if self.primary_identity() == identity_bytes {
-            return true;
-        }
-
-        // Check if the identity is one of the secondaries
-        self.secondary_identities()
-            .iter()
-            .any(|id| id == &identity_bytes)
-    }
 }
 
-/// Creates a new linked identity record for the given primary identity
 #[named]
-pub fn create_linked_record(
-    ledger: &mut LedgerMap,
-    primary_identity: &DccIdentity,
-    timestamp: u64,
-) -> Result<(), String> {
-    let primary_bytes = primary_identity.to_bytes_verifying();
-
-    // Check if a record already exists for this primary identity
-    if ledger.contains(LABEL_LINKED_IDENTITY, &primary_bytes) {
-        return Err("Linked identity record already exists for this primary identity".to_string());
-    }
-
-    // Create a new record
-    let record = LinkedIdentityRecord::new(primary_identity, timestamp);
-    let record_bytes = borsh::to_vec(&record).map_err(|e| e.to_string())?;
-
-    // Store the record in the ledger
-    ledger
-        .upsert(LABEL_LINKED_IDENTITY, &primary_bytes, record_bytes)
-        .map_err(|e| e.to_string())?;
-
-    fn_info!("Created linked identity record for {}", primary_identity);
-    Ok(())
+/// Links identities by adding a secondary principal to a primary principal's record
+pub fn link_identities(
+    _ledger: &mut LedgerMap,
+    primary_principal: Principal,
+    secondary_principals: Vec<Principal>,
+    _timestamp: u64,
+) -> Result<String, String> {
+    fn_info!("for principal {}", primary_principal);
+    link_secondary_to_primary_principal(primary_principal, secondary_principals);
+    Ok("Successfully linked identities".to_string())
 }
 
-/// Gets or creates a linked identity record for the given primary identity
 #[named]
-pub fn get_or_create_linked_record(
-    ledger: &mut LedgerMap,
-    primary_identity: &DccIdentity,
-    timestamp: u64,
-) -> Result<LinkedIdentityRecord, String> {
-    let primary_bytes = primary_identity.to_bytes_verifying();
-
-    // Check if a record already exists for this primary identity
-    if ledger.contains(LABEL_LINKED_IDENTITY, &primary_bytes) {
-        // Get the existing record
-        let record_bytes = ledger
-            .get(LABEL_LINKED_IDENTITY, &primary_bytes)
-            .map_err(|e| e.to_string())?;
-
-        LinkedIdentityRecord::try_from_slice(&record_bytes).map_err(|e| e.to_string())
-    } else {
-        // Create a new record
-        let record = LinkedIdentityRecord::new(primary_identity, timestamp);
-        let record_bytes = borsh::to_vec(&record).map_err(|e| e.to_string())?;
-
-        // Store the record in the ledger
-        ledger
-            .upsert(LABEL_LINKED_IDENTITY, &primary_bytes, record_bytes)
-            .map_err(|e| e.to_string())?;
-
-        fn_info!("Created linked identity record for {}", primary_identity);
-        Ok(record)
+/// Unlinks identities by removing secondary principals from a primary principal's record
+pub fn unlink_identities(
+    _ledger: &mut LedgerMap,
+    primary_principal: Principal,
+    secondary_principals: Vec<Principal>,
+    _timestamp: u64,
+) -> Result<String, String> {
+    fn_info!("for principal {}", primary_principal);
+    let unlinked =
+        unlink_secondary_from_primary_principal(&primary_principal, &secondary_principals);
+    if unlinked.is_empty() {
+        return Err("No valid linked identities found to unlink".to_string());
     }
+    Ok(format!(
+        "Successfully unlinked identities: {:?} from {}",
+        unlinked, primary_principal
+    ))
 }
 
-/// Adds a secondary identity to the linked identity record
 #[named]
-pub fn add_secondary_identity(
-    ledger: &mut LedgerMap,
-    primary_identity: &DccIdentity,
-    secondary_identity: &DccIdentity,
-    timestamp: u64,
-) -> Result<(), String> {
-    let primary_bytes = primary_identity.to_bytes_verifying();
-
-    // Get or create the record
-    let mut record = get_or_create_linked_record(ledger, primary_identity, timestamp)?;
-
-    // Add the secondary identity
-    record.add_secondary_identity(secondary_identity, timestamp)?;
-
-    // Update the record in the ledger
-    let record_bytes = borsh::to_vec(&record).map_err(|e| e.to_string())?;
-    ledger
-        .upsert(LABEL_LINKED_IDENTITY, &primary_bytes, record_bytes)
-        .map_err(|e| e.to_string())?;
-
-    fn_info!(
-        "Added secondary identity {} to primary identity {}",
-        secondary_identity,
-        primary_identity
-    );
-    Ok(())
-}
-
-/// Removes a secondary identity from the linked identity record
-#[named]
-pub fn remove_secondary_identity(
-    ledger: &mut LedgerMap,
-    primary_identity: &DccIdentity,
-    secondary_identity: &DccIdentity,
-    timestamp: u64,
-) -> Result<(), String> {
-    let primary_bytes = primary_identity.to_bytes_verifying();
-
-    // Check if a record exists for this primary identity
-    if !ledger.contains(LABEL_LINKED_IDENTITY, &primary_bytes) {
-        return Err("No linked identity record found for this primary identity".to_string());
-    }
-
-    // Get the record
-    let record_bytes = ledger
-        .get(LABEL_LINKED_IDENTITY, &primary_bytes)
-        .map_err(|e| e.to_string())?;
-
-    let mut record =
-        LinkedIdentityRecord::try_from_slice(&record_bytes).map_err(|e| e.to_string())?;
-
-    // Remove the secondary identity
-    record.remove_secondary_identity(secondary_identity, timestamp)?;
-
-    // Update the record in the ledger
-    let record_bytes = borsh::to_vec(&record).map_err(|e| e.to_string())?;
-    ledger
-        .upsert(LABEL_LINKED_IDENTITY, &primary_bytes, record_bytes)
-        .map_err(|e| e.to_string())?;
-
-    fn_info!(
-        "Removed secondary identity {} from primary identity {}",
-        secondary_identity,
-        primary_identity
-    );
-    Ok(())
-}
-
-/// Sets a new primary identity for the linked identity record
-#[named]
-pub fn set_primary_identity(
-    ledger: &mut LedgerMap,
-    old_primary: &DccIdentity,
-    new_primary: &DccIdentity,
-    timestamp: u64,
-) -> Result<(), String> {
-    let old_primary_bytes = old_primary.to_bytes_verifying();
-    let new_primary_bytes = new_primary.to_bytes_verifying();
-
-    // Check if a record exists for the old primary identity
-    if !ledger.contains(LABEL_LINKED_IDENTITY, &old_primary_bytes) {
-        return Err("No linked identity record found for the old primary identity".to_string());
-    }
-
-    // Check if a record already exists for the new primary identity
-    if ledger.contains(LABEL_LINKED_IDENTITY, &new_primary_bytes) {
-        return Err(
-            "Linked identity record already exists for the new primary identity".to_string(),
-        );
-    }
-
-    // Get the record for the old primary
-    let record_bytes = ledger
-        .get(LABEL_LINKED_IDENTITY, &old_primary_bytes)
-        .map_err(|e| e.to_string())?;
-
-    let mut record =
-        LinkedIdentityRecord::try_from_slice(&record_bytes).map_err(|e| e.to_string())?;
-
-    // Check if the new primary is already a secondary identity
-    match &mut record {
-        LinkedIdentityRecord::V1(record_v1) => {
-            let new_primary_pos = record_v1
-                .secondary_identities
-                .iter()
-                .position(|id| id == &new_primary_bytes);
-
-            if let Some(idx) = new_primary_pos {
-                // Remove the new primary from the secondary identities
-                record_v1.secondary_identities.remove(idx);
-
-                // Add the old primary as a secondary identity
-                record_v1
-                    .secondary_identities
-                    .push(old_primary_bytes.clone());
-
-                // Update the primary identity
-                record_v1.primary_identity = new_primary_bytes.clone();
-                record_v1.last_updated_at = timestamp;
-
-                // Update the record in the ledger under the new primary key
-                let record_bytes = borsh::to_vec(&record).map_err(|e| e.to_string())?;
-                ledger
-                    .upsert(LABEL_LINKED_IDENTITY, &new_primary_bytes, record_bytes)
-                    .map_err(|e| e.to_string())?;
-
-                // Remove the record under the old primary key
-                ledger
-                    .delete(LABEL_LINKED_IDENTITY, &old_primary_bytes)
-                    .map_err(|e| e.to_string())?;
-
-                fn_info!(
-                    "Changed primary identity from {} to {}",
-                    old_primary,
-                    new_primary
-                );
-                Ok(())
-            } else {
-                Err("New primary identity is not a secondary identity in the record".to_string())
+/// Lists all principals linked to the given primary principal
+pub fn list_linked_identities(primary_principal: Principal) -> Result<Vec<Principal>, String> {
+    fn_info!("for principal {}", primary_principal);
+    // Collect all secondary principals that map to this primary
+    let mut secondaries = Vec::new();
+    LINKED_PRINCIPALS_MAP.with(|map| {
+        for (secondary, primary) in map.borrow().iter() {
+            if *primary == primary_principal {
+                secondaries.push(*secondary);
             }
         }
+    });
+
+    if secondaries.is_empty() {
+        Err("No linked identities found".to_string())
+    } else {
+        Ok(secondaries)
     }
 }
 
-/// Lists all identities linked to the given primary identity
 #[named]
-pub fn list_linked_identities(
-    ledger: &LedgerMap,
-    primary_identity: &DccIdentity,
-) -> Result<Vec<Vec<u8>>, String> {
-    let primary_bytes = primary_identity.to_bytes_verifying();
-
-    // Check if a record exists for this primary identity
-    if !ledger.contains(LABEL_LINKED_IDENTITY, &primary_bytes) {
-        return Err("No linked identity record found for this primary identity".to_string());
-    }
-
-    // Get the record
-    let record_bytes = ledger
-        .get(LABEL_LINKED_IDENTITY, &primary_bytes)
-        .map_err(|e| e.to_string())?;
-
-    let record = LinkedIdentityRecord::try_from_slice(&record_bytes).map_err(|e| e.to_string())?;
-
-    // Return the list of secondary identities
-    let mut result = Vec::new();
-    result.push(primary_bytes.clone()); // Include the primary identity
-    result.extend_from_slice(record.secondary_identities());
-
-    Ok(result)
-}
-
-/// Checks if the signing identity is authorized to act on behalf of the primary identity
-#[named]
-pub fn authorize_operation(
-    ledger: &LedgerMap,
-    primary_identity: &DccIdentity,
-    signing_identity: &DccIdentity,
-) -> Result<bool, String> {
-    let primary_bytes = primary_identity.to_bytes_verifying();
-
-    // If the signing identity is the primary identity, it's authorized
-    if primary_identity.to_bytes_verifying() == signing_identity.to_bytes_verifying() {
-        return Ok(true);
-    }
-
-    // Check if a record exists for this primary identity
-    if !ledger.contains(LABEL_LINKED_IDENTITY, &primary_bytes) {
-        return Ok(false);
-    }
-
-    // Get the record
-    let record_bytes = ledger
-        .get(LABEL_LINKED_IDENTITY, &primary_bytes)
-        .map_err(|e| e.to_string())?;
-
-    let record = LinkedIdentityRecord::try_from_slice(&record_bytes).map_err(|e| e.to_string())?;
-
-    // Check if the signing identity is authorized
-    Ok(record.is_authorized(signing_identity))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::get_timestamp_ns;
-    use ed25519_dalek::SigningKey;
-    use rand::rngs::OsRng;
-
-    fn create_test_identity() -> DccIdentity {
-        let signing_key = SigningKey::generate(&mut OsRng);
-        DccIdentity::new_signing(&signing_key).unwrap()
-    }
-
-    #[test]
-    fn test_create_linked_record() {
-        let mut ledger = LedgerMap::new();
-        let primary = create_test_identity();
-        let timestamp = get_timestamp_ns();
-
-        // Create a new record
-        let result = create_linked_record(&mut ledger, &primary, timestamp);
-        assert!(result.is_ok());
-
-        // Try to create it again (should fail)
-        let result = create_linked_record(&mut ledger, &primary, timestamp);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_add_secondary_identity() {
-        let mut ledger = LedgerMap::new();
-        let primary = create_test_identity();
-        let secondary1 = create_test_identity();
-        let secondary2 = create_test_identity();
-        let timestamp = get_timestamp_ns();
-
-        // Add a secondary identity
-        let result = add_secondary_identity(&mut ledger, &primary, &secondary1, timestamp);
-        assert!(result.is_ok());
-
-        // Add another secondary identity
-        let result = add_secondary_identity(&mut ledger, &primary, &secondary2, timestamp);
-        assert!(result.is_ok());
-
-        // Try to add the primary as a secondary (should fail)
-        let result = add_secondary_identity(&mut ledger, &primary, &primary, timestamp);
-        assert!(result.is_err());
-
-        // Try to add the same secondary again (should fail)
-        let result = add_secondary_identity(&mut ledger, &primary, &secondary1, timestamp);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_remove_secondary_identity() {
-        let mut ledger = LedgerMap::new();
-        let primary = create_test_identity();
-        let secondary = create_test_identity();
-        let timestamp = get_timestamp_ns();
-
-        // Add a secondary identity
-        let result = add_secondary_identity(&mut ledger, &primary, &secondary, timestamp);
-        assert!(result.is_ok());
-
-        // Remove the secondary identity
-        let result = remove_secondary_identity(&mut ledger, &primary, &secondary, timestamp);
-        assert!(result.is_ok());
-
-        // Try to remove it again (should fail)
-        let result = remove_secondary_identity(&mut ledger, &primary, &secondary, timestamp);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_set_primary_identity() {
-        let mut ledger = LedgerMap::new();
-        let old_primary = create_test_identity();
-        let new_primary = create_test_identity();
-        let timestamp = get_timestamp_ns();
-
-        // Add the new primary as a secondary identity
-        let result = add_secondary_identity(&mut ledger, &old_primary, &new_primary, timestamp);
-        assert!(result.is_ok());
-
-        // Set the new primary
-        let result = set_primary_identity(&mut ledger, &old_primary, &new_primary, timestamp);
-        assert!(result.is_ok());
-
-        // Check that the record exists under the new primary
-        let result = list_linked_identities(&ledger, &new_primary);
-        assert!(result.is_ok());
-        let identities = result.unwrap();
-        assert_eq!(identities.len(), 2); // New primary + old primary as secondary
-
-        // Check that the record doesn't exist under the old primary
-        let result = list_linked_identities(&ledger, &old_primary);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_list_linked_identities() {
-        let mut ledger = LedgerMap::new();
-        let primary = create_test_identity();
-        let secondary1 = create_test_identity();
-        let secondary2 = create_test_identity();
-        let timestamp = get_timestamp_ns();
-
-        // Add secondary identities
-        add_secondary_identity(&mut ledger, &primary, &secondary1, timestamp).unwrap();
-        add_secondary_identity(&mut ledger, &primary, &secondary2, timestamp).unwrap();
-
-        // List the linked identities
-        let result = list_linked_identities(&ledger, &primary);
-        assert!(result.is_ok());
-        let identities = result.unwrap();
-        assert_eq!(identities.len(), 3); // Primary + 2 secondaries
-    }
-
-    #[test]
-    fn test_authorize_operation() {
-        let mut ledger = LedgerMap::new();
-        let primary = create_test_identity();
-        let secondary = create_test_identity();
-        let unauthorized = create_test_identity();
-        let timestamp = get_timestamp_ns();
-
-        // Add a secondary identity
-        add_secondary_identity(&mut ledger, &primary, &secondary, timestamp).unwrap();
-
-        // Check authorization
-        let result = authorize_operation(&ledger, &primary, &primary);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-
-        let result = authorize_operation(&ledger, &primary, &secondary);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
-
-        let result = authorize_operation(&ledger, &primary, &unauthorized);
-        assert!(result.is_ok());
-        assert!(!result.unwrap());
-    }
-
-    #[test]
-    fn test_max_linked_identities() {
-        let mut ledger = LedgerMap::new();
-        let primary = create_test_identity();
-        let timestamp = get_timestamp_ns();
-
-        // Add MAX_LINKED_IDENTITIES secondary identities
-        for _ in 0..MAX_LINKED_IDENTITIES {
-            let secondary = create_test_identity();
-            let result = add_secondary_identity(&mut ledger, &primary, &secondary, timestamp);
-            assert!(result.is_ok());
-        }
-
-        // Try to add one more (should fail)
-        let secondary = create_test_identity();
-        let result = add_secondary_identity(&mut ledger, &primary, &secondary, timestamp);
-        assert!(result.is_err());
+/// Gets the primary principal for a given principal (if it exists)
+pub fn get_primary_principal(principal: Principal) -> Result<Principal, String> {
+    fn_info!("for principal {}", principal);
+    match get_linked_primary_principal(&principal) {
+        Some(primary) => Ok(primary),
+        None => Ok(principal), // If not found as secondary, it might be a primary
     }
 }

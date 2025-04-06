@@ -1,67 +1,32 @@
 use crate::canister_backend::linked_identity::*;
+use candid::Principal;
 
-/// Creates a new linked identity record for the given primary identity
+/// Links identities by adding secondary identities to a primary principal's record
 #[ic_cdk::update]
-fn create_linked_record(
-    pubkey_bytes: Vec<u8>,
-    crypto_signature: Vec<u8>,
+fn link_identities(
+    primary_principal: Principal,
+    secondary_principals: Vec<Principal>,
 ) -> Result<String, String> {
-    _create_linked_record(pubkey_bytes, crypto_signature)
+    _link_identities(primary_principal, secondary_principals)
 }
 
-/// Adds a secondary identity to the linked identity record
+/// Unlinks identities by removing secondary identities from a primary principal's record
 #[ic_cdk::update]
-fn add_secondary_identity(
-    primary_pubkey_bytes: Vec<u8>,
-    secondary_pubkey_bytes: Vec<u8>,
-    crypto_signature: Vec<u8>,
+fn unlink_identities(
+    primary_principal: Principal,
+    secondary_principals: Vec<Principal>,
 ) -> Result<String, String> {
-    _add_secondary_identity(
-        primary_pubkey_bytes,
-        secondary_pubkey_bytes,
-        crypto_signature,
-    )
+    _unlink_identities(primary_principal, secondary_principals)
 }
 
-/// Removes a secondary identity from the linked identity record
-#[ic_cdk::update]
-fn remove_secondary_identity(
-    primary_pubkey_bytes: Vec<u8>,
-    secondary_pubkey_bytes: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    _remove_secondary_identity(
-        primary_pubkey_bytes,
-        secondary_pubkey_bytes,
-        crypto_signature,
-    )
-}
-
-/// Sets a new primary identity for the linked identity record
-#[ic_cdk::update]
-fn set_primary_identity(
-    old_primary_pubkey_bytes: Vec<u8>,
-    new_primary_pubkey_bytes: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    _set_primary_identity(
-        old_primary_pubkey_bytes,
-        new_primary_pubkey_bytes,
-        crypto_signature,
-    )
-}
-
-/// Lists all identities linked to the given primary identity
+/// Lists all identities linked to the given primary principal
 #[ic_cdk::query]
-fn list_linked_identities(pubkey_bytes: Vec<u8>) -> Result<Vec<Vec<u8>>, String> {
-    _list_linked_identities(pubkey_bytes)
+fn list_linked_identities(primary_principal: Principal) -> Result<Vec<Principal>, String> {
+    _list_linked_identities(primary_principal)
 }
 
-/// Checks if the signing identity is authorized to act on behalf of the primary identity
+/// Gets the primary principal for a given IC principal
 #[ic_cdk::query]
-fn authorize_operation(
-    primary_pubkey_bytes: Vec<u8>,
-    signing_pubkey_bytes: Vec<u8>,
-) -> Result<bool, String> {
-    _authorize_operation(primary_pubkey_bytes, signing_pubkey_bytes)
+fn get_primary_identity(principal: Principal) -> Result<Principal, String> {
+    _get_primary_identity(principal)
 }
