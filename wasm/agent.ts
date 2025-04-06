@@ -11,15 +11,7 @@ const defaultConfig = {
 
 // Singleton agent instance
 let agent: HttpAgent | null = null;
-
-/**
- * Configure the agent with custom settings
- * @param config Configuration options
- */
-export function configure(config: Partial<typeof defaultConfig>): void {
-    Object.assign(defaultConfig, config);
-    agent = null; // Reset the agent to force recreation with new config
-}
+let agentIdentity: Identity | null = null;
 
 /**
  * Get or create an agent instance
@@ -27,7 +19,8 @@ export function configure(config: Partial<typeof defaultConfig>): void {
  * @returns An HttpAgent instance
  */
 export function getAgent(identity?: Identity | null): HttpAgent {
-    if (!agent) {
+    // Create new agent if there isn't one or the identity differs
+    if (!agent || agentIdentity !== identity) {
         try {
             if (identity) {
                 agent = HttpAgent.createSync({
@@ -43,12 +36,23 @@ export function getAgent(identity?: Identity | null): HttpAgent {
                 });
                 console.log('Agent created without identity');
             }
+            // Store the identity used for this agent
+            agentIdentity = identity || null;
         } catch (error) {
             console.error(`Failed to initialize ${identity ? 'authenticated' : 'anonymous'} HttpAgent`);
             throw error;
         }
     }
     return agent;
+}
+
+/**
+ * Configure the agent with custom settings
+ * @param config Configuration options
+ */
+export function configure(config: Partial<typeof defaultConfig>): void {
+    Object.assign(defaultConfig, config);
+    agent = null; // Reset the agent to force recreation with new config
 }
 
 /**
