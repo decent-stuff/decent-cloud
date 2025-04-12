@@ -7,7 +7,7 @@ use candid::Principal;
 use function_name::named;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 use ic_cdk::println;
-use ledger_map::{AHashSet, LedgerMap};
+use ledger_map::{warn, AHashSet, LedgerMap};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap};
 
@@ -221,26 +221,39 @@ pub fn do_link_principals(
             .map(|p| p.to_string().split_once('-').unwrap().0.to_owned())
             .collect::<Vec<_>>()
     );
+    let mut alt_principals_add_valid = Vec::new();
+    for p in alt_principals_add {
+        if let Some(prev_main) = cache_get_main_from_alt_principal(&p) {
+            // If equal to the previous main principal, skip
+            if prev_main != main_principal {
+                return Err(format!(
+                    "Principal {} is already linked to main principal {}",
+                    p, prev_main
+                ));
+            }
+        } else {
+            alt_principals_add_valid.push(p);
+        }
+    }
 
-    let payload = LinkedIcIdsRecord::new(main_principal, alt_principals_add.clone(), vec![])
+    let payload = LinkedIcIdsRecord::new(main_principal, alt_principals_add_valid.clone(), vec![])
         .serialize()
         .unwrap();
 
-    // Store the pubkey in the ledger
     let key = ledger
         .count_entries_for_label(LABEL_LINKED_IC_IDS)
         .to_le_bytes();
     ledger
         .upsert(LABEL_LINKED_IC_IDS, key, payload)
         .map_err(|e| e.to_string())
-        .and_then(|_| cache_link_alt_to_main_principal(main_principal, &alt_principals_add))
+        .and_then(|_| cache_link_alt_to_main_principal(main_principal, &alt_principals_add_valid))
         .and_then(|_| {
             let fee = principal_linking_fee_e9s();
             let icrc1_account = IcrcCompatibleAccount::new(main_principal, None);
             match charge_fees_to_account_no_bump_reputation(ledger, &icrc1_account, fee, "") {
                 Ok(_) => Ok(format!(
                     "Successfully linked {} to {}. You have been charged {} tokens.",
-                    alt_principals_add
+                    alt_principals_add_valid
                         .iter()
                         .map(|p| p.to_string().split_once('-').unwrap().0.to_string())
                         .collect::<Vec<_>>()
@@ -268,9 +281,28 @@ pub fn do_unlink_principals(
             .map(|p| p.to_string().split_once('-').unwrap().0.to_owned())
             .collect::<Vec<_>>()
     );
+    let mut alt_principals_rm_valid = Vec::new();
+    for p in alt_principals_rm {
+        if let Some(prev_main) = cache_get_main_from_alt_principal(&p) {
+            // If equal to the previous main principal, skip
+            if prev_main == main_principal {
+                alt_principals_rm_valid.push(p);
+            } else {
+                return Err(format!(
+                    "Principal {} is linked to another principal {}",
+                    p, prev_main
+                ));
+            }
+        } else {
+            warn!(
+                "Principal {} is not linked to any main principal, ignoring",
+                p
+            );
+        }
+    }
 
     // Create an updated record with the remaining alternate principals
-    let payload = LinkedIcIdsRecord::new(main_principal, vec![], alt_principals_rm.clone())
+    let payload = LinkedIcIdsRecord::new(main_principal, vec![], alt_principals_rm_valid.clone())
         .serialize()
         .unwrap();
 
@@ -281,14 +313,14 @@ pub fn do_unlink_principals(
     ledger
         .upsert(LABEL_LINKED_IC_IDS, key, payload)
         .map_err(|e| e.to_string())
-        .map(|_| cache_unlink_alt_from_main_principal(&main_principal, &alt_principals_rm))
+        .map(|_| cache_unlink_alt_from_main_principal(&main_principal, &alt_principals_rm_valid))
         .and_then(|_| {
             let fee = principal_linking_fee_e9s();
             let icrc1_account = IcrcCompatibleAccount::new(main_principal, None);
             match charge_fees_to_account_no_bump_reputation(ledger, &icrc1_account, fee, "") {
                 Ok(_) => Ok(format!(
                     "Successfully unlinked {} from {}. You have been charged {} tokens.",
-                    alt_principals_rm
+                    alt_principals_rm_valid
                         .iter()
                         .map(|p| p.to_string().split_once('-').unwrap().0.to_string())
                         .collect::<Vec<_>>()
