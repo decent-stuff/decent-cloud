@@ -37,7 +37,10 @@ pub fn cache_get_alt_principals_from_main(main_principal: &Principal) -> Option<
 }
 
 /// Add alternate -> main mappings to the map
-pub fn cache_link_alt_to_main_principal(main_principal: Principal, alt_principals: &[Principal]) -> Result<(), String> {
+pub fn cache_link_alt_to_main_principal(
+    main_principal: Principal,
+    alt_principals: &[Principal],
+) -> Result<(), String> {
     if alt_principals.is_empty() {
         return Ok(());
     }
@@ -90,7 +93,9 @@ pub fn cache_unlink_alt_from_main_principal(
 }
 
 pub fn cache_update_from_ledger_record(record: &LinkedIcIdsRecord) {
-    if let Err(err) = cache_link_alt_to_main_principal(*record.main_principal(), record.alt_principals_add() ) {
+    if let Err(err) =
+        cache_link_alt_to_main_principal(*record.main_principal(), record.alt_principals_add())
+    {
         println!("Error for cache_link_alt_to_main_principal: {}", err);
     }
     cache_unlink_alt_from_main_principal(record.main_principal(), record.alt_principals_rm());
@@ -211,7 +216,10 @@ pub fn do_link_principals(
     fn_info!(
         "ADD main {} <-> alt {:?}",
         main_principal,
-        alt_principals_add.iter().map(|p| p.to_string().split_once('-').unwrap().0.to_owned()).collect::<Vec<_>>()
+        alt_principals_add
+            .iter()
+            .map(|p| p.to_string().split_once('-').unwrap().0.to_owned())
+            .collect::<Vec<_>>()
     );
 
     let payload = LinkedIcIdsRecord::new(main_principal, alt_principals_add.clone(), vec![])
@@ -219,13 +227,13 @@ pub fn do_link_principals(
         .unwrap();
 
     // Store the pubkey in the ledger
-    let key = ledger.count_entries_for_label(LABEL_LINKED_IC_IDS).to_le_bytes();
+    let key = ledger
+        .count_entries_for_label(LABEL_LINKED_IC_IDS)
+        .to_le_bytes();
     ledger
         .upsert(LABEL_LINKED_IC_IDS, key, payload)
         .map_err(|e| e.to_string())
-        .and_then(|_| {
-            cache_link_alt_to_main_principal(main_principal, &alt_principals_add)
-        })
+        .and_then(|_| cache_link_alt_to_main_principal(main_principal, &alt_principals_add))
         .and_then(|_| {
             let fee = principal_linking_fee_e9s();
             let icrc1_account = IcrcCompatibleAccount::new(main_principal, None);
@@ -252,8 +260,14 @@ pub fn do_unlink_principals(
     main_principal: Principal,
     alt_principals_rm: Vec<Principal>,
 ) -> Result<String, String> {
-    fn_info!("RM {} rm alt {:?}", main_principal, alt_principals_rm.iter().map(|p| p.to_string().split_once('-').unwrap().0.to_owned()).collect::<Vec<_>>()
-);
+    fn_info!(
+        "RM {} rm alt {:?}",
+        main_principal,
+        alt_principals_rm
+            .iter()
+            .map(|p| p.to_string().split_once('-').unwrap().0.to_owned())
+            .collect::<Vec<_>>()
+    );
 
     // Create an updated record with the remaining alternate principals
     let payload = LinkedIcIdsRecord::new(main_principal, vec![], alt_principals_rm.clone())
@@ -261,7 +275,9 @@ pub fn do_unlink_principals(
         .unwrap();
 
     // Update the ledger and the cache
-    let key = ledger.count_entries_for_label(LABEL_LINKED_IC_IDS).to_le_bytes();
+    let key = ledger
+        .count_entries_for_label(LABEL_LINKED_IC_IDS)
+        .to_le_bytes();
     ledger
         .upsert(LABEL_LINKED_IC_IDS, key, payload)
         .map_err(|e| e.to_string())

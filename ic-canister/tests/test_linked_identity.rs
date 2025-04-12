@@ -155,7 +155,10 @@ fn test_link_identity_validations() {
 
     // Linking the same alt principal to different main principal should fail since it's already linked
     let result = ctx.link_principals(pmain2, vec![palt]);
-    assert!(result.is_err(), "Re-linking should fail since palt is already linked");
+    assert!(
+        result.is_err(),
+        "Re-linking should fail since palt is already linked"
+    );
 
     // Verify the alt principal is still linked to the original main principal
     assert_eq!(ctx.get_main_principal(palt).unwrap(), pmain1);
@@ -169,7 +172,10 @@ fn test_link_identity_validations() {
 
     // Unlink pmain1 -> palt
     let result = ctx.unlink_principals(pmain1, vec![palt]);
-    assert!(result.is_ok(), "Failed to unlink the alt principal from pmain1");
+    assert!(
+        result.is_ok(),
+        "Failed to unlink the alt principal from pmain1"
+    );
 
     // After unlinking, palt should resolve to itself
     assert_eq!(ctx.get_main_principal(palt).unwrap(), palt);
@@ -208,7 +214,10 @@ fn test_unlink_identity_validations() {
 
     // Attempting to unlink non-linked identity should succeed but not change the state
     let result = ctx.unlink_principals(pmain, vec![unlinked]);
-    assert!(result.is_ok(), "Unlinking non-linked identity should succeed, without changes");
+    assert!(
+        result.is_ok(),
+        "Unlinking non-linked identity should succeed, without changes"
+    );
 
     // Original link should still be intact
     assert_eq!(ctx.get_main_principal(palt).unwrap(), pmain);
