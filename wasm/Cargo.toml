@@ -1,6 +1,6 @@
 [package]
 name = "decent-cloud-wasm"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Decent Cloud Team"]
 edition = "2021"
 description = "WebAssembly module for interacting with Decent Cloud ledger"
