@@ -263,7 +263,7 @@ pub fn do_node_provider_check_in(
         fee_memo.truncate(MEMO_BYTES_MAX);
         charge_fees_to_account_no_bump_reputation(
             ledger,
-            &dcc_id,
+            &dcc_id.as_icrc_compatible_account(),
             amount as TokenAmountE9s,
             &fee_memo,
         )?;

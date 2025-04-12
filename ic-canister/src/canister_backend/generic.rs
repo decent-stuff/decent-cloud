@@ -7,8 +7,8 @@ use dcc_common::{
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
     rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
     RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS, DATA_PULL_BYTES_BEFORE_LEN,
-    LABEL_CONTRACT_SIGN_REQUEST, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE,
-    LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
+    LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
     MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
 use flate2::{write::ZlibEncoder, Compression};
@@ -31,6 +31,7 @@ thread_local! {
         LABEL_NP_PROFILE.to_string(),
         LABEL_NP_OFFERING.to_string(),
         LABEL_CONTRACT_SIGN_REQUEST.to_string(),
+        LABEL_LINKED_IC_IDS.to_string(),
     ])).expect("Failed to create LedgerMap"));
     pub(crate) static AUTHORIZED_PUSHER: RefCell<Option<Principal>> = const { RefCell::new(None) };
     #[cfg(target_arch = "wasm32")]

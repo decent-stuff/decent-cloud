@@ -83,7 +83,7 @@ pub fn do_account_register(
         );
         charge_fees_to_account_no_bump_reputation(
             ledger,
-            &dcc_id,
+            &dcc_id.as_icrc_compatible_account(),
             amount as TokenAmountE9s,
             format!(
                 "register-{}",

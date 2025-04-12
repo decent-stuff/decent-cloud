@@ -15,7 +15,7 @@ borsh.workspace = true
 candid.workspace = true
 ciborium.workspace = true
 crc32fast.workspace = true
-dcc-common.workspace = true
+dcc-common = { workspace = true, features = ["ic"] }
 ed25519-dalek.workspace = true
 flate2.workspace = true
 hex.workspace = true

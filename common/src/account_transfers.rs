@@ -150,20 +150,19 @@ pub fn charge_fees_to_account_and_bump_reputation(
 
 pub fn charge_fees_to_account_no_bump_reputation(
     ledger: &mut LedgerMap,
-    dcc_id_charge: &DccIdentity,
+    icrc1_account_charge: &IcrcCompatibleAccount,
     amount_e9s: TokenAmountE9s,
     memo: &str,
 ) -> Result<(), String> {
     if amount_e9s == 0 {
         return Ok(());
     }
-    let from_icrc1_account = dcc_id_charge.as_icrc_compatible_account();
-    let balance_from_before = account_balance_get(&from_icrc1_account);
+    let balance_from_before = account_balance_get(icrc1_account_charge);
     match ledger_funds_transfer(
         ledger,
         // Burn 0 tokens, and transfer the entire amount_e9s to the fee accounts
         FundsTransfer::new(
-            from_icrc1_account,
+            icrc1_account_charge.clone(),
             MINTING_ACCOUNT,
             Some(amount_e9s),
             Some(fees_sink_accounts()),

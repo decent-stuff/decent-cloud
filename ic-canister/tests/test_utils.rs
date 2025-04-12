@@ -462,3 +462,57 @@ pub fn test_contract_sign_reply(
         Result<String, String>
     )
 }
+
+// ---- Linked Identity Management Functions ----
+#[allow(dead_code)]
+impl TestContext {
+    pub fn link_principals(
+        &self,
+        main_principal: Principal,
+        alt_principals: Vec<Principal>,
+    ) -> Result<String, String> {
+        update_check_and_decode!(
+            self.pic,
+            self.canister_id,
+            main_principal,
+            "link_principals",
+            Encode!(&main_principal, &alt_principals).unwrap(),
+            Result<String, String>
+        )
+    }
+
+    pub fn unlink_principals(
+        &self,
+        main_principal: Principal,
+        alt_principals: Vec<Principal>,
+    ) -> Result<String, String> {
+        update_check_and_decode!(
+            self.pic,
+            self.canister_id,
+            main_principal,
+            "unlink_principals",
+            Encode!(&main_principal, &alt_principals).unwrap(),
+            Result<String, String>
+        )
+    }
+
+    pub fn list_alt_principals(&self, primary: Principal) -> Result<Vec<Principal>, String> {
+        query_check_and_decode!(
+            self.pic,
+            self.canister_id,
+            "list_alt_principals",
+            Encode!(&primary).unwrap(),
+            Result<Vec<Principal>, String>
+        )
+    }
+
+    pub fn get_main_principal(&self, principal: Principal) -> Result<Principal, String> {
+        query_check_and_decode!(
+            self.pic,
+            self.canister_id,
+            "get_main_principal",
+            Encode!(&principal).unwrap(),
+            Result<Principal, String>
+        )
+    }
+}

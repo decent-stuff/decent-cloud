@@ -2,16 +2,16 @@ use crate::account_transfer_approvals::{approval_update, FundsTransferApproval};
 use crate::account_transfers::FundsTransfer;
 use crate::cache_transactions::RecentCache;
 use crate::{
-    account_balance_add, account_balance_sub, account_balances_clear, contracts_cache_open_add,
-    contracts_cache_open_remove, dcc_identity, error, reputations_apply_aging,
-    reputations_apply_changes, reputations_clear, set_num_providers, set_num_users,
-    set_offering_num_per_provider, AHashMap, CheckInPayload, ContractSignReplyPayload,
-    ContractSignRequest, ContractSignRequestPayload, DccIdentity, ReputationAge, ReputationChange,
-    UpdateOfferingPayload, UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY,
-    LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER,
-    LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER,
-    LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
-    PRINCIPAL_MAP,
+    account_balance_add, account_balance_sub, account_balances_clear,
+    cache_update_from_ledger_record, contracts_cache_open_add, contracts_cache_open_remove,
+    dcc_identity, error, reputations_apply_aging, reputations_apply_changes, reputations_clear,
+    set_num_providers, set_num_users, set_offering_num_per_provider, AHashMap, CheckInPayload,
+    ContractSignReplyPayload, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
+    LinkedIcIdsRecord, ReputationAge, ReputationChange, UpdateOfferingPayload,
+    UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
+    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN,
+    LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE,
+    LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -149,6 +149,11 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                 LABEL_CONTRACT_SIGN_REPLY => {
                     let contract_id = entry.key();
                     contracts_cache_open_remove(contract_id);
+                }
+                LABEL_LINKED_IC_IDS => {
+                    cache_update_from_ledger_record(
+                        &LinkedIcIdsRecord::deserialize(entry.value()).unwrap(),
+                    );
                 }
                 _ => {}
             }
