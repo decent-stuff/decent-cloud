@@ -176,7 +176,7 @@ pub fn do_contract_sign_reply(
         // Else, charge the provider the response fee, and revert the requester's reputation
         charge_fees_to_account_no_bump_reputation(
             ledger,
-            &provider_dcc_id,
+            &provider_dcc_id.as_icrc_compatible_account(),
             fees_e9s,
             cs_req.request_memo(),
         )?;
