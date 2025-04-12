@@ -84,7 +84,7 @@ pub fn main() {
     }
 
     if !Command::new("dfx")
-        .args(["build", "--check"])
+        .args(["build"])
         .current_dir(canister_dir_path)
         .status()
         .expect("Failed to build canister")
