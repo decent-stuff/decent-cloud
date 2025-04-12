@@ -221,7 +221,7 @@ pub fn do_link_principals(
     // Store the pubkey in the ledger
     let key = ledger.count_entries_for_label(LABEL_LINKED_IC_IDS).to_le_bytes();
     ledger
-        .upsert(LABEL_LINKED_IC_IDS, &key, payload)
+        .upsert(LABEL_LINKED_IC_IDS, key, payload)
         .map_err(|e| e.to_string())
         .and_then(|_| {
             cache_link_alt_to_main_principal(main_principal, &alt_principals_add)
@@ -263,7 +263,7 @@ pub fn do_unlink_principals(
     // Update the ledger and the cache
     let key = ledger.count_entries_for_label(LABEL_LINKED_IC_IDS).to_le_bytes();
     ledger
-        .upsert(LABEL_LINKED_IC_IDS, &key, payload)
+        .upsert(LABEL_LINKED_IC_IDS, key, payload)
         .map_err(|e| e.to_string())
         .map(|_| cache_unlink_alt_from_main_principal(&main_principal, &alt_principals_rm))
         .and_then(|_| {
