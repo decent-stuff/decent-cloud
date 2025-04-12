@@ -1,32 +1,32 @@
 use crate::canister_backend::linked_identity::*;
 use candid::Principal;
 
-/// Links identities by adding secondary identities to a primary principal's record
+/// Links principals by adding alternate principals to a main principal's record
 #[ic_cdk::update]
-fn link_identities(
-    primary_principal: Principal,
-    secondary_principals: Vec<Principal>,
+fn link_principals(
+    main_principal: Principal,
+    alt_principals: Vec<Principal>,
 ) -> Result<String, String> {
-    _link_identities(primary_principal, secondary_principals)
+    _link_principals(main_principal, alt_principals)
 }
 
-/// Unlinks identities by removing secondary identities from a primary principal's record
+/// Unlinks principals by removing alternate principals from a main principal's record
 #[ic_cdk::update]
-fn unlink_identities(
-    primary_principal: Principal,
-    secondary_principals: Vec<Principal>,
+fn unlink_principals(
+    main_principal: Principal,
+    alt_principals: Vec<Principal>,
 ) -> Result<String, String> {
-    _unlink_identities(primary_principal, secondary_principals)
+    _unlink_principals(main_principal, alt_principals)
 }
 
-/// Lists all identities linked to the given primary principal
+/// Lists alternate principals linked to the given main principal
 #[ic_cdk::query]
-fn list_linked_identities(primary_principal: Principal) -> Result<Vec<Principal>, String> {
-    _list_linked_identities(primary_principal)
+fn list_alt_principals(main_principal: Principal) -> Result<Vec<Principal>, String> {
+    _list_alt_principals(main_principal)
 }
 
-/// Gets the primary principal for a given IC principal
+/// Gets the main principal for a given alternate principal
 #[ic_cdk::query]
-fn get_primary_identity(principal: Principal) -> Result<Principal, String> {
-    _get_primary_identity(principal)
+fn get_main_principal(alt_principal: Principal) -> Result<Principal, String> {
+    _get_main_principal(alt_principal)
 }

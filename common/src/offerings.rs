@@ -96,7 +96,12 @@ pub fn do_node_provider_update_offering(
     set_offering_num_per_provider(pubkey_bytes.clone(), num_offering_instances as u64);
 
     let fees = np_offering_update_fee_e9s();
-    charge_fees_to_account_no_bump_reputation(ledger, &dcc_id.as_icrc_compatible_account(), fees, "update-offering")?;
+    charge_fees_to_account_no_bump_reputation(
+        ledger,
+        &dcc_id.as_icrc_compatible_account(),
+        fees,
+        "update-offering",
+    )?;
     // Store the original signed payload in the ledger
     ledger
         .upsert(LABEL_NP_OFFERING, &pubkey_bytes, payload_bytes)

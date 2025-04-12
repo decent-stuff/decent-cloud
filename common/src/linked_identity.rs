@@ -1,65 +1,109 @@
-use crate::{fn_info, AHashMap};
+use crate::{
+    amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reward_e9s_per_block,
+    AHashMap, IcrcCompatibleAccount, TokenAmountE9s, LABEL_LINKED_IC_IDS,
+};
 use borsh::{BorshDeserialize, BorshSerialize};
 use candid::Principal;
 use function_name::named;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 use ic_cdk::println;
-use ledger_map::LedgerMap;
+use ledger_map::{AHashSet, LedgerMap};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap};
 
-// Maximum number of linked identities allowed per primary
-pub const MAX_LINKED_IDENTITIES: usize = 32;
+// Maximum allowed number of linked identities allowed per main principal
+pub const MAX_LINKED_PRINCIPALS: usize = 32;
+
+fn principal_linking_fee_e9s() -> TokenAmountE9s {
+    reward_e9s_per_block() / 10000
+}
 
 thread_local! {
-    // A link from a secondary identity to its primary identity
-    pub static LINKED_PRINCIPALS_MAP: RefCell<AHashMap<Principal, Principal>> = RefCell::new(HashMap::default());
+    pub static LINKED_ALT_TO_MAIN: RefCell<AHashMap<Principal, Principal>> = RefCell::new(HashMap::default());
+    pub static LINKED_MAIN_TO_ALT: RefCell<AHashMap<Principal, AHashSet<Principal>>> = RefCell::new(HashMap::default());
 }
 
-/// Get the primary principal for a given principal from the map
-pub fn get_linked_primary_principal(secondary_principal: &Principal) -> Option<Principal> {
-    LINKED_PRINCIPALS_MAP.with(|map| map.borrow().get(secondary_principal).copied())
+/// Get the main principal for a given principal from the map
+pub fn cache_get_main_from_alt_principal(alt_principal: &Principal) -> Option<Principal> {
+    LINKED_ALT_TO_MAIN.with(|map| map.borrow().get(alt_principal).copied())
 }
 
-/// Add secondary -> primary mappings to the map
-pub fn link_secondary_to_primary_principal(primary: Principal, secondaries: Vec<Principal>) {
-    LINKED_PRINCIPALS_MAP.with(|map| {
-        for secondary in secondaries {
-            map.borrow_mut().insert(secondary, primary);
+pub fn cache_get_alt_principals_from_main(main_principal: &Principal) -> Option<Vec<Principal>> {
+    LINKED_MAIN_TO_ALT.with(|map| {
+        map.borrow()
+            .get(main_principal)
+            .map(|set| set.iter().copied().collect())
+    })
+}
+
+/// Add alternate -> main mappings to the map
+pub fn cache_link_alt_to_main_principal(main_principal: Principal, alt_principals: &[Principal]) -> Result<(), String> {
+    if alt_principals.is_empty() {
+        return Ok(());
+    }
+    for alt_principal in alt_principals {
+        if let Some(prev_main) = cache_get_main_from_alt_principal(alt_principal) {
+            return Err(format!(
+                "Principal {} is already linked to main principal {}",
+                alt_principal, prev_main
+            ));
+        }
+    }
+    LINKED_ALT_TO_MAIN.with(|map| {
+        for alt_principal in alt_principals {
+            map.borrow_mut().insert(*alt_principal, main_principal);
         }
     });
+    LINKED_MAIN_TO_ALT.with(|map| {
+        map.borrow_mut()
+            .entry(main_principal)
+            .or_default()
+            .extend(alt_principals);
+    });
+    Ok(())
 }
 
-/// Remove a secondary -> primary mapping from the map
-pub fn unlink_secondary_from_primary_principal(
-    primary: &Principal,
-    secondaries: &Vec<Principal>,
-) -> Vec<Principal> {
-    let mut removed = Vec::new();
-    LINKED_PRINCIPALS_MAP.with(|map| {
-        for secondary in secondaries {
-            // Check if the secondary principal is linked to the primary
-            match map.borrow().get(secondary) {
-                Some(linked_primary) if linked_primary == primary => {
-                    // Remove the mapping
-                    map.borrow_mut().remove(secondary);
-                    removed.push(*linked_primary)
-                }
-                _ => {} // Secondary principal not found or not linked to the primary
+/// Remove an alt -> main mapping from the map
+pub fn cache_unlink_alt_from_main_principal(
+    main_principal: &Principal,
+    alt_principals: &[Principal],
+) {
+    if alt_principals.is_empty() {
+        return;
+    }
+    LINKED_ALT_TO_MAIN.with(|map| {
+        let mut map = map.borrow_mut();
+        for alt_principal in alt_principals {
+            if map.get(alt_principal) == Some(main_principal) {
+                println!("Removing {} from {}", alt_principal, main_principal);
+                map.remove(alt_principal);
             }
         }
     });
-    removed
+    LINKED_MAIN_TO_ALT.with(|map| {
+        map.borrow_mut().entry(*main_principal).and_modify(|set| {
+            for alt_principal in alt_principals {
+                set.remove(alt_principal);
+            }
+        });
+    });
 }
 
-pub fn principal_serialize(
+pub fn cache_update_from_ledger_record(record: &LinkedIcIdsRecord) {
+    if let Err(err) = cache_link_alt_to_main_principal(*record.main_principal(), record.alt_principals_add() ) {
+        println!("Error for cache_link_alt_to_main_principal: {}", err);
+    }
+    cache_unlink_alt_from_main_principal(record.main_principal(), record.alt_principals_rm());
+}
+
+pub fn serialize_ppal(
     principal: &Principal,
     writer: &mut impl borsh::io::Write,
 ) -> Result<(), borsh::io::Error> {
     BorshSerialize::serialize(&principal.as_slice(), writer)
 }
 
-pub fn vec_principal_serialize(
+pub fn serialize_vec_ppal(
     principal: &[Principal],
     writer: &mut impl borsh::io::Write,
 ) -> Result<(), borsh::io::Error> {
@@ -69,16 +113,14 @@ pub fn vec_principal_serialize(
     )
 }
 
-pub fn principal_deserialize(
-    reader: &mut impl borsh::io::Read,
-) -> Result<Principal, borsh::io::Error> {
+pub fn deserialize_ppal(reader: &mut impl borsh::io::Read) -> Result<Principal, borsh::io::Error> {
     let principal: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
     Principal::try_from_slice(&principal).map_err(|_| {
         borsh::io::Error::new(borsh::io::ErrorKind::InvalidData, "Invalid Principal bytes")
     })
 }
 
-pub fn vec_principal_deserialize(
+pub fn deserialize_vec_ppal(
     reader: &mut impl borsh::io::Read,
 ) -> Result<Vec<Principal>, borsh::io::Error> {
     let principals: Vec<Vec<u8>> = BorshDeserialize::deserialize_reader(reader)?;
@@ -92,169 +134,165 @@ pub fn vec_principal_deserialize(
 }
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
-pub struct LinkedIcPrincipalsRecordV1 {
+pub struct LinkedIcIdsRecordV1 {
     #[borsh(
-        serialize_with = "principal_serialize",
-        deserialize_with = "principal_deserialize"
+        serialize_with = "serialize_ppal",
+        deserialize_with = "deserialize_ppal"
     )]
-    primary_principal: Principal, // IC Principal of the primary identity
+    main_principal: Principal, // IC Principal of the main identity
     #[borsh(
-        serialize_with = "vec_principal_serialize",
-        deserialize_with = "vec_principal_deserialize"
+        serialize_with = "serialize_vec_ppal",
+        deserialize_with = "deserialize_vec_ppal"
     )]
-    secondary_principals: Vec<Principal>, // List of IC Principals of the secondary identities
-    created_at: u64,      // Timestamp when the record was created
-    last_updated_at: u64, // Timestamp when the record was last updated
+    alt_principals_add: Vec<Principal>, // List of alt IC Principals to add
+    #[borsh(
+        serialize_with = "serialize_vec_ppal",
+        deserialize_with = "deserialize_vec_ppal"
+    )]
+    alt_principals_rm: Vec<Principal>, // List of alt IC Principals to remove
 }
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub enum LinkedIcIdsRecord {
-    V1(LinkedIcPrincipalsRecordV1),
+    V1(LinkedIcIdsRecordV1),
 }
 
 impl LinkedIcIdsRecord {
-    /// Creates a new LinkedIdentityRecord with the given primary identity
-    pub fn new(primary_principal: Principal, timestamp: u64) -> Self {
-        LinkedIcIdsRecord::V1(LinkedIcPrincipalsRecordV1 {
-            primary_principal,
-            secondary_principals: Vec::new(),
-            created_at: timestamp,
-            last_updated_at: timestamp,
+    /// Creates a new LinkedIdentityRecord with the given main identity
+    pub fn new(
+        main_principal: Principal,
+        alt_principals_add: Vec<Principal>,
+        alt_principals_rm: Vec<Principal>,
+    ) -> Self {
+        LinkedIcIdsRecord::V1(LinkedIcIdsRecordV1 {
+            main_principal,
+            alt_principals_add,
+            alt_principals_rm,
         })
     }
 
-    /// Returns the primary identity principal
-    pub fn primary_principal(&self) -> &Principal {
+    /// Returns the main identity principal
+    pub fn main_principal(&self) -> &Principal {
         match self {
-            LinkedIcIdsRecord::V1(record) => &record.primary_principal,
+            LinkedIcIdsRecord::V1(record) => &record.main_principal,
         }
     }
 
-    /// Returns the list of secondary principals
-    pub fn secondary_principals(&self) -> &[Principal] {
+    /// Returns the list of alternate principals added
+    pub fn alt_principals_add(&self) -> &[Principal] {
         match self {
-            LinkedIcIdsRecord::V1(record) => &record.secondary_principals,
+            LinkedIcIdsRecord::V1(record) => &record.alt_principals_add,
         }
     }
 
-    /// Adds a secondary principal to the record
-    pub fn add_secondary_principal(
-        &mut self,
-        secondary_principal: Principal,
-        timestamp: u64,
-    ) -> Result<(), String> {
+    /// Returns the list of alternate principals removed
+    pub fn alt_principals_rm(&self) -> &[Principal] {
         match self {
-            LinkedIcIdsRecord::V1(record) => {
-                // Check if the secondary principal is the same as the primary
-                if record.primary_principal == secondary_principal {
-                    return Err("Cannot add primary principal as a secondary principal".to_string());
-                }
-
-                // Check if the secondary principal is already in the list
-                if record.secondary_principals.contains(&secondary_principal) {
-                    return Err("Secondary principal already linked".to_string());
-                }
-
-                // Check if we've reached the maximum number of linked identities
-                if record.secondary_principals.len() >= MAX_LINKED_IDENTITIES {
-                    return Err(format!(
-                        "Cannot add more than {} linked identities",
-                        MAX_LINKED_IDENTITIES
-                    ));
-                }
-
-                // Add the secondary principal
-                record.secondary_principals.push(secondary_principal);
-                record.last_updated_at = timestamp;
-                Ok(())
-            }
+            LinkedIcIdsRecord::V1(record) => &record.alt_principals_rm,
         }
     }
 
-    /// Removes a secondary principal from the record
-    pub fn remove_secondary_principal(
-        &mut self,
-        secondary_principal: Principal,
-        timestamp: u64,
-    ) -> Result<(), String> {
-        match self {
-            LinkedIcIdsRecord::V1(record) => {
-                if let Some(pos) = record
-                    .secondary_principals
-                    .iter()
-                    .position(|p| p == &secondary_principal)
-                {
-                    record.secondary_principals.remove(pos);
-                    record.last_updated_at = timestamp;
-                    Ok(())
-                } else {
-                    Err("Secondary principal not found".to_string())
-                }
-            }
-        }
+    pub fn serialize(&self) -> Result<Vec<u8>, borsh::io::Error> {
+        borsh::to_vec(self)
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> Result<Self, borsh::io::Error> {
+        LinkedIcIdsRecord::try_from_slice(bytes)
     }
 }
 
 #[named]
-/// Links identities by adding a secondary principal to a primary principal's record
-pub fn link_identities(
-    _ledger: &mut LedgerMap,
-    primary_principal: Principal,
-    secondary_principals: Vec<Principal>,
-    _timestamp: u64,
+/// Links principals by adding alternate principals to a main principal's record
+pub fn do_link_principals(
+    ledger: &mut LedgerMap,
+    main_principal: Principal,
+    alt_principals_add: Vec<Principal>,
 ) -> Result<String, String> {
-    fn_info!("for principal {}", primary_principal);
-    link_secondary_to_primary_principal(primary_principal, secondary_principals);
-    Ok("Successfully linked identities".to_string())
-}
+    fn_info!(
+        "ADD main {} <-> alt {:?}",
+        main_principal,
+        alt_principals_add.iter().map(|p| p.to_string().split_once('-').unwrap().0.to_owned()).collect::<Vec<_>>()
+    );
 
-#[named]
-/// Unlinks identities by removing secondary principals from a primary principal's record
-pub fn unlink_identities(
-    _ledger: &mut LedgerMap,
-    primary_principal: Principal,
-    secondary_principals: Vec<Principal>,
-    _timestamp: u64,
-) -> Result<String, String> {
-    fn_info!("for principal {}", primary_principal);
-    let unlinked =
-        unlink_secondary_from_primary_principal(&primary_principal, &secondary_principals);
-    if unlinked.is_empty() {
-        return Err("No valid linked identities found to unlink".to_string());
-    }
-    Ok(format!(
-        "Successfully unlinked identities: {:?} from {}",
-        unlinked, primary_principal
-    ))
-}
+    let payload = LinkedIcIdsRecord::new(main_principal, alt_principals_add.clone(), vec![])
+        .serialize()
+        .unwrap();
 
-#[named]
-/// Lists all principals linked to the given primary principal
-pub fn list_linked_identities(primary_principal: Principal) -> Result<Vec<Principal>, String> {
-    fn_info!("for principal {}", primary_principal);
-    // Collect all secondary principals that map to this primary
-    let mut secondaries = Vec::new();
-    LINKED_PRINCIPALS_MAP.with(|map| {
-        for (secondary, primary) in map.borrow().iter() {
-            if *primary == primary_principal {
-                secondaries.push(*secondary);
+    // Store the pubkey in the ledger
+    let key = ledger.count_entries_for_label(LABEL_LINKED_IC_IDS).to_le_bytes();
+    ledger
+        .upsert(LABEL_LINKED_IC_IDS, &key, payload)
+        .map_err(|e| e.to_string())
+        .and_then(|_| {
+            cache_link_alt_to_main_principal(main_principal, &alt_principals_add)
+        })
+        .and_then(|_| {
+            let fee = principal_linking_fee_e9s();
+            let icrc1_account = IcrcCompatibleAccount::new(main_principal, None);
+            match charge_fees_to_account_no_bump_reputation(ledger, &icrc1_account, fee, "") {
+                Ok(_) => Ok(format!(
+                    "Successfully linked {} to {}. You have been charged {} tokens.",
+                    alt_principals_add
+                        .iter()
+                        .map(|p| p.to_string().split_once('-').unwrap().0.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    main_principal,
+                    amount_as_string(fee)
+                )),
+                Err(e) => Err(format!("Failed to charge the fees: {}", e)),
             }
-        }
-    });
-
-    if secondaries.is_empty() {
-        Err("No linked identities found".to_string())
-    } else {
-        Ok(secondaries)
-    }
+        })
 }
 
 #[named]
-/// Gets the primary principal for a given principal (if it exists)
-pub fn get_primary_principal(principal: Principal) -> Result<Principal, String> {
-    fn_info!("for principal {}", principal);
-    match get_linked_primary_principal(&principal) {
-        Some(primary) => Ok(primary),
-        None => Ok(principal), // If not found as secondary, it might be a primary
+/// Unlinks principals by removing alt principals from the main principal's record
+pub fn do_unlink_principals(
+    ledger: &mut LedgerMap,
+    main_principal: Principal,
+    alt_principals_rm: Vec<Principal>,
+) -> Result<String, String> {
+    fn_info!("RM {} rm alt {:?}", main_principal, alt_principals_rm.iter().map(|p| p.to_string().split_once('-').unwrap().0.to_owned()).collect::<Vec<_>>()
+);
+
+    // Create an updated record with the remaining alternate principals
+    let payload = LinkedIcIdsRecord::new(main_principal, vec![], alt_principals_rm.clone())
+        .serialize()
+        .unwrap();
+
+    // Update the ledger and the cache
+    let key = ledger.count_entries_for_label(LABEL_LINKED_IC_IDS).to_le_bytes();
+    ledger
+        .upsert(LABEL_LINKED_IC_IDS, &key, payload)
+        .map_err(|e| e.to_string())
+        .map(|_| cache_unlink_alt_from_main_principal(&main_principal, &alt_principals_rm))
+        .and_then(|_| {
+            let fee = principal_linking_fee_e9s();
+            let icrc1_account = IcrcCompatibleAccount::new(main_principal, None);
+            match charge_fees_to_account_no_bump_reputation(ledger, &icrc1_account, fee, "") {
+                Ok(_) => Ok(format!(
+                    "Successfully unlinked {} from {}. You have been charged {} tokens.",
+                    alt_principals_rm
+                        .iter()
+                        .map(|p| p.to_string().split_once('-').unwrap().0.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    main_principal,
+                    amount_as_string(fee)
+                )),
+                Err(e) => Err(format!("Failed to charge the fees: {}", e)),
+            }
+        })
+}
+
+/// Lists all principals linked to the given main principal
+pub fn do_list_alt_principals(main_principal: Principal) -> Result<Vec<Principal>, String> {
+    Ok(cache_get_alt_principals_from_main(&main_principal).unwrap_or_default())
+}
+
+pub fn do_get_main_principal(alt_principal: Principal) -> Result<Principal, String> {
+    match cache_get_main_from_alt_principal(&alt_principal) {
+        Some(main_principal) => Ok(main_principal),
+        None => Ok(alt_principal), // There is no main identity, return the alternate principal
     }
 }

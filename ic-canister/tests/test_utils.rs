@@ -464,46 +464,53 @@ pub fn test_contract_sign_reply(
 }
 
 // ---- Linked Identity Management Functions ----
-
 #[allow(dead_code)]
 impl TestContext {
-    pub fn link_identities(&self, primary: Principal, secondaries: Vec<Principal>) -> Result<String, String> {
+    pub fn link_principals(
+        &self,
+        main_principal: Principal,
+        alt_principals: Vec<Principal>,
+    ) -> Result<String, String> {
         update_check_and_decode!(
             self.pic,
             self.canister_id,
-            primary,
-            "link_identities",
-            Encode!(&primary, &secondaries).unwrap(),
+            main_principal,
+            "link_principals",
+            Encode!(&main_principal, &alt_principals).unwrap(),
             Result<String, String>
         )
     }
 
-    pub fn unlink_identities(&self, primary: Principal, secondaries: Vec<Principal>) -> Result<String, String> {
+    pub fn unlink_principals(
+        &self,
+        main_principal: Principal,
+        alt_principals: Vec<Principal>,
+    ) -> Result<String, String> {
         update_check_and_decode!(
             self.pic,
             self.canister_id,
-            primary,
-            "unlink_identities",
-            Encode!(&primary, &secondaries).unwrap(),
+            main_principal,
+            "unlink_principals",
+            Encode!(&main_principal, &alt_principals).unwrap(),
             Result<String, String>
         )
     }
 
-    pub fn list_linked_identities(&self, primary: Principal) -> Result<Vec<Principal>, String> {
+    pub fn list_alt_principals(&self, primary: Principal) -> Result<Vec<Principal>, String> {
         query_check_and_decode!(
             self.pic,
             self.canister_id,
-            "list_linked_identities",
+            "list_alt_principals",
             Encode!(&primary).unwrap(),
             Result<Vec<Principal>, String>
         )
     }
 
-    pub fn get_primary_principal(&self, principal: Principal) -> Result<Principal, String> {
+    pub fn get_main_principal(&self, principal: Principal) -> Result<Principal, String> {
         query_check_and_decode!(
             self.pic,
             self.canister_id,
-            "get_primary_principal",
+            "get_main_principal",
             Encode!(&principal).unwrap(),
             Result<Principal, String>
         )

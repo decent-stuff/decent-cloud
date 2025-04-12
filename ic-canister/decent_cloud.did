@@ -434,10 +434,10 @@ service : {
     user_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
 
     // Linked identity operations
-    link_principals: (primary_principal: principal, alternate_principals: vec principal) -> (ResultString);
-    unlink_principals: (primary_principal: principal, alternate_principals: vec principal) -> (ResultString);
-    list_alternate_principals: (primary_principal: principal) -> (variant { Ok: vec principal; Err: text }) query;
-    get_primary_principals: (ic_principal: principal) -> (variant { Ok: principal; Err: text }) query;
+    link_principals: (main_principal: principal, alt_principals: vec principal) -> (ResultString);
+    unlink_principals: (main_principal: principal, alt_principals: vec principal) -> (ResultString);
+    list_alt_principals: (main_principal: principal) -> (variant { Ok: vec principal; Err: text }) query;
+    get_main_principal: (alt_principal: principal) -> (variant { Ok: principal; Err: text }) query;
 
     // Check-in nonce that needs to be signed and sent for the check in
     // Provided here as a reference only, since client will instead use the nonce of the local ledger

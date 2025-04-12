@@ -1,50 +1,33 @@
 use super::generic::LEDGER_MAP;
 use candid::Principal;
 use dcc_common::{
-    get_primary_principal as common_get_primary_principal, get_timestamp_ns,
-    link_identities as common_link_identities,
-    list_linked_identities as common_list_linked_identities,
-    unlink_identities as common_unlink_identities,
+    do_get_main_principal, do_link_principals, do_list_alt_principals, do_unlink_principals,
 };
 
-/// Links identities by adding secondary identities to a primary principal's record
-pub fn _link_identities(
-    primary_principal: Principal,
-    secondary_principals: Vec<Principal>,
+pub fn _link_principals(
+    main_principal: Principal,
+    alt_principals: Vec<Principal>,
 ) -> Result<String, String> {
     LEDGER_MAP.with(|ledger| {
         let mut ledger = ledger.borrow_mut();
-        common_link_identities(
-            &mut ledger,
-            primary_principal,
-            secondary_principals,
-            get_timestamp_ns(),
-        )
+        do_link_principals(&mut ledger, main_principal, alt_principals)
     })
 }
 
-/// Unlinks identities by removing secondary identities from a primary principal's record
-pub fn _unlink_identities(
-    primary_principal: Principal,
-    secondary_principals: Vec<Principal>,
+pub fn _unlink_principals(
+    main_principal: Principal,
+    alt_principals: Vec<Principal>,
 ) -> Result<String, String> {
     LEDGER_MAP.with(|ledger| {
         let mut ledger = ledger.borrow_mut();
-        common_unlink_identities(
-            &mut ledger,
-            primary_principal,
-            secondary_principals,
-            get_timestamp_ns(),
-        )
+        do_unlink_principals(&mut ledger, main_principal, alt_principals)
     })
 }
 
-/// Lists all identities linked to the given primary principal
-pub fn _list_linked_identities(primary_principal: Principal) -> Result<Vec<Principal>, String> {
-    common_list_linked_identities(primary_principal)
+pub fn _list_alt_principals(main_principal: Principal) -> Result<Vec<Principal>, String> {
+    do_list_alt_principals(main_principal)
 }
 
-/// Gets the primary principal for a given IC principal
-pub fn _get_primary_identity(principal: Principal) -> Result<Principal, String> {
-    common_get_primary_principal(principal)
+pub fn _get_main_principal(alt_principal: Principal) -> Result<Principal, String> {
+    do_get_main_principal(alt_principal)
 }
