@@ -409,6 +409,23 @@ impl WasmLedgerEntry {
             description: "Contract Sign Reply".to_string(),
         }
     }
+
+    fn from_linked_ic_ids(entry: &LedgerEntry) -> Self {
+        let key = if entry.key().len() == 8 {
+            let mut key = [0u8; 8];
+            key.copy_from_slice(entry.key());
+            Value::Number(u64::from_le_bytes(key).into())
+        } else {
+            Value::String(BASE64.encode(entry.key()))
+        };
+        WasmLedgerEntry {
+            label: LABEL_LINKED_IC_IDS.to_string(),
+            key,
+            value: serde_json::to_value(LinkedIcIdsRecord::deserialize(entry.value()).unwrap())
+                .unwrap(),
+            description: "Linked IC Principals".to_string(),
+        }
+    }
 }
 
 pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
@@ -429,6 +446,7 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
             }
             LABEL_CONTRACT_SIGN_REQUEST => WasmLedgerEntry::from_contract_sign_request(entry),
             LABEL_CONTRACT_SIGN_REPLY => WasmLedgerEntry::from_contract_sign_reply(entry),
+            LABEL_LINKED_IC_IDS => WasmLedgerEntry::from_linked_ic_ids(entry),
             _ => WasmLedgerEntry::from_generic(entry),
         })
     }
