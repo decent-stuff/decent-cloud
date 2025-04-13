@@ -1,16 +1,60 @@
 "use client";
-
 import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, IdentityInfo } from "@/lib/auth-context";
 import HeaderSection from "@/components/ui/header";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { fetchMetadata } from "@/lib/icp-utils";
 import { fetchUserBalances, fetchDctPrice } from "@/lib/token-utils";
 import { sendFunds, getTopUpUrl } from "@/lib/send-funds-utils";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { SendFundsDialog } from "@/components/send-funds-dialog";
+import { SeedPhraseDialog } from "@/components/seed-phrase-dialog";
 import { Principal } from "@dfinity/principal";
+
+// Identity badge configuration
+const badgeStyles = {
+  current: {
+    bg: "bg-blue-900/30",
+    border: "border-blue-500/30",
+    text: "text-blue-400",
+    label: "Current"
+  },
+  signing: {
+    bg: "bg-emerald-900/30",
+    border: "border-emerald-500/30",
+    text: "text-emerald-400",
+    label: "Signing"
+  },
+};
+
+interface IdentityBadgesProps {
+  isCurrent: boolean;
+  isSigning: boolean;
+  type: IdentityInfo["type"];
+}
+
+const IdentityBadges = ({ isCurrent, isSigning }: IdentityBadgesProps) => {
+  const badges = [
+    { show: isCurrent, style: badgeStyles.current },
+    { show: isSigning, style: badgeStyles.signing },
+  ];
+
+  return (
+    <div className="flex gap-2">
+      {badges.map(({ show, style }, index) =>
+        show ? (
+          <span
+            key={index}
+            className={`text-xs ${style.bg} border ${style.border} px-2 py-1 rounded ${style.text}`}
+          >
+            {style.label}
+          </span>
+        ) : null
+      )}
+    </div>
+  );
+};
 
 interface DashboardData {
   dctPrice: number;
@@ -199,9 +243,12 @@ export default function DashboardPage() {
   const {
     isAuthenticated,
     currentIdentity,
+    signingIdentity,
     identities,
     switchIdentity,
     signOutIdentity,
+    errorMessage,
+    backupSeedPhrase
   } = useAuth();
 
   const [dashboardData, setDashboardData] = useState<DashboardData>({
@@ -215,6 +262,8 @@ export default function DashboardPage() {
 
   // State for send funds dialog
   const [sendFundsDialogOpen, setSendFundsDialogOpen] = useState(false);
+  const [showBackupDialog, setShowBackupDialog] = useState(false);
+  const [backupIdentity, setBackupIdentity] = useState<Principal | null>(null);
   const [selectedToken, setSelectedToken] = useState<{
     name: string;
     balance?: number;
@@ -298,7 +347,6 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Action Buttons - Moved to separate section to avoid header overlap */}
       <div className="flex flex-col sm:flex-row justify-end gap-3 mb-8">
         <Link href={`/login?returnUrl=${encodeURIComponent("/dashboard")}`}>
           <Button
@@ -358,9 +406,14 @@ export default function DashboardPage() {
           transition={{ duration: 0.3 }}
         >
           <div className="flex flex-col gap-4">
-            <h3 className="text-white/80 text-sm font-medium">
-              Your Identities
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-white/80 text-sm font-medium">Your Identities</h3>
+            </div>
+            {errorMessage && (
+              <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                {errorMessage}
+              </div>
+            )}
             <div className="grid gap-3">
               {identities.map((identity) => {
                 const isCurrent =
@@ -408,11 +461,26 @@ export default function DashboardPage() {
                       </div>
                     </button>
                     <div className="flex items-center gap-2">
-                      {isCurrent && (
-                        <span className="text-xs bg-white/20 px-2 py-1 rounded-full text-white/90">
-                          Current
-                        </span>
-                      )}
+                      <div className="flex gap-2">
+                        {identity.type === "seedPhrase" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBackupIdentity(identity.principal);
+                              setShowBackupDialog(true);
+                            }}
+                            className="text-amber-400 hover:text-amber-300 transition-colors"
+                            title="Show Backup Instructions"
+                          >
+                            💾
+                          </button>
+                        )}
+                        <IdentityBadges
+                          isCurrent={identity.principal.toString() === currentIdentity?.principal.toString()}
+                          isSigning={identity.principal.toString() === signingIdentity?.principal.toString()}
+                          type={identity.type}
+                        />
+                      </div>
                       <button
                         onClick={() => {
                           navigator.clipboard
@@ -711,6 +779,16 @@ export default function DashboardPage() {
           maxAmount={selectedToken.balance}
         />
       )}
+      {/* Backup Seed Phrase Dialog */}
+      <SeedPhraseDialog
+        isOpen={showBackupDialog}
+        onClose={() => {
+          setShowBackupDialog(false);
+          setBackupIdentity(null);
+        }}
+        mode="backup"
+        withSeedPhrase={backupIdentity ? backupSeedPhrase(backupIdentity) : null}
+      />
     </div>
   );
 }

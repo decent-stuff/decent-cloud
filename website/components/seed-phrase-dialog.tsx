@@ -3,18 +3,22 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { generateNewSeedPhrase, identityFromSeed } from "@/lib/auth-context";
+import { generateNewSeedPhrase } from "@/lib/auth-context";
 
 interface SeedPhraseDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit?: (phrase: string) => void;
+  withSeedPhrase?: string | null;
+  mode?: 'backup' | 'login';
 }
 
 export function SeedPhraseDialog({
   isOpen,
   onClose,
   onSubmit,
+  withSeedPhrase: withSeedPhrase = null,
+  mode = 'login'
 }: SeedPhraseDialogProps) {
   const [seedPhrase, setSeedPhrase] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -25,8 +29,11 @@ export function SeedPhraseDialog({
       setSeedPhrase("");
       setError("");
       setIsGenerating(false);
+    } else if (withSeedPhrase && mode === 'backup') {
+      setSeedPhrase(withSeedPhrase);
+      setIsGenerating(false);
     }
-  }, [isOpen]);
+  }, [isOpen, withSeedPhrase, mode]);
 
   const handleGenerateNew = () => {
     const newPhrase = generateNewSeedPhrase();
@@ -36,35 +43,29 @@ export function SeedPhraseDialog({
   };
 
   const handleConfirm = () => {
-    if (!seedPhrase.trim()) {
+    const trimmedSeedPhrase = seedPhrase.trim();
+    console.info("Confirming seed phrase:", trimmedSeedPhrase);
+    if (!trimmedSeedPhrase) {
       setError("Please enter your seed phrase");
       return;
     }
 
     // Basic validation - check if it's a valid mnemonic (12 or 24 words)
-    const wordCount = seedPhrase.trim().split(/\s+/).length;
+    const wordCount = trimmedSeedPhrase.split(/\s+/).length;
     if (wordCount !== 12 && wordCount !== 24) {
       setError("Invalid seed phrase. Must be 12 or 24 words");
       return;
     }
 
     try {
-      // Generate and store the identity
-      const identity = identityFromSeed(seedPhrase.trim());
-      // Store the DER-encoded private key
-      localStorage.setItem(
-        "identity_key",
-        JSON.stringify(
-          Array.from(new Uint8Array(identity.getKeyPair().secretKey))
-        )
-      );
-
-      if (isGenerating) {
-        // If this was a new generation, store the seed phrase for recovery
-        localStorage.setItem("seed_phrase", seedPhrase.trim());
+      // Store seed phrase in the seed_phrases array
+      const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
+      if (!storedSeedPhrases.includes(trimmedSeedPhrase)) {
+        storedSeedPhrases.push(trimmedSeedPhrase);
+        localStorage.setItem("seed_phrases", JSON.stringify(storedSeedPhrases));
       }
 
-      onSubmit?.(seedPhrase.trim());
+      onSubmit?.(trimmedSeedPhrase);
       onClose();
     } catch (err) {
       setError(`Invalid seed phrase format: ${err}`);
@@ -86,34 +87,37 @@ export function SeedPhraseDialog({
           aria-describedby="dialog-description"
         >
           <Dialog.Title className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-800">
-            Seed Phrase Authentication (Login/Register)
+            {mode === 'backup' ? 'Your Backup Seed Phrase' : 'Seed Phrase Authentication (Login/Register)'}
           </Dialog.Title>
 
           <div id="dialog-description" className="space-y-3 sm:space-y-4">
-            <div className="flex gap-2 sm:gap-4 mb-4 sm:mb-6">
-              <Button
-                onClick={handleGenerateNew}
-                className="flex-1 bg-blue-500 text-white hover:bg-blue-600 h-12 sm:h-10 text-sm sm:text-base"
-              >
-                Generate New
-              </Button>
-              <Button
-                onClick={() => {
-                  setSeedPhrase("");
-                  setIsGenerating(false);
-                }}
-                className="flex-1 bg-gray-400 text-white hover:bg-gray-600 h-12 sm:h-10 text-sm sm:text-base"
-                disabled={!isGenerating}
-              >
-                Enter Existing
-              </Button>
-            </div>
+            {mode === 'login' && (
+              <div className="flex gap-2 sm:gap-4 mb-4 sm:mb-6">
+                <Button
+                  onClick={handleGenerateNew}
+                  className="flex-1 bg-blue-500 text-white hover:bg-blue-600 h-12 sm:h-10 text-sm sm:text-base"
+                >
+                  Generate New
+                </Button>
+                <Button
+                  onClick={() => {
+                    setSeedPhrase("");
+                    setIsGenerating(false);
+                  }}
+                  className="flex-1 bg-gray-400 text-white hover:bg-gray-600 h-12 sm:h-10 text-sm sm:text-base"
+                  disabled={!isGenerating}
+                >
+                  Enter Existing
+                </Button>
+              </div>
+            )}
 
-            {isGenerating ? (
+            {mode === 'backup' || isGenerating ? (
               <>
                 <p className="text-sm sm:text-base text-gray-600">
-                  This is your new seed phrase. Write it down and keep it safe.
-                  You&apos;ll need it to recover your account.
+                  {mode === 'backup' 
+                    ? "This is your seed phrase for this identity. Store it safely to recover your account if needed." 
+                    : "This is your new seed phrase. Write it down and keep it safe. You'll need it to recover your account."}
                 </p>
 
                 <div className="bg-gray-50 p-3 sm:p-4 rounded break-all">
@@ -142,7 +146,7 @@ export function SeedPhraseDialog({
               </p>
             )}
 
-            {!isGenerating && (
+            {!isGenerating && mode === 'login' && (
               <textarea
                 value={seedPhrase}
                 onChange={handleInput}
@@ -156,12 +160,14 @@ export function SeedPhraseDialog({
             )}
 
             <Button
-              onClick={handleConfirm}
+              onClick={mode === 'backup' ? onClose : handleConfirm}
               className="w-full bg-emerald-500 text-white hover:bg-emerald-600 h-14 sm:h-12 text-sm sm:text-base"
-              disabled={!seedPhrase.trim()}
+              disabled={mode === 'login' && !seedPhrase.trim()}
             >
-              {isGenerating
-                ? "I've Saved My Seed Phrase"
+              {mode === 'backup'
+                ? "I have Safely Stored My Recovery Phrase"
+                : isGenerating
+                ? "I have Saved My Seed Phrase"
                 : "Login/Register with Seed Phrase"}
             </Button>
           </div>

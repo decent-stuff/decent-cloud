@@ -53,8 +53,8 @@ export function BlockchainValidator({
   showHeader = true,
   renderAsCard = true,
 }: BlockchainValidatorProps) {
-  const { isAuthenticated, currentIdentity, getAuthenticatedIdentity } = useAuth();
-  const principal = currentIdentity?.principal;
+  const { isAuthenticated, signingIdentity, getSigningIdentity } = useAuth();
+  const principal = signingIdentity?.principal;
   const [memo, setMemo] = useState<string>(defaultMemo);
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
@@ -90,14 +90,14 @@ export function BlockchainValidator({
       setIsValidating(true);
       setResult(null);
 
-      // Check if using seed-phrase based identity
-      if (currentIdentity?.type !== "seedPhrase") {
+      // Check if the signing identity
+      if (!signingIdentity) {
         throw new Error(
-          "Blockchain validation requires a seed-phrase based identity. Please switch to or create a seed-phrase identity to continue."
+          "Blockchain validation requires a seed-phrase based signing identity. Please switch to or create a seed-phrase identity to continue."
         );
       }
 
-      const authResult = await getAuthenticatedIdentity();
+      const authResult = await getSigningIdentity();
 
       // Validate the blockchain
       const validationResult = await validateBlockchain(memo, authResult);
@@ -129,7 +129,7 @@ export function BlockchainValidator({
       setIsRegistering(true);
       setResult(null);
 
-      const authResult = await getAuthenticatedIdentity();
+      const authResult = await getSigningIdentity();
 
       // Register as a provider
       const registrationResult = await registerProvider(authResult);
@@ -367,13 +367,13 @@ export function BlockchainValidator({
       )}
       <Button
         onClick={handleValidate}
-        disabled={isValidating || !blockHash || currentIdentity?.type !== "seedPhrase"}
+        disabled={isValidating || !blockHash || !signingIdentity || signingIdentity.type !== "seedPhrase"}
         className={`w-full ${
           darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
         }`}
         title={
-          currentIdentity?.type !== "seedPhrase"
-            ? "Blockchain validation requires a seed-phrase based identity"
+          !signingIdentity || signingIdentity.type !== "seedPhrase"
+            ? "Blockchain validation requires a seed-phrase based signing identity"
             : isProviderRegistered
             ? ""
             : "You may not be registered as a provider yet, validation may fail."
