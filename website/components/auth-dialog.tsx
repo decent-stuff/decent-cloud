@@ -110,10 +110,11 @@ export function AuthDialog({
                     registration.
                     <br />
                     Credentials are stored securely <b>in your browser only</b>,
-                    and deleted when you log out. Be careful about saving and making
-                    a backup of your seed phrase! If you lose the seed phrase, you will
-                    lose the identity and all the funds associated with it, and there
-                    is NO way to recover a lost seed phrase!
+                    and deleted when you log out.
+                    <br />
+                    Be careful about saving and <b>making a backup</b> of your seed phrase!
+                    If you lose the seed phrase, you will lose the identity and all the
+                    funds associated with it, and there is NO way to recover a lost seed phrase!
                     <br />
                     Seed phrase are also compatible with the CLI.
                   </p>
