@@ -105,20 +105,17 @@ export function AuthDialog({
                 </Button>
                 <div className="space-y-1 px-1 sm:px-2">
                   <p className="text-xs sm:text-sm text-gray-600">
-                    Use your seed phrase to access your account. Allows you to
-                    have the same identity as in the CLI, by reusing the same
-                    seed phrase.
-                    <br />
-                    Credentials are stored securely <b>in your browser only</b>,
-                    and deleted when you log out.
-                    <br />
                     Seed phrase is <b>a great way to start</b> exploring without
                     any commitment, since no data leaves your browser for the
                     registration.
                     <br />
-                    Be careful about losing your seed phrase though, if you want
-                    to keep the identity or the funds on it! There is NO way to
-                    recover a lost seed phrase.
+                    Credentials are stored securely <b>in your browser only</b>,
+                    and deleted when you log out. Be careful about saving and making
+                    a backup of your seed phrase! If you lose the seed phrase, you will
+                    lose the identity and all the funds associated with it, and there
+                    is NO way to recover a lost seed phrase!
+                    <br />
+                    Seed phrase are also compatible with the CLI.
                   </p>
                 </div>
               </div>
