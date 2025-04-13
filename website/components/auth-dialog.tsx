@@ -145,6 +145,9 @@ export function AuthDialog({
                     Internet Computer&apos;s official authentication service.
                     The generated identity will be different than from your seed
                     phrase though.
+                    <br />
+                    You are able to link the Internet Identity and the seed phrase identity,
+                    and use either of them.
                   </p>
                 </div>
               </div>
