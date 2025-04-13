@@ -1,35 +1,33 @@
 # Decent Cloud Documentation
 
-Welcome to the Decent Cloud documentation. This guide will help you navigate our documentation resources and find the information you need.
+Welcome to the official Decent Cloud documentation. This resource is designed to help users, providers, validators, and developers navigate the platform and access the information they need.
 
-## 📚 Documentation Overview
+## Documentation Overview
 
-| Document                                          | Description                                      | Audience   |
-| ------------------------------------------------- | ------------------------------------------------ | ---------- |
-| [Getting Started](getting-started.md)             | Quick setup guide for new users                  | Everyone   |
-| [Installation](installation.md)                   | Detailed installation instructions               | Everyone   |
-| [User Guide](user-guide.md)                       | Complete guide for platform users                | Users      |
-| [Provider Guide](provider-guide.md)               | Guide for node providers                         | Providers  |
-| [Mining and Validation](mining-and-validation.md) | How to participate in validation                 | Validators |
-| [Reputation System](reputation.md)                | Understanding our trust mechanism                | Everyone   |
-| [Token Distribution](token-distribution.md)       | How tokens are distributed                       | Everyone   |
-| [Development](development.md)                     | Guide for developers contributing to the project | Developers |
+| Document                                                        | Description                                         | Audience   |
+|-----------------------------------------------------------------|-----------------------------------------------------|------------|
+| [Getting Started](getting-started.md)                           | Quick setup for new users                           | Everyone   |
+| [Installation](installation.md)                                 | Step-by-step installation guide                     | Everyone   |
+| [User Guide](user-guide.md)                                     | Detailed instructions for platform users            | Users      |
+| [Provider Guide](provider-guide.md)                             | Comprehensive guide for resource providers          | Providers  |
+| [Mining and Validation](mining-and-validation.md)               | Instructions for validators to participate          | Validators |
+| [Reputation System](reputation.md)                              | Overview of the decentralized reputation system     | Everyone   |
+| [Token Distribution](token-distribution.md)                     | Explanation of token creation and reward mechanisms | Everyone   |
+| [Development](development.md)                                   | Guide for contributors and developers               | Developers |
 
-## 🔍 Finding What You Need
+## Navigation
 
 ### For New Users
-
-1. Start with [Installation](installation.md) to set up the CLI
-2. Follow [Getting Started](getting-started.md) to create your identity and get tokens
-3. Depending on your role, continue with either:
-   - [User Guide](user-guide.md) for consuming cloud resources
-   - [Provider Guide](provider-guide.md) for offering resources
+- Start with [Installation](installation.md) to set up the CLI.
+- Follow [Getting Started](getting-started.md) for initial configuration.
+- Depending on your role:
+  - Use the [User Guide](user-guide.md) for resource consumption.
+  - Refer to the [Provider Guide](provider-guide.md) for offering services.
 
 ### For Existing Users
-
-- [User Guide](user-guide.md) for managing your resources
-- [Reputation System](reputation.md) for understanding how trust works
-- [Mining and Validation](mining-and-validation.md) for earning tokens through validation
+- Check the [User Guide](user-guide.md) for resource management.
+- Visit [Reputation System](reputation.md) to understand trust mechanisms.
+- Read [Mining and Validation](mining-and-validation.md) to learn how to earn rewards.
 
 ### For Developers
 
@@ -74,16 +72,15 @@ We're continuously improving our documentation. Upcoming additions include:
 
 ## 🤝 Contributing to Documentation
 
-We welcome contributions to improve our documentation:
+Contributions are welcome. To help improve the documentation:
+1. Fork the repository.
+2. Make your changes.
+3. Submit a pull request.
 
-1. Fork the repository
-2. Make your changes
-3. Submit a pull request
+For contribution guidelines, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-For guidelines, see [CONTRIBUTING.md](../CONTRIBUTING.md).
+## Getting Help
 
-## 📞 Getting Help
-
-- 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
-- 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
-- 📚 [Project Website](https://decent-cloud.org/)
+- [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
+- [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
+- [Visit the Project Website](https://decent-cloud.org/)

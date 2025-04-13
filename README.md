@@ -1,40 +1,40 @@
 # Decent Cloud
 
-A peer-to-peer platform for decentralized cloud resource sharing and management.
+Decent Cloud is a peer-to-peer platform for decentralized cloud resource sharing and management.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 [![Documentation](https://img.shields.io/badge/docs-latest-green.svg)](docs/)
 [![Discussions](https://img.shields.io/github/discussions/decent-stuff/decent-cloud)](https://github.com/orgs/decent-stuff/discussions)
 
-## 🌟 Overview
+## Overview
 
-Decent Cloud revolutionizes cloud resource sharing by enabling anyone to rent or lease computing assets—from GPUs to web servers and web services—all through a single, unified interface. It eliminates vendor lock-in and streamlines cloud management with a decentralized approach.
+Decent Cloud transforms cloud resource sharing by enabling anyone to rent or lease computing assets—from GPUs to web services—through a single, unified interface. With no vendor lock-in and streamlined cloud management, our decentralized approach empowers both providers and users.
 
-What makes Decent Cloud truly stand out is its unique reputation system, which ties credibility directly to transaction fees. Paying these fees is the only way to build a strong reputation, and delivering poor service can quickly damage it—just as in real life. This tamper-proof ledger provides a transparent history of participant reputations, making it simple to identify reliable providers and maintain accountability across the platform.
+Our unique reputation system ties credibility to transaction fees. Paying these fees is essential for building a trustworthy history, while poor service quickly impacts reputation. This tamper-proof ledger ensures transparency and accountability across the platform.
 
-### ✨ Key Features
+### Key Features
 
-- 🌐 **Peer-to-Peer Platform**: Rent or lease cloud resources directly from providers
-- 🔄 **Unified Interface**: Single login for all cloud resources
-- 🌿 **Green Technology**: No Proof of Work, environmentally friendly
-- 🪙 **Fair Token Model**: DC Tokens minted every 10 minutes, similar to Bitcoin
-- ⛏️ **Accessible Mining**: Easy-to-join validation system with regular rewards
-- 🤝 **Community Driven**: Decisions made by the community, not VCs
+- **Peer-to-Peer Platform:** Rent or lease cloud resources directly.
+- **Unified Interface:** Single login for all cloud resources.
+- **Eco-Friendly:** No Proof of Work; environmentally responsible.
+- **Fair Token Model:** DC Tokens minted every 10 minutes, similar to Bitcoin.
+- **Accessible Mining:** Easy-to-join validation system with regular rewards.
+- **Community-Driven:** Governance by community, not venture capital.
 
-## 📚 Documentation
+## Documentation
 
-- [Getting Started](docs/getting-started.md) - A quick introduction to Decent Cloud for new users, including basic setup steps.
-- [Installation Guide](docs/installation.md) - Detailed platform installation instructions (OS specifics, requirements, etc.).
-- [User Guide](docs/user-guide.md) - A comprehensive guide for end-users (developers, operators) on how to interact with the platform.
-- [Provider Guide](docs/provider-guide.md) - In-depth documentation for providers on how to offer resources (e.g., servers, GPUs).
-- [Reputation Guide](docs/reputation.md) - Explanation of the unique, blockchain-based reputation system.
-- [Mining & Validation](docs/mining-and-validation.md) - Instructions on how to participate in securing the network and earning rewards.
-- [Token Distribution](docs/token-distribution.md) - An outline of how tokens are created, rewarded, and circulated within the ecosystem.
-- [Development Guide](docs/development.md) - Steps for contributors, including environment setup, testing, and best practices.
+- [Getting Started](docs/getting-started.md) – A quick introduction for new users, outlining basic setup.
+- [Installation](docs/installation.md) – Detailed installation instructions with OS specifics.
+- [User Guide](docs/user-guide.md) – Comprehensive usage guide for consumers.
+- [Provider Guide](docs/provider-guide.md) – Detailed information for resource providers.
+- [Reputation Guide](docs/reputation.md) – Explanation of our decentralized trust mechanism.
+- [Mining & Validation](docs/mining-and-validation.md) – Steps to participate in network validation.
+- [Token Distribution](docs/token-distribution.md) – Overview of token creation and rewards.
+- [Development Guide](docs/development.md) – Guidelines for contributors, including setup, testing, and best practices.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -50,11 +50,10 @@ chmod +x $HOME/bin/dc
 Add to PATH in `~/.bashrc`:
 
 ```bash
-if [ -d "$HOME/bin" ] ; then
-   export PATH="$HOME/bin:$PATH"
+if [ -d "$HOME/bin" ]; then
+  export PATH="$HOME/bin:$PATH"
 fi
 ```
-
 </details>
 
 <details>
@@ -64,7 +63,6 @@ fi
 curl -L https://github.com/decent-stuff/decent-cloud/releases/latest/download/decent-cloud-darwin-arm64 -o /usr/local/bin/dc
 chmod +x /usr/local/bin/dc
 ```
-
 </details>
 
 <details>
@@ -74,10 +72,9 @@ chmod +x /usr/local/bin/dc
 $download_url = "https://github.com/decent-stuff/decent-cloud/releases/latest/download/decent-cloud-windows-amd64.exe"
 Invoke-WebRequest "$download_url" -OutFile "dc.exe"
 ```
-
 </details>
 
-See the [Installation Guide](docs/installation.md) for detailed instructions.
+See the [Installation](docs/installation.md) guide for detailed instructions.
 
 ### Basic Usage
 
@@ -87,7 +84,7 @@ See the [Installation Guide](docs/installation.md) for detailed instructions.
 dc keygen --generate --identity my-id
 ```
 
-2. Register as a user, provider, or validator:
+2. Register according to role:
 
 ```bash
 # For users
@@ -97,48 +94,36 @@ dc user register --identity my-user
 dc np register --identity my-provider
 ```
 
-See the [Getting Started Guide](docs/getting-started.md) for next steps, or check the [Mining & Validation Guide](docs/mining-and-validation.md) to learn how to earn rewards.
+Continue with [Getting Started](docs/getting-started.md) or [Mining & Validation](docs/mining-and-validation.md) for next steps.
 
-## 🔗 Related Projects
+## Related Projects
 
-- **LedgerMap**: The backing ledger implementation
-
-  - GitHub: [github.com/decent-stuff/ledger-map](https://github.com/decent-stuff/ledger-map/)
-  - NPM Package: [@decent-stuff/ledger-map](https://www.npmjs.com/package/@decent-stuff/ledger-map)
-
-- **Frontend Website**: The official Decent Cloud web interface
-
+- **LedgerMap:** Backing ledger implementation  
+  - GitHub: [github.com/decent-stuff/ledger-map](https://github.com/decent-stuff/ledger-map/)  
+  - NPM: [@decent-stuff/ledger-map](https://www.npmjs.com/package/@decent-stuff/ledger-map)
+- **Frontend Website:** Official Decent Cloud web interface  
   - GitHub: [github.com/decent-stuff/website](https://github.com/decent-stuff/website/)
+- **Decent-Cloud:** Internet Computer canister and client code  
+  - CLI Client in `/cli`, and published as binaries.  
+  - Browser Client: [@decent-stuff/dc-client](https://www.npmjs.com/package/@decent-stuff/dc-client)
 
-- **Decent-Cloud**: This repository, Internet Computer canister and the client code
-  - Console Client: Available in this repository under `/cli` and published on GitHub as release binaries
-  - Browser Client: [@decent-stuff/dc-client](https://www.npmjs.com/package/@decent-stuff/dc-client) NPM package
+## Project Status
 
-## 🌐 Project Status
+Active development is underway. Primary development occurs on Linux (Ubuntu 24.04), with support for MacOS and Windows.
 
-The project is in active development. Main development and testing happens on Linux (Ubuntu 24.04), but MacOS and Windows versions work without issues.
+If you encounter issues:
+- [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
+- [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
+- [Read the Whitepaper](https://decent-cloud.org/)
 
-If you encounter problems:
+## Contributing
 
-- 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
-- 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
-- 📚 [Read the Whitepaper](https://decent-cloud.org/)
+Contributions are welcome! Refer to the [Development Guide](docs/development.md) for setup, building, testing, and contribution guidelines.
 
-## 🤝 Contributing
+## License
 
-We welcome contributions! See our [Development Guide](docs/development.md) for:
-
-- Setting up the development environment
-- Building from source
-- Running tests
-- Contributing guidelines
-
-## 📄 License
-
-This project is licensed under the APACHE 2 License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the APACHE 2 License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
-⭐ If you find this project useful, please give it a star! ⭐
-
-![Star the project](https://github.com/decent-stuff/decent-cloud/blob/main/images/star_img.png "Please star the project!")
+⭐ If you find this project useful, consider giving it a star!

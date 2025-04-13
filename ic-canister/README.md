@@ -1,99 +1,119 @@
-# ic-canister
+# IC Canister Deployment Guide
 
-## Running the project locally
+This document provides clear instructions for developing and deploying the IC canister both locally and on the Internet Computer mainnet.
 
-For local development:
+## Local Development
 
-```bash
-# Starts the replica, running in the background
-dfx start --background
+To develop locally:
 
-# Deploys your canisters to the replica and generates your candid interface
-dfx deploy
-```
+1. **Start the Replica:**  
+   Begin by launching the local replica in the background.
+   ```bash
+   dfx start --background
+   ```
+2. **Deploy Canisters:**  
+   Deploy your canisters and generate the candid interfaces.
+   ```bash
+   dfx deploy
+   ```
+3. **Reset Local Environment:**  
+   For a fresh start, reset the state:
+   ```bash
+   dfx start --background --clean
+   dfx deploy
+   ```
 
-To start local development from scratch, resetting the state
+## Mainnet Deployment
 
-```bash
-# Starts the replica, running in the background
-dfx start --background --clean
+For production deployments on the Internet Computer mainnet:
 
-# Deploys your canisters to the replica and generates your candid interface
-dfx deploy
-```
+1. **Set Up Mainnet Identity:**  
+   Create and switch to a mainnet identity.
+   ```bash
+   dfx identity new mainnet-eu
+   dfx identity use mainnet-eu
+   dfx identity get-principal
+   ```
+2. **Prepare for Deployment:**  
+   Check available subnet types and create a canister with an initial funding amount.
+   ```bash
+   dfx ledger --network ic show-subnet-types
+   dfx ledger --network ic create-canister --amount 0.5 --subnet-type european <your-canister-id>
+   ```
+3. **Deploy Wallet and Canisters:**  
+   Deploy your wallet and then the canisters.
+   ```bash
+   dfx identity --network ic deploy-wallet <your-wallet-id>
+   dfx deploy --ic
+   ```
+4. **Interact with Your Canister:**  
+   Optionally, call a method to verify deployment.
+   ```bash
+   dfx canister --ic call <canister-id> get_logs_info
+   ```
 
-Deploying on the IC Mainnet
+## Local Instance Testing
 
-```bash
-dfx identity new mainnet-eu
-dfx identity use mainnet-eu
-dfx identity get-principal
-dfx ledger --network ic show-subnet-types
-dfx ledger --network ic create-canister --amount 0.5 --subnet-type european 3cghu-vatzl-bylaa-ere6r-yudpn-5zaah-uwbdp-zie7s-wcmkh-3v267-yqe
-dfx identity --network ic deploy-wallet  tmuuj-diaaa-aaaas-aaaba-cai
-dfx deploy --ic
-dfx canister --ic call tlvs5-oqaaa-aaaas-aaabq-cai get_logs_info
-```
-
-# Interacting with the canister
-
-## Local canister instance
-
+After deployment, you can test your local instance:
 ```bash
 dfx deploy --identity default
-curl http://bkyz2-fmaaa-aaaaa-qaaaq-cai.localhost:8000/metrics
-curl http://bkyz2-fmaaa-aaaaa-qaaaq-cai.localhost:8000/logs
+curl http://<local-canister-id>.localhost:8000/metrics
+curl http://<local-canister-id>.localhost:8000/logs
 ```
+Access the Candid UI at:  
+[http://127.0.0.1:8000/?canisterId=<local-canister-id>](http://127.0.0.1:8000/?canisterId=<local-canister-id>)
 
-Candid UI: http://127.0.0.1:8000/?canisterId=bd3sg-teaaa-aaaaa-qaaba-cai&id=bkyz2-fmaaa-aaaaa-qaaaq-cai
+## Mainnet Instance Access
 
-## Mainnet canister instance
-
+To interact with a mainnet deployed canister:
 ```bash
 dfx deploy --ic --identity mainnet-eu
-curl https://tlvs5-oqaaa-aaaas-aaabq-cai.raw.icp0.io/metrics
-curl https://tlvs5-oqaaa-aaaas-aaabq-cai.raw.icp0.io/logs
+curl https://<canister-id>.raw.icp0.io/metrics
+curl https://<canister-id>.raw.icp0.io/logs
 ```
+Access the mainnet Candid UI via:  
+[https://<your-canister-id>.raw.ic0.app/](https://<your-canister-id>.raw.ic0.app/)
 
-Candid UI: https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/?id=tlvs5-oqaaa-aaaas-aaabq-cai
+## Advanced: Creating a Canister with an Alternate Identity
 
-# Creating a canister with other identity, on a regular subnet
+1. **Retrieve Principal ID:**  
+   For a different identity:
+   ```bash
+   dfx identity get-principal --identity mainnet-01
+   ```
+2. **Check Ledger Balance:**  
+   Verify your account balance.
+   ```bash
+   dfx ledger --network ic --identity mainnet-01 balance
+   ```
+3. **Create a New Identity:**  
+   Create a new identity if needed.
+   ```bash
+   dfx identity new mainnet-01
+   ```
+4. **Create and Fund a Canister:**  
+   Use the ledger to create a new canister.
+   ```bash
+   dfx ledger --network ic --identity mainnet-01 create-canister --amount 1 <wallet-address>
+   ```
+   Note: The command output confirms the new canister ID.
+5. **Configure Wallet:**  
+   Set the wallet for this identity.
+   ```bash
+   dfx identity --network ic --identity mainnet-01 set-wallet <wallet-id>
+   ```
+6. **Deploy the Canister:**  
+   Create and deploy the canister.
+   ```bash
+   dfx canister --network ic --identity mainnet-01 create decent_cloud
+   dfx deploy --network ic --identity mainnet-01 decent_cloud
+   ```
 
-```bash
-dfx identity get-principal --identity mainnet-01
-dfx ledger --network ic --identity mainnet-01 balance
-dfx identity new mainnet-01
-```
+For more details, refer to the [Documentation Home](../docs/README.md).
 
-```bash
-❯ dfx ledger --network ic --identity mainnet-01 create-canister --amount 1 74cze-reen5-6nkrr-m5f7s-pflwz-ej5mq-ptcfh-obfra-jdeqq-kb5u5-kae
-[...]
-Canister created with id: "gbj2u-3aaaa-aaaai-actqa-cai"
-```
+---
 
-Configure dfx to use the new wallet for the given identity
-
-```bash
-dfx identity --network mainnet-01 --identity mainnet-01 set-wallet gbj2u-3aaaa-aaaai-actqa-cai
-```
-
-Now create the canister with the wallet created above:
-
-```bash
-❯ dfx canister --network ic --identity mainnet-01 create decent_cloud
-Creating canister decent_cloud...
-decent_cloud canister created on network ic with canister id: ggi4a-wyaaa-aaaai-actqq-cai
-```
-
-(also on the same subnet)
-
-Finally, deploy the canister wasm:
-
-```bash
-dfx deploy --network ic --identity mainnet-01 decent_cloud
-```
-
-WALLET: https://dashboard.internetcomputer.org/canister/gbj2u-3aaaa-aaaai-actqa-cai
-CODE 01: https://dashboard.internetcomputer.org/canister/ggi4a-wyaaa-aaaai-actqq-cai
-CODE 02: https://dashboard.internetcomputer.org/canister/gplx4-aqaaa-aaaai-actra-cai
-SUBNET: https://dashboard.internetcomputer.org/subnet/brlsh-zidhj-3yy3e-6vqbz-7xnih-xeq2l-as5oc-g32c4-i5pdn-2wwof-oae
+**Dashboard Links (replace placeholders with actual IDs):**  
+- **Wallet:** [Dashboard](https://dashboard.internetcomputer.org/canister/<wallet-id>)  
+- **Canister Code:** [Dashboard](https://dashboard.internetcomputer.org/canister/<canister-id>)  
+- **Subnet:** [Dashboard](https://dashboard.internetcomputer.org/subnet/<subnet-id>)
