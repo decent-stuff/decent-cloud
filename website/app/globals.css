@@ -1,3 +1,4 @@
+@import "tailwindcss";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -89,9 +90,6 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
   body {
     @apply bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 text-white min-h-screen;
   }
@@ -99,13 +97,13 @@
 
 @layer utilities {
   .feature-card {
-    @apply bg-white bg-opacity-10 p-6 rounded-lg transition-all duration-300;
+    @apply bg-white opacity-10 p-6 rounded-lg transition-all duration-300;
   }
-  
+
   .feature-card:hover {
-    @apply bg-opacity-20 transform -translate-y-1;
+    @apply opacity-20 transform -translate-y-1;
   }
-  
+
   .feature-card.active {
     @apply ring-2 ring-purple-400;
   }
@@ -129,4 +127,22 @@
   animation: gradientAnimation 15s ease infinite;
 }
 
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
 
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.8);
+}
