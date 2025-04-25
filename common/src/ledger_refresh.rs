@@ -295,8 +295,8 @@ impl WasmLedgerEntry {
             value: serde_json::json!({
                 "parent_hash": BASE64.encode(parent_hash),
                 "signature": BASE64.encode(entry.value()),
-                "verified": match dcc_id.verify_bytes(parent_hash, entry.value()) {
-                    Ok(()) => "true".into(),
+                "verified": match dcc_id.verify_bytes(entry.key(), entry.value()) {
+                    Ok(()) => "verified".into(),
                     Err(e) => {
                         format!("Signature verification failed: {}", e)
                     }
