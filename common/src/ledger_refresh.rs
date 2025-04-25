@@ -212,7 +212,7 @@ impl WasmLedgerEntry {
                     "parent_hash": BASE64.encode(parent_hash),
                     "signature": BASE64.encode(payload.nonce_signature()),
                     "verified": match dcc_id.verify_bytes(parent_hash, payload.nonce_signature()) {
-                        Ok(()) => "true".into(),
+                        Ok(()) => "verified".into(),
                         Err(e) => {
                             format!("Signature verification failed: {}", e)
                         }
@@ -232,9 +232,10 @@ impl WasmLedgerEntry {
     }
 
     fn from_np_offering(entry: &LedgerEntry) -> Self {
+        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         WasmLedgerEntry {
             label: LABEL_NP_OFFERING.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
+            key: Value::String(dcc_id.to_string()),
             value: match UpdateOfferingPayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_update_offering() {
                     Ok(offering) => serde_json::to_value(&offering).unwrap(),
@@ -259,9 +260,10 @@ impl WasmLedgerEntry {
     }
 
     fn from_np_profile(entry: &LedgerEntry) -> Self {
+        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         WasmLedgerEntry {
             label: LABEL_NP_PROFILE.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
+            key: Value::String(dcc_id.to_string()),
             value: match UpdateProfilePayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_update_profile() {
                     Ok(profile) => serde_json::to_value(&profile).unwrap(),
