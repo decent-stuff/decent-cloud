@@ -1,17 +1,10 @@
 import "./globals.css";
-import { Inter } from "next/font/google";
-import { AuthProvider } from "@/lib/auth-context";
-import { GlobalLedgerComponent as GlobalLedgerComponent } from "@/components/global-ledger-component";
-
-const inter = Inter({ subsets: ["latin"] });
+import { AuthProvider } from "../lib/auth-context";
+import { ToastProvider } from "../components/ui/use-toast";
 
 export const metadata = {
-  title: "Decent Cloud - Decentralized Cloud Platform",
-  description:
-    "A novel decentralized cloud platform bridging the gap between traditional centralized cloud services and fully decentralized systems.",
-  icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-  },
+  title: "Decent Cloud - Decentralized Cloud Computing",
+  description: "Decentralized cloud computing platform powered by blockchain",
 };
 
 export default function RootLayout({
@@ -21,10 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className="min-h-screen bg-gradient-to-b from-blue-900 to-black text-white">
         <AuthProvider>
-          <GlobalLedgerComponent />
-          {children}
+          <ToastProvider>{children}</ToastProvider>
         </AuthProvider>
       </body>
     </html>
