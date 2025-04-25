@@ -220,14 +220,14 @@ export function BlockchainValidator({
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="Enter a memo for this validation"
-              maxLength={32}
+              maxLength={64}
               disabled={isValidating}
               className={`w-full px-3 py-2 ${
                 darkMode
                   ? "bg-white/10 border border-white/20 text-white"
                   : "border"
               } ${
-                new TextEncoder().encode(memo).length > 32 ? "bg-red-500" : ""
+                new TextEncoder().encode(memo).length > 64 ? "bg-red-500" : ""
               } rounded-md`}
             />
             <p
@@ -235,7 +235,7 @@ export function BlockchainValidator({
                 darkMode ? "text-white/70" : "text-gray-500"
               }`}
             >
-              Max 32 bytes. Current length:{" "}
+              Max 64 bytes. Current length:{" "}
               {new TextEncoder().encode(memo).length} bytes
             </p>
           </div>
@@ -367,7 +367,12 @@ export function BlockchainValidator({
       )}
       <Button
         onClick={handleValidate}
-        disabled={isValidating || !blockHash || !signingIdentity || signingIdentity.type !== "seedPhrase"}
+        disabled={
+          isValidating ||
+          !blockHash ||
+          !signingIdentity ||
+          signingIdentity.type !== "seedPhrase"
+        }
         className={`w-full ${
           darkMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""
         }`}

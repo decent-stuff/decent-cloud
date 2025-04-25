@@ -88,7 +88,7 @@ function handleError(
  * This implementation makes an authenticated update call to the node_provider_check_in endpoint
  * with the latest block hash signature.
  *
- * @param memo Optional memo to include with the validation (max 32 bytes)
+ * @param memo Optional memo to include with the validation (max 64 bytes)
  * @returns A promise that resolves to a ValidationResult
  */
 export async function validateBlockchain(
@@ -105,7 +105,7 @@ export async function validateBlockchain(
                 message: "No parent block hash found in the latest block"
             };
         }
-        
+
         if (!authResult) {
             return {
                 success: false,

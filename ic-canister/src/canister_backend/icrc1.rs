@@ -11,7 +11,7 @@ use crate::canister_backend::generic::LEDGER_MAP;
 use crate::DC_TOKEN_LOGO;
 use crate::{
     DC_TOKEN_DECIMALS, DC_TOKEN_NAME, DC_TOKEN_SYMBOL, DC_TOKEN_TOTAL_SUPPLY,
-    DC_TOKEN_TRANSFER_FEE_E9S, MEMO_BYTES_MAX, MINTING_ACCOUNT, MINTING_ACCOUNT_ICRC1,
+    DC_TOKEN_TRANSFER_FEE_E9S, MINTING_ACCOUNT, MINTING_ACCOUNT_ICRC1, TRANSFER_MEMO_BYTES_MAX,
 };
 use candid::types::number::Nat;
 use candid::CandidType;
@@ -100,7 +100,7 @@ fn validate_transaction_time(created_at_time: Option<u64>) -> Result<(), Icrc1Tr
 
 pub fn _icrc1_transfer(arg: TransferArg) -> Result<Nat, Icrc1TransferError> {
     if let Some(memo) = &arg.memo {
-        if memo.0.len() > MEMO_BYTES_MAX {
+        if memo.0.len() > TRANSFER_MEMO_BYTES_MAX {
             ic_cdk::trap("the memo field is too large");
         }
     }

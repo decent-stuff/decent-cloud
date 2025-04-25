@@ -4,7 +4,8 @@ use crate::{
     ledger_funds_transfer, platform_specific::get_timestamp_ns, DccIdentity, TokenAmountE9s,
     TransferError, BLOCK_INTERVAL_SECS, DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS,
     KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
-    LABEL_REWARD_DISTRIBUTION, MEMO_BYTES_MAX, MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
+    LABEL_REWARD_DISTRIBUTION, MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
+    TRANSFER_MEMO_BYTES_MAX, VALIDATION_MEMO_BYTES_MAX,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
@@ -227,10 +228,10 @@ pub fn do_node_provider_check_in(
     fn_info!("{}", dcc_id);
 
     // Check the max length of the memo
-    if memo.len() > MEMO_BYTES_MAX {
+    if memo.len() > VALIDATION_MEMO_BYTES_MAX {
         return Err(format!(
             "Memo too long, max length is {} bytes",
-            MEMO_BYTES_MAX
+            VALIDATION_MEMO_BYTES_MAX
         ));
     }
 
@@ -260,7 +261,7 @@ pub fn do_node_provider_check_in(
             ledger.get_blocks_count(),
             memo
         );
-        fee_memo.truncate(MEMO_BYTES_MAX);
+        fee_memo.truncate(TRANSFER_MEMO_BYTES_MAX);
         charge_fees_to_account_no_bump_reputation(
             ledger,
             &dcc_id.as_icrc_compatible_account(),

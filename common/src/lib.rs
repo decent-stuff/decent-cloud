@@ -109,7 +109,8 @@ pub const MAX_RESPONSE_BYTES_REPLICATED: usize = 2 * 1024 * 1024;
 // https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits
 pub const MAX_RESPONSE_BYTES_NON_REPLICATED: usize = 3 * 1024 * 1024;
 pub const MAX_PUBKEY_BYTES: usize = 32;
-pub const MEMO_BYTES_MAX: usize = 32;
+pub const TRANSFER_MEMO_BYTES_MAX: usize = 32;
+pub const VALIDATION_MEMO_BYTES_MAX: usize = 64;
 /// Reduction of reputations for all accounts, based on time (per block), in parts per million
 pub const REPUTATION_AGING_PPM: u64 = 1_000;
 pub const MAX_REPUTATION_INCREASE_PER_TX: i64 = DC_TOKEN_DECIMALS_DIV as i64 * 10; // Max 10 DC tokens per transaction

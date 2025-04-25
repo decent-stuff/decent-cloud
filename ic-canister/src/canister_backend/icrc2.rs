@@ -3,7 +3,7 @@ use candid::Nat;
 use dcc_common::{
     account_balance_get, approval_get, approval_update, get_timestamp_ns, ledger_funds_transfer,
     nat_to_balance, FundsTransfer, FundsTransferApproval, IcrcCompatibleAccount, TokenAmountE9s,
-    MEMO_BYTES_MAX,
+    TRANSFER_MEMO_BYTES_MAX,
 };
 use ic_cdk::caller;
 use icrc_ledger_types::icrc1::account::Account;
@@ -34,7 +34,7 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
 
     // Check the size of the memo
     if let Some(memo) = &args.memo {
-        if memo.0.len() > MEMO_BYTES_MAX {
+        if memo.0.len() > TRANSFER_MEMO_BYTES_MAX {
             return Err(ApproveError::GenericError {
                 error_code: 2u32.into(),
                 message: "Memo too large".to_string(),
