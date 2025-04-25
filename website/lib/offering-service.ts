@@ -1,6 +1,7 @@
 import { updateCanister } from './icp-utils';
 import { ed25519Sign } from '@decent-stuff/dc-client';
 import type { AuthenticatedIdentityResult } from './auth-context';
+import { isYamlFormat, yamlToJson, validateYaml } from './yaml-utils';
 
 // Define the validation result interface
 export interface OfferingResult {
@@ -69,18 +70,42 @@ function handleError(
  * @returns A promise that resolves to an OfferingResult
  */
 export async function updateOffering(
-    offeringJson: string,
+    offeringData: string,
     authResult: AuthenticatedIdentityResult | null
 ): Promise<OfferingResult> {
     try {
-        // Validate the offering JSON
-        try {
-            JSON.parse(offeringJson);
-        } catch (e) {
-            return {
-                success: false,
-                message: `Invalid offering JSON: ${e instanceof Error ? e.message : String(e)}`
-            };
+        // Determine if the input is YAML and convert to JSON if needed
+        let offeringJson = offeringData;
+
+        if (isYamlFormat(offeringData)) {
+            // Validate the YAML format first
+            if (!validateYaml(offeringData)) {
+                return {
+                    success: false,
+                    message: "Invalid YAML format. Please check your syntax."
+                };
+            }
+
+            try {
+                // Convert YAML to JSON
+                offeringJson = yamlToJson(offeringData);
+                console.log("Converted YAML to JSON:", offeringJson);
+            } catch (e) {
+                return {
+                    success: false,
+                    message: `Error converting YAML to JSON: ${e instanceof Error ? e.message : String(e)}`
+                };
+            }
+        } else {
+            // Validate as JSON
+            try {
+                JSON.parse(offeringJson);
+            } catch (e) {
+                return {
+                    success: false,
+                    message: `Invalid offering JSON: ${e instanceof Error ? e.message : String(e)}`
+                };
+            }
         }
 
         if (!authResult) {

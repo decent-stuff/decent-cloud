@@ -1,94 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faPlus,
-  faEdit,
-  faTrash,
-  faTimes,
-} from "@fortawesome/free-solid-svg-icons";
+import { faPlus, faEdit, faTrash } from "@fortawesome/free-solid-svg-icons";
 import HeaderSection from "@/components/ui/header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/components/ui/use-toast";
-import { useAuth } from "@/lib/auth-context";
-import { updateOffering } from "@/lib/offering-service";
+import { useAuth, AuthenticatedIdentityResult } from "@/lib/auth-context";
+import OfferingForm from "@/components/forms/offering-form";
 
-// Default offering template
-const DEFAULT_OFFERING_TEMPLATE = `{
-  "api_version": "v0.1.0",
-  "kind": "Offering",
-  "metadata": {
-    "name": "My Cloud Offering",
-    "version": "1.0"
-  },
-  "provider": {
-    "name": "My Provider Name",
-    "description": "Description of my cloud offering"
-  },
-  "defaults": {
-    "machine_spec": {
-      "instance_types": [
-        {
-          "id": "small",
-          "type": "general-purpose",
-          "cpu": "2 vCPUs",
-          "memory": "4 GB",
-          "storage": {
-            "type": "SSD",
-            "size": "50 GB"
-          },
-          "pricing": {
-            "on_demand": {
-              "hour": 50000000
-            }
-          },
-          "metadata": {
-            "optimized_for": "general",
-            "availability": "high"
-          }
-        }
-      ]
-    },
-    "terms_of_service": [
-      "Minimum contract period: none",
-      "Cancellation period: 1 day"
-    ],
-    "network_spec": {
-      "vpc_support": true,
-      "public_ip": true,
-      "private_ip": true,
-      "load_balancers": {
-        "type": [
-          "network"
-        ]
-      }
-    }
-  },
-  "regions": [
-    {
-      "name": "eu-central-1",
-      "description": "Central Europe region",
-      "geography": {
-        "continent": "Europe",
-        "country": "Germany",
-        "iso_codes": {
-          "country_code": "DE",
-          "region_code": "EU"
-        }
-      },
-      "availability_zones": [
-        {
-          "name": "eu-central-1a",
-          "description": "Primary availability zone"
-        }
-      ]
-    }
-  ]
-}`;
+// Offerings page for managing cloud offerings
 
 export default function OfferingsPage() {
   // Define an interface for the offering structure
@@ -105,104 +26,26 @@ export default function OfferingsPage() {
 
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [showOfferingForm, setShowOfferingForm] = useState(false);
-  const [offeringData, setOfferingData] = useState(DEFAULT_OFFERING_TEMPLATE);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
+  const [authIdentity, setAuthIdentity] =
+    useState<AuthenticatedIdentityResult | null>(null);
   const { isAuthenticated, getAuthenticatedIdentity } = useAuth();
 
-  // Function to handle JSON change in the editor
-  const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setOfferingData(e.target.value);
-  };
-
-  // Function to validate JSON
-  const validateJson = (jsonString: string): boolean => {
-    try {
-      JSON.parse(jsonString);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  // Function to submit offering
-  const handleSubmitOffering = async () => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description:
-          "Please log in with a seed-phrase based identity to add an offering.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!validateJson(offeringData)) {
-      toast({
-        title: "Invalid JSON",
-        description: "Please enter a valid JSON offering definition.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      // Get authenticated identity for signing from auth context
-      const authIdentity = await getAuthenticatedIdentity();
-      const result = await updateOffering(offeringData, authIdentity);
-
-      if (result.success) {
-        toast({
-          title:
-            "Offering Added, it will be publicly listed from the next Ledger block, in a few minutes.",
-          description: result.message,
-        });
-
-        // Parse the offering to display it in the list
+  // Get authenticated identity when needed
+  useEffect(() => {
+    if (isAuthenticated && showOfferingForm) {
+      const fetchIdentity = async () => {
         try {
-          const offeringJson = JSON.parse(offeringData);
-          const newOffering = {
-            id: Date.now().toString(),
-            name: offeringJson.metadata?.name || "Unnamed Offering",
-            type: offeringJson.provider?.name || "Unknown Type",
-            price: "Custom", // This would need to be extracted from the offering structure
-            specs: `${
-              offeringJson.defaults?.machine_spec?.instance_types?.[0]?.cpu ||
-              "Custom CPU"
-            }, ${
-              offeringJson.defaults?.machine_spec?.instance_types?.[0]
-                ?.memory || "Custom Memory"
-            }`,
-            location: offeringJson.regions?.[0]?.geography?.country || "Global",
-            status: "Active",
-            created: new Date().toISOString().split("T")[0],
-          };
-
-          setOfferings([newOffering, ...offerings]);
-          setShowOfferingForm(false);
-        } catch (e) {
-          console.error("Failed to parse offering for display", e);
+          const identity = await getAuthenticatedIdentity();
+          setAuthIdentity(identity);
+        } catch (error) {
+          console.error("Failed to get authenticated identity", error);
         }
-      } else {
-        toast({
-          title: "Error Adding Offering",
-          description: result.message,
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to add offering",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
+      };
+
+      // Call the async function and explicitly ignore the promise
+      void fetchIdentity();
     }
-  };
+  }, [isAuthenticated, showOfferingForm, getAuthenticatedIdentity]);
 
   const handleDeleteOffering = (id: string) => {
     setOfferings(offerings.filter((offering) => offering.id !== id));
@@ -238,58 +81,17 @@ export default function OfferingsPage() {
         </div>
 
         {showOfferingForm && (
-          <Card className="p-6 bg-black/20 backdrop-blur-sm rounded-lg border border-white/20 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-white">
-                Add New Offering
-              </h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowOfferingForm(false)}
-                className="text-white/70 hover:text-white hover:bg-white/10"
-              >
-                <FontAwesomeIcon icon={faTimes} />
-              </Button>
-            </div>
-
-            <div className="mb-4">
-              <Label htmlFor="offering-json" className="text-white mb-2 block">
-                ⚠️ Please make sure to adjust the template offering JSON before
-                submitting
-              </Label>
-              <Textarea
-                id="offering-json"
-                className="h-96 font-mono text-sm bg-black/30 text-white"
-                placeholder="Enter your offering JSON..."
-                value={offeringData}
-                onChange={handleJsonChange}
-              />
-              <p className="text-white/70 text-xs mt-2">
-                Enter a valid JSON offering definition. This will be signed with
-                your identity and submitted to the network.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowOfferingForm(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                disabled={isSubmitting || !isAuthenticated}
-                onClick={handleSubmitOffering}
-              >
-                {isSubmitting ? "Submitting..." : "Add Offering"}
-              </Button>
-            </div>
-          </Card>
+          <div className="mb-6">
+            <OfferingForm
+              onSubmitSuccess={() => {
+                setShowOfferingForm(false);
+                // We would normally parse the offeringData here and add it to the list
+                // but we'll handle that with a data fetching system in the future
+              }}
+              onCancel={() => setShowOfferingForm(false)}
+              authResult={authIdentity}
+            />
+          </div>
         )}
       </div>
 
@@ -361,7 +163,7 @@ export default function OfferingsPage() {
             <Button
               className="mt-4 bg-blue-600 hover:bg-blue-700 text-white"
               onClick={() => setShowOfferingForm(true)}
-              disabled={!isAuthenticated}
+              disabled={!isAuthenticated || showOfferingForm}
             >
               Add Your First Offering
             </Button>
