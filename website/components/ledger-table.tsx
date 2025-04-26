@@ -552,7 +552,15 @@ export function LedgerTable({ entries, isLoading, error }: LedgerTableProps) {
                         })
                         .map((entry) => (
                           <tr
-                            key={`${entry.blockOffset}-${entry.label}-${entry.key}`}
+                            key={
+                              entry.id !== undefined
+                                ? String(entry.id)
+                                : `${entry.blockOffset}-${entry.label}-${
+                                    entry.key
+                                  }-${Math.random()
+                                    .toString(36)
+                                    .substring(2, 9)}`
+                            }
                             className="hover:bg-gray-700/30"
                           >
                             <td
