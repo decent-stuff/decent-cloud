@@ -22,7 +22,7 @@ class LedgerDatabase extends Dexie {
         super(DB_NAME);
 
         // Define stores in a single version declaration
-        this.version(5).stores({
+        this.version(6).stores({
             ledgerBlocks: 'blockOffset, timestampNs',
             ledgerEntries: '++id, *label, *key, *blockOffset',
         });
@@ -383,6 +383,7 @@ export interface LedgerBlock {
 }
 
 export interface LedgerEntry {
+    id?: number;  // Auto-incrementing primary key
     label: string;
     key: string;
     value: unknown;

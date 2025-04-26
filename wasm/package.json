@@ -1,6 +1,6 @@
 {
   "name": "@decent-stuff/dc-client",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "High-performance WebAssembly client for browser-based querying of Decent Cloud ledger data",
   "main": "dist/dc-client.js",
   "module": "dist/dc-client.mjs",
