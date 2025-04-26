@@ -15,7 +15,7 @@
     "@decent-stuff/dc-client": "file:../wasm/dist"
   },
   "dependencies": {
-    "@decent-stuff/dc-client": "^0.2.10",
+    "@decent-stuff/dc-client": "^0.2.11",
     "@dfinity/agent": "^2.4.1",
     "@dfinity/auth-client": "^2.4.1",
     "@dfinity/candid": "^2.4.1",
