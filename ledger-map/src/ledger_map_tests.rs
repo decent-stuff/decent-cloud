@@ -545,7 +545,7 @@ mod tests {
         assert_eq!(blocks.len(), blocks_count);
 
         // Reference block hashes, from a good run
-        let expected_block_hashes = vec![
+        let expected_block_hashes = [
             vec![
                 59, 212, 243, 209, 119, 48, 119, 30, 19, 102, 137, 70, 162, 25, 101, 154, 229, 58,
                 186, 226, 164, 114, 252, 88, 255, 180, 170, 221, 196, 0, 141, 101,
@@ -611,8 +611,8 @@ mod tests {
         let mut ledger_map = new_temp_ledger(None);
 
         // Insert test data
-        let keys = vec![b"key1".to_vec(), b"key2".to_vec(), b"key3".to_vec()];
-        let values = vec![b"value1".to_vec(), b"value2".to_vec(), b"value3".to_vec()];
+        let keys = [b"key1".to_vec(), b"key2".to_vec(), b"key3".to_vec()];
+        let values = [b"value1".to_vec(), b"value2".to_vec(), b"value3".to_vec()];
         
         // Insert entries and commit
         ledger_map.upsert("Label1", keys[0].clone(), values[0].clone()).unwrap();

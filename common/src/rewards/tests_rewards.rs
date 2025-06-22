@@ -123,7 +123,8 @@ fn new_temp_ledger(labels_to_index: Option<Vec<String>>) -> LedgerMap {
     // Create a temporary directory for the test
     let file_path = tempfile::tempdir()
         .unwrap()
-        .into_path()
+        .keep()
+        .unwrap()
         .join("test_ledger_store.bin");
 
     LedgerMap::new_with_path(labels_to_index, Some(file_path))
