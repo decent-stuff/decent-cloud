@@ -14,9 +14,7 @@ Note that the Decent Cloud project is split across three repositories:
   - Console Client: Available in this repository under `/cli` and published on GitHub as release binaries
   - Browser Client: [@decent-stuff/dc-client](https://www.npmjs.com/package/@decent-stuff/dc-client) NPM package
 
-- **Frontend Website**: The official Decent Cloud web interface
-
-  - GitHub: [github.com/decent-stuff/website](https://github.com/decent-stuff/website/)
+- **Frontend Website**: The official Decent Cloud web interface (located in `/website` directory)
 
 ## Development Environment Setup
 
@@ -36,7 +34,7 @@ sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 ```
 
 3. **Node.js Setup**
-   
+
 ```bash
 # Install NVM (Node Version Manager)
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
@@ -51,8 +49,9 @@ npm install --global jest rimraf
 ```
 
 4. **Rust Setup**
-   
+
 Visit [rustup.rs](https://rustup.rs) or use:
+
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
@@ -106,6 +105,75 @@ Example output binaries:
 target/release/dc                               # Linux/MacOS binary
 target/x86_64-pc-windows-gnu/release/dc.exe    # Windows binary
 ```
+
+### Building the Website
+
+The website is located in the `/website` directory and uses Next.js. The website depends on the WebAssembly (WASM) client package located in `/wasm`.
+
+#### Prerequisites for Website Development
+
+Ensure you have completed the Node.js setup from the prerequisites section above.
+
+#### Website Development Workflow
+
+The website build process has been optimized to automatically build the WASM package when needed, eliminating the need to publish to npmjs.com during development.
+
+**For Production Build:**
+
+```bash
+cd website
+npm install  # Install dependencies (first time only)
+npm run build  # Automatically builds WASM package first, then website
+```
+
+**For Development (standard):**
+
+```bash
+cd website
+npm install  # Install dependencies (first time only)
+npm run dev  # Automatically builds WASM package first, then starts dev server
+```
+
+**For Development (with auto-rebuild on WASM changes):**
+
+```bash
+cd website
+npm install  # Install dependencies (first time only)
+npm run dev:watch  # Watches WASM files and rebuilds automatically
+```
+
+#### How the Build Process Works
+
+1. **Automatic WASM Building**: The website's `prebuild` and `predev` scripts automatically build the WASM package before starting the website build or dev server.
+
+2. **TypeScript Path Mapping**: The website's `tsconfig.json` is configured to import `@decent-stuff/dc-client` from the built WASM distribution (`../wasm/dist`) rather than the source files.
+
+3. **Watch Mode**: The `dev:watch` script uses `nodemon` and `concurrently` to:
+   - Watch for changes in WASM source files (`.rs`, `.ts`, `.js`)
+   - Automatically rebuild the WASM package when changes are detected
+   - Run the Next.js development server simultaneously
+
+#### WASM Package Structure
+
+The WASM package (`/wasm`) contains:
+
+- **Source files**: TypeScript and Rust source code
+- **Build script**: `build.js` that compiles Rust to WASM and TypeScript to JavaScript
+- **Distribution**: `dist/` directory containing the built package ready for consumption
+
+#### Troubleshooting Website Development
+
+**Issue: Import errors for `@decent-stuff/dc-client`**
+
+- Solution: Ensure the WASM package is built by running `cd wasm && npm run build`
+
+**Issue: Changes to WASM code not reflected in website**
+
+- Solution: Use `npm run dev:watch` instead of `npm run dev` for automatic rebuilding
+
+**Issue: Build fails with missing dependencies**
+
+- Solution: Run `npm install` in both `/wasm` and `/website` directories
 
 ## Testing
 
@@ -261,6 +329,17 @@ decent-cloud/
 ├── cli/            # Command-line interface
 ├── common/         # Shared utilities
 ├── ic-canister/    # Internet Computer canister
+├── ledger-map/     # A secure, persistent key-value storage
+├── wasm/           # WebAssembly client package
+│   ├── src/        # Rust source code
+│   ├── dist/       # Built package (auto-generated)
+│   ├── build.js    # Build script
+│   └── *.ts        # TypeScript source files
+├── website/        # Next.js frontend website
+│   ├── app/        # Next.js app directory
+│   ├── components/ # React components
+│   ├── lib/        # Utility libraries
+│   └── public/     # Static assets
 ├── np-offering/    # Node provider offering
 ├── np-profile/     # Node provider profile
 ├── np-json-search/ # JSON search functionality

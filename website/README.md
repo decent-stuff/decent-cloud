@@ -1,36 +1,131 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Decent Cloud Website
 
-## Getting Started
+This is the official frontend website for Decent Cloud, built with [Next.js](https://nextjs.org) and TypeScript.
 
-First, run the development server:
+## Overview
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The website provides a user-friendly interface for interacting with the Decent Cloud platform, including:
+
+- Ledger browsing and transaction history
+- Account management and authentication
+- Provider offerings and marketplace
+- Real-time data visualization
+
+## Development Setup
+
+### Prerequisites
+
+- Node.js 22+ (use `nvm` to manage versions)
+- npm or yarn package manager
+
+### Getting Started
+
+1. **Install dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+2. **Start development server:**
+
+   ```bash
+   npm run dev
+   ```
+
+   This automatically builds the WASM package first, then starts the Next.js dev server at [http://localhost:50200](http://localhost:50200).
+
+3. **For development with auto-rebuild on WASM changes:**
+   ```bash
+   npm run dev:watch
+   ```
+   This watches for changes in the WASM source files and automatically rebuilds when needed.
+
+### Build Commands
+
+- `npm run dev` - Start development server (builds WASM first)
+- `npm run dev:watch` - Start development server with WASM file watching
+- `npm run build` - Build for production (builds WASM first)
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+
+## Architecture
+
+### WASM Integration
+
+The website integrates with the Decent Cloud WebAssembly client package located in `../wasm`. The build process is configured to:
+
+1. **Automatic Building**: WASM package is automatically built before starting the website
+2. **TypeScript Path Mapping**: Imports `@decent-stuff/dc-client` from the built distribution (`../wasm/dist`)
+3. **Watch Mode**: Monitors WASM source files for changes during development
+
+### Key Dependencies
+
+- **Next.js 15+** - React framework
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Styling
+- **@decent-stuff/dc-client** - WASM client (local package)
+- **@dfinity/agent** - Internet Computer integration
+- **Dexie** - IndexedDB wrapper for local data storage
+
+## Project Structure
+
+```
+website/
+├── app/                 # Next.js app directory (pages)
+├── components/          # Reusable React components
+├── lib/                # Utility libraries and services
+├── public/             # Static assets
+├── styles/             # Global styles
+└── hooks/              # Custom React hooks
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Development Workflow
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Making Changes to WASM Code
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+When working on both the website and WASM package:
 
-## Learn More
+1. Use `npm run dev:watch` to automatically rebuild WASM on changes
+2. Or manually rebuild WASM: `cd ../wasm && npm run build`
+3. The website will automatically pick up the new build
 
-To learn more about Next.js, take a look at the following resources:
+### Adding New Features
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Create components in `components/`
+2. Add pages in `app/`
+3. Use the WASM client via `@decent-stuff/dc-client` imports
+4. Add utility functions in `lib/`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Troubleshooting
 
-## Deploy on Vercel
+**Import errors for `@decent-stuff/dc-client`:**
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Ensure WASM package is built: `cd ../wasm && npm run build`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Changes not reflected:**
+
+- Use `npm run dev:watch` for automatic rebuilding
+- Clear Next.js cache: `rm -rf .next`
+
+**Build failures:**
+
+- Check that all dependencies are installed in both `/wasm` and `/website`
+- Ensure Node.js version is 22+
+
+## Deployment
+
+The website is configured for static export:
+
+```bash
+npm run build
+```
+
+This generates a static site in the `out/` directory that can be deployed to any static hosting service.
+
+## Contributing
+
+See the main [Development Guide](../docs/development.md) for contribution guidelines and setup instructions.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.

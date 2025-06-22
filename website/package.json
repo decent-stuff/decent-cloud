@@ -3,7 +3,10 @@
   "version": "0.2.1",
   "private": true,
   "scripts": {
+    "prebuild": "cd ../wasm && npm run build",
+    "predev": "cd ../wasm && npm run build",
     "dev": "next dev -p 50200 -H 0.0.0.0",
+    "dev:watch": "concurrently \"nodemon --watch ../wasm/src --watch ../wasm/*.ts --watch ../wasm/*.js --ext rs,ts,js --exec 'cd ../wasm && npm run build'\" \"next dev -p 50200 -H 0.0.0.0\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -11,11 +14,7 @@
     "prepare": "",
     "prepublishOnly": "npm test"
   },
-  "localDependencies": {
-    "@decent-stuff/dc-client": "file:../wasm/dist"
-  },
   "dependencies": {
-    "@decent-stuff/dc-client": "^0.2.11",
     "@dfinity/agent": "^2.4.1",
     "@dfinity/auth-client": "^2.4.1",
     "@dfinity/candid": "^2.4.1",
@@ -61,7 +60,9 @@
     "@typescript-eslint/eslint-plugin": "^8.25.0",
     "@typescript-eslint/parser": "^8.25.0",
     "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.0",
     "eslint-config-next": "^15.3.1",
+    "nodemon": "^3.1.7",
     "eslint-plugin-promise": "^7.2.1",
     "postcss": "^8.5.3",
     "process": "^0.11.10",
