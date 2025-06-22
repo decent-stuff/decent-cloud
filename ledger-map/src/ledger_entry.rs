@@ -236,8 +236,8 @@ impl LedgerBlockV1 {
     }
 
     pub fn deserialize(data: &[u8]) -> Result<Self, LedgerError> {
-        let e = ZlibDecoder::new(data);
-        let v = borsh::de::from_reader(e)?;
+        let mut e = ZlibDecoder::new(data);
+        let v = borsh::de::from_reader(&mut e)?;
         Ok(v)
     }
 

@@ -7,15 +7,9 @@ pub enum LedgerError {
     Other(String),
 }
 
-impl<E: std::error::Error> From<E> for LedgerError {
-    fn from(error: E) -> Self {
+impl From<std::io::Error> for LedgerError {
+    fn from(error: std::io::Error) -> Self {
         LedgerError::Other(error.to_string())
-    }
-}
-
-impl From<LedgerError> for anyhow::Error {
-    fn from(error: LedgerError) -> Self {
-        anyhow::anyhow!("{}", error)
     }
 }
 

@@ -321,7 +321,7 @@ mod tests {
     fn test_persistent_storage_read_and_write() {
         let file_path = tempfile::tempdir()
             .unwrap()
-            .into_path()
+            .path()
             .join("test_ledger_store.bin");
         crate::platform_specific::set_backing_file(Some(file_path)).unwrap();
 

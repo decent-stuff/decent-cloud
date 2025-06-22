@@ -27,7 +27,7 @@ mod tests {
         // Create a temporary directory for the test
         let file_path = tempfile::tempdir()
             .unwrap()
-            .into_path()
+            .path()
             .join("test_ledger_store.bin");
 
         fn mock_get_timestamp_nanos() -> u64 {
