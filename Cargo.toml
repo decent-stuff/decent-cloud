@@ -4,6 +4,7 @@ members = [
     "cli",
     "common",
     "ic-canister",
+    "ledger-map",
     "np-offering",
     "np-profile",
     "np-json-search",
@@ -51,8 +52,6 @@ ic-metrics-encoder = "1.1"
 ic-cdk-timers = "0.11"
 icrc-ledger-types = "0.1"
 indexmap = "2.8"
-# ledger-map = { path = "../ledger-map" }
-ledger-map = { git = "https://github.com/decent-stuff/ledger-map.git", branch = "main" }
 log = "0.4"
 memmap2 = "0.9"
 num-traits = "0.2"

@@ -36,7 +36,7 @@ ic-agent.workspace = true
 ic-cdk.workspace = true
 icrc-ledger-types.workspace = true
 indexmap.workspace = true
-ledger-map.workspace = true
+ledger-map = { path = "../ledger-map" }
 log.workspace = true
 memmap2.workspace = true
 np-offering = { path = "../np-offering" }

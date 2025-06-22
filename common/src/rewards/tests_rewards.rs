@@ -124,7 +124,6 @@ fn new_temp_ledger(labels_to_index: Option<Vec<String>>) -> LedgerMap {
     let file_path = tempfile::tempdir()
         .unwrap()
         .keep()
-        .unwrap()
         .join("test_ledger_store.bin");
 
     LedgerMap::new_with_path(labels_to_index, Some(file_path))
