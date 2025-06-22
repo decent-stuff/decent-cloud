@@ -91,6 +91,7 @@ Desktop.ini
 
 ### Project Specific ###
 .aider*
+.roo/
 .history/
 
 ### Debug and Logs ###
