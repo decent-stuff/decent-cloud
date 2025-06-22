@@ -11,7 +11,29 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  website-tests:
+    name: Website Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install website dependencies
+        working-directory: ./website
+        run: npm ci
+
+      - name: Run website tests
+        working-directory: ./website
+        run: npm test
+
   build:
+    needs: website-tests
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}/ci-image@sha256:7015312e16dced2932d41d4cb5a9ee55cdc17b42ceeb148e809cfbd474e28c4b
