@@ -1,0 +1,68 @@
+[package]
+name = "ledger-map"
+version = "0.4.3"
+edition = "2021"
+description = "A Rust-based key-value map, for append-only data storage. Data integrity is protected with SHA-256 checksums, and cross-compiles to wasm32 for smart contract applications."
+license = "MIT OR Apache-2.0"
+documentation = "https://github.com/decent-cloud/ledger-map"
+readme = "README.md"
+homepage = "https://github.com/decent-cloud/ledger-map"
+repository = "https://github.com/decent-cloud/ledger-map"
+
+[lib]
+name = "ledger_map"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = { version = "1.0.98", features = ["std"] }
+ahash = { version = "0.8.12", default-features = false, features = [
+    "compile-time-rng",
+] }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+borsh = { version = "1.5.7", features = ["derive"] }
+flate2 = { version = "1.1.2", features = [
+    "rust_backend",
+], default-features = false }
+hex = "0.4.3"
+indexmap = { version = "2.9.0", features = ["std"] }
+lazy_static = "1.5.0"
+serde = { version = "1.0.219", features = ["derive"] }
+sha2 = "0.10.9"
+
+[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
+clap = "4.5.40"
+fs-err = "3.1.1"
+log = "0.4.27"
+dirs = "6.0.0"
+env_logger = "0.11.8"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ic-cdk = { version = "0.18.3", optional = true }
+ic-cdk-timers = { version = "0.12.0", optional = true }
+ic-canister-log = { version = "0.2.0", optional = true }
+js-sys = { version = "0.3.77", optional = true }
+getrandom = { version = "0.3.3", default-features = false, features = [
+    "wasm_js",
+], optional = true }
+wasm-bindgen = { version = "0.2.100", optional = true }
+wasm-bindgen-test = { version = "0.3.50", optional = true }
+web-sys = { version = "0.3.77", features = [
+    "Storage",
+    "Window",
+    "console",
+], optional = true }
+
+[features]
+default = []
+browser = [
+    "getrandom",
+    "js-sys",
+    "wasm-bindgen",
+    "wasm-bindgen-test",
+    "web-sys",
+]
+ic = ["ic-cdk", "ic-cdk-timers", "ic-canister-log"]
+
+[dev-dependencies]
+tempfile = "3.20.0"

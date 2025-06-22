@@ -1,0 +1,6 @@
+/data
+/target
+
+# NPM generated
+dist/
+node_modules/
