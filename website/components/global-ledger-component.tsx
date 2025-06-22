@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ledgerService } from "@/lib/ledger-service";
 
 // Default polling frequency for the global background service
@@ -12,14 +12,13 @@ const GLOBAL_POLLING_FREQUENCY = 30000; // 30 seconds (less frequent for backgro
  * is running across all pages in the application
  */
 export function GlobalLedgerComponent() {
-  const [retryCount, setRetryCount] = useState(0);
-  const MAX_RETRIES = 5;
-
   useEffect(() => {
     let retryTimeout: NodeJS.Timeout | null = null;
+    let currentRetryCount = 0;
+    const MAX_RETRIES = 5;
 
     // Initialize and start the ledger service when the component mounts
-    const initLedgerService = async () => {
+    const initLedgerService = async (): Promise<void> => {
       try {
         // Initialize the client
         const success = await ledgerService.initialize();
@@ -31,24 +30,24 @@ export function GlobalLedgerComponent() {
         await ledgerService.setPollingInterval(GLOBAL_POLLING_FREQUENCY);
 
         console.log("Global ledger service initialized and polling started");
-        setRetryCount(0); // Reset retry count on success
+        currentRetryCount = 0; // Reset retry count on success
       } catch (error) {
         console.error("Failed to initialize global ledger service:", error);
 
         // Implement retry logic with exponential backoff
-        if (retryCount < MAX_RETRIES) {
+        if (currentRetryCount < MAX_RETRIES) {
           const nextRetryDelay = Math.min(
-            1000 * Math.pow(2, retryCount),
+            1000 * Math.pow(2, currentRetryCount),
             60000
           ); // Max 60s delay
           console.log(
             `Retrying initialization in ${nextRetryDelay}ms (attempt ${
-              retryCount + 1
+              currentRetryCount + 1
             }/${MAX_RETRIES})`
           );
 
+          currentRetryCount++;
           retryTimeout = setTimeout(() => {
-            setRetryCount((prev) => prev + 1);
             void initLedgerService();
           }, nextRetryDelay);
         }
@@ -66,7 +65,7 @@ export function GlobalLedgerComponent() {
       ledgerService.stopPolling();
       console.log("Global ledger service polling stopped");
     };
-  }, [retryCount]);
+  }, []); // Empty dependency array - effect only runs once on mount
 
   // This component doesn't render anything
   return null;
