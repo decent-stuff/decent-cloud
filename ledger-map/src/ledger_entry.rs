@@ -72,12 +72,12 @@ impl LedgerEntry {
 }
 
 impl std::fmt::Display for LedgerEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let key = match String::try_from_slice(self.key()) {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let key = match String::from_utf8(self.key().to_vec()) {
             Ok(v) => v,
             Err(_) => BASE64.encode(self.key()),
         };
-        let value = match String::try_from_slice(self.value()) {
+        let value = match String::from_utf8(self.value().to_vec()) {
             Ok(v) => v,
             Err(_) => BASE64.encode(self.value()),
         };
@@ -113,7 +113,7 @@ impl LedgerBlockHeader {
     }
 
     pub const fn sizeof() -> usize {
-        size_of::<LedgerBlockHeaderV1>()
+        std::mem::size_of::<LedgerBlockHeaderV1>()
     }
 
     pub fn block_version(&self) -> u32 {
@@ -150,16 +150,35 @@ impl LedgerBlockHeader {
     }
 
     pub fn deserialize(data: &[u8]) -> Result<Self, LedgerError> {
+        if data.len() < 16 {
+            return Err(LedgerError::BlockCorrupted("Header too short".to_string()));
+        }
         let mut bytes = [0u8; 16];
         bytes.copy_from_slice(&data[0..16]);
-        let block_version = u32::from_le_bytes(bytes[0..4].try_into()?);
+        let block_version = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .map_err(|_| LedgerError::BlockCorrupted("Invalid block version".to_string()))?,
+        );
         match block_version {
             0 => Err(LedgerError::BlockEmpty),
             1 => Ok(LedgerBlockHeader::V1(LedgerBlockHeaderV1 {
                 block_version,
-                jump_bytes_prev: i32::from_le_bytes(bytes[4..8].try_into()?),
-                jump_bytes_next: u32::from_le_bytes(bytes[8..12].try_into()?),
-                reserved: u32::from_le_bytes(bytes[12..16].try_into()?),
+                jump_bytes_prev: i32::from_le_bytes(
+                    bytes[4..8]
+                        .try_into()
+                        .map_err(|_| LedgerError::BlockCorrupted("Invalid jump_bytes_prev".to_string()))?,
+                ),
+                jump_bytes_next: u32::from_le_bytes(
+                    bytes[8..12]
+                        .try_into()
+                        .map_err(|_| LedgerError::BlockCorrupted("Invalid jump_bytes_next".to_string()))?,
+                ),
+                reserved: u32::from_le_bytes(
+                    bytes[12..16]
+                        .try_into()
+                        .map_err(|_| LedgerError::BlockCorrupted("Invalid reserved field".to_string()))?,
+                ),
             })),
             _ => Err(LedgerError::BlockCorrupted(format!(
                 "Unsupported block version: {}",
@@ -170,7 +189,7 @@ impl LedgerBlockHeader {
 }
 
 impl std::fmt::Display for LedgerBlockHeader {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LedgerBlockHeader::V1(header) => write!(f, "{}", header),
         }
@@ -178,7 +197,7 @@ impl std::fmt::Display for LedgerBlockHeader {
 }
 
 impl std::fmt::Display for LedgerBlockHeaderV1 {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "block_version: {}, jump_bytes_prev: {}, jump_bytes_next: {}",
@@ -217,8 +236,8 @@ impl LedgerBlockV1 {
     }
 
     pub fn deserialize(data: &[u8]) -> Result<Self, LedgerError> {
-        let mut e = ZlibDecoder::new(data);
-        let v = borsh::de::from_reader(&mut e)?;
+        let e = ZlibDecoder::new(data);
+        let v = borsh::de::from_reader(e)?;
         Ok(v)
     }
 
@@ -288,7 +307,7 @@ impl LedgerBlock {
 }
 
 impl std::fmt::Display for LedgerBlock {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
             "~-=-~-=-~-=-~ Ledger block v{} with timestamp [{}] parent_hash {}  ~-=-~-=-~-=-~",
@@ -297,7 +316,7 @@ impl std::fmt::Display for LedgerBlock {
             hex::encode(self.parent_hash())
         )?;
         for entry in self.entries() {
-            writeln!(f, "{}", entry)?
+            writeln!(f, "{}", entry)?;
         }
         Ok(())
     }

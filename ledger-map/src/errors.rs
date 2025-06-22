@@ -15,7 +15,7 @@ impl<E: std::error::Error> From<E> for LedgerError {
 
 impl From<LedgerError> for anyhow::Error {
     fn from(error: LedgerError) -> Self {
-        anyhow::anyhow!(error)
+        anyhow::anyhow!("{}", error)
     }
 }
 
@@ -38,3 +38,5 @@ impl std::fmt::Display for LedgerError {
         }
     }
 }
+
+impl std::error::Error for LedgerError {}

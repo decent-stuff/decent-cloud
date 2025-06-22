@@ -82,11 +82,10 @@ impl LedgerMap {
     }
 
     pub fn begin_block(&mut self) -> anyhow::Result<()> {
-        if !&self.next_block_entries.is_empty() {
+        if !self.next_block_entries.is_empty() {
             return Err(anyhow::format_err!("There is already an open transaction."));
-        } else {
-            self.next_block_entries.clear();
         }
+        self.next_block_entries.clear();
         Ok(())
     }
 
@@ -99,7 +98,7 @@ impl LedgerMap {
                 self.next_block_entries.len()
             );
             let mut block_entries = Vec::new();
-            for (label, values) in self.next_block_entries.iter() {
+            for (label, values) in &self.next_block_entries {
                 if match &self.labels_to_index {
                     Some(labels_to_index) => labels_to_index.contains(label),
                     None => true,
@@ -109,7 +108,7 @@ impl LedgerMap {
                         .or_default()
                         .extend(values.clone())
                 };
-                for (_key, entry) in values.iter() {
+                for (_key, entry) in values {
                     block_entries.push(entry.clone());
                 }
             }
@@ -125,18 +124,15 @@ impl LedgerMap {
     pub fn get<S: AsRef<str>>(&self, label: S, key: &[u8]) -> Result<EntryValue, LedgerError> {
         fn lookup<'a>(
             map: &'a IndexMap<String, IndexMap<EntryKey, LedgerEntry>>,
-            label: &String,
+            label: &str,
             key: &[u8],
         ) -> Option<&'a LedgerEntry> {
-            match map.get(label) {
-                Some(entries) => entries.get(key),
-                None => None,
-            }
+            map.get(label)?.get(key)
         }
 
-        let label = label.as_ref().to_string();
+        let label_str = label.as_ref();
         for map in [&self.next_block_entries, &self.entries] {
-            if let Some(entry) = lookup(map, &label, key) {
+            if let Some(entry) = lookup(map, label_str, key) {
                 match entry.operation() {
                     Operation::Upsert => {
                         return Ok(entry.value().to_vec());
@@ -152,14 +148,14 @@ impl LedgerMap {
     }
 
     pub fn count_entries_for_label<S: AsRef<str>>(&self, label: S) -> u64 {
+        let label_str = label.as_ref();
         self.entries
-            .get(label.as_ref())
-            .map(|m| m.len() as u64)
-            .unwrap_or_default()
+            .get(label_str)
+            .map_or(0, |m| m.len() as u64)
             + self
                 .next_block_entries
-                .get(label.as_ref()).map(|m| m.len() as u64)
-                .unwrap_or_default()
+                .get(label_str)
+                .map_or(0, |m| m.len() as u64)
     }
 
     pub fn upsert<S: AsRef<str>, K: AsRef<[u8]>, V: AsRef<[u8]>>(
@@ -238,7 +234,7 @@ impl LedgerMap {
         }
 
         // Step 2: Add ledger entries into the index (self.entries) for quick search
-        for ledger_block in updates.into_iter() {
+        for ledger_block in updates {
             for ledger_entry in ledger_block.entries() {
                 // Skip entries that are not in the labels_to_index
                 if !match &self.labels_to_index {
@@ -255,14 +251,14 @@ impl LedgerMap {
                             .insert(ledger_entry.label().to_string(), new_map);
                         self.entries
                             .get_mut(ledger_entry.label())
-                            .ok_or(anyhow::format_err!(
+                            .ok_or_else(|| anyhow::format_err!(
                                 "Entry label {:?} not found",
                                 ledger_entry.label()
                             ))?
                     }
                 };
 
-                match &ledger_entry.operation() {
+                match ledger_entry.operation() {
                     Operation::Upsert => {
                         entries.insert(ledger_entry.key().to_vec(), ledger_entry.clone());
                     }
@@ -302,12 +298,12 @@ impl LedgerMap {
         F: FnMut(&[u8], &[u8]),
     {
         if let Some(entries) = self.entries.get(label) {
-            for (key, entry) in entries.iter() {
+            for (key, entry) in entries {
                 f(key.as_slice(), entry.value());
             }
         }
         if let Some(entries) = self.next_block_entries.get(label) {
-            for (key, entry) in entries.iter() {
+            for (key, entry) in entries {
                 f(key.as_slice(), entry.value());
             }
         }
@@ -469,7 +465,7 @@ impl LedgerMap {
     ) -> anyhow::Result<Vec<u8>> {
         let mut hasher = sha2::Sha256::new();
         hasher.update(parent_block_hash);
-        for entry in block_entries.iter() {
+        for entry in block_entries {
             hasher.update(to_vec(entry)?);
         }
         hasher.update(block_timestamp.to_le_bytes());
@@ -524,8 +520,8 @@ impl LedgerMap {
 
         // Finally, persist LedgerBlockHeader number of bytes to mark the end of the block chain
         persistent_storage_write(
-            self.metadata.borrow().next_block_start_pos() + jump_bytes_next_block as u64,
-            &[0u8; size_of::<LedgerBlockHeader>()],
+            self.metadata.borrow().next_block_start_pos(),
+            &vec![0u8; size_of::<LedgerBlockHeader>()],
         );
         Ok(())
     }
@@ -535,11 +531,11 @@ impl LedgerMap {
         offset: u64,
     ) -> Result<(LedgerBlockHeader, LedgerBlock), LedgerError> {
         // Find out how many bytes we need to read ==> block len in bytes
-        let mut buf = [0u8; size_of::<LedgerBlockHeader>()];
+        let mut buf = vec![0u8; size_of::<LedgerBlockHeader>()];
         persistent_storage_read(offset, &mut buf)
             .map_err(|e| LedgerError::BlockCorrupted(e.to_string()))?;
 
-        let block_header = LedgerBlockHeader::deserialize(buf.as_ref())?;
+        let block_header = LedgerBlockHeader::deserialize(&buf)?;
         let block_len_bytes = block_header.jump_bytes_next_block();
 
         // Read the block as raw bytes
@@ -547,7 +543,7 @@ impl LedgerMap {
         persistent_storage_read(offset + LedgerBlockHeader::sizeof() as u64, &mut buf)
             .map_err(|e| LedgerError::Other(e.to_string()))?;
 
-        let block = LedgerBlock::deserialize(buf.as_ref(), block_header.block_version())
+        let block = LedgerBlock::deserialize(&buf, block_header.block_version())
             .map_err(|err| LedgerError::BlockCorrupted(err.to_string()))?
             .with_offset(offset);
 

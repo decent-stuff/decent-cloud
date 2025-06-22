@@ -227,7 +227,7 @@ pub fn export_error() -> Vec<String> {
     Vec::new()
 }
 
-pub(crate) fn get_timestamp_nanos() -> u64 {
+pub fn get_timestamp_nanos() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
