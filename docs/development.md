@@ -249,7 +249,7 @@ cargo doc --no-deps --open
 Build the CI image locally:
 
 ```bash
-docker build .github/container/ --tag ghcr.io/decent-stuff/decent-cloud/ci-image:latest
+docker build -f .github/container/Dockerfile --tag ghcr.io/decent-stuff/decent-cloud/ci-image:latest .
 ```
 
 Push to registry:
