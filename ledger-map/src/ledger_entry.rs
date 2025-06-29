@@ -164,21 +164,15 @@ impl LedgerBlockHeader {
             0 => Err(LedgerError::BlockEmpty),
             1 => Ok(LedgerBlockHeader::V1(LedgerBlockHeaderV1 {
                 block_version,
-                jump_bytes_prev: i32::from_le_bytes(
-                    bytes[4..8]
-                        .try_into()
-                        .map_err(|_| LedgerError::BlockCorrupted("Invalid jump_bytes_prev".to_string()))?,
-                ),
-                jump_bytes_next: u32::from_le_bytes(
-                    bytes[8..12]
-                        .try_into()
-                        .map_err(|_| LedgerError::BlockCorrupted("Invalid jump_bytes_next".to_string()))?,
-                ),
-                reserved: u32::from_le_bytes(
-                    bytes[12..16]
-                        .try_into()
-                        .map_err(|_| LedgerError::BlockCorrupted("Invalid reserved field".to_string()))?,
-                ),
+                jump_bytes_prev: i32::from_le_bytes(bytes[4..8].try_into().map_err(|_| {
+                    LedgerError::BlockCorrupted("Invalid jump_bytes_prev".to_string())
+                })?),
+                jump_bytes_next: u32::from_le_bytes(bytes[8..12].try_into().map_err(|_| {
+                    LedgerError::BlockCorrupted("Invalid jump_bytes_next".to_string())
+                })?),
+                reserved: u32::from_le_bytes(bytes[12..16].try_into().map_err(|_| {
+                    LedgerError::BlockCorrupted("Invalid reserved field".to_string())
+                })?),
             })),
             _ => Err(LedgerError::BlockCorrupted(format!(
                 "Unsupported block version: {}",

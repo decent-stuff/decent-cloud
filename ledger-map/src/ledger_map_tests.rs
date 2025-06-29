@@ -68,9 +68,9 @@ mod tests {
 
         // Test after deleting entries
         ledger_map.delete("Label1", b"key1").unwrap();
-        assert_eq!(ledger_map.count_entries_for_label("Label1"), 4);  // Delete operation adds a tombstone entry
+        assert_eq!(ledger_map.count_entries_for_label("Label1"), 4); // Delete operation adds a tombstone entry
         ledger_map.commit_block().unwrap();
-        assert_eq!(ledger_map.count_entries_for_label("Label1"), 3);  // Tombstone remains after commit
+        assert_eq!(ledger_map.count_entries_for_label("Label1"), 3); // Tombstone remains after commit
     }
 
     #[test]
@@ -613,12 +613,18 @@ mod tests {
         // Insert test data
         let keys = [b"key1".to_vec(), b"key2".to_vec(), b"key3".to_vec()];
         let values = [b"value1".to_vec(), b"value2".to_vec(), b"value3".to_vec()];
-        
+
         // Insert entries and commit
-        ledger_map.upsert("Label1", keys[0].clone(), values[0].clone()).unwrap();
-        ledger_map.upsert("Label1", keys[1].clone(), values[1].clone()).unwrap();
+        ledger_map
+            .upsert("Label1", keys[0].clone(), values[0].clone())
+            .unwrap();
+        ledger_map
+            .upsert("Label1", keys[1].clone(), values[1].clone())
+            .unwrap();
         ledger_map.commit_block().unwrap();
-        ledger_map.upsert("Label1", keys[2].clone(), values[2].clone()).unwrap();
+        ledger_map
+            .upsert("Label1", keys[2].clone(), values[2].clone())
+            .unwrap();
 
         // Use for_each to collect entries
         let mut collected = Vec::new();

@@ -149,9 +149,7 @@ impl LedgerMap {
 
     pub fn count_entries_for_label<S: AsRef<str>>(&self, label: S) -> u64 {
         let label_str = label.as_ref();
-        self.entries
-            .get(label_str)
-            .map_or(0, |m| m.len() as u64)
+        self.entries.get(label_str).map_or(0, |m| m.len() as u64)
             + self
                 .next_block_entries
                 .get(label_str)
@@ -249,12 +247,9 @@ impl LedgerMap {
                         let new_map = IndexMap::new();
                         self.entries
                             .insert(ledger_entry.label().to_string(), new_map);
-                        self.entries
-                            .get_mut(ledger_entry.label())
-                            .ok_or_else(|| anyhow::format_err!(
-                                "Entry label {:?} not found",
-                                ledger_entry.label()
-                            ))?
+                        self.entries.get_mut(ledger_entry.label()).ok_or_else(|| {
+                            anyhow::format_err!("Entry label {:?} not found", ledger_entry.label())
+                        })?
                     }
                 };
 
