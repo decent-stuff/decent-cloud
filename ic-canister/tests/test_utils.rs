@@ -9,7 +9,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use np_offering::Offering;
 use once_cell::sync::Lazy;
-use pocket_ic::{PocketIc, WasmResult};
+use pocket_ic::PocketIc;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -19,17 +19,15 @@ use std::process::Command;
 #[macro_export]
 macro_rules! query_check_and_decode {
     ($pic:expr, $can:expr, $method_name:expr, $method_arg:expr, $decode_type:ty) => {{
-        let reply = $pic
-            .query_call(
-                $can,
-                Principal::anonymous(),
-                $method_name,
-                $method_arg.clone(),
-            )
-            .expect("Failed to run query call on the canister");
+        let reply = $pic.query_call(
+            $can,
+            Principal::anonymous(),
+            $method_name,
+            $method_arg.clone(),
+        );
         let reply = match reply {
-            WasmResult::Reply(reply) => reply,
-            WasmResult::Reject(_) => panic!("Received a reject"),
+            Ok(reply) => reply,
+            Err(err) => panic!("Received an error: {:?}", err),
         };
 
         candid::decode_one::<$decode_type>(&reply).expect("Failed to decode")
@@ -39,12 +37,10 @@ macro_rules! query_check_and_decode {
 #[macro_export]
 macro_rules! update_check_and_decode {
     ($pic:expr, $can:expr, $sender:expr, $method_name:expr, $method_arg:expr, $decode_type:ty) => {{
-        let reply = $pic
-            .update_call($can, $sender, $method_name, $method_arg.clone())
-            .expect("Failed to run update call on the canister");
+        let reply = $pic.update_call($can, $sender, $method_name, $method_arg.clone());
         let reply = match reply {
-            WasmResult::Reply(reply) => reply,
-            WasmResult::Reject(_) => panic!("Received a reject"),
+            Ok(reply) => reply,
+            Err(err) => panic!("Received an error: {:?}", err),
         };
 
         candid::decode_one::<$decode_type>(&reply).expect("Failed to decode")
@@ -184,7 +180,7 @@ impl TestContext {
         )
     }
 
-    pub fn upgrade(&self) -> Result<(), pocket_ic::CallError> {
+    pub fn upgrade(&self) -> Result<(), pocket_ic::RejectResponse> {
         let no_args = encode_one(true).expect("failed to encode");
         self.pic
             .upgrade_canister(self.canister_id, CANISTER_WASM.clone(), no_args, None)

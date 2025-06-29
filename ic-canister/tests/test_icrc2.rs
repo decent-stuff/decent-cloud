@@ -4,7 +4,6 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
-use pocket_ic::WasmResult;
 use test_utils::{create_test_account, TestContext};
 
 #[test]

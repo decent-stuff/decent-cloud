@@ -15,7 +15,6 @@ use decent_cloud_canister::canister_backend::icrc1::Icrc1StandardRecord;
 use decent_cloud_canister::DC_TOKEN_LOGO;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use np_offering::Offering;
-use pocket_ic::WasmResult;
 
 #[test]
 fn test_get_set_timestamp() {

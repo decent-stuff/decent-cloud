@@ -5,7 +5,6 @@ use icrc_ledger_types::{
     icrc1::transfer::{Memo, TransferArg, TransferError},
     icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse},
 };
-use pocket_ic::WasmResult;
 use test_utils::{create_test_account, create_test_subaccount, TestContext};
 
 #[test]
@@ -586,7 +585,7 @@ fn test_zero_amount_transfer() {
 
 #[test]
 #[should_panic(
-    expected = "Error from Canister lxzze-o7777-77777-aaaaa-cai: Canister called `ic0.trap` with message: the memo field is too large."
+    expected = "Error from Canister lxzze-o7777-77777-aaaaa-cai: Canister called `ic0.trap` with message: 'the memo field is too large'."
 )]
 fn test_max_memo_size() {
     let ctx = TestContext::new();
