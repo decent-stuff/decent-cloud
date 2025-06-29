@@ -1,0 +1,41 @@
+# Version control
+.git/
+
+# Build artifacts and dependencies
+**/target/
+**/dist/
+**/node_modules/
+**/build/
+
+# Development and documentation
+docs/
+examples/
+.vscode/
+.idea/
+**/*.md
+**/*.pdf
+**/*.svg
+**/*.png
+
+# Configuration and temporary files
+**/.env*
+**/*.log
+**/*.swp
+**/*.swo
+**/*.bk
+**/*.bak
+**/*.tmp
+**/*.temp
+
+# Project-specific
+# pitch/
+# whitepaper/
+# images/
+
+# Keep essential files
+!Cargo.toml
+!Cargo.lock
+!**/package.json
+!**/package-lock.json
+!wasm/build.js
+!tsconfig.json
