@@ -36,12 +36,12 @@
   "devDependencies": {
     "@dfinity/agent": "^2.4.1",
     "@dfinity/principal": "^2.4.1",
-    "@eslint/js": "^9.29.0",
+    "@eslint/js": "^9.30.0",
     "@next/eslint-plugin-next": "^15.3.4",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.0.3",
-    "@typescript-eslint/eslint-plugin": "8.34.1",
-    "@typescript-eslint/parser": "8.34.1",
+    "@types/node": "^24.0.7",
+    "@typescript-eslint/eslint-plugin": "8.35.0",
+    "@typescript-eslint/parser": "8.35.0",
     "dexie": "^4.0.11",
     "eslint": "^9.29.0",
     "eslint-config-prettier": "^10.1.5",
@@ -50,12 +50,11 @@
     "globals": "^16.2.0",
     "jest": "^30.0.2",
     "jest-environment-jsdom": "^30.0.2",
-    "prettier": "3.5.3",
-    "rimraf": "6.0.1",
+    "prettier": "3.6.2",
+    "rimraf": "5.0.10",
     "ts-jest": "^29.4.0",
     "typescript": "5.8.3",
-    "typescript-eslint": "^8.34.1",
-    "wasm-pack": "^0.13.1"
+    "typescript-eslint": "^8.34.1"
   },
   "engines": {
     "node": ">=16.0.0"
