@@ -36,7 +36,7 @@ jobs:
     needs: website-tests
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ci-image@sha256:7015312e16dced2932d41d4cb5a9ee55cdc17b42ceeb148e809cfbd474e28c4b
+      image: ghcr.io/${{ github.repository }}/ci-image@sha256:03436bda2cfbbe38c119cfc75a8a272eddc6d1815333b67f0566cf8a8c8ef7b5
 
     steps:
       - uses: actions/checkout@v4
