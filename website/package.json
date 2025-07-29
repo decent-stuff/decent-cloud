@@ -18,6 +18,7 @@
     "prepublishOnly": "npm test"
   },
   "dependencies": {
+    "@decent-stuff/dc-client": "file:../wasm/dist",
     "@dfinity/agent": "^2.4.1",
     "@dfinity/auth-client": "^2.4.1",
     "@dfinity/candid": "^2.4.1",
