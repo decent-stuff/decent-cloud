@@ -2,6 +2,7 @@ use base64::prelude::*;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use which::which;
 
 fn workspace_dir() -> PathBuf {
     let output = std::process::Command::new(env!("CARGO"))
@@ -46,9 +47,32 @@ fn prepare_token_logo_env_var() {
     panic!("Failed to find token-logo.svg or token-logo.png");
 }
 
+
+fn install_dfx_if_needed() {
+    // Check if dfx is installed
+    if which("dfx").is_err() {
+        println!("cargo:warning=dfx not found, installing...");
+        
+        // Install dfx using the provided command
+        let status = Command::new("sh")
+            .args(["-ci", "$(curl -fsSL https://internetcomputer.org/install.sh)"])
+            .env("DFXVM_INIT_YES", "yes")
+            .status();
+            
+        match status {
+            Ok(exit_status) if exit_status.success() => {
+                println!("cargo:warning=dfx installed successfully");
+            }
+            _ => {
+                panic!("Failed to install dfx. Please install it manually by running: DFXVM_INIT_YES=yes sh -ci \"$(curl -fsSL https://internetcomputer.org/install.sh)\"");
+            }
+        }
+    }
+}
+
 pub fn main() {
     prepare_token_logo_env_var();
-
+    install_dfx_if_needed();
     // Only build the canister on x86_64 Linux
     if Ok("linux") != env::var("CARGO_CFG_TARGET_OS").as_deref() {
         return;
