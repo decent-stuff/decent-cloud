@@ -39,7 +39,7 @@ Our unique reputation system ties credibility to transaction fees. Paying these 
 ### Installation
 
 <details>
-<summary>Linux (Ubuntu 20.04+)</summary>
+<summary>Linux (Ubuntu 24.04+)</summary>
 
 ```bash
 mkdir $HOME/bin

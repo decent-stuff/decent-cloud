@@ -4,13 +4,13 @@ This guide provides detailed instructions for installing Decent Cloud on differe
 
 ## System Requirements
 
-- **Linux**: Ubuntu 20.04 or newer
+- **Linux**: Ubuntu 24.04 or newer
 - **MacOS**: Both Intel and Apple Silicon (M1/M2/M3) supported
 - **Windows**: 64-bit version supported
 
 ## Platform-Specific Instructions
 
-### Linux (Ubuntu 20.04+)
+### Linux (Ubuntu 24.04+)
 
 1. Create a bin directory in your home folder:
 
