@@ -12,7 +12,7 @@ WORKDIR $HOME
 RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 
 # Install deps
-RUN apt update && apt install -y libunwind-dev
+RUN apt update && apt install -y libunwind-dev libssl-dev pkg-config
 
 # Install Rust
 RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \

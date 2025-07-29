@@ -24,8 +24,42 @@ Note that the Decent Cloud project is split across three repositories:
 
 ```bash
 sudo apt update -y
-sudo apt install build-essential curl git
+sudo apt install build-essential curl git libssl-dev pkg-config
 ```
+
+These packages are required for building the project:
+- `build-essential`: Contains essential build tools like gcc, g++, and make
+- `curl`: Used for downloading dependencies and tools
+- `git`: Required for version control
+- `libssl-dev`: OpenSSL development headers required by some Rust crates
+- `pkg-config`: Tool for finding installed libraries and their compile flags
+
+## Troubleshooting
+
+### Build Failures
+
+If you encounter build failures, especially related to OpenSSL or other system libraries, make sure you have installed all the required system dependencies:
+
+```bash
+sudo apt update -y
+sudo apt install build-essential curl git libssl-dev pkg-config
+```
+
+### Missing Tools
+
+If the build process fails due to missing tools like `dfx` or `pocket-ic`, the build script will attempt to automatically install them. If this fails, you can install them manually:
+
+**Install dfx:**
+```bash
+DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+```
+
+**Install pocket-ic:**
+```bash
+curl -L https://github.com/dfinity/pocketic/releases/download/9.0.3/pocket-ic-x86_64-linux.gz -o - | gzip -d - > ~/bin/pocket-ic && chmod +x ~/bin/pocket-ic
+```
+
+Make sure `~/bin` is in your PATH, or adjust the installation path as needed.
 
 2. **Internet Computer SDK (dfx)**
 
