@@ -98,6 +98,36 @@ console.log('🚀 Building WASM module...');
 
 async function main() {
   try {
+    // Check if wasm-pack is installed
+    try {
+      execSync('wasm-pack --version', { stdio: 'ignore' });
+    } catch (error) {
+      console.log('wasm-pack not found. Installing wasm-pack...');
+      execSync('cargo install --locked wasm-pack', { stdio: 'inherit' });
+    }
+
+    // Check if TypeScript is installed
+    try {
+      execSync('tsc --version', { stdio: 'ignore' });
+    } catch (error) {
+      console.log('TypeScript not found. Installing TypeScript globally...');
+      execSync('npm install -g typescript', { stdio: 'inherit' });
+    }
+
+    // Check if dependencies are installed
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(path.join(wasmDir, 'package.json'), 'utf8'));
+      if (packageJson.dependencies || packageJson.devDependencies) {
+        // Check if node_modules exists
+        if (!fs.existsSync(path.join(wasmDir, 'node_modules'))) {
+          console.log('Dependencies not found. Installing dependencies...');
+          execSync('npm install', { cwd: wasmDir, stdio: 'inherit' });
+        }
+      }
+    } catch (error) {
+      console.warn('Warning: Could not verify dependencies:', error.message);
+    }
+
     const gitRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
     const distDir = path.join(wasmDir, 'dist');
     ensureDirectoryExists(distDir);

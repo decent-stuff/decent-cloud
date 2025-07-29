@@ -3,8 +3,8 @@
   "version": "0.2.1",
   "private": true,
   "scripts": {
-    "prebuild": "cd ../wasm && npm run build",
-    "predev": "cd ../wasm && npm run build",
+    "prebuild": "node -e \"try { require('next'); } catch (e) { console.log('Next.js not found. Installing globally...'); require('child_process').execSync('npm install -g next', { stdio: 'inherit' }); }\" && cd ../wasm && npm run build",
+    "predev": "node -e \"try { require('next'); } catch (e) { console.log('Next.js not found. Installing globally...'); require('child_process').execSync('npm install -g next', { stdio: 'inherit' }); }\" && cd ../wasm && npm run build",
     "dev": "next dev -p 50200 -H 0.0.0.0",
     "dev:watch": "concurrently \"nodemon --watch ../wasm/src --watch ../wasm/*.ts --watch ../wasm/*.js --ext rs,ts,js --exec 'cd ../wasm && npm run build'\" \"next dev -p 50200 -H 0.0.0.0\"",
     "build": "next build",
