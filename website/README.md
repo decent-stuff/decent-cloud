@@ -114,13 +114,18 @@ When working on both the website and WASM package:
 
 ## Deployment
 
-The website is configured for static export:
+The website is automatically deployed to Cloudflare Pages on pushes to the main branch.
+
+For manual deployment or other hosting services, the website can be built as a static site:
 
 ```bash
 npm run build
 ```
 
-This generates a static site in the `out/` directory that can be deployed to any static hosting service.
+This generates a static site that can be deployed to any static hosting service.
+
+See [Cloudflare Deployment Setup](../docs/cloudflare-deployment.md) for detailed instructions
+on setting up automatic deployment to Cloudflare Pages.
 
 ## Contributing
 
