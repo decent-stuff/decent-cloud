@@ -284,15 +284,15 @@ interface KongSwapTokenDataRaw {
     logo_updated_at?: string;
     logo_url?: string;
     metrics?: {
-        market_cap?: string;
-        previous_price?: string;
-        price?: string;
-        price_change_24h?: string | null;
+        market_cap?: number | string;
+        previous_price?: number | string;
+        price?: number | string;
+        price_change_24h?: number | string | null;
         token_id?: number;
-        total_supply?: string;
-        tvl?: string;
+        total_supply?: number | string;
+        tvl?: number | string;
         updated_at?: string;
-        volume_24h?: string;
+        volume_24h?: number | string;
     };
     name?: string;
     symbol?: string;
@@ -303,22 +303,26 @@ interface KongSwapTokenDataRaw {
 }
 
 const parseTokenData = (token: KongSwapTokenDataRaw): Token => {
-    const parseMetricValue = (value: string | undefined | null): number => {
+    const parseMetricValue = (value: number | string | undefined | null): number => {
         if (!value) return 0;
-        return parseFloat(value.replaceAll(",", "")) || 0;
-    };
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') return parseFloat(value.replaceAll(",", "")) || 0;
+        return 0;
+    }
 
-    const parsePriceChange = (value: string | null | undefined): number | null => {
+    const parsePriceChange = (value: number | string | null | undefined): number | null => {
         if (value === null || value === undefined) return null;
-        return parseFloat(value.replaceAll(",", "")) || 0;
-    };
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') return parseFloat(value.replaceAll(",", "")) || 0;
+        return null;
+    }
 
     // Handle logo URL based on has_custom_logo flag
     const getLogo = (logoUrl: string | undefined): string => {
         if (!logoUrl) return "";
         if (logoUrl.startsWith('http')) return logoUrl;
         return `https://api.kongswap.io${logoUrl.startsWith('/') ? '' : '/'}${logoUrl}`;
-    };
+    }
 
     return {
         metrics: {
@@ -333,7 +337,7 @@ const parseTokenData = (token: KongSwapTokenDataRaw): Token => {
         logo_url: getLogo(token?.logo_url),
         address: token.address || token.canister_id || "",
         fee: Number(token.fee || 0),
-        fee_fixed: BigInt(token?.fee_fixed?.replaceAll("_", "") || "0").toString(),
+        fee_fixed: BigInt((token?.fee_fixed && typeof token.fee_fixed === 'string' ? token.fee_fixed.replaceAll("_", "") : "0") || "0").toString(),
         token: token.token_type || '',
         token_type: token.token_type || '',
         chain: token.token_type?.toUpperCase() === 'IC' ? 'ICP' : token.chain || '',
