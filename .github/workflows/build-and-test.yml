@@ -18,6 +18,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Configure git safe directory
+        run: |
+          git config --global --add safe.directory /__w/decent-cloud/decent-cloud
+          git config --global --add safe.directory $GITHUB_WORKSPACE 
       - name: dfxvm init
         run: |
           echo "dfxvm requires the default version to be set once after starting the container (bug!)"
