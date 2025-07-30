@@ -71,4 +71,4 @@ jobs:
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           command: |
             pages project list
-            pages deploy .vercel/output/static --project-name=decent-cloud-website
+            pages deploy .vercel/output/static --project-name=website
