@@ -12,7 +12,6 @@ env:
 
 jobs:
   build-test-deploy:
-    needs: website-tests
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}/ci-image@sha256:72d7a1ccdf2529d0b706f2bf9df1fae04e8e70fdae8eabc4bf7ad93016b03898
