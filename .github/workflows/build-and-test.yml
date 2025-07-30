@@ -48,40 +48,15 @@ jobs:
         working-directory: ./website
         run: npm test
 
-      - name: Install Cloudflare Next-on-Pages
+      - name: Build website
         working-directory: ./website
-        run: npm install -D @cloudflare/next-on-pages
-
-      - name: Install WASM dependencies
-        working-directory: ./wasm
-        run: npm ci
-
-      - name: Build WASM package
-        working-directory: ./wasm
         run: npm run build
 
-      - name: Build Next.js app for Cloudflare Pages
-        working-directory: ./website
-        run: npx @cloudflare/next-on-pages
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
-        if: github.ref == 'refs/heads/main'
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: |
-            pages project list
-            pages deploy .vercel/output/static --project-name=website
-          workingDirectory: "website"
-
-      - name: Deploy to Cloudflare Pages (Preview)
-        uses: cloudflare/wrangler-action@v3
-        if: github.ref != 'refs/heads/main'
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: |
-            pages project list
-            pages deploy .vercel/output/static --project-name=website --branch=${{ github.ref_name }}
+          command: pages deploy --project-name=website --branch=${{ github.ref_name }} out
           workingDirectory: "website"
