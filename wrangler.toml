@@ -1,0 +1,8 @@
+name = "decent-cloud-website"
+
+[build]
+command = "cd website && ./build.sh"
+watch_dir = "website"
+
+[vars]
+NODE_VERSION = "22"
