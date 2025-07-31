@@ -50,12 +50,14 @@ jobs:
 
       - name: Build website
         working-directory: ./website
-        run: npm run build
+        run: |
+          npm run build
+          npx @cloudflare/next-on-pages
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy --project-name=website --branch=${{ github.ref_name }} .next/server
+          command: pages deploy --project-name=website --branch=${{ github.ref_name }} .vercel/output/static
           workingDirectory: "website"

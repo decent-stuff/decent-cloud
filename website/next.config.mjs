@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+import { setupDevPlatform } from '@cloudflare/next-on-pages/next-dev';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -24,6 +25,10 @@ if (!existsSync(wasmDistPath) || !existsSync(wasmPackageJsonPath)) {
   }
 } else {
   console.log('@decent-stuff/dc-client package already built');
+}
+
+if (process.env.NODE_ENV === 'development') {
+  await setupDevPlatform();
 }
 
 const nextConfig = {
