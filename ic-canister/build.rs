@@ -1,5 +1,4 @@
 use base64::prelude::*;
-use dirs;
 use fs_err::create_dir_all;
 use fs_err::File;
 use std::env;
@@ -145,16 +144,21 @@ fn install_pocket_ic_if_needed() {
     }
 }
 
+fn ensure_in_path(path: PathBuf) {
+    let sys_path = env::var_os("PATH").unwrap_or_default();
+    let mut paths = env::split_paths(&sys_path).collect::<Vec<_>>();
+    if paths.iter().any(|p| p == &path) {
+        return;
+    }
+    paths.push(path);
+    env::set_var("PATH", env::join_paths(paths).unwrap());
+}
+
 pub fn main() {
     // Add ~/bin to PATH so that installed tools can be found
     if let Some(home_dir) = dirs::home_dir() {
-        let bin_dir = home_dir.join("bin");
-        if let Some(path) = std::env::var_os("PATH") {
-            let new_path =
-                std::env::join_paths(std::iter::once(bin_dir).chain(std::env::split_paths(&path)))
-                    .unwrap_or(path);
-            std::env::set_var("PATH", new_path);
-        }
+        ensure_in_path(home_dir.join("bin"));  // default pocket-ic path
+        ensure_in_path(home_dir.join(".local/share/dfx/bin")); // default dfx path
     }
 
     prepare_token_logo_env_var();
