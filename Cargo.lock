@@ -2431,11 +2431,12 @@ dependencies = [
  "csv",
  "ed25519-dalek",
  "fs-err",
- "np-json-search",
+ "hex",
  "serde",
  "serde_json",
  "serde_yaml_ng",
  "strsim",
+ "tempfile",
 ]
 
 [[package]]

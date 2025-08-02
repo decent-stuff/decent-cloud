@@ -1,4 +1,6 @@
 use np_offering::{ProviderPubkey, SearchQuery, OfferingFilter, ProductType, OfferingError};
+mod test_utils;
+use test_utils::*;
 
 #[test]
 fn test_provider_pubkey_creation() {
@@ -30,7 +32,7 @@ fn test_provider_pubkey_from_slice() {
 
 #[test]
 fn test_search_query_builder() {
-    let provider = ProviderPubkey::new([1u8; 32]);
+    let provider = default_test_provider_pubkey();
     
     let query = SearchQuery::new()
         .with_provider(provider.clone())
@@ -79,9 +81,9 @@ fn test_offering_filters() {
 
 #[test]
 fn test_provider_pubkey_equality() {
-    let pubkey1 = ProviderPubkey::new([1u8; 32]);
-    let pubkey2 = ProviderPubkey::new([1u8; 32]);
-    let pubkey3 = ProviderPubkey::new([2u8; 32]);
+    let pubkey1 = test_provider_pubkey(1);
+    let pubkey2 = test_provider_pubkey(1);
+    let pubkey3 = test_provider_pubkey(2);
     
     assert_eq!(pubkey1, pubkey2);
     assert_ne!(pubkey1, pubkey3);

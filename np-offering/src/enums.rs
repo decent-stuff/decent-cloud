@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum Currency {
     EUR,
     USD,
@@ -64,7 +64,7 @@ impl FromStr for Visibility {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum ProductType {
     VPS,
     Dedicated,
@@ -97,7 +97,7 @@ impl FromStr for ProductType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum VirtualizationType {
     KVM,
     VMware,
@@ -167,7 +167,7 @@ impl FromStr for BillingInterval {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum StockStatus {
     InStock,
     OutOfStock,
