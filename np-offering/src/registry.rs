@@ -1,7 +1,7 @@
 use crate::errors::OfferingError;
 use crate::server_offering::ServerOffering;
 use crate::types::{Offering, OfferingFilter, OfferingKey, ProviderPubkey, SearchQuery};
-use crate::legacy::ProviderOfferings;
+use crate::provider_offerings::ProviderOfferings;
 use std::collections::{HashMap, HashSet};
 
 /// Central registry for all offerings with efficient search
@@ -242,8 +242,26 @@ impl OfferingRegistry {
         )
     }
     
+    /// Sanitize search input to prevent potential injection attacks
+    fn sanitize_search_input(&self, input: &str) -> String {
+        input
+            .chars()
+            .map(|c| {
+                // Allow alphanumeric, basic punctuation, and whitespace
+                if c.is_alphanumeric() || c.is_whitespace() || c == '-' || c == '_' || c == '.' {
+                    c
+                } else {
+                    ' '
+                }
+            })
+            .collect()
+    }
+    
     fn search_text_internal(&self, text: &str) -> HashSet<(ProviderPubkey, OfferingKey)> {
-        let query_words: Vec<String> = text
+        // Sanitize input by removing potentially dangerous characters
+        let sanitized_text = self.sanitize_search_input(text);
+        
+        let query_words: Vec<String> = sanitized_text
             .split_whitespace()
             .map(|w| w.to_lowercase())
             .filter(|w| w.len() > 2 && !self.is_stop_word(w))
@@ -265,7 +283,10 @@ impl OfferingRegistry {
     }
     
     fn matches_filters(&self, offering: &Offering, filters: &[OfferingFilter]) -> bool {
-        for filter in filters {
+        // Basic query optimization: reorder filters by estimated selectivity
+        let optimized_filters = Self::optimize_filter_order(filters);
+        
+        for filter in &optimized_filters {
             if !self.matches_filter(offering, filter) {
                 return false;
             }
@@ -317,6 +338,33 @@ impl OfferingRegistry {
                 }
             }
         }
+    }
+    
+    /// Basic query optimization by reordering filters based on estimated selectivity
+    fn optimize_filter_order(filters: &[OfferingFilter]) -> Vec<&OfferingFilter> {
+        let mut filter_refs: Vec<&OfferingFilter> = filters.iter().collect();
+        
+        // Sort filters by estimated selectivity (most selective first)
+        filter_refs.sort_by_key(|&filter| {
+            match filter {
+                // High selectivity filters (likely to match few offerings)
+                OfferingFilter::HasGPU(true) => 1,
+                OfferingFilter::VirtualizationType(_) => 2,
+                OfferingFilter::ProductType(_) => 3,
+                OfferingFilter::Country(_) => 4,
+                OfferingFilter::Currency(_) => 5,
+                OfferingFilter::StockStatus(_) => 6,
+                // Medium selectivity filters
+                OfferingFilter::MinCores(_) => 7,
+                OfferingFilter::MinMemoryGB(_) => 8,
+                OfferingFilter::City(_) => 9,
+                // Lower selectivity filters (likely to match many offerings)
+                OfferingFilter::PriceRange(_, _) => 10,
+                OfferingFilter::HasGPU(false) => 11, // Most offerings don't have GPUs
+            }
+        });
+        
+        filter_refs
     }
     
     fn parse_csv_data(csv_data: &str) -> Result<Vec<ServerOffering>, OfferingError> {

@@ -11,7 +11,7 @@ pub mod server_offering;
 pub mod types;
 
 // Private modules
-mod legacy;
+mod provider_offerings;
 
 // Re-export main public types
 pub use enums::*;
@@ -21,4 +21,4 @@ pub use server_offering::ServerOffering;
 pub use types::{Offering, OfferingFilter, OfferingKey, ProviderPubkey, SearchQuery};
 
 // Re-export legacy types for backward compatibility
-pub use legacy::ProviderOfferings;
+pub use provider_offerings::ProviderOfferings;
