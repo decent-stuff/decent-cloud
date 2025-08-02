@@ -118,7 +118,7 @@ Test Server,A test server,TEST001,https://test.com,USD,29.99,0,Visible,VPS,KVM,M
 fn capture_main_output(args: Vec<String>) -> String {
     // Build the command to run the main binary
     let mut cmd = std::process::Command::new("cargo");
-    cmd.args(&["run", "--bin", "np-offering", "--"]).args(&args);
+    cmd.args(["run", "--bin", "np-offering", "--"]).args(&args);
 
     // Run the command and capture output
     let output = cmd.output().unwrap();

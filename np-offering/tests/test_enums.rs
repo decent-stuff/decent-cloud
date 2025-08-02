@@ -1,7 +1,7 @@
 use np_offering::{Currency, Visibility, ProductType, VirtualizationType, BillingInterval, StockStatus, ErrorCorrection};
 use std::str::FromStr;
-mod test_utils;
-use test_utils::*;
+mod common;
+use common::*;
 
 #[test]
 fn test_currency_from_str() {

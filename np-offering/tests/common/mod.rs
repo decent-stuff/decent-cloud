@@ -1,5 +1,7 @@
 //! Common test utilities and shared test data for the np-offering crate
 
+#![allow(dead_code)]
+
 use np_offering::{Currency, ProductType, StockStatus, VirtualizationType, BillingInterval, ErrorCorrection, Visibility, ProviderPubkey};
 
 /// Sample CSV data with multiple offerings for testing
@@ -11,12 +13,6 @@ Budget Server,Cheap option for startups.,BS001,https://test.com/BS001/,USD,29.99
 /// Single offering CSV for simpler tests
 pub const SINGLE_OFFERING_CSV: &str = r#"Offer Name,Description,Unique Internal identifier,Product page URL,Currency,Monthly price,Setup fee,Visibility,Product Type,Virtualization type,Billing interval,Stock,Processor Brand,Processor Amount,Processor Cores,Processor Speed,Processor Name,Memory Error Correction,Memory Type,Memory Amount,Hard Disk Drive Amount,Total Hard Disk Drive Capacity,Solid State Disk Amount,Total Solid State Disk Capacity,Unmetered,Uplink speed,Traffic,Datacenter Country,Datacenter City,Datacenter Coordinates,Features,Operating Systems,Control Panel,GPU Name,Payment Methods
 Intel Dual Core Dedicated Server,Here goes a product description.,DC2993,https://test.com/DC2993/,EUR,99.99,99.99,Visible,VPS,KVM,Monthly,In stock,Intel,1,2,2.6 GHz,Intel® Xeon® Processor E5-1620 v4,non-ECC,DDR4,8192 MB,0,0,2,160 GB,Unmetered inbound,1000 mbit,10240,NL,"Rotterdam, Netherlands","51.9229,4.46317","KVM over IP, Managed support, Native IPv6, Instant setup","Debian, CentOs, VMWare",cPanel,,"Bitcoin, Credit card, PayPal, Wire Transfer""#;
-
-/// Invalid CSV for error testing
-pub const INVALID_CSV: &str = r#"invalid,csv,data"#;
-
-/// Empty CSV for edge case testing
-pub const EMPTY_CSV: &str = "";
 
 /// Create a test provider pubkey with predictable values
 pub fn test_provider_pubkey(id: u8) -> ProviderPubkey {
@@ -88,37 +84,6 @@ pub fn test_error_correction_cases() -> Vec<(ErrorCorrection, &'static str)> {
         (ErrorCorrection::ECCRegistered, "ECC Registered"),
         (ErrorCorrection::NonECC, "non-ECC"),
     ]
-}
-
-/// Generic function to test enum roundtrip (FromStr + Display)
-pub fn test_enum_roundtrip<T, F, P>(cases: Vec<(T, &'static str)>, from_str_func: F, parse_func: P)
-where
-    T: std::fmt::Debug + PartialEq + std::fmt::Display,
-    F: Fn(&str) -> T,
-    P: Fn(&str) -> Result<T, ()>,
-{
-    for (original, display_str) in cases {
-        // Test Display implementation
-        let display = format!("{}", original);
-        assert_eq!(display, display_str);
-        
-        // Test FromStr implementation
-        let parsed = parse_func(&display.to_lowercase()).unwrap_or_else(|_| {
-            // Special case for VirtualizationType::None which parses from empty string
-            if display_str == "None" {
-                parse_func("").unwrap()
-            } else {
-                panic!("Failed to parse enum value: {}", display);
-            }
-        });
-        
-        // Test that parsed value matches original
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
-        
-        // Test that from_str_func also works (for cases where it's different)
-        let from_str_parsed = from_str_func(display_str);
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&from_str_parsed));
-    }
 }
 
 /// Test case insensitive parsing for enums

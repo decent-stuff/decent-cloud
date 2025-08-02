@@ -1,6 +1,6 @@
 use np_offering::{ProviderPubkey, SearchQuery, OfferingFilter, ProductType, OfferingError};
-mod test_utils;
-use test_utils::*;
+mod common;
+use common::*;
 
 #[test]
 fn test_provider_pubkey_creation() {

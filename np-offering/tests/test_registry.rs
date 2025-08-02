@@ -1,6 +1,6 @@
 use np_offering::{OfferingRegistry, SearchQuery, OfferingFilter, ProductType};
-mod test_utils;
-use test_utils::*;
+mod common;
+use common::*;
 
 #[test]
 fn test_registry_basic_operations() {
