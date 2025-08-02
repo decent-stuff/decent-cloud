@@ -115,14 +115,6 @@ impl Profile {
             }),
         }
     }
-
-    pub fn as_json_string(&self) -> Result<String, String> {
-        match self {
-            Profile::V0_1_0(profile) => {
-                serde_json::to_string(&profile.json_value).map_err(|e| e.to_string())
-            }
-        }
-    }
 }
 
 impl fmt::Display for Profile {
