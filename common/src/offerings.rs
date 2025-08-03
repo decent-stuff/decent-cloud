@@ -2,15 +2,13 @@ use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reward_e9s_per_block,
     warn, AHashMap, DccIdentity, TokenAmountE9s, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
 };
-use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
-use np_offering::Offering;
+use np_offering::ProviderOfferings;
 use std::cell::RefCell;
 
 thread_local! {
@@ -34,43 +32,45 @@ fn np_offering_update_fee_e9s() -> TokenAmountE9s {
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Hash)]
-pub struct UpdateOfferingPayloadV1 {
-    pub offering_payload: Vec<u8>,
+pub struct UpdateOfferingsPayloadV1 {
+    pub offerings_payload: Vec<u8>,
     pub signature: Vec<u8>,
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Hash)]
-pub enum UpdateOfferingPayload {
-    V1(UpdateOfferingPayloadV1),
+pub enum UpdateOfferingsPayload {
+    V1(UpdateOfferingsPayloadV1),
 }
 
-impl UpdateOfferingPayload {
-    pub fn new(offering_payload: &[u8], crypto_signature_bytes: &[u8]) -> Result<Self, String> {
-        if offering_payload.len() > MAX_NP_OFFERING_BYTES {
+impl UpdateOfferingsPayload {
+    pub fn new(offerings_payload: &[u8], crypto_signature_bytes: &[u8]) -> Result<Self, String> {
+        if offerings_payload.len() > MAX_NP_OFFERING_BYTES {
             return Err("Offering payload too long".to_string());
         }
-        Ok(UpdateOfferingPayload::V1(UpdateOfferingPayloadV1 {
-            offering_payload: offering_payload.to_vec(),
+        Ok(UpdateOfferingsPayload::V1(UpdateOfferingsPayloadV1 {
+            offerings_payload: offerings_payload.to_vec(),
             signature: crypto_signature_bytes.to_vec(),
         }))
     }
 
     pub fn payload_serialized(&self) -> &[u8] {
         match self {
-            UpdateOfferingPayload::V1(payload) => payload.offering_payload.as_slice(),
+            UpdateOfferingsPayload::V1(payload) => payload.offerings_payload.as_slice(),
         }
     }
 
-    pub fn deserialize_unchecked(data: &[u8]) -> Result<UpdateOfferingPayload, String> {
-        UpdateOfferingPayload::try_from_slice(data).map_err(|e| e.to_string())
+    pub fn deserialize(data: &[u8]) -> Result<UpdateOfferingsPayload, String> {
+        Self::try_from_slice(data).map_err(|e| e.to_string())
     }
 
-    pub fn deserialize_update_offering(&self) -> Result<Offering, String> {
-        Offering::new_from_bytes(self.payload_serialized(), "json")
-    }
-
-    pub fn offering(&self) -> Result<Offering, String> {
-        Offering::new_from_bytes(self.payload_serialized(), "json")
+    pub fn deserialize_offerings(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<ProviderOfferings, String> {
+        let csv_data = String::from_utf8(self.payload_serialized().to_vec())
+            .map_err(|e| format!("Invalid UTF-8 data: {}", e))?;
+        np_offering::ProviderOfferings::new_from_str(provider_pubkey, &csv_data)
+            .map_err(|e| format!("CSV parsing error: {}", e))
     }
 }
 
@@ -85,11 +85,11 @@ pub fn do_node_provider_update_offering(
     dcc_id.verify_bytes(&offering_serialized, &crypto_signature_bytes)?;
     fn_info!("{} => {} bytes", dcc_id, offering_serialized.len());
 
-    let payload = UpdateOfferingPayload::new(&offering_serialized, &crypto_signature_bytes)?;
+    let payload = UpdateOfferingsPayload::new(&offering_serialized, &crypto_signature_bytes)?;
     let payload_bytes = borsh::to_vec(&payload).unwrap();
 
     let num_offering_instances = payload
-        .offering()
+        .deserialize_offerings(dcc_id.to_bytes_verifying().as_slice())
         .map(|o| o.get_all_instance_ids().len())
         .unwrap_or(0);
 
@@ -119,8 +119,8 @@ pub fn do_node_provider_update_offering(
 pub fn do_get_matching_offerings(
     ledger: &LedgerMap,
     search_filter: &str,
-) -> Vec<(DccIdentity, Offering)> {
-    let mut results = vec![];
+) -> Vec<ProviderOfferings> {
+    let mut results: Vec<ProviderOfferings> = vec![];
 
     let search_filter = search_filter.trim();
 
@@ -128,28 +128,18 @@ pub fn do_get_matching_offerings(
         .iter(Some(LABEL_NP_OFFERING))
         .chain(ledger.next_block_iter(Some(LABEL_NP_OFFERING)))
     {
-        let dcc_id = match DccIdentity::new_verifying_from_bytes(entry.key()) {
-            Ok(dcc_id) => dcc_id,
-            Err(e) => {
-                warn!(
-                    "Error decoding public key {}: {}",
-                    BASE64.encode(entry.key()),
-                    e
-                );
-                continue;
-            }
-        };
-        let payload_decoded = match UpdateOfferingPayload::deserialize_unchecked(entry.value()) {
+        // Only the latest ProviderOfferings entry is returned in the iterator per provider
+        let payload_decoded = match UpdateOfferingsPayload::deserialize(entry.value()) {
             Ok(payload) => payload,
             Err(e) => {
                 warn!("Error decoding payload: {}", e);
                 continue;
             }
         };
-        match payload_decoded.offering() {
+        match payload_decoded.deserialize_offerings(entry.key()) {
             Ok(offering) => {
                 if search_filter.is_empty() || !offering.matches_search(search_filter).is_empty() {
-                    results.push((dcc_id, offering));
+                    results.push(offering);
                 }
             }
             Err(e) => {

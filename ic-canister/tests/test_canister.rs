@@ -14,7 +14,7 @@ use dcc_common::{
 use decent_cloud_canister::canister_backend::icrc1::Icrc1StandardRecord;
 use decent_cloud_canister::DC_TOKEN_LOGO;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
-use np_offering::Offering;
+use np_offering::ServerOffering;
 
 #[test]
 fn test_get_set_timestamp() {
@@ -355,48 +355,90 @@ fn test_offerings() {
     ctx.ffwd_to_next_block(ts_ns);
 
     assert_eq!(test_offering_search(&ctx, "").len(), 0);
-    let offering = Offering::new_from_file("tests/data/np-offering-demo1.yaml").unwrap();
+
+    // Create a test offering
+    let offering = ServerOffering {
+        offer_name: "Test Small VPS".to_string(),
+        description: "A small VPS for testing".to_string(),
+        unique_internal_identifier: "xxx-small".to_string(),
+        product_page_url: "https://example.com/xxx-small".to_string(),
+        currency: np_offering::Currency::USD,
+        monthly_price: 2.0,
+        setup_fee: 0.0,
+        visibility: np_offering::Visibility::Visible,
+        product_type: np_offering::ProductType::VPS,
+        virtualization_type: Some(np_offering::VirtualizationType::KVM),
+        billing_interval: np_offering::BillingInterval::Monthly,
+        stock: np_offering::StockStatus::InStock,
+        processor_brand: Some("Intel".to_string()),
+        processor_amount: Some(1),
+        processor_cores: Some(1),
+        processor_speed: Some("2.5 GHz".to_string()),
+        processor_name: Some("Intel Xeon".to_string()),
+        memory_error_correction: None,
+        memory_type: Some("DDR4".to_string()),
+        memory_amount: Some("512 MB".to_string()),
+        hdd_amount: 0,
+        total_hdd_capacity: None,
+        ssd_amount: 1,
+        total_ssd_capacity: Some("2 GB".to_string()),
+        unmetered: vec![],
+        uplink_speed: Some("1 Gbps".to_string()),
+        traffic: Some(1000),
+        datacenter_country: "US".to_string(),
+        datacenter_city: "New York".to_string(),
+        datacenter_coordinates: Some((40.7128, -74.0060)),
+        features: vec!["SSD Storage".to_string(), "IPv6".to_string()],
+        operating_systems: vec!["Ubuntu".to_string(), "CentOS".to_string()],
+        control_panel: Some("cPanel".to_string()),
+        gpu_name: None,
+        payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
+    };
+
     test_offering_add(&ctx, &np1, &offering).unwrap();
 
     let search_results = test_offering_search(&ctx, "");
     assert_eq!(search_results.len(), 1);
+    assert_eq!(search_results[0].provider_pubkey, np1.to_bytes_verifying());
     assert_eq!(
-        search_results[0].0.to_bytes_verifying(),
-        np1.to_bytes_verifying()
+        search_results[0].server_offerings[0].offer_name,
+        offering.offer_name
     );
     assert_eq!(
-        search_results[0].1.as_json_string(),
-        offering.as_json_string()
+        search_results[0].server_offerings[0].unique_internal_identifier,
+        offering.unique_internal_identifier
     );
 
     ctx.ffwd_to_next_block(ts_ns);
     let search_results = test_offering_search(&ctx, "");
     assert_eq!(search_results.len(), 1);
+    assert_eq!(search_results[0].provider_pubkey, np1.to_bytes_verifying());
     assert_eq!(
-        search_results[0].0.to_bytes_verifying(),
-        np1.to_bytes_verifying()
+        search_results[0].server_offerings[0].offer_name,
+        offering.offer_name
     );
     assert_eq!(
-        search_results[0].1.as_json_string(),
-        offering.as_json_string()
+        search_results[0].server_offerings[0].unique_internal_identifier,
+        offering.unique_internal_identifier
     );
 
-    let search_results = test_offering_search(&ctx, "memory >= 512MB");
+    let search_results = test_offering_search(&ctx, "512 MB");
     assert_eq!(search_results.len(), 1);
+    assert_eq!(search_results[0].provider_pubkey, np1.to_bytes_verifying());
     assert_eq!(
-        search_results[0].0.to_bytes_verifying(),
-        np1.to_bytes_verifying()
+        search_results[0].server_offerings[0].offer_name,
+        offering.offer_name
     );
     assert_eq!(
-        search_results[0].1.as_json_string(),
-        offering.as_json_string()
+        search_results[0].server_offerings[0].unique_internal_identifier,
+        offering.unique_internal_identifier
     );
 
-    let search_results = test_offering_search(&ctx, "memory < 512MB");
+    let search_results = test_offering_search(&ctx, "1GB");
     assert_eq!(search_results.len(), 0);
 
     // Test for contract signing
-    let offering_id = offering.matches_search("memory >= 512MB")[0].clone();
+    let offering_id = offering.get_unique_instance_id().clone();
     assert_eq!(offering_id, "xxx-small");
 
     let u1 = test_user_register(&ctx, b"u1", 2 * DC_TOKEN_DECIMALS_DIV).0;

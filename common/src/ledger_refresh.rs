@@ -7,7 +7,7 @@ use crate::{
     dcc_identity, error, reputations_apply_aging, reputations_apply_changes, reputations_clear,
     set_num_providers, set_num_users, set_offering_num_per_provider, AHashMap, CheckInPayload,
     ContractSignReplyPayload, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
-    LinkedIcIdsRecord, ReputationAge, ReputationChange, UpdateOfferingPayload,
+    LinkedIcIdsRecord, ReputationAge, ReputationChange, UpdateOfferingsPayload,
     UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
     LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN,
     LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE,
@@ -108,12 +108,14 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                     if let Ok(dcc_identity) =
                         dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
                     {
-                        match UpdateOfferingPayload::deserialize_unchecked(entry.value()) {
+                        match UpdateOfferingsPayload::deserialize(entry.value()) {
                             Ok(payload) => {
                                 set_offering_num_per_provider(
                                     entry.key().to_vec(),
                                     payload
-                                        .offering()
+                                        .deserialize_offerings(
+                                            dcc_identity.to_bytes_verifying().as_slice(),
+                                        )
                                         .map(|o| o.get_all_instance_ids().len() as u64)
                                         .unwrap_or_default(),
                                 );
@@ -236,8 +238,8 @@ impl WasmLedgerEntry {
         WasmLedgerEntry {
             label: LABEL_NP_OFFERING.to_string(),
             key: Value::String(dcc_id.to_string()),
-            value: match UpdateOfferingPayload::try_from_slice(entry.value()) {
-                Ok(payload) => match payload.deserialize_update_offering() {
+            value: match UpdateOfferingsPayload::try_from_slice(entry.value()) {
+                Ok(payload) => match payload.deserialize_offerings(entry.key()) {
                     Ok(offering) => serde_json::to_value(&offering).unwrap(),
                     Err(e) => {
                         serde_json::json!(format!(

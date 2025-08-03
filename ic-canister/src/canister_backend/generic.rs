@@ -11,14 +11,12 @@ use dcc_common::{
     LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
     MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
-use flate2::{write::ZlibEncoder, Compression};
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::platform_specific::{persistent_storage_read, persistent_storage_write};
 use ledger_map::{error, info, warn, LedgerMap};
 use serde::Serialize;
 use std::cell::RefCell;
-use std::io::prelude::*;
 use std::time::Duration;
 
 thread_local! {
@@ -242,28 +240,23 @@ pub(crate) fn _get_check_in_nonce() -> Vec<u8> {
 pub(crate) fn _offering_search(query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
     let mut response_bytes = 0;
     let mut response = Vec::new();
-    let max_offering_response_bytes = MAX_RESPONSE_BYTES_NON_REPLICATED * 9 / 10; // 90% of max response bytes
+    let max_offering_response_bytes = MAX_RESPONSE_BYTES_NON_REPLICATED * 7 / 10; // 70% of max response bytes
     LEDGER_MAP.with(|ledger| {
-        for (dcc_id, offering) in dcc_common::do_get_matching_offerings(&ledger.borrow(), &query) {
-            // convert results to json and compress that json with zlib
-            let offering_json_string = match offering.as_json_string() {
-                Ok(json) => json,
+        for offering in dcc_common::do_get_matching_offerings(&ledger.borrow(), &query) {
+            // Serialize using the new compact PEM + CSV format
+            let offering_json = match offering.serialize_as_json() {
+                Ok(json) => json.into_bytes(),
                 Err(e) => {
                     warn!("Failed to serialize offering: {}", e);
                     continue;
                 }
             };
-            let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
-
-            enc.write_all(offering_json_string.as_bytes())
-                .expect("Failed to compress");
-            let compressed = enc.finish().expect("Failed to compress");
-            let pubkey_bytes = dcc_id.to_bytes_verifying();
-            response_bytes += pubkey_bytes.len() + compressed.len();
+            response_bytes += offering_json.len();
             if response_bytes > max_offering_response_bytes {
                 break;
             }
-            response.push((pubkey_bytes, compressed));
+            // Return (provider_pubkey, serialized_offering) pairs
+            response.push((offering.provider_pubkey.clone(), offering_json));
         }
     });
     response
