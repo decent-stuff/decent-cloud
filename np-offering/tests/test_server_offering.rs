@@ -98,9 +98,8 @@ fn test_get_all_instance_ids() {
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
 
-    let ids = offering.get_all_instance_ids();
-    assert_eq!(ids.len(), 1);
-    assert_eq!(ids[0], "TEST001");
+    let id = offering.get_unique_instance_id();
+    assert_eq!(id, "TEST001");
 }
 
 #[test]

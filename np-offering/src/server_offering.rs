@@ -1,7 +1,9 @@
 use crate::csv_constants::CSV_HEADERS;
 use crate::enums::*;
 use crate::errors::OfferingError;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 
 /// Server offering similar to the CSV format of serverhunter.com
@@ -46,94 +48,77 @@ pub struct ServerOffering {
 
 impl ServerOffering {
     /// Get all instance IDs for this offering
-    /// Returns a vector containing the unique internal identifier
-    pub fn get_all_instance_ids(&self) -> Vec<String> {
-        vec![self.unique_internal_identifier.clone()]
+    pub fn get_unique_instance_id(&self) -> String {
+        self.unique_internal_identifier.clone()
+    }
+
+    /// Convert struct to IndexMap for automatic field processing
+    /// This method automatically includes ALL fields without manual enumeration
+    fn to_field_map(&self) -> Result<IndexMap<String, Value>, OfferingError> {
+        let json_value = serde_json::to_value(self)?;
+        let obj = json_value.as_object()
+            .ok_or_else(|| OfferingError::SerializationError("Failed to convert to object".to_string()))?;
+        Ok(obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
     }
 
     /// Search for matches in this offering based on the given filter
-    /// Returns matching field names/values
+    /// Automatically searches through ALL struct fields
     pub fn matches_search(&self, search_filter: &str) -> Vec<String> {
-        let mut matches = Vec::new();
+        let fields = match self.to_field_map() {
+            Ok(fields) => fields,
+            Err(_) => return vec![],
+        };
+
         let search_lower = search_filter.to_lowercase();
+        fields.into_iter()
+            .flat_map(|(field_name, value)| Self::search_value(&field_name, &value, &search_lower))
+            .collect()
+    }
 
-        // Search in various string fields
-        if self.offer_name.to_lowercase().contains(&search_lower) {
-            matches.push(format!("offer_name: {}", self.offer_name));
-        }
-        if self.description.to_lowercase().contains(&search_lower) {
-            matches.push(format!("description: {}", self.description));
-        }
-        if self
-            .unique_internal_identifier
-            .to_lowercase()
-            .contains(&search_lower)
-        {
-            matches.push(format!(
-                "unique_internal_identifier: {}",
-                self.unique_internal_identifier
-            ));
-        }
-        if self
-            .datacenter_country
-            .to_lowercase()
-            .contains(&search_lower)
-        {
-            matches.push(format!("datacenter_country: {}", self.datacenter_country));
-        }
-        if self.datacenter_city.to_lowercase().contains(&search_lower) {
-            matches.push(format!("datacenter_city: {}", self.datacenter_city));
-        }
-
-        // Search in optional string fields
-        if let Some(ref processor_brand) = self.processor_brand {
-            if processor_brand.to_lowercase().contains(&search_lower) {
-                matches.push(format!("processor_brand: {}", processor_brand));
+    /// Recursively search through a JSON value for the search term
+    fn search_value(field_name: &str, value: &Value, search_term: &str) -> Vec<String> {
+        match value {
+            Value::String(s) => {
+                if s.to_lowercase().contains(search_term) {
+                    vec![format!("{}: {}", field_name, s)]
+                } else {
+                    vec![]
+                }
             }
-        }
-        if let Some(ref processor_name) = self.processor_name {
-            if processor_name.to_lowercase().contains(&search_lower) {
-                matches.push(format!("processor_name: {}", processor_name));
+            Value::Number(n) => {
+                let s = n.to_string();
+                if s.to_lowercase().contains(search_term) {
+                    vec![format!("{}: {}", field_name, s)]
+                } else {
+                    vec![]
+                }
             }
-        }
-        if let Some(ref memory_type) = self.memory_type {
-            if memory_type.to_lowercase().contains(&search_lower) {
-                matches.push(format!("memory_type: {}", memory_type));
+            Value::Array(arr) => {
+                arr.iter()
+                    .flat_map(|item| Self::search_value(field_name, item, search_term))
+                    .collect()
             }
-        }
-        if let Some(ref control_panel) = self.control_panel {
-            if control_panel.to_lowercase().contains(&search_lower) {
-                matches.push(format!("control_panel: {}", control_panel));
+            Value::Object(obj) => {
+                obj.iter()
+                    .flat_map(|(key, val)| {
+                        let nested_field = format!("{}_{}", field_name, key);
+                        Self::search_value(&nested_field, val, search_term)
+                    })
+                    .collect()
             }
-        }
-        if let Some(ref gpu_name) = self.gpu_name {
-            if gpu_name.to_lowercase().contains(&search_lower) {
-                matches.push(format!("gpu_name: {}", gpu_name));
+            Value::Bool(b) => {
+                let s = b.to_string();
+                if s.to_lowercase().contains(search_term) {
+                    vec![format!("{}: {}", field_name, s)]
+                } else {
+                    vec![]
+                }
             }
+            Value::Null => vec![],
         }
-
-        // Search in arrays
-        for feature in &self.features {
-            if feature.to_lowercase().contains(&search_lower) {
-                matches.push(format!("features: {}", feature));
-            }
-        }
-        for os in &self.operating_systems {
-            if os.to_lowercase().contains(&search_lower) {
-                matches.push(format!("operating_systems: {}", os));
-            }
-        }
-        for payment in &self.payment_methods {
-            if payment.to_lowercase().contains(&search_lower) {
-                matches.push(format!("payment_methods: {}", payment));
-            }
-        }
-
-        matches
     }
 
     /// Get instance pricing information
-    /// Returns a map of pricing models to time units to prices
     pub fn instance_pricing(&self, _instance_id: &str) -> HashMap<String, HashMap<String, String>> {
         let mut pricing = HashMap::new();
         let mut units = HashMap::new();
@@ -142,74 +127,120 @@ impl ServerOffering {
         units.insert("month".to_string(), self.monthly_price.to_string());
         units.insert("year".to_string(), (self.monthly_price * 12.0).to_string());
         units.insert("day".to_string(), (self.monthly_price / 30.0).to_string());
-        units.insert(
-            "hour".to_string(),
-            (self.monthly_price / (30.0 * 24.0)).to_string(),
-        );
+        units.insert("hour".to_string(), (self.monthly_price / (30.0 * 24.0)).to_string());
 
         pricing.insert("on_demand".to_string(), units);
         pricing
     }
 
     /// Serialize the ServerOffering to CSV bytes
+    /// Automatically handles ALL struct fields using CSV_HEADERS order
     pub fn serialize(&self) -> Result<Vec<u8>, OfferingError> {
         let mut wtr = csv::Writer::from_writer(Vec::new());
-
-        // Write CSV headers first
         wtr.write_record(CSV_HEADERS)?;
 
-        // Build the record as a vector of strings to handle Vec fields properly
-        let record = vec![
-            self.offer_name.clone(),
-            self.description.clone(),
-            self.unique_internal_identifier.clone(),
-            self.product_page_url.clone(),
-            format!("{}", self.currency),
-            self.monthly_price.to_string(),
-            self.setup_fee.to_string(),
-            format!("{}", self.visibility),
-            format!("{}", self.product_type),
-            self.virtualization_type
-                .as_ref()
-                .map(|v| format!("{}", v))
-                .unwrap_or_default(),
-            format!("{}", self.billing_interval),
-            format!("{}", self.stock)
-                .replace("InStock", "In stock")
-                .replace("OutOfStock", "Out of stock"),
-            self.processor_brand.as_deref().unwrap_or("").to_string(),
-            self.processor_amount.unwrap_or(0).to_string(),
-            self.processor_cores.unwrap_or(0).to_string(),
-            self.processor_speed.as_deref().unwrap_or("").to_string(),
-            self.processor_name.as_deref().unwrap_or("").to_string(),
-            self.memory_error_correction
-                .as_ref()
-                .map(|v| format!("{}", v))
-                .unwrap_or_default(),
-            self.memory_type.as_deref().unwrap_or("").to_string(),
-            self.memory_amount.as_deref().unwrap_or("").to_string(),
-            self.hdd_amount.to_string(),
-            self.total_hdd_capacity.as_deref().unwrap_or("").to_string(),
-            self.ssd_amount.to_string(),
-            self.total_ssd_capacity.as_deref().unwrap_or("").to_string(),
-            self.unmetered.join(", "),
-            self.uplink_speed.as_deref().unwrap_or("").to_string(),
-            self.traffic.unwrap_or(0).to_string(),
-            self.datacenter_country.clone(),
-            self.datacenter_city.clone(),
-            self.datacenter_coordinates
-                .map(|(lat, lon)| format!("{},{}", lat, lon))
-                .unwrap_or_default(),
-            self.features.join(", "),
-            self.operating_systems.join(", "),
-            self.control_panel.as_deref().unwrap_or("").to_string(),
-            self.gpu_name.as_deref().unwrap_or("").to_string(),
-            self.payment_methods.join(", "),
-        ];
+        let fields = self.to_field_map()?;
+        
+        // Extract field values in CSV_HEADERS order - this ensures compilation errors 
+        // if headers don't match field names (converted to snake_case)
+        let record: Result<Vec<String>, OfferingError> = CSV_HEADERS.iter()
+            .map(|header| Self::extract_csv_value(&fields, header))
+            .collect();
 
-        wtr.write_record(&record)?;
+        wtr.write_record(&record?)?;
         wtr.into_inner()
             .map_err(|e| OfferingError::IoError(e.into_error()))
+    }
+
+    /// Extract a CSV value from the field map, handling type conversion and formatting
+    fn extract_csv_value(fields: &IndexMap<String, Value>, header: &str) -> Result<String, OfferingError> {
+        // Convert CSV header to field name (handle case differences)
+        let field_name = Self::header_to_field_name(header);
+        
+        let value = fields.get(&field_name)
+            .ok_or_else(|| OfferingError::SerializationError(
+                format!("Field '{}' (from header '{}') not found in struct", field_name, header)
+            ))?;
+
+        Ok(Self::value_to_csv_string(value))
+    }
+
+    /// Convert CSV header to struct field name
+    fn header_to_field_name(header: &str) -> String {
+        match header {
+            "Offer Name" => "offer_name".to_string(),
+            "Description" => "description".to_string(),
+            "Unique Internal identifier" => "unique_internal_identifier".to_string(),
+            "Product page URL" => "product_page_url".to_string(),
+            "Currency" => "currency".to_string(),
+            "Monthly price" => "monthly_price".to_string(),
+            "Setup fee" => "setup_fee".to_string(),
+            "Visibility" => "visibility".to_string(),
+            "Product Type" => "product_type".to_string(),
+            "Virtualization type" => "virtualization_type".to_string(),
+            "Billing interval" => "billing_interval".to_string(),
+            "Stock" => "stock".to_string(),
+            "Processor Brand" => "processor_brand".to_string(),
+            "Processor Amount" => "processor_amount".to_string(),
+            "Processor Cores" => "processor_cores".to_string(),
+            "Processor Speed" => "processor_speed".to_string(),
+            "Processor Name" => "processor_name".to_string(),
+            "Memory Error Correction" => "memory_error_correction".to_string(),
+            "Memory Type" => "memory_type".to_string(),
+            "Memory Amount" => "memory_amount".to_string(),
+            "Hard Disk Drive Amount" => "hdd_amount".to_string(),
+            "Total Hard Disk Drive Capacity" => "total_hdd_capacity".to_string(),
+            "Solid State Disk Amount" => "ssd_amount".to_string(),
+            "Total Solid State Disk Capacity" => "total_ssd_capacity".to_string(),
+            "Unmetered" => "unmetered".to_string(),
+            "Uplink speed" => "uplink_speed".to_string(),
+            "Traffic" => "traffic".to_string(),
+            "Datacenter Country" => "datacenter_country".to_string(),
+            "Datacenter City" => "datacenter_city".to_string(),
+            "Datacenter Coordinates" => "datacenter_coordinates".to_string(),
+            "Features" => "features".to_string(),
+            "Operating Systems" => "operating_systems".to_string(),
+            "Control Panel" => "control_panel".to_string(),
+            "GPU Name" => "gpu_name".to_string(),
+            "Payment Methods" => "payment_methods".to_string(),
+            _ => header.to_lowercase().replace(' ', "_"),
+        }
+    }
+
+    /// Convert a JSON value to CSV string representation
+    fn value_to_csv_string(value: &Value) -> String {
+        match value {
+            Value::String(s) => {
+                // Handle special enum cases that need CSV-specific formatting
+                match s.as_str() {
+                    "InStock" => "In stock".to_string(),
+                    "OutOfStock" => "Out of stock".to_string(),
+                    "Limited" => "Limited".to_string(),
+                    _ => s.clone(),
+                }
+            }
+            Value::Number(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Array(arr) => {
+                arr.iter()
+                    .map(|v| Self::value_to_csv_string(v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+            Value::Object(obj) => {
+                if let (Some(lat), Some(lon)) = (obj.get("0"), obj.get("1")) {
+                    // Handle coordinate tuple: (f64, f64)
+                    format!("{},{}", Self::value_to_csv_string(lat), Self::value_to_csv_string(lon))
+                } else {
+                    // Handle other objects by joining key-value pairs
+                    obj.iter()
+                        .map(|(k, v)| format!("{}:{}", k, Self::value_to_csv_string(v)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            }
+            Value::Null => String::new(),
+        }
     }
 }
 

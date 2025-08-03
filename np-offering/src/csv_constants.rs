@@ -2,8 +2,8 @@
 
 /// Standard CSV headers for server offerings in the correct order
 pub const CSV_HEADERS: &[&str] = &[
-    "offer_name",
-    "Description", 
+    "Offer Name",
+    "Description",
     "Unique Internal identifier",
     "Product page URL",
     "Currency",
@@ -11,7 +11,7 @@ pub const CSV_HEADERS: &[&str] = &[
     "Setup fee",
     "Visibility",
     "Product Type",
-    "Virtualization type", 
+    "Virtualization type",
     "Billing interval",
     "Stock",
     "Processor Brand",
@@ -29,7 +29,7 @@ pub const CSV_HEADERS: &[&str] = &[
     "Unmetered",
     "Uplink speed",
     "Traffic",
-    "Datacenter Country", 
+    "Datacenter Country",
     "Datacenter City",
     "Datacenter Coordinates",
     "Features",

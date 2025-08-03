@@ -81,84 +81,40 @@ impl ProviderOfferings {
     }
 
     pub fn to_writer<W: Write>(&self, writer: W) -> Result<(), OfferingError> {
-        let mut csv_writer = csv::WriterBuilder::new()
-            .has_headers(true)
-            .from_writer(writer);
-
-        // Always write headers, even for empty offerings
-        csv_writer.write_record(CSV_HEADERS)?;
-
-        // Write each offering as a record
-        for offering in &self.server_offerings {
-            let record = vec![
-                offering.offer_name.clone(),
-                offering.description.clone(),
-                offering.unique_internal_identifier.clone(),
-                offering.product_page_url.clone(),
-                format!("{}", offering.currency),
-                offering.monthly_price.to_string(),
-                offering.setup_fee.to_string(),
-                format!("{}", offering.visibility),
-                format!("{}", offering.product_type),
-                offering
-                    .virtualization_type
-                    .as_ref()
-                    .map(|v| format!("{}", v))
-                    .unwrap_or_default(),
-                format!("{}", offering.billing_interval),
-                format!("{}", offering.stock)
-                    .replace("InStock", "In stock")
-                    .replace("OutOfStock", "Out of stock"),
-                offering
-                    .processor_brand
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_string(),
-                offering.processor_amount.unwrap_or(0).to_string(),
-                offering.processor_cores.unwrap_or(0).to_string(),
-                offering
-                    .processor_speed
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_string(),
-                offering.processor_name.as_deref().unwrap_or("").to_string(),
-                offering
-                    .memory_error_correction
-                    .as_ref()
-                    .map(|v| format!("{}", v))
-                    .unwrap_or_default(),
-                offering.memory_type.as_deref().unwrap_or("").to_string(),
-                offering.memory_amount.as_deref().unwrap_or("").to_string(),
-                offering.hdd_amount.to_string(),
-                offering
-                    .total_hdd_capacity
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_string(),
-                offering.ssd_amount.to_string(),
-                offering
-                    .total_ssd_capacity
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_string(),
-                offering.unmetered.join(", "),
-                offering.uplink_speed.as_deref().unwrap_or("").to_string(),
-                offering.traffic.unwrap_or(0).to_string(),
-                offering.datacenter_country.clone(),
-                offering.datacenter_city.clone(),
-                offering
-                    .datacenter_coordinates
-                    .map(|(lat, lon)| format!("{},{}", lat, lon))
-                    .unwrap_or_default(),
-                offering.features.join(", "),
-                offering.operating_systems.join(", "),
-                offering.control_panel.as_deref().unwrap_or("").to_string(),
-                offering.gpu_name.as_deref().unwrap_or("").to_string(),
-                offering.payment_methods.join(", "),
-            ];
-            csv_writer.write_record(&record)?;
-        }
-
+        let mut buffer = Vec::new();
+        
+        // Write headers first
+        {
+            let mut csv_writer = csv::WriterBuilder::new()
+                .has_headers(false) // We handle headers manually to ensure consistency
+                .from_writer(&mut buffer);
+            
+            csv_writer.write_record(CSV_HEADERS)?;
+            
+            // Use each offering's serialize method to ensure consistency and DRY principle
+            for offering in &self.server_offerings {
+                let offering_csv = offering.serialize()?;
+                let offering_str = String::from_utf8_lossy(&offering_csv);
+                
+                // Parse the offering CSV to extract just the data row (skip header)
+                let mut reader = csv::ReaderBuilder::new()
+                    .has_headers(true)
+                    .from_reader(offering_str.as_bytes());
+                    
+                for result in reader.records() {
+                    let record = result?;
+                    csv_writer.write_record(&record)?;
+                }
+            }
+            
+            csv_writer.flush()?;
+        } // csv_writer is dropped here, releasing mutable borrow on buffer
+        
+        // Write the final result to the output writer
+        let mut output_writer = writer;
+        output_writer.write_all(&buffer)?;
+        output_writer.flush()?;
+        
         Ok(())
     }
 

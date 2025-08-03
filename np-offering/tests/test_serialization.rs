@@ -36,7 +36,7 @@ fn test_optimized_json_serialization() {
     assert!(parsed["server_offerings_csv"]
         .as_str()
         .unwrap()
-        .contains("offer_name"));
+        .contains("Offer Name"));
     assert!(parsed["server_offerings_csv"]
         .as_str()
         .unwrap()

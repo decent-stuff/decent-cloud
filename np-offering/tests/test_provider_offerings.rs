@@ -430,7 +430,7 @@ fn test_parse_record_with_lists() {
 #[test]
 fn test_pem_csv_serialization() {
     let test_pubkey = [1u8; 32];
-    let csv_with_headers = "offer_name,Description,Unique Internal identifier,Product page URL,Currency,Monthly price,Setup fee,Visibility,Product Type,Virtualization type,Billing interval,Stock,Processor Brand,Processor Amount,Processor Cores,Processor Speed,Processor Name,Memory Error Correction,Memory Type,Memory Amount,Hard Disk Drive Amount,Total Hard Disk Drive Capacity,Solid State Disk Amount,Total Solid State Disk Capacity,Unmetered,Uplink speed,Traffic,Datacenter Country,Datacenter City,Datacenter Coordinates,Features,Operating Systems,Control Panel,GPU Name,Payment Methods
+    let csv_with_headers = "Offer Name,Description,Unique Internal identifier,Product page URL,Currency,Monthly price,Setup fee,Visibility,Product Type,Virtualization type,Billing interval,Stock,Processor Brand,Processor Amount,Processor Cores,Processor Speed,Processor Name,Memory Error Correction,Memory Type,Memory Amount,Hard Disk Drive Amount,Total Hard Disk Drive Capacity,Solid State Disk Amount,Total Solid State Disk Capacity,Unmetered,Uplink speed,Traffic,Datacenter Country,Datacenter City,Datacenter Coordinates,Features,Operating Systems,Control Panel,GPU Name,Payment Methods
 Test Server,A test server,test-001,https://example.com,USD,99.99,0.0,Visible,VPS,KVM,Monthly,In stock,Intel,1,4,2.4GHz,Xeon E5,ECC,DDR4,16GB,0,,1,500GB,,1Gbps,10000,US,New York,\"40.7128,-74.0060\",SSD;KVM,Ubuntu;CentOS,cPanel,,Credit Card;PayPal";
 
     let offerings = ProviderOfferings::new_from_str(&test_pubkey, csv_with_headers)
@@ -533,7 +533,7 @@ fn test_empty_offerings_handling() {
 
     // Should have valid PEM but minimal CSV (just headers)
     assert!(pem.starts_with("-----BEGIN PUBLIC KEY-----"));
-    assert!(csv.contains("offer_name")); // CSV header should be present
+    assert!(csv.contains("Offer Name")); // CSV header should be present
 
     // Test round-trip
     let deserialized = ProviderOfferings::deserialize_from_pem_csv(&pem, &csv)
