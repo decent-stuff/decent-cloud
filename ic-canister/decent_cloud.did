@@ -406,10 +406,6 @@ type HttpResponse = record {
 
 type ResultString = variant { Ok: text; Err: text; };
 type ResultData = variant { Ok: record { text; vec nat8 }; Err: text; };
-type OfferingEntry = record {
-    np_pub_key: vec nat8;
-    offering_compressed: vec nat8;
-};
 
 service : {
     // Node Provider (NP) management operations
@@ -420,7 +416,7 @@ service : {
     node_provider_list_checked_in: () -> (ResultString) query;
     node_provider_get_profile_by_pubkey_bytes: (vec nat8) -> (opt text) query;
     node_provider_get_profile_by_principal: (principal) -> (opt text) query;
-    offering_search: (search_query: text) -> (vec OfferingEntry) query;
+    offering_search: (search_query: text) -> (vec record { vec nat8; vec nat8 }) query;
 
     // Contract signing and replying
     contract_sign_request: (pubkey_bytes: vec nat8, contract_info_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
