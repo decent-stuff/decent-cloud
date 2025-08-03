@@ -1,10 +1,10 @@
 use dcc_common::{PaymentEntries, PaymentEntry, PaymentEntryWithAmount, TokenAmountE9s};
-use np_offering::Offering;
+use np_offering::ServerOffering;
 use std::collections::HashMap;
 
 pub fn prompt_for_payment_entries(
     payment_entries_json: &Option<PaymentEntries>,
-    offering: &Offering,
+    offering: &ServerOffering,
     instance_id: &str,
 ) -> Vec<PaymentEntryWithAmount> {
     let pricing: HashMap<String, HashMap<String, String>> = offering.instance_pricing(instance_id);

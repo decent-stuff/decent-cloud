@@ -4,7 +4,7 @@ use dcc_common::DccIdentity;
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use ledger_map::LedgerMap;
 use log::info;
-use np_offering::Offering;
+use np_offering::ProviderOfferings;
 use std::{path::PathBuf, time::SystemTime};
 
 use crate::ledger::ledger_data_fetch;
@@ -138,17 +138,21 @@ pub async fn handle_np_command(
                 identity.expect("Identity must be specified for this command, use --identity");
             let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
-            // Offering::new_from_file returns an error if the schema validation fails
-            let np_offering = Offering::new_from_file(&update_offering_args.offering_file)?;
-            let np_offering_bytes = np_offering.serialize()?;
-            let crypto_signature = dcc_id.sign(&np_offering_bytes)?;
+            // ProviderOfferings::new_from_file returns an error if the validation fails
+            let np_offering = ProviderOfferings::new_from_file(
+                &dcc_id.to_bytes_verifying(),
+                &update_offering_args.offering_file,
+            )?;
+            let np_offering_json = np_offering.serialize_as_json()?;
+            let np_offering_bytes = np_offering_json.as_bytes();
+            let crypto_signature = dcc_id.sign(np_offering_bytes)?;
 
             let canister =
                 LedgerCanister::new_with_dcc_id(network_url, ledger_canister_id, &dcc_id).await?;
             let result = canister
                 .node_provider_update_offering(
                     &dcc_id.to_bytes_verifying(),
-                    &np_offering_bytes,
+                    np_offering_bytes,
                     &crypto_signature.to_bytes(),
                 )
                 .await

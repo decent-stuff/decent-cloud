@@ -6,6 +6,7 @@ use base64::Engine;
 use dcc_common::{ContractSignReply, ContractSignRequest, DccIdentity};
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use ledger_map::LedgerMap;
+use np_offering::ProviderOfferings;
 use std::path::PathBuf;
 
 pub async fn handle_contract_command(
@@ -108,8 +109,8 @@ pub async fn handle_contract_command(
                     &format!("instance_types.id = \"{instance_id}\""),
                 )
                 .into_iter()
-                .filter(|o| o.0.to_bytes_verifying() == provider_pubkey_bytes)
-                .collect::<Vec<(DccIdentity, np_offering::Offering)>>();
+                .filter(|o| o.provider_pubkey == provider_pubkey_bytes)
+                .collect::<Vec<ProviderOfferings>>();
 
                 let offering = match offerings.len() {
                     0 => {
@@ -118,7 +119,30 @@ pub async fn handle_contract_command(
                         );
                         continue;
                     }
-                    1 => &offerings[0].1,
+                    1 => {
+                        // Find the specific server offering with the matching instance_id
+                        let provider_offering = &offerings[0];
+                        let matching_offerings: Vec<&np_offering::ServerOffering> =
+                            provider_offering
+                                .server_offerings
+                                .iter()
+                                .filter(|so| so.unique_internal_identifier == instance_id)
+                                .collect();
+
+                        match matching_offerings.len() {
+                            0 => {
+                                eprintln!(
+                                    "ERROR: No offering found for the provider {provider_dcc_id} and id: {instance_id}"
+                                );
+                                continue;
+                            }
+                            1 => matching_offerings[0],
+                            _ => {
+                                eprintln!("ERROR: Provider {provider_dcc_id} has multiple offerings with id: {instance_id}");
+                                continue;
+                            }
+                        }
+                    }
                     _ => {
                         eprintln!("ERROR: Provider {provider_dcc_id} has multiple offerings with id: {instance_id}");
                         continue;
