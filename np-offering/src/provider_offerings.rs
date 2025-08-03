@@ -82,39 +82,39 @@ impl ProviderOfferings {
 
     pub fn to_writer<W: Write>(&self, writer: W) -> Result<(), OfferingError> {
         let mut buffer = Vec::new();
-        
+
         // Write headers first
         {
             let mut csv_writer = csv::WriterBuilder::new()
                 .has_headers(false) // We handle headers manually to ensure consistency
                 .from_writer(&mut buffer);
-            
+
             csv_writer.write_record(CSV_HEADERS)?;
-            
+
             // Use each offering's serialize method to ensure consistency and DRY principle
             for offering in &self.server_offerings {
                 let offering_csv = offering.serialize()?;
                 let offering_str = String::from_utf8_lossy(&offering_csv);
-                
+
                 // Parse the offering CSV to extract just the data row (skip header)
                 let mut reader = csv::ReaderBuilder::new()
                     .has_headers(true)
                     .from_reader(offering_str.as_bytes());
-                    
+
                 for result in reader.records() {
                     let record = result?;
                     csv_writer.write_record(&record)?;
                 }
             }
-            
+
             csv_writer.flush()?;
         } // csv_writer is dropped here, releasing mutable borrow on buffer
-        
+
         // Write the final result to the output writer
         let mut output_writer = writer;
         output_writer.write_all(&buffer)?;
         output_writer.flush()?;
-        
+
         Ok(())
     }
 

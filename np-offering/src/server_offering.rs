@@ -56,8 +56,9 @@ impl ServerOffering {
     /// This method automatically includes ALL fields without manual enumeration
     fn to_field_map(&self) -> Result<IndexMap<String, Value>, OfferingError> {
         let json_value = serde_json::to_value(self)?;
-        let obj = json_value.as_object()
-            .ok_or_else(|| OfferingError::SerializationError("Failed to convert to object".to_string()))?;
+        let obj = json_value.as_object().ok_or_else(|| {
+            OfferingError::SerializationError("Failed to convert to object".to_string())
+        })?;
         Ok(obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
     }
 
@@ -70,7 +71,8 @@ impl ServerOffering {
         };
 
         let search_lower = search_filter.to_lowercase();
-        fields.into_iter()
+        fields
+            .into_iter()
             .flat_map(|(field_name, value)| Self::search_value(&field_name, &value, &search_lower))
             .collect()
     }
@@ -93,19 +95,17 @@ impl ServerOffering {
                     vec![]
                 }
             }
-            Value::Array(arr) => {
-                arr.iter()
-                    .flat_map(|item| Self::search_value(field_name, item, search_term))
-                    .collect()
-            }
-            Value::Object(obj) => {
-                obj.iter()
-                    .flat_map(|(key, val)| {
-                        let nested_field = format!("{}_{}", field_name, key);
-                        Self::search_value(&nested_field, val, search_term)
-                    })
-                    .collect()
-            }
+            Value::Array(arr) => arr
+                .iter()
+                .flat_map(|item| Self::search_value(field_name, item, search_term))
+                .collect(),
+            Value::Object(obj) => obj
+                .iter()
+                .flat_map(|(key, val)| {
+                    let nested_field = format!("{}_{}", field_name, key);
+                    Self::search_value(&nested_field, val, search_term)
+                })
+                .collect(),
             Value::Bool(b) => {
                 let s = b.to_string();
                 if s.to_lowercase().contains(search_term) {
@@ -127,7 +127,10 @@ impl ServerOffering {
         units.insert("month".to_string(), self.monthly_price.to_string());
         units.insert("year".to_string(), (self.monthly_price * 12.0).to_string());
         units.insert("day".to_string(), (self.monthly_price / 30.0).to_string());
-        units.insert("hour".to_string(), (self.monthly_price / (30.0 * 24.0)).to_string());
+        units.insert(
+            "hour".to_string(),
+            (self.monthly_price / (30.0 * 24.0)).to_string(),
+        );
 
         pricing.insert("on_demand".to_string(), units);
         pricing
@@ -140,10 +143,11 @@ impl ServerOffering {
         wtr.write_record(CSV_HEADERS)?;
 
         let fields = self.to_field_map()?;
-        
-        // Extract field values in CSV_HEADERS order - this ensures compilation errors 
+
+        // Extract field values in CSV_HEADERS order - this ensures compilation errors
         // if headers don't match field names (converted to snake_case)
-        let record: Result<Vec<String>, OfferingError> = CSV_HEADERS.iter()
+        let record: Result<Vec<String>, OfferingError> = CSV_HEADERS
+            .iter()
             .map(|header| Self::extract_csv_value(&fields, header))
             .collect();
 
@@ -153,14 +157,19 @@ impl ServerOffering {
     }
 
     /// Extract a CSV value from the field map, handling type conversion and formatting
-    fn extract_csv_value(fields: &IndexMap<String, Value>, header: &str) -> Result<String, OfferingError> {
+    fn extract_csv_value(
+        fields: &IndexMap<String, Value>,
+        header: &str,
+    ) -> Result<String, OfferingError> {
         // Convert CSV header to field name (handle case differences)
         let field_name = Self::header_to_field_name(header);
-        
-        let value = fields.get(&field_name)
-            .ok_or_else(|| OfferingError::SerializationError(
-                format!("Field '{}' (from header '{}') not found in struct", field_name, header)
-            ))?;
+
+        let value = fields.get(&field_name).ok_or_else(|| {
+            OfferingError::SerializationError(format!(
+                "Field '{}' (from header '{}') not found in struct",
+                field_name, header
+            ))
+        })?;
 
         Ok(Self::value_to_csv_string(value))
     }
@@ -221,16 +230,19 @@ impl ServerOffering {
             }
             Value::Number(n) => n.to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::Array(arr) => {
-                arr.iter()
-                    .map(|v| Self::value_to_csv_string(v))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }
+            Value::Array(arr) => arr
+                .iter()
+                .map(Self::value_to_csv_string)
+                .collect::<Vec<_>>()
+                .join(", "),
             Value::Object(obj) => {
                 if let (Some(lat), Some(lon)) = (obj.get("0"), obj.get("1")) {
                     // Handle coordinate tuple: (f64, f64)
-                    format!("{},{}", Self::value_to_csv_string(lat), Self::value_to_csv_string(lon))
+                    format!(
+                        "{},{}",
+                        Self::value_to_csv_string(lat),
+                        Self::value_to_csv_string(lon)
+                    )
                 } else {
                     // Handle other objects by joining key-value pairs
                     obj.iter()

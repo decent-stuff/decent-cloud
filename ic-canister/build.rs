@@ -157,7 +157,7 @@ fn ensure_in_path(path: PathBuf) {
 pub fn main() {
     // Add ~/bin to PATH so that installed tools can be found
     if let Some(home_dir) = dirs::home_dir() {
-        ensure_in_path(home_dir.join("bin"));  // default pocket-ic path
+        ensure_in_path(home_dir.join("bin")); // default pocket-ic path
         ensure_in_path(home_dir.join(".local/share/dfx/bin")); // default dfx path
     }
 
