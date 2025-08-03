@@ -243,7 +243,7 @@ pub(crate) fn _offering_search(query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
     let max_offering_response_bytes = MAX_RESPONSE_BYTES_NON_REPLICATED * 7 / 10; // 70% of max response bytes
     LEDGER_MAP.with(|ledger| {
         for offering in dcc_common::do_get_matching_offerings(&ledger.borrow(), &query) {
-            // Serialize using the new compact PEM + CSV format
+            // Serialize using the PEM (public key) + CSV (offerings) format, in a JSON wrapper
             let offering_json = match offering.serialize_as_json() {
                 Ok(json) => json.into_bytes(),
                 Err(e) => {
