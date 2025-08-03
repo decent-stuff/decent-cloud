@@ -5,6 +5,7 @@ pub enum OfferingError {
     CsvError(csv::Error),
     IoError(std::io::Error),
     SerdeJsonError(serde_json::Error),
+    SerializationError(String),
     InvalidPubkeyLength(usize),
     OfferingNotFound(String, String),
     ProviderNotFound(String),
@@ -35,6 +36,7 @@ impl std::fmt::Display for OfferingError {
             OfferingError::CsvError(err) => write!(f, "CSV error: {}", err),
             OfferingError::IoError(err) => write!(f, "IO error: {}", err),
             OfferingError::SerdeJsonError(err) => write!(f, "Serde JSON error: {}", err),
+            OfferingError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
             OfferingError::InvalidPubkeyLength(len) => {
                 write!(f, "Invalid provider pubkey: expected 32 bytes, got {}", len)
             }

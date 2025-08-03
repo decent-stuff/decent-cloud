@@ -1,3 +1,4 @@
+use crate::csv_constants::CSV_HEADERS;
 use crate::enums::*;
 use crate::errors::OfferingError;
 use serde::{Deserialize, Serialize};
@@ -133,10 +134,7 @@ impl ServerOffering {
 
     /// Get instance pricing information
     /// Returns a map of pricing models to time units to prices
-    pub fn instance_pricing(
-        &self,
-        _instance_id: &str,
-    ) -> HashMap<String, HashMap<String, String>> {
+    pub fn instance_pricing(&self, _instance_id: &str) -> HashMap<String, HashMap<String, String>> {
         let mut pricing = HashMap::new();
         let mut units = HashMap::new();
 
@@ -158,44 +156,7 @@ impl ServerOffering {
         let mut wtr = csv::Writer::from_writer(Vec::new());
 
         // Write CSV headers first
-        let headers = vec![
-            "Offer Name",
-            "Description",
-            "Unique Internal identifier",
-            "Product page URL",
-            "Currency",
-            "Monthly price",
-            "Setup fee",
-            "Visibility",
-            "Product Type",
-            "Virtualization type",
-            "Billing interval",
-            "Stock",
-            "Processor Brand",
-            "Processor Amount",
-            "Processor Cores",
-            "Processor Speed",
-            "Processor Name",
-            "Memory Error Correction",
-            "Memory Type",
-            "Memory Amount",
-            "Hard Disk Drive Amount",
-            "Total Hard Disk Drive Capacity",
-            "Solid State Disk Amount",
-            "Total Solid State Disk Capacity",
-            "Unmetered",
-            "Uplink speed",
-            "Traffic",
-            "Datacenter Country",
-            "Datacenter City",
-            "Datacenter Coordinates",
-            "Features",
-            "Operating Systems",
-            "Control Panel",
-            "GPU Name",
-            "Payment Methods",
-        ];
-        wtr.write_record(&headers)?;
+        wtr.write_record(CSV_HEADERS)?;
 
         // Build the record as a vector of strings to handle Vec fields properly
         let record = vec![

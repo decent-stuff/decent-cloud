@@ -1,4 +1,7 @@
-use np_offering::{Currency, Visibility, ProductType, VirtualizationType, BillingInterval, StockStatus, ErrorCorrection};
+use np_offering::{
+    BillingInterval, Currency, ErrorCorrection, ProductType, StockStatus, VirtualizationType,
+    Visibility,
+};
 use std::str::FromStr;
 mod common;
 use common::*;
@@ -15,9 +18,9 @@ fn test_currency_from_str() {
         ("eur", Currency::EUR),
         ("UsD", Currency::USD),
     ];
-    
+
     test_enum_case_insensitive(valid_cases, Currency::from_str);
-    
+
     // Test invalid currency
     let invalid_inputs = vec!["INVALID", ""];
     test_enum_invalid_parsing(invalid_inputs, Currency::from_str);
@@ -39,9 +42,9 @@ fn test_visibility_from_str() {
         ("Visible", Visibility::Visible),
         ("INVISIBLE", Visibility::Invisible),
     ];
-    
+
     test_enum_case_insensitive(valid_cases, Visibility::from_str);
-    
+
     // Test invalid visibility
     let invalid_inputs = vec!["INVALID", ""];
     test_enum_invalid_parsing(invalid_inputs, Visibility::from_str);
@@ -65,9 +68,9 @@ fn test_product_type_from_str() {
         ("VPS", ProductType::VPS),
         ("Cloud", ProductType::Cloud),
     ];
-    
+
     test_enum_case_insensitive(valid_cases, ProductType::from_str);
-    
+
     // Test invalid product type
     let invalid_inputs = vec!["INVALID", ""];
     test_enum_invalid_parsing(invalid_inputs, ProductType::from_str);
@@ -94,9 +97,9 @@ fn test_virtualization_type_from_str() {
         ("KVM", VirtualizationType::KVM),
         ("XEN", VirtualizationType::Xen),
     ];
-    
+
     test_enum_case_insensitive(valid_cases, VirtualizationType::from_str);
-    
+
     // Test invalid virtualization type
     let invalid_inputs = vec!["INVALID"];
     test_enum_invalid_parsing(invalid_inputs, VirtualizationType::from_str);
@@ -124,9 +127,9 @@ fn test_billing_interval_from_str() {
         ("Hourly", BillingInterval::Hourly),
         ("MONTHLY", BillingInterval::Monthly),
     ];
-    
+
     test_enum_case_insensitive(valid_cases, BillingInterval::from_str);
-    
+
     // Test invalid billing interval
     let invalid_inputs = vec!["INVALID", ""];
     test_enum_invalid_parsing(invalid_inputs, BillingInterval::from_str);
@@ -152,9 +155,9 @@ fn test_stock_status_from_str() {
         ("OUT-OF-STOCK", StockStatus::OutOfStock),
         ("Limited", StockStatus::Limited),
     ];
-    
+
     test_enum_case_insensitive(valid_cases, StockStatus::from_str);
-    
+
     // Test invalid stock status
     let invalid_inputs = vec!["INVALID", ""];
     test_enum_invalid_parsing(invalid_inputs, StockStatus::from_str);
@@ -183,9 +186,9 @@ fn test_error_correction_from_str() {
         ("ECC-REGISTERED", ErrorCorrection::ECCRegistered),
         ("NON-ECC", ErrorCorrection::NonECC),
     ];
-    
+
     test_enum_case_insensitive(valid_cases, ErrorCorrection::from_str);
-    
+
     // Test invalid error correction
     let invalid_inputs = vec!["INVALID", ""];
     test_enum_invalid_parsing(invalid_inputs, ErrorCorrection::from_str);
@@ -204,7 +207,10 @@ fn test_currency_roundtrip() {
         let display = format!("{}", original);
         assert_eq!(display, display_str);
         let parsed = Currency::from_str(&display).unwrap();
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
+        assert_eq!(
+            std::mem::discriminant(&original),
+            std::mem::discriminant(&parsed)
+        );
     }
 }
 
@@ -214,7 +220,10 @@ fn test_visibility_roundtrip() {
         let display = format!("{}", original);
         assert_eq!(display, display_str);
         let parsed = Visibility::from_str(&display.to_lowercase()).unwrap();
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
+        assert_eq!(
+            std::mem::discriminant(&original),
+            std::mem::discriminant(&parsed)
+        );
     }
 }
 
@@ -224,7 +233,10 @@ fn test_product_type_roundtrip() {
         let display = format!("{}", original);
         assert_eq!(display, display_str);
         let parsed = ProductType::from_str(&display.to_lowercase()).unwrap();
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
+        assert_eq!(
+            std::mem::discriminant(&original),
+            std::mem::discriminant(&parsed)
+        );
     }
 }
 
@@ -233,14 +245,17 @@ fn test_virtualization_type_roundtrip() {
     for (original, display_str) in test_virtualization_type_cases() {
         let display = format!("{}", original);
         assert_eq!(display, display_str);
-        
+
         // Special case for None which parses from empty string
         let parsed = if matches!(original, VirtualizationType::None) {
             VirtualizationType::from_str("").unwrap()
         } else {
             VirtualizationType::from_str(&display.to_lowercase()).unwrap()
         };
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
+        assert_eq!(
+            std::mem::discriminant(&original),
+            std::mem::discriminant(&parsed)
+        );
     }
 }
 
@@ -250,7 +265,10 @@ fn test_billing_interval_roundtrip() {
         let display = format!("{}", original);
         assert_eq!(display, display_str);
         let parsed = BillingInterval::from_str(&display.to_lowercase()).unwrap();
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
+        assert_eq!(
+            std::mem::discriminant(&original),
+            std::mem::discriminant(&parsed)
+        );
     }
 }
 
@@ -259,13 +277,16 @@ fn test_stock_status_roundtrip() {
     for (original, display_str) in test_stock_status_cases() {
         let display = format!("{}", original);
         assert_eq!(display, display_str);
-        
+
         let parsed = match original {
             StockStatus::InStock => StockStatus::from_str("in stock").unwrap(),
             StockStatus::OutOfStock => StockStatus::from_str("out of stock").unwrap(),
             StockStatus::Limited => StockStatus::from_str("limited").unwrap(),
         };
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
+        assert_eq!(
+            std::mem::discriminant(&original),
+            std::mem::discriminant(&parsed)
+        );
     }
 }
 
@@ -274,12 +295,15 @@ fn test_error_correction_roundtrip() {
     for (original, display_str) in test_error_correction_cases() {
         let display = format!("{}", original);
         assert_eq!(display, display_str);
-        
+
         let parsed = match original {
             ErrorCorrection::ECC => ErrorCorrection::from_str("ecc").unwrap(),
             ErrorCorrection::ECCRegistered => ErrorCorrection::from_str("ecc registered").unwrap(),
             ErrorCorrection::NonECC => ErrorCorrection::from_str("non-ecc").unwrap(),
         };
-        assert_eq!(std::mem::discriminant(&original), std::mem::discriminant(&parsed));
+        assert_eq!(
+            std::mem::discriminant(&original),
+            std::mem::discriminant(&parsed)
+        );
     }
 }

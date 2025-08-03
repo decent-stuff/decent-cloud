@@ -31,9 +31,7 @@ Test Server,A test server,TEST001,https://test.com,USD,29.99,0,Visible,VPS,KVM,M
     let path = temp_file.path();
     fs::write(path, csv_content).unwrap();
 
-    let args = vec![
-        path.to_str().unwrap().to_string(),
-    ];
+    let args = vec![path.to_str().unwrap().to_string()];
 
     let output = capture_main_output(args);
     assert!(output.contains("Loaded 1 offerings from CSV"));

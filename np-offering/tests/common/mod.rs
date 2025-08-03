@@ -2,7 +2,11 @@
 
 #![allow(dead_code)]
 
-use np_offering::{Currency, ProductType, StockStatus, VirtualizationType, BillingInterval, ErrorCorrection, Visibility, ProviderPubkey};
+use ed25519_dalek::{SigningKey, VerifyingKey, SECRET_KEY_LENGTH};
+use np_offering::{
+    BillingInterval, Currency, ErrorCorrection, ProductType, ProviderPubkey, StockStatus,
+    VirtualizationType, Visibility,
+};
 
 /// Sample CSV data with multiple offerings for testing
 pub const SAMPLE_CSV: &str = r#"Offer Name,Description,Unique Internal identifier,Product page URL,Currency,Monthly price,Setup fee,Visibility,Product Type,Virtualization type,Billing interval,Stock,Processor Brand,Processor Amount,Processor Cores,Processor Speed,Processor Name,Memory Error Correction,Memory Type,Memory Amount,Hard Disk Drive Amount,Total Hard Disk Drive Capacity,Solid State Disk Amount,Total Solid State Disk Capacity,Unmetered,Uplink speed,Traffic,Datacenter Country,Datacenter City,Datacenter Coordinates,Features,Operating Systems,Control Panel,GPU Name,Payment Methods
@@ -16,7 +20,10 @@ Intel Dual Core Dedicated Server,Here goes a product description.,DC2993,https:/
 
 /// Create a test provider pubkey with predictable values
 pub fn test_provider_pubkey(id: u8) -> ProviderPubkey {
-    ProviderPubkey::new([id; 32])
+    let seed: [u8; SECRET_KEY_LENGTH] = [id; 32];
+    let sk = SigningKey::from_bytes(&seed);
+    let vk: VerifyingKey = sk.verifying_key();
+    ProviderPubkey::new(vk.to_bytes())
 }
 
 /// Create a test provider pubkey with default value (all 1s)
@@ -96,7 +103,10 @@ where
         let parsed = parse_func(input).unwrap_or_else(|_| {
             panic!("Failed to parse enum value: {}", input);
         });
-        assert_eq!(std::mem::discriminant(&parsed), std::mem::discriminant(&expected));
+        assert_eq!(
+            std::mem::discriminant(&parsed),
+            std::mem::discriminant(&expected)
+        );
     }
 }
 
@@ -106,6 +116,10 @@ where
     P: Fn(&str) -> Result<T, ()>,
 {
     for input in invalid_inputs {
-        assert!(parse_func(input).is_err(), "Expected error for input: {}", input);
+        assert!(
+            parse_func(input).is_err(),
+            "Expected error for input: {}",
+            input
+        );
     }
 }

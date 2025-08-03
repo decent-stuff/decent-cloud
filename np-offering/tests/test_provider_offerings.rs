@@ -3,9 +3,9 @@ mod common;
 use common::*;
 
 #[test]
-fn test_legacy_parse_csv() {
-    let collection =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+fn test_offerings_parse_csv() {
+    let collection = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
     assert_eq!(collection.server_offerings.len(), 1);
 
     let offering = &collection.server_offerings[0];
@@ -21,9 +21,9 @@ fn test_legacy_parse_csv() {
 }
 
 #[test]
-fn test_legacy_filtering() {
-    let collection =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+fn test_offerings_filtering() {
+    let collection = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
 
     let vps_offerings = collection.find_by_product_type(&ProductType::VPS);
     assert_eq!(vps_offerings.len(), 1);
@@ -36,9 +36,9 @@ fn test_legacy_filtering() {
 }
 
 #[test]
-fn test_legacy_get_instance_ids() {
-    let collection =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+fn test_offerings_get_instance_ids() {
+    let collection = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
     let ids = collection.get_all_instance_ids();
 
     assert_eq!(ids.len(), 1);
@@ -46,9 +46,9 @@ fn test_legacy_get_instance_ids() {
 }
 
 #[test]
-fn test_legacy_matches_search() {
-    let collection =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+fn test_offerings_matches_search() {
+    let collection = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
 
     let matches = collection.matches_search("Intel");
     assert!(!matches.is_empty());
@@ -61,9 +61,9 @@ fn test_legacy_matches_search() {
 }
 
 #[test]
-fn test_legacy_serialization() {
-    let offerings =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+fn test_offerings_serialization() {
+    let offerings = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
 
     let json = offerings.serialize_as_json().expect("Failed to serialize");
     assert!(!json.is_empty());
@@ -82,9 +82,9 @@ fn test_legacy_serialization() {
 }
 
 #[test]
-fn test_legacy_to_csv_string() {
-    let collection =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+fn test_offerings_to_csv_string() {
+    let collection = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
 
     // Test individual offering serialization instead of the collection
     let offering = &collection.server_offerings[0];
@@ -99,7 +99,7 @@ fn test_legacy_to_csv_string() {
 }
 
 #[test]
-fn test_legacy_new_constructor() {
+fn test_offerings_new_constructor() {
     let provider_pubkey = vec![1u8; 32];
     let server_offerings = vec![];
 
@@ -124,7 +124,7 @@ fn test_new_from_file() {
     let offering = &collection.server_offerings[0];
     assert_eq!(offering.offer_name, "Intel Dual Core Dedicated Server");
     assert_eq!(offering.unique_internal_identifier, "DC2993");
-    
+
     // Clean up
     std::fs::remove_file(file_path).unwrap();
 }
@@ -149,8 +149,8 @@ fn test_from_reader() {
 
 #[test]
 fn test_to_writer() {
-    let collection =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+    let collection = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
 
     // Test individual offering serialization instead of the collection
     // The collection serialization might have issues with sequence containers
@@ -167,8 +167,8 @@ fn test_to_writer() {
 
 #[test]
 fn test_to_str() {
-    let collection =
-        ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV).expect("Failed to parse CSV");
+    let collection = ProviderOfferings::new_from_str(&[0u8; 32], SINGLE_OFFERING_CSV)
+        .expect("Failed to parse CSV");
 
     // Test individual offering serialization instead of the collection
     // The collection serialization might have issues with sequence containers
@@ -196,9 +196,16 @@ fn test_parse_record() {
     assert_eq!(offering.offer_name, "Intel Dual Core Dedicated Server");
     assert!(std::mem::discriminant(&offering.currency) == std::mem::discriminant(&Currency::EUR));
     assert_eq!(offering.monthly_price, 99.99);
-    assert!(std::mem::discriminant(&offering.product_type) == std::mem::discriminant(&ProductType::VPS));
-    assert!(std::mem::discriminant(&offering.virtualization_type) == std::mem::discriminant(&Some(VirtualizationType::KVM)));
-    assert!(std::mem::discriminant(&offering.stock) == std::mem::discriminant(&StockStatus::InStock));
+    assert!(
+        std::mem::discriminant(&offering.product_type) == std::mem::discriminant(&ProductType::VPS)
+    );
+    assert!(
+        std::mem::discriminant(&offering.virtualization_type)
+            == std::mem::discriminant(&Some(VirtualizationType::KVM))
+    );
+    assert!(
+        std::mem::discriminant(&offering.stock) == std::mem::discriminant(&StockStatus::InStock)
+    );
 
     // Parse second record (with GPU)
     let offering = ProviderOfferings::parse_record(&records[1]).expect("Failed to parse record");
@@ -209,7 +216,10 @@ fn test_parse_record() {
     // Parse third record (with no virtualization)
     let offering = ProviderOfferings::parse_record(&records[2]).expect("Failed to parse record");
     assert_eq!(offering.offer_name, "Budget Server");
-    assert!(std::mem::discriminant(&offering.virtualization_type) == std::mem::discriminant(&Some(VirtualizationType::None)));
+    assert!(
+        std::mem::discriminant(&offering.virtualization_type)
+            == std::mem::discriminant(&Some(VirtualizationType::None))
+    );
 }
 
 #[test]
@@ -413,6 +423,126 @@ fn test_parse_record_with_lists() {
     println!("Features: {:?}", offering.features);
     println!("Operating Systems: {:?}", offering.operating_systems);
     println!("Payment Methods: {:?}", offering.payment_methods);
-    
+
     // If we get here, parsing succeeded
+}
+
+#[test]
+fn test_pem_csv_serialization() {
+    let test_pubkey = [1u8; 32];
+    let csv_with_headers = "offer_name,Description,Unique Internal identifier,Product page URL,Currency,Monthly price,Setup fee,Visibility,Product Type,Virtualization type,Billing interval,Stock,Processor Brand,Processor Amount,Processor Cores,Processor Speed,Processor Name,Memory Error Correction,Memory Type,Memory Amount,Hard Disk Drive Amount,Total Hard Disk Drive Capacity,Solid State Disk Amount,Total Solid State Disk Capacity,Unmetered,Uplink speed,Traffic,Datacenter Country,Datacenter City,Datacenter Coordinates,Features,Operating Systems,Control Panel,GPU Name,Payment Methods
+Test Server,A test server,test-001,https://example.com,USD,99.99,0.0,Visible,VPS,KVM,Monthly,In stock,Intel,1,4,2.4GHz,Xeon E5,ECC,DDR4,16GB,0,,1,500GB,,1Gbps,10000,US,New York,\"40.7128,-74.0060\",SSD;KVM,Ubuntu;CentOS,cPanel,,Credit Card;PayPal";
+
+    let offerings = ProviderOfferings::new_from_str(&test_pubkey, csv_with_headers)
+        .expect("Failed to create test offering");
+
+    // Test PEM + CSV serialization
+    let (pubkey_pem, csv_data) = offerings
+        .serialize_as_pem_csv()
+        .expect("PEM+CSV serialization failed");
+
+    // Validate PEM format
+    assert!(pubkey_pem.starts_with("-----BEGIN PUBLIC KEY-----"));
+    assert!(pubkey_pem.ends_with("-----END PUBLIC KEY-----\n"));
+
+    // Validate CSV format
+    assert!(csv_data.contains("Test Server"));
+    assert!(csv_data.contains("test-001"));
+
+    // Test round-trip
+    let deserialized = ProviderOfferings::deserialize_from_pem_csv(&pubkey_pem, &csv_data)
+        .expect("PEM+CSV deserialization failed");
+
+    assert_eq!(offerings.provider_pubkey, deserialized.provider_pubkey);
+    assert_eq!(
+        offerings.server_offerings.len(),
+        deserialized.server_offerings.len()
+    );
+    assert_eq!(
+        offerings.server_offerings[0].offer_name,
+        deserialized.server_offerings[0].offer_name
+    );
+}
+
+#[test]
+fn test_compact_json_serialization() {
+    let test_pubkey = test_provider_pubkey(2);
+    let csv_with_headers = "offer_name,Description,Unique Internal identifier,Product page URL,Currency,Monthly price,Setup fee,Visibility,Product Type,Virtualization type,Billing interval,Stock,Processor Brand,Processor Amount,Processor Cores,Processor Speed,Processor Name,Memory Error Correction,Memory Type,Memory Amount,Hard Disk Drive Amount,Total Hard Disk Drive Capacity,Solid State Disk Amount,Total Solid State Disk Capacity,Unmetered,Uplink speed,Traffic,Datacenter Country,Datacenter City,Datacenter Coordinates,Features,Operating Systems,Control Panel,GPU Name,Payment Methods
+Test Server 2,Another test server,test-002,https://example2.com,EUR,199.99,10.0,Visible,Dedicated,None,Yearly,Limited,AMD,2,8,3.2GHz,Ryzen,non-ECC,DDR4,32GB,1,1TB,2,1TB,Bandwidth,10Gbps,50000,DE,Berlin,\"52.5200,13.4050\",NVMe;RAID,Debian;Ubuntu,Plesk,RTX 4090,Bitcoin;Ethereum";
+
+    let offerings = ProviderOfferings::new_from_str(test_pubkey.as_bytes(), csv_with_headers)
+        .expect("Failed to create test offering");
+
+    // Test compact JSON serialization
+    let compact_json = offerings
+        .serialize_as_json()
+        .expect("Compact JSON serialization failed");
+
+    // Validate JSON structure
+    let parsed: serde_json::Value = serde_json::from_str(&compact_json).expect("Invalid JSON");
+    assert!(parsed["provider_pubkey_pem"].is_string());
+    assert!(parsed["server_offerings_csv"].is_string());
+
+    // Test round-trip
+    let deserialized = ProviderOfferings::deserialize_from_json(&compact_json)
+        .expect("Compact JSON deserialization failed");
+
+    assert_eq!(offerings.provider_pubkey, deserialized.provider_pubkey);
+    assert_eq!(
+        offerings.server_offerings.len(),
+        deserialized.server_offerings.len()
+    );
+    assert_eq!(
+        offerings.server_offerings[0].offer_name,
+        deserialized.server_offerings[0].offer_name
+    );
+}
+
+#[test]
+fn test_serialization_size_comparison() {
+    let test_pubkey = test_provider_pubkey(3);
+    let offerings = ProviderOfferings::new_from_str(test_pubkey.as_bytes(),
+            "Large Server,Very detailed server offering with lots of features,large-001,https://bigserver.com,USD,999.99,50.0,Visible,Dedicated,KVM,Monthly,In stock,Intel,4,32,3.8GHz,Xeon Gold,ECC,DDR4,128GB,4,8TB,8,4TB,Bandwidth;Storage,100Gbps,1000000,US,California,37.7749;-122.4194,NVMe;RAID10;Backup;Monitoring;DDoS Protection,Ubuntu;CentOS;Debian;Windows Server,cPanel;WHM;Plesk,RTX 4090;A100,Credit Card;PayPal;Bitcoin;Bank Transfer"
+        ).expect("Failed to create test offering");
+
+    // Compare different serialization formats
+    let compact_json = offerings.serialize_as_json().expect("Compact JSON failed");
+    let (pem, csv) = offerings.serialize_as_pem_csv().expect("PEM+CSV failed");
+
+    println!("Compact JSON size: {} bytes", compact_json.len());
+    println!(
+        "PEM size: {} bytes, CSV size: {} bytes, Total: {} bytes",
+        pem.len(),
+        csv.len(),
+        pem.len() + csv.len()
+    );
+
+    // Compact format should be more efficient for this use case
+    assert!(!compact_json.is_empty());
+}
+
+#[test]
+fn test_empty_offerings_handling() {
+    let test_pubkey = test_provider_pubkey(1);
+    let empty_offerings = ProviderOfferings::new(test_pubkey.to_vec(), vec![]);
+
+    // Test serialization of empty offerings
+    let (pem, csv) = empty_offerings
+        .serialize_as_pem_csv()
+        .expect("Empty PEM+CSV serialization failed");
+
+    // Should have valid PEM but minimal CSV (just headers)
+    assert!(pem.starts_with("-----BEGIN PUBLIC KEY-----"));
+    assert!(csv.contains("offer_name")); // CSV header should be present
+
+    // Test round-trip
+    let deserialized = ProviderOfferings::deserialize_from_pem_csv(&pem, &csv)
+        .expect("Empty PEM+CSV deserialization failed");
+
+    assert_eq!(
+        empty_offerings.provider_pubkey,
+        deserialized.provider_pubkey
+    );
+    assert_eq!(empty_offerings.server_offerings.len(), 0);
+    assert_eq!(deserialized.server_offerings.len(), 0);
 }

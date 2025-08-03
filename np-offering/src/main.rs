@@ -19,7 +19,10 @@ fn main() {
         }
     };
 
-    println!("Loaded {} offerings from CSV", offerings.server_offerings.len());
+    println!(
+        "Loaded {} offerings from CSV",
+        offerings.server_offerings.len()
+    );
 
     // If search parameters provided, filter results
     if args.len() >= 4 {
@@ -30,9 +33,7 @@ fn main() {
             "offer_name" => offerings.find_by_name(search_value),
             "product_type" => match search_value.to_lowercase().as_str() {
                 "vps" => offerings.find_by_product_type(&np_offering::ProductType::VPS),
-                "dedicated" => {
-                    offerings.find_by_product_type(&np_offering::ProductType::Dedicated)
-                }
+                "dedicated" => offerings.find_by_product_type(&np_offering::ProductType::Dedicated),
                 "cloud" => offerings.find_by_product_type(&np_offering::ProductType::Cloud),
                 "managed" => offerings.find_by_product_type(&np_offering::ProductType::Managed),
                 _ => {

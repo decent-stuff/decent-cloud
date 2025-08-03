@@ -1,3 +1,4 @@
+use crate::csv_constants::CSV_HEADERS;
 use crate::enums::*;
 use crate::errors::OfferingError;
 use crate::server_offering::ServerOffering;
@@ -8,8 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::str::FromStr;
 
-/// Legacy collection of server offerings - kept for backward compatibility
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ProviderOfferings {
     pub provider_pubkey: Vec<u8>,
     pub server_offerings: Vec<ServerOffering>,
@@ -84,9 +84,81 @@ impl ProviderOfferings {
         let mut csv_writer = csv::WriterBuilder::new()
             .has_headers(true)
             .from_writer(writer);
+
+        // Always write headers, even for empty offerings
+        csv_writer.write_record(CSV_HEADERS)?;
+
+        // Write each offering as a record
         for offering in &self.server_offerings {
-            csv_writer.serialize(offering)?;
+            let record = vec![
+                offering.offer_name.clone(),
+                offering.description.clone(),
+                offering.unique_internal_identifier.clone(),
+                offering.product_page_url.clone(),
+                format!("{}", offering.currency),
+                offering.monthly_price.to_string(),
+                offering.setup_fee.to_string(),
+                format!("{}", offering.visibility),
+                format!("{}", offering.product_type),
+                offering
+                    .virtualization_type
+                    .as_ref()
+                    .map(|v| format!("{}", v))
+                    .unwrap_or_default(),
+                format!("{}", offering.billing_interval),
+                format!("{}", offering.stock)
+                    .replace("InStock", "In stock")
+                    .replace("OutOfStock", "Out of stock"),
+                offering
+                    .processor_brand
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_string(),
+                offering.processor_amount.unwrap_or(0).to_string(),
+                offering.processor_cores.unwrap_or(0).to_string(),
+                offering
+                    .processor_speed
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_string(),
+                offering.processor_name.as_deref().unwrap_or("").to_string(),
+                offering
+                    .memory_error_correction
+                    .as_ref()
+                    .map(|v| format!("{}", v))
+                    .unwrap_or_default(),
+                offering.memory_type.as_deref().unwrap_or("").to_string(),
+                offering.memory_amount.as_deref().unwrap_or("").to_string(),
+                offering.hdd_amount.to_string(),
+                offering
+                    .total_hdd_capacity
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_string(),
+                offering.ssd_amount.to_string(),
+                offering
+                    .total_ssd_capacity
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_string(),
+                offering.unmetered.join(", "),
+                offering.uplink_speed.as_deref().unwrap_or("").to_string(),
+                offering.traffic.unwrap_or(0).to_string(),
+                offering.datacenter_country.clone(),
+                offering.datacenter_city.clone(),
+                offering
+                    .datacenter_coordinates
+                    .map(|(lat, lon)| format!("{},{}", lat, lon))
+                    .unwrap_or_default(),
+                offering.features.join(", "),
+                offering.operating_systems.join(", "),
+                offering.control_panel.as_deref().unwrap_or("").to_string(),
+                offering.gpu_name.as_deref().unwrap_or("").to_string(),
+                offering.payment_methods.join(", "),
+            ];
+            csv_writer.write_record(&record)?;
         }
+
         Ok(())
     }
 
@@ -328,36 +400,74 @@ impl ProviderOfferings {
         self.filter(|offering| offering.gpu_name.is_some())
     }
 
-    pub fn serialize_as_json(&self) -> Result<String, serde_json::Error> {
-        let pubkey = self.provider_pubkey.clone().try_into().unwrap_or_else(|_| panic!("slice length is {} instead of 32 bytes",
-            self.provider_pubkey.len()));
-        let pubkey = VerifyingKey::from_bytes(&pubkey).unwrap();
-        let pubkey_pem = pubkey
+    /// Serialize to PEM + CSV format (recommended for canister interfaces)
+    pub fn serialize_as_pem_csv(&self) -> Result<(String, String), OfferingError> {
+        // Convert pubkey to PEM
+        let pubkey: [u8; 32] = self.provider_pubkey.clone().try_into().map_err(|_| {
+            OfferingError::ParseError(format!(
+                "Invalid provider pubkey length: {} (expected 32)",
+                self.provider_pubkey.len()
+            ))
+        })?;
+
+        let verifying_key = VerifyingKey::from_bytes(&pubkey)
+            .map_err(|e| OfferingError::ParseError(format!("Invalid verifying key: {}", e)))?;
+
+        let pubkey_pem = verifying_key
             .to_public_key_pem(LineEnding::LF)
-            .expect("pem encode failed");
-        serde_json::to_string(
-            &serde_json::json!({"provider_pubkey": pubkey_pem, "server_offerings": self.server_offerings}),
-        )
+            .map_err(|e| OfferingError::ParseError(format!("PEM encoding failed: {}", e)))?;
+
+        // Convert offerings to CSV
+        let csv_data = self.to_str()?;
+
+        Ok((pubkey_pem, csv_data))
     }
 
-    pub fn deserialize_from_json(json_str: &str) -> Result<Self, OfferingError> {
-        let json_val: serde_json::Value = serde_json::from_str(json_str)?;
-        let pubkey_pem = json_val["provider_pubkey"].as_str().ok_or_else(|| {
-            OfferingError::ParseError("Missing provider_pubkey in JSON".to_string())
-        })?.to_string();
-        
-        let pubkey = VerifyingKey::from_public_key_pem(&pubkey_pem)
-            .map_err(|e| OfferingError::ParseError(format!("Invalid PEM key: {}", e)))?
-            .to_bytes()
-            .to_vec();
-            
-        let server_offerings: Vec<ServerOffering> = serde_json::from_value(
-            json_val["server_offerings"].clone()
-        )?;
-        
-        Ok(Self {
-            provider_pubkey: pubkey,
-            server_offerings,
+    /// Deserialize from PEM + CSV format
+    pub fn deserialize_from_pem_csv(
+        pubkey_pem: &str,
+        csv_data: &str,
+    ) -> Result<Self, OfferingError> {
+        // Parse PEM pubkey
+        let verifying_key = VerifyingKey::from_public_key_pem(pubkey_pem)
+            .map_err(|e| OfferingError::ParseError(format!("Invalid PEM key: {}", e)))?;
+
+        let pubkey_bytes = verifying_key.to_bytes().to_vec();
+
+        // Parse CSV data
+        let provider_offerings = Self::new_from_str(&pubkey_bytes, csv_data)?;
+
+        Ok(provider_offerings)
+    }
+
+    /// Serialize to compact format for canister responses (PEM + CSV in JSON wrapper)
+    pub fn serialize_as_json(&self) -> Result<String, OfferingError> {
+        let (pubkey_pem, csv_data) = self.serialize_as_pem_csv()?;
+
+        let compact_format = serde_json::json!({
+            "provider_pubkey_pem": pubkey_pem,
+            "server_offerings_csv": csv_data
+        });
+
+        serde_json::to_string(&compact_format).map_err(|e| {
+            OfferingError::SerializationError(format!("JSON serialization failed: {}", e))
         })
+    }
+
+    /// Deserialize from compact JSON format
+    pub fn deserialize_from_json(json_str: &str) -> Result<Self, OfferingError> {
+        let json_val: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
+            OfferingError::SerializationError(format!("JSON parsing failed: {}", e))
+        })?;
+
+        let pubkey_pem = json_val["provider_pubkey_pem"].as_str().ok_or_else(|| {
+            OfferingError::ParseError("Missing provider_pubkey_pem in compact JSON".to_string())
+        })?;
+
+        let csv_data = json_val["server_offerings_csv"].as_str().ok_or_else(|| {
+            OfferingError::ParseError("Missing server_offerings_csv in compact JSON".to_string())
+        })?;
+
+        Self::deserialize_from_pem_csv(pubkey_pem, csv_data)
     }
 }

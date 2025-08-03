@@ -1,4 +1,7 @@
-use np_offering::{ServerOffering, Currency, Visibility, ProductType, VirtualizationType, BillingInterval, StockStatus, ErrorCorrection};
+use np_offering::{
+    BillingInterval, Currency, ErrorCorrection, ProductType, ServerOffering, StockStatus,
+    VirtualizationType, Visibility,
+};
 
 #[test]
 fn test_server_offering_creation() {
@@ -39,13 +42,20 @@ fn test_server_offering_creation() {
         gpu_name: None,
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
-    
+
     assert_eq!(offering.offer_name, "Test Server");
     assert!(std::mem::discriminant(&offering.currency) == std::mem::discriminant(&Currency::USD));
     assert_eq!(offering.monthly_price, 99.99);
-    assert!(std::mem::discriminant(&offering.product_type) == std::mem::discriminant(&ProductType::VPS));
-    assert!(std::mem::discriminant(&offering.virtualization_type) == std::mem::discriminant(&Some(VirtualizationType::KVM)));
-    assert!(std::mem::discriminant(&offering.stock) == std::mem::discriminant(&StockStatus::InStock));
+    assert!(
+        std::mem::discriminant(&offering.product_type) == std::mem::discriminant(&ProductType::VPS)
+    );
+    assert!(
+        std::mem::discriminant(&offering.virtualization_type)
+            == std::mem::discriminant(&Some(VirtualizationType::KVM))
+    );
+    assert!(
+        std::mem::discriminant(&offering.stock) == std::mem::discriminant(&StockStatus::InStock)
+    );
 }
 
 #[test]
@@ -87,7 +97,7 @@ fn test_get_all_instance_ids() {
         gpu_name: None,
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
-    
+
     let ids = offering.get_all_instance_ids();
     assert_eq!(ids.len(), 1);
     assert_eq!(ids[0], "TEST001");
@@ -132,45 +142,47 @@ fn test_matches_search() {
         gpu_name: None,
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
-    
+
     // Test search in offer_name
     let matches = offering.matches_search("Intel");
     assert!(!matches.is_empty());
     assert!(matches.iter().any(|m| m.contains("offer_name")));
-    
+
     // Test search in description
     let matches = offering.matches_search("powerful");
     assert!(!matches.is_empty());
     assert!(matches.iter().any(|m| m.contains("description")));
-    
+
     // Test search in unique_internal_identifier
     let matches = offering.matches_search("INTEL001");
     assert!(!matches.is_empty());
-    assert!(matches.iter().any(|m| m.contains("unique_internal_identifier")));
-    
+    assert!(matches
+        .iter()
+        .any(|m| m.contains("unique_internal_identifier")));
+
     // Test search in processor_brand
     let matches = offering.matches_search("Intel");
     assert!(matches.iter().any(|m| m.contains("processor_brand")));
-    
+
     // Test search in features
     let matches = offering.matches_search("KVM");
     assert!(!matches.is_empty());
     assert!(matches.iter().any(|m| m.contains("features")));
-    
+
     // Test search in operating_systems
     let matches = offering.matches_search("Ubuntu");
     assert!(!matches.is_empty());
     assert!(matches.iter().any(|m| m.contains("operating_systems")));
-    
+
     // Test search in payment_methods
     let matches = offering.matches_search("PayPal");
     assert!(!matches.is_empty());
     assert!(matches.iter().any(|m| m.contains("payment_methods")));
-    
+
     // Test case insensitive search
     let matches = offering.matches_search("intel");
     assert!(!matches.is_empty());
-    
+
     // Test search with no matches
     let matches = offering.matches_search("NonExistent");
     assert!(matches.is_empty());
@@ -215,19 +227,19 @@ fn test_instance_pricing() {
         gpu_name: None,
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
-    
+
     let pricing = offering.instance_pricing("TEST001");
-    
+
     // Check that on_demand pricing exists
     assert!(pricing.contains_key("on_demand"));
     let on_demand = &pricing["on_demand"];
-    
+
     // Check that all time units are present
     assert!(on_demand.contains_key("month"));
     assert!(on_demand.contains_key("year"));
     assert!(on_demand.contains_key("day"));
     assert!(on_demand.contains_key("hour"));
-    
+
     // Check pricing calculations
     assert_eq!(on_demand["month"], "30"); // Monthly price
     assert_eq!(on_demand["year"], "360"); // Monthly * 12
@@ -274,16 +286,16 @@ fn test_serialize() {
         gpu_name: None,
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
-    
+
     let csv_bytes = offering.serialize().unwrap();
     let csv_string = String::from_utf8(csv_bytes).unwrap();
-    
+
     // Check that CSV contains expected headers
     assert!(csv_string.contains("Offer Name"));
     assert!(csv_string.contains("Description"));
     assert!(csv_string.contains("Currency"));
     assert!(csv_string.contains("Monthly price"));
-    
+
     // Check that CSV contains expected data
     assert!(csv_string.contains("Test Server"));
     assert!(csv_string.contains("A test server offering"));
@@ -326,22 +338,22 @@ fn test_serialize_with_optional_fields() {
         datacenter_country: "DE".to_string(),
         datacenter_city: "Berlin".to_string(),
         datacenter_coordinates: None, // None coordinates
-        features: vec![], // Empty features
-        operating_systems: vec![], // Empty OS
+        features: vec![],             // Empty features
+        operating_systems: vec![],    // Empty OS
         control_panel: None,
         gpu_name: None,
         payment_methods: vec![], // Empty payment methods
     };
-    
+
     let csv_bytes = offering.serialize().unwrap();
     let csv_string = String::from_utf8(csv_bytes).unwrap();
-    
+
     // Check that CSV contains expected data
     assert!(csv_string.contains("Minimal Server"));
     assert!(csv_string.contains("EUR"));
     assert!(csv_string.contains("29.99"));
     assert!(csv_string.contains("10"));
-    
+
     // Check that empty/None fields are handled properly
     assert!(csv_string.contains(",")); // Empty fields should result in consecutive commas
 }
@@ -385,9 +397,9 @@ fn test_display() {
         gpu_name: None,
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
-    
+
     let display_str = format!("{}", offering);
-    
+
     // Should be formatted as JSON
     assert!(display_str.contains("\"offer_name\": \"Test Server\""));
     assert!(display_str.contains("\"currency\": \"USD\""));
@@ -434,13 +446,24 @@ fn test_clone() {
         gpu_name: None,
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
-    
+
     let cloned_offering = offering.clone();
-    
+
     assert_eq!(cloned_offering.offer_name, offering.offer_name);
-    assert!(std::mem::discriminant(&cloned_offering.currency) == std::mem::discriminant(&offering.currency));
+    assert!(
+        std::mem::discriminant(&cloned_offering.currency)
+            == std::mem::discriminant(&offering.currency)
+    );
     assert_eq!(cloned_offering.monthly_price, offering.monthly_price);
-    assert!(std::mem::discriminant(&cloned_offering.product_type) == std::mem::discriminant(&offering.product_type));
-    assert!(std::mem::discriminant(&cloned_offering.virtualization_type) == std::mem::discriminant(&offering.virtualization_type));
-    assert!(std::mem::discriminant(&cloned_offering.stock) == std::mem::discriminant(&offering.stock));
+    assert!(
+        std::mem::discriminant(&cloned_offering.product_type)
+            == std::mem::discriminant(&offering.product_type)
+    );
+    assert!(
+        std::mem::discriminant(&cloned_offering.virtualization_type)
+            == std::mem::discriminant(&offering.virtualization_type)
+    );
+    assert!(
+        std::mem::discriminant(&cloned_offering.stock) == std::mem::discriminant(&offering.stock)
+    );
 }

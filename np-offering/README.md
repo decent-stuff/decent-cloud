@@ -58,6 +58,22 @@ Datacenter Coordinates, Features, Operating Systems, Control Panel,
 GPU Name, Payment Methods
 ```
 
+## Serialization
+
+### Motivation
+
+Decent Cloud operates across multiple environments with different constraints: IC canisters have response size limits and favor compact formats, web frontends need JSON compatibility, and storage systems benefit from minimal overhead. A single serialization approach cannot efficiently serve all contexts.
+
+### Design Approach
+
+The library provides three specialized formats:
+
+- **PEM + CSV**: Separates cryptographic identity (PEM-encoded Ed25519 keys) from structured data (CSV). Optimized for IC canister interfaces where size efficiency and Candid compatibility matter most.
+
+- **Compact JSON**: Wraps PEM + CSV in JSON structure for web API compatibility while preserving internal efficiency gains.
+
+Response size management ensures canister endpoints never exceed IC limits through progressive offering inclusion until size thresholds are reached.
+
 ## Technical Implementation
 
 ### Type System

@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
+use crate::enums::{Currency, ProductType, StockStatus, VirtualizationType};
 use crate::errors::OfferingError;
-use crate::enums::{ProductType, Currency, StockStatus, VirtualizationType};
 use crate::server_offering::ServerOffering;
+use serde::{Deserialize, Serialize};
 
 /// Strong-typed 32-byte provider public key
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -12,7 +12,7 @@ impl ProviderPubkey {
     pub fn new(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
-    
+
     /// Create from a slice, returning error if not exactly 32 bytes
     pub fn from_slice(bytes: &[u8]) -> Result<Self, OfferingError> {
         if bytes.len() != 32 {
@@ -22,17 +22,17 @@ impl ProviderPubkey {
         array.copy_from_slice(bytes);
         Ok(Self(array))
     }
-    
+
     /// Get the underlying 32-byte array
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
-    
+
     /// Convert to Vec<u8> for compatibility
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
-    
+
     /// Display as hex string for debugging
     pub fn to_hex(&self) -> String {
         hex::encode(self.0)
@@ -57,12 +57,12 @@ impl Offering {
             server_offering,
         }
     }
-    
+
     /// Get the offering key (unique_internal_identifier)
     pub fn key(&self) -> &str {
         &self.server_offering.unique_internal_identifier
     }
-    
+
     /// Get the provider pubkey
     pub fn provider(&self) -> &ProviderPubkey {
         &self.provider_pubkey
@@ -100,37 +100,37 @@ impl SearchQuery {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Filter by specific provider
     pub fn with_provider(mut self, provider: ProviderPubkey) -> Self {
         self.provider_pubkey = Some(provider);
         self
     }
-    
+
     /// Filter by specific offering key
     pub fn with_key(mut self, key: &str) -> Self {
         self.offering_key = Some(key.to_string());
         self
     }
-    
+
     /// Add text search filter
     pub fn with_text(mut self, text: &str) -> Self {
         self.text_filter = Some(text.to_string());
         self
     }
-    
+
     /// Add structured filter
     pub fn with_filter(mut self, filter: OfferingFilter) -> Self {
         self.filters.push(filter);
         self
     }
-    
+
     /// Limit number of results
     pub fn with_limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self
     }
-    
+
     /// Skip first N results
     pub fn with_offset(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
