@@ -4,13 +4,11 @@ use dcc_common::{
     PaymentEntry, PaymentEntryWithAmount, TokenAmountE9s, BLOCK_INTERVAL_SECS,
     FIRST_BLOCK_TIMESTAMP_NS,
 };
-use flate2::bufread::ZlibDecoder;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use np_offering::Offering;
+use np_offering::{ProviderOfferings, ServerOffering};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -340,7 +338,7 @@ pub fn test_np_check_in(ctx: &TestContext, dcc_identity: &DccIdentity) -> Result
 pub fn test_offering_add(
     ctx: &TestContext,
     dcc_id: &DccIdentity,
-    offering: &Offering,
+    offering: &ServerOffering,
 ) -> Result<String, String> {
     let payload_bytes = offering.serialize().unwrap();
     let payload_signature_bytes = dcc_id.sign(&payload_bytes).unwrap().to_bytes();
@@ -358,7 +356,7 @@ pub fn test_offering_add(
 pub fn test_offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
     ctx: &TestContext,
     search_query: &T,
-) -> Vec<(DccIdentity, Offering)> {
+) -> Vec<ProviderOfferings> {
     query_check_and_decode!(
         ctx.pic,
         ctx.canister_id,
@@ -367,15 +365,10 @@ pub fn test_offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
         Vec<(Vec<u8>, Vec<u8>)>
     )
     .into_iter()
-    .map(|(np_pubkey_bytes, payload_bytes)| {
-        let mut offering_as_json_string = String::new();
-        ZlibDecoder::new(payload_bytes.as_slice())
-            .read_to_string(&mut offering_as_json_string)
-            .unwrap();
-        (
-            DccIdentity::new_verifying_from_bytes(&np_pubkey_bytes).unwrap(),
-            Offering::new_from_str(&offering_as_json_string, "json").unwrap(),
-        )
+    .map(|(_np_pubkey_bytes, payload_bytes)| {
+        // Parse the CSV data to extract the offerings
+        let json_str = String::from_utf8_lossy(&payload_bytes);
+        ProviderOfferings::deserialize_from_json(&json_str).unwrap()
     })
     .collect()
 }
