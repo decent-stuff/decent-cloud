@@ -2,8 +2,8 @@ mod account;
 mod contract;
 mod keygen;
 mod ledger;
-mod np;
 mod offering;
+mod provider;
 mod user;
 
 use crate::argparse::{Cli, Commands};
@@ -14,8 +14,8 @@ pub use contract::handle_contract_command;
 pub use keygen::handle_keygen_command;
 pub use ledger::{handle_ledger_local_command, handle_ledger_remote_command};
 use ledger_map::LedgerMap;
-pub use np::handle_np_command;
 pub use offering::handle_offering_command;
+pub use provider::handle_provider_command;
 use std::error::Error;
 pub use user::handle_user_command;
 
@@ -54,8 +54,8 @@ pub async fn handle_command(
             )
             .await
         }
-        Commands::Np(args) => {
-            handle_np_command(
+        Commands::Provider(args) => {
+            handle_provider_command(
                 args,
                 network_url,
                 ledger_canister_id,

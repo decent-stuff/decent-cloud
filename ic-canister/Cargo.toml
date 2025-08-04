@@ -26,9 +26,9 @@ ic-certification.workspace = true
 ic-metrics-encoder.workspace = true
 icrc-ledger-types.workspace = true
 ledger-map = { path = "../ledger-map", features = ["ic"] }
-np-offering.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
+provider-offering.workspace = true
 serde_bytes.workspace = true
 serde_json.workspace = true
 serde.workspace = true

@@ -66,7 +66,7 @@ Share this output in the [community discussions](https://github.com/orgs/decent-
 2. **Register as Provider**
 
 ```bash
-dc np register --identity my-validator
+dc provider register --identity my-validator
 ```
 
 Registration fee: 0.5 DCT (one-time)
@@ -78,7 +78,7 @@ Registration fee: 0.5 DCT (one-time)
 By running the validation command, you automatically fetch the latest ledger and sign its hash, proving you have a full, unaltered copy. The more validators that run this process, the safer the network—and the reputation system—becomes.
 
 ```bash
-dc np validate --identity my-validator --memo "Your optional memo"
+dc provider validate --identity my-validator --memo "Your optional memo"
 ```
 
 - Cost: 0.5 DCT per block
@@ -117,7 +117,7 @@ dc ledger-remote get-registration-fee
 
 ```bash
 dc ledger-remote fetch
-dc np list --balances
+dc provider list --balances
 ```
 
 ### Track Rewards

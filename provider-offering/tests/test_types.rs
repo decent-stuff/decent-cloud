@@ -1,4 +1,4 @@
-use np_offering::{OfferingError, OfferingFilter, ProductType, ProviderPubkey, SearchQuery};
+use provider_offering::{OfferingError, OfferingFilter, ProductType, ProviderPubkey, SearchQuery};
 mod common;
 use common::*;
 

@@ -388,9 +388,9 @@ decent-cloud/
 │   ├── components/ # React components
 │   ├── lib/        # Utility libraries
 │   └── public/     # Static assets
-├── np-offering/    # Node provider offering
-├── np-profile/     # Node provider profile
-├── np-json-search/ # JSON search functionality
+├── provider-offering/    # Node provider offering
+├── provider-profile/     # Node provider profile
+├── provider-json-search/ # JSON search functionality
 ├── docs/           # Documentation
 └── examples/       # Example configurations
 ```

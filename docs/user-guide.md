@@ -56,7 +56,7 @@ Key aspects to consider:
 1. Review provider's profile and history:
 
 ```bash
-dc np list --balances
+dc provider list --balances
 ```
 
 2. Ensure sufficient token balance

@@ -51,7 +51,7 @@ const infoSections = [
     icon: "⛏️",
     content: `Validators play a crucial role in ensuring ledger integrity.<br/>Anyone can be a validator! Here’s how you can get started:<br/><br/>
     1. Acquire DCT tokens (from peers or a DEX such as Kong)<br/>
-    2. Run <code>dc np check-in</code> with your identity<br/>
+    2. Run <code>dc provider check-in</code> with your identity<br/>
     3. Get rewarded with block rewards<br/><br/>
     <strong>Quick facts:</strong><br/>
     • 50 DCT initial block reward<br/>

@@ -26,11 +26,8 @@ fn get_registration_fee() -> TokenAmountE9s {
 }
 
 #[ic_cdk::update]
-fn node_provider_register(
-    pubkey_bytes: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    _np_register(pubkey_bytes, crypto_signature)
+fn provider_register(pubkey_bytes: Vec<u8>, crypto_signature: Vec<u8>) -> Result<String, String> {
+    _provider_register(pubkey_bytes, crypto_signature)
 }
 
 #[ic_cdk::update]
@@ -39,30 +36,30 @@ fn user_register(pubkey_bytes: Vec<u8>, crypto_signature: Vec<u8>) -> Result<Str
 }
 
 #[ic_cdk::update]
-fn node_provider_check_in(
+fn provider_check_in(
     pubkey_bytes: Vec<u8>,
     memo: String,
     nonce_crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_check_in(pubkey_bytes, memo, nonce_crypto_signature)
+    _provider_check_in(pubkey_bytes, memo, nonce_crypto_signature)
 }
 
 #[ic_cdk::update]
-fn node_provider_update_profile(
+fn provider_update_profile(
     pubkey_bytes: Vec<u8>,
     profile_serialized: Vec<u8>,
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_update_profile(pubkey_bytes, profile_serialized, crypto_signature)
+    _provider_update_profile(pubkey_bytes, profile_serialized, crypto_signature)
 }
 
 #[ic_cdk::update]
-fn node_provider_update_offering(
+fn provider_update_offering(
     pubkey_bytes: Vec<u8>,
     offering_serialized: Vec<u8>,
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    _node_provider_update_offering(pubkey_bytes, offering_serialized, crypto_signature)
+    _provider_update_offering(pubkey_bytes, offering_serialized, crypto_signature)
 }
 
 #[ic_cdk::query]
@@ -96,13 +93,13 @@ fn contract_sign_reply(
 }
 
 #[ic_cdk::query]
-fn node_provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
-    _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes)
+fn provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
+    _provider_get_profile_by_pubkey_bytes(pubkey_bytes)
 }
 
 #[ic_cdk::query]
-fn node_provider_get_profile_by_principal(principal: Principal) -> Option<String> {
-    _node_provider_get_profile_by_principal(principal)
+fn provider_get_profile_by_principal(principal: Principal) -> Option<String> {
+    _provider_get_profile_by_principal(principal)
 }
 
 #[ic_cdk::query]
@@ -116,8 +113,8 @@ fn get_identity_reputation(pubkey_bytes: Vec<u8>) -> u64 {
 }
 
 #[ic_cdk::query]
-fn node_provider_list_checked_in() -> Result<Vec<String>, String> {
-    _node_provider_list_checked_in()
+fn provider_list_checked_in() -> Result<Vec<String>, String> {
+    _provider_list_checked_in()
 }
 
 #[ic_cdk::query]
@@ -154,8 +151,8 @@ fn run_periodic_task() {
 }
 
 #[ic_cdk::query]
-fn node_provider_list_registered() -> Result<Vec<String>, String> {
-    _node_provider_list_registered()
+fn provider_list_registered() -> Result<Vec<String>, String> {
+    _provider_list_registered()
 }
 
 // test utilities

@@ -156,7 +156,7 @@ fn test_get_last_rewards_distribution_ts() {
 }
 
 #[test]
-fn test_rewards_distribute_no_eligible_nps() {
+fn test_rewards_distribute_no_eligible_providers() {
     let mut test_ledger = new_temp_ledger(None);
     set_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 1_000_000_000);
 
@@ -175,12 +175,12 @@ fn test_rewards_distribute_no_eligible_nps() {
     let response: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
     assert_eq!(
         response[0].as_str().unwrap(),
-        "Distributing reward of 50.000000000 DC tokens: no eligible NPs"
+        "Distributing reward of 50.000000000 DC tokens: no eligible Providers"
     );
 }
 
 #[test]
-fn test_rewards_distribute_with_eligible_nps() {
+fn test_rewards_distribute_with_eligible_providers() {
     let mut test_ledger = new_temp_ledger(None);
     let mut last_ts_ns = FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 1_000_000_000;
     set_timestamp_ns(last_ts_ns);
@@ -193,19 +193,19 @@ fn test_rewards_distribute_with_eligible_nps() {
         )
         .unwrap();
 
-    let np1 = DccIdentity::new_from_seed(b"np1_seed").unwrap();
+    let prov1 = DccIdentity::new_from_seed(b"prov1_seed").unwrap();
     test_ledger
         .upsert(
-            LABEL_NP_REGISTER,
-            np1.to_bytes_verifying(),
-            np1.to_bytes_verifying(),
+            LABEL_PROV_REGISTER,
+            prov1.to_bytes_verifying(),
+            prov1.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
-            LABEL_NP_CHECK_IN,
-            np1.to_bytes_verifying(),
-            np1.to_bytes_verifying(),
+            LABEL_PROV_CHECK_IN,
+            prov1.to_bytes_verifying(),
+            prov1.to_bytes_verifying(),
         )
         .unwrap();
 
@@ -214,7 +214,7 @@ fn test_rewards_distribute_with_eligible_nps() {
     let result: Value = serde_json::from_str(&result).unwrap();
     assert_eq!(
         result[0].as_str().unwrap(),
-        "Distributing reward of 50.000000000 DC tokens to 1 NPs = 50.000000000 DC tokens per NP"
+        "Distributing reward of 50.000000000 DC tokens to 1 Providers = 50.000000000 DC tokens per Provider"
     );
 
     // Fast forward 42 blocks, there are rewards for 42 blocks that should be distributed
@@ -223,9 +223,9 @@ fn test_rewards_distribute_with_eligible_nps() {
 
     test_ledger
         .upsert(
-            LABEL_NP_CHECK_IN,
-            np1.to_bytes_verifying(),
-            np1.to_bytes_verifying(),
+            LABEL_PROV_CHECK_IN,
+            prov1.to_bytes_verifying(),
+            prov1.to_bytes_verifying(),
         )
         .unwrap();
     let result = rewards_distribute(&mut test_ledger).unwrap();
@@ -233,32 +233,32 @@ fn test_rewards_distribute_with_eligible_nps() {
     // 50 tokens * 42 = 2100
     assert_eq!(
         result[0].as_str().unwrap(),
-        "Distributing reward of 2100.000000000 DC tokens to 1 NPs = 2100.000000000 DC tokens per NP"
+        "Distributing reward of 2100.000000000 DC tokens to 1 Providers = 2100.000000000 DC tokens per Provider"
     );
 
-    // Later on, both np1 and np2 should be eligible for rewards. Each should get 25 tokens
+    // Later on, both prov1 and prov2 should be eligible for rewards. Each should get 25 tokens
     last_ts_ns += 7 * BLOCK_INTERVAL_SECS * 1_000_000_000;
     set_timestamp_ns(last_ts_ns);
-    let np2 = DccIdentity::new_from_seed(b"np2_seed").unwrap();
+    let prov2 = DccIdentity::new_from_seed(b"prov2_seed").unwrap();
     test_ledger
         .upsert(
-            LABEL_NP_REGISTER,
-            np2.to_bytes_verifying(),
-            np2.to_bytes_verifying(),
+            LABEL_PROV_REGISTER,
+            prov2.to_bytes_verifying(),
+            prov2.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
-            LABEL_NP_CHECK_IN,
-            np1.to_bytes_verifying(),
-            np1.to_bytes_verifying(),
+            LABEL_PROV_CHECK_IN,
+            prov1.to_bytes_verifying(),
+            prov1.to_bytes_verifying(),
         )
         .unwrap();
     test_ledger
         .upsert(
-            LABEL_NP_CHECK_IN,
-            np2.to_bytes_verifying(),
-            np2.to_bytes_verifying(),
+            LABEL_PROV_CHECK_IN,
+            prov2.to_bytes_verifying(),
+            prov2.to_bytes_verifying(),
         )
         .unwrap();
 
@@ -267,6 +267,6 @@ fn test_rewards_distribute_with_eligible_nps() {
     // 50 tokens * 7 = 350
     assert_eq!(
         result[0].as_str().unwrap(),
-        "Distributing reward of 350.000000000 DC tokens to 2 NPs = 175.000000000 DC tokens per NP"
+        "Distributing reward of 350.000000000 DC tokens to 2 Providers = 175.000000000 DC tokens per Provider"
     );
 }

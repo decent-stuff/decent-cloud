@@ -9,8 +9,8 @@ use crate::{
     ContractSignReplyPayload, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
     LinkedIcIdsRecord, ReputationAge, ReputationChange, UpdateOfferingsPayload,
     UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
-    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN,
-    LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REPUTATION_AGE,
+    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_PROV_CHECK_IN,
+    LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE,
     LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -92,11 +92,11 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                         approval.allowance(),
                     );
                 }
-                LABEL_NP_REGISTER | LABEL_USER_REGISTER => {
+                LABEL_PROV_REGISTER | LABEL_USER_REGISTER => {
                     if let Ok(dcc_identity) =
                         dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
                     {
-                        if entry.label() == LABEL_NP_REGISTER {
+                        if entry.label() == LABEL_PROV_REGISTER {
                             num_providers += 1;
                         } else if entry.label() == LABEL_USER_REGISTER {
                             num_users += 1;
@@ -104,7 +104,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                         principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
                     }
                 }
-                LABEL_NP_OFFERING => {
+                LABEL_PROV_OFFERING => {
                     if let Ok(dcc_identity) =
                         dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
                     {
@@ -204,10 +204,10 @@ impl WasmLedgerEntry {
         }
     }
 
-    fn from_np_check_in(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
+    fn from_provider_check_in(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         WasmLedgerEntry {
-            label: LABEL_NP_CHECK_IN.to_string(),
+            label: LABEL_PROV_CHECK_IN.to_string(),
             key: Value::String(dcc_id.to_string()),
             value: match CheckInPayload::try_from_slice(entry.value()) {
                 Ok(payload) => serde_json::json!({
@@ -233,10 +233,10 @@ impl WasmLedgerEntry {
         }
     }
 
-    fn from_np_offering(entry: &LedgerEntry) -> Self {
+    fn from_provider_offering(entry: &LedgerEntry) -> Self {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         WasmLedgerEntry {
-            label: LABEL_NP_OFFERING.to_string(),
+            label: LABEL_PROV_OFFERING.to_string(),
             key: Value::String(dcc_id.to_string()),
             value: match UpdateOfferingsPayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_offerings(entry.key()) {
@@ -261,10 +261,10 @@ impl WasmLedgerEntry {
         }
     }
 
-    fn from_np_profile(entry: &LedgerEntry) -> Self {
+    fn from_provider_profile(entry: &LedgerEntry) -> Self {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         WasmLedgerEntry {
-            label: LABEL_NP_PROFILE.to_string(),
+            label: LABEL_PROV_PROFILE.to_string(),
             key: Value::String(dcc_id.to_string()),
             value: match UpdateProfilePayload::try_from_slice(entry.value()) {
                 Ok(payload) => match payload.deserialize_update_profile() {
@@ -438,10 +438,14 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
         entries.push(match entry.label() {
             LABEL_DC_TOKEN_APPROVAL => WasmLedgerEntry::from_dc_token_approval(entry),
             LABEL_DC_TOKEN_TRANSFER => WasmLedgerEntry::from_dc_token_transfer(entry),
-            LABEL_NP_CHECK_IN => WasmLedgerEntry::from_np_check_in(entry, block.parent_hash()),
-            LABEL_NP_OFFERING => WasmLedgerEntry::from_np_offering(entry),
-            LABEL_NP_PROFILE => WasmLedgerEntry::from_np_profile(entry),
-            LABEL_NP_REGISTER => WasmLedgerEntry::from_account_register(entry, block.parent_hash()),
+            LABEL_PROV_CHECK_IN => {
+                WasmLedgerEntry::from_provider_check_in(entry, block.parent_hash())
+            }
+            LABEL_PROV_OFFERING => WasmLedgerEntry::from_provider_offering(entry),
+            LABEL_PROV_PROFILE => WasmLedgerEntry::from_provider_profile(entry),
+            LABEL_PROV_REGISTER => {
+                WasmLedgerEntry::from_account_register(entry, block.parent_hash())
+            }
             LABEL_REPUTATION_AGE => WasmLedgerEntry::from_reputation_age(entry),
             LABEL_REPUTATION_CHANGE => WasmLedgerEntry::from_reputation_change(entry),
             LABEL_REWARD_DISTRIBUTION => WasmLedgerEntry::from_reward_distribution(entry),

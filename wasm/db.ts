@@ -277,7 +277,7 @@ class LedgerDatabase extends Dexie {
             'get entries by label and key',
             async () => {
                 const result = await this.ledgerEntries.where('label').equals(label).and((entry) => entry.key.includes(key)).toArray();
-                console.info(`Found NP Register ${result.length} entries for label ${label} and key ${key}`);
+                console.info(`Found Provider Register ${result.length} entries for label ${label} and key ${key}`);
                 return result;
             },
             []

@@ -1,7 +1,7 @@
 graph TB
   D["Developer"] -- "Finds Node" --> BC["Blockchain"]
   D -- "Pays for Node Usage" --> BC
-  NP["Node Provider"] -- "Runs Node" --> N["Node"]
+  Provider -- "Runs Node" --> N["Node"]
   N -- "Accesses Data" --> DS["Decentralized / S3 / Other Storage"]
   N -- "Runs Classical Web Service" --> WS["Web Service"]
   N -- "Runs Arbitrary Applications" --> WL["Arbitrary Workloads"]
@@ -15,6 +15,6 @@ graph TB
     NREP -- "Can Spend Reputation to Reduce Developer Reputation" --> DREP
   end
 
-  BC -- "Periodic Reputation-Based Rewards" --> NP
-  BC -- "Assigns Node" --> NP
-  BC -- "Rented Node Rewards" --> NP
+  BC -- "Periodic Reputation-Based Rewards" --> Provider
+  BC -- "Assigns Node" --> Provider
+  BC -- "Rented Node Rewards" --> Provider

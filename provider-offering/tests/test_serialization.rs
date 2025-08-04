@@ -1,5 +1,5 @@
-use np_offering::serialization::{OfferingResponseBuilder, PaginatedOfferingsResponse};
-use np_offering::ProviderOfferings;
+use provider_offering::serialization::{OfferingResponseBuilder, PaginatedOfferingsResponse};
+use provider_offering::ProviderOfferings;
 mod common;
 use common::*;
 

@@ -1,6 +1,6 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reputation_get,
-    reward_e9s_per_block, DccIdentity, TokenAmountE9s, LABEL_NP_PROFILE, MAX_NP_PROFILE_BYTES,
+    reward_e9s_per_block, DccIdentity, TokenAmountE9s, LABEL_PROV_PROFILE, MAX_PROV_PROFILE_BYTES,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
@@ -8,10 +8,10 @@ use function_name::named;
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
-use np_profile::Profile;
+use provider_profile::Profile;
 use serde::Serialize;
 
-pub fn np_profile_update_fee_e9s() -> TokenAmountE9s {
+pub fn provider_profile_update_fee_e9s() -> TokenAmountE9s {
     reward_e9s_per_block() / 1000
 }
 
@@ -31,7 +31,7 @@ impl UpdateProfilePayload {
         update_profile_payload: &[u8],
         crypto_signature_bytes: &[u8],
     ) -> Result<Self, String> {
-        if update_profile_payload.len() > MAX_NP_PROFILE_BYTES {
+        if update_profile_payload.len() > MAX_PROV_PROFILE_BYTES {
             return Err("Profile payload too long".to_string());
         }
         Ok(UpdateProfilePayload::V1(UpdateProfilePayloadV1 {
@@ -54,7 +54,7 @@ impl UpdateProfilePayload {
 }
 
 #[named]
-pub fn do_node_provider_update_profile(
+pub fn do_provider_update_profile(
     ledger: &mut LedgerMap,
     pubkey_bytes: Vec<u8>,
     profile_serialized: Vec<u8>,
@@ -67,7 +67,7 @@ pub fn do_node_provider_update_profile(
     let payload = UpdateProfilePayload::new(&profile_serialized, &crypto_signature)?;
     let payload_bytes = borsh::to_vec(&payload).unwrap();
 
-    let fees = np_profile_update_fee_e9s();
+    let fees = provider_profile_update_fee_e9s();
     charge_fees_to_account_no_bump_reputation(
         ledger,
         &dcc_id.as_icrc_compatible_account(),
@@ -77,7 +77,7 @@ pub fn do_node_provider_update_profile(
 
     // Store the original signed payload in the ledger, to enable future verification
     ledger
-        .upsert(LABEL_NP_PROFILE, &pubkey_bytes, payload_bytes)
+        .upsert(LABEL_PROV_PROFILE, &pubkey_bytes, payload_bytes)
         .map(|_| {
             format!(
                 "Profile updated! Thank you. You have been charged {} tokens",
@@ -89,15 +89,15 @@ pub fn do_node_provider_update_profile(
 
 #[derive(Serialize)]
 pub struct NodeProviderProfileWithReputation {
-    pub profile: np_profile::Profile,
+    pub profile: provider_profile::Profile,
     pub reputation: u64,
 }
 
-pub fn do_node_provider_get_profile(
+pub fn do_provider_get_profile(
     ledger: &LedgerMap,
     pubkey_bytes: Vec<u8>,
 ) -> Option<NodeProviderProfileWithReputation> {
-    match ledger.get(LABEL_NP_PROFILE, &pubkey_bytes) {
+    match ledger.get(LABEL_PROV_PROFILE, &pubkey_bytes) {
         // Don't check the signature to save time
         Ok(data) => UpdateProfilePayload::deserialize_unchecked(&data)
             .ok()?

@@ -1,4 +1,4 @@
-//! # np-offering: Network Provider Offering Management
+//! # provider-offering: Network Provider Offering Management
 //!
 //! A robust framework for managing server offerings from network providers
 //! in the Decent Cloud ecosystem with efficient search and indexing capabilities.

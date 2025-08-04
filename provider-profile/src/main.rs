@@ -1,4 +1,4 @@
-use np_profile::Profile;
+use provider_profile::Profile;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

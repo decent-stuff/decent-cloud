@@ -239,7 +239,7 @@ class DecentCloudLedger {
         return this.withErrorHandling(
             "checking if provider is registered",
             async () => {
-                const entries = await db.getEntriesByLabelAndKey("NPRegister", principal);
+                const entries = await db.getEntriesByLabelAndKey("ProvRegister", principal);
                 console.log(`Found ${entries.length} registration entries for principal ${principal}`);
                 return entries.length > 0;
             },

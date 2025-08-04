@@ -85,7 +85,7 @@ function handleError(
 /**
  * Validates the blockchain by checking in as a node provider
  *
- * This implementation makes an authenticated update call to the node_provider_check_in endpoint
+ * This implementation makes an authenticated update call to the provider_check_in endpoint
  * with the latest block hash signature.
  *
  * @param memo Optional memo to include with the validation (max 64 bytes)
@@ -119,10 +119,10 @@ export async function validateBlockchain(
         // Create a signature of the last block hash
         const signatureBytes = await ed25519Sign(secretKeyRaw, dataToSign);
 
-        // Make the authenticated update call to node_provider_check_in
+        // Make the authenticated update call to provider_check_in
         try {
             const result = await updateCanister(
-                'node_provider_check_in',
+                'provider_check_in',
                 [publicKeyBytes, memo, signatureBytes],
                 identity
             );
@@ -148,7 +148,7 @@ export async function validateBlockchain(
 /**
  * Registers the current user as a node provider
  *
- * This implementation makes an authenticated update call to the node_provider_register endpoint
+ * This implementation makes an authenticated update call to the provider_register endpoint
  * with a signature of the public key.
  *
  * @returns A promise that resolves to a ValidationResult
@@ -169,10 +169,10 @@ export async function registerProvider(
         // Sign the public key with itself to prove ownership
         const signatureBytes = await ed25519Sign(secretKeyRaw, publicKeyBytes);
 
-        // Make the authenticated update call to node_provider_register
+        // Make the authenticated update call to provider_register
         try {
             const result = await updateCanister(
-                'node_provider_register',
+                'provider_register',
                 [publicKeyBytes, signatureBytes],
                 identity
             );

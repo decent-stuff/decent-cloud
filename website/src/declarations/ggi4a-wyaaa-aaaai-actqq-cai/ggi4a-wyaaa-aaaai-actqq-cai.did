@@ -350,19 +350,19 @@ type HttpResponse = record {
 type ResultString = variant { Ok: text; Err: text; };
 type ResultData = variant { Ok: record { text; vec nat8 }; Err: text; };
 type OfferingEntry = record {
-    np_pub_key: vec nat8;
+    provider_pub_key: vec nat8;
     offering_compressed: vec nat8;
 };
 
 service : {
-    // Node Provider (NP) management operations
+    // Provider management operations
     // crypto_sig can be used to cryptographically verify the authenticity of the message
-    node_provider_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    node_provider_update_profile: (pubkey_bytes: vec nat8, profile_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    node_provider_update_offering: (pubkey_bytes: vec nat8, offering_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    node_provider_list_checked_in: () -> (ResultString) query;
-    node_provider_get_profile_by_pubkey_bytes: (vec nat8) -> (opt text) query;
-    node_provider_get_profile_by_principal: (principal) -> (opt text) query;
+    provider_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+    provider_update_profile: (pubkey_bytes: vec nat8, profile_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+    provider_update_offering: (pubkey_bytes: vec nat8, offering_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
+    provider_list_checked_in: () -> (ResultString) query;
+    provider_get_profile_by_pubkey_bytes: (vec nat8) -> (opt text) query;
+    provider_get_profile_by_principal: (principal) -> (opt text) query;
     offering_search: (search_query: text) -> (vec OfferingEntry) query;
 
     // Contract signing and replying
@@ -383,9 +383,9 @@ service : {
     // - public key of the account (32B)
     // - memo, arbitrary text, up to 32B
     // - nonce_crypto_sig, cryptographic signature of the latest blockchain nonce
-    node_provider_check_in: (pubkey_bytes: vec nat8, memo: text, nonce_crypto_sig: vec nat8) -> (ResultString);
+    provider_check_in: (pubkey_bytes: vec nat8, memo: text, nonce_crypto_sig: vec nat8) -> (ResultString);
 
-    // Common NP and user management operations
+    // Common Provider and User management operations
     get_identity_reputation: (pubkey_bytes: vec nat8) -> (nat64) query;
     get_registration_fee: () -> (nat64) query;
 

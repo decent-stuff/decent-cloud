@@ -1,5 +1,5 @@
 [package]
-name = "np-offering"
+name = "provider-offering"
 version.workspace = true
 edition.workspace = true
 

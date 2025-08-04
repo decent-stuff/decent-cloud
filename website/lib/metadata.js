@@ -254,7 +254,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const OfferingEntry = IDL.Record({
     offering_compressed: IDL.Vec(IDL.Nat8),
-    np_pub_key: IDL.Vec(IDL.Nat8),
+    provider_pub_key: IDL.Vec(IDL.Nat8),
   });
   return IDL.Service({
     contract_sign_reply: IDL.Func(
@@ -356,33 +356,33 @@ export const idlFactory = ({ IDL }) => {
       [IDL.Vec(IDL.Tuple(IDL.Text, MetadataValue))],
       ["query"]
     ),
-    node_provider_check_in: IDL.Func(
+    provider_check_in: IDL.Func(
       [IDL.Vec(IDL.Nat8), IDL.Text, IDL.Vec(IDL.Nat8)],
       [ResultString],
       []
     ),
-    node_provider_get_profile_by_principal: IDL.Func(
+    provider_get_profile_by_principal: IDL.Func(
       [IDL.Principal],
       [IDL.Opt(IDL.Text)],
       ["query"]
     ),
-    node_provider_get_profile_by_pubkey_bytes: IDL.Func(
+    provider_get_profile_by_pubkey_bytes: IDL.Func(
       [IDL.Vec(IDL.Nat8)],
       [IDL.Opt(IDL.Text)],
       ["query"]
     ),
-    node_provider_list_checked_in: IDL.Func([], [ResultString], ["query"]),
-    node_provider_register: IDL.Func(
+    provider_list_checked_in: IDL.Func([], [ResultString], ["query"]),
+    provider_register: IDL.Func(
       [IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)],
       [ResultString],
       []
     ),
-    node_provider_update_offering: IDL.Func(
+    provider_update_offering: IDL.Func(
       [IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)],
       [ResultString],
       []
     ),
-    node_provider_update_profile: IDL.Func(
+    provider_update_profile: IDL.Func(
       [IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)],
       [ResultString],
       []

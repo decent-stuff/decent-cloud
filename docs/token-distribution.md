@@ -38,7 +38,7 @@ dc ledger-remote get-registration-fee
 ### Provider Participation
 
 ```bash
-dc np check-in --identity my-id --memo "Your optional memo here"
+dc provider check-in --identity my-id --memo "Your optional memo here"
 ```
 
 ### Viewing Distribution Status

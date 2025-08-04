@@ -13,19 +13,19 @@ This comprehensive guide covers everything you need to know about being a provid
 ### Registration
 
 ```bash
-dc np register --identity my-provider
+dc provider register --identity my-provider
 ```
 
 ## Managing Your Provider Profile
 
 ### Profile Setup
 
-1. Create a YAML profile file following [the template](https://github.com/decent-stuff/decent-cloud/blob/main/examples/np-profile-template.yaml)
+1. Create a profile file following [the template](https://github.com/decent-stuff/decent-cloud/blob/main/examples/provider-profile-template.yaml)
 2. Validate your YAML (use tools like [yamllint.com](https://www.yamllint.com/))
 3. Update your profile:
 
 ```bash
-dc np update-profile --identity my-provider --profile-file my-provider-profile.yaml
+dc provider update-profile --identity my-provider --profile-file my-provider-profile.yaml
 ```
 
 > Note: A small fee is required for profile updates to prevent DoS attacks.
@@ -41,12 +41,12 @@ dc np update-profile --identity my-provider --profile-file my-provider-profile.y
 
 ### Creating an Offering
 
-1. Prepare your offering YAML file following [the template](https://github.com/decent-stuff/decent-cloud/blob/main/examples/np-offering-template.yaml)
-2. Validate the YAML structure
+1. Prepare your offering YAML file following [the template](https://github.com/decent-stuff/decent-cloud/blob/main/examples/offering-example.csv)
+2. Validate the CSV structure
 3. Publish your offering:
 
 ```bash
-dc np update-offering --identity my-provider --offering-file my-provider-offering.yaml
+dc provider update-offering --identity my-provider --offering-file my-provider-offering.csv
 ```
 
 ### Offering Guidelines
@@ -105,7 +105,7 @@ dc contract sign-reply --identity my-provider --contract-id <contract-id-base64>
 ### Regular Check-ins
 
 ```bash
-dc np check-in --identity my-id --memo "Active and serving customers!"
+dc provider check-in --identity my-id --memo "Active and serving customers!"
 ```
 
 ### Best Practices
@@ -125,7 +125,7 @@ dc ledger-remote fetch
 ### Balance Checking
 
 ```bash
-dc np list --balances
+dc provider list --balances
 ```
 
 ### System Health

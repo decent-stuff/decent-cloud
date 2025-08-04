@@ -758,12 +758,12 @@ dependencies = [
  "ic-cdk 0.17.1",
  "icrc-ledger-types",
  "ledger-map",
- "np-offering",
- "np-profile",
  "num-bigint",
  "num-traits",
  "pem",
  "pkcs8",
+ "provider-offering",
+ "provider-profile",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -801,9 +801,9 @@ dependencies = [
  "ledger-map",
  "log",
  "memmap2",
- "np-offering",
- "np-profile",
  "pretty_env_logger",
+ "provider-offering",
+ "provider-profile",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -862,11 +862,11 @@ dependencies = [
  "ic-metrics-encoder",
  "icrc-ledger-types",
  "ledger-map",
- "np-offering",
  "num-bigint",
  "num-traits",
  "once_cell",
  "pocket-ic",
+ "provider-offering",
  "reqwest",
  "serde",
  "serde_bytes",
@@ -2412,49 +2412,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "np-json-search"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "parse-size",
- "regex",
- "serde_json",
- "serde_yaml_ng",
- "strsim",
-]
-
-[[package]]
-name = "np-offering"
-version = "0.3.0"
-dependencies = [
- "borsh",
- "candid",
- "csv",
- "ed25519-dalek",
- "fs-err",
- "hex",
- "indexmap",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "strsim",
- "tempfile",
-]
-
-[[package]]
-name = "np-profile"
-version = "0.3.0"
-dependencies = [
- "borsh",
- "fs-err",
- "np-json-search",
- "serde",
- "serde_json",
- "serde_yaml_ng",
-]
-
-[[package]]
 name = "nu-ansi-term"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2811,6 +2768,49 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31971752e70b8b2686d7e46ec17fb38dad4051d94024c88df49b667caea9c84"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "provider-json-search"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "parse-size",
+ "regex",
+ "serde_json",
+ "serde_yaml_ng",
+ "strsim",
+]
+
+[[package]]
+name = "provider-offering"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "candid",
+ "csv",
+ "ed25519-dalek",
+ "fs-err",
+ "hex",
+ "indexmap",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "strsim",
+ "tempfile",
+]
+
+[[package]]
+name = "provider-profile"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "fs-err",
+ "provider-json-search",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-use np_offering::{OfferingFilter, OfferingRegistry, ProductType, SearchQuery};
+use provider_offering::{OfferingFilter, OfferingRegistry, ProductType, SearchQuery};
 mod common;
 use common::*;
 

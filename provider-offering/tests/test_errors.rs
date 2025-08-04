@@ -1,4 +1,4 @@
-use np_offering::OfferingError;
+use provider_offering::OfferingError;
 use std::io;
 
 #[test]

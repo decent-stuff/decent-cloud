@@ -1,4 +1,6 @@
-use np_offering::{Currency, ProductType, ProviderOfferings, StockStatus, VirtualizationType};
+use provider_offering::{
+    Currency, ProductType, ProviderOfferings, StockStatus, VirtualizationType,
+};
 mod common;
 use common::*;
 

@@ -229,9 +229,9 @@ mod tests {
         ledger_map.delete("Label2", key.clone()).unwrap();
 
         // Ensure that the entry is not deleted from the ledger since the label doesn't match
-        let entries_np = ledger_map.entries.get("Label1").unwrap();
+        let entries_providers = ledger_map.entries.get("Label1").unwrap();
         assert_eq!(
-            entries_np.get(&key),
+            entries_providers.get(&key),
             Some(&LedgerEntry::new(
                 "Label1",
                 key.clone(),

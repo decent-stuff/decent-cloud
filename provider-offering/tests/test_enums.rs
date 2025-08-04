@@ -1,4 +1,4 @@
-use np_offering::{
+use provider_offering::{
     BillingInterval, Currency, ErrorCorrection, ProductType, StockStatus, VirtualizationType,
     Visibility,
 };

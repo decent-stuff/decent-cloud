@@ -110,7 +110,7 @@ interface NodeProviderProfileWithReputation {
 }
 
 interface OfferingEntry {
-  np_pub_key: Uint8Array;
+  provider_pub_key: Uint8Array;
   offering_compressed: Uint8Array;
 }
 
@@ -139,7 +139,7 @@ class NodeProviderManager {
     const nonce = await this.getCheckInNonce();
     const signature = await identity.sign(nonce);
     return await callCanister(
-      'node_provider_register',
+      'provider_register',
       [identity.pubkey, signature],
       this.actor
     );
@@ -152,7 +152,7 @@ class NodeProviderManager {
     const nonce = await this.getCheckInNonce();
     const signature = await identity.sign(nonce);
     return await callCanister(
-      'node_provider_check_in',
+      'provider_check_in',
       [identity.pubkey, memo, signature],
       this.actor
     );
@@ -163,7 +163,7 @@ class NodeProviderManager {
     identity: DccIdentity,
     profile: NodeProviderProfile
   ): Promise<ResultString> {
-    if (JSON.stringify(profile).length > MAX_NP_PROFILE_BYTES) {
+    if (JSON.stringify(profile).length > MAX_PROV_PROFILE_BYTES) {
       throw new Error('Profile payload too large');
     }
 
@@ -172,7 +172,7 @@ class NodeProviderManager {
     const fee = await this.getProfileUpdateFee();
 
     return await callCanister(
-      'node_provider_update_profile',
+      'provider_update_profile',
       [identity.pubkey, serialized, signature],
       this.actor
     );
@@ -184,7 +184,7 @@ class NodeProviderManager {
     offering: OfferingDetails
   ): Promise<ResultString> {
     const serialized = this.serializeOffering(offering);
-    if (serialized.length > MAX_NP_OFFERING_BYTES) {
+    if (serialized.length > MAX_PROV_OFFERING_BYTES) {
       throw new Error('Offering payload too large');
     }
 
@@ -192,7 +192,7 @@ class NodeProviderManager {
     const fee = await this.getOfferingUpdateFee();
 
     return await callCanister(
-      'node_provider_update_offering',
+      'provider_update_offering',
       [identity.pubkey, serialized, signature],
       this.actor
     );
@@ -200,13 +200,13 @@ class NodeProviderManager {
 
   // Queries
   async listCheckedIn(): Promise<string[]> {
-    const result = await callCanister('node_provider_list_checked_in', [], this.actor);
+    const result = await callCanister('provider_list_checked_in', [], this.actor);
     return result.Ok ? JSON.parse(result.Ok) : [];
   }
 
   async getProfile(pubkeyBytes: Uint8Array): Promise<NodeProviderProfileWithReputation | null> {
     return await callCanister(
-      'node_provider_get_profile_by_pubkey_bytes',
+      'provider_get_profile_by_pubkey_bytes',
       [pubkeyBytes],
       this.actor
     );
@@ -290,7 +290,7 @@ async function nodeProviderExample() {
 
     const offerings = await manager.searchOfferings("storage");
     for (const offering of offerings) {
-      const profile = await manager.getProfile(offering.np_pub_key);
+      const profile = await manager.getProfile(offering.provider_pub_key);
       console.log('Provider:', profile?.profile.name);
       console.log('Reputation:', profile?.reputation.toString());
       console.log('Offering:', decompressOffering(offering.offering_compressed));

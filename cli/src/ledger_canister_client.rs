@@ -114,48 +114,44 @@ impl LedgerCanister {
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
-    pub async fn node_provider_register(&self, key: &[u8], value: &[u8]) -> Result<String, String> {
+    pub async fn provider_register(&self, key: &[u8], value: &[u8]) -> Result<String, String> {
         let args = Encode!(&key, &value).map_err(|e| e.to_string())?;
-        let response = self.call_update("node_provider_register", &args).await?;
+        let response = self.call_update("provider_register", &args).await?;
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
-    pub async fn node_provider_check_in(
+    pub async fn provider_check_in(
         &self,
         key: &[u8],
         memo: &String,
         nonce_crypto_sig: &[u8],
     ) -> Result<String, String> {
         let args = Encode!(&key, &memo, &nonce_crypto_sig).map_err(|e| e.to_string())?;
-        let response = self.call_update("node_provider_check_in", &args).await?;
+        let response = self.call_update("provider_check_in", &args).await?;
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
-    pub async fn node_provider_update_profile(
+    pub async fn provider_update_profile(
         &self,
-        np_pubkey_bytes: &[u8],
-        np_profile_bytes: &[u8],
+        prov_pubkey_bytes: &[u8],
+        prov_profile_bytes: &[u8],
         crypto_signature: &[u8],
     ) -> Result<String, String> {
-        let args = Encode!(&np_pubkey_bytes, &np_profile_bytes, &crypto_signature)
+        let args = Encode!(&prov_pubkey_bytes, &prov_profile_bytes, &crypto_signature)
             .map_err(|e| e.to_string())?;
-        let response = self
-            .call_update("node_provider_update_profile", &args)
-            .await?;
+        let response = self.call_update("provider_update_profile", &args).await?;
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
-    pub async fn node_provider_update_offering(
+    pub async fn provider_update_offering(
         &self,
-        np_pubkey_bytes: &[u8],
-        np_offering_bytes: &[u8],
+        prov_pubkey_bytes: &[u8],
+        prov_offering_bytes: &[u8],
         crypto_signature: &[u8],
     ) -> Result<String, String> {
-        let args = Encode!(&np_pubkey_bytes, &np_offering_bytes, &crypto_signature)
+        let args = Encode!(&prov_pubkey_bytes, &prov_offering_bytes, &crypto_signature)
             .map_err(|e| e.to_string())?;
-        let response = self
-            .call_update("node_provider_update_offering", &args)
-            .await?;
+        let response = self.call_update("provider_update_offering", &args).await?;
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 

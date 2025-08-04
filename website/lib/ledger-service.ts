@@ -234,8 +234,8 @@ class LedgerService {
                 const entries = await this.getAllEntries();
                 const blocks = await this.getAllBlocks();
 
-                // Get all NPCheckIn entries (validators)
-                const checkInEntries = entries.filter(entry => entry.label === 'NPCheckIn');
+                // Get all ProvCheckIn entries (validators)
+                const checkInEntries = entries.filter(entry => entry.label === 'ProvCheckIn');
 
                 // Map to track validators by principal
                 const validatorMap = new Map<string, ValidatorInfo>();

@@ -59,7 +59,7 @@ dc user register --identity my-user
 #### For Providers
 
 ```bash
-dc np register --identity my-provider
+dc provider register --identity my-provider
 ```
 
 ## Next Steps

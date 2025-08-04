@@ -1,8 +1,8 @@
 mod test_utils;
 use crate::test_utils::{
     test_contract_sign_reply, test_contract_sign_request, test_contracts_list_pending,
-    test_get_id_reputation, test_icrc1_account_from_slice, test_np_check_in, test_np_register,
-    test_offering_add, test_offering_search, test_user_register, TestContext,
+    test_get_id_reputation, test_icrc1_account_from_slice, test_offering_add, test_offering_search,
+    test_provider_check_in, test_provider_register, test_user_register, TestContext,
 };
 use borsh::BorshDeserialize;
 use candid::{encode_one, Nat, Principal};
@@ -14,7 +14,7 @@ use dcc_common::{
 use decent_cloud_canister::canister_backend::icrc1::Icrc1StandardRecord;
 use decent_cloud_canister::DC_TOKEN_LOGO;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
-use np_offering::ServerOffering;
+use provider_offering::ServerOffering;
 
 #[test]
 fn test_get_set_timestamp() {
@@ -185,117 +185,117 @@ fn test_balances_and_transfers() {
 }
 
 #[test]
-fn test_np_registration_and_check_in() {
+fn test_provider_registration_and_check_in() {
     let ctx = TestContext::new();
     let ts_ns = ctx.get_timestamp_ns();
 
-    // Register one NP and commit one block, to make sure there is something in the ledger.
-    let (np_past, _reg1) = test_np_register(&ctx, b"np_past", 0);
+    // Register one Provider and commit one block, to make sure there is something in the ledger.
+    let (prov_past, _reg1) = test_provider_register(&ctx, b"prov_past", 0);
     assert_eq!(
-        test_np_check_in(&ctx, &np_past).unwrap(),
+        test_provider_check_in(&ctx, &prov_past).unwrap(),
         "Signature verified, check in successful. You have been charged 0.0 DC tokens".to_string()
     );
     ctx.commit();
 
-    // np_past now has 50 * 100 = 5000 tokens
+    // prov_past now has 50 * 100 = 5000 tokens
     let amount: TokenAmountE9s = 5000u32 as TokenAmountE9s * DC_TOKEN_DECIMALS_DIV;
     assert_eq!(
-        ctx.get_account_balance(&np_past.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov_past.as_icrc_compatible_account().into()),
         amount
     );
 
-    // Since the ledger is not empty, NP registration requires a payment of the registration fee
-    let (np1, reg1) = test_np_register(&ctx, b"np1", 0);
-    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
+    // Since the ledger is not empty, Provider registration requires a payment of the registration fee
+    let (prov1, reg1) = test_provider_register(&ctx, b"prov1", 0);
+    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account oklaa-ptl4i-uqysq-lxgo4-ya4ki-7dt3a-53rry-f7s47-ovxl4-r3rnm-5qe has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
     assert_eq!(
-        ctx.get_account_balance(&np1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
         0u64
     );
 
-    let (np2, reg2) = test_np_register(&ctx, b"np2", 0);
-    assert_eq!(reg2.unwrap_err(), "InsufficientFunds: account ejigd-cloes-e7n46-7uop4-cwkfh-ccuxk-ry2cf-adfeg-3ik3k-znob6-pae has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
+    let (prov2, reg2) = test_provider_register(&ctx, b"prov2", 0);
+    assert_eq!(reg2.unwrap_err(), "InsufficientFunds: account zrt5x-yw3i6-ez2tr-ua76a-qqbct-o2onk-vrbiw-36wsh-zzbyg-4tkbt-wae has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
     ctx.commit();
 
     // Initial reputation is 0
-    assert_eq!(test_get_id_reputation(&ctx, &np1), 0);
-    assert_eq!(test_get_id_reputation(&ctx, &np2), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov1), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov2), 0);
 
-    let np_past_acct = np_past.as_icrc_compatible_account().into();
-    let np2_acct = np2.as_icrc_compatible_account().into();
+    let prov_past_acct = prov_past.as_icrc_compatible_account().into();
+    let prov2_acct = prov2.as_icrc_compatible_account().into();
     let amount_send = 10 * DC_TOKEN_DECIMALS_DIV;
-    let response = ctx.transfer_funds(&np_past_acct, &np2_acct, amount_send);
+    let response = ctx.transfer_funds(&prov_past_acct, &prov2_acct, amount_send);
 
     assert!(response.is_ok());
 
     assert_eq!(
-        ctx.get_account_balance(&np_past.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov_past.as_icrc_compatible_account().into()),
         amount - amount_send - DC_TOKEN_TRANSFER_FEE_E9S
     );
     assert_eq!(
-        ctx.get_account_balance(&np2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
         amount_send
     );
 
-    // Now np1 still can't register
-    let (np1, reg1) = test_np_register(&ctx, b"np1", 0);
-    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account w7shl-xsw5s-kduqo-kx77s-nxs35-4zdh3-3tpob-nr4yc-2c6zw-qeyzj-rqe has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
+    // Now prov1 still can't register
+    let (prov1, reg1) = test_provider_register(&ctx, b"prov1", 0);
+    assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account oklaa-ptl4i-uqysq-lxgo4-ya4ki-7dt3a-53rry-f7s47-ovxl4-r3rnm-5qe has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
     assert_eq!(
-        ctx.get_account_balance(&np1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
         0u64
     );
 
-    // But np2 can, since it has enough funds
-    let (np2, reg2) = test_np_register(&ctx, b"np2", 0);
+    // But prov2 can, since it has enough funds
+    let (prov2, reg2) = test_provider_register(&ctx, b"prov2", 0);
     assert_eq!(
         reg2.unwrap(),
         "Registration complete! Thank you. You have been charged 0.500000000 DC tokens".to_string()
     );
     assert_eq!(
-        ctx.get_account_balance(&np2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
         9500000000u64
     );
 
     ctx.upgrade().expect("Canister upgrade failed");
     assert_eq!(
-        ctx.get_account_balance(&np2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
         9500000000u64
     );
 
     assert_eq!(
-        ctx.get_account_balance(&np1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
         0u64
     );
 
     ctx.commit();
-    // check in np2
+    // check in prov2
     assert_eq!(
-        test_np_check_in(&ctx, &np2).unwrap(),
+        test_provider_check_in(&ctx, &prov2).unwrap(),
         "Signature verified, check in successful. You have been charged 0.500000000 DC tokens"
             .to_string()
     );
     ctx.ffwd_to_next_block(ts_ns);
-    // Now np2 got a reward of 50 tokens distributed to it
-    // The balance is 50 (reward) + 10 (np_past transfer) - 0.5 (reg fee) - 0.5 (check in) = 59000000000 e9s
+    // Now prov2 got a reward of 50 tokens distributed to it
+    // The balance is 50 (reward) + 10 (prov_past transfer) - 0.5 (reg fee) - 0.5 (check in) = 59000000000 e9s
     assert_eq!(
-        ctx.get_account_balance(&np2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
         59000000000u64
     );
 
     ctx.upgrade().expect("Canister upgrade failed");
     assert_eq!(
-        ctx.get_account_balance(&np2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
         59000000000u64
     );
 
     assert_eq!(
-        ctx.get_account_balance(&np1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
         0u64
     );
 
     // Registration itself does not affect the reputation.
     reward_e9s_per_block_recalculate();
-    assert_eq!(test_get_id_reputation(&ctx, &np1), 0);
-    assert_eq!(test_get_id_reputation(&ctx, &np2), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov1), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov2), 0);
 }
 
 #[test]
@@ -303,20 +303,20 @@ fn test_reputation() {
     let ctx = TestContext::new();
     let ts_ns = ctx.get_timestamp_ns();
 
-    let _ = test_np_register(&ctx, b"np_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
+    let _ = test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
     ctx.ffwd_to_next_block(ts_ns);
 
-    let (np1, reg1) = test_np_register(&ctx, b"np1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (prov1, reg1) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
     assert_eq!(
         reg1.unwrap(),
         "Registration complete! Thank you. You have been charged 0.500000000 DC tokens".to_string()
     );
-    let (np2, reg2) = test_np_register(&ctx, b"np2", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (prov2, reg2) = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
     assert_eq!(
         reg2.unwrap(),
         "Registration complete! Thank you. You have been charged 0.500000000 DC tokens".to_string()
     );
-    let (np3, reg3) = test_np_register(&ctx, b"np3", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (prov3, reg3) = test_provider_register(&ctx, b"prov3", 2 * DC_TOKEN_DECIMALS_DIV);
     assert_eq!(
         reg3.unwrap(),
         "Registration complete! Thank you. You have been charged 0.500000000 DC tokens".to_string()
@@ -335,9 +335,9 @@ fn test_reputation() {
 
     ctx.ffwd_to_next_block(ts_ns);
 
-    assert_eq!(test_get_id_reputation(&ctx, &np1), 0);
-    assert_eq!(test_get_id_reputation(&ctx, &np2), 0);
-    assert_eq!(test_get_id_reputation(&ctx, &np3), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov1), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov2), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov3), 0);
 
     assert_eq!(test_get_id_reputation(&ctx, &u1), 0);
     assert_eq!(test_get_id_reputation(&ctx, &u2), 0);
@@ -348,10 +348,10 @@ fn test_offerings() {
     let ctx = TestContext::new();
     let ts_ns = ctx.get_timestamp_ns();
 
-    let _ = test_np_register(&ctx, b"np_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
+    let _ = test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
     ctx.ffwd_to_next_block(ts_ns);
 
-    let np1 = test_np_register(&ctx, b"np1", 2 * DC_TOKEN_DECIMALS_DIV).0;
+    let prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV).0;
     ctx.ffwd_to_next_block(ts_ns);
 
     assert_eq!(test_offering_search(&ctx, "").len(), 0);
@@ -362,14 +362,14 @@ fn test_offerings() {
         description: "A small VPS for testing".to_string(),
         unique_internal_identifier: "xxx-small".to_string(),
         product_page_url: "https://example.com/xxx-small".to_string(),
-        currency: np_offering::Currency::USD,
+        currency: provider_offering::Currency::USD,
         monthly_price: 2.0,
         setup_fee: 0.0,
-        visibility: np_offering::Visibility::Visible,
-        product_type: np_offering::ProductType::VPS,
-        virtualization_type: Some(np_offering::VirtualizationType::KVM),
-        billing_interval: np_offering::BillingInterval::Monthly,
-        stock: np_offering::StockStatus::InStock,
+        visibility: provider_offering::Visibility::Visible,
+        product_type: provider_offering::ProductType::VPS,
+        virtualization_type: Some(provider_offering::VirtualizationType::KVM),
+        billing_interval: provider_offering::BillingInterval::Monthly,
+        stock: provider_offering::StockStatus::InStock,
         processor_brand: Some("Intel".to_string()),
         processor_amount: Some(1),
         processor_cores: Some(1),
@@ -395,11 +395,14 @@ fn test_offerings() {
         payment_methods: vec!["Credit Card".to_string(), "PayPal".to_string()],
     };
 
-    test_offering_add(&ctx, &np1, &offering).unwrap();
+    test_offering_add(&ctx, &prov1, &offering).unwrap();
 
     let search_results = test_offering_search(&ctx, "");
     assert_eq!(search_results.len(), 1);
-    assert_eq!(search_results[0].provider_pubkey, np1.to_bytes_verifying());
+    assert_eq!(
+        search_results[0].provider_pubkey,
+        prov1.to_bytes_verifying()
+    );
     assert_eq!(
         search_results[0].server_offerings[0].offer_name,
         offering.offer_name
@@ -412,7 +415,10 @@ fn test_offerings() {
     ctx.ffwd_to_next_block(ts_ns);
     let search_results = test_offering_search(&ctx, "");
     assert_eq!(search_results.len(), 1);
-    assert_eq!(search_results[0].provider_pubkey, np1.to_bytes_verifying());
+    assert_eq!(
+        search_results[0].provider_pubkey,
+        prov1.to_bytes_verifying()
+    );
     assert_eq!(
         search_results[0].server_offerings[0].offer_name,
         offering.offer_name
@@ -424,7 +430,10 @@ fn test_offerings() {
 
     let search_results = test_offering_search(&ctx, "512 MB");
     assert_eq!(search_results.len(), 1);
-    assert_eq!(search_results[0].provider_pubkey, np1.to_bytes_verifying());
+    assert_eq!(
+        search_results[0].provider_pubkey,
+        prov1.to_bytes_verifying()
+    );
     assert_eq!(
         search_results[0].server_offerings[0].offer_name,
         offering.offer_name
@@ -444,34 +453,34 @@ fn test_offerings() {
     let u1 = test_user_register(&ctx, b"u1", 2 * DC_TOKEN_DECIMALS_DIV).0;
 
     assert_eq!(test_get_id_reputation(&ctx, &u1), 0);
-    assert_eq!(test_get_id_reputation(&ctx, &np1), 0);
+    assert_eq!(test_get_id_reputation(&ctx, &prov1), 0);
 
     // Test the rejection of a contract signing
-    contract_req_sign_flow(&ctx, &np1, &u1, &offering_id, "memo1".to_owned(), false);
+    contract_req_sign_flow(&ctx, &prov1, &u1, &offering_id, "memo1".to_owned(), false);
 
     // Test the acceptance of a contract signing
-    contract_req_sign_flow(&ctx, &np1, &u1, &offering_id, "memo2".to_owned(), true);
-    let np1_rep = test_get_id_reputation(&ctx, &np1);
+    contract_req_sign_flow(&ctx, &prov1, &u1, &offering_id, "memo2".to_owned(), true);
+    let prov1_rep = test_get_id_reputation(&ctx, &prov1);
     let u1_rep = test_get_id_reputation(&ctx, &u1);
 
     let pending_contracts = test_contracts_list_pending(&ctx, None);
     assert_eq!(pending_contracts.len(), 0);
-    let pending_contracts = test_contracts_list_pending(&ctx, Some(np1.to_bytes_verifying()));
+    let pending_contracts = test_contracts_list_pending(&ctx, Some(prov1.to_bytes_verifying()));
     assert_eq!(pending_contracts.len(), 0);
     ctx.ffwd_to_next_block(ts_ns);
 
     let pending_contracts = test_contracts_list_pending(&ctx, None);
     assert_eq!(pending_contracts.len(), 0);
-    let pending_contracts = test_contracts_list_pending(&ctx, Some(np1.to_bytes_verifying()));
+    let pending_contracts = test_contracts_list_pending(&ctx, Some(prov1.to_bytes_verifying()));
     assert_eq!(pending_contracts.len(), 0);
 
-    assert_eq!(test_get_id_reputation(&ctx, &np1), np1_rep);
+    assert_eq!(test_get_id_reputation(&ctx, &prov1), prov1_rep);
     assert_eq!(test_get_id_reputation(&ctx, &u1), u1_rep);
 }
 
 fn contract_req_sign_flow(
     ctx: &TestContext,
-    np1: &DccIdentity,
+    prov1: &DccIdentity,
     u1: &DccIdentity,
     offering_id: &str,
     memo: String,
@@ -482,8 +491,8 @@ fn contract_req_sign_flow(
     } else {
         println!("Testing a rejection of a contract signing");
     }
-    let np1_balance_before = ctx.get_account_balance(&np1.as_icrc_compatible_account().into());
-    let np1_rep_before = test_get_id_reputation(ctx, np1);
+    let prov1_balance_before = ctx.get_account_balance(&prov1.as_icrc_compatible_account().into());
+    let prov1_rep_before = test_get_id_reputation(ctx, prov1);
     let u1_balance_before = ctx.get_account_balance(&u1.as_icrc_compatible_account().into());
     let u1_rep_before = test_get_id_reputation(ctx, u1);
 
@@ -492,7 +501,7 @@ fn contract_req_sign_flow(
     test_contract_sign_request(
         ctx,
         u1,
-        &np1.to_bytes_verifying(),
+        &prov1.to_bytes_verifying(),
         offering_id,
         memo,
         contract_amount,
@@ -504,10 +513,10 @@ fn contract_req_sign_flow(
         u1_balance_before.clone() - contract_step_fee
     );
     assert_eq!(
-        ctx.get_account_balance(&np1.as_icrc_compatible_account().into()),
-        np1_balance_before
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
+        prov1_balance_before
     );
-    assert_eq!(test_get_id_reputation(ctx, np1), np1_rep_before);
+    assert_eq!(test_get_id_reputation(ctx, prov1), prov1_rep_before);
     assert_eq!(
         test_get_id_reputation(ctx, u1),
         u1_rep_before + contract_step_fee
@@ -516,7 +525,7 @@ fn contract_req_sign_flow(
     let pending_contracts = test_contracts_list_pending(ctx, None);
     assert_eq!(pending_contracts.len(), 1);
 
-    let pending_contracts = test_contracts_list_pending(ctx, Some(np1.to_bytes_verifying()));
+    let pending_contracts = test_contracts_list_pending(ctx, Some(prov1.to_bytes_verifying()));
     assert_eq!(pending_contracts.len(), 1);
 
     let (contract_id, contract_req_bytes) = pending_contracts[0].clone();
@@ -526,14 +535,14 @@ fn contract_req_sign_flow(
     assert_eq!(contract_id, contract_req.calc_contract_id());
 
     let reply = ContractSignReply::new(
-        np1.to_bytes_verifying(),
+        prov1.to_bytes_verifying(),
         "test_memo_wrong",
         contract_id,
         accept,
         "Thank you for signing up",
         "Here are some details",
     );
-    let res = test_contract_sign_reply(ctx, np1, u1, &reply).unwrap();
+    let res = test_contract_sign_reply(ctx, prov1, u1, &reply).unwrap();
     assert_eq!(res, "Contract signing reply submitted! Thank you. You have been charged 0.010000000 DC tokens as a fee, and your reputation has been bumped accordingly");
 
     if accept {
@@ -542,12 +551,12 @@ fn contract_req_sign_flow(
             u1_balance_before - 2 * contract_step_fee - contract_amount
         );
         assert_eq!(
-            ctx.get_account_balance(&np1.as_icrc_compatible_account().into()),
-            np1_balance_before + contract_amount
+            ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
+            prov1_balance_before + contract_amount
         );
         assert_eq!(
-            test_get_id_reputation(ctx, np1),
-            np1_rep_before + contract_step_fee
+            test_get_id_reputation(ctx, prov1),
+            prov1_rep_before + contract_step_fee
         );
         assert_eq!(
             test_get_id_reputation(ctx, u1),
@@ -559,10 +568,10 @@ fn contract_req_sign_flow(
             u1_balance_before - contract_step_fee
         );
         assert_eq!(
-            ctx.get_account_balance(&np1.as_icrc_compatible_account().into()),
-            np1_balance_before - contract_step_fee
+            ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
+            prov1_balance_before - contract_step_fee
         );
-        assert_eq!(test_get_id_reputation(ctx, np1), np1_rep_before);
+        assert_eq!(test_get_id_reputation(ctx, prov1), prov1_rep_before);
         assert_eq!(test_get_id_reputation(ctx, u1), u1_rep_before);
     }
 }

@@ -41,7 +41,7 @@ pub enum Commands {
     Account(AccountArgs),
     /// Node Provider management commands
     #[command(subcommand)]
-    Np(NpCommands),
+    Provider(ProviderCommands),
     /// User management commands
     #[command(subcommand)]
     User(UserCommands),
@@ -95,7 +95,7 @@ pub struct AccountArgs {
 
 #[derive(Subcommand)]
 #[command(subcommand_required = true, arg_required_else_help = true)]
-pub enum NpCommands {
+pub enum ProviderCommands {
     /// List all node provider identities
     List(ListArgs),
 

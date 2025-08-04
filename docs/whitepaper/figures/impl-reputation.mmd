@@ -1,16 +1,16 @@
 graph TB
   D["Developer"] -->|Node Payment| TX
-  TX["Transaction"] -->|Payment| NP["Node Provider"]
+  TX["Transaction"] -->|Payment| Provider
   TX -->|Fee| FEE["Platform R&D"]
 
-  FEE -->|Reputation Increase| RNP["NP Reputation"]
+  FEE -->|Reputation Increase| RP["Provider Reputation"]
   FEE -->|Reputation Increase| RD["Dev Reputation"]
 
-  RNP --->|Multiple Uses| U1["Matching, Rewards, DAO Participation"]
+  RP --->|Multiple Uses| U1["Matching, Rewards, DAO Participation"]
   RD -->|Multiple Uses| U2["Matching, DAO Participation"]
 
-  RNP -->|Spend to decrease| RD
-  RD -->|Spend to decrease| RNP
+  RP -->|Spend to decrease| RD
+  RD -->|Spend to decrease| RP
 
-  RNP -->|Decay|Burn
+  RP -->|Decay|Burn
   RD -->|Decay|Burn

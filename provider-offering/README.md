@@ -1,8 +1,8 @@
-# np-offering: Network Provider Offering Management
+# provider-offering: Network Provider Offering Management
 
 ## Overview
 
-The np-offering library provides efficient management and discovery of compute offerings from network providers within the Decent Cloud ecosystem. It enables providers to publish their available services—including VPS, dedicated servers, and cloud instances—with detailed specifications, pricing, and availability information.
+The provider-offering library provides efficient management and discovery of compute offerings from network providers within the Decent Cloud ecosystem. It enables providers to publish their available services—including VPS, dedicated servers, and cloud instances—with detailed specifications, pricing, and availability information.
 
 ### Key Capabilities
 

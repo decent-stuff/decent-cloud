@@ -1,5 +1,5 @@
 graph LR
   A[Public Internet] -- Forwarded Ports --> N[Node]
-  A[Public Internet] -- HTTP/HTTPS Ingress --> NP[Node Provider]
-  NP -- SNI Routing --> RP[HAProxy/Nginx Reverse Proxy]
+  A[Public Internet] -- HTTP/HTTPS Ingress --> Provider
+  Provider -- SNI Routing --> RP[HAProxy/Nginx Reverse Proxy]
   RP -- Unterminated TLS traffic --> N

@@ -1,5 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use np_json_search::value_matches;
+use provider_json_search::value_matches;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_yaml_ng::{self, Value as YamlValue};

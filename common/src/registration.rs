@@ -1,6 +1,6 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, info,
-    reward_e9s_per_block, AHashMap, DccIdentity, TokenAmountE9s, LABEL_NP_REGISTER,
+    reward_e9s_per_block, AHashMap, DccIdentity, TokenAmountE9s, LABEL_PROV_REGISTER,
     LABEL_USER_REGISTER,
 };
 use candid::Principal;
@@ -106,7 +106,7 @@ pub fn do_account_register(
 
     if label == LABEL_USER_REGISTER {
         inc_num_users();
-    } else if label == LABEL_NP_REGISTER {
+    } else if label == LABEL_PROV_REGISTER {
         inc_num_providers();
     }
 

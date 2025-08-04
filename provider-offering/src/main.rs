@@ -1,4 +1,4 @@
-use np_offering::ProviderOfferings;
+use provider_offering::ProviderOfferings;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -32,10 +32,14 @@ fn main() {
         let filtered = match search_field.as_str() {
             "offer_name" => offerings.find_by_name(search_value),
             "product_type" => match search_value.to_lowercase().as_str() {
-                "vps" => offerings.find_by_product_type(&np_offering::ProductType::VPS),
-                "dedicated" => offerings.find_by_product_type(&np_offering::ProductType::Dedicated),
-                "cloud" => offerings.find_by_product_type(&np_offering::ProductType::Cloud),
-                "managed" => offerings.find_by_product_type(&np_offering::ProductType::Managed),
+                "vps" => offerings.find_by_product_type(&provider_offering::ProductType::VPS),
+                "dedicated" => {
+                    offerings.find_by_product_type(&provider_offering::ProductType::Dedicated)
+                }
+                "cloud" => offerings.find_by_product_type(&provider_offering::ProductType::Cloud),
+                "managed" => {
+                    offerings.find_by_product_type(&provider_offering::ProductType::Managed)
+                }
                 _ => {
                     eprintln!("Unknown product type: {}", search_value);
                     std::process::exit(1);

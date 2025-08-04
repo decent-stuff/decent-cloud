@@ -72,9 +72,9 @@ export default function MarketplacePage() {
         await ledgerService.initialize();
         const allEntries = await ledgerService.getAllEntries();
 
-        // Filter entries with the label "NPOffering"
+        // Filter entries with the label "ProvOffering"
         const offeringEntries = allEntries.filter(
-          (entry) => entry.label === "NPOffering"
+          (entry) => entry.label === "ProvOffering"
         );
 
         // Create a map to track seen keys to handle duplicates

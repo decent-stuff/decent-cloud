@@ -62,7 +62,7 @@ function handleError(
 
 /**
  * Updates a provider's offering with the given JSON data
- * This implementation makes an authenticated update call to the node_provider_update_offering endpoint
+ * This implementation makes an authenticated update call to the provider_update_offering endpoint
  * with a cryptographically signed payload
  *
  * @param offeringJson The JSON string containing the offering data
@@ -124,10 +124,10 @@ export async function updateOffering(
         // Create a signature of the offering data
         const signatureBytes = await ed25519Sign(secretKeyRaw, offeringBytes);
 
-        // Make the authenticated update call to node_provider_update_offering
+        // Make the authenticated update call to provider_update_offering
         try {
             const result = await updateCanister(
-                'node_provider_update_offering',
+                'provider_update_offering',
                 [publicKeyBytes, offeringBytes, signatureBytes],
                 identity
             );

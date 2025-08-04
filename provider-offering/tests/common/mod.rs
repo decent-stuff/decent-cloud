@@ -1,9 +1,9 @@
-//! Common test utilities and shared test data for the np-offering crate
+//! Common test utilities and shared test data for the provider-offering crate
 
 #![allow(dead_code)]
 
 use ed25519_dalek::{SigningKey, VerifyingKey, SECRET_KEY_LENGTH};
-use np_offering::{
+use provider_offering::{
     BillingInterval, Currency, ErrorCorrection, ProductType, ProviderPubkey, StockStatus,
     VirtualizationType, Visibility,
 };

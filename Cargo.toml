@@ -5,9 +5,9 @@ members = [
     "common",
     "ic-canister",
     "ledger-map",
-    "np-offering",
-    "np-profile",
-    "np-json-search",
+    "provider-json-search",
+    "provider-offering",
+    "provider-profile",
     "wasm",
 ]
 
@@ -56,8 +56,8 @@ log = "0.4"
 memmap2 = "0.9"
 num-traits = "0.2"
 num-bigint = { version = "0.4", default-features = false, features = ["serde"] }
-np-offering = { path = "np-offering" }
-np-profile = { path = "np-profile" }
+provider-offering = { path = "provider-offering" }
+provider-profile = { path = "provider-profile" }
 parse-size = "1.1.0"
 pem = "3.0"
 pkcs8 = "0.10"

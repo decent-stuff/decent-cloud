@@ -1,23 +1,23 @@
-use crate::argparse::NpCommands;
+use crate::argparse::ProviderCommands;
 use crate::identity::{list_identities, list_local_identities, ListIdentityType};
 use dcc_common::DccIdentity;
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use ledger_map::LedgerMap;
 use log::info;
-use np_offering::ProviderOfferings;
+use provider_offering::ProviderOfferings;
 use std::{path::PathBuf, time::SystemTime};
 
 use crate::ledger::ledger_data_fetch;
 
-pub async fn handle_np_command(
-    np_cmd: NpCommands,
+pub async fn handle_provider_command(
+    provider_cmd: ProviderCommands,
     network_url: &str,
     ledger_canister_id: candid::Principal,
     identity: Option<String>,
     mut ledger_local: LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match np_cmd {
-        NpCommands::List(list_args) => {
+    match provider_cmd {
+        ProviderCommands::List(list_args) => {
             if list_args.only_local {
                 list_local_identities(list_args.balances)?
             } else {
@@ -28,7 +28,7 @@ pub async fn handle_np_command(
                 )?
             }
         }
-        NpCommands::Register => {
+        ProviderCommands::Register => {
             let identity =
                 identity.expect("Identity must be specified for this command, use --identity");
             let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
@@ -39,11 +39,11 @@ pub async fn handle_np_command(
             let canister =
                 LedgerCanister::new_with_dcc_id(network_url, ledger_canister_id, &dcc_id).await?;
             let result = canister
-                .node_provider_register(&pubkey_bytes, pubkey_signature.to_bytes().as_slice())
+                .provider_register(&pubkey_bytes, pubkey_signature.to_bytes().as_slice())
                 .await?;
             println!("Register: {}", result);
         }
-        NpCommands::CheckIn(check_in_args) => {
+        ProviderCommands::CheckIn(check_in_args) => {
             if check_in_args.only_nonce {
                 let nonce_bytes =
                     LedgerCanister::new_without_identity(network_url, ledger_canister_id)
@@ -101,7 +101,7 @@ pub async fn handle_np_command(
                     LedgerCanister::new_with_dcc_id(network_url, ledger_canister_id, &dcc_ident)
                         .await?;
                 let result = canister
-                    .node_provider_check_in(
+                    .provider_check_in(
                         &dcc_ident.to_bytes_verifying(),
                         &check_in_memo,
                         &nonce_crypto_signature.to_bytes(),
@@ -111,48 +111,49 @@ pub async fn handle_np_command(
                 info!("Check-in success: {}", result);
             }
         }
-        NpCommands::UpdateProfile(update_profile_args) => {
+        ProviderCommands::UpdateProfile(update_profile_args) => {
             let identity =
                 identity.expect("Identity must be specified for this command, use --identity");
 
             let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
-            let np_profile = np_profile::Profile::new_from_file(&update_profile_args.profile_file)?;
-            let np_profile_bytes = borsh::to_vec(&np_profile)?;
-            let crypto_signature = dcc_id.sign(&np_profile_bytes)?;
+            let prov_profile =
+                provider_profile::Profile::new_from_file(&update_profile_args.profile_file)?;
+            let prov_profile_bytes = borsh::to_vec(&prov_profile)?;
+            let crypto_signature = dcc_id.sign(&prov_profile_bytes)?;
 
             let canister =
                 LedgerCanister::new_with_dcc_id(network_url, ledger_canister_id, &dcc_id).await?;
             let result = canister
-                .node_provider_update_profile(
+                .provider_update_profile(
                     &dcc_id.to_bytes_verifying(),
-                    &np_profile_bytes,
+                    &prov_profile_bytes,
                     &crypto_signature.to_bytes(),
                 )
                 .await
                 .map_err(|e| format!("Update profile failed: {}", e))?;
             info!("Profile update response: {}", result);
         }
-        NpCommands::UpdateOffering(update_offering_args) => {
+        ProviderCommands::UpdateOffering(update_offering_args) => {
             let identity =
                 identity.expect("Identity must be specified for this command, use --identity");
             let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
             // ProviderOfferings::new_from_file returns an error if the validation fails
-            let np_offering = ProviderOfferings::new_from_file(
+            let prov_offering = ProviderOfferings::new_from_file(
                 &dcc_id.to_bytes_verifying(),
                 &update_offering_args.offering_file,
             )?;
-            let np_offering_json = np_offering.serialize_as_json()?;
-            let np_offering_bytes = np_offering_json.as_bytes();
-            let crypto_signature = dcc_id.sign(np_offering_bytes)?;
+            let prov_offering_json = prov_offering.serialize_as_json()?;
+            let prov_offering_bytes = prov_offering_json.as_bytes();
+            let crypto_signature = dcc_id.sign(prov_offering_bytes)?;
 
             let canister =
                 LedgerCanister::new_with_dcc_id(network_url, ledger_canister_id, &dcc_id).await?;
             let result = canister
-                .node_provider_update_offering(
+                .provider_update_offering(
                     &dcc_id.to_bytes_verifying(),
-                    np_offering_bytes,
+                    prov_offering_bytes,
                     &crypto_signature.to_bytes(),
                 )
                 .await

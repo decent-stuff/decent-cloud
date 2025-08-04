@@ -7,8 +7,8 @@ use dcc_common::{
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
     rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
     RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS, DATA_PULL_BYTES_BEFORE_LEN,
-    LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
-    LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS, LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING,
+    LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
     MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
 use ic_cdk::println;
@@ -22,12 +22,12 @@ use std::time::Duration;
 thread_local! {
     // Ledger that indexes only specific labels, to save on memory
     pub(crate) static LEDGER_MAP: RefCell<LedgerMap> = RefCell::new(LedgerMap::new(Some(vec![
-        LABEL_NP_REGISTER.to_string(),
-        LABEL_NP_CHECK_IN.to_string(),
+        LABEL_PROV_REGISTER.to_string(),
+        LABEL_PROV_CHECK_IN.to_string(),
         LABEL_USER_REGISTER.to_string(),
         LABEL_REWARD_DISTRIBUTION.to_string(),
-        LABEL_NP_PROFILE.to_string(),
-        LABEL_NP_OFFERING.to_string(),
+        LABEL_PROV_PROFILE.to_string(),
+        LABEL_PROV_OFFERING.to_string(),
         LABEL_CONTRACT_SIGN_REQUEST.to_string(),
         LABEL_LINKED_IC_IDS.to_string(),
     ])).expect("Failed to create LedgerMap"));
@@ -143,7 +143,7 @@ pub(crate) fn _get_registration_fee() -> TokenAmountE9s {
     account_registration_fee_e9s()
 }
 
-pub(crate) fn _np_register(
+pub(crate) fn _provider_register(
     pubkey_bytes: Vec<u8>,
     signature_bytes: Vec<u8>,
 ) -> Result<String, String> {
@@ -151,7 +151,7 @@ pub(crate) fn _np_register(
     LEDGER_MAP.with(|ledger| {
         dcc_common::do_account_register(
             &mut ledger.borrow_mut(),
-            LABEL_NP_REGISTER,
+            LABEL_PROV_REGISTER,
             pubkey_bytes,
             signature_bytes,
         )
@@ -173,14 +173,14 @@ pub(crate) fn _user_register(
     })
 }
 
-pub(crate) fn _node_provider_check_in(
+pub(crate) fn _provider_check_in(
     pubkey_bytes: Vec<u8>,
     memo: String,
     nonce_signature: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
     LEDGER_MAP.with(|ledger| {
-        dcc_common::do_node_provider_check_in(
+        dcc_common::do_provider_check_in(
             &mut ledger.borrow_mut(),
             pubkey_bytes,
             memo,
@@ -189,14 +189,14 @@ pub(crate) fn _node_provider_check_in(
     })
 }
 
-pub(crate) fn _node_provider_update_profile(
+pub(crate) fn _provider_update_profile(
     pubkey_bytes: Vec<u8>,
     profile_serialized: Vec<u8>,
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
     LEDGER_MAP.with(|ledger| {
-        dcc_common::do_node_provider_update_profile(
+        dcc_common::do_provider_update_profile(
             &mut ledger.borrow_mut(),
             pubkey_bytes,
             profile_serialized,
@@ -205,14 +205,14 @@ pub(crate) fn _node_provider_update_profile(
     })
 }
 
-pub(crate) fn _node_provider_update_offering(
+pub(crate) fn _provider_update_offering(
     pubkey_bytes: Vec<u8>,
     update_offering_payload: Vec<u8>,
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
     // To prevent DOS attacks, a fee is charged for executing this operation
     LEDGER_MAP.with(|ledger| {
-        dcc_common::do_node_provider_update_offering(
+        dcc_common::do_provider_update_offering(
             &mut ledger.borrow_mut(),
             pubkey_bytes,
             update_offering_payload,
@@ -221,16 +221,16 @@ pub(crate) fn _node_provider_update_offering(
     })
 }
 
-pub(crate) fn _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
-    let np_profile = LEDGER_MAP
-        .with(|ledger| dcc_common::do_node_provider_get_profile(&ledger.borrow(), pubkey_bytes));
-    np_profile
-        .map(|np_profile| serde_json::to_string_pretty(&np_profile).expect("Failed to encode"))
+pub(crate) fn _provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
+    let prov_profile = LEDGER_MAP
+        .with(|ledger| dcc_common::do_provider_get_profile(&ledger.borrow(), pubkey_bytes));
+    prov_profile
+        .map(|prov_profile| serde_json::to_string_pretty(&prov_profile).expect("Failed to encode"))
 }
 
-pub(crate) fn _node_provider_get_profile_by_principal(principal: Principal) -> Option<String> {
+pub(crate) fn _provider_get_profile_by_principal(principal: Principal) -> Option<String> {
     let pubkey_bytes = get_pubkey_from_principal(principal);
-    _node_provider_get_profile_by_pubkey_bytes(pubkey_bytes)
+    _provider_get_profile_by_pubkey_bytes(pubkey_bytes)
 }
 
 pub(crate) fn _get_check_in_nonce() -> Vec<u8> {
@@ -304,14 +304,14 @@ pub(crate) fn _get_identity_reputation(identity: Vec<u8>) -> u64 {
     reputation_get(identity)
 }
 
-pub(crate) fn _node_provider_list_checked_in() -> Result<Vec<String>, String> {
+pub(crate) fn _provider_list_checked_in() -> Result<Vec<String>, String> {
     LEDGER_MAP.with(|ledger| {
         let binding = ledger.borrow();
-        let np_vec = binding
-            .next_block_iter(Some(LABEL_NP_CHECK_IN))
+        let provider_vec = binding
+            .next_block_iter(Some(LABEL_PROV_CHECK_IN))
             .map(|entry| String::from_utf8_lossy(entry.key()).to_string())
             .collect::<Vec<String>>();
-        Ok(np_vec)
+        Ok(provider_vec)
     })
 }
 
@@ -507,18 +507,18 @@ pub(crate) fn _run_periodic_task() {
     ledger_periodic_task();
 }
 
-pub(crate) fn _node_provider_list_registered() -> Result<Vec<String>, String> {
+pub(crate) fn _provider_list_registered() -> Result<Vec<String>, String> {
     LEDGER_MAP.with(|ledger| {
         let binding = ledger.borrow();
-        let np_vec = binding
-            .iter(Some(LABEL_NP_REGISTER))
+        let provider_vec = binding
+            .iter(Some(LABEL_PROV_REGISTER))
             .map(|entry| {
-                let np = String::from_utf8_lossy(entry.key());
+                let provider = String::from_utf8_lossy(entry.key());
                 let acct = get_account_from_pubkey(entry.value());
                 let balance = account_balance_get(&acct);
-                format!("{} ==> {} (acct balance: {})", np, acct, balance)
+                format!("{} ==> {} (acct balance: {})", provider, acct, balance)
             })
             .collect::<Vec<String>>();
-        Ok(np_vec)
+        Ok(provider_vec)
     })
 }

@@ -1,6 +1,6 @@
 use crate::{
     amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reward_e9s_per_block,
-    warn, AHashMap, DccIdentity, TokenAmountE9s, LABEL_NP_OFFERING, MAX_NP_OFFERING_BYTES,
+    warn, AHashMap, DccIdentity, TokenAmountE9s, LABEL_PROV_OFFERING, MAX_PROV_OFFERING_BYTES,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 use function_name::named;
@@ -8,7 +8,7 @@ use function_name::named;
 #[allow(unused_imports)]
 use ic_cdk::println;
 use ledger_map::LedgerMap;
-use np_offering::ProviderOfferings;
+use provider_offering::ProviderOfferings;
 use std::cell::RefCell;
 
 thread_local! {
@@ -27,7 +27,7 @@ pub fn get_num_offerings() -> u64 {
     NUM_OFFERINGS_TOTAL.with(|n| *n.borrow())
 }
 
-fn np_offering_update_fee_e9s() -> TokenAmountE9s {
+fn provider_offering_update_fee_e9s() -> TokenAmountE9s {
     reward_e9s_per_block() / 10000
 }
 
@@ -44,7 +44,7 @@ pub enum UpdateOfferingsPayload {
 
 impl UpdateOfferingsPayload {
     pub fn new(offerings_payload: &[u8], crypto_signature_bytes: &[u8]) -> Result<Self, String> {
-        if offerings_payload.len() > MAX_NP_OFFERING_BYTES {
+        if offerings_payload.len() > MAX_PROV_OFFERING_BYTES {
             return Err("Offering payload too long".to_string());
         }
         Ok(UpdateOfferingsPayload::V1(UpdateOfferingsPayloadV1 {
@@ -69,13 +69,13 @@ impl UpdateOfferingsPayload {
     ) -> Result<ProviderOfferings, String> {
         let csv_data = String::from_utf8(self.payload_serialized().to_vec())
             .map_err(|e| format!("Invalid UTF-8 data: {}", e))?;
-        np_offering::ProviderOfferings::new_from_str(provider_pubkey, &csv_data)
+        provider_offering::ProviderOfferings::new_from_str(provider_pubkey, &csv_data)
             .map_err(|e| format!("CSV parsing error: {}", e))
     }
 }
 
 #[named]
-pub fn do_node_provider_update_offering(
+pub fn do_provider_update_offering(
     ledger: &mut LedgerMap,
     pubkey_bytes: Vec<u8>,
     offering_serialized: Vec<u8>,
@@ -95,7 +95,7 @@ pub fn do_node_provider_update_offering(
 
     set_offering_num_per_provider(pubkey_bytes.clone(), num_offering_instances as u64);
 
-    let fees = np_offering_update_fee_e9s();
+    let fees = provider_offering_update_fee_e9s();
     charge_fees_to_account_no_bump_reputation(
         ledger,
         &dcc_id.as_icrc_compatible_account(),
@@ -104,7 +104,7 @@ pub fn do_node_provider_update_offering(
     )?;
     // Store the original signed payload in the ledger
     ledger
-        .upsert(LABEL_NP_OFFERING, &pubkey_bytes, payload_bytes)
+        .upsert(LABEL_PROV_OFFERING, &pubkey_bytes, payload_bytes)
         .map(|_| {
             format!(
                 "Offering updated! Thank you. You have been charged {} tokens",
@@ -125,8 +125,8 @@ pub fn do_get_matching_offerings(
     let search_filter = search_filter.trim();
 
     for entry in ledger
-        .iter(Some(LABEL_NP_OFFERING))
-        .chain(ledger.next_block_iter(Some(LABEL_NP_OFFERING)))
+        .iter(Some(LABEL_PROV_OFFERING))
+        .chain(ledger.next_block_iter(Some(LABEL_PROV_OFFERING)))
     {
         // Only the latest ProviderOfferings entry is returned in the iterator per provider
         let payload_decoded = match UpdateOfferingsPayload::deserialize(entry.value()) {

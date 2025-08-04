@@ -1,12 +1,12 @@
 [package]
-name = "np-profile"
+name = "provider-profile"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
 borsh.workspace = true
 fs-err = { workspace = true }
-np-json-search = { path = "../np-json-search" }
+provider-json-search = { path = "../provider-json-search" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }

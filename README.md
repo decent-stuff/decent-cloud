@@ -91,7 +91,7 @@ dc keygen --generate --identity my-id
 dc user register --identity my-user
 
 # For providers/validators
-dc np register --identity my-provider
+dc provider register --identity my-provider
 ```
 
 Continue with [Getting Started](docs/getting-started.md) or [Mining & Validation](docs/mining-and-validation.md) for next steps.

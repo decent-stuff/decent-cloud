@@ -3,7 +3,7 @@ use crate::{
     charge_fees_to_account_no_bump_reputation, fn_info, get_account_from_pubkey, info,
     ledger_funds_transfer, platform_specific::get_timestamp_ns, DccIdentity, TokenAmountE9s,
     TransferError, BLOCK_INTERVAL_SECS, DC_TOKEN_DECIMALS_DIV, FIRST_BLOCK_TIMESTAMP_NS,
-    KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
+    KEY_LAST_REWARD_DISTRIBUTION_TS, LABEL_PROV_CHECK_IN, LABEL_PROV_REGISTER,
     LABEL_REWARD_DISTRIBUTION, MINTING_ACCOUNT, REWARD_HALVING_AFTER_BLOCKS,
     TRANSFER_MEMO_BYTES_MAX, VALIDATION_MEMO_BYTES_MAX,
 };
@@ -150,14 +150,14 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
     reward_e9s_per_block_recalculate();
     let rewards_e9_to_distribute = calc_token_rewards_e9_since_timestamp_ns(since_ts);
     let mut response_text = Vec::new();
-    let eligible_nps = ledger
-        .next_block_iter(Some(LABEL_NP_CHECK_IN))
+    let eligible_providers = ledger
+        .next_block_iter(Some(LABEL_PROV_CHECK_IN))
         .cloned()
         .collect::<Vec<_>>();
 
-    if eligible_nps.is_empty() {
+    if eligible_providers.is_empty() {
         let msg = format!(
-            "Distributing reward of {} tokens: no eligible NPs",
+            "Distributing reward of {} tokens: no eligible Providers",
             amount_as_string(rewards_e9_to_distribute)
         );
         info!("{}", msg);
@@ -170,12 +170,13 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
         });
     }
 
-    let token_rewards_per_np = rewards_e9_to_distribute / (eligible_nps.len() as TokenAmountE9s);
+    let token_rewards_per_provider =
+        rewards_e9_to_distribute / (eligible_providers.len() as TokenAmountE9s);
     response_text.push(format!(
-        "Distributing reward of {} tokens to {} NPs = {} tokens per NP",
+        "Distributing reward of {} tokens to {} Providers = {} tokens per Provider",
         amount_as_string(rewards_e9_to_distribute),
-        eligible_nps.len(),
-        amount_as_string(token_rewards_per_np)
+        eligible_providers.len(),
+        amount_as_string(token_rewards_per_provider)
     ));
     info!("{}", response_text.iter().last().unwrap());
 
@@ -190,21 +191,21 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
             message: e.to_string(),
         })?;
 
-    for np in eligible_nps {
-        let np_acct = get_account_from_pubkey(np.key());
+    for provider in eligible_providers {
+        let provider_acct = get_account_from_pubkey(provider.key());
 
         let balance_to_after =
-            account_balance_get(&np_acct) + token_rewards_per_np as TokenAmountE9s;
+            account_balance_get(&provider_acct) + token_rewards_per_provider as TokenAmountE9s;
         ledger_funds_transfer(
             ledger,
             FundsTransfer::new(
                 MINTING_ACCOUNT,
-                np_acct,
+                provider_acct,
                 None,
                 None,
                 Some(get_timestamp_ns()),
                 vec![],
-                token_rewards_per_np,
+                token_rewards_per_provider,
                 0,
                 balance_to_after,
             ),
@@ -218,7 +219,7 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
 }
 
 #[named]
-pub fn do_node_provider_check_in(
+pub fn do_provider_check_in(
     ledger: &mut LedgerMap,
     pubkey_bytes: Vec<u8>,
     memo: String,
@@ -235,9 +236,9 @@ pub fn do_node_provider_check_in(
         ));
     }
 
-    // Check that the NP is already registered
+    // Check that the Provider is already registered
     ledger
-        .get(LABEL_NP_REGISTER, &pubkey_bytes)
+        .get(LABEL_PROV_REGISTER, &pubkey_bytes)
         .map_err(|e| format!("Provider not yet registered in the Ledger: {}", e))?;
 
     // Verify the signature
@@ -277,7 +278,7 @@ pub fn do_node_provider_check_in(
     let payload_bytes = payload.to_bytes().unwrap();
 
     Ok(ledger
-        .upsert(LABEL_NP_CHECK_IN, pubkey_bytes, &payload_bytes)
+        .upsert(LABEL_PROV_CHECK_IN, pubkey_bytes, &payload_bytes)
         .map(|_| {
             format!(
                 "Signature verified, check in successful. You have been charged {} tokens",
@@ -287,7 +288,7 @@ pub fn do_node_provider_check_in(
 }
 
 pub fn rewards_current_block_checked_in(ledger: &LedgerMap) -> usize {
-    ledger.next_block_iter(Some(LABEL_NP_CHECK_IN)).count()
+    ledger.next_block_iter(Some(LABEL_PROV_CHECK_IN)).count()
 }
 
 #[cfg(test)]

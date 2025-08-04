@@ -1,5 +1,5 @@
 [package]
-name = "np-json-search"
+name = "provider-json-search"
 version.workspace = true
 edition.workspace = true
 

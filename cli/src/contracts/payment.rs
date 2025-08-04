@@ -1,5 +1,5 @@
 use dcc_common::{PaymentEntries, PaymentEntry, PaymentEntryWithAmount, TokenAmountE9s};
-use np_offering::ServerOffering;
+use provider_offering::ServerOffering;
 use std::collections::HashMap;
 
 pub fn prompt_for_payment_entries(

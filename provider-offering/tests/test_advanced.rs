@@ -1,4 +1,4 @@
-use np_offering::{
+use provider_offering::{
     Currency, OfferingFilter, OfferingRegistry, ProductType, SearchQuery, StockStatus,
     VirtualizationType,
 };

@@ -6,9 +6,9 @@ use dcc_common::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use np_offering::{ProviderOfferings, ServerOffering};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
+use provider_offering::{ProviderOfferings, ServerOffering};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -241,7 +241,7 @@ pub fn test_icrc1_account_from_slice(bytes: &[u8]) -> Account {
 // ---- Node Provider and User Management Functions ----
 
 #[allow(dead_code)]
-pub fn test_np_register(
+pub fn test_provider_register(
     ctx: &TestContext,
     seed: &[u8],
     initial_funds: TokenAmountE9s,
@@ -259,7 +259,7 @@ pub fn test_np_register(
         ctx.pic,
         ctx.canister_id,
         dcc_identity.to_ic_principal(),
-        "node_provider_register",
+        "provider_register",
         Encode!(&pubkey_bytes, &pubkey_signature.to_bytes()).unwrap(),
         Result<String, String>
     );
@@ -305,7 +305,10 @@ pub fn test_get_id_reputation(ctx: &TestContext, dcc_id: &DccIdentity) -> u64 {
 }
 
 #[allow(dead_code)]
-pub fn test_np_check_in(ctx: &TestContext, dcc_identity: &DccIdentity) -> Result<String, String> {
+pub fn test_provider_check_in(
+    ctx: &TestContext,
+    dcc_identity: &DccIdentity,
+) -> Result<String, String> {
     let no_args = encode_one(()).expect("failed to encode");
     let nonce_bytes = query_check_and_decode!(
         ctx.pic,
@@ -321,7 +324,7 @@ pub fn test_np_check_in(ctx: &TestContext, dcc_identity: &DccIdentity) -> Result
         ctx.pic,
         ctx.canister_id,
         dcc_identity.to_ic_principal(),
-        "node_provider_check_in",
+        "provider_check_in",
         Encode!(
             &dcc_identity.to_bytes_verifying(),
             &String::from("Just a test memo!"),
@@ -346,7 +349,7 @@ pub fn test_offering_add(
         ctx.pic,
         ctx.canister_id,
         dcc_id.to_ic_principal(),
-        "node_provider_update_offering",
+        "provider_update_offering",
         Encode!(&dcc_id.to_bytes_verifying(), &payload_bytes, &payload_signature_bytes).unwrap(),
         Result<String, String>
     )
@@ -365,7 +368,7 @@ pub fn test_offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
         Vec<(Vec<u8>, Vec<u8>)>
     )
     .into_iter()
-    .map(|(_np_pubkey_bytes, payload_bytes)| {
+    .map(|(_provider_pubkey_bytes, payload_bytes)| {
         // Parse the CSV data to extract the offerings
         let json_str = String::from_utf8_lossy(&payload_bytes);
         ProviderOfferings::deserialize_from_json(&json_str).unwrap()

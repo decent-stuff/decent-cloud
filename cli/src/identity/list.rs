@@ -1,4 +1,4 @@
-use dcc_common::{DccIdentity, LABEL_NP_REGISTER, LABEL_USER_REGISTER};
+use dcc_common::{DccIdentity, LABEL_PROV_REGISTER, LABEL_USER_REGISTER};
 use ledger_map::LedgerMap;
 
 use super::println_identity;
@@ -51,7 +51,7 @@ pub fn list_identities(
 ) -> Result<(), Box<dyn std::error::Error>> {
     if identity_type == ListIdentityType::Providers || identity_type == ListIdentityType::All {
         println!("\n# Registered providers");
-        for entry in ledger.iter(Some(LABEL_NP_REGISTER)) {
+        for entry in ledger.iter(Some(LABEL_PROV_REGISTER)) {
             let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
             println_identity(&dcc_id, show_balances);
         }

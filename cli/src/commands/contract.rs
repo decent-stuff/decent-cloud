@@ -6,7 +6,7 @@ use base64::Engine;
 use dcc_common::{ContractSignReply, ContractSignRequest, DccIdentity};
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use ledger_map::LedgerMap;
-use np_offering::ProviderOfferings;
+use provider_offering::ProviderOfferings;
 use std::path::PathBuf;
 
 pub async fn handle_contract_command(
@@ -122,7 +122,7 @@ pub async fn handle_contract_command(
                     1 => {
                         // Find the specific server offering with the matching instance_id
                         let provider_offering = &offerings[0];
-                        let matching_offerings: Vec<&np_offering::ServerOffering> =
+                        let matching_offerings: Vec<&provider_offering::ServerOffering> =
                             provider_offering
                                 .server_offerings
                                 .iter()
