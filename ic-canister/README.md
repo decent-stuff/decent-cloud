@@ -111,13 +111,72 @@ Access the mainnet Candid UI via:
 
 ## Provider Offerings and Network Services
 
-For comprehensive information about network provider offerings, such as VPS, dedicated servers, and cloud instances, please refer to the [provider-offering README](../provider-offering/README.md).
+For comprehensive information about network provider offerings, including VPS, dedicated servers, and cloud instances available through the Decent Cloud ecosystem, please refer to the [provider-offering README](../provider-offering/README.md).
 
-This document contains detailed information about:
-- CSV format specifications for offerings
-- Provider identity management and offerings
+The provider-offering documentation contains detailed information about:
+- **Provider Identity Management**: Using 32-byte public keys for cryptographic validation
+- **Offering Structure**: Complete service specifications, pricing, location, and availability
+- **Search and Discovery**: Multiple access patterns for finding offerings
+- **Data Format**: CSV format specifications compatible with industry standards
+- **Serialization**: PEM + CSV and Compact JSON formats for different environments
+- **Technical Implementation**: Type system, registry architecture, and search implementation
+- **Integration Points**: How offerings integrate with the Decent Cloud ledger system
 
----
+## API Integration
+
+### Basic Setup
+
+To interact with the Decent Cloud canister programmatically:
+
+```typescript
+import { Actor, HttpAgent } from '@dfinity/agent';
+import { Principal } from '@dfinity/principal';
+import { idlFactory } from './declarations/decent_cloud.did.js';
+
+// Production configuration
+const defaultConfig = {
+  networkUrl: 'https://icp-api.io',
+  canisterId: 'ggi4a-wyaaa-aaaai-actqq-cai'
+};
+```
+
+### Higher-Level Client Usage
+
+For easier interaction, you can use the provided client library:
+
+```typescript
+import { DecentCloudClient } from '@decent-stuff/dc-client';
+
+async function example() {
+  // Initialize client
+  const client = new DecentCloudClient();
+  await client.initialize();
+
+  // Handle operations with built-in error handling
+  try {
+    // Fetch ledger blocks
+    await client.fetchBlocks();
+    
+    // Get transaction history
+    const lastBlock = await client.getLastFetchedBlock();
+    if (lastBlock) {
+      const entries = await client.getBlockEntries(lastBlock.blockOffset);
+      console.log('Block entries:', entries);
+    }
+  } catch (error) {
+    console.error('Operation failed:', error);
+  }
+}
+```
+
+### Security and Best Practices
+
+1. Transactions and sensitive operations need to be signed with appropriate cryptographic signatures
+2. Use secure key management for storing and handling private keys
+3. Validate all input data before sending to the canister
+4. Handle errors gracefully and provide appropriate user feedback
+5. Use HTTPS endpoints in production environments
+6. Use BigInt for all token amounts to prevent precision loss
 
 For more details, refer to the [Documentation Home](../docs/README.md).
 
