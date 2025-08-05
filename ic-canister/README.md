@@ -109,9 +109,17 @@ Access the mainnet Candid UI via:
    dfx deploy --network ic --identity mainnet-01 decent_cloud
    ```
 
-For more details, refer to the [Documentation Home](../docs/README.md).
+## Provider Offerings and Network Services
+
+For comprehensive information about network provider offerings, such as VPS, dedicated servers, and cloud instances, please refer to the [provider-offering README](../provider-offering/README.md).
+
+This document contains detailed information about:
+- CSV format specifications for offerings
+- Provider identity management and offerings
 
 ---
+
+For more details, refer to the [Documentation Home](../docs/README.md).
 
 **Dashboard Links (replace placeholders with actual IDs):**  
 - **Wallet:** [Dashboard](https://dashboard.internetcomputer.org/canister/<wallet-id>)  
