@@ -44,6 +44,17 @@ impl RecentCache {
         if cache.len() < CACHE_MAX_LENGTH || tx_num > *cache.keys().next().unwrap_or(&0) {
             // Only insert the entry if the cache is not full or if the new entry has a higher id than the minimal
             cache.insert(tx_num, tx);
+            Self::trim_cache(cache);
+        }
+    }
+
+    fn trim_cache(cache: &mut BTreeMap<u64, Transaction>) {
+        while cache.len() > CACHE_MAX_LENGTH {
+            if let Some((&first_key, _)) = cache.iter().next() {
+                cache.remove(&first_key);
+            } else {
+                break;
+            }
         }
     }
 
@@ -114,14 +125,7 @@ impl RecentCache {
     /// Ensure the cache does not exceed the maximum length.
     pub fn ensure_cache_length() {
         RECENT_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-
-            // If the number of entries exceeds the maximum length, remove the oldest entries
-            while cache.len() > CACHE_MAX_LENGTH {
-                if let Some((&first_key, _)) = cache.iter().next() {
-                    cache.remove(&first_key);
-                }
-            }
+            Self::trim_cache(&mut cache.borrow_mut());
         });
     }
 }
@@ -172,11 +176,13 @@ mod tests {
         for i in 0..CACHE_MAX_LENGTH + 10 {
             RecentCache::add_entry(i as u64, create_dummy_transaction(i as u64));
         }
-        assert!(RecentCache::get_num_entries() >= CACHE_MAX_LENGTH);
-        RecentCache::ensure_cache_length();
 
         assert_eq!(RecentCache::get_num_entries(), CACHE_MAX_LENGTH);
         assert_eq!(RecentCache::get_min_tx_num(), Some(10));
+        assert_eq!(
+            RecentCache::get_max_tx_num(),
+            Some((CACHE_MAX_LENGTH + 9) as u64)
+        );
     }
 
     #[test]
@@ -213,6 +219,20 @@ mod tests {
         assert_eq!(RecentCache::get_num_entries(), 5);
         RecentCache::clear_cache();
         assert_eq!(RecentCache::get_num_entries(), 0);
+    }
+
+    #[test]
+    fn test_append_entry_increments_tx_num() {
+        RecentCache::clear_cache();
+        RecentCache::add_entry(5, create_dummy_transaction(5));
+        RecentCache::add_entry(6, create_dummy_transaction(6));
+
+        let appended = create_dummy_transaction(7);
+        RecentCache::append_entry(appended.clone());
+
+        assert_eq!(RecentCache::get_max_tx_num(), Some(7));
+        assert_eq!(RecentCache::get_transaction(7), Some(appended));
+        assert_eq!(RecentCache::get_next_tx_num(), 8);
     }
 
     #[test]
