@@ -7,6 +7,7 @@ use dcc_common::{
     ContractId, ContractReqSerialized, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
 };
 use ic_agent::{export::Principal, identity::BasicIdentity, Agent};
+use log::Level;
 use serde::Serialize;
 
 type ResultString = Result<String, String>;
@@ -224,28 +225,40 @@ impl LedgerCanister {
             .map_err(|e| e.to_string())?
     }
 
-    pub async fn get_logs_debug(&self) -> Result<String, String> {
+    async fn get_logs_by_method(&self, method: &str) -> Result<String, String> {
         let args = Encode!(&()).map_err(|e| e.to_string())?;
-        let response = self.call_query("get_logs_debug", &args).await?;
+        let response = self.call_query(method, &args).await?;
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
+    }
+
+    pub async fn get_logs(&self, level: Level) -> Result<String, String> {
+        let method = match level {
+            Level::Error => "get_logs_error",
+            Level::Warn => "get_logs_warn",
+            Level::Info => "get_logs_info",
+            Level::Debug => "get_logs_debug",
+            Level::Trace => {
+                return Err("Trace logs are not supported by the ledger canister".to_string())
+            }
+        };
+
+        self.get_logs_by_method(method).await
+    }
+
+    pub async fn get_logs_debug(&self) -> Result<String, String> {
+        self.get_logs(Level::Debug).await
     }
 
     pub async fn get_logs_info(&self) -> Result<String, String> {
-        let args = Encode!(&()).map_err(|e| e.to_string())?;
-        let response = self.call_query("get_logs_info", &args).await?;
-        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
+        self.get_logs(Level::Info).await
     }
 
     pub async fn get_logs_warn(&self) -> Result<String, String> {
-        let args = Encode!(&()).map_err(|e| e.to_string())?;
-        let response = self.call_query("get_logs_warn", &args).await?;
-        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
+        self.get_logs(Level::Warn).await
     }
 
     pub async fn get_logs_error(&self) -> Result<String, String> {
-        let args = Encode!(&()).map_err(|e| e.to_string())?;
-        let response = self.call_query("get_logs_error", &args).await?;
-        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
+        self.get_logs(Level::Error).await
     }
 }
 

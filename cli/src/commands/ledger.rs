@@ -3,13 +3,14 @@ use crate::identity::{list_identities, ListIdentityType};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use candid::{Decode, Encode};
-use chrono::DateTime;
+use chrono::{TimeZone, Utc};
 use dcc_common::{DccIdentity, FundsTransfer, LABEL_DC_TOKEN_TRANSFER};
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::LedgerMap;
 use log::Level;
-use std::path::PathBuf;
+use serde::Deserialize;
+use std::{convert::TryFrom, io, path::PathBuf};
 use tabular::{Row, Table};
 
 pub async fn handle_ledger_local_command(
@@ -124,61 +125,110 @@ pub async fn handle_ledger_remote_command(
         }
         LedgerRemoteCommands::GetLogsDebug => {
             println!("Ledger canister DEBUG logs:");
-            print_logs(
-                Level::Debug,
-                &LedgerCanister::new_without_identity(network_url, ledger_canister_id)
-                    .await?
-                    .get_logs_debug()
-                    .await?,
-            )?;
+            fetch_and_print_logs(Level::Debug, network_url, ledger_canister_id).await?;
         }
         LedgerRemoteCommands::GetLogsInfo => {
             println!("Ledger canister INFO logs:");
-            print_logs(
-                Level::Info,
-                &LedgerCanister::new_without_identity(network_url, ledger_canister_id)
-                    .await?
-                    .get_logs_info()
-                    .await?,
-            )?;
+            fetch_and_print_logs(Level::Info, network_url, ledger_canister_id).await?;
         }
         LedgerRemoteCommands::GetLogsWarn => {
             println!("Ledger canister WARN logs:");
-            print_logs(
-                Level::Warn,
-                &LedgerCanister::new_without_identity(network_url, ledger_canister_id)
-                    .await?
-                    .get_logs_warn()
-                    .await?,
-            )?;
+            fetch_and_print_logs(Level::Warn, network_url, ledger_canister_id).await?;
         }
         LedgerRemoteCommands::GetLogsError => {
             println!("Ledger canister ERROR logs:");
-            print_logs(
-                Level::Error,
-                &LedgerCanister::new_without_identity(network_url, ledger_canister_id)
-                    .await?
-                    .get_logs_error()
-                    .await?,
-            )?;
+            fetch_and_print_logs(Level::Error, network_url, ledger_canister_id).await?;
         }
     }
 
     Ok(())
 }
 
-fn print_logs(log_level: Level, logs_json: &str) -> Result<(), Box<dyn std::error::Error>> {
-    for entry in serde_json::from_str::<Vec<serde_json::Value>>(logs_json)?.into_iter() {
-        let timestamp_ns = entry["timestamp"].as_u64().unwrap_or_default();
-        let timestamp_s = (timestamp_ns / 1_000_000_000) as i64;
-        // Create DateTime from the timestamp
-        let dt = DateTime::from_timestamp(timestamp_s, 0).unwrap_or_default();
-        println!(
-            "{} [{}] - {}",
-            dt.format("%Y-%m-%dT%H:%M:%S"),
-            log_level,
-            entry["message"].as_str().expect("Invalid message field")
+fn print_logs(log_level: Level, logs_json: &str) -> Result<(), serde_json::Error> {
+    for line in format_log_lines(log_level, logs_json)? {
+        println!("{}", line);
+    }
+
+    Ok(())
+}
+
+fn format_log_lines(log_level: Level, logs_json: &str) -> Result<Vec<String>, serde_json::Error> {
+    let entries: Vec<LogEntry> = serde_json::from_str(logs_json)?;
+
+    Ok(entries
+        .into_iter()
+        .map(|entry| format_log_line(log_level, entry))
+        .collect())
+}
+
+fn format_log_line(log_level: Level, entry: LogEntry) -> String {
+    let timestamp = entry
+        .timestamp
+        .and_then(format_timestamp)
+        .unwrap_or_else(|| "unknown".to_string());
+    let message = entry.message.unwrap_or_else(|| "<no message>".to_string());
+
+    format!("{} [{}] - {}", timestamp, log_level, message)
+}
+
+fn format_timestamp(timestamp_ns: u64) -> Option<String> {
+    let seconds = timestamp_ns / 1_000_000_000;
+    let nanoseconds = (timestamp_ns % 1_000_000_000) as u32;
+    let seconds = i64::try_from(seconds).ok()?;
+
+    Utc.timestamp_opt(seconds, nanoseconds)
+        .single()
+        .map(|dt| dt.format("%Y-%m-%dT%H:%M:%S").to_string())
+}
+
+#[derive(Debug, Deserialize)]
+struct LogEntry {
+    timestamp: Option<u64>,
+    message: Option<String>,
+}
+
+async fn fetch_and_print_logs(
+    level: Level,
+    network_url: &str,
+    ledger_canister_id: candid::Principal,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let canister = LedgerCanister::new_without_identity(network_url, ledger_canister_id).await?;
+    let logs = canister
+        .get_logs(level)
+        .await
+        .map_err(|err| -> Box<dyn std::error::Error> {
+            Box::new(io::Error::new(io::ErrorKind::Other, err))
+        })?;
+    print_logs(level, &logs).map_err(|err| -> Box<dyn std::error::Error> { Box::new(err) })?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_timestamp_and_message() {
+        let logs_json = "[{\"timestamp\": 1680000000000000000, \"message\": \"hello\"}]";
+        let lines = format_log_lines(Level::Info, logs_json).expect("log parsing failed");
+
+        assert_eq!(
+            lines,
+            vec!["2023-03-28T10:40:00 [INFO] - hello".to_string()]
         );
     }
-    Ok(())
+
+    #[test]
+    fn handles_missing_fields() {
+        let logs_json = "[{\"timestamp\": null}, {\"message\": null}]";
+        let lines = format_log_lines(Level::Warn, logs_json).expect("log parsing failed");
+
+        assert_eq!(
+            lines,
+            vec![
+                "unknown [WARN] - <no message>".to_string(),
+                "unknown [WARN] - <no message>".to_string()
+            ]
+        );
+    }
 }
