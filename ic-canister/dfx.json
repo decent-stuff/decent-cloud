@@ -27,10 +27,7 @@
     },
     "local": {
       "bind": "127.0.0.1:8002",
-      "type": "ephemeral",
-      "replica": {
-        "log_level": "info"
-      }
+      "type": "ephemeral"
     }
   },
   "output_env_file": ".env",
