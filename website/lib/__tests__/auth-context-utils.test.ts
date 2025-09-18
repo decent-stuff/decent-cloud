@@ -23,7 +23,9 @@ describe("auth-context utilities", () => {
       .update(seed)
       .digest();
     const referenceSeed = referenceDigest.subarray(0, 32);
-    const referenceIdentity = Ed25519KeyIdentity.fromSeed(referenceSeed);
+    const referenceIdentity = Ed25519KeyIdentity.fromSecretKey(
+      Uint8Array.from(referenceSeed).buffer
+    );
 
     expect(derivedIdentity.getPrincipal().toString()).toEqual(
       referenceIdentity.getPrincipal().toString()

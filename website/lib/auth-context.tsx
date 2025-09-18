@@ -19,7 +19,7 @@ import {
 interface IdentityInfo {
   identity: Identity;
   principal: Principal;
-  type: "ii" | "nfid" | "seedPhrase";
+  type: "ii" | "seedPhrase";
   name?: string;
   publicKeyBytes?: Uint8Array;
   secretKeyRaw?: Uint8Array;
@@ -39,7 +39,6 @@ interface AuthContextType {
   signingIdentity: IdentityInfo | null;
   identities: IdentityInfo[];
   loginWithII: (returnUrl?: string) => Promise<void>;
-  loginWithNFID: () => Promise<void>;
   loginWithSeedPhrase: (
     seedPhrase?: string,
     returnUrl?: string
@@ -65,7 +64,6 @@ const AuthContext = createContext<AuthContextType>({
   signingIdentity: null,
   identities: [],
   loginWithII: async () => {},
-  loginWithNFID: async () => {},
   loginWithSeedPhrase: async () => {},
   logout: async () => {},
   switchIdentity: () => {},
@@ -379,21 +377,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const loginWithNFID = async () => {
-    if (!authClient) return;
-
-    await authClient.login({
-      identityProvider: "https://nfid.one",
-      onSuccess: async () => {
-        const identity = authClient.getIdentity();
-        addIdentity(identity, "nfid");
-        
-        // Let existing auto-generation logic in addIdentity handle seed identity if needed
-        window.location.href = "/dashboard";
-      },
-    });
-  };
-
   const loginWithSeedPhrase = async (
     existingSeedPhrase?: string,
     returnUrl = "/dashboard"
@@ -504,8 +487,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Update auth client for II/NFID identities
-    if (targetIdentity.type === "ii" || targetIdentity.type === "nfid") {
+    // Update auth client for II identities
+    if (targetIdentity.type === "ii") {
       void AuthClient.create().then(setAuthClient);
     }
   };
@@ -534,7 +517,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signingIdentity,
         identities,
         loginWithII,
-        loginWithNFID,
         loginWithSeedPhrase,
         logout,
         switchIdentity,
@@ -562,14 +544,15 @@ export function generateNewSeedPhrase(): string {
 
 export function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
   // 1. Generate seed from mnemonic with empty password (matching backend)
-  const seed = mnemonicToSeedSync(seedPhrase, "");
+  const seedBuffer = mnemonicToSeedSync(seedPhrase, "");
+  const seedBytes = new Uint8Array(seedBuffer);
 
   // 2 & 3. Create HMAC-SHA512 with key "ed25519 seed" and feed seed
-  const keyMaterial = hmac(sha512, "ed25519 seed", seed);
+  const keyMaterial = hmac(sha512, "ed25519 seed", seedBytes);
 
   // 4. Get first 32 bytes of HMAC output and create the identity
-  const seedBytes = keyMaterial.slice(0, 32);
-  return Ed25519KeyIdentity.fromSeed(seedBytes);
+  const derivedSeed = keyMaterial.slice(0, 32);
+  return Ed25519KeyIdentity.fromSecretKey(derivedSeed.buffer);
 }
 
 export function useAuth() {

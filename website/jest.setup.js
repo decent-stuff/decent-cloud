@@ -1,5 +1,15 @@
 import "@testing-library/jest-dom";
 import { jest } from "@jest/globals";
+import { TextDecoder, TextEncoder } from "util";
+
+// Polyfill web APIs required by @dfinity packages when running in Node
+if (typeof global.TextEncoder === "undefined") {
+  global.TextEncoder = TextEncoder;
+}
+
+if (typeof global.TextDecoder === "undefined") {
+  global.TextDecoder = TextDecoder;
+}
 
 // Silence console warnings for tests
 const originalWarn = console.warn;

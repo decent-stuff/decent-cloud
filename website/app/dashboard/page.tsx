@@ -437,11 +437,7 @@ export default function DashboardPage() {
                           isCurrent ? "text-white" : "text-white/70"
                         }`}
                       >
-                        {identity.type === "ii"
-                          ? "🔑"
-                          : identity.type === "nfid"
-                          ? "🎮"
-                          : "🌱"}
+                        {identity.type === "ii" ? "🔑" : "🌱"}
                       </div>
                       <div>
                         <div
@@ -451,8 +447,6 @@ export default function DashboardPage() {
                         >
                           {identity.type === "ii"
                             ? "Internet Identity"
-                            : identity.type === "nfid"
-                            ? "NFID"
                             : "Seed Phrase"}
                         </div>
                         <div className="text-sm font-mono text-white/60">
