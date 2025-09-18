@@ -2,6 +2,7 @@ import Dexie, { Table } from 'dexie';
 
 // Constants
 const DB_NAME = 'DecentCloudLedgerDB';
+const DB_VERSION = 7;
 
 /**
  * LedgerDatabase class for managing ledger data in IndexedDB
@@ -22,10 +23,20 @@ class LedgerDatabase extends Dexie {
         super(DB_NAME);
 
         // Define stores in a single version declaration
-        this.version(6).stores({
-            ledgerBlocks: 'blockOffset, timestampNs',
-            ledgerEntries: '++id, *label, *key, *blockOffset',
-        });
+        this.version(DB_VERSION)
+            .stores({
+                ledgerBlocks: 'blockOffset, timestampNs',
+                ledgerEntries: '++id, *label, *key, *blockOffset',
+            })
+            .upgrade(async (transaction) => {
+                console.info(
+                    `Dexie schema upgrade to v${DB_VERSION} detected. Clearing existing ledger data to trigger full resync.`
+                );
+                await Promise.all([
+                    transaction.table('ledgerBlocks').clear(),
+                    transaction.table('ledgerEntries').clear(),
+                ]);
+            });
 
         // Initialize the database asynchronously
         void this.initialize();

@@ -95,118 +95,163 @@ class DecentCloudLedger {
      * @returns {Promise<string>} Fetch result.
      */
     async fetchLedgerBlocks(): Promise<string> {
+        const MAX_FETCH_ITERATIONS = 50;
+
         return this.withErrorHandling(
             "fetching ledger blocks",
             async () => {
-                // Step 1: Get the highest block offset stored locally.
+                // Step 1: Determine where to resume fetching from.
                 const lastBlock = await db.getLastBlock();
+                let cursorPosition = lastBlock?.fetchOffset ?? 0;
+                let bytesBefore: [Uint8Array] | undefined = lastBlock
+                    ? [base64ToUint8Array(lastBlock.fetchCompareBytes)]
+                    : undefined;
 
-                // Step 2: Create a cursor for fetching data.
-                let cursorString: string;
-                let bytesBefore: [Uint8Array] | undefined;
-                if (lastBlock === null) {
-                    cursorString = "position=0";
-                    bytesBefore = undefined;
-                } else {
-                    cursorString = `position=${lastBlock.fetchOffset}`;
-                    bytesBefore = [base64ToUint8Array(lastBlock.fetchCompareBytes)];
+                let totalBlocks = 0;
+                let totalEntries = 0;
+                let iteration = 0;
+
+                while (true) {
+                    iteration += 1;
+                    const cursorString = `position=${cursorPosition}`;
+
+                    console.log(
+                        `Requesting ledger canister with cursor: ${cursorString} and bytesBefore: ${bytesBefore}`
+                    );
+                    const result = await canisterQueryLedgerData(cursorString, bytesBefore);
+
+                    // Validate the response.
+                    if (!result || !result.Ok || !Array.isArray(result.Ok) || result.Ok.length < 2) {
+                        const s = `Invalid or empty response from ledger canister: ${result}`;
+                        console.warn(s);
+                        return s;
+                    }
+
+                    const [remotePositionStr, binaryData] = result.Ok;
+                    if (!remotePositionStr || !binaryData || !(binaryData instanceof Uint8Array)) {
+                        const s = `Invalid data format from canister: ${remotePositionStr}, ${binaryData}`;
+                        console.warn(s);
+                        return s;
+                    }
+
+                    // Parse metadata from the response string.
+                    // Example: "position=8388608&response_bytes=143991&direction=forward&more=false"
+                    const remotePositionMatch = remotePositionStr.match(/position=(\d+)/);
+                    const remotePosition = remotePositionMatch ? parseInt(remotePositionMatch[1], 10) : NaN;
+                    const moreMatch = remotePositionStr.match(/more=(true|false)/i);
+                    const hasMore = moreMatch ? moreMatch[1].toLowerCase() === 'true' : false;
+
+                    console.debug(`Received remote position: ${remotePosition} from str ${remotePositionStr}`);
+                    console.debug("Received binary data:", binaryData.length, "bytes");
+
+                    if (binaryData.length === 0) {
+                        if (totalBlocks === 0) {
+                            const s = `Fetch successful, no new ledger data found.`;
+                            console.info(s);
+                            return s;
+                        }
+                        console.info('No additional binary data returned; stopping incremental fetch loop.');
+                        break;
+                    }
+
+                    // Step 3: Process the binary data using the WASM function.
+                    console.log("Processing binary data into ledger blocks using WASM...");
+                    const newBlocks: LedgerBlock[] = [];
+                    const newEntries: LedgerEntry[] = [];
+
+                    try {
+                        const blocksData = await parseLedgerBlocks(
+                            binaryData,
+                            BigInt(Number.isNaN(remotePosition) ? cursorPosition : remotePosition)
+                        );
+                        if (!Array.isArray(blocksData)) {
+                            const s = `Invalid data format from canister: ${blocksData}`;
+                            console.warn(s);
+                            return s;
+                        }
+                        console.log(`Parsed ${blocksData.length} blocks from binary data`);
+
+                        // Process each block and its entries.
+                        for (const blockData of blocksData) {
+                            if (!blockData || !blockData.block_header) {
+                                console.warn("Invalid block data:", blockData);
+                                continue;
+                            }
+
+                            const blockHeader: LedgerBlock = {
+                                blockVersion: blockData.block_header.block_version,
+                                blockSize: blockData.block.length,
+                                parentBlockHash: blockData.block_header.parent_block_hash,
+                                blockHash: blockData.block_header.block_hash,
+                                blockOffset: blockData.block_header.offset,
+                                fetchCompareBytes: blockData.block_header.fetch_compare_bytes,
+                                fetchOffset: blockData.block_header.fetch_offset,
+                                timestampNs: blockData.block_header.timestamp_ns
+                            };
+                            newBlocks.push(blockHeader);
+
+                            for (const entry of blockData.block) {
+                                if (!entry.label || !entry.key) {
+                                    console.warn("Invalid entry data:", entry);
+                                    continue;
+                                }
+                                const ledgerEntry: LedgerEntry = {
+                                    blockOffset: blockData.block_header.offset,
+                                    label: entry.label,
+                                    key: entry.key,
+                                    value: entry.value,
+                                    description: entry.description
+                                };
+                                newEntries.push(ledgerEntry);
+                            }
+                        }
+                    } catch (error) {
+                        const s = `Error processing blocks with WASM: ${error}`;
+                        console.warn(s);
+                        return s;
+                    }
+
+                    if (newBlocks.length === 0) {
+                        console.warn(
+                            'No ledger blocks were parsed from the response despite receiving binary data; stopping fetch loop to avoid infinite retry.'
+                        );
+                        break;
+                    }
+
+                    console.log(
+                        `Storing ${newBlocks.length} new blocks and ${newEntries.length} new ledger entries in IndexedDB`
+                    );
+                    await db.bulkAddOrUpdate(newBlocks, newEntries);
+
+                    totalBlocks += newBlocks.length;
+                    totalEntries += newEntries.length;
+
+                    const lastFetchedBlock = newBlocks[newBlocks.length - 1];
+                    cursorPosition = Number.isNaN(remotePosition)
+                        ? lastFetchedBlock.fetchOffset
+                        : remotePosition;
+                    bytesBefore = [base64ToUint8Array(lastFetchedBlock.fetchCompareBytes)];
+
+                    if (!hasMore) {
+                        console.info('Ledger canister indicated no more data to fetch.');
+                        break;
+                    }
+
+                    if (iteration >= MAX_FETCH_ITERATIONS) {
+                        console.error(
+                            `Reached maximum ledger fetch iterations (${MAX_FETCH_ITERATIONS}); Stopping to prevent infinite loop.`
+                        );
+                        break;
+                    }
                 }
 
-                console.log(
-                    `Requesting ledger canister with cursor: ${cursorString} and bytesBefore: ${bytesBefore}`
-                );
-                const result = await canisterQueryLedgerData(cursorString, bytesBefore);
-
-                // Validate the response.
-                if (!result || !result.Ok || !Array.isArray(result.Ok) || result.Ok.length < 2) {
-                    const s = `Invalid or empty response from ledger canister: ${result}`;
-                    console.warn(s);
-                    return s;
-                }
-
-                const [remotePositionStr, binaryData] = result.Ok;
-                if (!remotePositionStr || !binaryData || !(binaryData instanceof Uint8Array)) {
-                    const s = `Invalid data format from canister: ${remotePositionStr}, ${binaryData}`;
-                    console.warn(s);
-                    return s;
-                }
-
-                // Parse the remote position and compare with the last stored block.
-                // Example of remotePositionStr:
-                // "position=8388608&response_bytes=143991&direction=forward&more=false"
-                const remotePositionMatch = remotePositionStr.match(/position=(\d+)/);
-                const remotePosition = remotePositionMatch ? parseInt(remotePositionMatch[1], 10) : NaN;
-
-                console.debug(`Received remote position: ${remotePosition} from str ${remotePositionStr}`);
-                console.debug("Received binary data:", binaryData.length, "bytes");
-
-                if (binaryData.length === 0) {
+                if (totalBlocks === 0) {
                     const s = `Fetch successful, no new ledger data found.`;
                     console.info(s);
                     return s;
                 }
 
-                // Step 3: Process the binary data using the WASM function.
-                console.log("Processing binary data into ledger blocks using WASM...");
-                const newBlocks: LedgerBlock[] = [];
-                const newEntries: LedgerEntry[] = [];
-
-                try {
-                    const blocksData = await parseLedgerBlocks(binaryData, BigInt(remotePosition));
-                    if (!Array.isArray(blocksData)) {
-                        const s = `Invalid data format from canister: ${blocksData}`;
-                        console.warn(s);
-                        return s;
-                    }
-                    console.log(`Parsed ${blocksData.length} blocks from binary data`);
-
-                    // Process each block and its entries.
-                    for (const blockData of blocksData) {
-                        if (!blockData || !blockData.block_header) {
-                            console.warn("Invalid block data:", blockData);
-                            continue;
-                        }
-
-                        const blockHeader: LedgerBlock = {
-                            blockVersion: blockData.block_header.block_version,
-                            blockSize: blockData.block.length,
-                            parentBlockHash: blockData.block_header.parent_block_hash,
-                            blockHash: blockData.block_header.block_hash,
-                            blockOffset: blockData.block_header.offset,
-                            fetchCompareBytes: blockData.block_header.fetch_compare_bytes,
-                            fetchOffset: blockData.block_header.fetch_offset,
-                            timestampNs: blockData.block_header.timestamp_ns
-                        };
-                        newBlocks.push(blockHeader);
-
-                        for (const entry of blockData.block) {
-                            if (!entry.label || !entry.key) {
-                                console.warn("Invalid entry data:", entry);
-                                continue;
-                            }
-                            const ledgerEntry: LedgerEntry = {
-                                blockOffset: blockData.block_header.offset,
-                                label: entry.label,
-                                key: entry.key,
-                                value: entry.value,
-                                description: entry.description
-                            };
-                            newEntries.push(ledgerEntry);
-                        }
-                    }
-                } catch (error) {
-                    const s = `Error processing blocks with WASM: ${error}`;
-                    console.warn(s);
-                    return s;
-                }
-
-                // Step 4: Store the new ledger entries in the local database.
-                if (newBlocks.length > 0) {
-                    console.log(`Storing ${newBlocks.length} new blocks and ${newEntries.length} new ledger entries in IndexedDB`);
-                    await db.bulkAddOrUpdate(newBlocks, newEntries);
-                }
-
-                return `Fetched ${newBlocks.length} new blocks and ${newEntries.length} new ledger entries.`;
+                return `Fetched ${totalBlocks} new blocks and ${totalEntries} new ledger entries.`;
             },
             "Error fetching ledger blocks. See console for details."
         );
