@@ -4,11 +4,27 @@ import Dexie, { Table } from 'dexie';
 const DB_NAME = 'DecentCloudLedgerDB';
 const DB_VERSION = 7;
 
+interface LedgerDatabaseApi {
+    isAvailable(): boolean;
+    getLastBlock(): Promise<LedgerBlock | null>;
+    bulkAddOrUpdate(newBlocks: LedgerBlock[], newEntries: LedgerEntry[]): Promise<void>;
+    getAllEntries(): Promise<LedgerEntry[]>;
+    getAllBlocks(): Promise<LedgerBlock[]>;
+    getEntriesByLabelAndKey(labelOrLabels: string | readonly string[], key: string): Promise<LedgerEntry[]>;
+    getEntriesByLabel(label: string): Promise<LedgerEntry[]>;
+    getEntry(key: string): Promise<LedgerEntry | undefined>;
+    getBlockEntries(blockOffset: number): Promise<LedgerEntry[]>;
+    clearAllEntries(): Promise<void>;
+    resetDatabase(): Promise<void>;
+    getError(): string | null;
+    setError(error: string | null): void;
+}
+
 /**
  * LedgerDatabase class for managing ledger data in IndexedDB
  * Uses Dexie as the IndexedDB wrapper
  */
-class LedgerDatabase extends Dexie {
+class LedgerDatabase extends Dexie implements LedgerDatabaseApi {
     ledgerBlocks!: Table<LedgerBlock, number>;
     ledgerEntries!: Table<LedgerEntry, string>;
 
@@ -201,6 +217,10 @@ class LedgerDatabase extends Dexie {
         );
     }
 
+    isAvailable(): boolean {
+        return true;
+    }
+
     /**
      * Get the last ledger entry (with the highest timestamp)
      * @returns The last ledger entry or null if no entries exist
@@ -391,8 +411,82 @@ class LedgerDatabase extends Dexie {
     }
 }
 
+class UnavailableLedgerDatabase implements LedgerDatabaseApi {
+    private _error: string | null = 'IndexedDB API missing. Ledger storage disabled in this environment.';
+    private warned = false;
+
+    private warn(): void {
+        if (!this.warned) {
+            console.warn(this._error);
+            this.warned = true;
+        }
+    }
+
+    isAvailable(): boolean {
+        return false;
+    }
+
+    async getLastBlock(): Promise<LedgerBlock | null> {
+        this.warn();
+        return null;
+    }
+
+    async bulkAddOrUpdate(): Promise<void> {
+        this.warn();
+    }
+
+    async getAllEntries(): Promise<LedgerEntry[]> {
+        this.warn();
+        return [];
+    }
+
+    async getAllBlocks(): Promise<LedgerBlock[]> {
+        this.warn();
+        return [];
+    }
+
+    async getEntriesByLabelAndKey(): Promise<LedgerEntry[]> {
+        this.warn();
+        return [];
+    }
+
+    async getEntriesByLabel(): Promise<LedgerEntry[]> {
+        this.warn();
+        return [];
+    }
+
+    async getEntry(): Promise<LedgerEntry | undefined> {
+        this.warn();
+        return undefined;
+    }
+
+    async getBlockEntries(): Promise<LedgerEntry[]> {
+        this.warn();
+        return [];
+    }
+
+    async clearAllEntries(): Promise<void> {
+        this.warn();
+    }
+
+    async resetDatabase(): Promise<void> {
+        this.warn();
+    }
+
+    getError(): string | null {
+        return this._error;
+    }
+
+    setError(error: string | null): void {
+        this._error = error;
+    }
+}
+
+const globalWithIndexedDB = globalThis as typeof globalThis & { indexedDB?: unknown };
+const hasIndexedDB = typeof globalThis !== 'undefined' && globalWithIndexedDB.indexedDB !== undefined;
+
 // Create and export a singleton instance of the database
-export const db = new LedgerDatabase();
+export const db: LedgerDatabaseApi = hasIndexedDB ? new LedgerDatabase() : new UnavailableLedgerDatabase();
 
 export interface LedgerBlock {
     blockVersion: number;

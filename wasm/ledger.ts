@@ -100,6 +100,13 @@ class DecentCloudLedger {
         return this.withErrorHandling(
             "fetching ledger blocks",
             async () => {
+                if (!db.isAvailable()) {
+                    const s = 'IndexedDB API unavailable in this runtime; skipping ledger fetch.';
+                    console.warn(s);
+                    db.setError(s);
+                    return s;
+                }
+
                 // Step 1: Determine where to resume fetching from.
                 const lastBlock = await db.getLastBlock();
                 let cursorPosition = lastBlock?.fetchOffset ?? 0;
