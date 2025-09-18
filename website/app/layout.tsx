@@ -2,6 +2,10 @@ import "./globals.css";
 import { AuthProvider } from "../lib/auth-context";
 import { ToastProvider } from "../components/ui/use-toast";
 import { GlobalLedgerComponent as GlobalLedgerComponent } from "@/components/global-ledger-component";
+import '@fortawesome/fontawesome-svg-core/styles.css';
+import { config } from '@fortawesome/fontawesome-svg-core';
+
+config.autoAddCss = false;
 
 export const metadata = {
   title: "Decent Cloud - Decentralized Cloud Computing",
