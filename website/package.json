@@ -22,6 +22,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@cloudflare/next-on-pages": "^1.13.13",
     "@decent-stuff/dc-client": "file:../wasm/dist",
     "@dfinity/agent": "^2.4.1",
     "@dfinity/auth-client": "^2.4.1",
@@ -61,7 +62,6 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@cloudflare/next-on-pages": "^1.13.13",
     "@eslint/js": "^9.29.0",
     "@next/eslint-plugin-next": "^15.3.3",
     "@testing-library/jest-dom": "^6.6.3",
