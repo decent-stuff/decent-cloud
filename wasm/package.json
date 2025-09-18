@@ -14,13 +14,13 @@
   ],
   "scripts": {
     "build": "node build.js",
-    "clean": "rimraf dist",
+    "clean": "npx rimraf dist",
     "prepare": "npm run clean && npm run build",
     "prepublishOnly": "npm test",
     "test:browser": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack test --node",
-    "test": "jest --passWithNoTests",
-    "format": "prettier --write \"**/*.{js,ts,json,md}\"",
-    "lint": "eslint . --ext .js,.ts"
+    "test": "npx jest --passWithNoTests",
+    "format": "npx prettier --write \"**/*.{js,ts,json,md}\"",
+    "lint": "npx eslint . --ext .js,.ts"
   },
   "keywords": [
     "decent-cloud",
