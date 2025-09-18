@@ -1,4 +1,5 @@
 import { LedgerEntry, LedgerBlock, decentCloudLedger } from '@decent-stuff/dc-client';
+import { isProviderCheckInLabel } from './ledger-labels';
 
 // Validator information interface
 export interface ValidatorInfo {
@@ -234,8 +235,10 @@ class LedgerService {
                 const entries = await this.getAllEntries();
                 const blocks = await this.getAllBlocks();
 
-                // Get all ProvCheckIn entries (validators)
-                const checkInEntries = entries.filter(entry => entry.label === 'ProvCheckIn');
+                // Get all provider check-in entries (supports both current and legacy labels)
+                const checkInEntries = entries.filter((entry) =>
+                    isProviderCheckInLabel(entry.label)
+                );
 
                 // Map to track validators by principal
                 const validatorMap = new Map<string, ValidatorInfo>();

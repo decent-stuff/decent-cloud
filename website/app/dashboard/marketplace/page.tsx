@@ -7,6 +7,7 @@ import HeaderSection from "@/components/ui/header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ledgerService } from "@/lib/ledger-service";
+import { isProviderOfferingLabel } from "@/lib/ledger-labels";
 import {
   Dialog,
   DialogContent,
@@ -72,9 +73,9 @@ export default function MarketplacePage() {
         await ledgerService.initialize();
         const allEntries = await ledgerService.getAllEntries();
 
-        // Filter entries with the label "ProvOffering"
-        const offeringEntries = allEntries.filter(
-          (entry) => entry.label === "ProvOffering"
+        // Filter entries that match provider offering labels (including legacy ones)
+        const offeringEntries = allEntries.filter((entry) =>
+          isProviderOfferingLabel(entry.label)
         );
 
         // Create a map to track seen keys to handle duplicates

@@ -272,12 +272,24 @@ class LedgerDatabase extends Dexie {
     /**
      * Retrieve entries with a specific label and a substring of the key.
      */
-    async getEntriesByLabelAndKey(label: string, key: string): Promise<LedgerEntry[]> {
+    async getEntriesByLabelAndKey(
+        labelOrLabels: string | readonly string[],
+        key: string
+    ): Promise<LedgerEntry[]> {
         return this.withErrorHandling(
             'get entries by label and key',
             async () => {
-                const result = await this.ledgerEntries.where('label').equals(label).and((entry) => entry.key.includes(key)).toArray();
-                console.info(`Found Provider Register ${result.length} entries for label ${label} and key ${key}`);
+                const labels = Array.isArray(labelOrLabels)
+                    ? Array.from(labelOrLabels)
+                    : [labelOrLabels];
+                const result = await this.ledgerEntries
+                    .where('label')
+                    .anyOf(labels)
+                    .and((entry) => typeof entry.key === 'string' && entry.key.includes(key))
+                    .toArray();
+                console.info(
+                    `Found Provider Register ${result.length} entries for labels ${labels.join(', ')} and key ${key}`
+                );
                 return result;
             },
             []

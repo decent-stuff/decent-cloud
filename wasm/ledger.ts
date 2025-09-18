@@ -1,6 +1,7 @@
 import { db, LedgerBlock, LedgerEntry } from './db';
 import { canisterQueryLedgerData } from './agent';
 import { parseLedgerBlocks } from './dc-client.js';
+import { providerLabelVariants } from './labels';
 
 // Types for ledger transaction entries
 interface Account {
@@ -239,7 +240,10 @@ class DecentCloudLedger {
         return this.withErrorHandling(
             "checking if provider is registered",
             async () => {
-                const entries = await db.getEntriesByLabelAndKey("ProvRegister", principal);
+                const entries = await db.getEntriesByLabelAndKey(
+                    providerLabelVariants.register,
+                    principal
+                );
                 console.log(`Found ${entries.length} registration entries for principal ${principal}`);
                 return entries.length > 0;
             },
