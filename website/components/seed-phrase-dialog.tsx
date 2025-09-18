@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { generateNewSeedPhrase } from "@/lib/auth-context";
+import { addSeedPhrase as persistSeedPhrase } from "@/lib/seed-storage";
 
 interface SeedPhraseDialogProps {
   isOpen: boolean;
@@ -59,11 +60,7 @@ export function SeedPhraseDialog({
 
     try {
       // Store seed phrase in the seed_phrases array
-      const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
-      if (!storedSeedPhrases.includes(trimmedSeedPhrase)) {
-        storedSeedPhrases.push(trimmedSeedPhrase);
-        localStorage.setItem("seed_phrases", JSON.stringify(storedSeedPhrases));
-      }
+      persistSeedPhrase(trimmedSeedPhrase);
 
       onSubmit?.(trimmedSeedPhrase);
       onClose();

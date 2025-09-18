@@ -12,6 +12,7 @@ const customJestConfig = {
     "^@/(.*)$": "<rootDir>/$1",
     "^@/components/(.*)$": "<rootDir>/components/$1",
     "^@/lib/(.*)$": "<rootDir>/lib/$1",
+    "^@decent-stuff/dc-client(.*)$": "<rootDir>/test/mocks/dc-client$1",
   },
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": ["babel-jest", { presets: ["next/babel"] }],

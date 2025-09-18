@@ -5,8 +5,16 @@ import { AuthClient } from "@dfinity/auth-client";
 import { Identity } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 import { Ed25519KeyIdentity } from "@dfinity/identity";
+import { hmac } from "@noble/hashes/hmac";
+import { sha512 } from "@noble/hashes/sha512";
 import { generateMnemonic, mnemonicToSeedSync } from "bip39";
-import { createHmac } from "crypto";
+import {
+  addSeedPhrase as persistSeedPhrase,
+  clearStoredSeedPhrases,
+  filterStoredSeedPhrases,
+  getStoredSeedPhrases,
+  setStoredSeedPhrases,
+} from "@/lib/seed-storage";
 
 interface IdentityInfo {
   identity: Identity;
@@ -130,9 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             remaining.push(newIdentity);
             
             // Store seed phrase
-            const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
-            storedSeedPhrases.push(seedPhrase);
-            localStorage.setItem("seed_phrases", JSON.stringify(storedSeedPhrases));
+            persistSeedPhrase(seedPhrase);
             
             // Set as signing identity and show backup dialog
             setSigningIdentity(newIdentity);
@@ -151,16 +157,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Remove from localStorage if it's a seed phrase identity
-    const storedSeedPhrases = JSON.parse(
-      localStorage.getItem("seed_phrases") || "[]"
-    );
-    const remainingSeedPhrases = storedSeedPhrases.filter(
-      (seedPhrase: string) => {
-        const identity = identityFromSeed(seedPhrase);
-        return identity.getPrincipal().toString() !== principal.toString();
-      }
-    );
-    localStorage.setItem("seed_phrases", JSON.stringify(remainingSeedPhrases));
+    filterStoredSeedPhrases((seedPhrase) => {
+      const identity = identityFromSeed(seedPhrase);
+      return identity.getPrincipal().toString() !== principal.toString();
+    });
   };
 
   const addIdentity = (
@@ -216,8 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (type !== "seedPhrase" && !signingIdentity) {
       // Check for existing seed identities in both current state and localStorage
       const hasSeedIdentity = identities.some(i => i.type === "seedPhrase");
-      const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
-      const hasStoredSeedPhrases = storedSeedPhrases.length > 0;
+      const hasStoredSeedPhrases = getStoredSeedPhrases().length > 0;
       
       if (!hasSeedIdentity && !hasStoredSeedPhrases) {
         // Only create a new seed identity if none exist anywhere
@@ -238,9 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
 
           // Store seed phrase
-          const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
-          storedSeedPhrases.push(seedPhrase);
-          localStorage.setItem("seed_phrases", JSON.stringify(storedSeedPhrases));
+          persistSeedPhrase(seedPhrase);
           
           // Mark as new seed phrase to trigger backup dialog
           localStorage.setItem("new_seed_phrase", "true");
@@ -299,20 +296,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Check for and migrate old format seed phrase if it exists
       const oldSeedPhrase = localStorage.getItem("seed_phrase");
       if (oldSeedPhrase) {
-        const storedSeedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]");
-        if (!storedSeedPhrases.includes(oldSeedPhrase)) {
-          storedSeedPhrases.push(oldSeedPhrase);
-          localStorage.setItem("seed_phrases", JSON.stringify(storedSeedPhrases));
-        }
+        persistSeedPhrase(oldSeedPhrase);
         // Clean up old format
         localStorage.removeItem("seed_phrase");
         localStorage.removeItem("identity_key");
       }
 
       // Get current seed phrases
-      const storedSeedPhrases = JSON.parse(
-        localStorage.getItem("seed_phrases") || "[]"
-      );
+      const storedSeedPhrases = getStoredSeedPhrases();
 
       const validPhrases: string[] = [];
       let foundSigningIdentity = false;
@@ -348,7 +339,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Update localStorage to remove any invalid phrases
       if (validPhrases.length !== storedSeedPhrases.length) {
-        localStorage.setItem("seed_phrases", JSON.stringify(validPhrases));
+        setStoredSeedPhrases(validPhrases);
       }
 
       // Then try with AuthClient
@@ -417,13 +408,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Store all seed phrases
-      const storedSeedPhrases = JSON.parse(
-        localStorage.getItem("seed_phrases") || "[]"
-      );
-      if (!storedSeedPhrases.includes(seedPhrase)) {
-        storedSeedPhrases.push(seedPhrase);
-        localStorage.setItem("seed_phrases", JSON.stringify(storedSeedPhrases));
-      }
+      persistSeedPhrase(seedPhrase);
 
       setShowSeedPhrase(true);
 
@@ -468,7 +453,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Try to find matching seed phrase in storage
-    const storedPhrases = JSON.parse(localStorage.getItem("seed_phrases") || "[]") as string[];
+    const storedPhrases = getStoredSeedPhrases();
     const matchingPhrase = storedPhrases.find((phrase: string) => {
       try {
         const testIdentity = identityFromSeed(phrase);
@@ -538,7 +523,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setShowSeedPhrase(false);
     setShowBackupInstructions(false);
     setErrorMessage(null);
-    localStorage.removeItem("seed_phrases");
+    clearStoredSeedPhrases();
   };
 
   return (
@@ -580,18 +565,11 @@ export function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
   const seed = mnemonicToSeedSync(seedPhrase, "");
 
   // 2 & 3. Create HMAC-SHA512 with key "ed25519 seed" and feed seed
-  const hmac = createHmac("sha512", "ed25519 seed");
-  hmac.update(seed);
+  const keyMaterial = hmac(sha512, "ed25519 seed", seed);
 
-  // 4. Get first 32 bytes of HMAC output
-  const keyMaterial = hmac.digest();
-  const seedBytes = keyMaterial.subarray(0, 32);
-
-  // Convert Buffer to ArrayBuffer for DFinity identity
-  const privateKeyArrayBuffer = new Uint8Array(seedBytes).buffer;
-
-  // Create DFinity identity from private key
-  return Ed25519KeyIdentity.fromSecretKey(privateKeyArrayBuffer);
+  // 4. Get first 32 bytes of HMAC output and create the identity
+  const seedBytes = keyMaterial.slice(0, 32);
+  return Ed25519KeyIdentity.fromSeed(seedBytes);
 }
 
 export function useAuth() {
