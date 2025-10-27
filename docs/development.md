@@ -101,17 +101,13 @@ cargo install --force cargo-make
 ```
 
 6. **Python Environment**
-   Install `pixi` for Python dependency management:
+   Set up Python environment for the project:
 
 ```bash
-curl -fsSL https://pixi.sh/install.sh | bash
+python3 scripts/setup-python-env.py
 ```
 
-After installation, set up project dependencies:
-
-```bash
-pixi install
-```
+This will create a virtual environment and install all necessary dependencies.
 
 ## Building the Project
 
@@ -249,7 +245,11 @@ cargo make
 #### Whitepaper
 
 ```bash
-pixi run python3 ./docs/whitepaper/build.py
+# Activate virtual environment first (if not already activated)
+source .venv/bin/activate  # On Linux/Mac
+# or .venv\Scripts\activate  # On Windows
+
+python3 ./docs/whitepaper/build.py
 ```
 
 The PDF will be generated at `build/docs/whitepaper/whitepaper.pdf`

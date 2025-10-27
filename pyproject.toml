@@ -7,33 +7,6 @@ license = "APACHE"
 readme = "README.md"
 requires-python = ">=3.10"
 
-[tool.pixi.project]
-channels = ["conda-forge"]
-platforms = ["linux-64"]
-
-[tool.pixi.tasks]
-build = "cargo build --release"
-install-pre-commit = "pixi global install pre-commit"
-install-gh = "pixi global install gh"
-install-micromamba = "pixi global install micromamba"
-install-starship = "pixi global install starship"
-install-ruff = "pixi global install ruff"
-install-tbump = "pixi global install tbump"
-install-pocket-ic-server = "curl -L -o - https://github.com/dfinity/pocketic/releases/download/9.0.3/pocket-ic-x86_64-linux.gz | gunzip | install /dev/stdin -m 755 $HOME/bin/pocket-ic"
-install = { depends_on = [
-    "install-pre-commit",
-    "install-gh",
-    "install-micromamba",
-    "install-starship",
-    "install-ruff",
-    "install-tbump",
-    "install-pocket-ic-server",
-] }
-pytest = { cmd = "pytest", env = { "POCKET_IC_BIN" = "$HOME/bin/pocket-ic" } }
-test-all = "cargo test --all-features"
-lint = "pre-commit run --all"
-bump = "tbump --only-patch"
-
 [tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "INFO"
@@ -45,8 +18,16 @@ addopts = ["--import-mode=importlib"]
 [tool.ruff]
 line-length = 130
 
-[tool.pixi.dependencies]
-pytest = "*"
-mock = "*"
-black = "*"
-python = "*"
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "mock",
+]
+dev = [
+    "pytest",
+    "mock",
+    "black",
+    "ruff",
+    "pre-commit",
+    "tbump",
+]

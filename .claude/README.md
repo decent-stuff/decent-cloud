@@ -56,8 +56,6 @@ Initialization script that:
 - **Integration**: End-to-end testing across all components
 
 ### 📦 Build System Integration
-- **Pants** for build orchestration
-- **Bazel** for hermetic builds
 - **Cargo** for Rust workspace management
 - **UV** for Python dependency management
 - **npm** for JavaScript packages

@@ -46,3 +46,4 @@ jobs:
           docker pull $IMAGE
           docker run --rm $IMAGE cargo --version
           docker run --rm $IMAGE cargo make --version
+          docker run --rm $HOME/.cargo/bin/uv --version

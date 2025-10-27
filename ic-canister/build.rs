@@ -208,8 +208,10 @@ pub fn main() {
         panic!("failed to build canister")
     };
 
-    let result = which::which("pocket-ic").expect(
-        "Failed to find pocket-ic server binary. Please run `pixi run install-pocket-ic-server`",
-    );
+    let result = which::which("pocket-ic").unwrap_or_else(|_| {
+        eprintln!("Failed to find pocket-ic server binary.");
+        eprintln!("Please run: python3 scripts/install-pocket-ic.py");
+        std::process::exit(1);
+    });
     println!("cargo:rustc-env=POCKET_IC_BIN={}", result.to_str().unwrap());
 }

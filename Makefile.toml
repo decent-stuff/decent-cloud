@@ -51,6 +51,36 @@ dependencies = ["dfx-start"]
 command = "cargo"
 args = ["build"]
 
+[tasks.setup-python]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+python3 scripts/setup-python-env.py
+'''
+
+[tasks.install-pocket-ic]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+python3 scripts/install-pocket-ic.py
+'''
+
+[tasks.build-whitepaper]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+if [ ! -d ".venv" ]; then
+    echo "Virtual environment not found. Running setup first..."
+    python3 scripts/setup-python-env.py
+fi
+
+source .venv/bin/activate
+python3 ./docs/whitepaper/build.py
+'''
+
 
 [tasks.test]
 dependencies = ["dfx-start", "build", "canister"]

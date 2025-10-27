@@ -12,7 +12,7 @@ WORKDIR $HOME
 RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 
 # Install deps
-RUN apt update && apt install -y libunwind-dev libssl-dev pkg-config
+RUN apt update && apt install -y libunwind-dev curl libssl-dev pkg-config
 
 # Install Rust
 RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
@@ -20,6 +20,9 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
 
 # Install cargo-make
 RUN cargo install cargo-make cargo-nextest wasm-pack
+
+# Install UV
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Install pocket-ic-server
 RUN curl -L https://github.com/dfinity/pocketic/releases/download/9.0.3/pocket-ic-x86_64-linux.gz -o - | gzip -d - > /usr/local/bin/pocket-ic && chmod +x /usr/local/bin/pocket-ic
