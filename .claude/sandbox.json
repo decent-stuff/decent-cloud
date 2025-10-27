@@ -1,0 +1,80 @@
+{
+  "environment": {
+    "type": "container",
+    "base_image": "rust:latest",
+    "customizations": {
+      "apt_packages": [
+        "python3",
+        "python3-pip",
+        "python3-venv",
+        "nodejs",
+        "npm",
+        "git",
+        "curl",
+        "wget",
+        "build-essential",
+        "pkg-config",
+        "libssl-dev",
+        "protobuf-compiler",
+        "protoc-gen-go",
+        "protoc-gen-go-grpc"
+      ]
+    },
+    "environment_variables": {
+      "RUST_TOOLCHAIN": "stable",
+      "RUST_BACKTRACE": "1",
+      "XDG_DATA_HOME": "/usr/local",
+      "POCKET_IC_BIN": "/usr/local/bin/pocket-ic",
+      "CARGO_TERM_COLOR": "always",
+      "PYTHONPATH": "/code",
+      "NODE_ENV": "development",
+      "PATH": "/usr/local/dfx/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    }
+  },
+  "tools": {
+    "rust": {
+      "toolchain": "stable",
+      "components": ["rustfmt", "clippy", "rust-src"],
+      "targets": ["wasm32-unknown-unknown"],
+      "additional_tools": ["cargo-make", "cargo-nextest", "wasm-pack"]
+    },
+    "python": {
+      "version": "3.11",
+      "package_manager": "poetry",
+      "additional_tools": ["pytest", "black", "ruff", "mypy"]
+    },
+    "javascript": {
+      "node_version": "22",
+      "package_manager": "npm",
+      "additional_tools": ["typescript", "jest", "eslint", "prettier"]
+    },
+    "internet_computer": {
+      "dfx_version": "0.24.2",
+      "pocket_ic": true,
+      "candid": true
+    }
+  },
+  "build_commands": {
+    "rust": "cargo make",
+    "python": "poetry install && poetry run pytest",
+    "website": "cd website && npm install && npm run build",
+    "full_test": "cargo make && cd simulator && poetry run pytest && cd website && npm test"
+  },
+  "mounts": {
+    "workspace": "/code",
+    "cargo_cache": "/usr/local/cargo/registry",
+    "npm_cache": "/root/.npm",
+    "poetry_cache": "/root/.cache/pypoetry"
+  },
+  "working_directory": "/code",
+  "features": {
+    "privileged": false,
+    "network": true,
+    "mount_docker_socket": false
+  },
+  "resource_limits": {
+    "memory": "8GB",
+    "cpu": "4",
+    "timeout": 1800
+  }
+}

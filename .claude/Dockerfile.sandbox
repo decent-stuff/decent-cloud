@@ -1,0 +1,62 @@
+# Use the official Rust image as a base
+FROM rust:latest
+
+ENV HOME=/code \
+    XDG_DATA_HOME=/usr/local \
+    PATH=/usr/local/dfx/bin:$PATH \
+    POCKET_IC_BIN=/usr/local/bin/pocket-ic
+RUN mkdir $HOME
+WORKDIR $HOME
+
+# Install dfx (matching CI setup)
+RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+
+# Install system dependencies (including CI deps and additional ones)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    nodejs \
+    npm \
+    git \
+    curl \
+    wget \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    protoc-gen-go \
+    protoc-gen-go-grpc \
+    libunwind-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust targets (matching CI setup)
+RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
+    && rustup toolchain install nightly --profile=complete
+
+# Install cargo-make (matching CI setup)
+RUN cargo install cargo-make cargo-nextest wasm-pack
+
+# Install pocket-ic-server (matching CI setup with version)
+RUN curl -L https://github.com/dfinity/pocketic/releases/download/9.0.3/pocket-ic-x86_64-linux.gz -o - | gzip -d - > /usr/local/bin/pocket-ic && chmod +x /usr/local/bin/pocket-ic
+
+# Install Python and Poetry
+RUN pip3 install poetry pytest black ruff mypy
+
+# Install Node.js tools
+RUN npm install -g typescript jest eslint prettier
+
+# Set up additional environment variables
+ENV CARGO_TERM_COLOR=always
+ENV PYTHONPATH=/code
+ENV NODE_ENV=development
+
+# Create necessary directories for caches
+RUN mkdir -p /usr/local/cargo/registry /root/.npm /root/.cache/pypoetry
+
+# Set up entrypoint (matching CI setup)
+ENV TINI_VERSION=v0.19.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+RUN chmod +x /tini
+ENTRYPOINT ["/tini", "--"]
