@@ -165,6 +165,7 @@ pub async fn ledger_data_push(
         );
         let args = Encode!(&cursor_push.to_urlenc_string(), &buf).map_err(|e| e.to_string())?;
         let result = ledger_canister.call_update("data_push", &args).await?;
+        #[allow(clippy::double_parens)]
         let result = Decode!(&result, Result<String, String>).map_err(|e| e.to_string())??;
         info!("Response from pushing at position {}: {}", position, result);
     }

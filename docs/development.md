@@ -56,7 +56,7 @@ DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)
 
 **Install pocket-ic:**
 ```bash
-curl -L https://github.com/dfinity/pocketic/releases/download/9.0.3/pocket-ic-x86_64-linux.gz -o - | gzip -d - > ~/bin/pocket-ic && chmod +x ~/bin/pocket-ic
+curl -L https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz -o - | gzip -d - > ~/bin/pocket-ic && chmod +x ~/bin/pocket-ic
 ```
 
 Make sure `~/bin` is in your PATH, or adjust the installation path as needed.

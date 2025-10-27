@@ -42,6 +42,7 @@ pub async fn handle_funds_transfer(
     };
     let args = Encode!(&transfer_args).map_err(|e| e.to_string())?;
     let result = canister.call_update("icrc1_transfer", &args).await?;
+    #[allow(clippy::double_parens)]
     let response = Decode!(&result, Result<Nat, Icrc1TransferError>).map_err(|e| e.to_string())?;
 
     match response {

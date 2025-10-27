@@ -40,7 +40,7 @@ tempfile.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 ic-cdk.workspace = true
-web-sys = { version = "0.3.80", features = [
+web-sys = { version = "0.3.82", features = [
     "Storage",
     "Window",
     "console",

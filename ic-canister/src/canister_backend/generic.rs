@@ -11,7 +11,10 @@ use dcc_common::{
     LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
     MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
-use ic_cdk::println;
+use ic_cdk::{
+    api::{certified_data_set, msg_caller},
+    println,
+};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::platform_specific::{persistent_storage_read, persistent_storage_write};
 use ledger_map::{error, info, warn, LedgerMap};
@@ -75,7 +78,7 @@ fn ledger_periodic_task() {
         // Set certified data, for compliance with ICRC-3
         // Borrowed from https://github.com/ldclabs/ic-sft/blob/4825d760811731476ffbbb1705295a6ad4aae58f/src/ic_sft_canister/src/store.rs#L193-L210
         let root_hash = ledger_construct_hash_tree(ledger).digest();
-        ic_cdk::api::set_certified_data(&root_hash);
+        certified_data_set(root_hash);
 
         // Cleanup old transactions that are used for deduplication
         recent_transactions_cleanup();
@@ -126,7 +129,7 @@ pub fn _pre_upgrade() {
             error!("Failed to commit ledger: {}", e);
         });
         // Set certified data, for compliance with ICRC-3
-        ic_cdk::api::set_certified_data(&ledger.borrow().get_latest_block_hash());
+        certified_data_set(ledger.borrow().get_latest_block_hash());
     });
 }
 
@@ -375,7 +378,7 @@ pub(crate) fn _data_push_auth() -> Result<String, String> {
         let authorized_pusher =
             AUTHORIZED_PUSHER.with(|authorized_pusher| *authorized_pusher.borrow());
         if ledger.get_blocks_count() == 0 {
-            let caller = ic_cdk::api::caller();
+            let caller = msg_caller();
 
             match authorized_pusher {
                 Some(authorized_pusher) => {
@@ -399,7 +402,7 @@ pub(crate) fn _data_push_auth() -> Result<String, String> {
 }
 
 pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String> {
-    let caller = ic_cdk::api::caller();
+    let caller = msg_caller();
     let authorized_pusher = AUTHORIZED_PUSHER.with(|authorized_pusher| *authorized_pusher.borrow());
 
     match authorized_pusher {

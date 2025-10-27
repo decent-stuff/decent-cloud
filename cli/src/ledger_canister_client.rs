@@ -112,12 +112,14 @@ impl LedgerCanister {
     pub async fn init_ledger_map(&self) -> Result<String, String> {
         let args = Encode!(&()).map_err(|e| e.to_string())?;
         let response = self.call_update("init_ledger_map", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
     pub async fn provider_register(&self, key: &[u8], value: &[u8]) -> Result<String, String> {
         let args = Encode!(&key, &value).map_err(|e| e.to_string())?;
         let response = self.call_update("provider_register", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
@@ -129,6 +131,7 @@ impl LedgerCanister {
     ) -> Result<String, String> {
         let args = Encode!(&key, &memo, &nonce_crypto_sig).map_err(|e| e.to_string())?;
         let response = self.call_update("provider_check_in", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
@@ -141,6 +144,7 @@ impl LedgerCanister {
         let args = Encode!(&prov_pubkey_bytes, &prov_profile_bytes, &crypto_signature)
             .map_err(|e| e.to_string())?;
         let response = self.call_update("provider_update_profile", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
@@ -153,6 +157,7 @@ impl LedgerCanister {
         let args = Encode!(&prov_pubkey_bytes, &prov_offering_bytes, &crypto_signature)
             .map_err(|e| e.to_string())?;
         let response = self.call_update("provider_update_offering", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
@@ -165,6 +170,7 @@ impl LedgerCanister {
         let args = Encode!(&requester_pubkey_bytes, &payload_bytes, &payload_sig_bytes)
             .map_err(|e| e.to_string())?;
         let response = self.call_update("contract_sign_request", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
@@ -177,6 +183,7 @@ impl LedgerCanister {
         let args = Encode!(&provider_pubkey_bytes, &payload_bytes, &payload_sig_bytes)
             .map_err(|e| e.to_string())?;
         let response = self.call_update("contract_sign_reply", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
@@ -189,6 +196,7 @@ impl LedgerCanister {
             .call_query("contracts_list_pending", &args)
             .await
             .unwrap();
+        #[allow(clippy::double_parens)]
         Decode!(
             response.as_slice(),
             Vec<(ContractId, ContractReqSerialized)>
@@ -211,6 +219,7 @@ impl LedgerCanister {
             .call_query("get_check_in_nonce", &args)
             .await
             .expect("Failed to call get_check_in_nonce");
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), Vec<u8>).expect("Failed to decode response")
     }
 
@@ -221,6 +230,7 @@ impl LedgerCanister {
     ) -> Result<(String, Vec<u8>), String> {
         let args = Encode!(&cursor, &bytes_before).map_err(|e| e.to_string())?;
         let response = self.call_query("data_fetch", &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), Result<(String, Vec<u8>), String>)
             .map_err(|e| e.to_string())?
     }
@@ -228,6 +238,7 @@ impl LedgerCanister {
     async fn get_logs_by_method(&self, method: &str) -> Result<String, String> {
         let args = Encode!(&()).map_err(|e| e.to_string())?;
         let response = self.call_query(method, &args).await?;
+        #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 

@@ -5,7 +5,7 @@ use dcc_common::{
     nat_to_balance, FundsTransfer, FundsTransferApproval, IcrcCompatibleAccount, TokenAmountE9s,
     TRANSFER_MEMO_BYTES_MAX,
 };
-use ic_cdk::caller;
+use ic_cdk::api::msg_caller as caller;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};

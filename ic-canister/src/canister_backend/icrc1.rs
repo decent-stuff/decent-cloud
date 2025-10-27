@@ -20,7 +20,7 @@ use dcc_common::{
     nat_to_balance, FundsTransfer, IcrcCompatibleAccount, TokenAmountE9s, PERMITTED_DRIFT,
     TX_WINDOW,
 };
-use ic_cdk::caller;
+use ic_cdk::api::msg_caller as caller;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use icrc_ledger_types::icrc1::transfer::{Memo as Icrc1Memo, TransferError as Icrc1TransferError};
@@ -197,7 +197,7 @@ pub fn _mint_tokens_for_test(
                 balance_to_after,
             ),
         )
-        .unwrap_or_else(|err| ic_cdk::trap(&err.to_string()))
+        .unwrap_or_else(|err| ic_cdk::trap(err.to_string()))
     })
 }
 

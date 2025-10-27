@@ -86,7 +86,7 @@ fn _get_committed_transactions(start: u64, max_length: u64) -> Vec<Transaction> 
     LEDGER_MAP.with(|ledger| {
         'outer: for block in ledger.borrow().iter_raw() {
             let (_blk_header, ledger_block) = block.unwrap_or_else(|e| {
-                ic_cdk::api::trap(&format!("Failed to deserialize block: {}", e));
+                ic_cdk::api::trap(format!("Failed to deserialize block: {}", e));
             });
 
             // Extract the transactions from the block
@@ -120,7 +120,7 @@ fn _get_uncommitted_transactions(max_length: u64) -> Vec<Transaction> {
         {
             let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
                 .unwrap_or_else(|e| {
-                    ic_cdk::api::trap(&format!(
+                    ic_cdk::api::trap(format!(
                         "Failed to deserialize transfer {:?} ==> {:?}",
                         entry, e
                     ));

@@ -32,6 +32,7 @@ pub async fn handle_user_command(
             let pubkey_signature = dcc_id.sign(&pubkey_bytes)?;
             let args = Encode!(&pubkey_bytes, &pubkey_signature.to_bytes())?;
             let result = canister.call_update("user_register", &args).await?.to_vec();
+            #[allow(clippy::double_parens)]
             let response = Decode!(&result, Result<String, String>).map_err(|e| e.to_string())?;
 
             match response {

@@ -51,7 +51,7 @@ fn prepare_token_logo_env_var() {
 }
 
 // Configuration constants
-const POCKET_IC_VERSION: &str = "9.0.3";
+const POCKET_IC_VERSION: &str = "10.0.0";
 
 fn install_dfx_if_needed() {
     // Check if dfx is installed

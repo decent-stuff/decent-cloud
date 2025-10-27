@@ -65,7 +65,7 @@ fn test_search_query_default() {
 
 #[test]
 fn test_offering_filters() {
-    let filters = vec![
+    let filters = [
         OfferingFilter::PriceRange(10.0, 100.0),
         OfferingFilter::ProductType(ProductType::VPS),
         OfferingFilter::Country("US".to_string()),

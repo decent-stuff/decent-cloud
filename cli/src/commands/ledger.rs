@@ -60,6 +60,7 @@ pub async fn handle_ledger_remote_command(
                 LedgerCanister::new_without_identity(network_url, ledger_canister_id).await?;
             return crate::ledger::ledger_data_fetch(&canister, &mut ledger_local).await;
         }
+        #[allow(clippy::double_parens)]
         LedgerRemoteCommands::DataPushAuthorize | LedgerRemoteCommands::DataPush => {
             let identity =
                 identity.expect("Identity must be specified for this command, use --identity");
@@ -110,6 +111,7 @@ pub async fn handle_ledger_remote_command(
                 LedgerCanister::new_without_identity(network_url, ledger_canister_id).await?;
             let noargs = Encode!(&()).expect("Failed to encode args");
             let response = canister.call_query("get_registration_fee", &noargs).await?;
+            #[allow(clippy::double_parens)]
             let fee_e9s = Decode!(response.as_slice(), u64).map_err(|e| e.to_string())?;
             println!(
                 "Registration fee: {}",
@@ -196,9 +198,7 @@ async fn fetch_and_print_logs(
     let logs = canister
         .get_logs(level)
         .await
-        .map_err(|err| -> Box<dyn std::error::Error> {
-            Box::new(io::Error::new(io::ErrorKind::Other, err))
-        })?;
+        .map_err(|err| -> Box<dyn std::error::Error> { Box::new(io::Error::other(err)) })?;
     print_logs(level, &logs).map_err(|err| -> Box<dyn std::error::Error> { Box::new(err) })?;
     Ok(())
 }
