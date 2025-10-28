@@ -35,7 +35,6 @@ TOOL=""
 COMMAND=""
 DETACH=false
 REBUILD=true
-SHELL_MODE=false
 
 # Helper functions
 log_info() {
@@ -66,18 +65,18 @@ OPTIONS:
     -h, --help          Show this help message
     -d, --detach        Run in detached mode
         --no-build      Skip building Docker image before running, run the existing image if available, without checking
-    -s, --shell         Start a shell in the container instead of running a tool
     -f, --file FILE     Use specific docker-compose file (default: <repo-root>/agent/docker-compose.yml)
 
 TOOLS:
     claude              Run Claude Code (with dangerously-skip-permissions)
     happy               Run Happy Coder
+    bash OR shell       Run a plain bash shell
 
 EXAMPLES:
     $0 claude                        # Start Claude Code with dangerously-skip-permissions
     $0 happy                         # Start Happy Coder
+    $0 bash                          # Start a bash shell
     $0 claude --no-build             # Run Claude Code without rebuilding
-    $0 happy --shell                 # Start a bash shell in the container
     $0 claude "cargo test"           # Run cargo test in the container with Claude Code
     $0 happy --detach                # Start Happy Coder in background
 
@@ -105,15 +104,11 @@ while [[ $# -gt 0 ]]; do
             REBUILD=false
             shift
             ;;
-        -s|--shell)
-            SHELL_MODE=true
-            shift
-            ;;
         -f|--file)
             COMPOSE_FILE="$2"
             shift 2
             ;;
-        claude|happy)
+        claude|happy|shell|bash)
             if [[ -z "$TOOL" ]]; then
                 TOOL="$1"
                 shift
@@ -202,6 +197,10 @@ run_tool() {
             happy)
                 tool_command="happy --yolo"
                 log_info "Starting Happy Coder..."
+                ;;
+            bash|shell)
+                tool_command="bash"
+                log_info "Starting bash shell..."
                 ;;
         esac
 

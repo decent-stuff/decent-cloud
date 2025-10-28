@@ -18,6 +18,7 @@ services:
       - ${HOME}/.claude:/home/ubuntu/.claude
       - ${HOME}/.happy:/home/ubuntu/.happy
       # Cache volumes for rust tooling and dependencies (controlled by ubuntu user)
+      - rustup-cache:/usr/local/rustup
       - cargo-cache:/home/ubuntu/.cargo
       - home-cache:/home/ubuntu/.cache
     working_dir: /code
@@ -30,6 +31,8 @@ services:
       - decent-cloud-network
 
 volumes:
+  rustup-cache:
+    driver: local
   cargo-cache:
     driver: local
   home-cache:
