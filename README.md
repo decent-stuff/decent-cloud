@@ -2,7 +2,6 @@
 
 Decent Cloud is a peer-to-peer platform for decentralized cloud resource sharing and management.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
 ![Version](https://img.shields.io/badge/version-0.4.0-blue)
 [![Documentation](https://img.shields.io/badge/docs-latest-green.svg)](docs/)

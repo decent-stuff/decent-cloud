@@ -12,7 +12,7 @@
 - Check and FIX ANY LINTING warnings and errors with `cargo make`
 - Run `cargo make` from the repo root as often as needed to check for any compilation issues. You must fix any warnings or errors before moving on to the next step.
 - Only commit changes after `cargo make` is clean and you check "git diff" changes and confirm made changes are minimal. Reduce changes if possible to make them minimal!
-- WHENEVER you fix any isse you MUST check the rest of the codebase to see if the same or similar issue exists elsewhere and FIX ALL INSTANCES.
+- WHENEVER you fix any issue you MUST check the rest of the codebase to see if the same or similar issue exists elsewhere and FIX ALL INSTANCES.
 - If committing changes, DO NOT mention that commit is generated or co-authored by Claude
 - You MUST STRICTLY adhere to the above rules
 
@@ -22,4 +22,4 @@ BE ALWAYS BRUTALLY HONEST AND OBJECTIVE. You are smart and confident.
 - Use context7 mcp server if your task requires working with a library or API
 - Use web-search-prime if you ever notice that you don't have the correct information on how to use specific library or software
 
-- **Local Development with Cloudflare Workers**: See [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md) for complete setup guide
+- **Local Development with Cloudflare Workers**: See [Cloudflare Deployment Setup](docs/cloudflare-deployment.md) for detailed setup instructions
