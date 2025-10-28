@@ -316,7 +316,7 @@ mod tests {
         assert!(ledger_map.commit_block().is_ok());
         let entries = ledger_map.entries.get("Label2").unwrap();
         let stored_entry = entries.get(&key).unwrap();
-        assert_entry_fields_match(stored_entry, "Label2", &key, &vec![], Operation::Delete);
+        assert_entry_fields_match(stored_entry, "Label2", &key, &[], Operation::Delete);
         assert_eq!(ledger_map.entries.get("Label1"), None);
         assert_eq!(
             ledger_map.get("Label2", &key).unwrap_err(),
@@ -673,7 +673,7 @@ mod tests {
 
         // Add entries and verify pre-serialization
         ledger_map.upsert("Label1", b"key1", b"value1").unwrap();
-        assert!(ledger_map.get_next_block_serialized_data().len() > 0);
+        assert!(!ledger_map.get_next_block_serialized_data().is_empty());
 
         // Commit clears serialized data
         ledger_map.commit_block().unwrap();
@@ -709,7 +709,11 @@ mod tests {
 
         // Overwrite with larger value - should update serialized data
         ledger_map
-            .upsert("Label1", &key, b"much_larger_value_that_should_increase_size")
+            .upsert(
+                "Label1",
+                &key,
+                b"much_larger_value_that_should_increase_size",
+            )
             .unwrap();
         let larger_size = ledger_map.get_next_block_serialized_data().len();
         assert!(larger_size > initial_size);
@@ -829,11 +833,16 @@ mod tests {
         // Test 2: Entry count by label (may be 1 due to delete filter in iteration)
         let label1_count = ledger_map.get_next_block_entries_count(Some("Label1"));
         assert!(label1_count >= 1); // At least the upsert or tombstone exists
-        assert_eq!(ledger_map.get_next_block_entries_count(Some("NonExistent")), 0);
+        assert_eq!(
+            ledger_map.get_next_block_entries_count(Some("NonExistent")),
+            0
+        );
 
         // Test 3: Large values work (within size limits)
         let large_value = vec![b'y'; 10000]; // 10KB
-        ledger_map.upsert("Label2", b"large_key", &large_value).unwrap();
+        ledger_map
+            .upsert("Label2", b"large_key", &large_value)
+            .unwrap();
         let final_serialized = ledger_map.get_next_block_serialized_data();
         assert!(final_serialized.len() > serialized.len()); // Should grow
     }

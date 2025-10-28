@@ -128,46 +128,14 @@ dc account --identity my-validator
 
 ## Economics
 
-### Block Rewards
+For detailed information about token economics, block rewards, and costs, see the [Token Distribution Guide](token-distribution.md).
 
-- 50 DCT per block
-- Every 10 minutes
-- Halving schedule similar to Bitcoin
-- Equal distribution among all active validators
+Key points for validators:
+- Block rewards (50 DCT every 10 minutes) are shared equally among active validators
+- Registration requires 0.5 DCT (one-time fee)
+- Each validation requires 0.5 DCT
+- Your ROI depends on consistent participation and total number of validators
 
-### Costs
-
-- Registration: 0.5 DCT (one-time)
-- Validation: 0.5 DCT per block
-- Transaction fees: Minimal
-
-### ROI Considerations
-
-- Consistent participation is key
-- Rewards depend on total validators
-- Future network growth may affect token value
-
-## Tips for Success
-
-1. **Consistent Participation**
-
-   - Regular validations
-   - Maintain adequate token balance
-   - Monitor system performance
-   - Stay updated with changes
-
-2. **Community Involvement**
-
-   - Share knowledge
-   - Help other validators
-   - Participate in governance
-   - Suggest improvements
-
-3. **Technical Maintenance**
-   - Keep software updated
-   - Monitor system resources
-   - Maintain reliable connectivity
-   - Regular security checks
 
 ## Support
 
@@ -175,11 +143,3 @@ dc account --identity my-validator
 - 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
 - 📚 [Read Documentation](https://decent-cloud.org/)
 
-## Future Developments
-
-- WebUI for easier management
-- Enhanced monitoring tools
-- Automated reward tracking
-- Advanced analytics
-
-Remember: Your participation helps secure and grow the network while earning rewards!
