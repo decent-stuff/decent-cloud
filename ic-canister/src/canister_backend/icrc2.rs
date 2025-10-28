@@ -5,7 +5,6 @@ use dcc_common::{
     nat_to_balance, FundsTransfer, FundsTransferApproval, IcrcCompatibleAccount, TokenAmountE9s,
     TRANSFER_MEMO_BYTES_MAX,
 };
-use ic_cdk::api::msg_caller as caller;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -20,7 +19,7 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
         });
     }
 
-    let caller_principal = caller();
+    let caller_principal = ic_cdk::api::msg_caller();
     let from =
         IcrcCompatibleAccount::new(caller_principal, args.from_subaccount.map(|s| s.to_vec()));
 
@@ -125,7 +124,7 @@ pub fn _icrc2_approve(args: ApproveArgs) -> Result<Nat, ApproveError> {
 }
 
 pub fn _icrc2_transfer_from(args: TransferFromArgs) -> Result<Nat, TransferFromError> {
-    let caller_principal = caller();
+    let caller_principal = ic_cdk::api::msg_caller();
     let spender = Account {
         owner: caller_principal,
         subaccount: args.spender_subaccount,

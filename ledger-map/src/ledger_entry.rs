@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::io;
 
 /// Enum defining the different operations that can be performed on entries.
-#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(
+    BorshSerialize, BorshDeserialize, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize,
+)]
 pub enum Operation {
     Upsert,
     Delete,
@@ -18,15 +20,19 @@ pub type EntryKey = Vec<u8>;
 pub type EntryValue = Vec<u8>;
 
 /// Struct representing an entry stored for a particular key in the key-value store.
-#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct LedgerEntryV1 {
     label: String,
     key: EntryKey,
     value: EntryValue,
     operation: Operation,
+    /// Pre-serialized Borsh data for fast sync (not persisted to disk)
+    #[borsh(skip)]
+    #[serde(skip)]
+    serialized: Option<Vec<u8>>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum LedgerEntry {
     V1(LedgerEntryV1),
 }
@@ -43,6 +49,7 @@ impl LedgerEntry {
             key: key.as_ref().to_vec(),
             value: value.as_ref().to_vec(),
             operation,
+            serialized: None, // Will be set during insertion if needed
         })
     }
 
@@ -67,6 +74,34 @@ impl LedgerEntry {
     pub fn operation(&self) -> Operation {
         match self {
             LedgerEntry::V1(entry) => entry.operation,
+        }
+    }
+
+    /// Get pre-serialized data if available, otherwise serialize on-demand
+    pub fn get_serialized(&self) -> Option<Vec<u8>> {
+        match self {
+            LedgerEntry::V1(entry) => entry.serialized.clone(),
+        }
+    }
+
+    /// Set pre-serialized data
+    pub fn set_serialized(&mut self, serialized: Vec<u8>) {
+        match self {
+            LedgerEntry::V1(entry) => entry.serialized = Some(serialized),
+        }
+    }
+
+    /// Get serialized data, creating it if needed
+    pub fn ensure_serialized(&self) -> Result<Vec<u8>, LedgerError> {
+        match self {
+            LedgerEntry::V1(entry) => {
+                if let Some(ref serialized) = entry.serialized {
+                    Ok(serialized.clone())
+                } else {
+                    // Serialize on-demand if not already done
+                    borsh::to_vec(self).map_err(|e| LedgerError::SerializationError(e.to_string()))
+                }
+            }
         }
     }
 }

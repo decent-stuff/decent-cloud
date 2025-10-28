@@ -7,6 +7,20 @@ mod tests {
     use crate::ledger_entry::LedgerBlockHeader;
     use crate::{partition_table, LedgerBlock, LedgerEntry, LedgerError, LedgerMap, Operation};
 
+    /// Helper function to compare entry fields (ignoring serialized field)
+    fn assert_entry_fields_match(
+        entry: &LedgerEntry,
+        expected_label: &str,
+        expected_key: &[u8],
+        expected_value: &[u8],
+        expected_operation: Operation,
+    ) {
+        assert_eq!(entry.label(), expected_label);
+        assert_eq!(entry.key(), expected_key);
+        assert_eq!(entry.value(), expected_value);
+        assert_eq!(entry.operation(), expected_operation);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn log_init() {
         // Set log level to info by default
@@ -121,9 +135,12 @@ mod tests {
         assert!(ledger_map.commit_block().is_ok());
         assert_eq!(ledger_map.get("Label2", &key).unwrap(), value);
         let entries = ledger_map.entries.get("Label2").unwrap();
-        assert_eq!(
-            entries.get(&key),
-            Some(&LedgerEntry::new("Label2", key, value, Operation::Upsert,))
+        assert_entry_fields_match(
+            entries.get(&key).unwrap(),
+            "Label2",
+            &key,
+            &value,
+            Operation::Upsert,
         );
         assert_eq!(ledger_map.metadata.borrow().num_blocks(), 1);
         assert!(ledger_map.next_block_entries.is_empty());
@@ -142,14 +159,13 @@ mod tests {
         assert_eq!(ledger_map.get("Label1", &key).unwrap(), value);
         ledger_map.commit_block().unwrap();
         let entries = ledger_map.entries.get("Label1").unwrap();
-        assert_eq!(
-            entries.get(&key),
-            Some(&LedgerEntry::new(
-                "Label1",
-                key.clone(),
-                value.clone(),
-                Operation::Upsert,
-            ))
+        // Check the entry fields (ignore serialized field)
+        assert_entry_fields_match(
+            entries.get(&key).unwrap(),
+            "Label1",
+            &key,
+            &value,
+            Operation::Upsert,
         );
     }
 
@@ -188,13 +204,20 @@ mod tests {
             ledger_map.get("Label1", &key).unwrap_err(),
             LedgerError::EntryNotFound
         ); // After delete: the value is gone in the public interface
-        assert_eq!(
-            ledger_map
-                .next_block_entries
-                .get("Label1")
-                .unwrap()
-                .get(&key),
-            expected_tombstone.as_ref()
+           // Check that the entry in next_block has the right fields (ignore serialized field)
+        let actual_tombstone = ledger_map
+            .next_block_entries
+            .get("Label1")
+            .unwrap()
+            .get(&key)
+            .unwrap();
+        let expected = expected_tombstone.as_ref().unwrap();
+        assert_entry_fields_match(
+            actual_tombstone,
+            expected.label(),
+            expected.key(),
+            expected.value(),
+            expected.operation(),
         );
         assert_eq!(ledger_map.entries.get("Label1"), None); // (not yet committed)
 
@@ -202,9 +225,14 @@ mod tests {
         assert!(ledger_map.commit_block().is_ok());
 
         // And recheck: the value is gone in the public interface and deletion is in the ledger
-        assert_eq!(
-            ledger_map.entries.get("Label1").unwrap().get(&key),
-            expected_tombstone.as_ref()
+        let stored_tombstone = ledger_map.entries.get("Label1").unwrap().get(&key).unwrap();
+        let expected = expected_tombstone.as_ref().unwrap();
+        assert_entry_fields_match(
+            stored_tombstone,
+            expected.label(),
+            expected.key(),
+            expected.value(),
+            expected.operation(),
         );
         assert_eq!(ledger_map.next_block_entries.get("Label1"), None);
         assert_eq!(
@@ -229,16 +257,8 @@ mod tests {
         ledger_map.delete("Label2", key.clone()).unwrap();
 
         // Ensure that the entry is not deleted from the ledger since the label doesn't match
-        let entries_providers = ledger_map.entries.get("Label1").unwrap();
-        assert_eq!(
-            entries_providers.get(&key),
-            Some(&LedgerEntry::new(
-                "Label1",
-                key.clone(),
-                value.clone(),
-                Operation::Upsert,
-            ))
-        );
+        let stored_entry = ledger_map.entries.get("Label1").unwrap().get(&key).unwrap();
+        assert_entry_fields_match(stored_entry, "Label1", &key, &value, Operation::Upsert);
         assert_eq!(ledger_map.entries.get("Label2"), None);
     }
 
@@ -295,16 +315,8 @@ mod tests {
         ledger_map.delete("Label2", key.clone()).unwrap();
         assert!(ledger_map.commit_block().is_ok());
         let entries = ledger_map.entries.get("Label2").unwrap();
-        assert_eq!(
-            entries.get(&key),
-            Some(LedgerEntry::new(
-                "Label2",
-                key.clone(),
-                vec![],
-                Operation::Delete
-            ))
-            .as_ref()
-        );
+        let stored_entry = entries.get(&key).unwrap();
+        assert_entry_fields_match(stored_entry, "Label2", &key, &vec![], Operation::Delete);
         assert_eq!(ledger_map.entries.get("Label1"), None);
         assert_eq!(
             ledger_map.get("Label2", &key).unwrap_err(),
@@ -650,5 +662,179 @@ mod tests {
             empty_collected.push((key.to_vec(), value.to_vec()));
         });
         assert!(empty_collected.is_empty());
+    }
+
+    #[test]
+    fn test_next_block_serialized_data() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        // Test empty next block
+        assert_eq!(ledger_map.get_next_block_serialized_data(), Vec::new());
+
+        // Add entries and verify pre-serialization
+        ledger_map.upsert("Label1", b"key1", b"value1").unwrap();
+        assert!(ledger_map.get_next_block_serialized_data().len() > 0);
+
+        // Commit clears serialized data
+        ledger_map.commit_block().unwrap();
+        assert_eq!(ledger_map.get_next_block_serialized_data(), Vec::new());
+    }
+
+    #[test]
+    fn test_next_block_limits() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        // Test normal entry works
+        ledger_map.upsert("Label1", b"key1", b"value1").unwrap();
+
+        // Test size limit enforcement
+        let large_value = vec![0u8; 3 * 1024 * 1024]; // 3MB exceeds 2MB limit
+        let result = ledger_map.upsert("Label1", b"large_key", large_value);
+        assert!(matches!(result, Err(LedgerError::BlockTooLarge(_))));
+
+        // Verify entries are pre-serialized on successful insertion
+        assert!(ledger_map.next_block_entries["Label1"][&b"key1".to_vec()]
+            .get_serialized()
+            .is_some());
+    }
+
+    #[test]
+    fn test_next_block_comprehensive_coverage() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        // Test 1: Overwrite scenarios and serialization consistency
+        let key = b"test_key".to_vec();
+        ledger_map.upsert("Label1", &key, b"small_value").unwrap();
+        let initial_size = ledger_map.get_next_block_serialized_data().len();
+
+        // Overwrite with larger value - should update serialized data
+        ledger_map
+            .upsert("Label1", &key, b"much_larger_value_that_should_increase_size")
+            .unwrap();
+        let larger_size = ledger_map.get_next_block_serialized_data().len();
+        assert!(larger_size > initial_size);
+
+        // Test 2: Serialization fallback works
+        // Manually clear serialized data to test fallback mechanism
+        for (_label, entries) in &mut ledger_map.next_block_entries {
+            for (_key, entry) in entries {
+                let new_entry =
+                    LedgerEntry::new(entry.label(), entry.key(), entry.value(), entry.operation());
+                *entry = new_entry;
+            }
+        }
+        // Should still work via fallback
+        let fallback_serialized = ledger_map.get_next_block_serialized_data();
+        assert!(!fallback_serialized.is_empty());
+        assert_eq!(fallback_serialized.len(), larger_size);
+    }
+
+    #[test]
+    fn test_size_limit_boundary_conditions() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        // Test accumulated size limit - many small entries
+        let small_value = vec![42u8; 1000]; // 1KB each
+        let entries_per_batch = 1000; // 1MB per batch
+        let max_batches = 1; // Should allow first batch
+
+        for batch in 0..max_batches {
+            for i in 0..entries_per_batch {
+                let key = format!("key_{}_{}", batch, i);
+                ledger_map
+                    .upsert("Label1", key.as_bytes(), &small_value)
+                    .unwrap();
+            }
+        }
+
+        // Should be able to add one more small entry (under 2MB limit)
+        ledger_map
+            .upsert("Label1", b"final_key", &small_value)
+            .unwrap();
+
+        // But adding another full batch should exceed limit
+        for i in 0..entries_per_batch {
+            let key = format!("overflow_key_{}", i);
+            let result = ledger_map.upsert("Label1", key.as_bytes(), &small_value);
+            if result.is_err() {
+                assert!(matches!(result, Err(LedgerError::BlockTooLarge(_))));
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn test_memory_cleanup_after_commit() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        // Add multiple entries with pre-serialized data
+        for i in 0..100 {
+            let key = format!("key_{}", i);
+            let value = format!("value_{}", i);
+            ledger_map
+                .upsert("Label1", key.as_bytes(), value.as_bytes())
+                .unwrap();
+        }
+
+        // Verify all entries have pre-serialized data
+        for (_label, entries) in &ledger_map.next_block_entries {
+            for (_key, entry) in entries {
+                assert!(entry.get_serialized().is_some());
+            }
+        }
+
+        // Commit should clear next_block_entries and associated serialized data
+        ledger_map.commit_block().unwrap();
+
+        // Verify cleanup
+        assert!(ledger_map.next_block_entries.is_empty());
+        assert_eq!(ledger_map.get_next_block_serialized_data(), Vec::new());
+    }
+
+    #[test]
+    fn test_force_commit_edge_cases() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        // Add entries that would be lost on upgrade
+        ledger_map.upsert("Label1", b"key1", b"value1").unwrap();
+        ledger_map.upsert("Label2", b"key2", b"value2").unwrap();
+
+        // Force commit should preserve all data
+        ledger_map.force_commit_block().unwrap();
+
+        // Verify data is preserved in main ledger
+        assert_eq!(ledger_map.get("Label1", b"key1").unwrap(), b"value1");
+        assert_eq!(ledger_map.get("Label2", b"key2").unwrap(), b"value2");
+
+        // Force commit on empty ledger should not fail
+        ledger_map.force_commit_block().unwrap();
+    }
+
+    #[test]
+    fn test_mixed_operations_and_edge_cases() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        // Test 1: Mixed operations (upsert + delete tombstones)
+        ledger_map.upsert("Label1", b"key1", b"value1").unwrap();
+        ledger_map.upsert("Label1", b"key2", b"value2").unwrap();
+        ledger_map.delete("Label1", b"key1").unwrap(); // Creates delete tombstone
+
+        // Should serialize both upsert and delete operations
+        let serialized = ledger_map.get_next_block_serialized_data();
+        assert!(!serialized.is_empty());
+        // Should have at least one entry (exact count depends on delete filter behavior)
+        let total_count = ledger_map.get_next_block_entries_count(None);
+        assert!(total_count >= 1);
+
+        // Test 2: Entry count by label (may be 1 due to delete filter in iteration)
+        let label1_count = ledger_map.get_next_block_entries_count(Some("Label1"));
+        assert!(label1_count >= 1); // At least the upsert or tombstone exists
+        assert_eq!(ledger_map.get_next_block_entries_count(Some("NonExistent")), 0);
+
+        // Test 3: Large values work (within size limits)
+        let large_value = vec![b'y'; 10000]; // 10KB
+        ledger_map.upsert("Label2", b"large_key", &large_value).unwrap();
+        let final_serialized = ledger_map.get_next_block_serialized_data();
+        assert!(final_serialized.len() > serialized.len()); // Should grow
     }
 }

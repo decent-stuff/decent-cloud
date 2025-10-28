@@ -4,6 +4,9 @@ pub enum LedgerError {
     BlockEmpty,
     BlockCorrupted(String),
     UnsupportedBlockVersion(u32),
+    TooManyEntriesInBlock(String),
+    BlockTooLarge(String),
+    SerializationError(String),
     Other(String),
 }
 
@@ -28,6 +31,11 @@ impl std::fmt::Display for LedgerError {
             LedgerError::UnsupportedBlockVersion(version) => {
                 write!(f, "Unsupported block version: {}", version)
             }
+            LedgerError::TooManyEntriesInBlock(err) => {
+                write!(f, "Too many entries in block: {}", err)
+            }
+            LedgerError::BlockTooLarge(err) => write!(f, "Block too large: {}", err),
+            LedgerError::SerializationError(err) => write!(f, "Serialization error: {}", err),
             LedgerError::Other(err) => write!(f, "Other error: {}", err),
         }
     }

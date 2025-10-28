@@ -1,6 +1,8 @@
 use crate::canister_backend::generic::*;
 use candid::Principal;
-use dcc_common::{ContractId, ContractReqSerialized, TokenAmountE9s};
+use dcc_common::{
+    ContractId, ContractReqSerialized, NextBlockSyncRequest, NextBlockSyncResponse, TokenAmountE9s,
+};
 #[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -153,6 +155,21 @@ fn run_periodic_task() {
 #[ic_cdk::query]
 fn provider_list_registered() -> Result<Vec<String>, String> {
     _provider_list_registered()
+}
+
+/// Query endpoint to get the next block from the ledger for synchronization
+#[ic_cdk::query]
+fn next_block_sync(
+    start_position: Option<u64>,
+    include_data: Option<bool>,
+    max_entries: Option<u32>,
+) -> Result<NextBlockSyncResponse, String> {
+    let request = NextBlockSyncRequest {
+        start_position,
+        include_data: include_data.unwrap_or(true),
+        max_entries: max_entries.map(|e| e as usize),
+    };
+    _next_block_sync(request)
 }
 
 // test utilities

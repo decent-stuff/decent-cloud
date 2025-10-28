@@ -6,15 +6,12 @@ use dcc_common::{
     recent_transactions_cleanup, refresh_caches_from_ledger, reputation_get,
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
     rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
-    RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS, DATA_PULL_BYTES_BEFORE_LEN,
-    LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS, LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING,
-    LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
-    MAX_RESPONSE_BYTES_NON_REPLICATED,
+    NextBlockSyncRequest, NextBlockSyncResponse, RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS,
+    DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS,
+    LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER,
+    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, MAX_RESPONSE_BYTES_NON_REPLICATED,
 };
-use ic_cdk::{
-    api::{certified_data_set, msg_caller},
-    println,
-};
+use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::platform_specific::{persistent_storage_read, persistent_storage_write};
 use ledger_map::{error, info, warn, LedgerMap};
@@ -78,7 +75,7 @@ fn ledger_periodic_task() {
         // Set certified data, for compliance with ICRC-3
         // Borrowed from https://github.com/ldclabs/ic-sft/blob/4825d760811731476ffbbb1705295a6ad4aae58f/src/ic_sft_canister/src/store.rs#L193-L210
         let root_hash = ledger_construct_hash_tree(ledger).digest();
-        certified_data_set(root_hash);
+        ic_cdk::api::certified_data_set(root_hash);
 
         // Cleanup old transactions that are used for deduplication
         recent_transactions_cleanup();
@@ -125,11 +122,15 @@ pub fn _init(enable_test_config: Option<bool>) {
 
 pub fn _pre_upgrade() {
     LEDGER_MAP.with(|ledger| {
-        ledger.borrow_mut().commit_block().unwrap_or_else(|e| {
-            error!("Failed to commit ledger: {}", e);
-        });
+        // Force commit any pending next block data for upgrade safety
+        ledger
+            .borrow_mut()
+            .force_commit_block()
+            .unwrap_or_else(|e| {
+                error!("Failed to force commit ledger: {}", e);
+            });
         // Set certified data, for compliance with ICRC-3
-        certified_data_set(ledger.borrow().get_latest_block_hash());
+        ic_cdk::api::certified_data_set(ledger.borrow().get_latest_block_hash());
     });
 }
 
@@ -378,7 +379,7 @@ pub(crate) fn _data_push_auth() -> Result<String, String> {
         let authorized_pusher =
             AUTHORIZED_PUSHER.with(|authorized_pusher| *authorized_pusher.borrow());
         if ledger.get_blocks_count() == 0 {
-            let caller = msg_caller();
+            let caller = ic_cdk::api::msg_caller();
 
             match authorized_pusher {
                 Some(authorized_pusher) => {
@@ -402,7 +403,7 @@ pub(crate) fn _data_push_auth() -> Result<String, String> {
 }
 
 pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String> {
-    let caller = msg_caller();
+    let caller = ic_cdk::api::msg_caller();
     let authorized_pusher = AUTHORIZED_PUSHER.with(|authorized_pusher| *authorized_pusher.borrow());
 
     match authorized_pusher {
@@ -523,5 +524,29 @@ pub(crate) fn _provider_list_registered() -> Result<Vec<String>, String> {
             })
             .collect::<Vec<String>>();
         Ok(provider_vec)
+    })
+}
+
+/// Get the current next block data for syncing
+/// Returns Borsh-pre-serialized data from in-memory buffer
+pub(crate) fn _next_block_sync(
+    _request: NextBlockSyncRequest,
+) -> Result<NextBlockSyncResponse, String> {
+    LEDGER_MAP.with(|ledger| {
+        let ledger_ref = ledger.borrow();
+        let serialized_data = ledger_ref.get_next_block_serialized_data();
+        if serialized_data.is_empty() {
+            Ok(NextBlockSyncResponse {
+                has_block: false,
+                ..Default::default()
+            })
+        } else {
+            Ok(NextBlockSyncResponse {
+                has_block: true,
+                block_data: Some(serialized_data), // Reuse field for serialized entries
+                entries_count: ledger_ref.get_next_block_entries_count(None),
+                ..Default::default()
+            })
+        }
     })
 }

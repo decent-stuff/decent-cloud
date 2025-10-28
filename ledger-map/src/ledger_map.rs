@@ -15,6 +15,10 @@ use indexmap::IndexMap;
 use sha2::Digest;
 use std::{cell::RefCell, mem::size_of};
 
+// TODO: Make this configurable based on canister memory limits
+const MAX_NEXT_BLOCK_SIZE_BYTES: usize = 2 * 1024 * 1024; // 2MB limit
+const MAX_NEXT_BLOCK_ENTRIES: usize = 10000; // Safety limit for entry count
+
 #[derive(Debug)]
 pub struct LedgerMap {
     metadata: RefCell<Metadata>,
@@ -450,10 +454,51 @@ impl LedgerMap {
     }
 
     pub fn get_next_block_entries_count(&self, label: Option<&str>) -> usize {
-        self.next_block_iter(label).count()
+        match label {
+            Some(label) => self.next_block_iter(Some(label)).count(),
+            None => self.next_block_entries.values().map(|m| m.len()).sum(),
+        }
     }
 
-    fn _compute_block_chain_hash(
+    /// Get pre-serialized data from the next block for fast sync
+    pub fn get_next_block_serialized_data(&self) -> Vec<u8> {
+        let mut serialized_data = Vec::new();
+        for (_label, entries) in &self.next_block_entries {
+            for (_key, entry) in entries {
+                if let Some(serialized) = entry.get_serialized() {
+                    serialized_data.extend_from_slice(&serialized);
+                } else {
+                    // Fallback: serialize on-demand if not already done
+                    if let Ok(serialized) = entry.ensure_serialized() {
+                        serialized_data.extend_from_slice(&serialized);
+                    }
+                }
+            }
+        }
+        serialized_data
+    }
+
+    /// Calculate the current serialized size of all entries in the next block
+    fn _get_next_block_serialized_size(&self) -> usize {
+        self.next_block_entries
+            .values()
+            .flat_map(|entries| entries.values())
+            .filter_map(|entry| entry.get_serialized())
+            .map(|s| s.len())
+            .sum()
+    }
+
+    /// Force commit current block (used during upgrades to prevent data loss)
+    pub fn force_commit_block(&mut self) -> anyhow::Result<()> {
+        if !self.next_block_entries.is_empty() {
+            warn!("Force committing pending block during upgrade");
+            self.commit_block()
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn _compute_block_chain_hash(
         parent_block_hash: &[u8],
         block_entries: &[LedgerEntry],
         block_timestamp: u64,
@@ -552,7 +597,34 @@ impl LedgerMap {
         value: V,
         operation: Operation,
     ) -> Result<(), LedgerError> {
-        let entry = LedgerEntry::new(label.as_ref(), key, value, operation);
+        let mut entry = LedgerEntry::new(label.as_ref(), key, value, operation);
+
+        // Pre-serialize immediately to catch errors early
+        let serialized =
+            to_vec(&entry).map_err(|e| LedgerError::SerializationError(e.to_string()))?;
+
+        // Check entry count limit
+        let total_entries: usize = self.next_block_entries.values().map(|m| m.len()).sum();
+        if total_entries >= MAX_NEXT_BLOCK_ENTRIES {
+            return Err(LedgerError::TooManyEntriesInBlock(format!(
+                "Block exceeds limit of {} entries",
+                MAX_NEXT_BLOCK_ENTRIES
+            )));
+        }
+
+        // Check serialized size limit
+        let current_size = self._get_next_block_serialized_size();
+        if current_size + serialized.len() > MAX_NEXT_BLOCK_SIZE_BYTES {
+            return Err(LedgerError::BlockTooLarge(format!(
+                "Block exceeds {} bytes limit",
+                MAX_NEXT_BLOCK_SIZE_BYTES
+            )));
+        }
+
+        // Store the serialized data in the entry for fast sync
+        entry.set_serialized(serialized);
+
+        // Update in-memory structures
         match self.next_block_entries.get_mut(entry.label()) {
             Some(entries) => {
                 entries.insert(entry.key().to_vec(), entry);
