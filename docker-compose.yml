@@ -1,24 +1,25 @@
-version: '3.8'
-
 services:
-  decent-cloud-claude:
+  claude:
     build:
       context: .
       dockerfile: Dockerfile
     image: decent-cloud-claude:latest
     container_name: decent-cloud-claude-dev
     environment:
-      # Development environment variables - HOME must stay /code for dfx
+      # Development environment variables
       - RUST_LOG=info
       - RUST_BACKTRACE=1
-      - HOME=/code
+      - HOME=/home/ubuntu
     volumes:
       # Mount the entire project directory to /code (matches Dockerfile WORKDIR)
       - .:/code
       # Mount Claude Code configuration from home directory
       # Note: HOME is /code for dfx compatibility, so mount Claude config there
-      - ${HOME}/.claude.json:/code/.claude.json
-      - ${HOME}/.claude:/code/.claude
+      - ${HOME}/.claude.json:/home/ubuntu/.claude.json
+      - ${HOME}/.claude:/home/ubuntu/.claude
+      # Cache volumes for rust tooling and dependencies (controlled by ubuntu user)
+      - cargo-cache:/home/ubuntu/.cargo
+      - dfx-cache:/home/ubuntu/.cache
     working_dir: /code
     stdin_open: true
     tty: true
@@ -27,6 +28,12 @@ services:
       - "3000:3000"
     networks:
       - decent-cloud-network
+
+volumes:
+  cargo-cache:
+    driver: local
+  dfx-cache:
+    driver: local
 
 networks:
   decent-cloud-network:

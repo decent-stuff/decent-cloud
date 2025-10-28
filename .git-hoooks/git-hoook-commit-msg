@@ -1,0 +1,81 @@
+#!/bin/sh
+
+# Validate input
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <commit-msg-file>" >&2
+    exit 1
+fi
+
+COMMIT_MSG_FILE=$1
+
+# Validate commit message file exists and is readable
+if [ ! -f "$COMMIT_MSG_FILE" ] || [ ! -r "$COMMIT_MSG_FILE" ]; then
+    echo "Error: Cannot read commit message file: $COMMIT_MSG_FILE" >&2
+    exit 1
+fi
+
+# Temporary file for processing
+TMP_PROCESSED_MSG_FILE="${COMMIT_MSG_FILE}.processed.$$"
+
+# Function to clean up temporary file on exit
+cleanup() {
+    rm -f "$TMP_PROCESSED_MSG_FILE"
+}
+trap cleanup EXIT INT TERM
+
+# --- Step 1: Remove lines containing unwanted strings using sed ---
+# Use sed to remove lines containing the specified patterns
+if ! sed '/🤖 Generated with/d; /Co-Authored-By: Claude/d; /Co-Authored-By: Happy/d; /via \[Happy\]/d' "$COMMIT_MSG_FILE" > "$TMP_PROCESSED_MSG_FILE"; then
+    echo "Error: sed command failed while processing commit message" >&2
+    exit 1
+fi
+
+# Check if the processed file has content
+if [ ! -s "$TMP_PROCESSED_MSG_FILE" ]; then
+    echo "Error: Commit message became empty after filtering" >&2
+    exit 1
+fi
+
+# --- Step 2: Clean up blank lines from the processed message ---
+# This awk script will:
+# - Skip all leading blank lines.
+# - Print a single blank line for any sequence of one or more blank lines
+#   found *after* at least one non-blank line.
+# - Print non-blank lines.
+# - Avoid trailing blank lines (implicitly, as a pending blank line at EOF
+#   won't be printed).
+awk '
+    BEGIN {
+        content_has_started = 0 # Flag to track if we have seen the first non-blank line
+        pending_blank_line = 0  # Flag to indicate a blank line separator should be printed
+    }
+
+    NF { # If the line has fields (it is not blank)
+        if (!content_has_started) {
+            content_has_started = 1 # Mark that content has started
+        } else if (pending_blank_line) {
+            print "" # Print the pending blank line separator before this non-blank line
+        }
+        print $0 # Print the current non-blank line
+        pending_blank_line = 0 # Reset pending blank line flag
+        next
+    }
+
+    !NF { # If the line is blank (NF == 0)
+        if (content_has_started) {
+            pending_blank_line = 1 # Mark that we have encountered a blank line after content has started
+        }
+    }
+' "$TMP_PROCESSED_MSG_FILE" > "$COMMIT_MSG_FILE"
+
+# Check if awk command succeeded and final file has content
+if [ ! -s "$COMMIT_MSG_FILE" ]; then
+    echo "Error: Commit message became empty after blank line cleanup" >&2
+    exit 1
+fi
+
+# Clean up the temporary file
+rm -f "$TMP_PROCESSED_MSG_FILE"
+
+# Exit with 0 to indicate success
+exit 0

@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 # Default values
 COMPOSE_FILE="docker-compose.yml"
-SERVICE_NAME="decent-cloud-claude"
+SERVICE_NAME="claude"
 COMMAND=""
 DETACH=false
 REBUILD=false
@@ -49,19 +49,19 @@ USAGE:
 OPTIONS:
     -h, --help          Show this help message
     -d, --detach        Run in detached mode
-    -r, --rebuild       Rebuild the Docker image before running
+    -r, --(re)build     Rebuild the Docker image before running
     -s, --shell         Start a shell in the container instead of Claude Code
     -f, --file FILE     Use specific docker-compose file (default: docker-compose.yml)
 
 EXAMPLES:
     $0                              # Start Claude Code with dangerously-skip-permissions
     $0 --rebuild                    # Rebuild image and start Claude Code
+    $0 --build                      # Same as above
     $0 --shell                      # Start a bash shell in the container
     $0 "cargo test"                 # Run cargo test in the container
     $0 --detach                     # Start Claude Code in background
 
 REQUIREMENTS:
-    - ANTHROPIC_API_KEY environment variable must be set
     - Docker and Docker Compose must be installed
 
 This wrapper provides a safe way to run Claude Code with full access to the project
@@ -80,7 +80,7 @@ while [[ $# -gt 0 ]]; do
             DETACH=true
             shift
             ;;
-        -r|--rebuild)
+        -r|--rebuild|--build)
             REBUILD=true
             shift
             ;;
@@ -125,12 +125,15 @@ check_requirements() {
 
 # Build or rebuild the image
 build_image() {
+    # Enable BuildX for faster parallel builds
+    DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
+
     if [[ "$REBUILD" == "true" ]]; then
-        log_info "Rebuilding Docker image..."
-        docker-compose -f "$COMPOSE_FILE" build --no-cache
+        log_info "Rebuilding Docker image with BuildKit (preserving cache where possible)..."
+        DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker-compose -f "$COMPOSE_FILE" build --pull
     else
-        log_info "Building Docker image (if needed)..."
-        docker-compose -f "$COMPOSE_FILE" build
+        log_info "Building Docker image with BuildKit (faster parallel builds)..."
+        DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker-compose -f "$COMPOSE_FILE" build
     fi
 }
 
