@@ -171,26 +171,5 @@ dc provider list --balances
 
 ## Support and Community
 
-### Getting Help
+For support and community discussions, visit the [main documentation](../docs/README.md#getting-help).
 
-- 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
-- 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
-- 📚 [Read Documentation](https://decent-cloud.org/)
-
-### Contributing to the Community
-
-- Share best practices
-- Help other providers
-- Provide feedback
-- Suggest improvements
-
-## Future Developments
-
-Stay tuned for:
-
-- WebUI for easier management
-- Enhanced analytics
-- Automated resource allocation
-- Improved monitoring tools
-
-Remember: Your success as a provider contributes to the entire ecosystem's growth and stability!

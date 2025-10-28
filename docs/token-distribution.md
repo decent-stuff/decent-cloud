@@ -114,16 +114,4 @@ dc ledger-remote fetch
    - Provide feedback on distribution mechanics
    - Engage in improvement proposals
 
-## Future Developments
-
-- WebUI integration for easier participation
-- Enhanced analytics and reporting
-- Additional governance features
-
 For technical details and the complete tokenomics model, please refer to our [whitepaper](https://decent-cloud.org/).
-
-## Support and Resources
-
-- 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
-- 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
-- 📚 [Read the Whitepaper](https://decent-cloud.org/)

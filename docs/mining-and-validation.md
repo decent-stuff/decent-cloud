@@ -53,7 +53,7 @@ dc keygen --generate --identity my-validator
 dc account --identity my-validator
 ```
 
-Share this output in the [community discussions](https://github.com/orgs/decent-stuff/discussions) to get started.
+This Principal ID is required for token transfers and network registration. Keep it secure and share it only when necessary for receiving tokens or registration purposes.
 
 ### Initial Setup
 
@@ -137,9 +137,5 @@ Key points for validators:
 - Your ROI depends on consistent participation and total number of validators
 
 
-## Support
-
-- 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
-- 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
-- 📚 [Read Documentation](https://decent-cloud.org/)
+For support and community discussions, visit the [main documentation](../docs/README.md#getting-help).
 
