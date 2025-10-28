@@ -1,5 +1,5 @@
-# Dockerfile for Decent Cloud + Claude Code development environment
-# Based on .github/container/Dockerfile with additions for Claude Code
+# Dockerfile for Decent Cloud + Containerized development environment
+# Based on .github/container/Dockerfile with additions for Claude Code and Happy Coder
 
 FROM rust:latest
 
@@ -50,13 +50,13 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
 # Install cargo tools using binstall for faster installation
 RUN cargo binstall cargo-make cargo-nextest wasm-pack
 
-# Configure npm to use user-specific global directory and install Claude Code
+# Configure npm to use user-specific global directory and install Claude Code and Happy Coder
 RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile \
     && export PATH=~/.npm-global/bin:$PATH \
-    && npm install -g @anthropic-ai/claude-code
+    && npm install -g @anthropic-ai/claude-code happy-coder
 
 # Copy and set up git commit hook (moved to end for better caching)
 COPY --chown=ubuntu:ubuntu .git-hoooks/git-hoook-commit-msg $HOME/.git/hooks/commit-msg
