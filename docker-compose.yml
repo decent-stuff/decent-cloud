@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  decent-cloud-claude:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: decent-cloud-claude:latest
+    container_name: decent-cloud-claude-dev
+    environment:
+      # Development environment variables - HOME must stay /code for dfx
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+      - HOME=/code
+    volumes:
+      # Mount the entire project directory to /code (matches Dockerfile WORKDIR)
+      - .:/code
+      # Mount Claude Code configuration from home directory
+      # Note: HOME is /code for dfx compatibility, so mount Claude config there
+      - ${HOME}/.claude.json:/code/.claude.json
+      - ${HOME}/.claude:/code/.claude
+    working_dir: /code
+    stdin_open: true
+    tty: true
+    ports:
+      # Expose website port if needed
+      - "3000:3000"
+    networks:
+      - decent-cloud-network
+
+networks:
+  decent-cloud-network:
+    driver: bridge
