@@ -58,8 +58,13 @@ RUN mkdir -p ~/.npm-global \
     && export PATH=~/.npm-global/bin:$PATH \
     && npm install -g @anthropic-ai/claude-code happy-coder
 
-# Copy and set up git commit hook (moved to end for better caching)
-COPY --chown=ubuntu:ubuntu .git-hoooks/git-hoook-commit-msg $HOME/.git/hooks/commit-msg
+# Copy git hooks and configure git within the container
+COPY --chown=ubuntu:ubuntu .git-hooks/ $HOME/.git-hooks/
+RUN chmod +x $HOME/.git-hooks/commit-msg \
+    && mkdir -p $HOME/.git/hooks \
+    && cp $HOME/.git-hooks/commit-msg $HOME/.git/hooks/commit-msg \
+    && git config --global core.hooksPath $HOME/.git-hooks \
+    && git config --global init.defaultBranch main
 
 # Set entrypoint to use tini for proper signal handling
 ENTRYPOINT ["/tini", "--"]
