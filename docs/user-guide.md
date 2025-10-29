@@ -90,27 +90,25 @@ dc contract list-open
 
 ## Managing Resources
 
-### Best Practices
+### Resource Management in Decent Cloud
 
-1. **Resource Planning**
+1. **Ledger Synchronization**
 
-   - Accurately estimate needs
-   - Consider scaling requirements
-   - Plan for redundancy
-   - Monitor usage patterns
+   - Regularly sync your local ledger: `dc ledger-remote fetch`
+   - This ensures you have the latest contract and provider information
+   - Essential for accurate balance and status checks
 
-2. **Cost Management**
+2. **Token Balance Management**
 
-   - Track token usage
-   - Monitor resource utilization
-   - Plan for long-term needs
-   - Consider bulk contracts
+   - Monitor your DC token balance before making contract requests
+   - Check registration fees: `dc ledger-remote get-registration-fee`
+   - Maintain sufficient tokens for contract operations
 
-3. **Security**
-   - Use strong SSH keys
-   - Implement access controls
-   - Regular security audits
-   - Backup critical data
+3. **Contract Monitoring**
+
+   - Track active contracts with `dc contract list-open`
+   - Verify provider reputation before contracting: `dc provider list --balances`
+   - Keep records of contract terms and communication
 
 ## Token Management
 
@@ -130,30 +128,30 @@ dc user balance --identity my-user
 
 ## Troubleshooting
 
-### Common Issues
+### Platform-Specific Issues
 
-1. **Connection Problems**
+1. **Ledger Sync Problems**
 
-   - Verify network connectivity
-   - Check SSH key configuration
-   - Confirm provider status
-   - Review firewall settings
+   - Force ledger sync: `dc ledger-remote fetch --force`
+   - Check your internet connection to the Internet Computer network
+   - Verify your identity is correctly configured
 
-2. **Resource Access**
+2. **Contract Request Issues**
 
-   - Verify contract status
-   - Check authentication
-   - Review access permissions
-   - Contact provider support
+   - Ensure you have sufficient DC tokens for registration fees
+   - Verify your SSH public key format is correct
+   - Check that provider offerings are active: `dc offering list`
 
-3. **Performance Issues**
-   - Monitor resource usage
-   - Check network latency
-   - Review application logs
-   - Document performance metrics
+3. **Identity and Authentication**
+
+   - Confirm identity exists: `dc keygen --list`
+   - Verify account registration: `dc user status --identity <your-id>`
+   - Check Principal ID matches your expectations
 
 ### Getting Support
 
-For support and community discussions, visit the [main documentation](../docs/README.md#getting-help).
+For platform-specific support:
+- 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
+- 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
 
 

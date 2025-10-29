@@ -38,33 +38,16 @@ These packages are required for building the project:
 
 ### Build Failures
 
-If you encounter build failures, especially related to OpenSSL or other system libraries, make sure you have installed all the required system dependencies:
-
-```bash
-sudo apt update -y
-sudo apt install build-essential curl git libssl-dev pkg-config
-```
+If you encounter build failures, especially related to OpenSSL or other system libraries, ensure you have installed all the required system dependencies listed above.
 
 ### Missing Tools
 
-If the build process fails due to missing tools like `dfx` or `pocket-ic`, the build script will attempt to automatically install them. If this fails, you can install them manually:
-
-**Install dfx:**
-```bash
-DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
-```
-
-**Install pocket-ic:**
-```bash
-curl -L https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz -o - | gzip -d - > ~/bin/pocket-ic && chmod +x ~/bin/pocket-ic
-```
-
-Make sure `~/bin` is in your PATH, or adjust the installation path as needed.
+If the build process fails due to missing tools like `dfx` or `pocket-ic`, the build script will attempt to automatically install them. If this fails, you can install them manually using the instructions below in the appropriate sections.
 
 2. **Internet Computer SDK (dfx)**
 
 ```bash
-sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 ```
 
 3. **Node.js Setup**

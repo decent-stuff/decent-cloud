@@ -49,8 +49,8 @@ chmod +x $HOME/bin/dc
 Add to PATH in `~/.bashrc`:
 
 ```bash
-if [ -d "$HOME/bin" ]; then
-  export PATH="$HOME/bin:$PATH"
+if [ -d "$HOME/bin" ] ; then
+   export PATH="$HOME/bin:$PATH"
 fi
 ```
 </details>

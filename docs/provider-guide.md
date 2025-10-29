@@ -134,24 +134,25 @@ dc provider list --balances
 - Keep systems updated
 - Maintain security measures
 
-## Security Best Practices
+## Security Best Practices for Providers
 
-1. **Key Management**
+1. **Platform Key Management**
 
-   - Secure storage of private keys
-   - Regular backup of credentials
-   - Access control implementation
+   - Store Decent Cloud identity mnemonics securely (consider hardware security modules)
+   - Regular backup of `~/.dcc/identity/` directory
+   - Limit access to provider identity keys to authorized personnel
 
-2. **System Security**
+2. **Reputation System Security**
 
-   - Regular security updates
-   - Network monitoring
-   - Access logging
+   - Maintain consistent check-ins to preserve reputation score
+   - Promptly address contract disputes to maintain positive rating
+   - Monitor provider balance: `dc provider list --balances`
 
-3. **User Data Protection**
-   - Implement data encryption
-   - Regular security audits
-   - Privacy policy compliance
+3. **Resource Security**
+
+   - Isolate tenant environments using containers or VMs
+   - Implement rate limiting for resource access
+   - Log all contract-related operations for audit trails
 
 ## Reputation Management
 
@@ -171,5 +172,7 @@ dc provider list --balances
 
 ## Support and Community
 
-For support and community discussions, visit the [main documentation](../docs/README.md#getting-help).
+For provider-specific support and community discussions:
+- 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
+- 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
 

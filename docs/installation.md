@@ -71,25 +71,11 @@ You should see the version number of your installed Decent Cloud client.
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Permission Denied**
-
-   - Make sure you have execution permissions on the binary
-   - For Linux/MacOS: Run `chmod +x` on the binary
-
-2. **Command Not Found**
-
-   - Ensure the binary is in your PATH
-   - Try logging out and back in after modifying PATH
-
-3. **SSL/TLS Errors**
-   - Check your system's SSL certificates
-   - Ensure you have a working internet connection
+For common installation issues and solutions, see the [Development Guide troubleshooting section](development.md#troubleshooting).
 
 ### Getting Help
 
-If you encounter any issues:
+If you encounter installation-specific issues:
 
 - 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
 - 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)

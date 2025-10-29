@@ -35,40 +35,31 @@ Welcome to the official Decent Cloud documentation. This resource is designed to
 - [Proposals](proposals/) for design documents and RFCs
 - [Whitepaper](whitepaper/) for technical foundations
 
-## 🌟 Key Concepts
+## Documentation Structure
 
-### Reputation System
+The documentation is organized by user type and functionality:
 
-Our [reputation system](reputation.md) is the cornerstone of trust in Decent Cloud. It ensures:
+### Core Platform Documentation
+- **[Getting Started](getting-started.md)**: First-time setup and basic configuration
+- **[Installation](installation.md)**: Platform-specific installation instructions
+- **[User Guide](user-guide.md)**: Resource consumption and management
+- **[Provider Guide](provider-guide.md)**: Offering resources and managing services
 
-- Transparent, blockchain-based trust
-- Incentives for honest behavior
-- Protection against bad actors
+### Platform Mechanics
+- **[Reputation System](reputation.md)**: Trust and reputation mechanisms
+- **[Mining & Validation](mining-and-validation.md)**: Network participation and rewards
+- **[Token Distribution](token-distribution.md)**: Token economics and distribution
 
-### Validation
+### Development Resources
+- **[Development Guide](development.md)**: Contributing to the project
+- **[Cloudflare Deployment](cloudflare-deployment.md)**: Deployment instructions
 
-[Validation](mining-and-validation.md) is how we maintain our decentralized ledger:
+## For Quick Reference
 
-- Energy-efficient consensus
-- Equal reward distribution
-- Tamper-proof transaction history
-
-### Token Economics
-
-Our [token distribution](token-distribution.md) model is designed for:
-
-- Sustainable growth
-- Fair participation rewards
-- Balanced incentives
-
-## 📋 Documentation Roadmap
-
-We're continuously improving our documentation. Upcoming additions include:
-
-- Interactive tutorials
-- Video walkthroughs
-- API reference documentation
-- Advanced use cases and examples
+See the main [README.md](../README.md) for:
+- Installation quick start
+- Basic usage commands
+- Project overview and status
 
 ## 🤝 Contributing to Documentation
 

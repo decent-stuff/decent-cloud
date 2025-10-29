@@ -32,7 +32,7 @@ The website provides a user-friendly interface for interacting with the Decent C
    npm run dev
    ```
 
-   This automatically builds the WASM package first, then starts the Next.js dev server at [http://localhost:50200](http://localhost:50200).
+   This automatically builds the WASM package first, then starts the Next.js dev server.
 
 3. **For development with auto-rebuild on WASM changes:**
    ```bash
@@ -98,19 +98,12 @@ When working on both the website and WASM package:
 
 ### Troubleshooting
 
-**Import errors for `@decent-stuff/dc-client`:**
+For development issues, see the [Development Guide website section](../docs/development.md#website-development-workflow).
 
-- Ensure WASM package is built: `cd ../wasm && npm run build`
-
-**Changes not reflected:**
-
-- Use `npm run dev:watch` for automatic rebuilding
-- Clear Next.js cache: `rm -rf .next`
-
-**Build failures:**
-
-- Check that all dependencies are installed in both `/wasm` and `/website`
-- Ensure Node.js version is 22+
+**Common Issues:**
+- Import errors for `@decent-stuff/dc-client`: Ensure WASM package is built
+- Changes not reflected: Use `npm run dev:watch` for automatic rebuilding
+- Build failures: Check dependencies in both `/wasm` and `/website` directories
 
 ## Deployment
 
