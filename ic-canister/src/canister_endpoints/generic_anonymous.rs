@@ -1,8 +1,5 @@
 use crate::canister_backend::generic::*;
-use dcc_common::{
-    ContractId, ContractReqSerialized, NextBlockEntriesResult, NextBlockSyncRequest,
-    NextBlockSyncResponse,
-};
+use candid::Principal;
 
 /// Anonymous version of provider_register - accepts caller info in parameters
 #[ic_cdk::update]
@@ -13,7 +10,7 @@ fn provider_register_anonymous(
 ) -> Result<String, String> {
     // Set caller if provided (for compatibility)
     if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse() {
+        if let Ok(principal) = principal_str.parse::<Principal>() {
             ic_cdk::println!("Setting caller principal: {}", principal);
         }
     }
@@ -30,7 +27,7 @@ fn provider_update_profile_anonymous(
     caller_principal: Option<String>,
 ) -> Result<String, String> {
     if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse() {
+        if let Ok(principal) = principal_str.parse::<Principal>() {
             ic_cdk::println!("Setting caller principal: {}", principal);
         }
     }
@@ -47,7 +44,7 @@ fn provider_update_offering_anonymous(
     caller_principal: Option<String>,
 ) -> Result<String, String> {
     if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse() {
+        if let Ok(principal) = principal_str.parse::<Principal>() {
             ic_cdk::println!("Setting caller principal: {}", principal);
         }
     }
@@ -64,7 +61,7 @@ fn provider_check_in_anonymous(
     caller_principal: Option<String>,
 ) -> Result<String, String> {
     if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse() {
+        if let Ok(principal) = principal_str.parse::<Principal>() {
             ic_cdk::println!("Setting caller principal: {}", principal);
         }
     }
@@ -81,7 +78,7 @@ fn contract_sign_request_anonymous(
     caller_principal: Option<String>,
 ) -> Result<String, String> {
     if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse() {
+        if let Ok(principal) = principal_str.parse::<Principal>() {
             ic_cdk::println!("Setting caller principal: {}", principal);
         }
     }
@@ -98,7 +95,7 @@ fn contract_sign_reply_anonymous(
     caller_principal: Option<String>,
 ) -> Result<String, String> {
     if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse() {
+        if let Ok(principal) = principal_str.parse::<Principal>() {
             ic_cdk::println!("Setting caller principal: {}", principal);
         }
     }
@@ -114,7 +111,7 @@ fn user_register_anonymous(
     caller_principal: Option<String>,
 ) -> Result<String, String> {
     if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse() {
+        if let Ok(principal) = principal_str.parse::<Principal>() {
             ic_cdk::println!("Setting caller principal: {}", principal);
         }
     }
@@ -171,7 +168,7 @@ fn bulk_update_from_cf(operations: Vec<BulkOperation>) -> Vec<BulkResult> {
 
 /// Query to get data for CF synchronization
 #[ic_cdk::query]
-fn cf_sync_data(from_timestamp_ns: Option<u64>, limit: Option<u32>) -> Vec<SyncDataEntry> {
+fn cf_sync_data(_from_timestamp_ns: Option<u64>, _limit: Option<u32>) -> Vec<SyncDataEntry> {
     // TODO: Implement this to return recent changes for CF sync
     // This would query the ledger for changes since from_timestamp_ns
     vec![]
