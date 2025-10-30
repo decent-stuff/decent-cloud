@@ -1,8 +1,9 @@
 mod test_utils;
 use crate::test_utils::{
     test_contract_sign_reply, test_contract_sign_request, test_contracts_list_pending,
-    test_get_id_reputation, test_icrc1_account_from_slice, test_next_block_entries, test_offering_add,
-    test_offering_search, test_provider_check_in, test_provider_register, test_user_register, TestContext,
+    test_get_id_reputation, test_icrc1_account_from_slice, test_next_block_entries,
+    test_offering_add, test_offering_search, test_provider_check_in, test_provider_register,
+    test_user_register, TestContext,
 };
 use borsh::BorshDeserialize;
 use candid::{encode_one, Nat, Principal};
@@ -598,7 +599,8 @@ fn test_next_block_entries_with_single_provider_registration() {
     assert_eq!(empty_result.total_count, 0);
 
     // Register a provider
-    let (provider, _reg_result) = test_provider_register(&ctx, b"test_prov", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (provider, _reg_result) =
+        test_provider_register(&ctx, b"test_prov", 2 * DC_TOKEN_DECIMALS_DIV);
 
     // Test next block entries
     let result = test_next_block_entries(&ctx, None, None, None);
@@ -609,11 +611,15 @@ fn test_next_block_entries_with_single_provider_registration() {
     assert!(!result.has_more);
 
     // Find entries by label
-    let prov_reg_entry = result.entries.iter()
+    let prov_reg_entry = result
+        .entries
+        .iter()
         .find(|e| e.label == "ProvRegister")
         .expect("Should find ProvRegister entry");
 
-    let token_transfer_entry = result.entries.iter()
+    let token_transfer_entry = result
+        .entries
+        .iter()
         .find(|e| e.label == "DCTokenTransfer")
         .expect("Should find DCTokenTransfer entry");
 
@@ -654,11 +660,17 @@ fn test_next_block_entries_with_multiple_entries() {
     assert!(labels.contains(&"DCTokenTransfer".to_string()));
 
     // Should have exactly 2 ProvRegister entries
-    let prov_reg_count = labels.iter().filter(|l| l.as_str() == "ProvRegister").count();
+    let prov_reg_count = labels
+        .iter()
+        .filter(|l| l.as_str() == "ProvRegister")
+        .count();
     assert_eq!(prov_reg_count, 2);
 
     // Should have exactly 3 DCTokenTransfer entries
-    let token_transfer_count = labels.iter().filter(|l| l.as_str() == "DCTokenTransfer").count();
+    let token_transfer_count = labels
+        .iter()
+        .filter(|l| l.as_str() == "DCTokenTransfer")
+        .count();
     assert_eq!(token_transfer_count, 3);
 }
 
@@ -752,8 +764,12 @@ fn test_next_block_entries_pagination() {
     assert_eq!(page5_keys.len(), 2);
 
     // Ensure no duplicate keys across pages
-    let all_keys = page1_keys.iter().chain(page2_keys.iter()).chain(page3_keys.iter())
-        .chain(page4_keys.iter()).chain(page5_keys.iter());
+    let all_keys = page1_keys
+        .iter()
+        .chain(page2_keys.iter())
+        .chain(page3_keys.iter())
+        .chain(page4_keys.iter())
+        .chain(page5_keys.iter());
     let unique_keys: std::collections::HashSet<_> = all_keys.cloned().collect();
     assert_eq!(unique_keys.len(), 10);
 }
