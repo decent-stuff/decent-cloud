@@ -24,7 +24,8 @@ RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install
     && dfxvm default 0.29.2
 
 # Install deps (exact from CI Dockerfile)
-RUN apt update && apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates
+RUN apt update && \
+    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq
 
 # Install Node.js directly from NodeSource repository (simpler than NVM for Docker)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
