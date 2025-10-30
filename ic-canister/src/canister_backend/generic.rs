@@ -1,5 +1,5 @@
 use super::pre_icrc3::ledger_construct_hash_tree;
-use candid::Principal;
+use candid::{CandidType, Principal};
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
     get_account_from_pubkey, get_num_offerings, get_num_providers, get_pubkey_from_principal,
@@ -15,9 +15,25 @@ use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::platform_specific::{persistent_storage_read, persistent_storage_write};
 use ledger_map::{error, info, warn, LedgerMap};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::time::Duration;
+
+/// Individual entry in the next block
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+pub struct NextBlockEntry {
+    pub label: String,
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
+}
+
+/// Result containing entries from the next block and pagination info
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+pub struct NextBlockEntriesResult {
+    pub entries: Vec<NextBlockEntry>,
+    pub has_more: bool,
+    pub total_count: u32,
+}
 
 thread_local! {
     // Ledger that indexes only specific labels, to save on memory
@@ -527,7 +543,45 @@ pub(crate) fn _provider_list_registered() -> Result<Vec<String>, String> {
     })
 }
 
-/// Get the current next block data for syncing
+/// Get entries from the next block with simple paging
+/// Returns entries in insertion order (chronological) and whether more entries are available
+pub(crate) fn _next_block_entries(
+    label: Option<String>,
+    offset: u32,
+    limit: u32,
+) -> NextBlockEntriesResult {
+    LEDGER_MAP.with(|ledger| {
+        let ledger_ref = ledger.borrow();
+        let all_entries: Vec<NextBlockEntry> = ledger_ref
+            .next_block_iter(label.as_deref())
+            .map(|entry| NextBlockEntry {
+                label: entry.label().to_string(),
+                key: entry.key().to_vec(),
+                value: entry.value().to_vec(),
+            })
+            .collect();
+
+        let total_entries = all_entries.len();
+        let start = offset as usize;
+        let end = (start + limit as usize).min(total_entries);
+
+        let entries = if start < total_entries {
+            all_entries[start..end].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        let has_more = end < total_entries;
+
+        NextBlockEntriesResult {
+            entries,
+            has_more,
+            total_count: total_entries as u32,
+        }
+    })
+}
+
+/// Get the current next block data for syncing (kept for compatibility)
 /// Returns Borsh-pre-serialized data from in-memory buffer
 pub(crate) fn _next_block_sync(
     _request: NextBlockSyncRequest,
@@ -538,6 +592,7 @@ pub(crate) fn _next_block_sync(
         if serialized_data.is_empty() {
             Ok(NextBlockSyncResponse {
                 has_block: false,
+                block_position: Some(ledger_ref.get_next_block_start_pos()),
                 ..Default::default()
             })
         } else {
@@ -545,6 +600,7 @@ pub(crate) fn _next_block_sync(
                 has_block: true,
                 block_data: Some(serialized_data), // Reuse field for serialized entries
                 entries_count: ledger_ref.get_next_block_entries_count(None),
+                block_position: Some(ledger_ref.get_next_block_start_pos()),
                 ..Default::default()
             })
         }

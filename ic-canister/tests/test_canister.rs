@@ -1,8 +1,8 @@
 mod test_utils;
 use crate::test_utils::{
     test_contract_sign_reply, test_contract_sign_request, test_contracts_list_pending,
-    test_get_id_reputation, test_icrc1_account_from_slice, test_offering_add, test_offering_search,
-    test_provider_check_in, test_provider_register, test_user_register, TestContext,
+    test_get_id_reputation, test_icrc1_account_from_slice, test_next_block_entries, test_offering_add,
+    test_offering_search, test_provider_check_in, test_provider_register, test_user_register, TestContext,
 };
 use borsh::BorshDeserialize;
 use candid::{encode_one, Nat, Principal};
@@ -574,4 +574,273 @@ fn contract_req_sign_flow(
         assert_eq!(test_get_id_reputation(ctx, prov1), prov1_rep_before);
         assert_eq!(test_get_id_reputation(ctx, u1), u1_rep_before);
     }
+}
+
+#[test]
+fn test_next_block_entries_empty() {
+    let ctx = TestContext::new();
+
+    // Test with empty next block (no entries)
+    let result = test_next_block_entries(&ctx, None, None, None);
+
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 0);
+    assert!(!result.has_more);
+}
+
+#[test]
+fn test_next_block_entries_with_single_provider_registration() {
+    let ctx = TestContext::new();
+
+    // Check empty state first
+    let empty_result = test_next_block_entries(&ctx, None, None, None);
+    assert_eq!(empty_result.entries.len(), 0);
+    assert_eq!(empty_result.total_count, 0);
+
+    // Register a provider
+    let (provider, _reg_result) = test_provider_register(&ctx, b"test_prov", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Test next block entries
+    let result = test_next_block_entries(&ctx, None, None, None);
+
+    // Should have 2 entries: DCTokenTransfer and ProvRegister
+    assert_eq!(result.entries.len(), 2);
+    assert_eq!(result.total_count, 2);
+    assert!(!result.has_more);
+
+    // Find entries by label
+    let prov_reg_entry = result.entries.iter()
+        .find(|e| e.label == "ProvRegister")
+        .expect("Should find ProvRegister entry");
+
+    let token_transfer_entry = result.entries.iter()
+        .find(|e| e.label == "DCTokenTransfer")
+        .expect("Should find DCTokenTransfer entry");
+
+    // Verify ProvRegister entry
+    assert_eq!(prov_reg_entry.key, provider.to_bytes_verifying());
+    assert!(!prov_reg_entry.value.is_empty());
+
+    // Verify DCTokenTransfer entry
+    assert!(!token_transfer_entry.value.is_empty());
+}
+
+#[test]
+fn test_next_block_entries_with_multiple_entries() {
+    let ctx = TestContext::new();
+    let _ts_ns = ctx.get_timestamp_ns();
+
+    // Register multiple providers
+    let (prov1, _) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let _prov2 = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+    let _user1 = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Check in a provider
+    test_provider_check_in(&ctx, &prov1).unwrap();
+
+    // Test next block entries
+    let result = test_next_block_entries(&ctx, None, None, None);
+
+    // Should have 7 entries: 3 DCTokenTransfer + 2 ProvRegister + 1 UserRegister + 1 ProvCheckIn
+    assert_eq!(result.entries.len(), 7);
+    assert_eq!(result.total_count, 7);
+    assert!(!result.has_more);
+
+    // Verify entries are in chronological order
+    let labels: Vec<String> = result.entries.iter().map(|e| e.label.clone()).collect();
+    assert!(labels.contains(&"ProvRegister".to_string()));
+    assert!(labels.contains(&"UserRegister".to_string()));
+    assert!(labels.contains(&"ProvCheckIn".to_string()));
+    assert!(labels.contains(&"DCTokenTransfer".to_string()));
+
+    // Should have exactly 2 ProvRegister entries
+    let prov_reg_count = labels.iter().filter(|l| l.as_str() == "ProvRegister").count();
+    assert_eq!(prov_reg_count, 2);
+
+    // Should have exactly 3 DCTokenTransfer entries
+    let token_transfer_count = labels.iter().filter(|l| l.as_str() == "DCTokenTransfer").count();
+    assert_eq!(token_transfer_count, 3);
+}
+
+#[test]
+fn test_next_block_entries_filter_by_label() {
+    let ctx = TestContext::new();
+
+    // Register providers and users
+    let _prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let _user1 = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Test filtering by ProvRegister label
+    let result = test_next_block_entries(&ctx, Some("ProvRegister".to_string()), None, None);
+
+    assert_eq!(result.entries.len(), 1);
+    assert_eq!(result.total_count, 1);
+    assert!(!result.has_more);
+
+    let entry = &result.entries[0];
+    assert_eq!(entry.label, "ProvRegister");
+
+    // Test filtering by UserRegister label
+    let result = test_next_block_entries(&ctx, Some("UserRegister".to_string()), None, None);
+
+    assert_eq!(result.entries.len(), 1);
+    assert_eq!(result.total_count, 1);
+    assert!(!result.has_more);
+
+    let entry = &result.entries[0];
+    assert_eq!(entry.label, "UserRegister");
+
+    // Test filtering by non-existent label
+    let result = test_next_block_entries(&ctx, Some("NonExistent".to_string()), None, None);
+
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 0);
+    assert!(!result.has_more);
+}
+
+#[test]
+fn test_next_block_entries_pagination() {
+    let ctx = TestContext::new();
+
+    // Register multiple providers to create enough entries for pagination testing
+    for i in 0..5 {
+        let seed = format!("prov{}", i);
+        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+    }
+
+    // Test pagination with limit 2
+    let result1 = test_next_block_entries(&ctx, None, Some(0), Some(2));
+    assert_eq!(result1.entries.len(), 2);
+    assert_eq!(result1.total_count, 10); // 5 ProvRegister + 5 DCTokenTransfer
+    assert!(result1.has_more);
+
+    // Get second page
+    let result2 = test_next_block_entries(&ctx, None, Some(2), Some(2));
+    assert_eq!(result2.entries.len(), 2);
+    assert_eq!(result2.total_count, 10);
+    assert!(result2.has_more);
+
+    // Get third page
+    let result3 = test_next_block_entries(&ctx, None, Some(4), Some(2));
+    assert_eq!(result3.entries.len(), 2);
+    assert_eq!(result3.total_count, 10);
+    assert!(result3.has_more);
+
+    // Get fourth page
+    let result4 = test_next_block_entries(&ctx, None, Some(6), Some(2));
+    assert_eq!(result4.entries.len(), 2);
+    assert_eq!(result4.total_count, 10);
+    assert!(result4.has_more);
+
+    // Get fifth page
+    let result5 = test_next_block_entries(&ctx, None, Some(8), Some(2));
+    assert_eq!(result5.entries.len(), 2);
+    assert_eq!(result5.total_count, 10);
+    assert!(!result5.has_more);
+
+    // Verify no overlap between pages
+    let page1_keys: Vec<Vec<u8>> = result1.entries.iter().map(|e| e.key.clone()).collect();
+    let page2_keys: Vec<Vec<u8>> = result2.entries.iter().map(|e| e.key.clone()).collect();
+    let page3_keys: Vec<Vec<u8>> = result3.entries.iter().map(|e| e.key.clone()).collect();
+    let page4_keys: Vec<Vec<u8>> = result4.entries.iter().map(|e| e.key.clone()).collect();
+    let page5_keys: Vec<Vec<u8>> = result5.entries.iter().map(|e| e.key.clone()).collect();
+
+    assert_eq!(page1_keys.len(), 2);
+    assert_eq!(page2_keys.len(), 2);
+    assert_eq!(page3_keys.len(), 2);
+    assert_eq!(page4_keys.len(), 2);
+    assert_eq!(page5_keys.len(), 2);
+
+    // Ensure no duplicate keys across pages
+    let all_keys = page1_keys.iter().chain(page2_keys.iter()).chain(page3_keys.iter())
+        .chain(page4_keys.iter()).chain(page5_keys.iter());
+    let unique_keys: std::collections::HashSet<_> = all_keys.cloned().collect();
+    assert_eq!(unique_keys.len(), 10);
+}
+
+#[test]
+fn test_next_block_entries_pagination_edge_cases() {
+    let ctx = TestContext::new();
+
+    // Test with offset beyond available entries
+    let result = test_next_block_entries(&ctx, None, Some(100), Some(10));
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 0);
+    assert!(!result.has_more);
+
+    // Register one provider
+    test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Test with offset exactly at the end
+    let result = test_next_block_entries(&ctx, None, Some(2), Some(10));
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 2);
+    assert!(!result.has_more);
+
+    // Test with offset beyond the end
+    let result = test_next_block_entries(&ctx, None, Some(10), Some(10));
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 2);
+    assert!(!result.has_more);
+}
+
+#[test]
+fn test_next_block_entries_after_commit() {
+    let ctx = TestContext::new();
+
+    // Register a provider
+    test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Verify entry is in next block
+    let result = test_next_block_entries(&ctx, None, None, None);
+    assert_eq!(result.entries.len(), 2);
+    assert_eq!(result.total_count, 2);
+
+    // Commit the block
+    ctx.commit();
+
+    // Verify next block is now empty after commit
+    let result = test_next_block_entries(&ctx, None, None, None);
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 0);
+    assert!(!result.has_more);
+}
+
+#[test]
+fn test_next_block_entries_with_large_dataset() {
+    let ctx = TestContext::new();
+
+    // Create a larger dataset (15 entries) to test pagination
+    for i in 0..15 {
+        let seed = format!("prov{}", i);
+        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+    }
+
+    // Test with default limit (100)
+    let result = test_next_block_entries(&ctx, None, None, None);
+    assert_eq!(result.entries.len(), 30); // 15 ProvRegister + 15 DCTokenTransfer
+    assert_eq!(result.total_count, 30);
+    assert!(!result.has_more);
+
+    // Test with custom limit (5)
+    let mut total_retrieved = 0;
+    let mut offset = 0;
+    let limit = 5;
+
+    loop {
+        let result = test_next_block_entries(&ctx, None, Some(offset), Some(limit));
+        total_retrieved += result.entries.len();
+
+        if !result.has_more {
+            break;
+        }
+
+        offset += limit as u32;
+
+        // Safety check to prevent infinite loop
+        assert!(offset < 100, "Pagination loop detected");
+    }
+
+    assert_eq!(total_retrieved, 30);
+    assert_eq!(total_retrieved, result.total_count as usize);
 }

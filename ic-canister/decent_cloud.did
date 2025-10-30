@@ -479,6 +479,27 @@ service : {
     data_push: (cursor: text, data: vec nat8) -> (ResultString);
     metadata: () -> (vec record { text; MetadataValue; }) query;
 
+    // Next block operations for real-time synchronization
+    next_block_entries: (label: opt text, offset: opt nat32, limit: opt nat32) -> (record {
+        entries: vec record {
+            label: text;
+            key: vec nat8;
+            value: vec nat8;
+        };
+        has_more: bool;
+        total_count: nat32;
+    }) query;
+    next_block_sync: (start_position: opt nat64, include_data: opt bool, max_entries: opt nat32) -> (record {
+        has_block: bool;
+        block_header: opt vec nat8;
+        block_data: opt vec nat8;
+        block_hash: opt vec nat8;
+        block_position: opt nat64;
+        next_block_position: opt nat64;
+        entries_count: nat;
+        more_blocks_available: bool;
+    }) query;
+
     // Debugging and troubleshooting
     http_request: (request: HttpRequest) -> (HttpResponse) query;
     get_logs_debug: () -> (ResultString) query;

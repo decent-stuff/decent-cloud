@@ -157,7 +157,18 @@ fn provider_list_registered() -> Result<Vec<String>, String> {
     _provider_list_registered()
 }
 
-/// Query endpoint to get the next block from the ledger for synchronization
+/// Query endpoint to get entries from the next block with simple paging
+/// Returns entries in chronological order (insertion order)
+#[ic_cdk::query]
+fn next_block_entries(
+    label: Option<String>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> NextBlockEntriesResult {
+    _next_block_entries(label, offset.unwrap_or(0), limit.unwrap_or(100))
+}
+
+/// Query endpoint to get the next block from the ledger for synchronization (kept for compatibility)
 #[ic_cdk::query]
 fn next_block_sync(
     start_position: Option<u64>,
