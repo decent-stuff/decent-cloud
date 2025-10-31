@@ -43,6 +43,14 @@ export class JsonResponse {
     });
     return CorsHandler.addHeaders(response);
   }
+
+  static json<T>(data: T, status = 200): Response {
+    const response = new Response(JSON.stringify(data), {
+      status,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    return CorsHandler.addHeaders(response);
+  }
 }
 
 export class DatabaseService {
