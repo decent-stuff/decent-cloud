@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Structure
 
-This is a multi-repository project. See the [Development Guide](docs/development.md) for detailed information about the project structure and repositories.
+Multi-repository project - see [Development Guide](docs/development.md#project-structure) for details.
 
 ## Key Development Commands
 
@@ -26,16 +26,16 @@ cargo test
 
 ### Website Development
 
-See the [Development Guide](docs/development.md) for detailed website development instructions, including:
+See [Development Guide](docs/development.md#building-the-website) for:
 - Standard development (`npm run dev`)
-- Development with WASM auto-rebuild (`npm run dev:watch`)
+- WASM auto-rebuild (`npm run dev:watch`)
 - Production build (`npm run build`)
 
 ### Documentation
 
-See the [Development Guide](docs/development.md) for detailed documentation instructions, including:
-- Building the whitepaper (requires Python venv activation)
-- Generating API documentation with `cargo doc --no-deps --open`
+See [Development Guide](docs/development.md#documentation) for:
+- Building whitepaper (Python venv required)
+- API docs with `cargo doc --no-deps --open`
 
 ## Documentation Guidelines
 

@@ -35,65 +35,11 @@ Our unique reputation system ties credibility to transaction fees. Paying these 
 
 ## Quick Start
 
-### Installation
+1. **Install** - See [Installation Guide](docs/installation.md) for detailed setup instructions
+2. **Generate identity** - `dc keygen --generate --identity my-id`
+3. **Register** - `dc user register --identity my-user` or `dc provider register --identity my-provider`
 
-<details>
-<summary>Linux (Ubuntu 24.04+)</summary>
-
-```bash
-mkdir $HOME/bin
-curl -L https://github.com/decent-stuff/decent-cloud/releases/latest/download/decent-cloud-linux-amd64 -o $HOME/bin/dc
-chmod +x $HOME/bin/dc
-```
-
-Add to PATH in `~/.bashrc`:
-
-```bash
-if [ -d "$HOME/bin" ] ; then
-   export PATH="$HOME/bin:$PATH"
-fi
-```
-</details>
-
-<details>
-<summary>MacOS ARM64 (M1, M2, M3)</summary>
-
-```bash
-curl -L https://github.com/decent-stuff/decent-cloud/releases/latest/download/decent-cloud-darwin-arm64 -o /usr/local/bin/dc
-chmod +x /usr/local/bin/dc
-```
-</details>
-
-<details>
-<summary>Windows</summary>
-
-```powershell
-$download_url = "https://github.com/decent-stuff/decent-cloud/releases/latest/download/decent-cloud-windows-amd64.exe"
-Invoke-WebRequest "$download_url" -OutFile "dc.exe"
-```
-</details>
-
-See the [Installation](docs/installation.md) guide for detailed instructions.
-
-### Basic Usage
-
-1. Generate your identity:
-
-```bash
-dc keygen --generate --identity my-id
-```
-
-2. Register according to role:
-
-```bash
-# For users
-dc user register --identity my-user
-
-# For providers/validators
-dc provider register --identity my-provider
-```
-
-Continue with [Getting Started](docs/getting-started.md) or [Mining & Validation](docs/mining-and-validation.md) for next steps.
+Continue with [Getting Started](docs/getting-started.md) for complete setup.
 
 ## Related Projects
 
