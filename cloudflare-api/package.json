@@ -3,17 +3,20 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
-		"deploy": "wrangler deploy",
-		"deploy:prod": "wrangler deploy --env production",
-		"dev": "wrangler dev --env local",
+		"deploy": "npm run deploy:prod",
+		"deploy:prod": "echo '🚀 Starting production deployment...' && node scripts/deploy.js production",
+		"deploy:dev": "echo '🧪 Starting local deployment test...' && node scripts/deploy.js local",
+		"deploy:test": "echo '🧪 Testing deployment pipeline...' && node scripts/test-deployment.js",
+		"dev": "rm -rf .wrangler/state/v3/d1/miniflare-D1DatabaseObject/* && wrangler dev --config wrangler.local.jsonc",
 		"dev:import": "wrangler dev --config wrangler.import.toml --env local --port 8789",
-		"start": "wrangler dev --env local",
 		"test": "vitest",
 		"cf-typegen": "wrangler types",
-		"d1:migrate": "wrangler d1 migrations apply decent-cloud-db",
-		"d1:migrate:test": "wrangler d1 migrations apply decent-cloud-test --env local",
-		"d1:execute": "wrangler d1 execute decent-cloud-db --command",
-		"d1:execute:test": "wrangler d1 execute decent-cloud-test --command --env local"
+		"d1:migrate": "echo '🗄️ Running production migrations...' && wrangler d1 migrations apply decent-cloud-db --config wrangler.prod.jsonc",
+		"d1:migrate:local": "echo '🗄️ Running local migrations...' && wrangler d1 migrations apply decent-cloud-db --config wrangler.local.jsonc --local",
+		"d1:status": "echo '📊 Migration status: Check deployment output for migration details'",
+		"d1:execute": "wrangler d1 execute decent-cloud-db --command --config wrangler.prod.jsonc",
+		"import:data": "node scripts/import-data.js",
+		"import:real": "node scripts/import-real-data.js"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
