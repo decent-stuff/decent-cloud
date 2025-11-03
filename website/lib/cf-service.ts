@@ -1,14 +1,14 @@
 // Cloudflare Service adapter for Decent Cloud
 // Replaces direct canister calls with CF service calls
 
-interface CFResponse<T = any> {
+interface CFResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
   details?: string;
 }
 
-interface ResultString = { Ok: string } | { Err: string };
+type ResultString = { Ok: string } | { Err: string };
 
 // CF Service endpoint - replace with actual CF worker URL when deployed
 const CF_SERVICE_URL = 'http://localhost:8787'; // For local development
@@ -17,9 +17,9 @@ const CF_SERVICE_URL = 'http://localhost:8787'; // For local development
 /**
  * Generic function to call CF service methods
  */
-async function callCFService<T = any>(
+async function callCFService<T = unknown>(
   method: string,
-  args: any[] = [],
+  args: unknown[] = [],
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${CF_SERVICE_URL}/api/v1/canister/${method}`;
@@ -44,15 +44,25 @@ async function callCFService<T = any>(
     throw new Error(result.error || 'Unknown CF service error');
   }
 
+  if (result.data === undefined) {
+    throw new Error('No data returned from CF service');
+  }
+
   return result.data;
 }
 
 /**
  * Wrapper to maintain compatibility with existing canister result format
  */
-function processCFResult(result: any): ResultString {
+function processCFResult(result: unknown): ResultString {
   if (result && typeof result === 'object' && ('Ok' in result || 'Err' in result)) {
-    return result; // Already in canister format
+    const resultObj = result as { Ok?: unknown; Err?: unknown };
+    if ('Ok' in resultObj && resultObj.Ok !== undefined) {
+      return { Ok: String(resultObj.Ok) };
+    }
+    if ('Err' in resultObj && resultObj.Err !== undefined) {
+      return { Err: String(resultObj.Err) };
+    }
   }
 
   // Convert CF success to canister format
@@ -61,8 +71,8 @@ function processCFResult(result: any): ResultString {
   }
 
   // Handle error case
-  if (result && typeof result === 'object' && result.error) {
-    return { Err: result.error };
+  if (result && typeof result === 'object' && 'error' in result && (result as { error: unknown }).error) {
+    return { Err: String((result as { error: unknown }).error) };
   }
 
   // Default case
@@ -117,21 +127,21 @@ export class CFService {
   }
 
   async providerGetProfileByPubkeyBytes(pubkeyBytes: Uint8Array): Promise<string | null> {
-    const result = await callCFService('provider_get_profile_by_pubkey_bytes', [
+    const result = await callCFService<string | null>('provider_get_profile_by_pubkey_bytes', [
       Array.from(pubkeyBytes)
     ]);
     return result;
   }
 
   async providerGetProfileByPrincipal(principal: string): Promise<string | null> {
-    const result = await callCFService('provider_get_profile_by_principal', [principal]);
+    const result = await callCFService<string | null>('provider_get_profile_by_principal', [principal]);
     return result;
   }
 
   async offeringSearch(searchQuery: string): Promise<Array<{ provider_pub_key: Uint8Array; offering_compressed: Uint8Array }>> {
-    const result = await callCFService('offering_search', [searchQuery]);
+    const result = await callCFService<Array<{ provider_pub_key: number[]; offering_compressed: number[] }>>('offering_search', [searchQuery]);
 
-    return result.map((entry: any) => ({
+    return result.map((entry) => ({
       provider_pub_key: new Uint8Array(entry.provider_pub_key),
       offering_compressed: new Uint8Array(entry.offering_compressed)
     }));
@@ -154,9 +164,9 @@ export class CFService {
 
   async contractsListPending(pubkeyBytes: Uint8Array | null): Promise<Array<[Uint8Array, Uint8Array]>> {
     const args = pubkeyBytes ? [Array.from(pubkeyBytes)] : [null];
-    const result = await callCFService('contracts_list_pending', args);
+    const result = await callCFService<Array<[number[], number[]]>>('contracts_list_pending', args);
 
-    return result.map((entry: any) => [
+    return result.map((entry) => [
       new Uint8Array(entry[0]),
       new Uint8Array(entry[1])
     ]);
@@ -188,7 +198,7 @@ export class CFService {
 
   // Check-in operations
   async getCheckInNonce(): Promise<Uint8Array> {
-    const result = await callCFService('get_check_in_nonce');
+    const result = await callCFService<number[]>('get_check_in_nonce');
     return new Uint8Array(result);
   }
 
@@ -208,15 +218,15 @@ export class CFService {
 
   // Common operations
   async getIdentityReputation(pubkeyBytes: Uint8Array): Promise<bigint> {
-    const result = await callCFService('get_identity_reputation', [
+    const result = await callCFService<string | bigint>('get_identity_reputation', [
       Array.from(pubkeyBytes)
     ]);
-    return BigInt(result);
+    return typeof result === 'string' ? BigInt(result) : result;
   }
 
   async getRegistrationFee(): Promise<bigint> {
-    const result = await callCFService('get_registration_fee');
-    return BigInt(result);
+    const result = await callCFService<string | bigint>('get_registration_fee');
+    return typeof result === 'string' ? BigInt(result) : result;
   }
 }
 
