@@ -4,6 +4,7 @@ import {
   handleCanisterRequest,
   handleCanisterMethod
 } from './routes/canister';
+import { handleSyncRequest } from './routes/sync';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -28,7 +29,8 @@ export default {
             message: 'Decent Cloud API is running',
             environment: env.ENVIRONMENT,
             features: {
-              canisterApi: true
+              canisterApi: true,
+              ledgerSync: true
             }
           }), {
             headers: { 'Content-Type': 'application/json' }
@@ -41,6 +43,10 @@ export default {
             return handleCanisterMethod(request, env, method);
           }
 
+          // Handle sync endpoints
+          if (url.pathname.startsWith('/api/sync')) {
+            return handleSyncRequest(request, env);
+          }
           
           return new Response(JSON.stringify({
             success: false,

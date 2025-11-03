@@ -581,6 +581,44 @@ pub(crate) fn _next_block_entries(
     })
 }
 
+/// Get committed ledger entries with simple paging
+/// Returns entries from committed blocks (not next_block) in chronological order
+pub(crate) fn _ledger_entries(
+    label: Option<String>,
+    offset: u32,
+    limit: u32,
+) -> NextBlockEntriesResult {
+    LEDGER_MAP.with(|ledger| {
+        let ledger_ref = ledger.borrow();
+
+        let all_entries: Vec<NextBlockEntry> = ledger_ref
+            .iter(label.as_deref())
+            .map(|entry| NextBlockEntry {
+                label: entry.label().to_string(),
+                key: entry.key().to_vec(),
+                value: entry.value().to_vec(),
+            })
+            .collect();
+
+        let total_entries = all_entries.len();
+        let start = offset as usize;
+        let end = (start + limit as usize).min(total_entries);
+        let entries = if start < total_entries {
+            all_entries[start..end].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        let has_more = end < total_entries;
+
+        NextBlockEntriesResult {
+            entries,
+            has_more,
+            total_count: total_entries as u32,
+        }
+    })
+}
+
 /// Get the current next block data for syncing (kept for compatibility)
 /// Returns Borsh-pre-serialized data from in-memory buffer
 pub(crate) fn _next_block_sync(

@@ -489,6 +489,18 @@ service : {
         has_more: bool;
         total_count: nat32;
     }) query;
+    
+    // Committed ledger entries operations for historical data sync
+    ledger_entries: (label: opt text, offset: opt nat32, limit: opt nat32) -> (record {
+        entries: vec record {
+            label: text;
+            key: vec nat8;
+            value: vec nat8;
+        };
+        has_more: bool;
+        total_count: nat32;
+    }) query;
+    
     next_block_sync: (start_position: opt nat64, include_data: opt bool, max_entries: opt nat32) -> (record {
         has_block: bool;
         block_header: opt vec nat8;
