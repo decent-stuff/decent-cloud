@@ -334,7 +334,7 @@ impl LedgerMap {
     ) -> impl Iterator<Item = anyhow::Result<(LedgerBlockHeader, LedgerBlock)>> + '_ {
         let data_start = partition_table::get_data_partition()
             .start_lba
-            .min(start_pos);
+            .max(start_pos);
         (0..).scan(data_start, |state, _| {
             let (block_header, ledger_block) = match self._persisted_block_read(*state) {
                 Ok(decoded) => decoded,

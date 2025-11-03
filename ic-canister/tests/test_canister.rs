@@ -304,7 +304,8 @@ fn test_reputation() {
     let ctx = TestContext::new();
     let ts_ns = ctx.get_timestamp_ns();
 
-    let _ = test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
+    let (_prov_past, _reg_result) =
+        test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
     ctx.ffwd_to_next_block(ts_ns);
 
     let (prov1, reg1) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
@@ -349,7 +350,8 @@ fn test_offerings() {
     let ctx = TestContext::new();
     let ts_ns = ctx.get_timestamp_ns();
 
-    let _ = test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
+    let (_prov_past, _reg_result) =
+        test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
     ctx.ffwd_to_next_block(ts_ns);
 
     let prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV).0;
@@ -638,8 +640,8 @@ fn test_next_block_entries_with_multiple_entries() {
 
     // Register multiple providers
     let (prov1, _) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-    let _prov2 = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
-    let _user1 = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_prov2, _reg_result) = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_user1, _reg_result) = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
 
     // Check in a provider
     test_provider_check_in(&ctx, &prov1).unwrap();
@@ -679,8 +681,8 @@ fn test_next_block_entries_filter_by_label() {
     let ctx = TestContext::new();
 
     // Register providers and users
-    let _prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-    let _user1 = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_prov1, _reg_result) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_user1, _reg_result) = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
 
     // Test filtering by ProvRegister label
     let result = test_next_block_entries(&ctx, Some("ProvRegister".to_string()), None, None);
@@ -717,7 +719,8 @@ fn test_next_block_entries_pagination() {
     // Register multiple providers to create enough entries for pagination testing
     for i in 0..5 {
         let seed = format!("prov{}", i);
-        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        let (_provider, _reg_result) =
+            test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
     }
 
     // Test pagination with limit 2
@@ -785,7 +788,8 @@ fn test_next_block_entries_pagination_edge_cases() {
     assert!(!result.has_more);
 
     // Register one provider
-    test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_provider, _reg_result) =
+        test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
 
     // Test with offset exactly at the end
     let result = test_next_block_entries(&ctx, None, Some(2), Some(10));
@@ -805,7 +809,8 @@ fn test_next_block_entries_after_commit() {
     let ctx = TestContext::new();
 
     // Register a provider
-    test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_provider, _reg_result) =
+        test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
 
     // Verify entry is in next block
     let result = test_next_block_entries(&ctx, None, None, None);
@@ -829,7 +834,8 @@ fn test_next_block_entries_with_large_dataset() {
     // Create a larger dataset (15 entries) to test pagination
     for i in 0..15 {
         let seed = format!("prov{}", i);
-        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        let (_provider, _reg_result) =
+            test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
     }
 
     // Test with default limit (100)
@@ -851,7 +857,7 @@ fn test_next_block_entries_with_large_dataset() {
             break;
         }
 
-        offset += limit as u32;
+        offset += limit;
 
         // Safety check to prevent infinite loop
         assert!(offset < 100, "Pagination loop detected");

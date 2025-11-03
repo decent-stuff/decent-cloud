@@ -153,6 +153,7 @@ mod tests {
                 },
                 memo: None,
                 created_at_time: None,
+                fee: None,
             }),
             burn: None,
             transfer: None,
