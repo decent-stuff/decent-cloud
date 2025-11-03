@@ -206,7 +206,7 @@ impl LedgerMap {
         let mut expected_parent_hash = Vec::new();
         let mut updates = Vec::new();
         // Step 1: Read all Ledger Blocks
-        for entry in self.iter_raw() {
+        for entry in self.iter_raw(0) {
             let (block_header, ledger_block) = entry?;
 
             if ledger_block.parent_hash() != expected_parent_hash {
@@ -330,8 +330,11 @@ impl LedgerMap {
 
     pub fn iter_raw(
         &self,
+        start_pos: u64,
     ) -> impl Iterator<Item = anyhow::Result<(LedgerBlockHeader, LedgerBlock)>> + '_ {
-        let data_start = partition_table::get_data_partition().start_lba;
+        let data_start = partition_table::get_data_partition()
+            .start_lba
+            .min(start_pos);
         (0..).scan(data_start, |state, _| {
             let (block_header, ledger_block) = match self._persisted_block_read(*state) {
                 Ok(decoded) => decoded,

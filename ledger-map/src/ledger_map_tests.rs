@@ -377,7 +377,8 @@ mod tests {
             .unwrap();
         ledger_map.commit_block().unwrap();
 
-        let (headers, blocks): (Vec<_>, Vec<_>) = ledger_map.iter_raw().map(|x| x.unwrap()).unzip();
+        let (headers, blocks): (Vec<_>, Vec<_>) =
+            ledger_map.iter_raw(0).map(|x| x.unwrap()).unzip();
 
         let header_len_bytes = headers
             .iter()

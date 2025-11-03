@@ -84,7 +84,7 @@ fn _get_committed_transactions(start: u64, max_length: u64) -> Vec<Transaction> 
     let mut tx_num: u64 = 0;
 
     LEDGER_MAP.with(|ledger| {
-        'outer: for block in ledger.borrow().iter_raw() {
+        'outer: for block in ledger.borrow().iter_raw(0) {
             let (_blk_header, ledger_block) = block.unwrap_or_else(|e| {
                 ic_cdk::api::trap(format!("Failed to deserialize block: {}", e));
             });

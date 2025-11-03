@@ -35,7 +35,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
     let mut num_providers = 0u64;
     let mut num_users = 0u64;
     let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
-    for block in ledger.iter_raw() {
+    for block in ledger.iter_raw(0) {
         let (_blk_head, block) = block?;
         for entry in block.entries() {
             match entry.label() {

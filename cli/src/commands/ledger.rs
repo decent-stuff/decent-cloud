@@ -34,7 +34,7 @@ pub async fn handle_ledger_local_command(
         }
     } else if local_args.list_entries_raw {
         println!("Raw Entries:");
-        for entry in ledger_local.iter_raw() {
+        for entry in ledger_local.iter_raw(0) {
             let (blk_header, ledger_block) = entry?;
             println!("{}", blk_header);
             println!("{}", ledger_block)

@@ -152,7 +152,7 @@ pub fn get_blocks(arg: GetBlocksRequest) -> GetBlocksResponse {
     };
 
     LEDGER_MAP.with(|ledger| {
-        for (block_idx, block) in ledger.borrow().iter_raw().enumerate() {
+        for (block_idx, block) in ledger.borrow().iter_raw(0).enumerate() {
             // Ignore blocks indexes before the provided start value
             if (block_idx as u64) < start_block_idx {
                 continue;
