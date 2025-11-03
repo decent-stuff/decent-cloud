@@ -491,7 +491,8 @@ service : {
     }) query;
     
     // Committed ledger entries operations for historical data sync
-    ledger_entries: (label: opt text, offset: opt nat32, limit: opt nat32) -> (record {
+    // Set include_next_block to true to also include uncommitted entries
+    ledger_entries: (label: opt text, offset: opt nat32, limit: opt nat32, include_next_block: opt bool) -> (record {
         entries: vec record {
             label: text;
             key: vec nat8;

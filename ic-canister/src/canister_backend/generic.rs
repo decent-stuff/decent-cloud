@@ -582,16 +582,24 @@ pub(crate) fn _next_block_entries(
 }
 
 /// Get committed ledger entries with simple paging
-/// Returns entries from committed blocks (not next_block) in chronological order
+/// Returns entries from committed blocks, optionally including next_block data
+///
+/// # Arguments
+/// * `label` - Optional label filter (e.g., "ProvProfile", "ProvOffering")
+/// * `offset` - Starting offset for pagination
+/// * `limit` - Maximum number of entries to return
+/// * `include_next_block` - If true, includes uncommitted entries from next_block
 pub(crate) fn _ledger_entries(
     label: Option<String>,
     offset: u32,
     limit: u32,
+    include_next_block: bool,
 ) -> NextBlockEntriesResult {
     LEDGER_MAP.with(|ledger| {
         let ledger_ref = ledger.borrow();
 
-        let all_entries: Vec<NextBlockEntry> = ledger_ref
+        // Collect committed entries
+        let mut all_entries: Vec<NextBlockEntry> = ledger_ref
             .iter(label.as_deref())
             .map(|entry| NextBlockEntry {
                 label: entry.label().to_string(),
@@ -599,6 +607,19 @@ pub(crate) fn _ledger_entries(
                 value: entry.value().to_vec(),
             })
             .collect();
+
+        // Optionally add next_block entries
+        if include_next_block {
+            let next_block: Vec<NextBlockEntry> = ledger_ref
+                .next_block_iter(label.as_deref())
+                .map(|entry| NextBlockEntry {
+                    label: entry.label().to_string(),
+                    key: entry.key().to_vec(),
+                    value: entry.value().to_vec(),
+                })
+                .collect();
+            all_entries.extend(next_block);
+        }
 
         let total_entries = all_entries.len();
         let start = offset as usize;

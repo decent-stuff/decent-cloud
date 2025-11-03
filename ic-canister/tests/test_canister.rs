@@ -1,9 +1,9 @@
 mod test_utils;
 use crate::test_utils::{
     test_contract_sign_reply, test_contract_sign_request, test_contracts_list_pending,
-    test_get_id_reputation, test_icrc1_account_from_slice, test_next_block_entries,
-    test_offering_add, test_offering_search, test_provider_check_in, test_provider_register,
-    test_user_register, TestContext,
+    test_get_id_reputation, test_icrc1_account_from_slice, test_ledger_entries,
+    test_next_block_entries, test_offering_add, test_offering_search, test_provider_check_in,
+    test_provider_register, test_user_register, TestContext,
 };
 use borsh::BorshDeserialize;
 use candid::{encode_one, Nat, Principal};
@@ -859,4 +859,210 @@ fn test_next_block_entries_with_large_dataset() {
 
     assert_eq!(total_retrieved, 30);
     assert_eq!(total_retrieved, result.total_count as usize);
+}
+
+// ---- Ledger Entries Tests ----
+
+#[test]
+fn test_ledger_entries_empty() {
+    let ctx = TestContext::new();
+
+    // Test with empty ledger (no committed entries)
+    let result = test_ledger_entries(&ctx, None, None, None, None);
+
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 0);
+    assert!(!result.has_more);
+}
+
+#[test]
+fn test_ledger_entries_with_committed_data() {
+    let ctx = TestContext::new();
+
+    // Register providers and commit
+    let (prov1, _) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (prov2, _) = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Commit the block
+    ctx.commit();
+
+    // Query committed entries only (exclude_next_block = false or None)
+    let result = test_ledger_entries(&ctx, None, None, None, Some(false));
+
+    // Should have committed entries: at least 2 ProvRegister
+    assert!(result.entries.len() >= 2);
+    assert!(result.total_count >= 2);
+
+    // Verify we have ProvRegister entries
+    let prov_register_count = result
+        .entries
+        .iter()
+        .filter(|e| e.label == "ProvRegister")
+        .count();
+    assert_eq!(prov_register_count, 2);
+
+    let committed_count = result.total_count;
+
+    // Add a new provider (uncommitted)
+    let _prov3 = test_provider_register(&ctx, b"prov3", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Query again without including next_block - should still have same count
+    let result2 = test_ledger_entries(&ctx, None, None, None, Some(false));
+    assert_eq!(result2.total_count, committed_count);
+}
+
+#[test]
+fn test_ledger_entries_with_next_block_included() {
+    let ctx = TestContext::new();
+
+    // Register and commit
+    let _prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    ctx.commit();
+
+    // Add more without committing
+    let _prov2 = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+    let _user1 = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // Query without next_block
+    let result_committed = test_ledger_entries(&ctx, None, None, None, Some(false));
+    let committed_count = result_committed.total_count;
+    assert!(committed_count >= 1); // At least the ProvRegister
+
+    // Query with next_block included
+    let result_all = test_ledger_entries(&ctx, None, None, None, Some(true));
+
+    // Verify we have more entries with next_block included
+    assert!(result_all.total_count > result_committed.total_count);
+
+    // Should have at least 2 more entries (1 ProvRegister + 1 UserRegister in next_block)
+    assert!(result_all.total_count >= committed_count + 2);
+}
+
+#[test]
+fn test_ledger_entries_filter_by_label() {
+    let ctx = TestContext::new();
+
+    // Register providers and users, then commit
+    let _prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let _prov2 = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+    let _user1 = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
+    ctx.commit();
+
+    // Test filtering by ProvRegister label
+    let result = test_ledger_entries(&ctx, Some("ProvRegister".to_string()), None, None, None);
+    assert_eq!(result.entries.len(), 2);
+    assert_eq!(result.total_count, 2);
+    assert!(result.entries.iter().all(|e| e.label == "ProvRegister"));
+
+    // Test filtering by UserRegister label
+    let result = test_ledger_entries(&ctx, Some("UserRegister".to_string()), None, None, None);
+    assert_eq!(result.entries.len(), 1);
+    assert_eq!(result.total_count, 1);
+    assert_eq!(result.entries[0].label, "UserRegister");
+
+    // Test filtering by non-existent label
+    let result = test_ledger_entries(&ctx, Some("NonExistent".to_string()), None, None, None);
+    assert_eq!(result.entries.len(), 0);
+    assert_eq!(result.total_count, 0);
+}
+
+#[test]
+fn test_ledger_entries_pagination() {
+    let ctx = TestContext::new();
+
+    // Register multiple providers to create enough entries
+    for i in 0..5 {
+        let seed = format!("prov{}", i);
+        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+    }
+    ctx.commit();
+
+    // Get total count first
+    let result_all = test_ledger_entries(&ctx, None, None, None, None);
+    let total_entries = result_all.total_count;
+    assert!(total_entries >= 5); // At least 5 ProvRegister entries
+
+    // Test pagination with limit 2
+    let result1 = test_ledger_entries(&ctx, None, Some(0), Some(2), None);
+    assert_eq!(result1.entries.len(), 2);
+    assert_eq!(result1.total_count, total_entries);
+    assert_eq!(result1.has_more, total_entries > 2);
+
+    if total_entries > 2 {
+        // Get second page
+        let result2 = test_ledger_entries(&ctx, None, Some(2), Some(2), None);
+        assert!(result2.entries.len() <= 2);
+        assert_eq!(result2.total_count, total_entries);
+
+        // Verify no overlap
+        let keys1: Vec<_> = result1.entries.iter().map(|e| &e.key).collect();
+        let keys2: Vec<_> = result2.entries.iter().map(|e| &e.key).collect();
+        for k2 in keys2 {
+            assert!(!keys1.contains(&k2), "Found overlap in paginated results");
+        }
+    }
+}
+
+#[test]
+fn test_ledger_entries_pagination_with_filter() {
+    let ctx = TestContext::new();
+
+    // Register 10 providers
+    for i in 0..10 {
+        let seed = format!("prov{}", i);
+        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+    }
+    ctx.commit();
+
+    // Filter by ProvRegister and paginate
+    let result1 = test_ledger_entries(
+        &ctx,
+        Some("ProvRegister".to_string()),
+        Some(0),
+        Some(5),
+        None,
+    );
+    assert_eq!(result1.entries.len(), 5);
+    assert_eq!(result1.total_count, 10);
+    assert!(result1.has_more);
+    assert!(result1.entries.iter().all(|e| e.label == "ProvRegister"));
+
+    let result2 = test_ledger_entries(
+        &ctx,
+        Some("ProvRegister".to_string()),
+        Some(5),
+        Some(5),
+        None,
+    );
+    assert_eq!(result2.entries.len(), 5);
+    assert_eq!(result2.total_count, 10);
+    assert!(!result2.has_more);
+    assert!(result2.entries.iter().all(|e| e.label == "ProvRegister"));
+}
+
+#[test]
+fn test_ledger_entries_comparison_with_next_block_entries() {
+    let ctx = TestContext::new();
+
+    // Add some committed data
+    let _prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    ctx.commit();
+
+    // Add some uncommitted data
+    let _prov2 = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+
+    // ledger_entries with include_next_block=false should match committed data
+    let ledger_committed = test_ledger_entries(&ctx, None, None, None, Some(false));
+    let committed_count = ledger_committed.total_count;
+
+    // next_block_entries should only show uncommitted
+    let next_block = test_next_block_entries(&ctx, None, None, None);
+    let next_block_count = next_block.total_count;
+
+    // ledger_entries with include_next_block=true should be sum of both
+    let ledger_all = test_ledger_entries(&ctx, None, None, None, Some(true));
+
+    assert!(committed_count >= 1); // At least ProvRegister
+    assert!(next_block_count >= 1); // At least ProvRegister in next_block
+    assert_eq!(ledger_all.total_count, committed_count + next_block_count);
 }

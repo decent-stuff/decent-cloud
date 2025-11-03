@@ -169,14 +169,20 @@ fn next_block_entries(
 }
 
 /// Query endpoint to get committed ledger entries with simple paging
-/// Returns entries from committed blocks (not next_block) in chronological order
+/// Returns entries from committed blocks, optionally including next_block data
 #[ic_cdk::query]
 fn ledger_entries(
     label: Option<String>,
     offset: Option<u32>,
     limit: Option<u32>,
+    include_next_block: Option<bool>,
 ) -> NextBlockEntriesResult {
-    _ledger_entries(label, offset.unwrap_or(0), limit.unwrap_or(100))
+    _ledger_entries(
+        label,
+        offset.unwrap_or(0),
+        limit.unwrap_or(100),
+        include_next_block.unwrap_or(false),
+    )
 }
 
 /// Query endpoint to get the next block from the ledger for synchronization (kept for compatibility)
