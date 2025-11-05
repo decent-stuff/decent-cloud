@@ -157,29 +157,19 @@ fn provider_list_registered() -> Result<Vec<String>, String> {
     _provider_list_registered()
 }
 
-/// Query endpoint to get entries from the next block with simple paging
-/// Returns entries in chronological order (insertion order)
-#[ic_cdk::query]
-fn next_block_entries(
-    label: Option<String>,
-    offset: Option<u32>,
-    limit: Option<u32>,
-) -> NextBlockEntriesResult {
-    _next_block_entries(label, offset.unwrap_or(0), limit.unwrap_or(100))
-}
-
-/// Query endpoint to get committed ledger entries with simple paging
+/// Query endpoint to get committed ledger entries with cursor-based pagination
 /// Returns entries from committed blocks, optionally including next_block data
+/// Use the returned next_cursor to efficiently resume iteration from where you left off
 #[ic_cdk::query]
 fn ledger_entries(
     label: Option<String>,
-    offset: Option<u32>,
+    cursor: Option<ResumeCursor>,
     limit: Option<u32>,
     include_next_block: Option<bool>,
-) -> NextBlockEntriesResult {
+) -> LedgerEntriesResult {
     _ledger_entries(
         label,
-        offset.unwrap_or(0),
+        cursor,
         limit.unwrap_or(100),
         include_next_block.unwrap_or(false),
     )

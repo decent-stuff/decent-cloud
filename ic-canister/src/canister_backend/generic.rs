@@ -19,20 +19,27 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::time::Duration;
 
-/// Individual entry in the next block
+/// Individual ledger entry
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
-pub struct NextBlockEntry {
+pub struct LedgerEntry {
     pub label: String,
     pub key: Vec<u8>,
     pub value: Vec<u8>,
 }
 
-/// Result containing entries from the next block and pagination info
+/// Resume cursor for efficient pagination through ledger entries
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
-pub struct NextBlockEntriesResult {
-    pub entries: Vec<NextBlockEntry>,
+pub struct ResumeCursor {
+    pub block_position: u64, // LBA (Logical Block Address) to resume from
+    pub entry_index: u32,    // Entry index within that block to resume from
+}
+
+/// Result containing ledger entries and pagination info
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+pub struct LedgerEntriesResult {
+    pub entries: Vec<LedgerEntry>,
     pub has_more: bool,
-    pub total_count: u32,
+    pub next_cursor: Option<ResumeCursor>,
 }
 
 thread_local! {
@@ -543,99 +550,132 @@ pub(crate) fn _provider_list_registered() -> Result<Vec<String>, String> {
     })
 }
 
-/// Get entries from the next block with simple paging
-/// Returns entries in insertion order (chronological) and whether more entries are available
-pub(crate) fn _next_block_entries(
-    label: Option<String>,
-    offset: u32,
-    limit: u32,
-) -> NextBlockEntriesResult {
-    LEDGER_MAP.with(|ledger| {
-        let ledger_ref = ledger.borrow();
-        let all_entries: Vec<NextBlockEntry> = ledger_ref
-            .next_block_iter(label.as_deref())
-            .map(|entry| NextBlockEntry {
-                label: entry.label().to_string(),
-                key: entry.key().to_vec(),
-                value: entry.value().to_vec(),
-            })
-            .collect();
-
-        let total_entries = all_entries.len();
-        let start = offset as usize;
-        let end = (start + limit as usize).min(total_entries);
-
-        let entries = if start < total_entries {
-            all_entries[start..end].to_vec()
-        } else {
-            Vec::new()
-        };
-
-        let has_more = end < total_entries;
-
-        NextBlockEntriesResult {
-            entries,
-            has_more,
-            total_count: total_entries as u32,
-        }
-    })
-}
-
-/// Get committed ledger entries with simple paging
-/// Returns entries from committed blocks, optionally including next_block data
+/// Get committed ledger entries from raw blocks with cursor-based pagination
+/// Uses iter_raw() to iterate through committed blocks starting from cursor position
 ///
 /// # Arguments
 /// * `label` - Optional label filter (e.g., "ProvProfile", "ProvOffering")
-/// * `offset` - Starting offset for pagination
+/// * `cursor` - Optional resume cursor (block_position + entry_index within block)
 /// * `limit` - Maximum number of entries to return
 /// * `include_next_block` - If true, includes uncommitted entries from next_block
 pub(crate) fn _ledger_entries(
     label: Option<String>,
-    offset: u32,
+    cursor: Option<ResumeCursor>,
     limit: u32,
     include_next_block: bool,
-) -> NextBlockEntriesResult {
+) -> LedgerEntriesResult {
     LEDGER_MAP.with(|ledger| {
         let ledger_ref = ledger.borrow();
+        let limit = limit as usize;
 
-        // Collect committed entries
-        let mut all_entries: Vec<NextBlockEntry> = ledger_ref
-            .iter(label.as_deref())
-            .map(|entry| NextBlockEntry {
-                label: entry.label().to_string(),
-                key: entry.key().to_vec(),
-                value: entry.value().to_vec(),
-            })
-            .collect();
+        // Extract starting position from cursor, default to 0
+        let start_block_pos = cursor.as_ref().map(|c| c.block_position).unwrap_or(0);
+        let start_entry_idx = cursor.as_ref().map(|c| c.entry_index).unwrap_or(0) as usize;
 
-        // Optionally add next_block entries
-        if include_next_block {
-            let next_block: Vec<NextBlockEntry> = ledger_ref
-                .next_block_iter(label.as_deref())
-                .map(|entry| NextBlockEntry {
+        let mut collected_entries = Vec::new();
+        let mut current_block_pos = start_block_pos;
+        let mut next_cursor: Option<ResumeCursor> = None;
+
+        // Phase 1: Iterate through committed blocks starting from cursor position
+        if ledger_ref.get_blocks_count() > 0 {
+            for block_result in ledger_ref.iter_raw(start_block_pos) {
+                match block_result {
+                    Ok((block_header, ledger_block)) => {
+                        let mut block_entry_idx = 0u32;
+
+                        for entry in ledger_block.entries() {
+                            // Apply label filter if specified
+                            if let Some(ref filter_label) = label {
+                                if entry.label() != filter_label {
+                                    continue;
+                                }
+                            }
+
+                            // Only process upsert operations
+                            if entry.operation() == ledger_map::ledger_entry::Operation::Upsert {
+                                // Skip entries before start_entry_idx in the first block
+                                if current_block_pos == start_block_pos
+                                    && (block_entry_idx as usize) < start_entry_idx
+                                {
+                                    block_entry_idx += 1;
+                                    continue;
+                                }
+
+                                // Check if we've collected enough entries
+                                if collected_entries.len() >= limit {
+                                    // Set next_cursor to resume from this position
+                                    next_cursor = Some(ResumeCursor {
+                                        block_position: current_block_pos,
+                                        entry_index: block_entry_idx,
+                                    });
+                                    break;
+                                }
+
+                                collected_entries.push(LedgerEntry {
+                                    label: entry.label().to_string(),
+                                    key: entry.key().to_vec(),
+                                    value: entry.value().to_vec(),
+                                });
+
+                                block_entry_idx += 1;
+                            }
+                        }
+
+                        // If we've collected enough, stop iterating blocks
+                        if collected_entries.len() >= limit {
+                            break;
+                        }
+
+                        // Move to next block
+                        current_block_pos += block_header.jump_bytes_next_block() as u64;
+                    }
+                    Err(e) => {
+                        error!("Failed to read block during iter_raw: {}", e);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Phase 2: Optionally add next_block entries
+        if include_next_block && collected_entries.len() < limit {
+            let next_block_start_pos = ledger_ref.get_next_block_start_pos();
+            let mut next_block_entry_idx = 0u32;
+
+            for entry in ledger_ref.next_block_iter(label.as_deref()) {
+                // If we're starting from next_block, skip entries before start_entry_idx
+                if next_cursor.is_none()
+                    && next_block_start_pos == start_block_pos
+                    && (next_block_entry_idx as usize) < start_entry_idx
+                {
+                    next_block_entry_idx += 1;
+                    continue;
+                }
+
+                if collected_entries.len() >= limit {
+                    next_cursor = Some(ResumeCursor {
+                        block_position: next_block_start_pos,
+                        entry_index: next_block_entry_idx,
+                    });
+                    break;
+                }
+
+                collected_entries.push(LedgerEntry {
                     label: entry.label().to_string(),
                     key: entry.key().to_vec(),
                     value: entry.value().to_vec(),
-                })
-                .collect();
-            all_entries.extend(next_block);
+                });
+
+                next_block_entry_idx += 1;
+            }
         }
 
-        let total_entries = all_entries.len();
-        let start = offset as usize;
-        let end = (start + limit as usize).min(total_entries);
-        let entries = if start < total_entries {
-            all_entries[start..end].to_vec()
-        } else {
-            Vec::new()
-        };
+        let has_more = next_cursor.is_some();
 
-        let has_more = end < total_entries;
-
-        NextBlockEntriesResult {
-            entries,
+        LedgerEntriesResult {
+            entries: collected_entries,
             has_more,
-            total_count: total_entries as u32,
+            next_cursor,
         }
     })
 }

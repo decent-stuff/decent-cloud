@@ -1,9 +1,9 @@
 mod test_utils;
 use crate::test_utils::{
     test_contract_sign_reply, test_contract_sign_request, test_contracts_list_pending,
-    test_get_id_reputation, test_icrc1_account_from_slice, test_ledger_entries,
-    test_next_block_entries, test_offering_add, test_offering_search, test_provider_check_in,
-    test_provider_register, test_user_register, TestContext,
+    test_get_id_reputation, test_icrc1_account_from_slice, test_ledger_entries, test_offering_add,
+    test_offering_search, test_provider_check_in, test_provider_register, test_user_register,
+    TestContext,
 };
 use borsh::BorshDeserialize;
 use candid::{encode_one, Nat, Principal};
@@ -579,294 +579,6 @@ fn contract_req_sign_flow(
     }
 }
 
-#[test]
-fn test_next_block_entries_empty() {
-    let ctx = TestContext::new();
-
-    // Test with empty next block (no entries)
-    let result = test_next_block_entries(&ctx, None, None, None);
-
-    assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 0);
-    assert!(!result.has_more);
-}
-
-#[test]
-fn test_next_block_entries_with_single_provider_registration() {
-    let ctx = TestContext::new();
-
-    // Check empty state first
-    let empty_result = test_next_block_entries(&ctx, None, None, None);
-    assert_eq!(empty_result.entries.len(), 0);
-    assert_eq!(empty_result.total_count, 0);
-
-    // Register a provider
-    let (provider, _reg_result) =
-        test_provider_register(&ctx, b"test_prov", 2 * DC_TOKEN_DECIMALS_DIV);
-
-    // Test next block entries
-    let result = test_next_block_entries(&ctx, None, None, None);
-
-    // Should have 2 entries: DCTokenTransfer and ProvRegister
-    assert_eq!(result.entries.len(), 2);
-    assert_eq!(result.total_count, 2);
-    assert!(!result.has_more);
-
-    // Find entries by label
-    let prov_reg_entry = result
-        .entries
-        .iter()
-        .find(|e| e.label == "ProvRegister")
-        .expect("Should find ProvRegister entry");
-
-    let token_transfer_entry = result
-        .entries
-        .iter()
-        .find(|e| e.label == "DCTokenTransfer")
-        .expect("Should find DCTokenTransfer entry");
-
-    // Verify ProvRegister entry
-    assert_eq!(prov_reg_entry.key, provider.to_bytes_verifying());
-    assert!(!prov_reg_entry.value.is_empty());
-
-    // Verify DCTokenTransfer entry
-    assert!(!token_transfer_entry.value.is_empty());
-}
-
-#[test]
-fn test_next_block_entries_with_multiple_entries() {
-    let ctx = TestContext::new();
-    let _ts_ns = ctx.get_timestamp_ns();
-
-    // Register multiple providers
-    let (prov1, _) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-    let (_prov2, _reg_result) = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
-    let (_user1, _reg_result) = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
-
-    // Check in a provider
-    test_provider_check_in(&ctx, &prov1).unwrap();
-
-    // Test next block entries
-    let result = test_next_block_entries(&ctx, None, None, None);
-
-    // Should have 7 entries: 3 DCTokenTransfer + 2 ProvRegister + 1 UserRegister + 1 ProvCheckIn
-    assert_eq!(result.entries.len(), 7);
-    assert_eq!(result.total_count, 7);
-    assert!(!result.has_more);
-
-    // Verify entries are in chronological order
-    let labels: Vec<String> = result.entries.iter().map(|e| e.label.clone()).collect();
-    assert!(labels.contains(&"ProvRegister".to_string()));
-    assert!(labels.contains(&"UserRegister".to_string()));
-    assert!(labels.contains(&"ProvCheckIn".to_string()));
-    assert!(labels.contains(&"DCTokenTransfer".to_string()));
-
-    // Should have exactly 2 ProvRegister entries
-    let prov_reg_count = labels
-        .iter()
-        .filter(|l| l.as_str() == "ProvRegister")
-        .count();
-    assert_eq!(prov_reg_count, 2);
-
-    // Should have exactly 3 DCTokenTransfer entries
-    let token_transfer_count = labels
-        .iter()
-        .filter(|l| l.as_str() == "DCTokenTransfer")
-        .count();
-    assert_eq!(token_transfer_count, 3);
-}
-
-#[test]
-fn test_next_block_entries_filter_by_label() {
-    let ctx = TestContext::new();
-
-    // Register providers and users
-    let (_prov1, _reg_result) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-    let (_user1, _reg_result) = test_user_register(&ctx, b"user1", 2 * DC_TOKEN_DECIMALS_DIV);
-
-    // Test filtering by ProvRegister label
-    let result = test_next_block_entries(&ctx, Some("ProvRegister".to_string()), None, None);
-
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.total_count, 1);
-    assert!(!result.has_more);
-
-    let entry = &result.entries[0];
-    assert_eq!(entry.label, "ProvRegister");
-
-    // Test filtering by UserRegister label
-    let result = test_next_block_entries(&ctx, Some("UserRegister".to_string()), None, None);
-
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.total_count, 1);
-    assert!(!result.has_more);
-
-    let entry = &result.entries[0];
-    assert_eq!(entry.label, "UserRegister");
-
-    // Test filtering by non-existent label
-    let result = test_next_block_entries(&ctx, Some("NonExistent".to_string()), None, None);
-
-    assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 0);
-    assert!(!result.has_more);
-}
-
-#[test]
-fn test_next_block_entries_pagination() {
-    let ctx = TestContext::new();
-
-    // Register multiple providers to create enough entries for pagination testing
-    for i in 0..5 {
-        let seed = format!("prov{}", i);
-        let (_provider, _reg_result) =
-            test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
-    }
-
-    // Test pagination with limit 2
-    let result1 = test_next_block_entries(&ctx, None, Some(0), Some(2));
-    assert_eq!(result1.entries.len(), 2);
-    assert_eq!(result1.total_count, 10); // 5 ProvRegister + 5 DCTokenTransfer
-    assert!(result1.has_more);
-
-    // Get second page
-    let result2 = test_next_block_entries(&ctx, None, Some(2), Some(2));
-    assert_eq!(result2.entries.len(), 2);
-    assert_eq!(result2.total_count, 10);
-    assert!(result2.has_more);
-
-    // Get third page
-    let result3 = test_next_block_entries(&ctx, None, Some(4), Some(2));
-    assert_eq!(result3.entries.len(), 2);
-    assert_eq!(result3.total_count, 10);
-    assert!(result3.has_more);
-
-    // Get fourth page
-    let result4 = test_next_block_entries(&ctx, None, Some(6), Some(2));
-    assert_eq!(result4.entries.len(), 2);
-    assert_eq!(result4.total_count, 10);
-    assert!(result4.has_more);
-
-    // Get fifth page
-    let result5 = test_next_block_entries(&ctx, None, Some(8), Some(2));
-    assert_eq!(result5.entries.len(), 2);
-    assert_eq!(result5.total_count, 10);
-    assert!(!result5.has_more);
-
-    // Verify no overlap between pages
-    let page1_keys: Vec<Vec<u8>> = result1.entries.iter().map(|e| e.key.clone()).collect();
-    let page2_keys: Vec<Vec<u8>> = result2.entries.iter().map(|e| e.key.clone()).collect();
-    let page3_keys: Vec<Vec<u8>> = result3.entries.iter().map(|e| e.key.clone()).collect();
-    let page4_keys: Vec<Vec<u8>> = result4.entries.iter().map(|e| e.key.clone()).collect();
-    let page5_keys: Vec<Vec<u8>> = result5.entries.iter().map(|e| e.key.clone()).collect();
-
-    assert_eq!(page1_keys.len(), 2);
-    assert_eq!(page2_keys.len(), 2);
-    assert_eq!(page3_keys.len(), 2);
-    assert_eq!(page4_keys.len(), 2);
-    assert_eq!(page5_keys.len(), 2);
-
-    // Ensure no duplicate keys across pages
-    let all_keys = page1_keys
-        .iter()
-        .chain(page2_keys.iter())
-        .chain(page3_keys.iter())
-        .chain(page4_keys.iter())
-        .chain(page5_keys.iter());
-    let unique_keys: std::collections::HashSet<_> = all_keys.cloned().collect();
-    assert_eq!(unique_keys.len(), 10);
-}
-
-#[test]
-fn test_next_block_entries_pagination_edge_cases() {
-    let ctx = TestContext::new();
-
-    // Test with offset beyond available entries
-    let result = test_next_block_entries(&ctx, None, Some(100), Some(10));
-    assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 0);
-    assert!(!result.has_more);
-
-    // Register one provider
-    let (_provider, _reg_result) =
-        test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-
-    // Test with offset exactly at the end
-    let result = test_next_block_entries(&ctx, None, Some(2), Some(10));
-    assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 2);
-    assert!(!result.has_more);
-
-    // Test with offset beyond the end
-    let result = test_next_block_entries(&ctx, None, Some(10), Some(10));
-    assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 2);
-    assert!(!result.has_more);
-}
-
-#[test]
-fn test_next_block_entries_after_commit() {
-    let ctx = TestContext::new();
-
-    // Register a provider
-    let (_provider, _reg_result) =
-        test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-
-    // Verify entry is in next block
-    let result = test_next_block_entries(&ctx, None, None, None);
-    assert_eq!(result.entries.len(), 2);
-    assert_eq!(result.total_count, 2);
-
-    // Commit the block
-    ctx.commit();
-
-    // Verify next block is now empty after commit
-    let result = test_next_block_entries(&ctx, None, None, None);
-    assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 0);
-    assert!(!result.has_more);
-}
-
-#[test]
-fn test_next_block_entries_with_large_dataset() {
-    let ctx = TestContext::new();
-
-    // Create a larger dataset (15 entries) to test pagination
-    for i in 0..15 {
-        let seed = format!("prov{}", i);
-        let (_provider, _reg_result) =
-            test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
-    }
-
-    // Test with default limit (100)
-    let result = test_next_block_entries(&ctx, None, None, None);
-    assert_eq!(result.entries.len(), 30); // 15 ProvRegister + 15 DCTokenTransfer
-    assert_eq!(result.total_count, 30);
-    assert!(!result.has_more);
-
-    // Test with custom limit (5)
-    let mut total_retrieved = 0;
-    let mut offset = 0;
-    let limit = 5;
-
-    loop {
-        let result = test_next_block_entries(&ctx, None, Some(offset), Some(limit));
-        total_retrieved += result.entries.len();
-
-        if !result.has_more {
-            break;
-        }
-
-        offset += limit;
-
-        // Safety check to prevent infinite loop
-        assert!(offset < 100, "Pagination loop detected");
-    }
-
-    assert_eq!(total_retrieved, 30);
-    assert_eq!(total_retrieved, result.total_count as usize);
-}
-
 // ---- Ledger Entries Tests ----
 
 #[test]
@@ -877,8 +589,8 @@ fn test_ledger_entries_empty() {
     let result = test_ledger_entries(&ctx, None, None, None, None);
 
     assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 0);
     assert!(!result.has_more);
+    assert!(result.next_cursor.is_none());
 }
 
 #[test]
@@ -897,7 +609,6 @@ fn test_ledger_entries_with_committed_data() {
 
     // Should have committed entries: at least 2 ProvRegister
     assert!(result.entries.len() >= 2);
-    assert!(result.total_count >= 2);
 
     // Verify we have ProvRegister entries
     let prov_register_count = result
@@ -907,14 +618,14 @@ fn test_ledger_entries_with_committed_data() {
         .count();
     assert_eq!(prov_register_count, 2);
 
-    let committed_count = result.total_count;
+    let committed_len = result.entries.len();
 
     // Add a new provider (uncommitted)
     let _prov3 = test_provider_register(&ctx, b"prov3", 2 * DC_TOKEN_DECIMALS_DIV);
 
     // Query again without including next_block - should still have same count
     let result2 = test_ledger_entries(&ctx, None, None, None, Some(false));
-    assert_eq!(result2.total_count, committed_count);
+    assert_eq!(result2.entries.len(), committed_len);
 }
 
 #[test]
@@ -931,17 +642,17 @@ fn test_ledger_entries_with_next_block_included() {
 
     // Query without next_block
     let result_committed = test_ledger_entries(&ctx, None, None, None, Some(false));
-    let committed_count = result_committed.total_count;
-    assert!(committed_count >= 1); // At least the ProvRegister
+    let committed_len = result_committed.entries.len();
+    assert!(committed_len >= 1); // At least the ProvRegister
 
     // Query with next_block included
     let result_all = test_ledger_entries(&ctx, None, None, None, Some(true));
 
     // Verify we have more entries with next_block included
-    assert!(result_all.total_count > result_committed.total_count);
+    assert!(result_all.entries.len() > committed_len);
 
     // Should have at least 2 more entries (1 ProvRegister + 1 UserRegister in next_block)
-    assert!(result_all.total_count >= committed_count + 2);
+    assert!(result_all.entries.len() >= committed_len + 2);
 }
 
 #[test]
@@ -957,19 +668,19 @@ fn test_ledger_entries_filter_by_label() {
     // Test filtering by ProvRegister label
     let result = test_ledger_entries(&ctx, Some("ProvRegister".to_string()), None, None, None);
     assert_eq!(result.entries.len(), 2);
-    assert_eq!(result.total_count, 2);
     assert!(result.entries.iter().all(|e| e.label == "ProvRegister"));
+    assert!(!result.has_more);
 
     // Test filtering by UserRegister label
     let result = test_ledger_entries(&ctx, Some("UserRegister".to_string()), None, None, None);
     assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.total_count, 1);
     assert_eq!(result.entries[0].label, "UserRegister");
+    assert!(!result.has_more);
 
     // Test filtering by non-existent label
     let result = test_ledger_entries(&ctx, Some("NonExistent".to_string()), None, None, None);
     assert_eq!(result.entries.len(), 0);
-    assert_eq!(result.total_count, 0);
+    assert!(!result.has_more);
 }
 
 #[test]
@@ -983,29 +694,22 @@ fn test_ledger_entries_pagination() {
     }
     ctx.commit();
 
-    // Get total count first
-    let result_all = test_ledger_entries(&ctx, None, None, None, None);
-    let total_entries = result_all.total_count;
-    assert!(total_entries >= 5); // At least 5 ProvRegister entries
-
-    // Test pagination with limit 2
-    let result1 = test_ledger_entries(&ctx, None, Some(0), Some(2), None);
+    // Test cursor-based pagination with limit 2
+    let result1 = test_ledger_entries(&ctx, None, None, Some(2), None);
     assert_eq!(result1.entries.len(), 2);
-    assert_eq!(result1.total_count, total_entries);
-    assert_eq!(result1.has_more, total_entries > 2);
+    assert!(result1.has_more);
+    assert!(result1.next_cursor.is_some());
 
-    if total_entries > 2 {
-        // Get second page
-        let result2 = test_ledger_entries(&ctx, None, Some(2), Some(2), None);
-        assert!(result2.entries.len() <= 2);
-        assert_eq!(result2.total_count, total_entries);
+    // Get second page using the cursor from first page
+    let result2 = test_ledger_entries(&ctx, None, result1.next_cursor.clone(), Some(2), None);
+    assert!(result2.entries.len() <= 2);
+    assert!(result2.entries.len() > 0); // Should have at least some entries
 
-        // Verify no overlap
-        let keys1: Vec<_> = result1.entries.iter().map(|e| &e.key).collect();
-        let keys2: Vec<_> = result2.entries.iter().map(|e| &e.key).collect();
-        for k2 in keys2 {
-            assert!(!keys1.contains(&k2), "Found overlap in paginated results");
-        }
+    // Verify no overlap between pages
+    let keys1: Vec<_> = result1.entries.iter().map(|e| &e.key).collect();
+    let keys2: Vec<_> = result2.entries.iter().map(|e| &e.key).collect();
+    for k2 in keys2 {
+        assert!(!keys1.contains(&k2), "Found overlap in paginated results");
     }
 }
 
@@ -1020,55 +724,22 @@ fn test_ledger_entries_pagination_with_filter() {
     }
     ctx.commit();
 
-    // Filter by ProvRegister and paginate
-    let result1 = test_ledger_entries(
-        &ctx,
-        Some("ProvRegister".to_string()),
-        Some(0),
-        Some(5),
-        None,
-    );
+    // Filter by ProvRegister and paginate with cursor
+    let result1 = test_ledger_entries(&ctx, Some("ProvRegister".to_string()), None, Some(5), None);
     assert_eq!(result1.entries.len(), 5);
-    assert_eq!(result1.total_count, 10);
     assert!(result1.has_more);
+    assert!(result1.next_cursor.is_some());
     assert!(result1.entries.iter().all(|e| e.label == "ProvRegister"));
 
+    // Get second page using cursor
     let result2 = test_ledger_entries(
         &ctx,
         Some("ProvRegister".to_string()),
-        Some(5),
+        result1.next_cursor.clone(),
         Some(5),
         None,
     );
     assert_eq!(result2.entries.len(), 5);
-    assert_eq!(result2.total_count, 10);
     assert!(!result2.has_more);
     assert!(result2.entries.iter().all(|e| e.label == "ProvRegister"));
-}
-
-#[test]
-fn test_ledger_entries_comparison_with_next_block_entries() {
-    let ctx = TestContext::new();
-
-    // Add some committed data
-    let _prov1 = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-    ctx.commit();
-
-    // Add some uncommitted data
-    let _prov2 = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
-
-    // ledger_entries with include_next_block=false should match committed data
-    let ledger_committed = test_ledger_entries(&ctx, None, None, None, Some(false));
-    let committed_count = ledger_committed.total_count;
-
-    // next_block_entries should only show uncommitted
-    let next_block = test_next_block_entries(&ctx, None, None, None);
-    let next_block_count = next_block.total_count;
-
-    // ledger_entries with include_next_block=true should be sum of both
-    let ledger_all = test_ledger_entries(&ctx, None, None, None, Some(true));
-
-    assert!(committed_count >= 1); // At least ProvRegister
-    assert!(next_block_count >= 1); // At least ProvRegister in next_block
-    assert_eq!(ledger_all.total_count, committed_count + next_block_count);
 }

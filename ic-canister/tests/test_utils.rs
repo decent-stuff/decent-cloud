@@ -376,38 +376,22 @@ pub fn test_offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
     .collect()
 }
 
-// ---- Next Block Entries Functions ----
-
-#[allow(dead_code)]
-pub fn test_next_block_entries(
-    ctx: &TestContext,
-    label: Option<String>,
-    offset: Option<u32>,
-    limit: Option<u32>,
-) -> decent_cloud_canister::canister_backend::generic::NextBlockEntriesResult {
-    query_check_and_decode!(
-        ctx.pic,
-        ctx.canister_id,
-        "next_block_entries",
-        Encode!(&label, &offset, &limit).unwrap(),
-        decent_cloud_canister::canister_backend::generic::NextBlockEntriesResult
-    )
-}
+// ---- Ledger Entries Functions ----
 
 #[allow(dead_code)]
 pub fn test_ledger_entries(
     ctx: &TestContext,
     label: Option<String>,
-    offset: Option<u32>,
+    cursor: Option<decent_cloud_canister::canister_backend::generic::ResumeCursor>,
     limit: Option<u32>,
     include_next_block: Option<bool>,
-) -> decent_cloud_canister::canister_backend::generic::NextBlockEntriesResult {
+) -> decent_cloud_canister::canister_backend::generic::LedgerEntriesResult {
     query_check_and_decode!(
         ctx.pic,
         ctx.canister_id,
         "ledger_entries",
-        Encode!(&label, &offset, &limit, &include_next_block).unwrap(),
-        decent_cloud_canister::canister_backend::generic::NextBlockEntriesResult
+        Encode!(&label, &cursor, &limit, &include_next_block).unwrap(),
+        decent_cloud_canister::canister_backend::generic::LedgerEntriesResult
     )
 }
 
