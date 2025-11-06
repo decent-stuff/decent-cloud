@@ -1,9 +1,18 @@
+mod database;
+mod ledger_client;
+mod sync_service;
+
+use candid::Principal;
+use database::Database;
+use ledger_client::LedgerClient;
 use poem::{
     handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
     Route, Server,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::sync::Arc;
+use sync_service::SyncService;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -80,14 +89,51 @@ async fn main() -> Result<(), std::io::Error> {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let addr = format!("0.0.0.0:{}", port);
+
+    // Database setup
+    let database_url =
+        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./ledger.db".to_string());
+    let database = Arc::new(
+        Database::new(&database_url)
+            .await
+            .expect("Failed to initialize database"),
+    );
+    tracing::info!("Database initialized at {}", database_url);
+
+    // Ledger client setup
+    let network_url = env::var("NETWORK_URL").unwrap_or_else(|_| "https://ic0.app".to_string());
+    let canister_id = env::var("CANISTER_ID")
+        .expect("CANISTER_ID environment variable required")
+        .parse::<Principal>()
+        .expect("Invalid CANISTER_ID");
+    let ledger_client = Arc::new(
+        LedgerClient::new(&network_url, canister_id)
+            .await
+            .expect("Failed to initialize ledger client"),
+    );
+    tracing::info!("Ledger client initialized for canister {}", canister_id);
+
+    // Start sync service in background
+    let sync_interval_secs = env::var("SYNC_INTERVAL_SECS")
+        .unwrap_or_else(|_| "30".to_string())
+        .parse::<u64>()
+        .unwrap_or(30);
+    let sync_service =
+        SyncService::new(ledger_client.clone(), database.clone(), sync_interval_secs);
+    tokio::spawn(async move {
+        tracing::info!(
+            "Starting sync service with {}s interval",
+            sync_interval_secs
+        );
+        sync_service.run().await;
+    });
 
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
@@ -96,7 +142,5 @@ async fn main() -> Result<(), std::io::Error> {
         .at("/api/v1/canister/:method", post(canister_proxy))
         .with(Cors::new());
 
-    Server::new(TcpListener::bind(&addr))
-        .run(app)
-        .await
+    Server::new(TcpListener::bind(&addr)).run(app).await
 }

@@ -1,6 +1,6 @@
 [package]
 name = "decent-cloud-api"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 [[bin]]
@@ -8,23 +8,17 @@ name = "api-server"
 path = "src/main.rs"
 
 [dependencies]
-# Web framework
-poem = "3.0"
-tokio = { version = "1.0", features = ["full"] }
-
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Error handling
-anyhow = "1.0"
-
-# Config
-dotenv = "0.15"
-
-# HTTP client for ICP canister calls (use rustls for musl compatibility)
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+anyhow.workspace = true
+candid.workspace = true
+dcc-common = { path = "../common" }
+dotenv.workspace = true
+ic-agent.workspace = true
+ledger-map = { path = "../ledger-map" }
+poem.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

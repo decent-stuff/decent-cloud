@@ -811,7 +811,7 @@ dependencies = [
  "fs-err",
  "hex",
  "hmac",
- "ic-agent 0.44.3",
+ "ic-agent",
  "ic-cdk",
  "icrc-ledger-types",
  "indexmap",
@@ -835,13 +835,13 @@ dependencies = [
 
 [[package]]
 name = "decent-cloud-api"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "candid",
  "dcc-common",
  "dotenv",
- "ic-agent 0.40.1",
+ "ic-agent",
  "ledger-map",
  "poem",
  "reqwest",
@@ -1801,54 +1801,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "ic-agent"
-version = "0.40.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4832787330765f1bdf67123928855390b7f0b5a16dd0a7ea67674b7d3178ffd0"
-dependencies = [
- "arc-swap",
- "async-channel",
- "async-lock",
- "async-trait",
- "async-watch",
- "backoff",
- "cached",
- "candid",
- "der",
- "ecdsa",
- "ed25519-consensus",
- "elliptic-curve",
- "futures-util",
- "hex",
- "http",
- "http-body",
- "ic-certification",
- "ic-transport-types 0.40.1",
- "ic-verify-bls-signature",
- "k256",
- "leb128",
- "p256",
- "pem 3.0.6",
- "pkcs8",
- "rand 0.8.5",
- "rangemap",
- "reqwest",
- "sec1",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "serde_repr",
- "sha2 0.10.9",
- "simple_asn1",
- "stop-token",
- "thiserror 2.0.17",
- "time",
- "tokio",
- "tower-service",
- "url",
 ]
 
 [[package]]
@@ -3833,18 +3785,6 @@ name = "simd-adler32"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
-
-[[package]]
-name = "simple_asn1"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "297f631f50729c8c99b84667867963997ec0b50f32b2a7dbcab828ef0541e8bb"
-dependencies = [
- "num-bigint",
- "num-traits",
- "thiserror 2.0.17",
- "time",
-]
 
 [[package]]
 name = "slab"
