@@ -39,15 +39,15 @@ indexmap.workspace = true
 ledger-map = { path = "../ledger-map" }
 log.workspace = true
 memmap2.workspace = true
+pretty_env_logger.workspace = true
 provider-offering = { path = "../provider-offering" }
 provider-profile = { path = "../provider-profile" }
-pretty_env_logger.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng.workspace = true
-serde.workspace = true
 sha2.workspace = true
-strum_macros.workspace = true
 strum.workspace = true
+strum_macros.workspace = true
 tabular.workspace = true
 tiny-bip39.workspace = true
 tokio.workspace = true

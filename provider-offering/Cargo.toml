@@ -11,9 +11,9 @@ ed25519-dalek = { workspace = true, features = ["pem"] }
 fs-err.workspace = true
 hex.workspace = true
 indexmap.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng.workspace = true
-serde.workspace = true
 strsim.workspace = true
 
 [dev-dependencies]

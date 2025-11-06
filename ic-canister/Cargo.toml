@@ -20,8 +20,8 @@ ed25519-dalek.workspace = true
 flate2.workspace = true
 hex.workspace = true
 ic-canister-log.workspace = true
-ic-cdk-timers.workspace = true
 ic-cdk.workspace = true
+ic-cdk-timers.workspace = true
 ic-certification.workspace = true
 ic-metrics-encoder.workspace = true
 icrc-ledger-types.workspace = true
@@ -29,21 +29,21 @@ ledger-map = { path = "../ledger-map", features = ["ic"] }
 num-bigint.workspace = true
 num-traits.workspace = true
 provider-offering.workspace = true
+serde.workspace = true
 serde_bytes.workspace = true
 serde_json.workspace = true
-serde.workspace = true
 sha2.workspace = true
-
-[dev-dependencies]
-fs-err.workspace = true
-pocket-ic.workspace = true
-once_cell = "1.21.3"
 
 [build-dependencies]
 base64.workspace = true
-fs-err.workspace = true
-which.workspace = true
-reqwest = { version = "0.12", features = ["blocking"] }
-flate2.workspace = true
 dirs = "6.0"
+flate2.workspace = true
+fs-err.workspace = true
+reqwest = { version = "0.12", features = ["blocking"] }
 tempfile = "3.23"
+which.workspace = true
+
+[dev-dependencies]
+fs-err.workspace = true
+once_cell = "1.21.3"
+pocket-ic.workspace = true
