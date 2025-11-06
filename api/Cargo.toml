@@ -26,5 +26,5 @@ anyhow = "1.0"
 # Config
 dotenv = "0.15"
 
-# HTTP client for ICP canister calls
-reqwest = { version = "0.12", features = ["json"] }
+# HTTP client for ICP canister calls (use rustls for musl compatibility)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }

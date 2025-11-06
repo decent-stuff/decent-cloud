@@ -7,6 +7,13 @@ services:
     networks:
       - decent-cloud-prod
 
+  api:
+    container_name: decent-cloud-api-prod
+    ports:
+      - "59101:8080"  # Prod: host 59101 -> container 8080
+    networks:
+      - decent-cloud-prod
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: decent-cloud-tunnel-prod
@@ -18,6 +25,8 @@ services:
       - decent-cloud-prod
     depends_on:
       website:
+        condition: service_healthy
+      api:
         condition: service_healthy
 
 networks:

@@ -30,7 +30,7 @@ api.decent-cloud.org (API)
 ### 2. API (api.decent-cloud.org)
 - **Technology**: Rust poem web framework
 - **Container**: Debian slim with Rust binary
-- **Port**: 8080 (internal), 58100 (host)
+- **Port**: 8080 (internal), 59001 (host dev) 59101 (host prod)
 - **Health**: `/api/v1/health` endpoint
 - **Deployment**: Docker container + Cloudflare Tunnel
 - **Endpoints**: `/api/v1/canister/*` - ICP canister proxy endpoints
@@ -62,30 +62,28 @@ The tunnel must be configured in Cloudflare dashboard with two ingress rules:
 ## Current Status
 
 ### ✅ Completed
-- Website Docker container with nginx
-- Tunnel deployment scripts
-- Removed Cloudflare Worker dependencies
-- Removed wrangler.toml configurations
-
-### 🚧 In Progress
-- Website tunnel routing (Worker still intercepting traffic)
-- Poem API server creation
+- Website Docker container with nginx serving static Next.js build
+- API Docker container with poem serving REST endpoints
+- Tunnel deployment scripts for production
+- Removed all Cloudflare Worker dependencies
+- Removed all wrangler.toml configurations
+- Website accessible at https://decent-cloud.org
+- API running locally at http://localhost:59101
 
 ### 📋 TODO
-1. **Undeploy Cloudflare Worker** that's intercepting decent-cloud.org
-   - Go to Cloudflare Dashboard → Workers & Pages
-   - Find and delete/disable the `decent-cloud-api` worker
-   - Verify decent-cloud.org routes to tunnel
+1. **Configure Tunnel for API** in Cloudflare Dashboard
+   - Go to Zero Trust → Access → Tunnels
+   - Edit your tunnel
+   - Add new ingress rule:
+     - Hostname: `api.decent-cloud.org`
+     - Service: `http://api:8080`
+   - This will make API accessible at https://api.decent-cloud.org
 
-2. **Create Poem API Server** (in `api/` directory)
-   - Copy structure from `icp-cc/poem-backend`
-   - Implement `/api/v1/canister/*` endpoints
-   - Add Docker deployment configuration
-   - Add to docker-compose files
-
-3. **Configure Tunnel for API**
-   - Update tunnel configuration for api.decent-cloud.org
-   - Test API endpoints
+2. **Implement Full Canister Proxy Logic** (in `api/src/main.rs`)
+   - Add ICP agent integration
+   - Implement actual canister method calls
+   - Add proper error handling and retries
+   - Match all endpoints from `website/lib/cf-service.ts`
 
 ## Testing
 
@@ -102,11 +100,16 @@ curl https://decent-cloud.org/health
 
 ### API
 ```bash
-# Local container (once created)
-curl http://localhost:58100/api/v1/health
+# Local container
+curl http://localhost:59101/api/v1/health
 
-# Production
+# Production (after tunnel configured)
 curl https://api.decent-cloud.org/api/v1/health
+
+# Test canister proxy endpoint
+curl -X POST http://localhost:59101/api/v1/canister/test_method \
+  -H "Content-Type: application/json" \
+  -d '{"args": []}'
 ```
 
 ## Notes

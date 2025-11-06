@@ -1,6 +1,6 @@
 use poem::{
-    handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, IntoResponse,
-    Response, Route, Server,
+    handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
+    Route, Server,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -37,6 +37,18 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
+/// Proxy ICP canister methods
+///
+/// Expected methods from cf-service.ts:
+/// - Provider: provider_register_anonymous, provider_update_profile_anonymous,
+///   provider_update_offering_anonymous, provider_list_checked_in,
+///   provider_get_profile_by_pubkey_bytes, provider_get_profile_by_principal
+/// - Offering: offering_search
+/// - Contract: contract_sign_request_anonymous, contracts_list_pending,
+///   contract_sign_reply_anonymous
+/// - User: user_register_anonymous
+/// - Check-in: get_check_in_nonce, provider_check_in_anonymous
+/// - Common: get_identity_reputation, get_registration_fee
 #[handler]
 async fn canister_proxy(
     method: poem::web::Path<String>,
@@ -45,17 +57,19 @@ async fn canister_proxy(
     tracing::info!("Proxying canister method: {}", method.0);
     tracing::debug!("Request args: {:?}", req.args);
 
-    // TODO: Implement actual ICP canister call
-    // For now, return a placeholder response
-    let response: ApiResponse<String> = ApiResponse {
-        success: false,
-        data: None,
-        error: Some(format!("Canister proxy not yet implemented for method: {}", method.0)),
-    };
+    // TODO: Implement ICP agent and actual canister calls
+    // This requires:
+    // 1. Add ic-agent dependency
+    // 2. Initialize agent with canister ID from env
+    // 3. Parse args based on method signature
+    // 4. Call canister method
+    // 5. Return result in CFResponse<T> format
 
-    Response::builder()
-        .content_type("application/json")
-        .body(serde_json::to_string(&response).unwrap())
+    unimplemented!(
+        "Canister proxy for method '{}' not yet implemented. \
+        Need to integrate ic-agent and implement canister method calls.",
+        method.0
+    );
 }
 
 #[tokio::main]
