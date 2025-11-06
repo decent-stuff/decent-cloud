@@ -1,5 +1,4 @@
 /** @type {import('next').NextConfig} */
-import { setupDevPlatform } from '@cloudflare/next-on-pages/next-dev';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -27,16 +26,11 @@ if (!existsSync(wasmDistPath) || !existsSync(wasmPackageJsonPath)) {
   console.log('@decent-stuff/dc-client package already built');
 }
 
-if (process.env.NODE_ENV === 'development') {
-  await setupDevPlatform();
-}
-
 const nextConfig = {
+  output: "export",
   images: {
     unoptimized: true,
   },
-  // Uncomment this line if you want to use static export in the future
-  // output: "export",
 };
 
 export default nextConfig;

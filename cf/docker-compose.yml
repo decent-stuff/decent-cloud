@@ -1,0 +1,33 @@
+# Base configuration for Decent Cloud services
+services:
+  website:
+    build:
+      context: ..
+      dockerfile: cf/Dockerfile.prod
+    image: decent-cloud-website:${ENVIRONMENT:-dev}
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    image: decent-cloud-api:${ENVIRONMENT:-dev}
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - RUST_LOG=${RUST_LOG:-info}
+      - PORT=8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3

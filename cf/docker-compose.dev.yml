@@ -1,0 +1,25 @@
+# Development overrides - adds Cloudflare Tunnel
+services:
+  website:
+    container_name: decent-cloud-website-dev
+    ports:
+      - "59000:3000"  # Dev: host 59000 -> container 3000
+    networks:
+      - decent-cloud-dev
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: decent-cloud-tunnel-dev
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN
+    networks:
+      - decent-cloud-dev
+    depends_on:
+      website:
+        condition: service_healthy
+
+networks:
+  decent-cloud-dev:
+    driver: bridge

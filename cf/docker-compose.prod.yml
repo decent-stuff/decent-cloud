@@ -1,0 +1,25 @@
+# Production overrides - adds Cloudflare Tunnel
+services:
+  website:
+    container_name: decent-cloud-website-prod
+    ports:
+      - "59100:3000"  # Prod: host 59100 -> container 3000
+    networks:
+      - decent-cloud-prod
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: decent-cloud-tunnel-prod
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN
+    networks:
+      - decent-cloud-prod
+    depends_on:
+      website:
+        condition: service_healthy
+
+networks:
+  decent-cloud-prod:
+    driver: bridge

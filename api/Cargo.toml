@@ -1,0 +1,30 @@
+[package]
+name = "decent-cloud-api"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "api-server"
+path = "src/main.rs"
+
+[dependencies]
+# Web framework
+poem = "3.0"
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1.0"
+
+# Config
+dotenv = "0.15"
+
+# HTTP client for ICP canister calls
+reqwest = { version = "0.12", features = ["json"] }

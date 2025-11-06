@@ -1,0 +1,80 @@
+# Multi-stage build for Decent Cloud website
+# Builds Next.js static website and serves with nginx
+
+# Stage 1: Build Next.js website with Rust toolchain for WASM
+FROM --platform=linux/amd64 rust:1.91-slim as web-builder
+WORKDIR /app
+
+# Install Node.js and build tools
+RUN apt-get update && \
+    apt-get install -y curl ca-certificates git && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install wasm-pack
+RUN cargo install wasm-pack
+
+# Copy Cargo workspace files (needed for wasm build)
+COPY Cargo.toml Cargo.lock ./
+COPY cli ./cli
+COPY common ./common
+COPY ic-canister ./ic-canister
+COPY ledger-map ./ledger-map
+COPY provider-json-search ./provider-json-search
+COPY provider-offering ./provider-offering
+COPY provider-profile ./provider-profile
+COPY wasm ./wasm
+
+# Copy website files
+COPY website ./website
+
+# Initialize a dummy git repo for build.js (it checks git for change detection)
+RUN git init && git config user.email "docker@build" && git config user.name "Docker Build"
+
+# Install dependencies (this will trigger prepare scripts and build WASM)
+RUN cd wasm && npm ci && \
+    cd ../website && npm ci
+
+# Build website (wasm is already built via prepare script)
+RUN cd website && npm run build
+
+# Stage 2: Runtime with nginx
+FROM --platform=linux/amd64 nginx:alpine
+
+# Install runtime dependencies
+RUN apk add --no-cache curl ca-certificates
+
+# Copy nginx config
+COPY <<EOF /etc/nginx/conf.d/default.conf
+server {
+    listen 3000;
+    server_name _;
+
+    # Serve static website
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # SPA routing - try files, fallback to index.html
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "healthy";
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+
+# Copy website build
+COPY --from=web-builder /app/website/out /usr/share/nginx/html
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
