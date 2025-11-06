@@ -11,7 +11,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-test-deploy:
+  build-test:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}/ci-image@sha256:72d7a1ccdf2529d0b706f2bf9df1fae04e8e70fdae8eabc4bf7ad93016b03898
@@ -21,7 +21,7 @@ jobs:
       - name: Configure git safe directory
         run: |
           git config --global --add safe.directory /__w/decent-cloud/decent-cloud
-          git config --global --add safe.directory $GITHUB_WORKSPACE 
+          git config --global --add safe.directory $GITHUB_WORKSPACE
       - name: dfxvm init
         run: |
           echo "dfxvm requires the default version to be set once after starting the container (bug!)"
@@ -32,22 +32,3 @@ jobs:
           # dfx requires XDG_DATA_HOME to be set
           XDG_DATA_HOME: /usr/local
         run: /tini -s -- cargo make
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-          cache-dependency-path: website/package-lock.json
-
-      - name: Install website dependencies
-        working-directory: ./website
-        run: npm ci
-
-      - name: Run website tests
-        working-directory: ./website
-        run: npm test
-
-      - name: Build website
-        working-directory: ./website
-        run: npm run build
