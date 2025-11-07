@@ -58,7 +58,7 @@ impl Database {
         for entry in entries {
             grouped_entries
                 .entry(entry.label.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(entry);
         }
 
@@ -487,7 +487,7 @@ impl Database {
                 "INSERT INTO reputation_changes (pubkey_hash, change_amount, reason, block_timestamp_ns) VALUES (?, ?, ?, ?)"
             )
             .bind(&entry.key)
-            .bind(change.changes()[0].1 as i64) // Get the delta amount from first change
+            .bind(change.changes()[0].1) // Get the delta amount from first change
             .bind("") // Reason is not stored in the structure, use empty string
             .bind(entry.block_timestamp_ns as i64) // Use actual block timestamp
             .execute(&mut **tx)

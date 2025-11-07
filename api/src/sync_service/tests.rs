@@ -166,7 +166,7 @@ async fn test_ledger_dir_env_var_persistence() {
 
     // Verify that SyncService reads the LEDGER_DIR environment variable correctly
     let ledger_dir = std::env::var("LEDGER_DIR")
-        .map(|path| std::path::PathBuf::from(path))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
             tempfile::tempdir()
                 .expect("Failed to create temp dir")
@@ -188,7 +188,7 @@ async fn test_ledger_dir_fallback_to_temp() {
 
     // Verify that a temp directory is created when LEDGER_DIR is not set
     let ledger_dir = std::env::var("LEDGER_DIR")
-        .map(|path| std::path::PathBuf::from(path))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
             // This should create a temp directory
             let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");

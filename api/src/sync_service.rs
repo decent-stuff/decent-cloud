@@ -18,7 +18,7 @@ impl SyncService {
         interval_secs: u64,
     ) -> Self {
         let ledger_dir = std::env::var("LEDGER_DIR")
-            .map(|path| std::path::PathBuf::from(path))
+            .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| {
                 // Fallback to temp directory for development
                 let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");

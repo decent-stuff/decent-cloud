@@ -27,8 +27,11 @@ impl LedgerClient {
             .call()
             .await?;
 
-        Decode!(response.as_slice(), Result<(String, Vec<u8>), String>)?
-            .map_err(|e| anyhow::anyhow!("Canister error: {}", e))
+        #[allow(clippy::double_parens)]
+        {
+            Decode!(response.as_slice(), Result<(String, Vec<u8>), String>)?
+                .map_err(|e| anyhow::anyhow!("Canister error: {}", e))
+        }
     }
 }
 
