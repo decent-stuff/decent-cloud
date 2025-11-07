@@ -131,7 +131,7 @@ impl Database {
                 .map_err(|e| anyhow::anyhow!("Failed to parse check-in: {}", e))?;
 
             sqlx::query(
-                "INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
+                "INSERT OR IGNORE INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
             )
             .bind(&entry.key)
             .bind(check_in.memo())
