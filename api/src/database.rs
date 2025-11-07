@@ -27,13 +27,36 @@ impl Database {
         Ok(())
     }
 
-    pub async fn insert_entries(&self, _entries: Vec<LedgerEntryData>) -> Result<()> {
-        // TODO: Implement batch insert/upsert for ledger entries
-        // For each entry: INSERT OR REPLACE INTO ledger_entries
-        todo!("Implement batch insert/upsert for ledger entries")
+    /// Test helper method to access the underlying pool for test assertions
+    #[cfg(test)]
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
+    pub async fn insert_entries(&self, entries: Vec<LedgerEntryData>) -> Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let mut tx = self.pool.begin().await?;
+
+        for entry in entries {
+            sqlx::query(
+                "INSERT OR REPLACE INTO ledger_entries (label, key, value) VALUES (?, ?, ?)",
+            )
+            .bind(&entry.label)
+            .bind(&entry.key)
+            .bind(&entry.value)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
     }
 }
 
+#[derive(Clone)]
 pub struct LedgerEntryData {
     pub label: String,
     pub key: Vec<u8>,

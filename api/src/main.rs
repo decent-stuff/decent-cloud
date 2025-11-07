@@ -107,10 +107,10 @@ async fn main() -> Result<(), std::io::Error> {
         }
         Err(e) => {
             tracing::error!("Failed to initialize database at {}: {}", database_url, e);
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database initialization failed: {}", e),
-            ));
+            return Err(std::io::Error::other(format!(
+                "Database initialization failed: {}",
+                e
+            )));
         }
     };
 

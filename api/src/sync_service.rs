@@ -1,12 +1,14 @@
 use crate::{database::Database, ledger_client::LedgerClient};
 use anyhow::Result;
-use std::sync::Arc;
+use ledger_map::LedgerMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub struct SyncService {
     ledger_client: Arc<LedgerClient>,
     database: Arc<Database>,
     interval: Duration,
+    ledger_parser: Arc<Mutex<LedgerMap>>,
 }
 
 impl SyncService {
@@ -15,10 +17,15 @@ impl SyncService {
         database: Arc<Database>,
         interval_secs: u64,
     ) -> Self {
+        let temp_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
+        let ledger_parser = LedgerMap::new_with_path(None, Some(temp_file.path().to_path_buf()))
+            .expect("Failed to create LedgerMap parser");
+
         Self {
             ledger_client,
             database,
             interval: Duration::from_secs(interval_secs),
+            ledger_parser: Arc::new(Mutex::new(ledger_parser)),
         }
     }
 
@@ -35,13 +42,74 @@ impl SyncService {
     }
 
     async fn sync_once(&self) -> Result<()> {
-        // TODO: Implement incremental sync logic
-        // 1. Get last sync position from DB
-        // 2. Fetch data from canister using cursor
-        // 3. Parse ledger data into blocks and entries
-        // 4. Insert entries into DB
-        // 5. Update sync position
-        tracing::warn!("Sync not yet implemented - skipping");
+        let last_position = self.database.get_last_sync_position().await?;
+        let raw_data = self.fetch_data(last_position).await?;
+
+        if raw_data.is_empty() {
+            return Ok(());
+        }
+
+        let entries = self.parse_ledger_data(&raw_data)?;
+        self.store_entries(entries).await?;
+        self.update_sync_position(last_position, raw_data.len())
+            .await?;
+
         Ok(())
     }
+
+    async fn fetch_data(&self, last_position: u64) -> Result<Vec<u8>> {
+        tracing::debug!("Starting sync from position {}", last_position);
+
+        let cursor_str = if last_position > 0 {
+            Some(format!("position={}", last_position))
+        } else {
+            None
+        };
+
+        let (new_cursor_str, raw_data) = self.ledger_client.data_fetch(cursor_str).await?;
+        tracing::info!(
+            "Fetched {} bytes, new cursor: {}",
+            raw_data.len(),
+            new_cursor_str
+        );
+
+        Ok(raw_data)
+    }
+
+    async fn store_entries(&self, entries: Vec<crate::database::LedgerEntryData>) -> Result<()> {
+        tracing::info!("Parsed {} ledger entries", entries.len());
+        if !entries.is_empty() {
+            self.database.insert_entries(entries).await?;
+        }
+        Ok(())
+    }
+
+    async fn update_sync_position(&self, last_position: u64, data_len: usize) -> Result<()> {
+        let new_position = last_position + data_len as u64;
+        self.database.update_sync_position(new_position).await?;
+        tracing::info!("Sync completed, new position: {}", new_position);
+        Ok(())
+    }
+
+    fn parse_ledger_data(&self, data: &[u8]) -> Result<Vec<crate::database::LedgerEntryData>> {
+        let mut entries = Vec::new();
+        let parser = self.ledger_parser.lock().unwrap();
+
+        for block_result in parser.iter_raw_from_slice(data) {
+            let (_block_header, block, _block_hash) = block_result?;
+
+            for entry in block.entries() {
+                entries.push(crate::database::LedgerEntryData {
+                    label: entry.label().to_string(),
+                    key: entry.key().to_vec(),
+                    value: entry.value().to_vec(),
+                });
+            }
+        }
+
+        Ok(entries)
+    }
 }
+
+#[cfg(test)]
+mod tests;

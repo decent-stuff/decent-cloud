@@ -31,3 +31,6 @@ impl LedgerClient {
             .map_err(|e| anyhow::anyhow!("Canister error: {}", e))
     }
 }
+
+#[cfg(test)]
+mod tests;
