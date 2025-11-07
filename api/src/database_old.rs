@@ -1,21 +1,13 @@
 use anyhow::Result;
-use borsh::de::BorshDeserialize;
 use borsh::{BorshDeserialize, BorshSerialize};
 use dcc_common::{
     CheckInPayload, ContractSignReply, ContractSignRequest, FundsTransfer, 
-    FundsTransferApproval, IcrcCompatibleAccount, linked_identity, offerings, profiles, cache_reputation, cache_reputation::ReputationAge, 
-    cache_reputation::ReputationChange, registration, get_timestamp_ns
+    FundsTransferApproval, LinkedIdentity, Offerings, Profiles, ReputationAge, 
+    ReputationChange, Registration, get_timestamp_ns, IcrcCompatibleAccount
 };
 use serde_json;
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
-
-#[derive(Debug, Clone)]
-pub struct LedgerEntryData {
-    pub label: String,
-    pub key: Vec<u8>,
-    pub value: Vec<u8>,
-}
 
 pub struct Database {
     pool: SqlitePool,
@@ -36,11 +28,17 @@ impl Database {
     }
 
     pub async fn update_sync_position(&self, position: u64) -> Result<()> {
-        sqlx::query("UPDATE sync_state SET last_position = ? WHERE id = 1")
+        sqlx::query("UPDATE sync_state SET last_position = ?, last_sync_at = CURRENT_TIMESTAMP WHERE id = 1")
             .bind(position as i64)
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    /// Test helper method to access the underlying pool for test assertions
+    #[cfg(test)]
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 
     pub async fn insert_entries(&self, entries: Vec<LedgerEntryData>) -> Result<()> {
@@ -62,19 +60,19 @@ impl Database {
         // Process each group
         for (label, entries) in grouped_entries {
             match label.as_str() {
-                "ProvRegister" => self.insert_provider_registrations(&mut tx, &entries).await?,
-                "ProvCheckIn" => self.insert_provider_check_ins(&mut tx, &entries).await?,
-                "ProvProfile" => self.insert_provider_profiles(&mut tx, &entries).await?,
-                "ProvOffering" => self.insert_provider_offerings(&mut tx, &entries).await?,
-                "DCTokenTransfer" => self.insert_token_transfers(&mut tx, &entries).await?,
-                "DCTokenApproval" => self.insert_token_approvals(&mut tx, &entries).await?,
-                "UserRegister" => self.insert_user_registrations(&mut tx, &entries).await?,
-                "ContractSignReq" => self.insert_contract_sign_requests(&mut tx, &entries).await?,
-                "ContractSignReply" => self.insert_contract_sign_replies(&mut tx, &entries).await?,
-                "RepChange" => self.insert_reputation_changes(&mut tx, &entries).await?,
-                "RepAge" => self.insert_reputation_aging(&mut tx, &entries).await?,
-                "RewardDistr" => self.insert_reward_distributions(&mut tx, &entries).await?,
-                "LinkedIcIds" => self.insert_linked_ic_ids(&mut tx, &entries).await?,
+                "ProvRegister" => self.insert_provider_registrations(&mut tx, entries).await?,
+                "ProvCheckIn" => self.insert_provider_check_ins(&mut tx, entries).await?,
+                "ProvProfile" => self.insert_provider_profiles(&mut tx, entries).await?,
+                "ProvOffering" => self.insert_provider_offerings(&mut tx, entries).await?,
+                "DCTokenTransfer" => self.insert_token_transfers(&mut tx, entries).await?,
+                "DCTokenApproval" => self.insert_token_approvals(&mut tx, entries).await?,
+                "UserRegister" => self.insert_user_registrations(&mut tx, entries).await?,
+                "ContractSignReq" => self.insert_contract_sign_requests(&mut tx, entries).await?,
+                "ContractSignReply" => self.insert_contract_sign_replies(&mut tx, entries).await?,
+                "RepChange" => self.insert_reputation_changes(&mut tx, entries).await?,
+                "RepAge" => self.insert_reputation_aging(&mut tx, entries).await?,
+                "RewardDistr" => self.insert_reward_distributions(&mut tx, entries).await?,
+                "LinkedIcIds" => self.insert_linked_ic_ids(&mut tx, entries).await?,
                 _ => {
                     // Unknown label - skip or handle as needed
                     tracing::warn!("Unknown ledger entry label: {}", label);
@@ -96,7 +94,7 @@ impl Database {
             .bind(&entry.key)
             .bind(&entry.key)
             .bind(&entry.value) // Store signature directly
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -115,7 +113,7 @@ impl Database {
             .bind(&entry.key)
             .bind(check_in.memo())
             .bind(check_in.nonce_signature())
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -137,7 +135,7 @@ impl Database {
             )
             .bind(&entry.key)
             .bind(&profile_json)
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -159,7 +157,7 @@ impl Database {
             )
             .bind(&entry.key)
             .bind(&offering_json)
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -173,14 +171,14 @@ impl Database {
                 .map_err(|e| anyhow::anyhow!("Failed to parse transfer: {}", e))?;
             
             sqlx::query(
-                "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns, block_hash, block_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns, block_hash, block_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(transfer.from_account().to_string())
             .bind(transfer.to_account().to_string())
             .bind(transfer.amount_e9s() as i64)
             .bind(transfer.fee_e9s() as i64)
             .bind(transfer.memo().map(|m| String::from_utf8_lossy(m)))
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .bind(transfer.block_hash())
             .bind(transfer.block_offset() as i64)
             .execute(&mut **tx)
@@ -202,7 +200,7 @@ impl Database {
             .bind(approval.spender_account().to_string())
             .bind(approval.amount_e9s() as i64)
             .bind(approval.expires_at())
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -219,7 +217,7 @@ impl Database {
             .bind(&entry.key)
             .bind(&entry.key)
             .bind(&entry.value) // Store signature directly
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -241,7 +239,7 @@ impl Database {
             )
             .bind(&entry.key)
             .bind(&request_json)
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -264,7 +262,7 @@ impl Database {
             .bind(reply.request_id() as i64)
             .bind(&entry.key)
             .bind(&reply_json)
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
@@ -314,7 +312,7 @@ impl Database {
             sqlx::query(
                 "INSERT INTO reward_distributions (block_timestamp_ns, total_amount_e9s, providers_count, amount_per_provider_e9s) VALUES (?, ?, ?, ?)"
             )
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .bind(0) // These would need to be parsed from actual reward data
             .bind(0)
             .bind(0)
@@ -335,16 +333,225 @@ impl Database {
             )
             .bind(&entry.key)
             .bind(linked_ids.ic_principal().to_string())
-            .bind(get_timestamp_ns() as i64)
+            .bind(get_timestamp_ns())
             .execute(&mut **tx)
             .await?;
         }
         Ok(())
     }
-
-    /// Test helper method to access the underlying pool
-    #[cfg(test)]
-    pub fn pool(&self) -> &SqlitePool {
-        &self.pool
+        match entry.label.as_str() {
+            "ProvRegister" => {
+                // Registration stores the crypto signature as value, pubkey as key
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT OR REPLACE INTO provider_registrations (pubkey_hash, pubkey_bytes, created_at) VALUES (?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind(&entry.key)
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "ProvCheckIn" => {
+                // CheckIn payload - store the raw data for now
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp) VALUES (?, ?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind("") // Placeholder memo
+                .bind(&entry.value) // Store the raw payload
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "ProvProfile" => {
+                // Profile contains the actual profile data
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT OR REPLACE INTO provider_profiles (pubkey_hash, profile_data, updated_at) VALUES (?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind(&entry.value)
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "ProvOffering" => {
+                // Offering contains the offering data
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO provider_offerings (pubkey_hash, offering_data, created_at) VALUES (?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind(&entry.value)
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "DCTokenTransfer" => {
+                // Token transfer - store raw data for now
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+                )
+                .bind("") // Placeholder from account
+                .bind("") // Placeholder to account
+                .bind(0) // Placeholder amount
+                .bind(0) // Placeholder fee
+                .bind("") // Placeholder memo
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "DCTokenApproval" => {
+                // Token approval - store raw data for now
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO token_approvals (spender_account, amount_e9s, expires_at, created_at) VALUES (?, ?, ?, ?)"
+                )
+                .bind("") // Placeholder spender account
+                .bind(0) // Placeholder amount
+                .bind(0) // Placeholder expires at
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "UserRegister" => {
+                // User registration stores crypto signature as value, pubkey as key
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT OR REPLACE INTO user_registrations (pubkey_hash, pubkey_bytes, created_at) VALUES (?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind(&entry.key)
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "ContractSignReq" => {
+                // Contract sign request data
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO contract_sign_requests (pubkey_hash, contract_data, created_at) VALUES (?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind(&entry.value)
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "ContractSignReply" => {
+                // Contract sign reply data
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO contract_sign_replies (request_id, pubkey_hash, reply_data, created_at) VALUES (?, ?, ?, ?)"
+                )
+                .bind(0) // Placeholder request ID
+                .bind(&entry.key)
+                .bind(&entry.value)
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "RepChange" => {
+                // Reputation change - store raw data for now
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO reputation_changes (pubkey_hash, change_amount, reason, block_timestamp) VALUES (?, ?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind(0) // Placeholder change amount
+                .bind("") // Placeholder reason
+                .bind(current_time)
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            "RepAge" => {
+                // Reputation aging - store raw data for now
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                
+                sqlx::query(
+                    "INSERT INTO reputation_aging (block_timestamp, aging_factor) VALUES (?, ?)"
+                )
+                .bind(current_time)
+                .bind(0) // Placeholder aging factor
+                .execute(&mut **tx)
+                .await?;
+                Ok(true)
+            }
+            
+            _ => Ok(false) // Not a structured entry, fallback to generic storage
+        }
     }
+}
+
+#[derive(Clone)]
+pub struct LedgerEntryData {
+    pub label: String,
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
 }

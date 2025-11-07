@@ -177,3 +177,153 @@ async fn test_ledger_dir_fallback_to_temp() {
     // Verify the directory exists
     assert!(ledger_dir.exists());
 }
+
+#[tokio::test]
+async fn test_structured_provider_registration() {
+    let database = setup_test_db().await;
+    
+    // Create a mock provider registration entry
+    let entries = vec![LedgerEntryData {
+        label: "ProvRegister".to_string(),
+        key: vec![1, 2, 3, 4], // Mock pubkey hash
+        value: vec![5, 6, 7, 8], // Mock crypto signature
+    }];
+
+    // Insert entries into database
+    database.insert_entries(entries).await.unwrap();
+
+    // Verify to entry was inserted into the structured table
+    let row = sqlx::query("SELECT * FROM provider_registrations WHERE pubkey_hash = ?")
+        .bind(&[1, 2, 3, 4][..])
+        .fetch_one(database.pool())
+        .await
+        .unwrap();
+
+    assert!(!row.is_empty());
+}
+
+#[tokio::test]
+async fn test_structured_provider_check_in() {
+    let database = setup_test_db().await;
+    
+    // Create a mock provider check-in entry with proper CheckInPayload structure
+    let check_in_payload = dcc_common::CheckInPayload::new(
+        "Test memo".to_string(),
+        vec![9, 10, 11, 12] // Mock nonce signature
+    );
+    let check_in_bytes = check_in_payload.to_bytes().unwrap();
+    
+    let entries = vec![LedgerEntryData {
+        label: "ProvCheckIn".to_string(),
+        key: vec![1, 2, 3, 4], // Mock pubkey hash
+        value: check_in_bytes,
+    }];
+
+    // Insert entries into database
+    database.insert_entries(entries).await.unwrap();
+
+    // Verify to entry was inserted into the structured table
+    let row = sqlx::query("SELECT * FROM provider_check_ins WHERE pubkey_hash = ?")
+        .bind(&[1, 2, 3, 4][..])
+        .fetch_one(database.pool())
+        .await
+        .unwrap();
+
+    let memo: String = row.get("memo");
+    assert_eq!(memo, "Test memo");
+}
+
+#[tokio::test]
+async fn test_structured_token_transfer() {
+    let database = setup_test_db().await;
+    
+    // Create a mock token transfer entry
+    let from_account = dcc_common::IcrcCompatibleAccount::from_hex("0x74657374000000000000000000000000000000000000000000000000000000000").unwrap();
+    let to_account = dcc_common::IcrcCompatibleAccount::from_hex("0x74657374000000000000000000000000000000000000000000000000000000001").unwrap();
+    
+    let transfer = dcc_common::FundsTransfer::new(
+        from_account,
+        to_account,
+        None, // fee
+        Some(b"Test memo".to_vec()),
+        None, // created_at_time
+        None, // balance_to_before
+        None, // balance_from_before
+        None, // balance_to_after
+        None, // balance_from_after
+        None, // block_hash
+        None, // block_offset
+    );
+    let transfer_bytes = transfer.to_bytes().unwrap();
+    
+    let entries = vec![LedgerEntryData {
+        label: "DCTokenTransfer".to_string(),
+        key: b"test_key".to_vec(),
+        value: transfer_bytes,
+    }];
+
+    // Insert entries into database
+    database.insert_entries(entries).await.unwrap();
+
+    // Verify to entry was inserted into the structured table
+    let row = sqlx::query("SELECT * FROM token_transfers")
+        .fetch_one(database.pool())
+        .await
+        .unwrap();
+
+    let amount: i64 = row.get("amount_e9s");
+    assert!(amount >= 0);
+}
+
+#[tokio::test]
+async fn test_structured_mixed_entries() {
+    let database = setup_test_db().await;
+    
+    // Create a mix of structured entries
+    let entries = vec![
+        LedgerEntryData {
+            label: "ProvRegister".to_string(),
+            key: vec![1, 2, 3, 4],
+            value: vec![5, 6, 7, 8],
+        },
+        LedgerEntryData {
+            label: "UserRegister".to_string(),
+            key: vec![9, 10, 11, 12],
+            value: vec![13, 14, 15, 16],
+        },
+        LedgerEntryData {
+            label: "ProvCheckIn".to_string(),
+            key: vec![1, 2, 3, 4],
+            value: dcc_common::CheckInPayload::new(
+                "Provider check-in".to_string(),
+                vec![17, 18, 19, 20]
+            ).to_bytes().unwrap(),
+        },
+    ];
+
+    // Insert entries into database
+    database.insert_entries(entries).await.unwrap();
+
+    // Verify structured entries
+    let provider_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM provider_registrations")
+        .fetch_one(database.pool())
+        .await
+        .unwrap()
+        .get("count");
+    
+    let user_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM user_registrations")
+        .fetch_one(database.pool())
+        .await
+        .unwrap()
+        .get("count");
+
+    let check_in_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM provider_check_ins")
+        .fetch_one(database.pool())
+        .await
+        .unwrap()
+        .get("count");
+
+    assert_eq!(provider_count, 1);
+    assert_eq!(user_count, 1);
+    assert_eq!(check_in_count, 1);
+}

@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+borsh.workspace = true
 candid.workspace = true
 dcc-common = { path = "../common" }
 dotenv.workspace = true

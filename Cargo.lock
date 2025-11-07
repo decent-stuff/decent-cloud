@@ -838,6 +838,7 @@ name = "decent-cloud-api"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "borsh",
  "candid",
  "dcc-common",
  "dotenv",
