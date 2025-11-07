@@ -1,5 +1,7 @@
 use crate::database::{Database, LedgerEntryData};
+use candid::Principal;
 use ledger_map::LedgerMap;
+use sqlx::Row;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -42,6 +44,9 @@ async fn test_parse_empty_data() {
                 label: entry.label().to_string(),
                 key: entry.key().to_vec(),
                 value: entry.value().to_vec(),
+                block_timestamp_ns: 0, // Empty data won't have blocks
+                block_hash: vec![],
+                block_offset: 0,
             });
         }
     }
@@ -66,11 +71,17 @@ async fn test_ledger_entry_data_creation() {
         label: "test_label".to_string(),
         key: b"test_key".to_vec(),
         value: b"test_value".to_vec(),
+        block_timestamp_ns: 1234567890,
+        block_hash: vec![1, 2, 3, 4],
+        block_offset: 100,
     };
 
     assert_eq!(entry.label, "test_label");
     assert_eq!(entry.key, b"test_key");
     assert_eq!(entry.value, b"test_value");
+    assert_eq!(entry.block_timestamp_ns, 1234567890);
+    assert_eq!(entry.block_hash, vec![1, 2, 3, 4]);
+    assert_eq!(entry.block_offset, 100);
 }
 
 #[tokio::test]
@@ -115,16 +126,25 @@ async fn test_multiple_ledger_entries() {
             label: "label1".to_string(),
             key: b"key1".to_vec(),
             value: b"value1".to_vec(),
+            block_timestamp_ns: 1000,
+            block_hash: vec![1, 2, 3, 4],
+            block_offset: 0,
         },
         LedgerEntryData {
             label: "label2".to_string(),
             key: b"key2".to_vec(),
             value: b"value2".to_vec(),
+            block_timestamp_ns: 2000,
+            block_hash: vec![5, 6, 7, 8],
+            block_offset: 100,
         },
         LedgerEntryData {
             label: "label3".to_string(),
             key: b"key3".to_vec(),
             value: b"value3".to_vec(),
+            block_timestamp_ns: 3000,
+            block_hash: vec![9, 10, 11, 12],
+            block_offset: 200,
         },
     ];
     let entries: Vec<LedgerEntryData> = entries_array.to_vec();
@@ -140,21 +160,23 @@ async fn test_ledger_dir_env_var_persistence() {
     // Test that LEDGER_DIR environment variable is properly used
     let temp_dir = tempfile::tempdir().unwrap();
     let ledger_path = temp_dir.path().to_str().unwrap();
-    
+
     // Set the environment variable
     std::env::set_var("LEDGER_DIR", ledger_path);
-    
+
     // Verify that SyncService reads the LEDGER_DIR environment variable correctly
     let ledger_dir = std::env::var("LEDGER_DIR")
         .map(|path| std::path::PathBuf::from(path))
         .unwrap_or_else(|_| {
-            tempfile::tempdir().expect("Failed to create temp dir").keep()
+            tempfile::tempdir()
+                .expect("Failed to create temp dir")
+                .keep()
         });
-    
+
     // Verify the correct directory path is used
     assert_eq!(ledger_dir, temp_dir.path());
     assert!(ledger_dir.exists());
-    
+
     // Clean up
     std::env::remove_var("LEDGER_DIR");
 }
@@ -163,17 +185,16 @@ async fn test_ledger_dir_env_var_persistence() {
 async fn test_ledger_dir_fallback_to_temp() {
     // Ensure LEDGER_DIR is not set
     std::env::remove_var("LEDGER_DIR");
-    
+
     // Verify that a temp directory is created when LEDGER_DIR is not set
     let ledger_dir = std::env::var("LEDGER_DIR")
         .map(|path| std::path::PathBuf::from(path))
         .unwrap_or_else(|_| {
             // This should create a temp directory
-            let temp_dir = tempfile::tempdir()
-                .expect("Failed to create temp dir");
+            let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
             temp_dir.keep()
         });
-    
+
     // Verify the directory exists
     assert!(ledger_dir.exists());
 }
@@ -181,12 +202,15 @@ async fn test_ledger_dir_fallback_to_temp() {
 #[tokio::test]
 async fn test_structured_provider_registration() {
     let database = setup_test_db().await;
-    
+
     // Create a mock provider registration entry
     let entries = vec![LedgerEntryData {
         label: "ProvRegister".to_string(),
-        key: vec![1, 2, 3, 4], // Mock pubkey hash
-        value: vec![5, 6, 7, 8], // Mock crypto signature
+        key: vec![1, 2, 3, 4],                   // Mock pubkey hash
+        value: vec![5, 6, 7, 8],                 // Mock crypto signature
+        block_timestamp_ns: 1704063600000000000, // Realistic timestamp
+        block_hash: vec![1, 2, 3, 4, 5, 6, 7, 8],
+        block_offset: 1000,
     }];
 
     // Insert entries into database
@@ -205,18 +229,21 @@ async fn test_structured_provider_registration() {
 #[tokio::test]
 async fn test_structured_provider_check_in() {
     let database = setup_test_db().await;
-    
+
     // Create a mock provider check-in entry with proper CheckInPayload structure
     let check_in_payload = dcc_common::CheckInPayload::new(
         "Test memo".to_string(),
-        vec![9, 10, 11, 12] // Mock nonce signature
+        vec![9, 10, 11, 12], // Mock nonce signature
     );
     let check_in_bytes = check_in_payload.to_bytes().unwrap();
-    
+
     let entries = vec![LedgerEntryData {
         label: "ProvCheckIn".to_string(),
         key: vec![1, 2, 3, 4], // Mock pubkey hash
         value: check_in_bytes,
+        block_timestamp_ns: 1704063600000000000,
+        block_hash: vec![9, 10, 11, 12, 13, 14, 15, 16],
+        block_offset: 2000,
     }];
 
     // Insert entries into database
@@ -236,30 +263,37 @@ async fn test_structured_provider_check_in() {
 #[tokio::test]
 async fn test_structured_token_transfer() {
     let database = setup_test_db().await;
-    
+
     // Create a mock token transfer entry
-    let from_account = dcc_common::IcrcCompatibleAccount::from_hex("0x74657374000000000000000000000000000000000000000000000000000000000").unwrap();
-    let to_account = dcc_common::IcrcCompatibleAccount::from_hex("0x74657374000000000000000000000000000000000000000000000000000000001").unwrap();
-    
+    let from_account = dcc_common::IcrcCompatibleAccount::new(
+        Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap(),
+        None,
+    );
+    let to_account = dcc_common::IcrcCompatibleAccount::new(
+        Principal::from_text("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap(),
+        None,
+    );
+
     let transfer = dcc_common::FundsTransfer::new(
         from_account,
         to_account,
-        None, // fee
-        Some(b"Test memo".to_vec()),
-        None, // created_at_time
-        None, // balance_to_before
-        None, // balance_from_before
-        None, // balance_to_after
-        None, // balance_from_after
-        None, // block_hash
-        None, // block_offset
+        Some(1000), // fee
+        None,       // fees_accounts
+        None,       // created_at_time
+        b"Test memo".to_vec(),
+        10000, // amount
+        50000, // balance_from_after
+        60000, // balance_to_after
     );
     let transfer_bytes = transfer.to_bytes().unwrap();
-    
+
     let entries = vec![LedgerEntryData {
         label: "DCTokenTransfer".to_string(),
         key: b"test_key".to_vec(),
         value: transfer_bytes,
+        block_timestamp_ns: 1704063600000000000,
+        block_hash: vec![17, 18, 19, 20, 21, 22, 23, 24],
+        block_offset: 3000,
     }];
 
     // Insert entries into database
@@ -278,26 +312,37 @@ async fn test_structured_token_transfer() {
 #[tokio::test]
 async fn test_structured_mixed_entries() {
     let database = setup_test_db().await;
-    
+
     // Create a mix of structured entries
     let entries = vec![
         LedgerEntryData {
             label: "ProvRegister".to_string(),
             key: vec![1, 2, 3, 4],
             value: vec![5, 6, 7, 8],
+            block_timestamp_ns: 1704063600000000000,
+            block_hash: vec![1, 1, 1, 1, 1, 1, 1, 1],
+            block_offset: 4000,
         },
         LedgerEntryData {
             label: "UserRegister".to_string(),
             key: vec![9, 10, 11, 12],
             value: vec![13, 14, 15, 16],
+            block_timestamp_ns: 1704063600000000000,
+            block_hash: vec![2, 2, 2, 2, 2, 2, 2, 2],
+            block_offset: 5000,
         },
         LedgerEntryData {
             label: "ProvCheckIn".to_string(),
             key: vec![1, 2, 3, 4],
             value: dcc_common::CheckInPayload::new(
                 "Provider check-in".to_string(),
-                vec![17, 18, 19, 20]
-            ).to_bytes().unwrap(),
+                vec![17, 18, 19, 20],
+            )
+            .to_bytes()
+            .unwrap(),
+            block_timestamp_ns: 1704063600000000000,
+            block_hash: vec![3, 3, 3, 3, 3, 3, 3, 3],
+            block_offset: 6000,
         },
     ];
 
@@ -310,7 +355,7 @@ async fn test_structured_mixed_entries() {
         .await
         .unwrap()
         .get("count");
-    
+
     let user_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM user_registrations")
         .fetch_one(database.pool())
         .await

@@ -21,8 +21,7 @@ impl SyncService {
             .map(|path| std::path::PathBuf::from(path))
             .unwrap_or_else(|_| {
                 // Fallback to temp directory for development
-                let temp_dir = tempfile::tempdir()
-                    .expect("Failed to create temp dir");
+                let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
                 temp_dir.keep()
             });
 
@@ -107,13 +106,18 @@ impl SyncService {
         let parser = self.ledger_parser.lock().unwrap();
 
         for block_result in parser.iter_raw_from_slice(data) {
-            let (_block_header, block, _block_hash) = block_result?;
+            let (_block_header, block, block_hash) = block_result?;
+            let block_timestamp = block.timestamp();
+            let block_offset = block.get_offset();
 
             for entry in block.entries() {
                 entries.push(crate::database::LedgerEntryData {
                     label: entry.label().to_string(),
                     key: entry.key().to_vec(),
                     value: entry.value().to_vec(),
+                    block_timestamp_ns: block_timestamp,
+                    block_hash: block_hash.clone(),
+                    block_offset,
                 });
             }
         }
