@@ -16,10 +16,11 @@ RUN apt update && apt install -y libunwind-dev curl libssl-dev pkg-config
 
 # Install Rust
 RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
-    && rustup toolchain install nightly --profile=complete
+    && rustup toolchain install nightly --profile=complete \
+    && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-# Install cargo-make
-RUN cargo install cargo-make cargo-nextest wasm-pack
+# Install cargo tools using binstall for faster installation
+RUN cargo binstall cargo-make cargo-nextest wasm-pack
 
 # Install UV
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
