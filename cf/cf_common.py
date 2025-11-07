@@ -87,15 +87,19 @@ def run_docker_compose(compose_files: list[str], command: list[str], env_vars: d
     except subprocess.CalledProcessError:
         return False
 
-def check_tunnel_status(compose_files: list[str]) -> str:
+def check_tunnel_status(compose_files: list[str], env_name: str) -> str:
     """Check tunnel connection status from logs."""
     try:
+        project_name = f"decent-cloud-{env_name[:4]}"  # dev -> dev, prod -> prod
+        env_vars = {'COMPOSE_PROJECT_NAME': project_name}
+        
         result = subprocess.run(
             ["docker", "compose"] +
             [arg for f in compose_files for arg in ["-f", f]] +
             ["logs", "cloudflared"],
             capture_output=True,
             text=True,
+            env={**os.environ, **env_vars},
             check=False
         )
         logs = result.stdout + result.stderr
@@ -155,12 +159,17 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     print_warning(f"Building and starting {action}...")
     print()
 
-    if not run_docker_compose(compose_files, ["up", "-d", "--build"], env_vars):
+    # Use a specific project name to isolate dev and prod environments
+    project_name = f"decent-cloud-{env_name[:4]}"  # dev -> dev, prod -> prod
+    env_vars_with_project = {**env_vars, 'COMPOSE_PROJECT_NAME': project_name}
+
+    if not run_docker_compose(compose_files, ["up", "-d", "--build"], env_vars_with_project):
         print()
         print_error(f"{env_name.title()} deployment failed")
         print()
         compose_args = " ".join(f"-f {f}" for f in compose_files)
-        print(f"Check logs: {BLUE}docker compose {compose_args} logs{NC}")
+        project_args = f"-p {project_name}"
+        print(f"Check logs: {BLUE}docker compose {project_args} {compose_args} logs{NC}")
         print()
         return 1
 
@@ -186,7 +195,7 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     import time
     time.sleep(5)
 
-    status = check_tunnel_status(compose_files)
+    status = check_tunnel_status(compose_files, env_name)
 
     if status == "connected":
         print_success("Tunnel connected successfully!")
@@ -217,21 +226,23 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
         msg = f"Could not verify tunnel status" if status == "error" else "Tunnel status unclear"
         print_warning(msg)
         compose_args = " ".join(f"-f {f}" for f in compose_files)
-        print(f"  {BLUE}docker compose {compose_args} logs cloudflared{NC}")
+        project_args = f"-p {project_name}"
+        print(f"  {BLUE}docker compose {project_args} {compose_args} logs cloudflared{NC}")
         print()
 
     # Management commands
     print("Useful commands:" if not is_prod else "Management commands:")
     compose_args = " ".join(f"-f {f}" for f in compose_files)
+    project_args = f"-p {project_name}"
     if is_prod:
-        print(f"  View logs:    {BLUE}docker compose {compose_args} logs -f{NC}")
-        print(f"  Check status: {BLUE}docker compose {compose_args} ps{NC}")
-        print(f"  Restart:      {BLUE}docker compose {compose_args} restart{NC}")
-        print(f"  Stop:         {BLUE}docker compose {compose_args} down{NC}")
+        print(f"  View logs:    {BLUE}docker compose {project_args} {compose_args} logs -f{NC}")
+        print(f"  Check status: {BLUE}docker compose {project_args} {compose_args} ps{NC}")
+        print(f"  Restart:      {BLUE}docker compose {project_args} {compose_args} restart{NC}")
+        print(f"  Stop:         {BLUE}docker compose {project_args} {compose_args} down{NC}")
     else:
-        print(f"  {BLUE}docker compose {compose_args} logs -f{NC}")
-        print(f"  {BLUE}docker compose {compose_args} ps{NC}")
-        print(f"  {BLUE}docker compose {compose_args} down{NC}")
+        print(f"  {BLUE}docker compose {project_args} {compose_args} logs -f{NC}")
+        print(f"  {BLUE}docker compose {project_args} {compose_args} ps{NC}")
+        print(f"  {BLUE}docker compose {project_args} {compose_args} down{NC}")
     print()
 
     return 0
