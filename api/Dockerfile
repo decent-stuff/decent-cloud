@@ -3,12 +3,6 @@
 FROM --platform=linux/amd64 rust:1.91 as builder
 WORKDIR /app
 
-# Install musl target for static binary
-RUN rustup target add x86_64-unknown-linux-musl && \
-    apt-get update && \
-    apt-get install -y musl-tools musl-dev && \
-    rm -rf /var/lib/apt/lists/*
-
 # Copy workspace Cargo files
 COPY Cargo.toml Cargo.lock ./
 COPY api/Cargo.toml ./api/
@@ -23,33 +17,39 @@ COPY wasm ./wasm
 
 # Create dummy main.rs to cache dependencies
 RUN mkdir -p api/src && echo "fn main() {}" > api/src/main.rs
-RUN cargo build --release --target x86_64-unknown-linux-musl --bin api-server
-RUN rm -rf api/src
+RUN cargo build --release --bin api-server
 
-# Copy actual source code
+# Copy actual source code (this invalidates the dummy binary)
 COPY api/src ./api/src
 COPY api/migrations ./api/migrations
 
-# Build the application
-RUN cargo build --release --target x86_64-unknown-linux-musl --bin api-server
+# Build the application (force rebuild by touching files)
+RUN touch api/src/main.rs && cargo build --release --bin api-server
 
 # Runtime stage
 FROM --platform=linux/amd64 debian:bookworm-slim
+
+# Build arguments for user/group IDs (defaults to 1000)
+ARG USER_ID=1000
+ARG GROUP_ID=1000
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd -r -s /bin/false appuser
+# Create non-root user with configurable UID/GID for volume compatibility
+RUN groupadd -g ${GROUP_ID} appuser && \
+    useradd -r -u ${USER_ID} -g appuser -s /bin/false appuser
 
 # Copy binary from builder stage
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/api-server /usr/local/bin/api-server
+COPY --from=builder /app/target/release/api-server /usr/local/bin/api-server
 
-# Set permissions
-RUN chown appuser:appuser /usr/local/bin/api-server
+# Create data directory and set permissions
+RUN mkdir -p /data && \
+    chown -R appuser:appuser /usr/local/bin/api-server /data
 
 # Switch to non-root user
 USER appuser

@@ -28,6 +28,9 @@ Cargo.lock
 .cache/
 .cache/cargo-make/
 
+# Runtime
+/data/
+
 ### IDE and Editor ###
 # VS Code
 .vscode/*

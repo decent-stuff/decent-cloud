@@ -92,6 +92,30 @@ python3 scripts/setup-python-env.py
 
 This will create a virtual environment and install all necessary dependencies.
 
+### Docker Setup for Volume Permissions
+
+The API service uses Docker volumes to persist the SQLite database. To ensure proper file permissions, the container's `appuser` UID/GID can be configured at build time.
+
+**Default Configuration:**
+By default, the API container uses UID/GID 1000:1000, which matches most single-user Linux systems.
+
+**Custom UID/GID:**
+If your host data directory has different ownership (e.g., UID 1001), set environment variables before building:
+
+```bash
+# Check your data directory ownership
+stat -c "UID: %u, GID: %g" data/api-data
+
+# Set matching UID/GID for Docker build
+export USER_ID=1001
+export GROUP_ID=1001
+
+# Rebuild the API container
+docker compose -f cf/docker-compose.yml -f cf/docker-compose.prod.yml build api
+```
+
+The build arguments are defined in `cf/docker-compose.yml` and default to 1000 if not specified.
+
 ## Building the Project
 
 ### Building Binaries

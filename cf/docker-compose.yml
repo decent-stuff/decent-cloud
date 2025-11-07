@@ -19,6 +19,9 @@ services:
     build:
       context: ..
       dockerfile: api/Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
     image: decent-cloud-api:${ENVIRONMENT:-dev}
     restart: unless-stopped
     environment:
@@ -28,7 +31,7 @@ services:
       - PORT=8080
       - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
     volumes:
-      - ./data:/data
+      - ../data/api-data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 30s
