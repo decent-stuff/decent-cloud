@@ -153,7 +153,7 @@ CREATE TABLE token_approvals (
 -- Contract sign requests
 CREATE TABLE contract_sign_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    contract_id BLOB NOT NULL UNIQUE,
+    contract_id BLOB NOT NULL,
     requester_pubkey_hash BLOB NOT NULL,
     requester_ssh_pubkey TEXT NOT NULL,
     requester_contact TEXT NOT NULL,

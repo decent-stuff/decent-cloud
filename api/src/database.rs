@@ -84,6 +84,13 @@ impl Database {
                 "RepAge" => self.insert_reputation_aging(&mut tx, &entries).await?,
                 "RewardDistr" => self.insert_reward_distributions(&mut tx, &entries).await?,
                 "LinkedIcIds" => self.insert_linked_ic_ids(&mut tx, &entries).await?,
+                // Handle NP-prefixed labels (namespace providers)
+                "NPRegister" => {
+                    self.insert_provider_registrations(&mut tx, &entries)
+                        .await?
+                }
+                "NPCheckIn" => self.insert_provider_check_ins(&mut tx, &entries).await?,
+                "NPOffering" => self.insert_provider_offerings(&mut tx, &entries).await?,
                 _ => tracing::warn!("Unknown ledger entry label: {}", label),
             }
         }
@@ -403,7 +410,7 @@ impl Database {
 
             // Insert the main contract request
             sqlx::query(
-                "INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT OR IGNORE INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&contract_id)
             .bind(&requester_pubkey_hash)
