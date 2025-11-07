@@ -30,7 +30,7 @@ impl SyncService {
 
         // LedgerMap expects a file path, not a directory
         let ledger_file = ledger_dir.join("main.bin");
-        
+
         let ledger_parser = LedgerMap::new_with_path(None, Some(ledger_file))
             .expect("Failed to create LedgerMap parser");
 

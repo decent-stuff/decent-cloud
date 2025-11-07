@@ -3,8 +3,8 @@ use borsh::BorshDeserialize;
 use dcc_common::{
     cache_reputation::ReputationAge, cache_reputation::ReputationChange,
     linked_identity::LinkedIcIdsRecord, offerings, CheckInPayload, ContractSignReplyPayload,
-    ContractSignRequestPayload, FundsTransfer, FundsTransferApproval,
-    UpdateProfilePayload, DC_TOKEN_DECIMALS_DIV,
+    ContractSignRequestPayload, FundsTransfer, FundsTransferApproval, UpdateProfilePayload,
+    DC_TOKEN_DECIMALS_DIV,
 };
 use provider_profile::Profile;
 use sqlx::{Row, SqlitePool};
@@ -65,14 +65,20 @@ impl Database {
         // Process each group efficiently
         for (label, entries) in grouped_entries {
             match label.as_str() {
-                "ProvRegister" => self.insert_provider_registrations(&mut tx, &entries).await?,
+                "ProvRegister" => {
+                    self.insert_provider_registrations(&mut tx, &entries)
+                        .await?
+                }
                 "ProvCheckIn" => self.insert_provider_check_ins(&mut tx, &entries).await?,
                 "ProvProfile" => self.insert_provider_profiles(&mut tx, &entries).await?,
                 "ProvOffering" => self.insert_provider_offerings(&mut tx, &entries).await?,
                 "DCTokenTransfer" => self.insert_token_transfers(&mut tx, &entries).await?,
                 "DCTokenApproval" => self.insert_token_approvals(&mut tx, &entries).await?,
                 "UserRegister" => self.insert_user_registrations(&mut tx, &entries).await?,
-                "ContractSignReq" => self.insert_contract_sign_requests(&mut tx, &entries).await?,
+                "ContractSignReq" => {
+                    self.insert_contract_sign_requests(&mut tx, &entries)
+                        .await?
+                }
                 "ContractSignReply" => self.insert_contract_sign_replies(&mut tx, &entries).await?,
                 "RepChange" => self.insert_reputation_changes(&mut tx, &entries).await?,
                 "RepAge" => self.insert_reputation_aging(&mut tx, &entries).await?,
@@ -397,7 +403,7 @@ impl Database {
 
             // Insert the main contract request
             sqlx::query(
-                "INSERT OR IGNORE INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&contract_id)
             .bind(&requester_pubkey_hash)

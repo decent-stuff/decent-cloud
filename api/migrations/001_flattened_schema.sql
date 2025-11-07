@@ -1,26 +1,5 @@
--- Fully Structured Schema - No JSON blobs whatsoever
--- This creates a clean, normalized database structure for efficient querying
-
--- Drop all existing tables for clean migration
-DROP TABLE IF EXISTS provider_registrations;
-DROP TABLE IF EXISTS provider_check_ins;
-DROP TABLE IF EXISTS provider_profiles;
-DROP TABLE IF EXISTS provider_profiles_contacts;
-DROP TABLE IF EXISTS provider_offerings;
-DROP TABLE IF EXISTS provider_offerings_payment_methods;
-DROP TABLE IF EXISTS provider_offerings_features;
-DROP TABLE IF EXISTS provider_offerings_operating_systems;
-DROP TABLE IF EXISTS user_registrations;
-DROP TABLE IF EXISTS token_transfers;
-DROP TABLE IF EXISTS token_approvals;
-DROP TABLE IF EXISTS contract_sign_requests;
-DROP TABLE IF EXISTS contract_payment_entries;
-DROP TABLE IF EXISTS contract_sign_replies;
-DROP TABLE IF EXISTS reputation_changes;
-DROP TABLE IF EXISTS reputation_aging;
-DROP TABLE IF EXISTS reward_distributions;
-DROP TABLE IF EXISTS linked_ic_ids;
-DROP TABLE IF EXISTS sync_state;
+-- Flattened Schema - Complete database structure for fresh deployment
+-- This consolidates all previous migrations into a single clean schema
 
 -- Provider registrations
 CREATE TABLE provider_registrations (

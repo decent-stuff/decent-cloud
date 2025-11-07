@@ -22,8 +22,6 @@ struct HealthResponse {
     environment: String,
 }
 
-
-
 #[derive(Debug, Deserialize)]
 struct CanisterRequest {
     args: Vec<serde_json::Value>,
