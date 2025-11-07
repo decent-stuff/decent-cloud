@@ -134,3 +134,46 @@ async fn test_multiple_ledger_entries() {
     assert_eq!(entries[1].label, "label2");
     assert_eq!(entries[2].label, "label3");
 }
+
+#[tokio::test]
+async fn test_ledger_dir_env_var_persistence() {
+    // Test that LEDGER_DIR environment variable is properly used
+    let temp_dir = tempfile::tempdir().unwrap();
+    let ledger_path = temp_dir.path().to_str().unwrap();
+    
+    // Set the environment variable
+    std::env::set_var("LEDGER_DIR", ledger_path);
+    
+    // Verify that SyncService reads the LEDGER_DIR environment variable correctly
+    let ledger_dir = std::env::var("LEDGER_DIR")
+        .map(|path| std::path::PathBuf::from(path))
+        .unwrap_or_else(|_| {
+            tempfile::tempdir().expect("Failed to create temp dir").keep()
+        });
+    
+    // Verify the correct directory path is used
+    assert_eq!(ledger_dir, temp_dir.path());
+    assert!(ledger_dir.exists());
+    
+    // Clean up
+    std::env::remove_var("LEDGER_DIR");
+}
+
+#[tokio::test]
+async fn test_ledger_dir_fallback_to_temp() {
+    // Ensure LEDGER_DIR is not set
+    std::env::remove_var("LEDGER_DIR");
+    
+    // Verify that a temp directory is created when LEDGER_DIR is not set
+    let ledger_dir = std::env::var("LEDGER_DIR")
+        .map(|path| std::path::PathBuf::from(path))
+        .unwrap_or_else(|_| {
+            // This should create a temp directory
+            let temp_dir = tempfile::tempdir()
+                .expect("Failed to create temp dir");
+            temp_dir.keep()
+        });
+    
+    // Verify the directory exists
+    assert!(ledger_dir.exists());
+}

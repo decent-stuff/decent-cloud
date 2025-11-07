@@ -7,6 +7,15 @@ services:
     networks:
       - decent-cloud-dev
 
+# Note: LEDGER_DIR is not set for dev, allowing fallback to temp directory
+# This enables multiple dev containers and easier cleanup
+  api:
+    container_name: decent-cloud-api-dev
+    ports:
+      - "59001:8080"  # Dev: host 59001 -> container 8080
+    networks:
+      - decent-cloud-dev
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: decent-cloud-tunnel-dev
@@ -18,6 +27,8 @@ services:
       - decent-cloud-dev
     depends_on:
       website:
+        condition: service_healthy
+      api:
         condition: service_healthy
 
 networks:

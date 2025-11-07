@@ -30,6 +30,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
       - PORT=8080
       - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+      - LEDGER_DIR=/data/ledger
     volumes:
       - ../data/api-data:/data
     healthcheck:

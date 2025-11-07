@@ -17,8 +17,19 @@ impl SyncService {
         database: Arc<Database>,
         interval_secs: u64,
     ) -> Self {
-        let temp_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
-        let ledger_parser = LedgerMap::new_with_path(None, Some(temp_file.path().to_path_buf()))
+        let ledger_dir = std::env::var("LEDGER_DIR")
+            .map(|path| std::path::PathBuf::from(path))
+            .unwrap_or_else(|_| {
+                // Fallback to temp directory for development
+                let temp_dir = tempfile::tempdir()
+                    .expect("Failed to create temp dir");
+                temp_dir.keep()
+            });
+
+        // Ensure the directory exists
+        std::fs::create_dir_all(&ledger_dir).expect("Failed to create ledger directory");
+
+        let ledger_parser = LedgerMap::new_with_path(None, Some(ledger_dir))
             .expect("Failed to create LedgerMap parser");
 
         Self {
