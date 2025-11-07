@@ -17,14 +17,18 @@ services:
 
   api:
     build:
-      context: ../api
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: api/Dockerfile
     image: decent-cloud-api:${ENVIRONMENT:-dev}
     restart: unless-stopped
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
       - RUST_LOG=${RUST_LOG:-info}
       - PORT=8080
+      - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+    volumes:
+      - ./data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 30s

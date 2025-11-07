@@ -86,7 +86,7 @@ Or on error:
 ## Environment Variables
 
 Required:
-- `CANISTER_ID`: ICP canister ID to proxy to
+- `CANISTER_ID`: ICP canister ID, ggi4a-wyaaa-aaaai-actqq-cai for mainnet
 - `IC_NETWORK`: Network URL (e.g., "https://ic0.app" for mainnet)
 
 Optional:

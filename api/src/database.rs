@@ -8,7 +8,7 @@ pub struct Database {
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = SqlitePool::connect(database_url).await?;
-        sqlx::migrate!("./migrations").run(&pool).await?;
+        sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
     }
 

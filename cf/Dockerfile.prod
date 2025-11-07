@@ -17,6 +17,7 @@ RUN cargo install wasm-pack
 
 # Copy Cargo workspace files (needed for wasm build)
 COPY Cargo.toml Cargo.lock ./
+COPY api ./api
 COPY cli ./cli
 COPY common ./common
 COPY ic-canister ./ic-canister

@@ -99,13 +99,20 @@ async fn main() -> Result<(), std::io::Error> {
 
     // Database setup
     let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./ledger.db".to_string());
-    let database = Arc::new(
-        Database::new(&database_url)
-            .await
-            .expect("Failed to initialize database"),
-    );
-    tracing::info!("Database initialized at {}", database_url);
+        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./ledger.db?mode=rwc".to_string());
+    let database = match Database::new(&database_url).await {
+        Ok(db) => {
+            tracing::info!("Database initialized at {}", database_url);
+            Arc::new(db)
+        }
+        Err(e) => {
+            tracing::error!("Failed to initialize database at {}: {}", database_url, e);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Database initialization failed: {}", e),
+            ));
+        }
+    };
 
     // Ledger client setup
     let network_url = env::var("NETWORK_URL").unwrap_or_else(|_| "https://ic0.app".to_string());

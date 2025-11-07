@@ -24,6 +24,8 @@ impl SyncService {
 
     pub async fn run(self) {
         let mut interval = tokio::time::interval(self.interval);
+        interval.tick().await; // Skip first immediate tick
+
         loop {
             interval.tick().await;
             if let Err(e) = self.sync_once().await {
@@ -39,6 +41,7 @@ impl SyncService {
         // 3. Parse ledger data into blocks and entries
         // 4. Insert entries into DB
         // 5. Update sync position
-        todo!("Implement incremental sync logic")
+        tracing::warn!("Sync not yet implemented - skipping");
+        Ok(())
     }
 }
