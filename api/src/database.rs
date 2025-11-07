@@ -2,11 +2,11 @@ use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::{
     cache_reputation::ReputationAge, cache_reputation::ReputationChange,
-    linked_identity::LinkedIcIdsRecord, offerings, CheckInPayload, ContractSignReply,
-    ContractSignRequest, FundsTransfer, FundsTransferApproval, UpdateProfilePayload,
-    DC_TOKEN_DECIMALS_DIV,
+    linked_identity::LinkedIcIdsRecord, offerings, CheckInPayload, ContractSignReplyPayload,
+    ContractSignRequestPayload, FundsTransfer, FundsTransferApproval,
+    UpdateProfilePayload, DC_TOKEN_DECIMALS_DIV,
 };
-use serde_json;
+use provider_profile::Profile;
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 
@@ -62,32 +62,23 @@ impl Database {
                 .push(entry);
         }
 
-        // Process each group
+        // Process each group efficiently
         for (label, entries) in grouped_entries {
             match label.as_str() {
-                "ProvRegister" => {
-                    self.insert_provider_registrations(&mut tx, &entries)
-                        .await?
-                }
+                "ProvRegister" => self.insert_provider_registrations(&mut tx, &entries).await?,
                 "ProvCheckIn" => self.insert_provider_check_ins(&mut tx, &entries).await?,
                 "ProvProfile" => self.insert_provider_profiles(&mut tx, &entries).await?,
                 "ProvOffering" => self.insert_provider_offerings(&mut tx, &entries).await?,
                 "DCTokenTransfer" => self.insert_token_transfers(&mut tx, &entries).await?,
                 "DCTokenApproval" => self.insert_token_approvals(&mut tx, &entries).await?,
                 "UserRegister" => self.insert_user_registrations(&mut tx, &entries).await?,
-                "ContractSignReq" => {
-                    self.insert_contract_sign_requests(&mut tx, &entries)
-                        .await?
-                }
+                "ContractSignReq" => self.insert_contract_sign_requests(&mut tx, &entries).await?,
                 "ContractSignReply" => self.insert_contract_sign_replies(&mut tx, &entries).await?,
                 "RepChange" => self.insert_reputation_changes(&mut tx, &entries).await?,
                 "RepAge" => self.insert_reputation_aging(&mut tx, &entries).await?,
                 "RewardDistr" => self.insert_reward_distributions(&mut tx, &entries).await?,
                 "LinkedIcIds" => self.insert_linked_ic_ids(&mut tx, &entries).await?,
-                _ => {
-                    // Unknown label - skip or handle as needed
-                    tracing::warn!("Unknown ledger entry label: {}", label);
-                }
+                _ => tracing::warn!("Unknown ledger entry label: {}", label),
             }
         }
 
@@ -152,31 +143,38 @@ impl Database {
                 .deserialize_update_profile()
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize profile: {}", e))?;
 
-            // Extract structured fields from profile
             // Extract structured fields from profile based on ProfileV0_1_0 structure
-            let name = "".to_string(); // TODO: Extract from profile structure
-            let description = "".to_string(); // TODO: Extract from profile structure
-            let website_url = "".to_string(); // TODO: Extract from profile structure
-            let contact_email = "".to_string(); // TODO: Extract from profile structure
-            let location = "".to_string(); // TODO: Extract from profile structure
+            match profile {
+                Profile::V0_1_0(profile_v0_1_0) => {
+                    // Insert main profile record
+                    sqlx::query(
+                        "INSERT OR REPLACE INTO provider_profiles (pubkey_hash, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    )
+                    .bind(&entry.key)
+                    .bind(&profile_v0_1_0.metadata.name)
+                    .bind(&profile_v0_1_0.spec.description)
+                    .bind(&profile_v0_1_0.spec.url)
+                    .bind(&profile_v0_1_0.spec.logo_url)
+                    .bind(&profile_v0_1_0.spec.why_choose_us)
+                    .bind(&profile_v0_1_0.api_version)
+                    .bind(&profile_v0_1_0.metadata.version)
+                    .bind(entry.block_timestamp_ns as i64)
+                    .execute(&mut **tx)
+                    .await?;
 
-            // Store capabilities as JSON since it's complex nested data
-            let capabilities_json = serde_json::to_string(&profile)
-                .map_err(|e| anyhow::anyhow!("Failed to serialize profile: {}", e))?;
-
-            sqlx::query(
-                "INSERT OR REPLACE INTO provider_profiles (pubkey_hash, name, description, website_url, contact_email, location, capabilities_json, updated_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(&entry.key)
-            .bind(name)
-            .bind(description)
-            .bind(website_url)
-            .bind(contact_email)
-            .bind(location)
-            .bind(capabilities_json)
-            .bind(entry.block_timestamp_ns as i64)
-            .execute(&mut **tx)
-            .await?;
+                    // Insert contact information in normalized table
+                    for (contact_type, contact_value) in &profile_v0_1_0.spec.contacts {
+                        sqlx::query(
+                            "INSERT OR REPLACE INTO provider_profiles_contacts (provider_pubkey_hash, contact_type, contact_value) VALUES (?, ?, ?)"
+                        )
+                        .bind(&entry.key)
+                        .bind(contact_type)
+                        .bind(contact_value)
+                        .execute(&mut **tx)
+                        .await?;
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -191,38 +189,107 @@ impl Database {
             let offering_payload = offerings::UpdateOfferingsPayload::try_from_slice(&entry.value)
                 .map_err(|e| anyhow::anyhow!("Failed to parse offering payload: {}", e))?;
             let provider_key = &entry.key;
-            let offering = offering_payload
+            let provider_offerings = offering_payload
                 .deserialize_offerings(provider_key)
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize offering: {}", e))?;
 
-            // Store each offering as a structured record
-            for offering in &offering.server_offerings {
+            // Store each offering as a fully structured record
+            for offering in &provider_offerings.server_offerings {
                 let price_per_hour_e9s =
                     (offering.monthly_price / 30.0 / 24.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
                 let price_per_day_e9s =
                     (offering.monthly_price / 30.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
-                let tags = offering.features.join(",");
-                let availability_json = serde_json::to_string(&offering.payment_methods)
-                    .map_err(|e| anyhow::anyhow!("Failed to serialize payment methods: {}", e))?;
 
-                sqlx::query(
-                        "INSERT INTO provider_offerings (pubkey_hash, offering_id, instance_type, region, pricing_model, price_per_hour_e9s, price_per_day_e9s, min_contract_hours, max_contract_hours, availability_json, tags, description, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                // Insert main offering record
+                let offering_id = sqlx::query_scalar::<_, i64>(
+                    "INSERT INTO provider_offerings (
+                        pubkey_hash, offering_id, offer_name, description, product_page_url,
+                        currency, monthly_price, setup_fee, visibility, product_type,
+                        virtualization_type, billing_interval, stock_status, processor_brand,
+                        processor_amount, processor_cores, processor_speed, processor_name,
+                        memory_error_correction, memory_type, memory_amount, hdd_amount,
+                        total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth,
+                        uplink_speed, traffic, datacenter_country, datacenter_city,
+                        datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
+                        price_per_hour_e9s, price_per_day_e9s, min_contract_hours,
+                        max_contract_hours, created_at_ns
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    RETURNING id"
+                )
+                .bind(provider_key)
+                .bind(&offering.unique_internal_identifier)
+                .bind(&offering.offer_name)
+                .bind(&offering.description)
+                .bind(&offering.product_page_url)
+                .bind(offering.currency.to_string())
+                .bind(offering.monthly_price)
+                .bind(offering.setup_fee)
+                .bind(offering.visibility.to_string())
+                .bind(offering.product_type.to_string())
+                .bind(offering.virtualization_type.as_ref().map(|t| t.to_string()))
+                .bind(offering.billing_interval.to_string())
+                .bind(offering.stock.to_string())
+                .bind(&offering.processor_brand)
+                .bind(offering.processor_amount)
+                .bind(offering.processor_cores)
+                .bind(&offering.processor_speed)
+                .bind(&offering.processor_name)
+                .bind(offering.memory_error_correction.as_ref().map(|e| e.to_string()))
+                .bind(&offering.memory_type)
+                .bind(&offering.memory_amount)
+                .bind(offering.hdd_amount)
+                .bind(&offering.total_hdd_capacity)
+                .bind(offering.ssd_amount)
+                .bind(&offering.total_ssd_capacity)
+                .bind(!offering.unmetered.is_empty())
+                .bind(&offering.uplink_speed)
+                .bind(offering.traffic)
+                .bind(&offering.datacenter_country)
+                .bind(&offering.datacenter_city)
+                .bind(offering.datacenter_coordinates.map(|c| c.0))
+                .bind(offering.datacenter_coordinates.map(|c| c.1))
+                .bind(&offering.control_panel)
+                .bind(&offering.gpu_name)
+                .bind(price_per_hour_e9s)
+                .bind(price_per_day_e9s)
+                .bind(Some(1)) // min contract hours
+                .bind(None::<i64>) // max contract hours
+                .bind(entry.block_timestamp_ns as i64)
+                .fetch_one(&mut **tx)
+                .await?;
+
+                // Insert payment methods in normalized table
+                for payment_method in &offering.payment_methods {
+                    sqlx::query(
+                        "INSERT INTO provider_offerings_payment_methods (offering_id, payment_method) VALUES (?, ?)"
                     )
-                    .bind(&entry.key)
-                    .bind(&offering.unique_internal_identifier)
-                    .bind(offering.product_type.to_string())
-                    .bind(&offering.datacenter_country)
-                    .bind("monthly") // pricing model
-                    .bind(price_per_hour_e9s)
-                    .bind(price_per_day_e9s)
-                    .bind(Some(1)) // min contract hours
-                    .bind(None::<i64>) // max contract hours
-                    .bind(availability_json)
-                    .bind(tags)
-                    .bind(&offering.description)
-                    .bind(entry.block_timestamp_ns as i64)
+                    .bind(offering_id)
+                    .bind(payment_method)
                     .execute(&mut **tx)
                     .await?;
+                }
+
+                // Insert features in normalized table
+                for feature in &offering.features {
+                    sqlx::query(
+                        "INSERT INTO provider_offerings_features (offering_id, feature) VALUES (?, ?)"
+                    )
+                    .bind(offering_id)
+                    .bind(feature)
+                    .execute(&mut **tx)
+                    .await?;
+                }
+
+                // Insert operating systems in normalized table
+                for os in &offering.operating_systems {
+                    sqlx::query(
+                        "INSERT INTO provider_offerings_operating_systems (offering_id, operating_system) VALUES (?, ?)"
+                    )
+                    .bind(offering_id)
+                    .bind(os)
+                    .execute(&mut **tx)
+                    .await?;
+                }
             }
         }
         Ok(())
@@ -307,17 +374,22 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            let request = ContractSignRequest::try_from_slice(&entry.value)
-                .map_err(|e| anyhow::anyhow!("Failed to parse contract sign request: {}", e))?;
+            let payload =
+                ContractSignRequestPayload::try_from_slice(&entry.value).map_err(|e| {
+                    anyhow::anyhow!("Failed to parse contract sign request payload: {}", e)
+                })?;
+            let request = payload.deserialize_contract_sign_request().map_err(|e| {
+                anyhow::anyhow!("Failed to deserialize contract sign request: {}", e)
+            })?;
 
-            // Extract structured fields from the request
-            let contract_id = entry.key.clone(); // Use the ledger entry key as contract ID
+            // Use the calculated contract ID from the payload
+            let contract_id = payload.calc_contract_id().to_vec();
             let requester_pubkey_hash = request.requester_pubkey_bytes().to_vec();
             let requester_ssh_pubkey = request.requester_ssh_pubkey().clone();
             let requester_contact = request.requester_contact().clone();
             let provider_pubkey_hash = request.provider_pubkey_bytes().to_vec();
             let offering_id = request.offering_id().clone();
-            let region_name = request.contract_id().cloned(); // Note: field name might be confusing in original struct
+            let region_name = request.region_name().cloned();
             let instance_config = request.instance_config().cloned();
             let payment_amount_e9s = request.payment_amount_e9s() as i64;
             let start_timestamp = request.contract_start_timestamp();
@@ -342,9 +414,19 @@ impl Database {
             .execute(&mut **tx)
             .await?;
 
-            // Insert payment entries if available (need to extract from the payment_entries field)
-            // Note: The ContractSignRequest structure has payment_entries, but we need to parse them
-            // This would require access to the payment_entries field in the struct
+            // Insert payment entries from the request
+            for payment_entry in request.payment_entries() {
+                sqlx::query(
+                            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, ?, ?, ?, ?)"
+                        )
+                        .bind(&contract_id)
+                        .bind(&payment_entry.e.pricing_model)
+                        .bind(&payment_entry.e.time_period_unit)
+                        .bind(payment_entry.e.quantity as i64)
+                        .bind(payment_entry.amount_e9s as i64)
+                        .execute(&mut **tx)
+                        .await?;
+            }
         }
         Ok(())
     }
@@ -356,20 +438,25 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            let reply = ContractSignReply::try_from_slice(&entry.value)
-                .map_err(|e| anyhow::anyhow!("Failed to parse contract sign reply: {}", e))?;
+            let payload = ContractSignReplyPayload::try_from_slice(&entry.value).map_err(|e| {
+                anyhow::anyhow!("Failed to parse contract sign reply payload: {}", e)
+            })?;
+            let reply = payload
+                .deserialize_contract_sign_reply()
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize contract sign reply: {}", e))?;
 
-            // Use the entry key as contract ID since it's how contracts are identified
-            let contract_id = entry.key.clone();
-            let provider_pubkey_hash = entry.key.clone(); // Provider who signed the reply
+            // Use the contract ID from the reply structure
+            let contract_id = reply.contract_id().to_vec();
+            let provider_pubkey_hash = entry.key.clone(); // Provider who signed the reply (from entry key)
 
             // Extract reply status and memo from the reply structure
-            // Note: We need to access the actual fields of ContractSignReply
-            // For now, using placeholder values - this needs to be adjusted based on the actual struct
-            let reply_status = "accepted"; // Default, should be extracted from reply
-            let reply_memo = ""; // Default, should be extracted from reply
-            let instance_details = serde_json::to_string(&reply)
-                .map_err(|e| anyhow::anyhow!("Failed to serialize reply details: {}", e))?;
+            let reply_status = if reply.sign_accepted() {
+                "accepted"
+            } else {
+                "rejected"
+            };
+            let reply_memo = reply.response_text();
+            let instance_details = reply.response_details();
 
             sqlx::query(
                 "INSERT INTO contract_sign_replies (contract_id, provider_pubkey_hash, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, ?, ?, ?, ?)"
@@ -378,7 +465,7 @@ impl Database {
             .bind(&provider_pubkey_hash)
             .bind(reply_status)
             .bind(reply_memo)
-            .bind(&instance_details)
+            .bind(instance_details)
             .bind(entry.block_timestamp_ns as i64)
             .execute(&mut **tx)
             .await?;
@@ -437,14 +524,25 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            // Reward distributions are stored as a simple timestamp entry
+            // Reward distributions are stored as timestamp (8 bytes) in the value
+            // The value contains the timestamp of the distribution
+            let distribution_timestamp = if entry.value.len() >= 8 {
+                let bytes: [u8; 8] = entry.value[..8].try_into().unwrap_or([0; 8]);
+                u64::from_le_bytes(bytes)
+            } else {
+                entry.block_timestamp_ns
+            };
+
+            // Note: For detailed distribution amounts, we would need to query the reward distribution
+            // logs or calculate based on the reward logic. For now, we store the timestamp.
+            // The actual amounts distributed to providers would be recorded in token_transfers table.
             sqlx::query(
                 "INSERT INTO reward_distributions (block_timestamp_ns, total_amount_e9s, providers_count, amount_per_provider_e9s) VALUES (?, ?, ?, ?)"
             )
-            .bind(entry.block_timestamp_ns as i64)
-            .bind(0) // These would need to be parsed from actual reward data
-            .bind(0)
-            .bind(0)
+            .bind(distribution_timestamp as i64)
+            .bind(0) // TODO: Calculate from actual reward distribution data
+            .bind(0) // TODO: Count actual providers who received rewards
+            .bind(0) // TODO: Calculate per-provider amount
             .execute(&mut **tx)
             .await?;
         }
@@ -461,13 +559,27 @@ impl Database {
             let linked_ids = LinkedIcIdsRecord::try_from_slice(&entry.value)
                 .map_err(|e| anyhow::anyhow!("Failed to parse linked IC IDs: {}", e))?;
 
-            // For each added principal in the linked identities record
+            // Insert added principals
             for principal in linked_ids.alt_principals_add() {
                 sqlx::query(
-                    "INSERT OR REPLACE INTO linked_ic_ids (pubkey_hash, ic_principal, linked_at_ns) VALUES (?, ?, ?)"
+                    "INSERT INTO linked_ic_ids (pubkey_hash, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
                 )
                 .bind(&entry.key)
                 .bind(principal.to_text())
+                .bind("add")
+                .bind(entry.block_timestamp_ns as i64)
+                .execute(&mut **tx)
+                .await?;
+            }
+
+            // Insert removed principals
+            for principal in linked_ids.alt_principals_rm() {
+                sqlx::query(
+                    "INSERT INTO linked_ic_ids (pubkey_hash, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
+                )
+                .bind(&entry.key)
+                .bind(principal.to_text())
+                .bind("remove")
                 .bind(entry.block_timestamp_ns as i64)
                 .execute(&mut **tx)
                 .await?;

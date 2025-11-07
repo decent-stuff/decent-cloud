@@ -16,6 +16,8 @@ dotenv.workspace = true
 ic-agent.workspace = true
 ledger-map = { path = "../ledger-map" }
 poem.workspace = true
+provider-profile = { path = "../provider-profile" }
+provider-offering = { path = "../provider-offering" }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -845,6 +845,8 @@ dependencies = [
  "ic-agent",
  "ledger-map",
  "poem",
+ "provider-offering",
+ "provider-profile",
  "reqwest",
  "serde",
  "serde_json",

@@ -213,6 +213,18 @@ impl ContractSignRequest {
             ContractSignRequest::V1(v1) => &v1.request_memo,
         }
     }
+
+    pub fn region_name(&self) -> Option<&String> {
+        match self {
+            ContractSignRequest::V1(v1) => v1.region_name.as_ref(),
+        }
+    }
+
+    pub fn payment_entries(&self) -> &Vec<PaymentEntryWithAmount> {
+        match self {
+            ContractSignRequest::V1(v1) => &v1.payment_entries,
+        }
+    }
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]

@@ -1,5 +1,4 @@
-use crate::ledger_client::LedgerClient;
-use candid::{Decode, Encode, Principal};
+use candid::{Encode, Principal};
 
 #[test]
 fn test_ledger_client_new_valid_parameters() {

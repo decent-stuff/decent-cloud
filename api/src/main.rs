@@ -22,14 +22,7 @@ struct HealthResponse {
     environment: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ApiResponse<T> {
-    success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-}
+
 
 #[derive(Debug, Deserialize)]
 struct CanisterRequest {
