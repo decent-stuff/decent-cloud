@@ -3,7 +3,7 @@ services:
   website:
     build:
       context: ..
-      dockerfile: cf/Dockerfile.prod
+      dockerfile: cf/Dockerfile
       args:
         BUILDKIT_INLINE_CACHE: 1
     image: decent-cloud-website:${ENVIRONMENT:-dev}

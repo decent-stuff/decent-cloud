@@ -26,7 +26,7 @@ python3 deploy_prod.py   # Production
 
 - **docker-compose.yml** - Base Docker Compose configuration
 - **docker-compose.prod.yml** - Production overrides (adds Cloudflare Tunnel)
-- **Dockerfile.prod** - Multi-stage build for website
+- **Dockerfile** - Multi-stage build for website
 
 ### Configuration
 

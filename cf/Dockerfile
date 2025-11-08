@@ -68,16 +68,24 @@ COPY website/package*.json ./website/
 RUN cd wasm && npm ci --ignore-scripts && \
     cd ../website && npm ci --ignore-scripts
 
-# Now copy source and build
-COPY wasm ./wasm
-COPY website ./website
+# Copy WASM source in stages for better caching
+# First copy Rust source files (most likely to change)
+COPY wasm/src ./wasm/src
+COPY wasm/*.ts ./wasm/
+COPY wasm/*.js ./wasm/
+COPY wasm/package.json ./wasm/
 
-# Initialize git repo for build.js
+# Initialize git repo for build.js (needed for incremental builds)
 RUN git init && git config user.email "docker@build" && git config user.name "Docker Build"
 
-# Build WASM and website
-RUN cd wasm && npm run build && \
-    cd ../website && npm run build
+# Build WASM first (cached layer)
+RUN cd wasm && npm run build
+
+# Copy website source after WASM is built (separate layer)
+COPY website ./website
+
+# Build website (cached layer - only rebuilds if website source changes)
+RUN cd website && npm run build
 
 # Stage 2: Runtime with nginx
 FROM --platform=linux/amd64 nginx:alpine

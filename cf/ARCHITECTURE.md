@@ -43,7 +43,7 @@ api.decent-cloud.org (API)
 - `cf/docker-compose.dev.yml` - Development overrides
 
 ### Dockerfiles
-- `cf/Dockerfile.prod` - Multi-stage build for website (Next.js + nginx)
+- `cf/Dockerfile` - Multi-stage build for website (Next.js + nginx)
 - `api/Dockerfile` - Multi-stage build for API (Rust + poem)
 
 ### Python Scripts
