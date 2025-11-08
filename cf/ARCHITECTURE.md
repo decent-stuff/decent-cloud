@@ -48,9 +48,7 @@ api.decent-cloud.org (API)
 
 ### Python Scripts
 - `cf/setup_tunnel.py` - Interactive tunnel configuration wizard
-- `cf/deploy_prod.py` - Deploy production environment
-- `cf/deploy_dev.py` - Deploy development environment
-- `cf/cf_common.py` - Shared utilities
+- `cf/deploy.py` - Deploy environment
 
 ## Cloudflare Tunnel Configuration
 

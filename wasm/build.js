@@ -244,7 +244,7 @@ async function main() {
 
     // Copy additional files only if their source is newer than the target.
     console.log('Copying additional files...');
-    const filesToCopy = [
+    var filesToCopy = [
       ['canister_idl.js', 'canister_idl.js'],
       ['dc-client.js', 'dc-client.js'],
       ['dc-client-worker.js', 'dc-client-worker.js'],
@@ -252,7 +252,6 @@ async function main() {
       ['db.ts', 'db.ts'],
       ['agent.ts', 'agent.ts'],
       ['ledger.ts', 'ledger.ts'],
-      ['LICENSE', 'LICENSE'],
     ];
 
     filesToCopy.forEach(([src, dest]) => {

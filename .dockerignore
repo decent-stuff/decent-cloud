@@ -16,8 +16,8 @@
 # Development and documentation
 docs/
 examples/
-.vscode/
-.idea/
+**/.idea
+**/.vscode
 **/*.md
 **/*.pdf
 **/*.svg
@@ -26,6 +26,7 @@ examples/
 # Configuration and temporary files
 **/.env*
 !.env.example
+**/.DS_Store
 **/*.log
 **/*.swp
 **/*.swo
