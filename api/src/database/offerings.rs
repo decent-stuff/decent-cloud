@@ -1,12 +1,13 @@
+use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::{offerings, DC_TOKEN_DECIMALS_DIV};
-use super::types::{Database, LedgerEntryData};
 
 impl Database {
     // Helper function to calculate pricing from monthly price
     fn calculate_pricing(monthly_price: f64) -> (i64, i64) {
-        let price_per_hour_e9s = (monthly_price / 30.0 / 24.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
+        let price_per_hour_e9s =
+            (monthly_price / 30.0 / 24.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
         let price_per_day_e9s = (monthly_price / 30.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
         (price_per_hour_e9s, price_per_day_e9s)
     }
@@ -33,7 +34,7 @@ impl Database {
         // Insert features in normalized table
         for feature in features {
             sqlx::query(
-                "INSERT INTO provider_offerings_features (offering_id, feature) VALUES (?, ?)"
+                "INSERT INTO provider_offerings_features (offering_id, feature) VALUES (?, ?)",
             )
             .bind(offering_id)
             .bind(feature)
@@ -71,7 +72,7 @@ impl Database {
 
             // Store each offering as a fully structured record
             for offering in &provider_offerings.server_offerings {
-                let (price_per_hour_e9s, price_per_day_e9s) = 
+                let (price_per_hour_e9s, price_per_day_e9s) =
                     Self::calculate_pricing(offering.monthly_price);
 
                 // Insert main offering record
@@ -139,7 +140,8 @@ impl Database {
                     &offering.payment_methods,
                     &offering.features,
                     &offering.operating_systems,
-                ).await?;
+                )
+                .await?;
             }
         }
         Ok(())

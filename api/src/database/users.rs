@@ -1,5 +1,5 @@
-use anyhow::Result;
 use super::types::{Database, LedgerEntryData};
+use anyhow::Result;
 
 impl Database {
     // User registrations

@@ -4,6 +4,8 @@ services:
     build:
       context: ..
       dockerfile: cf/Dockerfile.prod
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     image: decent-cloud-website:${ENVIRONMENT:-dev}
     restart: unless-stopped
     environment:
@@ -22,6 +24,7 @@ services:
       args:
         USER_ID: ${USER_ID:-1000}
         GROUP_ID: ${GROUP_ID:-1000}
+        BUILDKIT_INLINE_CACHE: 1
     image: decent-cloud-api:${ENVIRONMENT:-dev}
     restart: unless-stopped
     environment:
@@ -32,7 +35,7 @@ services:
       - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
       - LEDGER_DIR=/data/ledger
     volumes:
-      - ../data/api-data:/data
+      - ../data/api-data-prod:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 30s

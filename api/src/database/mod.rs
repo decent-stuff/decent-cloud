@@ -1,14 +1,14 @@
-pub mod types;
+pub mod contracts;
 pub mod core;
 pub mod handlers;
-pub mod providers;
+pub mod identity;
 pub mod offerings;
-pub mod contracts;
-pub mod tokens;
-pub mod users;
+pub mod providers;
 pub mod reputation;
 pub mod rewards;
-pub mod identity;
+pub mod tokens;
+pub mod types;
+pub mod users;
 
 // Re-export main types
 pub use types::{Database, LedgerEntryData};

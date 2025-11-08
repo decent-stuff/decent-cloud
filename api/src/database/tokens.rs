@@ -1,6 +1,6 @@
+use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use dcc_common::{FundsTransfer, FundsTransferApproval};
-use super::types::{Database, LedgerEntryData};
 
 impl Database {
     // Token transfers

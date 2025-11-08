@@ -1,6 +1,6 @@
+use super::types::Database;
 use anyhow::Result;
 use sqlx::{Row, SqlitePool};
-use super::types::Database;
 
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
@@ -10,9 +10,10 @@ impl Database {
     }
 
     pub async fn get_last_sync_position(&self) -> Result<u64> {
-        let row: sqlx::sqlite::SqliteRow = sqlx::query("SELECT last_position FROM sync_state WHERE id = 1")
-            .fetch_one(&self.pool)
-            .await?;
+        let row: sqlx::sqlite::SqliteRow =
+            sqlx::query("SELECT last_position FROM sync_state WHERE id = 1")
+                .fetch_one(&self.pool)
+                .await?;
         Ok(row.get::<i64, _>("last_position") as u64)
     }
 

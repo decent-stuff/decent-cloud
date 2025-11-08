@@ -11,10 +11,8 @@ services:
     container_name: decent-cloud-api-dev
     ports:
       - "59001:8080"  # Dev: host 59001 -> container 8080
-    # Unset LEDGER_DIR to allow fallback to temp directory
-    # This enables multiple dev containers and easier cleanup
-    environment:
-      LEDGER_DIR: /tmp/ledger-dev  # Use temp directory for dev
+    volumes:
+      - ../data/api-data-dev:/data
     networks:
       - decent-cloud-dev
 

@@ -1,7 +1,7 @@
+use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::{cache_reputation::ReputationAge, cache_reputation::ReputationChange};
-use super::types::{Database, LedgerEntryData};
 
 impl Database {
     // Reputation changes

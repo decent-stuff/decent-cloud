@@ -1,7 +1,7 @@
+use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::linked_identity::LinkedIcIdsRecord;
-use super::types::{Database, LedgerEntryData};
 
 impl Database {
     // Linked IC identities

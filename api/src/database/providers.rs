@@ -1,8 +1,8 @@
+use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::{CheckInPayload, UpdateProfilePayload};
 use provider_profile::Profile;
-use super::types::{Database, LedgerEntryData};
 
 impl Database {
     // Provider registrations
