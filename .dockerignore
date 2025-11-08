@@ -7,15 +7,13 @@
 **/target/
 !**/target/x86_64-unknown-linux-gnu/release/api-server
 **/dist/
-!**/website/out/
 **/node_modules/
 **/build/
 **/.next/
 **/out/
-!**/wasm/dist/
-**/*.wasm
-!**/wasm/dist/*.wasm
-**/.wasm-pack-cache/
+# Allow website/out and wasm/dist for Docker builds
+!website/out/
+!wasm/dist/
 
 # Development and documentation
 docs/
@@ -24,8 +22,6 @@ examples/
 **/.vscode
 **/*.md
 **/*.pdf
-**/*.svg
-**/*.png
 
 # Configuration and temporary files
 **/.env*
@@ -49,7 +45,6 @@ examples/
 # Project-specific
 pitch/
 whitepaper/
-images/
 cf/data/
 data/
 **/data/

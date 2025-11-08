@@ -1,4 +1,4 @@
-# Development overrides - adds Cloudflare Tunnel
+# Development overrides - no tunnel, access via localhost only
 services:
   website:
     container_name: decent-cloud-website-dev
@@ -15,21 +15,6 @@ services:
       - ../data/api-data-dev:/data
     networks:
       - decent-cloud-dev
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: decent-cloud-tunnel-dev
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN
-    networks:
-      - decent-cloud-dev
-    depends_on:
-      website:
-        condition: service_healthy
-      api:
-        condition: service_healthy
 
 networks:
   decent-cloud-dev:

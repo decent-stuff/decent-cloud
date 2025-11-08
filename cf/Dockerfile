@@ -22,9 +22,36 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # SPA routing - try files, fallback to index.html
+    # Serve static assets directly
+    location ~* \.(ico|png|svg|jpg|jpeg|wasm|js|css)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
+    # Next.js static files
+    location /_next/static/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
+    # Favicon
+    location /favicon.svg {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
+    # HTML pages - try exact file, then with .html extension, then 404
     location / {
-        try_files \$uri \$uri/ /index.html;
+        try_files \$uri \$uri.html \$uri/ =404;
+    }
+
+    # Custom 404 page
+    error_page 404 /404.html;
+    location = /404.html {
+        internal;
     }
 
     # Health check endpoint
@@ -38,6 +65,9 @@ EOF
 
 # Copy pre-built website output (assumes website was built natively first)
 COPY website/out /usr/share/nginx/html
+
+# Copy images directory
+COPY images /usr/share/nginx/html/images
 
 EXPOSE 3000
 
