@@ -106,7 +106,9 @@ impl SyncService {
 
     fn parse_ledger_data(&self, data: &[u8]) -> Result<Vec<crate::database::LedgerEntryData>> {
         let mut entries = Vec::new();
-        let parser = self.ledger_parser.lock().unwrap();
+        let parser = self.ledger_parser.lock().map_err(|_| {
+            anyhow::anyhow!("Failed to acquire ledger parser lock - possible poisoning")
+        })?;
 
         for block_result in parser.iter_raw_from_slice(data) {
             let (_block_header, block, block_hash) = block_result?;

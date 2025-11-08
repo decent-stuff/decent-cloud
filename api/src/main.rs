@@ -65,11 +65,17 @@ async fn canister_proxy(
     // 4. Call canister method
     // 5. Return result in CFResponse<T> format
 
-    unimplemented!(
-        "Canister proxy for method '{}' not yet implemented. \
-        Need to integrate ic-agent and implement canister method calls.",
-        method.0
-    );
+    // For now, return a meaningful error response instead of panicking
+    let error_response = serde_json::json!({
+        "success": false,
+        "error": format!("Canister method '{}' not yet implemented", method.0),
+        "message": "ICP canister integration is pending implementation"
+    });
+
+    poem::Response::builder()
+        .status(poem::http::StatusCode::NOT_IMPLEMENTED)
+        .header(poem::http::header::CONTENT_TYPE, "application/json")
+        .body(error_response.to_string())
 }
 
 #[tokio::main]
