@@ -1,12 +1,16 @@
 -- Fix foreign key constraints for contract_sign_replies and contract_payment_entries
--- SQLite doesn't support adding UNIQUE constraints to columns referenced by foreign keys
--- We need to recreate the contract_sign_requests table with the proper constraints
+-- Only fix the contract_sign_requests table to have UNIQUE constraint on contract_id
+-- This resolves the foreign key mismatch error
 
--- Disable foreign key constraints temporarily
 PRAGMA foreign_keys = OFF;
 
--- Create the new contract_sign_requests table with UNIQUE constraint on contract_id
-CREATE TABLE contract_sign_requests_new (
+-- Drop the problematic tables first
+DROP TABLE IF EXISTS contract_sign_replies;
+DROP TABLE IF EXISTS contract_payment_entries;
+DROP TABLE IF EXISTS contract_sign_requests;
+
+-- Recreate contract_sign_requests with UNIQUE constraint on contract_id
+CREATE TABLE contract_sign_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contract_id BLOB NOT NULL UNIQUE,
     requester_pubkey_hash BLOB NOT NULL,
@@ -24,38 +28,36 @@ CREATE TABLE contract_sign_requests_new (
     status TEXT DEFAULT 'pending' -- pending, accepted, rejected, completed, cancelled
 );
 
--- Copy data from old table, keeping only the latest record for each contract_id
-INSERT INTO contract_sign_requests_new (
-    id, contract_id, requester_pubkey_hash, requester_ssh_pubkey, 
-    requester_contact, provider_pubkey_hash, offering_id, region_name,
-    instance_config, payment_amount_e9s, start_timestamp, request_memo,
-    created_at_ns, created_at, status
-)
-SELECT 
-    MAX(id) as id,
-    contract_id,
-    requester_pubkey_hash,
-    requester_ssh_pubkey,
-    requester_contact,
-    provider_pubkey_hash,
-    offering_id,
-    region_name,
-    instance_config,
-    payment_amount_e9s,
-    start_timestamp,
-    request_memo,
-    created_at_ns,
-    created_at,
-    status
-FROM contract_sign_requests
-GROUP BY contract_id
-ORDER BY MAX(id);
+-- Recreate contract_payment_entries with proper foreign key
+CREATE TABLE contract_payment_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id BLOB NOT NULL,
+    pricing_model TEXT NOT NULL, -- on_demand, reserved, spot
+    time_period_unit TEXT NOT NULL, -- hour, day, month, year
+    quantity INTEGER NOT NULL,
+    amount_e9s INTEGER NOT NULL,
+    FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE
+);
 
--- Drop the old table
-DROP TABLE contract_sign_requests;
+-- Recreate contract_sign_replies with proper foreign key
+CREATE TABLE contract_sign_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id BLOB NOT NULL,
+    provider_pubkey_hash BLOB NOT NULL,
+    reply_status TEXT NOT NULL, -- accepted, rejected
+    reply_memo TEXT,
+    instance_details TEXT, -- connection details, IP addresses, etc.
+    created_at_ns INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE
+);
 
--- Rename the new table to the original name
-ALTER TABLE contract_sign_requests_new RENAME TO contract_sign_requests;
+-- Recreate indexes
+CREATE INDEX idx_contract_sign_requests_contract_id ON contract_sign_requests(contract_id);
+CREATE INDEX idx_contract_sign_requests_requester_pubkey_hash ON contract_sign_requests(requester_pubkey_hash);
+CREATE INDEX idx_contract_sign_requests_provider_pubkey_hash ON contract_sign_requests(provider_pubkey_hash);
+CREATE INDEX idx_contract_sign_requests_status ON contract_sign_requests(status);
+CREATE INDEX idx_contract_payment_entries_contract_id ON contract_payment_entries(contract_id);
+CREATE INDEX idx_contract_sign_replies_contract_id ON contract_sign_replies(contract_id);
 
--- Re-enable foreign key constraints
 PRAGMA foreign_keys = ON;

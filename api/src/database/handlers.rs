@@ -48,8 +48,14 @@ impl Database {
                 "NPCheckIn" => self.insert_provider_check_ins(&mut tx, &entries).await?,
                 // Skip all offering entries (ProvOffering, NPOffering) - will be handled in DB
                 "ProvOffering" | "NPOffering" => {
-                    tracing::debug!("Skipping offering entry: {} - offerings will be handled directly in DB", entries.first().map(|e| e.label.as_str()).unwrap_or("unknown"));
-                },
+                    tracing::debug!(
+                        "Skipping offering entry: {} - offerings will be handled directly in DB",
+                        entries
+                            .first()
+                            .map(|e| e.label.as_str())
+                            .unwrap_or("unknown")
+                    );
+                }
                 _ => tracing::warn!("Unknown ledger entry label: {}", label),
             }
         }
