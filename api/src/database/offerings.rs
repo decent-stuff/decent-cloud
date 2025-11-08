@@ -3,8 +3,10 @@ use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::{offerings, DC_TOKEN_DECIMALS_DIV};
 
+#[allow(dead_code)]
 impl Database {
     // Helper function to calculate pricing from monthly price
+    #[allow(dead_code)]
     fn calculate_pricing(monthly_price: f64) -> (i64, i64) {
         let price_per_hour_e9s =
             (monthly_price / 30.0 / 24.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
@@ -13,6 +15,7 @@ impl Database {
     }
 
     // Helper function to insert offering metadata
+    #[allow(dead_code)]
     async fn insert_offering_metadata(
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         offering_id: i64,
@@ -57,14 +60,23 @@ impl Database {
     }
 
     // Provider offerings
+    #[allow(dead_code)]
     pub async fn insert_provider_offerings(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            let offering_payload = offerings::UpdateOfferingsPayload::try_from_slice(&entry.value)
-                .map_err(|e| anyhow::anyhow!("Failed to parse offering payload: {}", e))?;
+            let offering_payload = match offerings::UpdateOfferingsPayload::try_from_slice(
+                &entry.value,
+            ) {
+                Ok(payload) => payload,
+                Err(e) => {
+                    tracing::warn!("Skipping malformed offering entry with key {:?}: {}. Raw data (first 50 bytes): {:?}", 
+                        &entry.key, e, &entry.value.get(..50));
+                    continue; // Skip this entry and continue with others
+                }
+            };
             let provider_key = &entry.key;
             let provider_offerings = offering_payload
                 .deserialize_offerings(provider_key)

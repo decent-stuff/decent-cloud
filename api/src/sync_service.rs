@@ -116,8 +116,13 @@ impl SyncService {
             let block_offset = block.get_offset();
 
             for entry in block.entries() {
+                let label = entry.label();
+                // Skip offering entries - they will be handled directly in the DB
+                if label == "ProvOffering" || label == "NPOffering" {
+                    continue;
+                }
                 entries.push(crate::database::LedgerEntryData {
-                    label: entry.label().to_string(),
+                    label: label.to_string(),
                     key: entry.key().to_vec(),
                     value: entry.value().to_vec(),
                     block_timestamp_ns: block_timestamp,

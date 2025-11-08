@@ -28,7 +28,6 @@ impl Database {
                 }
                 "ProvCheckIn" => self.insert_provider_check_ins(&mut tx, &entries).await?,
                 "ProvProfile" => self.insert_provider_profiles(&mut tx, &entries).await?,
-                "ProvOffering" => self.insert_provider_offerings(&mut tx, &entries).await?,
                 "DCTokenTransfer" => self.insert_token_transfers(&mut tx, &entries).await?,
                 "DCTokenApproval" => self.insert_token_approvals(&mut tx, &entries).await?,
                 "UserRegister" => self.insert_user_registrations(&mut tx, &entries).await?,
@@ -47,7 +46,10 @@ impl Database {
                         .await?
                 }
                 "NPCheckIn" => self.insert_provider_check_ins(&mut tx, &entries).await?,
-                "NPOffering" => self.insert_provider_offerings(&mut tx, &entries).await?,
+                // Skip all offering entries (ProvOffering, NPOffering) - will be handled in DB
+                "ProvOffering" | "NPOffering" => {
+                    tracing::debug!("Skipping offering entry: {} - offerings will be handled directly in DB", entries.first().map(|e| e.label.as_str()).unwrap_or("unknown"));
+                },
                 _ => tracing::warn!("Unknown ledger entry label: {}", label),
             }
         }
