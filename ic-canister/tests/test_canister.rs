@@ -703,7 +703,7 @@ fn test_ledger_entries_pagination() {
     // Get second page using the cursor from first page
     let result2 = test_ledger_entries(&ctx, None, result1.next_cursor.clone(), Some(2), None);
     assert!(result2.entries.len() <= 2);
-    assert!(result2.entries.len() > 0); // Should have at least some entries
+    assert!(!result2.entries.is_empty()); // Should have at least some entries
 
     // Verify no overlap between pages
     let keys1: Vec<_> = result1.entries.iter().map(|e| &e.key).collect();

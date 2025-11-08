@@ -9,8 +9,8 @@ This directory contains Docker and Python scripts for deploying the Decent Cloud
 python3 setup_tunnel.py
 
 # 2. Deploy
-python3 deploy_dev.py    # Development
-python3 deploy_prod.py   # Production
+python3 deploy.py deploy dev    # Development
+python3 deploy.py deploy prod   # Production
 ```
 
 ## Files
@@ -18,15 +18,14 @@ python3 deploy_prod.py   # Production
 ### Python Scripts
 
 - **setup_tunnel.py** - Interactive setup wizard for Cloudflare Tunnel configuration
-- **deploy_dev.py** - Deploy to development environment
-- **deploy_prod.py** - Deploy to production environment
+- **deploy.py** - Unified deployment script with native build support (replaces deploy_dev.py and deploy_prod.py)
 - **cf_common.py** - Shared utilities (validation, env loading, Docker operations)
 
 ### Docker Files
 
 - **docker-compose.yml** - Base Docker Compose configuration
 - **docker-compose.prod.yml** - Production overrides (adds Cloudflare Tunnel)
-- **Dockerfile** - Multi-stage build for website
+- **Dockerfile** - Builds the docker image for website (assumes native build)
 
 ### Configuration
 

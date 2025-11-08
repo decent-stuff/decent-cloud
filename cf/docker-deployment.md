@@ -1,6 +1,6 @@
 # Docker Deployment with Cloudflare Tunnel
 
-This guide explains how to deploy the Decent Cloud website using Docker Compose with Cloudflare Tunnel for secure external access.
+This guide explains how to deploy the Decent Cloud website with native build process and Cloudflare Tunnel for secure external access.
 
 ## Overview
 
@@ -8,6 +8,19 @@ The deployment consists of:
 - **website**: Static Next.js website served via nginx (this deployment)
 - **cloudflared**: Cloudflare Tunnel connector for secure external access
 - **cloudflare-api**: Cloudflare Workers API (separate deployment, see `cloudflare-api/` directory)
+
+## Docker Images
+
+This deployment uses simplified Dockerfiles that assume components are built natively first:
+- **cf/Dockerfile**: Builds website from externally-built WASM modules
+- **api/Dockerfile**: Runs API from externally-built Rust binary
+- **deploy.py**: Python script that handles native builds before Docker deployment
+
+**Benefits of the simplified approach:**
+- Faster builds by avoiding in-container compilation
+- Better caching of native build artifacts
+- Smaller Docker images (no build tools needed)
+- Clear separation of build and runtime concerns
 
 ## Architecture
 
@@ -58,12 +71,14 @@ Cloudflare Network
 
 ## Quick Setup with Python Scripts (Recommended)
 
-Python scripts are provided for automated deployment. They handle validation, environment setup, and provide clear feedback.
+Python scripts facilitate the automated deployment with the simplified Docker approach. They handle native builds, validation, environment setup, and provide clear feedback.
 
 ### Prerequisites
 
 - Python 3.10 or higher
 - Docker and Docker Compose
+- Rust toolchain (for native API builds)
+- Node.js and npm (for native WASM builds)
 - A Cloudflare account with access to your domain
 
 ### Quick Start
@@ -75,16 +90,18 @@ cd cf
 python3 setup_tunnel.py
 
 # 2. Deploy to development
-python3 deploy_dev.py
+python3 deploy.py deploy dev
 
 # Or deploy to production
-python3 deploy_prod.py
+python3 deploy.py deploy prod
 ```
 
 The scripts will:
-- Validate Docker installation
+- Validate Docker and build tool installation
 - Check for tunnel token (stored in `.env`, not on command line)
-- Build and start containers
+- Build WASM modules natively (faster than in-container builds)
+- Build API server binary natively (optimized for target platform)
+- Build and start containers using simplified Dockerfiles
 - Verify tunnel connection
 - Provide helpful feedback and troubleshooting
 
@@ -154,19 +171,23 @@ Using Python scripts (recommended):
 cd cf
 
 # Development
-python3 deploy_dev.py
+python3 deploy.py deploy dev
 
 # Production
-python3 deploy_prod.py
+python3 deploy.py deploy prod
 ```
 
-Or manually with docker compose:
+Or manually with docker compose (using simplified Dockerfiles):
 ```bash
 cd cf
 
 # Load the tunnel token and start services
 source .env && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
+
+**Note:** The simplified Dockerfiles assume native builds have been completed first. When using manual docker compose, ensure you've built:
+- WASM modules: `cd wasm && node build.js`
+- API binary: `cargo build --release --bin api-server --target x86_64-unknown-linux-gnu`
 
 ### Step 6: Verify Deployment
 
@@ -220,9 +241,11 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 # Pull latest code changes
 git pull
 
-# Rebuild and restart
+# Rebuild and restart (using simplified Dockerfiles)
 export $(cat .env.tunnel | xargs) && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
+
+**Note:** The simplified Dockerfiles will rebuild quickly since they don't need to compile WASM or Rust code in-container. The native builds are handled by the deploy.py script.
 
 ## Monitoring
 

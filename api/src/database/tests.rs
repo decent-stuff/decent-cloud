@@ -8,7 +8,7 @@ use sqlx::{Row, SqlitePool};
 /// 2. File-based migrations cause test isolation issues and cleanup complexity  
 /// 3. Manual creation gives us precise control over test schema
 /// 4. The manual schema matches migration 001_flattened_schema.sql
-
+///
 /// Test data factory for creating consistent test entries
 struct TestDataFactory;
 impl TestDataFactory {
@@ -247,7 +247,7 @@ async fn test_bulk_insert_performance() {
             .to_bytes()
             .unwrap(),
             timestamp,
-            i as u64,
+            i,
         ));
     }
 

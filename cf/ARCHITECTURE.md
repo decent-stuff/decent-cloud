@@ -43,8 +43,8 @@ api.decent-cloud.org (API)
 - `cf/docker-compose.dev.yml` - Development overrides
 
 ### Dockerfiles
-- `cf/Dockerfile` - Multi-stage build for website (Next.js + nginx)
-- `api/Dockerfile` - Multi-stage build for API (Rust + poem)
+- `cf/Dockerfile` - Build for website (assumes website built natively and then added to the image)
+- `api/Dockerfile` - Build for API (assumes binary built natively and then added to the image)
 
 ### Python Scripts
 - `cf/setup_tunnel.py` - Interactive tunnel configuration wizard

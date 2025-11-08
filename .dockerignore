@@ -5,12 +5,16 @@
 
 # Build artifacts and dependencies (except what's needed for build)
 **/target/
+!**/target/x86_64-unknown-linux-gnu/release/api-server
 **/dist/
+!**/website/out/
 **/node_modules/
 **/build/
 **/.next/
 **/out/
+!**/wasm/dist/
 **/*.wasm
+!**/wasm/dist/*.wasm
 **/.wasm-pack-cache/
 
 # Development and documentation
