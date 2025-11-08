@@ -598,8 +598,8 @@ fn test_ledger_entries_with_committed_data() {
     let ctx = TestContext::new();
 
     // Register providers and commit
-    let (prov1, _) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-    let (prov2, _) = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_prov1, _) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
+    let (_prov2, _) = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
 
     // Commit the block
     ctx.commit();
@@ -690,7 +690,7 @@ fn test_ledger_entries_pagination() {
     // Register multiple providers to create enough entries
     for i in 0..5 {
         let seed = format!("prov{}", i);
-        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
     }
     ctx.commit();
 
@@ -720,7 +720,7 @@ fn test_ledger_entries_pagination_with_filter() {
     // Register 10 providers
     for i in 0..10 {
         let seed = format!("prov{}", i);
-        test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
     }
     ctx.commit();
 

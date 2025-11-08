@@ -131,7 +131,7 @@ impl Database {
                 .map_err(|e| anyhow::anyhow!("Failed to parse check-in: {}", e))?;
 
             sqlx::query(
-                "INSERT OR IGNORE INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
+                "INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
             )
             .bind(&entry.key)
             .bind(check_in.memo())
@@ -410,7 +410,7 @@ impl Database {
 
             // Insert the main contract request
             sqlx::query(
-                "INSERT OR IGNORE INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&contract_id)
             .bind(&requester_pubkey_hash)
@@ -607,3 +607,6 @@ impl Database {
         &self.pool
     }
 }
+
+#[cfg(test)]
+mod tests;

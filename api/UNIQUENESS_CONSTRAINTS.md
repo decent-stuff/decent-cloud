@@ -16,9 +16,9 @@ The tuple (block offset, label, key) is always unique for ledger entries.
 - `provider_profiles.pubkey_hash`
 - `user_registrations.pubkey_hash`
 
-### Tables without UNIQUE constraints (use INSERT OR IGNORE for duplicates):
-- `contract_sign_requests` - duplicate contract IDs may appear in ledger
-- `provider_check_ins` - multiple check-ins allowed per provider
+### Tables that should store ALL entries (use regular INSERT):
+- `provider_check_ins` - store all check-ins for historical tracking and uptime analysis
+- `contract_sign_requests` - store all requests for complete audit trail
 
 ### Transactional tables (use regular INSERT - each entry is distinct):
 - `token_transfers`, `token_approvals`, `contract_payment_entries`
