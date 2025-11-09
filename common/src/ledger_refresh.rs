@@ -2,7 +2,17 @@ use crate::account_transfer_approvals::{approval_update, FundsTransferApproval};
 use crate::account_transfers::FundsTransfer;
 use crate::cache_transactions::RecentCache;
 use crate::{
-    AHashMap, CheckInPayload, ContractSignReplyPayload, ContractSignRequest, ContractSignRequestPayload, DccIdentity, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, LinkedIcIdsRecord, PRINCIPAL_MAP, ReputationAge, ReputationChange, UpdateOfferingsPayload, UpdateProfilePayload, account_balance_add, account_balance_sub, account_balances_clear, cache_update_from_ledger_record, contracts_cache_open_add, contracts_cache_open_remove, dcc_identity, error, reputations_apply_aging, reputations_apply_changes, reputations_clear, set_num_providers, set_num_users, set_offering_num_per_provider
+    account_balance_add, account_balance_sub, account_balances_clear,
+    cache_update_from_ledger_record, contracts_cache_open_add, contracts_cache_open_remove,
+    dcc_identity, error, reputations_apply_aging, reputations_apply_changes, reputations_clear,
+    set_num_providers, set_num_users, set_offering_num_per_provider, AHashMap, CheckInPayload,
+    ContractSignReplyPayload, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
+    LinkedIcIdsRecord, ReputationAge, ReputationChange, UpdateOfferingsPayload,
+    UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
+    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN,
+    LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN,
+    LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE,
+    LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -432,7 +442,9 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
             LABEL_PROV_CHECK_IN | LABEL_NP_CHECK_IN => {
                 WasmLedgerEntry::from_provider_check_in(entry, block.parent_hash())
             }
-            LABEL_PROV_OFFERING | LABEL_NP_OFFERING => WasmLedgerEntry::from_provider_offering(entry),
+            LABEL_PROV_OFFERING | LABEL_NP_OFFERING => {
+                WasmLedgerEntry::from_provider_offering(entry)
+            }
             LABEL_PROV_PROFILE | LABEL_NP_PROFILE => WasmLedgerEntry::from_provider_profile(entry),
             LABEL_PROV_REGISTER | LABEL_NP_REGISTER => {
                 WasmLedgerEntry::from_account_register(entry, block.parent_hash())

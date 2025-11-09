@@ -2,8 +2,8 @@ mod database;
 mod ledger_client;
 mod sync_service;
 
-use clap::{Parser, Subcommand};
 use candid::Principal;
+use clap::{Parser, Subcommand};
 use database::Database;
 use ledger_client::LedgerClient;
 use poem::{
@@ -187,10 +187,16 @@ async fn sync_command() -> Result<(), std::io::Error> {
     let ctx = setup_app_context().await?;
 
     // Run sync service
-    let sync_service =
-        SyncService::new(ctx.ledger_client.clone(), ctx.database.clone(), ctx.sync_interval_secs);
+    let sync_service = SyncService::new(
+        ctx.ledger_client.clone(),
+        ctx.database.clone(),
+        ctx.sync_interval_secs,
+    );
 
-    tracing::info!("Running sync service with {}s interval", ctx.sync_interval_secs);
+    tracing::info!(
+        "Running sync service with {}s interval",
+        ctx.sync_interval_secs
+    );
     sync_service.run().await;
 
     Ok(())

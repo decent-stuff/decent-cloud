@@ -17,6 +17,8 @@ web-sys = { version = "0.3.82", features = [
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
 fs-err.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
