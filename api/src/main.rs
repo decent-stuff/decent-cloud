@@ -1,3 +1,4 @@
+mod api_handlers;
 mod database;
 mod ledger_client;
 mod sync_service;
@@ -170,14 +171,80 @@ async fn serve_command() -> Result<(), std::io::Error> {
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
-    // TODO: Serve DB data to the frontend over some HTTP endpoints, using ctx
-    // let ctx = setup_app_context().await?;
+    let ctx = setup_app_context().await?;
 
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
     let app = Route::new()
+        // Health check
         .at("/api/v1/health", poem::get(health))
+        // Legacy canister proxy
         .at("/api/v1/canister/:method", post(canister_proxy))
+        // Provider endpoints
+        .at("/api/v1/providers", poem::get(api_handlers::list_providers))
+        .at(
+            "/api/v1/providers/active/:days",
+            poem::get(api_handlers::get_active_providers),
+        )
+        .at(
+            "/api/v1/providers/:pubkey",
+            poem::get(api_handlers::get_provider_profile),
+        )
+        .at(
+            "/api/v1/providers/:pubkey/contacts",
+            poem::get(api_handlers::get_provider_contacts),
+        )
+        .at(
+            "/api/v1/providers/:pubkey/offerings",
+            poem::get(api_handlers::get_provider_offerings),
+        )
+        .at(
+            "/api/v1/providers/:pubkey/contracts",
+            poem::get(api_handlers::get_provider_contracts),
+        )
+        .at(
+            "/api/v1/providers/:pubkey/stats",
+            poem::get(api_handlers::get_provider_stats),
+        )
+        // Offering endpoints
+        .at(
+            "/api/v1/offerings",
+            poem::get(api_handlers::search_offerings),
+        )
+        .at(
+            "/api/v1/offerings/:id",
+            poem::get(api_handlers::get_offering),
+        )
+        // Contract endpoints
+        .at("/api/v1/contracts", poem::get(api_handlers::list_contracts))
+        .at(
+            "/api/v1/contracts/:id",
+            poem::get(api_handlers::get_contract),
+        )
+        .at(
+            "/api/v1/users/:pubkey/contracts",
+            poem::get(api_handlers::get_user_contracts),
+        )
+        // Token endpoints
+        .at(
+            "/api/v1/transfers",
+            poem::get(api_handlers::get_recent_transfers),
+        )
+        .at(
+            "/api/v1/accounts/:account/transfers",
+            poem::get(api_handlers::get_account_transfers),
+        )
+        .at(
+            "/api/v1/accounts/:account/balance",
+            poem::get(api_handlers::get_account_balance),
+        )
+        // Stats endpoints
+        .at("/api/v1/stats", poem::get(api_handlers::get_platform_stats))
+        .at(
+            "/api/v1/reputation/:pubkey",
+            poem::get(api_handlers::get_reputation),
+        )
+        .data(ctx.database)
         .with(Cors::new());
 
     Server::new(TcpListener::bind(&addr)).run(app).await

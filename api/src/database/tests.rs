@@ -5,9 +5,9 @@ use sqlx::{Row, SqlitePool};
 ///
 /// NOTE: We manually create tables instead of using migrations because:
 /// 1. sqlx migrations don't work well with in-memory SQLite databases
-/// 2. File-based migrations cause test isolation issues and cleanup complexity  
+/// 2. File-based migrations cause test isolation issues and cleanup complexity
 /// 3. Manual creation gives us precise control over test schema
-/// 4. The manual schema matches migration 001_flattened_schema.sql
+/// 4. The manual schema matches migration 001_original_schema.sql
 ///
 /// Test data factory for creating consistent test entries
 struct TestDataFactory;
@@ -86,7 +86,7 @@ async fn setup_test_db() -> Database {
     let pool = SqlitePool::connect(":memory:").await.unwrap();
 
     // Load and execute migration SQL at runtime for production-like schema
-    let migration_sql = include_str!("../../migrations/001_flattened_schema.sql");
+    let migration_sql = include_str!("../../migrations/001_original_schema.sql");
 
     // Execute the entire migration as a single batch
     sqlx::query(migration_sql).execute(&pool).await.unwrap();

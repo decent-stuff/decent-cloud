@@ -5,8 +5,120 @@ use base64::Engine;
 use borsh::BorshDeserialize;
 use dcc_common::{CheckInPayload, UpdateProfilePayload};
 use provider_profile::Profile;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ProviderProfile {
+    pub pubkey_hash: Vec<u8>,
+    pub name: String,
+    pub description: Option<String>,
+    pub website_url: Option<String>,
+    pub logo_url: Option<String>,
+    pub why_choose_us: Option<String>,
+    pub api_version: String,
+    pub profile_version: String,
+    pub updated_at_ns: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ProviderCheckIn {
+    pub pubkey_hash: Vec<u8>,
+    pub memo: String,
+    pub block_timestamp_ns: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ProviderContact {
+    pub contact_type: String,
+    pub contact_value: String,
+}
 
 impl Database {
+    /// Get list of active providers (checked in recently)
+    pub async fn get_active_providers(&self, days: i64) -> Result<Vec<ProviderProfile>> {
+        let cutoff_ns = (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+            - days.max(1) * 24 * 3600 * 1_000_000_000) as i64;
+
+        let profiles = sqlx::query_as::<_, ProviderProfile>(
+            "SELECT DISTINCT p.* FROM provider_profiles p
+             INNER JOIN provider_check_ins c ON p.pubkey_hash = c.pubkey_hash
+             WHERE c.block_timestamp_ns > ?
+             ORDER BY p.name",
+        )
+        .bind(cutoff_ns)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(profiles)
+    }
+
+    /// Get provider profile by pubkey hash
+    pub async fn get_provider_profile(
+        &self,
+        pubkey_hash: &[u8],
+    ) -> Result<Option<ProviderProfile>> {
+        let profile = sqlx::query_as::<_, ProviderProfile>(
+            "SELECT * FROM provider_profiles WHERE pubkey_hash = ?",
+        )
+        .bind(pubkey_hash)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(profile)
+    }
+
+    /// Get provider contacts
+    pub async fn get_provider_contacts(&self, pubkey_hash: &[u8]) -> Result<Vec<ProviderContact>> {
+        let contacts = sqlx::query_as::<_, ProviderContact>(
+            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey_hash = ?"
+        )
+        .bind(pubkey_hash)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contacts)
+    }
+
+    /// Get recent check-ins for a provider
+    pub async fn get_provider_check_ins(
+        &self,
+        pubkey_hash: &[u8],
+        limit: i64,
+    ) -> Result<Vec<ProviderCheckIn>> {
+        let check_ins = sqlx::query_as::<_, ProviderCheckIn>(
+            "SELECT pubkey_hash, memo, block_timestamp_ns FROM provider_check_ins
+             WHERE pubkey_hash = ? ORDER BY block_timestamp_ns DESC LIMIT ?",
+        )
+        .bind(pubkey_hash)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(check_ins)
+    }
+
+    /// Get all providers with profiles
+    pub async fn list_providers(&self, limit: i64, offset: i64) -> Result<Vec<ProviderProfile>> {
+        let profiles = sqlx::query_as::<_, ProviderProfile>(
+            "SELECT * FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT ? OFFSET ?",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(profiles)
+    }
+
+    /// Count total providers
+    pub async fn count_providers(&self) -> Result<i64> {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM provider_profiles")
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(count.0)
+    }
+
     // Provider registrations
     pub(crate) async fn insert_provider_registrations(
         &self,

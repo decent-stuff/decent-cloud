@@ -6,6 +6,7 @@ pub mod offerings;
 pub mod providers;
 pub mod reputation;
 pub mod rewards;
+pub mod stats;
 pub mod tokens;
 pub mod types;
 pub mod users;
