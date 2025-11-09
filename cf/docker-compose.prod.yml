@@ -1,4 +1,18 @@
 # Production overrides - adds Cloudflare Tunnel
+x-api-base: &api-base
+  environment:
+    - ENVIRONMENT=prod
+    - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
+    - RUST_LOG=${RUST_LOG:-info}
+    - PORT=8080
+    - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30}  # Used for the sync service only
+    - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+    - LEDGER_DIR=/data/ledger
+  volumes:
+    - ../data/api-data-prod:/data
+  networks:
+    - decent-cloud-prod
+
 services:
   website:
     container_name: decent-cloud-website-prod
@@ -9,21 +23,15 @@ services:
     networks:
       - decent-cloud-prod
 
-  api:
-    container_name: decent-cloud-api-prod
+  api-serve:
+    <<: *api-base
+    container_name: decent-cloud-api-serve-prod
     ports:
       - "59101:8080"  # Prod: host 59101 -> container 8080
-    environment:
-      - ENVIRONMENT=prod
-      - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
-      - RUST_LOG=${RUST_LOG:-info}
-      - PORT=8080
-      - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
-      - LEDGER_DIR=/data/ledger
-    volumes:
-      - ../data/api-data-prod:/data
-    networks:
-      - decent-cloud-prod
+
+  api-sync:
+    <<: *api-base
+    container_name: decent-cloud-api-sync-prod
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -37,7 +45,7 @@ services:
     depends_on:
       website:
         condition: service_healthy
-      api:
+      api-serve:
         condition: service_healthy
 
 networks:

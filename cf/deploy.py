@@ -357,20 +357,21 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     print_success("Found .env file")
     print()
 
-    # Load tunnel token
-    token = get_tunnel_token(env_file)
-    if not token:
-        print_error("TUNNEL_TOKEN not found in .env file")
-        print()
-        print(f"Run setup again: {BLUE}python3 setup_tunnel.py{NC}")
-        print()
-        return 1
+    if is_prod:
+        # Load tunnel token
+        token = get_tunnel_token(env_file)
+        if not token:
+            print_error("TUNNEL_TOKEN not found in .env file")
+            print()
+            print(f"Run setup again: {BLUE}python3 setup_tunnel.py{NC}")
+            print()
+            return 1
 
-    print_success("Tunnel token loaded")
-    print()
+        print_success("Tunnel token loaded")
+        print()
 
-    # Add token to env_vars
-    env_vars['TUNNEL_TOKEN'] = token
+        # Add token to env_vars
+        env_vars['TUNNEL_TOKEN'] = token
 
     # Build website natively first
     if not build_website_natively():
@@ -393,7 +394,7 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     project_name = f"decent-cloud-{env_name[:4]}"  # dev -> dev, prod -> prod
     env_vars_with_project = {**env_vars, 'COMPOSE_PROJECT_NAME': project_name}
 
-    if not run_docker_compose(compose_files, ["up", "-d", "--build"], env_vars_with_project):
+    if not run_docker_compose(compose_files, ["up", "-d", "--build", "--remove-orphans"], env_vars_with_project):
         print()
         print_error(f"{env_name.title()} deployment failed")
         print()
@@ -420,45 +421,46 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     print("  • Cloudflare Tunnel")
     print()
 
-    # Check tunnel connection
-    print_warning("Verifying tunnel connection..." if is_prod else "Checking tunnel connection...")
-    import time
-    time.sleep(5)
+    if is_prod:
+        # Check tunnel connection
+        print_warning("Verifying tunnel connection..." if is_prod else "Checking tunnel connection...")
+        import time
+        time.sleep(5)
 
-    status = check_tunnel_status(compose_files, env_name)
+        status = check_tunnel_status(compose_files, env_name)
 
-    if status == "connected":
-        print_success("Tunnel connected successfully!")
-        print()
-        if is_prod:
-            print("Your website is now live and accessible")
+        if status == "connected":
+            print_success("Tunnel connected successfully!")
             print()
-            print("Verify deployment:")
-            print("  • Check tunnel status in Cloudflare dashboard")
-            print("  • Test your domain: https://your-domain.com/health")
+            if is_prod:
+                print("Your website is now live and accessible")
+                print()
+                print("Verify deployment:")
+                print("  • Check tunnel status in Cloudflare dashboard")
+                print("  • Test your domain: https://your-domain.com/health")
+            else:
+                print("Your website is now accessible through Cloudflare")
+        elif status == "unauthorized":
+            print_error("Tunnel authentication failed!")
+            print()
+            if is_prod:
+                print("Possible causes:")
+                print("  1. Tunnel doesn't exist in Cloudflare dashboard")
+                print("  2. Token is invalid or expired")
+            else:
+                print("The tunnel token is invalid or the tunnel doesn't exist")
+            print()
+            print(f"Fix: {BLUE}python3 setup_tunnel.py{NC}")
+            print()
+            if is_prod:
+                return 1
         else:
-            print("Your website is now accessible through Cloudflare")
-    elif status == "unauthorized":
-        print_error("Tunnel authentication failed!")
-        print()
-        if is_prod:
-            print("Possible causes:")
-            print("  1. Tunnel doesn't exist in Cloudflare dashboard")
-            print("  2. Token is invalid or expired")
-        else:
-            print("The tunnel token is invalid or the tunnel doesn't exist")
-        print()
-        print(f"Fix: {BLUE}python3 setup_tunnel.py{NC}")
-        print()
-        if is_prod:
-            return 1
-    else:
-        msg = "Could not verify tunnel status" if status == "error" else "Tunnel status unclear"
-        print_warning(msg)
-        compose_args = " ".join(f"-f {f}" for f in compose_files)
-        project_args = f"-p {project_name}"
-        print(f"  {BLUE}docker compose {project_args} {compose_args} logs cloudflared{NC}")
-        print()
+            msg = "Could not verify tunnel status" if status == "error" else "Tunnel status unclear"
+            print_warning(msg)
+            compose_args = " ".join(f"-f {f}" for f in compose_files)
+            project_args = f"-p {project_name}"
+            print(f"  {BLUE}docker compose {project_args} {compose_args} logs cloudflared{NC}")
+            print()
 
     # Management commands
     print("Useful commands:" if not is_prod else "Management commands:")
@@ -508,7 +510,7 @@ Examples:
     logs_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
     logs_parser.add_argument("-f", "--follow", action="store_true", help="Follow log output")
     logs_parser.add_argument(
-        "service", nargs="?", choices=["website", "api", "cloudflared"], help="Specific service to show logs for"
+        "service", nargs="?", choices=["website", "api-serve", "api-sync", "cloudflared"], help="Specific service to show logs for"
     )
 
     # Status command

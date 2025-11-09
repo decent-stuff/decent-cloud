@@ -11,6 +11,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 borsh.workspace = true
 candid.workspace = true
+clap.workspace = true
 dcc-common = { path = "../common" }
 dotenv.workspace = true
 ic-agent.workspace = true

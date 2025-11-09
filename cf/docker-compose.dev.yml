@@ -1,4 +1,11 @@
 # Development overrides - no tunnel, access via localhost only
+
+x-api-base: &api-base
+  volumes:
+    - ../data/api-data-dev:/data
+  networks:
+    - decent-cloud-dev
+
 services:
   website:
     container_name: decent-cloud-website-dev
@@ -7,14 +14,15 @@ services:
     networks:
       - decent-cloud-dev
 
-  api:
-    container_name: decent-cloud-api-dev
+  api-serve:
+    <<: *api-base
+    container_name: decent-cloud-api-serve-dev
     ports:
       - "59001:8080"  # Dev: host 59001 -> container 8080
-    volumes:
-      - ../data/api-data-dev:/data
-    networks:
-      - decent-cloud-dev
+
+  api-sync:
+    <<: *api-base
+    container_name: decent-cloud-api-sync-dev
 
 networks:
   decent-cloud-dev:

@@ -840,6 +840,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "candid",
+ "clap",
  "dcc-common",
  "dotenv",
  "ic-agent",

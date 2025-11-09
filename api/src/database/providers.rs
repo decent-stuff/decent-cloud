@@ -33,8 +33,20 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            let check_in = CheckInPayload::try_from_slice(&entry.value)
-                .map_err(|e| anyhow::anyhow!("Failed to parse check-in: {}", e))?;
+            // Skip malformed check-in entries with variant tag 209
+            if !entry.value.is_empty() && entry.value[0] == 209 {
+                tracing::warn!("Skipping malformed check-in entry with variant tag 209 for pubkey: {:?}", &entry.key);
+                continue;
+            }
+
+            let check_in = CheckInPayload::try_from_slice(&entry.value).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to parse check-in: {} (data length: {}, first 20 bytes: {:?})",
+                    e,
+                    entry.value.len(),
+                    &entry.value[..entry.value.len().min(20)]
+                )
+            })?;
 
             sqlx::query(
                 "INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"

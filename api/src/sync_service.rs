@@ -44,7 +44,11 @@ impl SyncService {
 
     pub async fn run(self) {
         let mut interval = tokio::time::interval(self.interval);
-        interval.tick().await; // Skip first immediate tick
+
+        // Run initial sync immediately on startup
+        if let Err(e) = self.sync_once().await {
+            tracing::error!("Initial sync failed: {}", e);
+        }
 
         loop {
             interval.tick().await;

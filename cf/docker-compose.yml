@@ -1,4 +1,25 @@
 # Base configuration for Decent Cloud services
+x-api-base: &api-base
+  build:
+    context: ..
+    dockerfile: api/Dockerfile
+    args:
+      USER_ID: ${USER_ID:-1000}
+      GROUP_ID: ${GROUP_ID:-1000}
+      BUILDKIT_INLINE_CACHE: 1
+  image: decent-cloud-api:${ENVIRONMENT:-dev}
+  restart: unless-stopped
+  environment:
+    - ENVIRONMENT=${ENVIRONMENT:-dev}
+    - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
+    - RUST_LOG=${RUST_LOG:-info}
+    - PORT=8080
+    - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+    - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30}  # Used for the sync service only
+    - LEDGER_DIR=/data/ledger
+  volumes:
+    - ../data/api-data-prod:/data
+
 services:
   website:
     build:
@@ -17,28 +38,16 @@ services:
       start_period: 5s
       retries: 3
 
-  api:
-    build:
-      context: ..
-      dockerfile: api/Dockerfile
-      args:
-        USER_ID: ${USER_ID:-1000}
-        GROUP_ID: ${GROUP_ID:-1000}
-        BUILDKIT_INLINE_CACHE: 1
-    image: decent-cloud-api:${ENVIRONMENT:-dev}
-    restart: unless-stopped
-    environment:
-      - ENVIRONMENT=${ENVIRONMENT:-dev}
-      - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
-      - RUST_LOG=${RUST_LOG:-info}
-      - PORT=8080
-      - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
-      - LEDGER_DIR=/data/ledger
-    volumes:
-      - ../data/api-data-prod:/data
+  api-serve:
+    <<: *api-base
+    command: ["api-server", "serve"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 30s
       timeout: 3s
       start_period: 5s
       retries: 3
+
+  api-sync:
+    <<: *api-base
+    command: ["api-server", "sync"]
