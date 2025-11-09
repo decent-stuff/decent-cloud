@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchMetadata } from '$lib/services/icp';
+	import { fetchMetadata, fetchDctPrice } from '$lib/services/icp';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeaturesSection from '$lib/components/FeaturesSection.svelte';
 	import BenefitsSection from '$lib/components/BenefitsSection.svelte';
@@ -28,7 +28,7 @@
 
 	async function loadDashboardData() {
 		try {
-			const metadata = await fetchMetadata();
+			const [metadata, dctPrice] = await Promise.all([fetchMetadata(), fetchDctPrice()]);
 
 			const getValue = (key: string): number => {
 				const entry = metadata.find(([k]: [string, any]) => k === key);
@@ -36,7 +36,6 @@
 				const value = entry[1];
 				if ('Nat' in value) {
 					const num = Number(value.Nat);
-					if (key === 'ledger:token_value_in_usd_e6') return num / 1_000_000;
 					if (key === 'ledger:current_block_rewards_e9s') return num / 1_000_000_000;
 					return num;
 				}
@@ -45,7 +44,7 @@
 			};
 
 			dashboardData = {
-				dctPrice: getValue('ledger:token_value_in_usd_e6'),
+				dctPrice,
 				providerCount: getValue('ledger:total_providers'),
 				totalBlocks: getValue('ledger:num_blocks'),
 				blocksUntilHalving: getValue('ledger:blocks_until_next_halving'),

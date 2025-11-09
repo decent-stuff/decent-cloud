@@ -61,24 +61,22 @@
 				{currentText}<span class="animate-pulse">|</span>
 			</h2>
 
-			<div class="flex flex-col sm:flex-row gap-4 mt-8 justify-center md:justify-start">
+			<div class="mt-8 justify-center md:justify-start">
 				<a
-					href="/dashboard"
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all"
+					href="https://github.com/orgs/decent-stuff/discussions"
+					class="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full font-extrabold text-lg md:text-xl hover:brightness-110 hover:shadow-2xl hover:scale-105 transition-all"
 				>
-					Get Started
-				</a>
-				<a
-					href="#features"
-					class="px-8 py-3 border-2 border-white/30 rounded-lg font-semibold hover:bg-white/10 transition-all"
-				>
-					Learn More
+					<span>🚀 Join the Development</span>
 				</a>
 			</div>
 		</div>
 
-		<div class="hidden md:block">
-			<img src="/images/cloud-illustration.png" alt="Cloud Computing" class="w-full max-w-lg mx-auto" />
+		<div class="hidden md:flex justify-center md:justify-end">
+			<img
+				src="/images/cloud-illustration.png"
+				alt="Cloud Computing"
+				class="w-full md:min-w-[375px] max-w-md md:max-w-lg lg:max-w-xl animate-float"
+			/>
 		</div>
 	</div>
 
@@ -103,5 +101,19 @@
 
 	.animate-fade-in {
 		animation: fade-in 0.8s ease-out;
+	}
+
+	@keyframes float {
+		0%,
+		100% {
+			transform: translateY(0) scale(1);
+		}
+		50% {
+			transform: translateY(-5px) scale(1.05);
+		}
+	}
+
+	.animate-float {
+		animation: float 5s ease-in-out infinite;
 	}
 </style>
