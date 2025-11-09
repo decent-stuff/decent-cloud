@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fetchMetadata, fetchDctPrice } from '$lib/services/icp';
+	import { getMetadataValue } from '$lib/utils/metadata.ts';
+	import Header from '$lib/components/Header.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeaturesSection from '$lib/components/FeaturesSection.svelte';
 	import BenefitsSection from '$lib/components/BenefitsSection.svelte';
@@ -30,26 +32,13 @@
 		try {
 			const [metadata, dctPrice] = await Promise.all([fetchMetadata(), fetchDctPrice()]);
 
-			const getValue = (key: string): number => {
-				const entry = metadata.find(([k]: [string, any]) => k === key);
-				if (!entry) return 0;
-				const value = entry[1];
-				if ('Nat' in value) {
-					const num = Number(value.Nat);
-					if (key === 'ledger:current_block_rewards_e9s') return num / 1_000_000_000;
-					return num;
-				}
-				if ('Int' in value) return Number(value.Int);
-				return 0;
-			};
-
 			dashboardData = {
 				dctPrice,
-				providerCount: getValue('ledger:total_providers'),
-				totalBlocks: getValue('ledger:num_blocks'),
-				blocksUntilHalving: getValue('ledger:blocks_until_next_halving'),
-				validatorCount: getValue('ledger:current_block_validators'),
-				blockReward: getValue('ledger:current_block_rewards_e9s')
+				providerCount: getMetadataValue(metadata, 'ledger:total_providers'),
+				totalBlocks: getMetadataValue(metadata, 'ledger:num_blocks'),
+				blocksUntilHalving: getMetadataValue(metadata, 'ledger:blocks_until_next_halving'),
+				validatorCount: getMetadataValue(metadata, 'ledger:current_block_validators'),
+				blockReward: getMetadataValue(metadata, 'ledger:current_block_rewards_e9s')
 			};
 		} catch (err) {
 			console.error('Error fetching dashboard data:', err);
@@ -64,6 +53,7 @@
 </script>
 
 <div class="min-h-screen bg-gradient-to-b from-gray-900 via-blue-900 to-purple-900 text-white">
+	<Header />
 	<HeroSection />
 	<FeaturesSection />
 	<BenefitsSection />
