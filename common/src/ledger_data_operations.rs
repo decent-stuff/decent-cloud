@@ -13,9 +13,16 @@ macro_rules! tracing_info {
     };
 }
 
-#[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
+#[cfg(all(target_arch = "wasm32", not(feature = "ic")))]
+macro_rules! tracing_info {
+    ($($arg:tt)*) => {{
+        web_sys::console::info_1(&format!($($arg)*).into());
+    }};
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 use tracing;
-#[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
+#[cfg(not(target_arch = "wasm32"))]
 macro_rules! tracing_info {
     ($($arg:tt)*) => {
         tracing::info!($($arg)*)
