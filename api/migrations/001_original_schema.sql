@@ -1,5 +1,4 @@
--- Flattened Schema - Complete database structure for fresh deployment
--- This consolidates all previous migrations into a single clean schema
+-- Complete database structure
 
 -- Provider registrations
 CREATE TABLE provider_registrations (
@@ -153,7 +152,7 @@ CREATE TABLE token_approvals (
 -- Contract sign requests
 CREATE TABLE contract_sign_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    contract_id BLOB NOT NULL,
+    contract_id BLOB NOT NULL UNIQUE,
     requester_pubkey_hash BLOB NOT NULL,
     requester_ssh_pubkey TEXT NOT NULL,
     requester_contact TEXT NOT NULL,
@@ -264,7 +263,7 @@ CREATE INDEX idx_token_transfers_block_hash ON token_transfers(block_hash);
 CREATE INDEX idx_token_approvals_owner_account ON token_approvals(owner_account);
 CREATE INDEX idx_token_approvals_spender_account ON token_approvals(spender_account);
 CREATE INDEX idx_contract_sign_requests_contract_id ON contract_sign_requests(contract_id);
-CREATE INDEX idx_contract_sign_requests_requester ON contract_sign_requests(requester_pubkey_hash);
+CREATE INDEX idx_contract_sign_requests_requester_pubkey_hash ON contract_sign_requests(requester_pubkey_hash);
 CREATE INDEX idx_contract_sign_requests_provider ON contract_sign_requests(provider_pubkey_hash);
 CREATE INDEX idx_contract_sign_requests_status ON contract_sign_requests(status);
 CREATE INDEX idx_contract_sign_requests_offering ON contract_sign_requests(offering_id);
