@@ -1,14 +1,10 @@
 use candid::{Decode, Encode};
-use dcc_common::DATA_PULL_BYTES_BEFORE_LEN;
-use dcc_common::{cursor_from_data, CursorDirection, LedgerCursor};
+use dcc_common::{cursor_from_data, fetch_and_write_ledger_data, CursorDirection, LedgerCursor};
 use decent_cloud::ledger_canister_client::LedgerCanister;
-use fs_err::OpenOptions;
-use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
+use ledger_map::platform_specific::persistent_storage_read;
+use ledger_map::LedgerMap;
 use log::info;
-use std::{
-    io::{Seek, Write},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
 use super::get_ledger_metadata;
 
@@ -18,94 +14,25 @@ pub async fn ledger_data_fetch(
     ledger_canister: &LedgerCanister,
     ledger_local: &mut LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let ledger_file_path = ledger_local
-        .get_file_path()
-        .expect("failed to open the local ledger path");
+    let last_position = ledger_local.get_next_block_start_pos();
 
-    // FIXME: needs to be adjusted to fetch data multiple times if needed, right now it only does it once
-    let cursor_local = {
-        cursor_from_data(
-            ledger_map::partition_table::get_data_partition().start_lba,
-            ledger_map::platform_specific::persistent_storage_size_bytes(),
-            ledger_local.get_next_block_start_pos(),
-            ledger_local.get_next_block_start_pos(),
-        )
-    };
-
-    let bytes_before = if cursor_local.position > DATA_PULL_BYTES_BEFORE_LEN as u64 {
-        let mut buf = vec![0u8; DATA_PULL_BYTES_BEFORE_LEN as usize];
-        persistent_storage_read(
-            cursor_local.position - DATA_PULL_BYTES_BEFORE_LEN as u64,
-            &mut buf,
-        )?;
-        Some(buf)
-    } else {
-        None
-    };
-
-    info!(
-        "Fetching data from the Ledger canister {} to {}, with local cursor: {} and bytes before: {:?}",
-        ledger_canister.canister_id(),
-        ledger_file_path.display(),
-        cursor_local,
-        hex::encode(bytes_before.as_ref().unwrap_or(&vec![])),
-    );
-    let (cursor_remote, data) = ledger_canister
-        .data_fetch(Some(cursor_local.to_request_string()), bytes_before)
-        .await?;
-    let cursor_remote = LedgerCursor::new_from_string(cursor_remote);
-    let offset_remote = cursor_remote.position;
-    info!(
-        "Ledger canister returned position {:0x}, full cursor: {}",
-        offset_remote, cursor_remote
-    );
-    if offset_remote < cursor_local.position {
-        return Err(format!(
-            "Ledger canister has less data than available locally {} < {} bytes",
-            offset_remote, cursor_local.position
-        )
-        .into());
-    }
-    if data.len() <= 64 {
-        info!("Data: {} bytes ==> {:?}", data.len(), data);
-    } else {
-        info!(
-            "Data: {} bytes ==> {:?}...",
-            data.len(),
-            &data[..64.min(data.len())]
-        );
-    }
-    let mut ledger_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(&ledger_file_path)
-        .expect("failed to open the local ledger path");
-    let file_size_bytes = ledger_file.metadata().unwrap().len();
-    let file_size_bytes_target = offset_remote + data.len() as u64 + 1024 * 1024;
-    if file_size_bytes < file_size_bytes_target {
-        ledger_file.set_len(file_size_bytes_target).unwrap();
-        ledger_file
-            .seek(std::io::SeekFrom::Start(offset_remote))
-            .unwrap();
-    }
-    if offset_remote + cursor_remote.response_bytes > cursor_local.position {
-        ledger_file.write_all(&data).unwrap();
-        info!(
-            "Wrote {} bytes at offset 0x{:0x} of file {}",
-            data.len(),
-            offset_remote,
-            ledger_file_path.display()
-        );
-        ledger_file
-            .write_all(&[0u8; size_of::<ledger_map::ledger_entry::LedgerBlockHeader>()])
-            .unwrap();
-    }
-    // Set the modified time to the current time, to mark that the data is up-to-date
-    filetime::set_file_mtime(ledger_file_path, std::time::SystemTime::now().into())?;
+    let (data, _new_position) = fetch_and_write_ledger_data(
+        ledger_local,
+        |cursor_str, bytes_before| async move {
+            ledger_canister
+                .data_fetch(cursor_str, bytes_before)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))
+        },
+        last_position,
+    )
+    .await?;
 
     if !data.is_empty() {
-        ledger_local.refresh_ledger()?;
+        // Set the modified time to the current time, to mark that the data is up-to-date
+        if let Some(ledger_file_path) = ledger_local.get_file_path() {
+            filetime::set_file_mtime(ledger_file_path, std::time::SystemTime::now().into())?;
+        }
     }
 
     Ok(())

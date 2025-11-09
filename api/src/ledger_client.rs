@@ -18,8 +18,12 @@ impl LedgerClient {
     }
 
     /// Fetch ledger data starting from cursor position
-    pub async fn data_fetch(&self, cursor: Option<String>) -> Result<(String, Vec<u8>)> {
-        let args = Encode!(&cursor, &None::<Vec<u8>>)?;
+    pub async fn data_fetch(
+        &self,
+        cursor: Option<String>,
+        bytes_before: Option<Vec<u8>>,
+    ) -> Result<(String, Vec<u8>)> {
+        let args = Encode!(&cursor, &bytes_before)?;
         let response = self
             .agent
             .query(&self.canister_id, "data_fetch")
