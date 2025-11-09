@@ -109,3 +109,4 @@ crash-*
 ### WebAssembly ###
 *.wasm
 *.wasm.gz
+.just-tmp/
