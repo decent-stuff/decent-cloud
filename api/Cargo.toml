@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+base64.workspace = true
 borsh.workspace = true
 candid.workspace = true
 clap.workspace = true
@@ -17,15 +18,13 @@ dotenv.workspace = true
 ic-agent.workspace = true
 ledger-map = { path = "../ledger-map" }
 poem.workspace = true
-provider-profile = { path = "../provider-profile" }
 provider-offering = { path = "../provider-offering" }
+provider-profile = { path = "../provider-profile" }
 reqwest.workspace = true
-serde.workspace = true
 serde_json.workspace = true
+serde.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
-tracing.workspace = true
 tracing-subscriber.workspace = true
-
-
+tracing.workspace = true

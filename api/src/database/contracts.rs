@@ -11,16 +11,15 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            let payload =
-                ContractSignRequestPayload::try_from_slice(&entry.value).map_err(|e| {
-                    anyhow::anyhow!("Failed to parse contract sign request payload: {}", e)
-                })?;
-            let request = payload.deserialize_contract_sign_request().map_err(|e| {
+            let csr = ContractSignRequestPayload::try_from_slice(&entry.value).map_err(|e| {
+                anyhow::anyhow!("Failed to parse contract sign request payload: {}", e)
+            })?;
+            let request = csr.deserialize_contract_sign_request().map_err(|e| {
                 anyhow::anyhow!("Failed to deserialize contract sign request: {}", e)
             })?;
 
             // Use the calculated contract ID from the payload
-            let contract_id = payload.calc_contract_id().to_vec();
+            let contract_id = csr.calc_contract_id().to_vec();
             let requester_pubkey_hash = request.requester_pubkey_bytes().to_vec();
             let requester_ssh_pubkey = request.requester_ssh_pubkey().clone();
             let requester_contact = request.requester_contact().clone();
@@ -34,7 +33,7 @@ impl Database {
 
             // Insert the main contract request
             sqlx::query(
-                "INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&contract_id)
             .bind(&requester_pubkey_hash)

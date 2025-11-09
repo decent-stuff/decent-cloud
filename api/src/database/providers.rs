@@ -1,5 +1,7 @@
 use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use borsh::BorshDeserialize;
 use dcc_common::{CheckInPayload, UpdateProfilePayload};
 use provider_profile::Profile;
@@ -33,20 +35,23 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            // Skip malformed check-in entries with variant tag 209
-            if !entry.value.is_empty() && entry.value[0] == 209 {
-                tracing::warn!("Skipping malformed check-in entry with variant tag 209 for pubkey: {:?}", &entry.key);
-                continue;
-            }
-
-            let check_in = CheckInPayload::try_from_slice(&entry.value).map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to parse check-in: {} (data length: {}, first 20 bytes: {:?})",
-                    e,
-                    entry.value.len(),
-                    &entry.value[..entry.value.len().min(20)]
-                )
-            })?;
+            let check_in = match CheckInPayload::try_from_slice(&entry.value) {
+                Ok(check_in) => check_in,
+                Err(e) => {
+                    if entry.value.len() == 64 {
+                        // Earlier versions of the protocol stored the nonce signature directly
+                        CheckInPayload::new(String::new(), entry.value.clone())
+                    } else {
+                        tracing::error!(
+                            "Failed to parse check-in: {}. Payload: {} len {}",
+                            e,
+                            BASE64.encode(&entry.value),
+                            entry.value.len()
+                        );
+                        continue;
+                    }
+                }
+            };
 
             sqlx::query(
                 "INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
