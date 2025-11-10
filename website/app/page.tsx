@@ -42,10 +42,13 @@ function extractDashboardData(metadata: Metadata | null): DashboardData {
     const value = entry[1];
     if ("Nat" in value) {
       const num = Number(value.Nat);
-      if (key === "ledger:token_value_in_usd_e6") {
+      if (key.endsWith("_e6")) {
         return num / 1_000_000; // Convert from e6 to actual USD value
       }
-      if (key === "ledger:current_block_rewards_e9s") {
+      if (key.endsWith("_e8s")) {
+        return num / 100_000_000;
+      }
+      if (key.endsWith("_e9s")) {
         return num / 1_000_000_000; // Convert from e9s to DCT
       }
       return num;
