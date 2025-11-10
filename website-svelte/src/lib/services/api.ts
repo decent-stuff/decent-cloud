@@ -22,12 +22,8 @@ export interface PlatformStats {
 	total_transfers: number;
 	total_volume_e9s: number;
 	validator_count_24h: number;
-	current_block_validators: number;
-	total_blocks: number;
-	latest_block_timestamp_ns: number;
-	blocks_until_next_halving: number;
-	current_block_rewards_e9s: number;
-	reward_per_block_e9s: number;
+	latest_block_timestamp_ns: number | null;
+	metadata: Record<string, unknown>;
 }
 
 export async function fetchPlatformStats(): Promise<PlatformStats> {

@@ -9,12 +9,14 @@ const sampleStats = {
 	total_transfers: 12,
 	total_volume_e9s: 1_500_000_000,
 	validator_count_24h: 4,
-	current_block_validators: 3,
-	total_blocks: 42,
 	latest_block_timestamp_ns: 123_456_789,
-	blocks_until_next_halving: 210_000,
-	current_block_rewards_e9s: 5_000_000_000,
-	reward_per_block_e9s: 50_000_000_000
+	metadata: {
+		'ledger:num_blocks': 42,
+		'ledger:blocks_until_next_halving': 210_000,
+		'ledger:current_block_rewards_e9s': 50_000_000_000,
+		'ledger:current_block_validators': 3,
+		'ledger:token_value_in_usd_e6': 1_000_000
+	}
 };
 
 const sampleOfferings = [
