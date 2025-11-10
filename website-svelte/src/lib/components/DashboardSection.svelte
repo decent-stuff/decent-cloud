@@ -35,11 +35,6 @@
 			icon: "📉",
 		},
 		{
-			label: "Validators",
-			value: dashboardData.validatorCount.toString(),
-			icon: "✅",
-		},
-		{
 			label: "Reward Per Block",
 			value: `${dashboardData.rewardPerBlock.toFixed(2)} DCT`,
 			icon: "🎁",
