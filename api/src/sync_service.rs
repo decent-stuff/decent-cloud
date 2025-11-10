@@ -1,4 +1,4 @@
-use crate::{database::Database, ledger_client::LedgerClient};
+use crate::{database::Database, ledger_client::LedgerClient, ledger_path::ledger_dir_path};
 use anyhow::Result;
 use dcc_common::{fetch_and_write_ledger_data, parse_ledger_entries};
 use ledger_map::LedgerMap;
@@ -18,18 +18,8 @@ impl SyncService {
         database: Arc<Database>,
         interval_secs: u64,
     ) -> Self {
-        let ledger_dir = std::env::var("LEDGER_DIR")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| {
-                // Fallback to temp directory for development
-                let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-                temp_dir.keep()
-            });
-
-        // Ensure the directory exists
-        std::fs::create_dir_all(&ledger_dir).expect("Failed to create ledger directory");
-
-        // LedgerMap expects a file path, not a directory
+        let ledger_dir =
+            ledger_dir_path().expect("Failed to resolve ledger directory for sync service");
         let ledger_file = ledger_dir.join("main.bin");
 
         let ledger_parser = LedgerMap::new_with_path(None, Some(ledger_file))

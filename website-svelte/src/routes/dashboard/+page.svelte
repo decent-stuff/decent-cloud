@@ -1,16 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchMetadata, fetchDctPrice } from '$lib/services/icp';
-	import { getMetadataValue } from '$lib/utils/metadata.ts';
-
-	interface DashboardData {
-		dctPrice: number;
-		providerCount: number;
-		totalBlocks: number;
-		blocksUntilHalving: number;
-		validatorCount: number;
-		blockReward: number;
-	}
+	import { fetchDashboardData, type DashboardData } from '$lib/services/dashboard-data';
 
 	let dashboardData: DashboardData = {
 		dctPrice: 0,
@@ -23,16 +13,7 @@
 
 	async function loadDashboardData() {
 		try {
-			const [metadata, dctPrice] = await Promise.all([fetchMetadata(), fetchDctPrice()]);
-
-			dashboardData = {
-				dctPrice,
-				providerCount: getMetadataValue(metadata, 'ledger:total_providers'),
-				totalBlocks: getMetadataValue(metadata, 'ledger:num_blocks'),
-				blocksUntilHalving: getMetadataValue(metadata, 'ledger:blocks_until_next_halving'),
-				validatorCount: getMetadataValue(metadata, 'ledger:current_block_validators'),
-				blockReward: getMetadataValue(metadata, 'ledger:current_block_rewards_e9s')
-			};
+			dashboardData = await fetchDashboardData();
 		} catch (err) {
 			console.error('Error fetching dashboard data:', err);
 		}

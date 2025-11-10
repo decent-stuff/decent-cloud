@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchDctPrice, fetchMetadata } from './icp';
+import { fetchDctPrice } from './icp';
 
 describe('fetchDctPrice', () => {
 	beforeEach(() => {

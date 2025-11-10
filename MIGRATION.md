@@ -29,6 +29,7 @@ Successfully migrated the Decent Cloud website from Next.js to SvelteKit with si
 - [x] Footer
 - [x] Scroll indicator
 - [x] All visual styles working correctly
+- [x] Metrics pulled from the Rust API (`/api/v1/stats`) so the browser never loads the ledger wasm directly
 
 ### 📋 Still To Do
 - [ ] Dashboard pages (main, validators, offerings, marketplace)

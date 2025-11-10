@@ -1,6 +1,8 @@
 mod api_handlers;
 mod database;
 mod ledger_client;
+mod ledger_path;
+mod network_metrics;
 mod sync_service;
 
 use candid::Principal;

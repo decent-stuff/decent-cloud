@@ -1,4 +1,4 @@
-use crate::database::Database;
+use crate::{database::Database, network_metrics::load_ledger_metrics};
 use poem::{
     handler,
     web::{Data, Json, Path, Query},
@@ -31,6 +31,22 @@ impl<T> ApiResponse<T> {
             error: Some(msg),
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct PlatformOverview {
+    pub total_providers: i64,
+    pub active_providers: i64,
+    pub total_offerings: i64,
+    pub total_contracts: i64,
+    pub total_transfers: i64,
+    pub total_volume_e9s: i64,
+    pub validator_count_24h: i64,
+    pub current_block_validators: u64,
+    pub total_blocks: u64,
+    pub latest_block_timestamp_ns: u64,
+    pub blocks_until_next_halving: u64,
+    pub current_block_rewards_e9s: u64,
 }
 
 // Query parameters for pagination
@@ -297,11 +313,38 @@ pub async fn get_account_balance(
 #[handler]
 pub async fn get_platform_stats(
     db: Data<&Arc<Database>>,
-) -> PoemResult<Json<ApiResponse<crate::database::stats::PlatformStats>>> {
-    match db.get_platform_stats().await {
-        Ok(stats) => Ok(Json(ApiResponse::success(stats))),
-        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
-    }
+) -> PoemResult<Json<ApiResponse<PlatformOverview>>> {
+    let base_stats = match db.get_platform_stats().await {
+        Ok(stats) => stats,
+        Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
+    };
+
+    let validator_count = match db.get_active_providers(1).await {
+        Ok(providers) => providers.len() as i64,
+        Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
+    };
+
+    let ledger_metrics = match load_ledger_metrics() {
+        Ok(metrics) => metrics,
+        Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
+    };
+
+    let response = PlatformOverview {
+        total_providers: base_stats.total_providers,
+        active_providers: base_stats.active_providers,
+        total_offerings: base_stats.total_offerings,
+        total_contracts: base_stats.total_contracts,
+        total_transfers: base_stats.total_transfers,
+        total_volume_e9s: base_stats.total_volume_e9s,
+        validator_count_24h: validator_count,
+        current_block_validators: ledger_metrics.current_block_validators,
+        total_blocks: ledger_metrics.total_blocks,
+        latest_block_timestamp_ns: ledger_metrics.latest_block_timestamp_ns,
+        blocks_until_next_halving: ledger_metrics.blocks_until_next_halving,
+        current_block_rewards_e9s: ledger_metrics.current_block_rewards_e9s,
+    };
+
+    Ok(Json(ApiResponse::success(response)))
 }
 
 #[handler]
