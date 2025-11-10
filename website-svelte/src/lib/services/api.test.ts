@@ -30,7 +30,7 @@ describe('fetchPlatformStats', () => {
 		const stats = await fetchPlatformStats();
 
 		expect(stats).toEqual(sampleStats);
-		expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/v1/stats'));
+		expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/v1/stats'));
 	});
 
 	it('throws when response is not ok', async () => {

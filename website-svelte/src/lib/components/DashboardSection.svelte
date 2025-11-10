@@ -7,6 +7,7 @@
 		validatorCount: number;
 		blockReward: number;
 	};
+	export let error: string | null = null;
 
 	const stats = [
 		{
@@ -50,6 +51,13 @@
 		<p class="text-xl text-white/70 text-center mb-16">
 			Real-time data from the Decent Cloud network
 		</p>
+
+		{#if error}
+			<div class="mb-8 bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400 text-center">
+				<p class="font-semibold">Error loading statistics</p>
+				<p class="text-sm mt-1">{error}</p>
+			</div>
+		{/if}
 
 		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
 			{#each stats as stat}

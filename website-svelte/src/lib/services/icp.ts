@@ -1,4 +1,5 @@
 import { HttpAgent, Actor, type Identity } from '@dfinity/agent';
+// @ts-expect-error - metadata.js is a JavaScript file with proper exports
 import { idlFactory as metadataIdl } from '../utils/metadata.js';
 import type { Principal } from '@dfinity/principal';
 

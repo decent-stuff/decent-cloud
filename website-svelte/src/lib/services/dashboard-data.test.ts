@@ -53,4 +53,11 @@ describe('fetchDashboardData', () => {
 
 		await expect(fetchDashboardData()).rejects.toThrow('stats failed');
 	});
+
+	it('propagates failures from the DCT price API', async () => {
+		mockedFetchPlatformStats.mockResolvedValue(mockStats);
+		mockedFetchDctPrice.mockRejectedValue(new Error('price failed'));
+
+		await expect(fetchDashboardData()).rejects.toThrow('price failed');
+	});
 });

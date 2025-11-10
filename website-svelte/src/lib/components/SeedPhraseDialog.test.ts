@@ -34,7 +34,7 @@ describe('SeedPhraseDialog validation logic', () => {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		expect(errorMessage).toBe('Test error');
 
-		const stringError = 'String error';
+		const stringError: unknown = 'String error';
 		const stringErrorMessage = stringError instanceof Error ? stringError.message : String(stringError);
 		expect(stringErrorMessage).toBe('String error');
 	});

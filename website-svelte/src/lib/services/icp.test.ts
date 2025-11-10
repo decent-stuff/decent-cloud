@@ -17,7 +17,7 @@ describe('fetchDctPrice', () => {
 			]
 		};
 
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => mockResponse
 		});
@@ -25,7 +25,7 @@ describe('fetchDctPrice', () => {
 		const price = await fetchDctPrice();
 
 		expect(price).toBe(1.23456789);
-		expect(global.fetch).toHaveBeenCalledWith(
+		expect(globalThis.fetch).toHaveBeenCalledWith(
 			'https://api.kongswap.io/api/tokens/by_canister',
 			expect.objectContaining({
 				method: 'POST',
@@ -48,7 +48,7 @@ describe('fetchDctPrice', () => {
 			]
 		};
 
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => mockResponse
 		});
@@ -69,7 +69,7 @@ describe('fetchDctPrice', () => {
 			]
 		};
 
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => mockResponse
 		});
@@ -80,7 +80,7 @@ describe('fetchDctPrice', () => {
 	});
 
 	it('should return 0 when API returns HTTP error', async () => {
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: false,
 			status: 500
 		});
@@ -91,7 +91,7 @@ describe('fetchDctPrice', () => {
 	});
 
 	it('should return 0 when API returns empty items', async () => {
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({ items: [] })
 		});
@@ -102,7 +102,7 @@ describe('fetchDctPrice', () => {
 	});
 
 	it('should return 0 when fetch throws network error', async () => {
-		global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+		globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
 
 		const price = await fetchDctPrice();
 
@@ -120,7 +120,7 @@ describe('fetchDctPrice', () => {
 			]
 		};
 
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => mockResponse
 		});
@@ -139,7 +139,7 @@ describe('fetchDctPrice', () => {
 			]
 		};
 
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => mockResponse
 		});

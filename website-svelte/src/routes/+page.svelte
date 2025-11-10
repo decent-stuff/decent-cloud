@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchDashboardData, type DashboardData } from '$lib/services/dashboard-data';
+	import { dashboardStore } from '$lib/stores/dashboard';
 	import Header from '$lib/components/Header.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeaturesSection from '$lib/components/FeaturesSection.svelte';
@@ -9,26 +9,32 @@
 	import InfoSection from '$lib/components/InfoSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 
-	let dashboardData: DashboardData = {
+	let dashboardData = $state({
 		dctPrice: 0,
 		providerCount: 0,
 		totalBlocks: 0,
 		blocksUntilHalving: 0,
 		validatorCount: 0,
 		blockReward: 0
-	};
+	});
+	let error = $state<string | null>(null);
 
-	async function loadDashboardData() {
-		try {
-			dashboardData = await fetchDashboardData();
-		} catch (err) {
-			console.error('Error fetching dashboard data:', err);
-		}
-	}
+	$effect(() => {
+		const unsubscribeData = dashboardStore.data.subscribe((value) => {
+			dashboardData = value;
+		});
+		const unsubscribeError = dashboardStore.error.subscribe((value) => {
+			error = value;
+		});
+		return () => {
+			unsubscribeData();
+			unsubscribeError();
+		};
+	});
 
 	onMount(() => {
-		loadDashboardData();
-		const interval = setInterval(loadDashboardData, 10000);
+		dashboardStore.load();
+		const interval = setInterval(() => dashboardStore.load(), 10000);
 		return () => clearInterval(interval);
 	});
 </script>
@@ -38,7 +44,7 @@
 	<HeroSection />
 	<FeaturesSection />
 	<BenefitsSection />
-	<DashboardSection {dashboardData} />
+	<DashboardSection {dashboardData} {error} />
 	<InfoSection />
 	<Footer />
 </div>

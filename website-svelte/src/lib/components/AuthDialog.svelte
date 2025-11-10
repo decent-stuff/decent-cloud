@@ -3,8 +3,8 @@
 	import SeedPhraseDialog from './SeedPhraseDialog.svelte';
 
 	let { open = $bindable(false) } = $props();
-	let isLoading = false;
-	let errorMsg = '';
+	let isLoading = $state(false);
+	let errorMsg = $state('');
 	let showSeedPhraseDialog = $state(false);
 
 	async function handleIILogin() {

@@ -1,27 +1,33 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchDashboardData, type DashboardData } from '$lib/services/dashboard-data';
+	import { dashboardStore } from '$lib/stores/dashboard';
 
-	let dashboardData: DashboardData = {
+	let dashboardData = $state({
 		dctPrice: 0,
 		providerCount: 0,
 		totalBlocks: 0,
 		blocksUntilHalving: 0,
 		validatorCount: 0,
 		blockReward: 0
-	};
+	});
+	let error = $state<string | null>(null);
 
-	async function loadDashboardData() {
-		try {
-			dashboardData = await fetchDashboardData();
-		} catch (err) {
-			console.error('Error fetching dashboard data:', err);
-		}
-	}
+	$effect(() => {
+		const unsubscribeData = dashboardStore.data.subscribe((value) => {
+			dashboardData = value;
+		});
+		const unsubscribeError = dashboardStore.error.subscribe((value) => {
+			error = value;
+		});
+		return () => {
+			unsubscribeData();
+			unsubscribeError();
+		};
+	});
 
 	onMount(() => {
-		loadDashboardData();
-		const interval = setInterval(loadDashboardData, 10000);
+		dashboardStore.load();
+		const interval = setInterval(() => dashboardStore.load(), 10000);
 		return () => clearInterval(interval);
 	});
 </script>
@@ -31,6 +37,13 @@
 		<h1 class="text-4xl font-bold text-white mb-2">Dashboard Overview</h1>
 		<p class="text-white/60">Welcome to your Decent Cloud dashboard</p>
 	</div>
+
+	{#if error}
+		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">
+			<p class="font-semibold">Error loading dashboard data</p>
+			<p class="text-sm mt-1">{error}</p>
+		</div>
+	{/if}
 
 	<!-- Stats Grid -->
 	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
