@@ -104,7 +104,7 @@ impl MetadataCache {
         }
         cache.last_updated = SystemTime::now();
 
-        tracing::debug!("Metadata cache refreshed with {} entries", cache.data.len());
+        tracing::info!("Metadata cache refreshed with {} entries", cache.data.len());
         Ok(())
     }
 

@@ -22,14 +22,20 @@ pub struct ReputationInfo {
 impl Database {
     /// Get platform-wide statistics
     pub async fn get_platform_stats(&self) -> Result<PlatformStats> {
-        let total_providers: (i64,) =
-            sqlx::query_as("SELECT COUNT(DISTINCT pubkey_hash) FROM provider_profiles")
-                .fetch_one(&self.pool)
-                .await?;
+        // Total providers = all who have ever checked in or created a profile
+        let total_providers: (i64,) = sqlx::query_as(
+            "SELECT COUNT(DISTINCT pubkey_hash) FROM (
+                SELECT pubkey_hash FROM provider_profiles
+                UNION
+                SELECT pubkey_hash FROM provider_check_ins
+            )",
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
         // Active in the last year
-        let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-            - 365 * 24 * 3600 * 1_000_000_000;
+        let cutoff_ns =
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 365 * 24 * 3600 * 1_000_000_000;
         let active_providers: (i64,) = sqlx::query_as(
             "SELECT COUNT(DISTINCT pubkey_hash) FROM provider_check_ins WHERE block_timestamp_ns > ?"
         )

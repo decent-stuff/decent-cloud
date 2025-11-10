@@ -321,8 +321,17 @@ pub async fn get_platform_stats(
         Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
     };
 
-    let validator_count = match db.get_active_providers(1).await {
-        Ok(providers) => providers.len() as i64,
+    // Count providers who checked in within last 24 hours
+    let cutoff_24h =
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 24 * 3600 * 1_000_000_000;
+    let validator_count: (i64,) = match sqlx::query_as(
+        "SELECT COUNT(DISTINCT pubkey_hash) FROM provider_check_ins WHERE block_timestamp_ns > ?",
+    )
+    .bind(cutoff_24h)
+    .fetch_one(&db.pool)
+    .await
+    {
+        Ok(count) => count,
         Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
     };
 
@@ -356,7 +365,7 @@ pub async fn get_platform_stats(
         total_contracts: base_stats.total_contracts,
         total_transfers: base_stats.total_transfers,
         total_volume_e9s: base_stats.total_volume_e9s,
-        validator_count_24h: validator_count,
+        validator_count_24h: validator_count.0,
         current_block_validators: metadata
             .get_u64("ledger:current_block_validators")
             .unwrap_or(0),
