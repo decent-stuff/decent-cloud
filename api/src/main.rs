@@ -2,6 +2,7 @@ mod api_handlers;
 mod database;
 mod ledger_client;
 mod ledger_path;
+mod metadata_cache;
 mod network_metrics;
 mod sync_service;
 
@@ -9,6 +10,7 @@ use candid::Principal;
 use clap::{Parser, Subcommand};
 use database::Database;
 use ledger_client::LedgerClient;
+use metadata_cache::MetadataCache;
 use poem::{
     handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
     Route, Server,
@@ -51,6 +53,7 @@ struct AppContext {
     database: Arc<Database>,
     ledger_client: Arc<LedgerClient>,
     sync_interval_secs: u64,
+    metadata_cache: Arc<MetadataCache>,
 }
 
 async fn setup_app_context() -> Result<AppContext, std::io::Error> {
@@ -90,10 +93,21 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
         .parse::<u64>()
         .unwrap_or(30);
 
+    // Metadata cache setup
+    let metadata_refresh_interval = env::var("METADATA_REFRESH_INTERVAL_SECS")
+        .unwrap_or_else(|_| "60".to_string())
+        .parse::<u64>()
+        .unwrap_or(60);
+    let metadata_cache = Arc::new(MetadataCache::new(
+        ledger_client.clone(),
+        metadata_refresh_interval,
+    ));
+
     Ok(AppContext {
         database,
         ledger_client,
         sync_interval_secs,
+        metadata_cache,
     })
 }
 
@@ -247,9 +261,22 @@ async fn serve_command() -> Result<(), std::io::Error> {
             poem::get(api_handlers::get_reputation),
         )
         .data(ctx.database)
+        .data(ctx.metadata_cache.clone())
         .with(Cors::new());
 
-    Server::new(TcpListener::bind(&addr)).run(app).await
+    // Start metadata cache service in background
+    let cache_for_task = ctx.metadata_cache.clone();
+    let metadata_cache_task = tokio::spawn(async move {
+        cache_for_task.run().await;
+    });
+
+    tracing::info!("Starting metadata cache service");
+    let server_result = Server::new(TcpListener::bind(&addr))
+        .run(app)
+        .await;
+
+    metadata_cache_task.abort();
+    server_result
 }
 
 async fn sync_command() -> Result<(), std::io::Error> {

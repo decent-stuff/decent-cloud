@@ -6,8 +6,8 @@ const defaultData: DashboardData = {
 	providerCount: 0,
 	totalBlocks: 0,
 	blocksUntilHalving: 0,
-	validatorCount: 0,
-	blockReward: 0
+	rewardPerBlock: 0,
+	accumulatedRewards: 0
 };
 
 function createDashboardStore() {

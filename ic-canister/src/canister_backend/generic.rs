@@ -4,7 +4,8 @@ use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
     get_account_from_pubkey, get_num_offerings, get_num_providers, get_pubkey_from_principal,
     recent_transactions_cleanup, refresh_caches_from_ledger, reputation_get,
-    reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
+    reward_e9s_per_block, reward_e9s_per_block_recalculate, rewards_current_block_checked_in,
+    rewards_distribute,
     rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
     NextBlockSyncRequest, NextBlockSyncResponse, RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS,
     DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS,
@@ -478,6 +479,7 @@ pub(crate) fn _metadata() -> Vec<(String, MetadataValue)> {
     let authorized_pusher = AUTHORIZED_PUSHER.with(|authorized_pusher| *authorized_pusher.borrow());
     LEDGER_MAP.with(|ledger| {
         let ledger = ledger.borrow();
+        reward_e9s_per_block_recalculate();
         vec![
             MetadataValue::entry(
                 "ledger:data_start_lba",
@@ -514,6 +516,10 @@ pub(crate) fn _metadata() -> Vec<(String, MetadataValue)> {
             MetadataValue::entry(
                 "ledger:current_block_rewards_e9s",
                 rewards_pending_e9s(&ledger),
+            ),
+            MetadataValue::entry(
+                "ledger:reward_per_block_e9s",
+                reward_e9s_per_block(),
             ),
         ]
     })

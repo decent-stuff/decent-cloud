@@ -1,4 +1,4 @@
-use crate::{database::Database, network_metrics::load_ledger_metrics};
+use crate::{database::Database, metadata_cache::MetadataCache};
 use poem::{
     handler,
     web::{Data, Json, Path, Query},
@@ -47,6 +47,7 @@ pub struct PlatformOverview {
     pub latest_block_timestamp_ns: u64,
     pub blocks_until_next_halving: u64,
     pub current_block_rewards_e9s: u64,
+    pub reward_per_block_e9s: u64,
 }
 
 // Query parameters for pagination
@@ -313,6 +314,7 @@ pub async fn get_account_balance(
 #[handler]
 pub async fn get_platform_stats(
     db: Data<&Arc<Database>>,
+    metadata_cache: Data<&Arc<MetadataCache>>,
 ) -> PoemResult<Json<ApiResponse<PlatformOverview>>> {
     let base_stats = match db.get_platform_stats().await {
         Ok(stats) => stats,
@@ -324,10 +326,27 @@ pub async fn get_platform_stats(
         Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
     };
 
-    let ledger_metrics = match load_ledger_metrics() {
-        Ok(metrics) => metrics,
-        Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
+    // Get metadata from cache (fetched periodically from canister)
+    let metadata = match metadata_cache.get() {
+        Ok(m) => m,
+        Err(e) => return Ok(Json(ApiResponse::error(format!("Failed to get metadata: {}", e)))),
     };
+
+    let total_blocks = metadata
+        .get_u64("ledger:num_blocks")
+        .unwrap_or(0);
+    let latest_block_timestamp_ns = metadata
+        .get_u64("ledger:latest_block_timestamp_ns")
+        .unwrap_or(0);
+    let blocks_until_next_halving = metadata
+        .get_u64("ledger:blocks_until_next_halving")
+        .unwrap_or(0);
+    let current_block_rewards_e9s = metadata
+        .get_u64("ledger:current_block_rewards_e9s")
+        .unwrap_or(0);
+    let reward_per_block_e9s = metadata
+        .get_u64("ledger:reward_per_block_e9s")
+        .unwrap_or(0);
 
     let response = PlatformOverview {
         total_providers: base_stats.total_providers,
@@ -337,11 +356,14 @@ pub async fn get_platform_stats(
         total_transfers: base_stats.total_transfers,
         total_volume_e9s: base_stats.total_volume_e9s,
         validator_count_24h: validator_count,
-        current_block_validators: ledger_metrics.current_block_validators,
-        total_blocks: ledger_metrics.total_blocks,
-        latest_block_timestamp_ns: ledger_metrics.latest_block_timestamp_ns,
-        blocks_until_next_halving: ledger_metrics.blocks_until_next_halving,
-        current_block_rewards_e9s: ledger_metrics.current_block_rewards_e9s,
+        current_block_validators: metadata
+            .get_u64("ledger:current_block_validators")
+            .unwrap_or(0),
+        total_blocks,
+        latest_block_timestamp_ns,
+        blocks_until_next_halving,
+        current_block_rewards_e9s,
+        reward_per_block_e9s,
     };
 
     Ok(Json(ApiResponse::success(response)))

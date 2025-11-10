@@ -14,8 +14,8 @@ const mockDashboardData = {
 	providerCount: 12,
 	totalBlocks: 256,
 	blocksUntilHalving: 10_000,
-	validatorCount: 2,
-	blockReward: 9
+	rewardPerBlock: 50,
+	accumulatedRewards: 9
 };
 
 describe('dashboardStore', () => {

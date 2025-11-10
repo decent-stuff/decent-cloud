@@ -26,7 +26,8 @@ const mockStats = {
 	total_blocks: 256,
 	latest_block_timestamp_ns: 123_000,
 	blocks_until_next_halving: 10_000,
-	current_block_rewards_e9s: 9_000_000_000
+	current_block_rewards_e9s: 9_000_000_000,
+	reward_per_block_e9s: 50_000_000_000
 };
 
 describe('fetchDashboardData', () => {
@@ -43,8 +44,8 @@ describe('fetchDashboardData', () => {
 		expect(dashboard.dctPrice).toBe(1.23);
 		expect(dashboard.providerCount).toBe(mockStats.total_providers);
 		expect(dashboard.totalBlocks).toBe(mockStats.total_blocks);
-		expect(dashboard.validatorCount).toBe(mockStats.current_block_validators);
-		expect(dashboard.blockReward).toBeCloseTo(9);
+		expect(dashboard.rewardPerBlock).toBeCloseTo(50);
+		expect(dashboard.accumulatedRewards).toBeCloseTo(9);
 	});
 
 	it('propagates failures from the stats API', async () => {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { dashboardStore } from '$lib/stores/dashboard';
 	import Header from '$lib/components/Header.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
@@ -20,23 +21,24 @@
 	});
 	let error = $state<string | null>(null);
 
-	$effect(() => {
+	onMount(() => {
+		if (!browser) return;
+		
 		const unsubscribeData = dashboardStore.data.subscribe((value) => {
 			dashboardData = value;
 		});
 		const unsubscribeError = dashboardStore.error.subscribe((value) => {
 			error = value;
 		});
+		
+		dashboardStore.load();
+		const interval = setInterval(() => dashboardStore.load(), 10000);
+		
 		return () => {
 			unsubscribeData();
 			unsubscribeError();
+			clearInterval(interval);
 		};
-	});
-
-	onMount(() => {
-		dashboardStore.load();
-		const interval = setInterval(() => dashboardStore.load(), 10000);
-		return () => clearInterval(interval);
 	});
 </script>
 

@@ -1,11 +1,21 @@
 use anyhow::Result;
-use candid::{Decode, Encode, Principal};
+use candid::{Decode, Encode, Principal, CandidType};
 use ic_agent::Agent;
+use serde::{Deserialize, Serialize};
 
 /// Ledger canister client for fetching data
 pub struct LedgerClient {
     agent: Agent,
     canister_id: Principal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+#[serde(untagged)]
+pub enum MetadataValue {
+    Nat(u64),
+    Int(i64),
+    Text(String),
+    Blob(Vec<u8>),
 }
 
 impl LedgerClient {
@@ -36,6 +46,18 @@ impl LedgerClient {
             Decode!(response.as_slice(), Result<(String, Vec<u8>), String>)?
                 .map_err(|e| anyhow::anyhow!("Canister error: {}", e))
         }
+    }
+
+    /// Fetch metadata from the canister
+    pub async fn fetch_metadata(&self) -> Result<Vec<(String, MetadataValue)>> {
+        let response = self
+            .agent
+            .query(&self.canister_id, "metadata")
+            .call()
+            .await?;
+
+        Decode!(response.as_slice(), Vec<(String, MetadataValue)>)
+            .map_err(|e| anyhow::anyhow!("Failed to decode metadata: {}", e))
     }
 }
 

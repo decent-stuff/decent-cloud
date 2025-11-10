@@ -1,46 +1,55 @@
 <script lang="ts">
-	export let dashboardData: {
-		dctPrice: number;
-		providerCount: number;
-		totalBlocks: number;
-		blocksUntilHalving: number;
-		validatorCount: number;
-		blockReward: number;
-	};
-	export let error: string | null = null;
+	interface Props {
+		dashboardData: {
+			dctPrice: number;
+			providerCount: number;
+			totalBlocks: number;
+			blocksUntilHalving: number;
+			rewardPerBlock: number;
+			accumulatedRewards: number;
+		};
+		error?: string | null;
+	}
 
-	const stats = [
+	let { dashboardData, error = null }: Props = $props();
+
+	const stats = $derived([
 		{
 			label: "DCT Price",
-			getValue: () => `$${dashboardData.dctPrice.toFixed(4)}`,
+			value: `$${dashboardData.dctPrice.toFixed(4)}`,
 			icon: "💰",
 		},
 		{
 			label: "Providers",
-			getValue: () => dashboardData.providerCount.toString(),
+			value: dashboardData.providerCount.toString(),
 			icon: "🖥️",
 		},
 		{
 			label: "Total Blocks",
-			getValue: () => dashboardData.totalBlocks.toLocaleString(),
+			value: dashboardData.totalBlocks.toLocaleString(),
 			icon: "⛓️",
 		},
 		{
 			label: "Blocks Until Halving",
-			getValue: () => dashboardData.blocksUntilHalving.toLocaleString(),
+			value: dashboardData.blocksUntilHalving.toLocaleString(),
 			icon: "📉",
 		},
 		{
 			label: "Validators",
-			getValue: () => dashboardData.validatorCount.toString(),
+			value: dashboardData.validatorCount.toString(),
 			icon: "✅",
 		},
 		{
-			label: "Block Reward",
-			getValue: () => `${dashboardData.blockReward.toFixed(2)} DCT`,
+			label: "Reward Per Block",
+			value: `${dashboardData.rewardPerBlock.toFixed(2)} DCT`,
 			icon: "🎁",
 		},
-	];
+		{
+			label: "Accumulated Rewards",
+			value: `${dashboardData.accumulatedRewards.toFixed(2)} DCT`,
+			icon: "💰",
+		},
+	]);
 </script>
 
 <section class="py-20 px-4">
@@ -65,7 +74,7 @@
 					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-center hover:bg-white/20 transition-all"
 				>
 					<div class="text-4xl mb-2">{stat.icon}</div>
-					<div class="text-2xl font-bold mb-1">{stat.getValue()}</div>
+					<div class="text-2xl font-bold mb-1">{stat.value}</div>
 					<div class="text-sm text-white/60">{stat.label}</div>
 				</div>
 			{/each}
