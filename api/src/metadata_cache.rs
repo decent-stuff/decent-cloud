@@ -1,7 +1,8 @@
 use crate::ledger_client::LedgerClient;
 use anyhow::Result;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
-use std::collections::HashMap;
+use serde_json::Value as JsonValue;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
@@ -19,38 +20,43 @@ impl CachedMetadata {
         }
     }
 
-    pub fn get_u64(&self, key: &str) -> Option<u64> {
-        self.data.get(key).and_then(|v| match v {
-            MetadataValue::Nat(n) => {
-                // Convert Nat (big integer) to u64 via string parsing
-                n.to_string().parse::<u64>().ok()
-            }
-            MetadataValue::Int(i) => {
-                // Convert Int (big integer) to i64, then to u64 if non-negative
-                let val = i.to_string().parse::<i64>().ok()?;
-                if val >= 0 {
-                    Some(val as u64)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        })
+    /// Convert all metadata to JSON format
+    pub fn to_json_map(&self) -> BTreeMap<String, JsonValue> {
+        self.data
+            .iter()
+            .map(|(k, v)| (k.clone(), metadata_value_to_json(v)))
+            .collect()
     }
+}
 
-    #[allow(dead_code)]
-    pub fn get_i64(&self, key: &str) -> Option<i64> {
-        self.data.get(key).and_then(|v| match v {
-            MetadataValue::Nat(n) => {
-                // Convert Nat (big integer) to i64 via string parsing
-                n.to_string().parse::<i64>().ok()
+/// Convert MetadataValue to JSON Value
+fn metadata_value_to_json(value: &MetadataValue) -> JsonValue {
+    match value {
+        MetadataValue::Nat(n) => {
+            // Try to parse as u64, fall back to string for large numbers
+            if n > &candid::Nat::from(u64::MAX) {
+                return JsonValue::String(n.to_string());
             }
-            MetadataValue::Int(i) => {
-                // Convert Int (big integer) to i64 via string parsing
-                i.to_string().parse::<i64>().ok()
+            n.0.to_u64_digits()
+                .first()
+                .cloned()
+                .unwrap_or_default()
+                .into()
+        }
+        MetadataValue::Int(i) => {
+            // Try to parse as i64, fall back to string for large numbers
+            if i > &candid::Int::from(i64::MAX) {
+                return JsonValue::String(i.to_string());
             }
-            _ => None,
-        })
+            let (sign, n) = i.0.to_u64_digits();
+            if sign == num_bigint::Sign::Minus {
+                JsonValue::from(-(*n.first().unwrap_or(&0) as i64))
+            } else {
+                JsonValue::from(*n.first().unwrap_or(&0) as i64)
+            }
+        }
+        MetadataValue::Text(t) => JsonValue::String(t.clone()),
+        MetadataValue::Blob(b) => JsonValue::String(hex::encode(b)),
     }
 }
 
@@ -71,11 +77,6 @@ impl MetadataCache {
 
     pub async fn run(&self) {
         let mut interval = tokio::time::interval(self.refresh_interval);
-
-        // Run initial fetch immediately on startup
-        if let Err(e) = self.refresh().await {
-            tracing::error!("Initial metadata fetch failed: {}", e);
-        }
 
         loop {
             interval.tick().await;

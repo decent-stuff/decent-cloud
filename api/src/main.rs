@@ -270,7 +270,6 @@ async fn serve_command() -> Result<(), std::io::Error> {
         cache_for_task.run().await;
     });
 
-    tracing::info!("Starting metadata cache service");
     let server_result = Server::new(TcpListener::bind(&addr)).run(app).await;
 
     metadata_cache_task.abort();

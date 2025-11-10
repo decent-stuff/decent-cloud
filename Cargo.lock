@@ -851,6 +851,7 @@ dependencies = [
  "ic-agent",
  "icrc-ledger-types",
  "ledger-map",
+ "num-bigint",
  "poem",
  "provider-offering",
  "provider-profile",

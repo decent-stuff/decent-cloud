@@ -31,3 +31,4 @@ tempfile.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
+num-bigint.workspace = true

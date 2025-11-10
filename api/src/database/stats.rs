@@ -20,6 +20,15 @@ pub struct ReputationInfo {
 }
 
 impl Database {
+    /// Get the latest block timestamp from provider check-ins
+    pub async fn get_latest_block_timestamp_ns(&self) -> Result<Option<i64>> {
+        let result: (Option<i64>,) =
+            sqlx::query_as("SELECT MAX(block_timestamp_ns) FROM provider_check_ins")
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(result.0)
+    }
+
     /// Get platform-wide statistics
     pub async fn get_platform_stats(&self) -> Result<PlatformStats> {
         // Total providers = all who have ever checked in or created a profile
@@ -264,5 +273,28 @@ mod tests {
         assert_eq!(stats.pending_contracts, 1);
         assert_eq!(stats.total_revenue_e9s, 3000);
         assert_eq!(stats.offerings_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_block_timestamp_ns_empty() {
+        let db = setup_test_db().await;
+        let result = db.get_latest_block_timestamp_ns().await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_block_timestamp_ns_with_data() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+        let timestamp1 = 1000i64;
+        let timestamp2 = 2000i64;
+
+        sqlx::query("INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, 'test1', ?, ?)")
+            .bind(&pubkey).bind(vec![0u8; 64]).bind(timestamp1).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, 'test2', ?, ?)")
+            .bind(&pubkey).bind(vec![1u8; 64]).bind(timestamp2).execute(&db.pool).await.unwrap();
+
+        let result = db.get_latest_block_timestamp_ns().await.unwrap();
+        assert_eq!(result, Some(timestamp2));
     }
 }

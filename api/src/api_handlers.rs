@@ -5,6 +5,8 @@ use poem::{
     Result as PoemResult,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 // Common response wrapper
@@ -35,6 +37,7 @@ impl<T> ApiResponse<T> {
 
 #[derive(Debug, Serialize)]
 pub struct PlatformOverview {
+    // Database-derived statistics (always available, reliable)
     pub total_providers: i64,
     pub active_providers: i64,
     pub total_offerings: i64,
@@ -42,12 +45,13 @@ pub struct PlatformOverview {
     pub total_transfers: i64,
     pub total_volume_e9s: i64,
     pub validator_count_24h: i64,
-    pub current_block_validators: u64,
-    pub total_blocks: u64,
-    pub latest_block_timestamp_ns: u64,
-    pub blocks_until_next_halving: u64,
-    pub current_block_rewards_e9s: u64,
-    pub reward_per_block_e9s: u64,
+    pub latest_block_timestamp_ns: Option<u64>,
+
+    // All canister metadata (flexible, future-proof)
+    // Includes: num_blocks, blocks_until_next_halving, current_block_validators,
+    // current_block_rewards_e9s, reward_per_block_e9s, token_value_in_usd_e6,
+    // latest_block_hash, and any future metadata fields
+    pub metadata: BTreeMap<String, JsonValue>,
 }
 
 // Query parameters for pagination
@@ -335,28 +339,23 @@ pub async fn get_platform_stats(
         Err(e) => return Ok(Json(ApiResponse::error(e.to_string()))),
     };
 
-    // Get metadata from cache (fetched periodically from canister)
-    let metadata = match metadata_cache.get() {
-        Ok(m) => m,
-        Err(e) => {
-            return Ok(Json(ApiResponse::error(format!(
-                "Failed to get metadata: {}",
-                e
-            ))))
-        }
+    // Get latest block timestamp from database
+    let latest_block_timestamp_ns = match db.get_latest_block_timestamp_ns().await {
+        Ok(Some(ts)) if ts > 0 => Some(ts as u64),
+        _ => None,
     };
 
-    let total_blocks = metadata.get_u64("ledger:num_blocks").unwrap_or(0);
-    let latest_block_timestamp_ns = metadata
-        .get_u64("ledger:latest_block_timestamp_ns")
-        .unwrap_or(0);
-    let blocks_until_next_halving = metadata
-        .get_u64("ledger:blocks_until_next_halving")
-        .unwrap_or(0);
-    let current_block_rewards_e9s = metadata
-        .get_u64("ledger:current_block_rewards_e9s")
-        .unwrap_or(0);
-    let reward_per_block_e9s = metadata.get_u64("ledger:reward_per_block_e9s").unwrap_or(0);
+    // Get all metadata from cache as JSON (fetched periodically from canister)
+    let metadata_map = match metadata_cache.get() {
+        Ok(m) => {
+            tracing::debug!("Metadata cache has {} entries", m.data.len());
+            m.to_json_map()
+        }
+        Err(e) => {
+            tracing::warn!("Failed to get metadata from cache: {}", e);
+            BTreeMap::new()
+        }
+    };
 
     let response = PlatformOverview {
         total_providers: base_stats.total_providers,
@@ -366,14 +365,8 @@ pub async fn get_platform_stats(
         total_transfers: base_stats.total_transfers,
         total_volume_e9s: base_stats.total_volume_e9s,
         validator_count_24h: validator_count.0,
-        current_block_validators: metadata
-            .get_u64("ledger:current_block_validators")
-            .unwrap_or(0),
-        total_blocks,
         latest_block_timestamp_ns,
-        blocks_until_next_halving,
-        current_block_rewards_e9s,
-        reward_per_block_e9s,
+        metadata: metadata_map,
     };
 
     Ok(Json(ApiResponse::success(response)))
