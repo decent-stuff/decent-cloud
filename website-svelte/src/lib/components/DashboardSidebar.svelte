@@ -49,7 +49,8 @@
 	<!-- User Section -->
 	<div class="p-4 border-t border-white/10">
 		<button
-			on:click={handleLogout}
+			type="button"
+			onclick={handleLogout}
 			class="w-full px-4 py-3 text-left rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-3"
 		>
 			<span class="text-xl">👤</span>

@@ -1,16 +1,20 @@
 <script lang="ts">
 	import { authStore } from '$lib/stores/auth';
 	import AuthDialog from './AuthDialog.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 
-	let isAuthenticated = false;
+	let isAuthenticated = $state(false);
 	let showAuthDialog = $state(false);
+	let unsubscribe: (() => void) | null = null;
 
 	onMount(() => {
-		authStore.isAuthenticated.subscribe((value) => {
+		unsubscribe = authStore.isAuthenticated.subscribe((value) => {
 			isAuthenticated = value;
 		});
-		authStore.initialize();
+	});
+
+	onDestroy(() => {
+		unsubscribe?.();
 	});
 
 	function handleConnect() {
@@ -38,7 +42,8 @@
 				</a>
 			{:else}
 				<button
-					on:click={handleConnect}
+					type="button"
+					onclick={handleConnect}
 					class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full font-semibold hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Connect Wallet

@@ -5,7 +5,7 @@ import type { Principal } from '@dfinity/principal';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
-import { generateMnemonic, mnemonicToSeedSync } from 'bip39';
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from 'bip39';
 import {
 	addSeedPhrase as persistSeedPhrase,
 	clearStoredSeedPhrases,
@@ -44,11 +44,14 @@ function createAuthStore() {
 
 	// Generate Ed25519 identity from seed phrase
 	function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
+		if (!validateMnemonic(seedPhrase)) {
+			throw new Error('Invalid seed phrase');
+		}
 		const seedBuffer = mnemonicToSeedSync(seedPhrase, '');
 		const seedBytes = new Uint8Array(seedBuffer);
 		const keyMaterial = hmac(sha512, 'ed25519 seed', seedBytes);
 		const derivedSeed = keyMaterial.slice(0, 32);
-		return Ed25519KeyIdentity.fromSecretKey(derivedSeed.buffer);
+		return Ed25519KeyIdentity.fromSecretKey(derivedSeed);
 	}
 
 	function generateNewSeedPhrase(): string {
