@@ -1,5 +1,6 @@
-use crate::ledger_client::{LedgerClient, MetadataValue};
-use anyhow::{Context, Result};
+use crate::ledger_client::LedgerClient;
+use anyhow::Result;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
@@ -20,16 +21,34 @@ impl CachedMetadata {
 
     pub fn get_u64(&self, key: &str) -> Option<u64> {
         self.data.get(key).and_then(|v| match v {
-            MetadataValue::Nat(n) => Some(*n),
-            MetadataValue::Int(i) if *i >= 0 => Some(*i as u64),
+            MetadataValue::Nat(n) => {
+                // Convert Nat (big integer) to u64 via string parsing
+                n.to_string().parse::<u64>().ok()
+            }
+            MetadataValue::Int(i) => {
+                // Convert Int (big integer) to i64, then to u64 if non-negative
+                let val = i.to_string().parse::<i64>().ok()?;
+                if val >= 0 {
+                    Some(val as u64)
+                } else {
+                    None
+                }
+            }
             _ => None,
         })
     }
 
+    #[allow(dead_code)]
     pub fn get_i64(&self, key: &str) -> Option<i64> {
         self.data.get(key).and_then(|v| match v {
-            MetadataValue::Nat(n) => Some(*n as i64),
-            MetadataValue::Int(i) => Some(*i),
+            MetadataValue::Nat(n) => {
+                // Convert Nat (big integer) to i64 via string parsing
+                n.to_string().parse::<i64>().ok()
+            }
+            MetadataValue::Int(i) => {
+                // Convert Int (big integer) to i64 via string parsing
+                i.to_string().parse::<i64>().ok()
+            }
             _ => None,
         })
     }
@@ -67,15 +86,17 @@ impl MetadataCache {
     }
 
     async fn refresh(&self) -> Result<()> {
-        let metadata = self
-            .ledger_client
-            .fetch_metadata()
-            .await
-            .context("Failed to fetch metadata from canister")?;
-
-        let mut cache = self.cache.write().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire cache lock - possible poisoning")
+        let metadata = self.ledger_client.fetch_metadata().await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to fetch metadata from canister after retries: {}",
+                e
+            )
         })?;
+
+        let mut cache = self
+            .cache
+            .write()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire cache lock - possible poisoning"))?;
 
         cache.data.clear();
         for (key, value) in metadata {

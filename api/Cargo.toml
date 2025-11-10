@@ -18,6 +18,7 @@ dcc-common = { path = "../common" }
 dotenv.workspace = true
 hex.workspace = true
 ic-agent.workspace = true
+icrc-ledger-types.workspace = true
 ledger-map = { path = "../ledger-map" }
 poem.workspace = true
 provider-offering = { path = "../provider-offering" }

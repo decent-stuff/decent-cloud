@@ -21,6 +21,7 @@ pub struct ProviderProfile {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct ProviderCheckIn {
     pub pubkey_hash: Vec<u8>,
     pub memo: String,
@@ -36,8 +37,8 @@ pub struct ProviderContact {
 impl Database {
     /// Get list of active providers (checked in recently)
     pub async fn get_active_providers(&self, days: i64) -> Result<Vec<ProviderProfile>> {
-        let cutoff_ns = (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-            - days.max(1) * 24 * 3600 * 1_000_000_000) as i64;
+        let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+            - days.max(1) * 24 * 3600 * 1_000_000_000;
 
         let profiles = sqlx::query_as::<_, ProviderProfile>(
             "SELECT DISTINCT p.* FROM provider_profiles p
@@ -80,6 +81,7 @@ impl Database {
     }
 
     /// Get recent check-ins for a provider
+    #[allow(dead_code)]
     pub async fn get_provider_check_ins(
         &self,
         pubkey_hash: &[u8],
@@ -111,6 +113,7 @@ impl Database {
     }
 
     /// Count total providers
+    #[allow(dead_code)]
     pub async fn count_providers(&self) -> Result<i64> {
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM provider_profiles")
             .fetch_one(&self.pool)

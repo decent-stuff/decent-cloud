@@ -75,7 +75,7 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     };
 
     // Ledger client setup
-    let network_url = env::var("NETWORK_URL").unwrap_or_else(|_| "https://ic0.app".to_string());
+    let network_url = env::var("NETWORK_URL").unwrap_or_else(|_| "https://icp-api.io".to_string());
     let canister_id = env::var("CANISTER_ID")
         .expect("CANISTER_ID environment variable required")
         .parse::<Principal>()
@@ -271,9 +271,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     });
 
     tracing::info!("Starting metadata cache service");
-    let server_result = Server::new(TcpListener::bind(&addr))
-        .run(app)
-        .await;
+    let server_result = Server::new(TcpListener::bind(&addr)).run(app).await;
 
     metadata_cache_task.abort();
     server_result

@@ -28,8 +28,8 @@ impl Database {
                 .await?;
 
         // Active in the last year
-        let cutoff_ns = (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
-            - 365 * 24 * 3600 * 1_000_000_000) as i64;
+        let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+            - 365 * 24 * 3600 * 1_000_000_000;
         let active_providers: (i64,) = sqlx::query_as(
             "SELECT COUNT(DISTINCT pubkey_hash) FROM provider_check_ins WHERE block_timestamp_ns > ?"
         )

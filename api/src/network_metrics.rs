@@ -18,6 +18,7 @@ pub struct LedgerMetrics {
     pub reward_per_block_e9s: u64,
 }
 
+#[allow(dead_code)]
 pub fn load_ledger_metrics() -> Result<LedgerMetrics> {
     let ledger_file = ledger_file_path().context("Ledger directory unavailable")?;
     load_metrics_from_file(&ledger_file)

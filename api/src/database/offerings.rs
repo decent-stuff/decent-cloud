@@ -47,34 +47,39 @@ pub struct Offering {
     pub max_contract_hours: Option<i64>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SearchOfferingsParams<'a> {
+    pub product_type: Option<&'a str>,
+    pub country: Option<&'a str>,
+    pub min_price_e9s: Option<i64>,
+    pub max_price_e9s: Option<i64>,
+    pub in_stock_only: bool,
+    pub limit: i64,
+    pub offset: i64,
+}
+
 #[allow(dead_code)]
 impl Database {
     /// Search offerings with filters
     pub async fn search_offerings(
         &self,
-        product_type: Option<&str>,
-        country: Option<&str>,
-        min_price_e9s: Option<i64>,
-        max_price_e9s: Option<i64>,
-        in_stock_only: bool,
-        limit: i64,
-        offset: i64,
+        params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
         let mut query = String::from("SELECT * FROM provider_offerings WHERE 1=1");
 
-        if product_type.is_some() {
+        if params.product_type.is_some() {
             query.push_str(" AND product_type = ?");
         }
-        if country.is_some() {
+        if params.country.is_some() {
             query.push_str(" AND datacenter_country = ?");
         }
-        if min_price_e9s.is_some() {
+        if params.min_price_e9s.is_some() {
             query.push_str(" AND price_per_hour_e9s >= ?");
         }
-        if max_price_e9s.is_some() {
+        if params.max_price_e9s.is_some() {
             query.push_str(" AND price_per_hour_e9s <= ?");
         }
-        if in_stock_only {
+        if params.in_stock_only {
             query.push_str(" AND stock_status = ?");
         }
 
@@ -82,25 +87,25 @@ impl Database {
 
         let mut query_builder = sqlx::query_as::<_, Offering>(&query);
 
-        if let Some(pt) = product_type {
+        if let Some(pt) = params.product_type {
             query_builder = query_builder.bind(pt);
         }
-        if let Some(c) = country {
+        if let Some(c) = params.country {
             query_builder = query_builder.bind(c);
         }
-        if let Some(min) = min_price_e9s {
+        if let Some(min) = params.min_price_e9s {
             query_builder = query_builder.bind(min);
         }
-        if let Some(max) = max_price_e9s {
+        if let Some(max) = params.max_price_e9s {
             query_builder = query_builder.bind(max);
         }
-        if in_stock_only {
+        if params.in_stock_only {
             query_builder = query_builder.bind("in_stock");
         }
 
         let offerings = query_builder
-            .bind(limit)
-            .bind(offset)
+            .bind(params.limit)
+            .bind(params.offset)
             .fetch_all(&self.pool)
             .await?;
 
@@ -462,7 +467,15 @@ mod tests {
         insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
 
         let results = db
-            .search_offerings(None, None, None, None, false, 10, 0)
+            .search_offerings(SearchOfferingsParams {
+                product_type: None,
+                country: None,
+                min_price_e9s: None,
+                max_price_e9s: None,
+                in_stock_only: false,
+                limit: 10,
+                offset: 0,
+            })
             .await
             .unwrap();
         assert_eq!(results.len(), 2);
@@ -475,7 +488,15 @@ mod tests {
         insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
 
         let results = db
-            .search_offerings(None, Some("US"), None, None, false, 10, 0)
+            .search_offerings(SearchOfferingsParams {
+                product_type: None,
+                country: Some("US"),
+                min_price_e9s: None,
+                max_price_e9s: None,
+                in_stock_only: false,
+                limit: 10,
+                offset: 0,
+            })
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
@@ -493,7 +514,15 @@ mod tests {
         let min_price = (100.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
         let max_price = (200.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
         let results = db
-            .search_offerings(None, None, Some(min_price), Some(max_price), false, 10, 0)
+            .search_offerings(SearchOfferingsParams {
+                product_type: None,
+                country: None,
+                min_price_e9s: Some(min_price),
+                max_price_e9s: Some(max_price),
+                in_stock_only: false,
+                limit: 10,
+                offset: 0,
+            })
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
@@ -508,13 +537,29 @@ mod tests {
         }
 
         let page1 = db
-            .search_offerings(None, None, None, None, false, 2, 0)
+            .search_offerings(SearchOfferingsParams {
+                product_type: None,
+                country: None,
+                min_price_e9s: None,
+                max_price_e9s: None,
+                in_stock_only: false,
+                limit: 2,
+                offset: 0,
+            })
             .await
             .unwrap();
         assert_eq!(page1.len(), 2);
 
         let page2 = db
-            .search_offerings(None, None, None, None, false, 2, 2)
+            .search_offerings(SearchOfferingsParams {
+                product_type: None,
+                country: None,
+                min_price_e9s: None,
+                max_price_e9s: None,
+                in_stock_only: false,
+                limit: 2,
+                offset: 2,
+            })
             .await
             .unwrap();
         assert_eq!(page2.len(), 2);

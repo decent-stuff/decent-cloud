@@ -64,23 +64,26 @@ impl SyncService {
         Ok(())
     }
 
+    #[allow(clippy::await_holding_lock)]
     async fn fetch_data(&self, last_position: u64) -> Result<(Vec<u8>, u64)> {
         tracing::debug!("Starting sync from position {}", last_position);
 
-        let mut ledger_parser = self.ledger_parser.lock().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire ledger parser lock - possible poisoning")
-        })?;
+        let (raw_data, new_position) = {
+            let mut ledger_parser = self.ledger_parser.lock().map_err(|_| {
+                anyhow::anyhow!("Failed to acquire ledger parser lock - possible poisoning")
+            })?;
 
-        let (raw_data, new_position) = fetch_and_write_ledger_data(
-            &mut *ledger_parser,
-            |cursor_str, bytes_before| async move {
-                self.ledger_client
-                    .data_fetch(cursor_str, bytes_before)
-                    .await
-            },
-            last_position,
-        )
-        .await?;
+            fetch_and_write_ledger_data(
+                &mut ledger_parser,
+                |cursor_str, bytes_before| async move {
+                    self.ledger_client
+                        .data_fetch(cursor_str, bytes_before)
+                        .await
+                },
+                last_position,
+            )
+            .await?
+        };
 
         Ok((raw_data, new_position))
     }

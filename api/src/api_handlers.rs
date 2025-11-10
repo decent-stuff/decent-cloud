@@ -151,15 +151,15 @@ pub async fn search_offerings(
     Query(params): Query<OfferingSearchQuery>,
 ) -> PoemResult<Json<ApiResponse<Vec<crate::database::offerings::Offering>>>> {
     match db
-        .search_offerings(
-            params.product_type.as_deref(),
-            params.country.as_deref(),
-            params.min_price_e9s,
-            params.max_price_e9s,
-            params.in_stock_only,
-            params.limit,
-            params.offset,
-        )
+        .search_offerings(crate::database::offerings::SearchOfferingsParams {
+            product_type: params.product_type.as_deref(),
+            country: params.country.as_deref(),
+            min_price_e9s: params.min_price_e9s,
+            max_price_e9s: params.max_price_e9s,
+            in_stock_only: params.in_stock_only,
+            limit: params.limit,
+            offset: params.offset,
+        })
         .await
     {
         Ok(offerings) => Ok(Json(ApiResponse::success(offerings))),
@@ -329,12 +329,15 @@ pub async fn get_platform_stats(
     // Get metadata from cache (fetched periodically from canister)
     let metadata = match metadata_cache.get() {
         Ok(m) => m,
-        Err(e) => return Ok(Json(ApiResponse::error(format!("Failed to get metadata: {}", e)))),
+        Err(e) => {
+            return Ok(Json(ApiResponse::error(format!(
+                "Failed to get metadata: {}",
+                e
+            ))))
+        }
     };
 
-    let total_blocks = metadata
-        .get_u64("ledger:num_blocks")
-        .unwrap_or(0);
+    let total_blocks = metadata.get_u64("ledger:num_blocks").unwrap_or(0);
     let latest_block_timestamp_ns = metadata
         .get_u64("ledger:latest_block_timestamp_ns")
         .unwrap_or(0);
@@ -344,9 +347,7 @@ pub async fn get_platform_stats(
     let current_block_rewards_e9s = metadata
         .get_u64("ledger:current_block_rewards_e9s")
         .unwrap_or(0);
-    let reward_per_block_e9s = metadata
-        .get_u64("ledger:reward_per_block_e9s")
-        .unwrap_or(0);
+    let reward_per_block_e9s = metadata.get_u64("ledger:reward_per_block_e9s").unwrap_or(0);
 
     let response = PlatformOverview {
         total_providers: base_stats.total_providers,

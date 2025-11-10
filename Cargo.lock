@@ -849,6 +849,7 @@ dependencies = [
  "dotenv",
  "hex",
  "ic-agent",
+ "icrc-ledger-types",
  "ledger-map",
  "poem",
  "provider-offering",
