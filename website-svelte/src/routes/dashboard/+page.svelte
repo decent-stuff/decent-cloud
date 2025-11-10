@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { dashboardStore } from '$lib/stores/dashboard';
+	import type { DashboardData } from '$lib/services/dashboard-data';
 
-	let dashboardData = $state({
+	let dashboardData = $state<DashboardData>({
 		dctPrice: 0,
 		providerCount: 0,
 		totalBlocks: 0,

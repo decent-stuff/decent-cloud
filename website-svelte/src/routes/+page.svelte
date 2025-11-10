@@ -8,8 +8,9 @@
 	import DashboardSection from '$lib/components/DashboardSection.svelte';
 	import InfoSection from '$lib/components/InfoSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import type { DashboardData } from '$lib/services/dashboard-data';
 
-	let dashboardData = $state({
+	let dashboardData = $state<DashboardData>({
 		dctPrice: 0,
 		providerCount: 0,
 		totalBlocks: 0,
