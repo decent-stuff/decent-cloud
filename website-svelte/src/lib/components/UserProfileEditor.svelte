@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { UserApiClient } from '$lib/services/user-api';
+	import { API_BASE_URL } from '$lib/services/api';
+	import { UserApiClient, handleApiResponse } from '$lib/services/user-api';
 	import ContactsEditor from './ContactsEditor.svelte';
 	import SocialsEditor from './SocialsEditor.svelte';
 	import PublicKeysEditor from './PublicKeysEditor.svelte';
@@ -31,9 +32,7 @@
 	// Fetch existing profile
 	onMount(async () => {
 		try {
-			const res = await fetch(
-				`${import.meta.env.VITE_DECENT_CLOUD_API_URL || 'https://api.decent-cloud.org'}/api/v1/users/${pubkey}/profile`
-			);
+			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/profile`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -56,8 +55,9 @@
 
 		try {
 			const res = await apiClient.updateProfile(pubkey, profile);
-			const data = await res.json();
+			await handleApiResponse(res);
 
+			const data = await res.json();
 			if (!data.success) {
 				throw new Error(data.error || 'Failed to update profile');
 			}
@@ -75,52 +75,56 @@
 </script>
 
 <div class="space-y-6">
-	<div class="bg-white border rounded-lg p-6">
-		<h2 class="text-xl font-semibold mb-4">Basic Information</h2>
+	<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+		<h2 class="text-2xl font-bold text-white mb-4">Basic Information</h2>
 
 		<div class="space-y-4">
 			<div>
-				<label for="display-name" class="block text-sm font-medium mb-2"> Display Name </label>
+				<label for="display-name" class="block text-sm font-medium text-white/70 mb-2">
+					Display Name
+				</label>
 				<input
 					id="display-name"
 					type="text"
 					bind:value={profile.display_name}
-					class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 					placeholder="Your display name"
 				/>
 			</div>
 
 			<div>
-				<label for="bio" class="block text-sm font-medium mb-2">Bio</label>
+				<label for="bio" class="block text-sm font-medium text-white/70 mb-2">Bio</label>
 				<textarea
 					id="bio"
 					bind:value={profile.bio}
-					class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 					rows={4}
 					placeholder="Tell us about yourself"
 				></textarea>
 			</div>
 
 			<div>
-				<label for="avatar-url" class="block text-sm font-medium mb-2">Avatar URL</label>
+				<label for="avatar-url" class="block text-sm font-medium text-white/70 mb-2">
+					Avatar URL
+				</label>
 				<input
 					id="avatar-url"
 					type="url"
 					bind:value={profile.avatar_url}
-					class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 					placeholder="https://example.com/avatar.png"
 				/>
 			</div>
 		</div>
 
 		{#if error}
-			<div class="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
+			<div class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400">
 				{error}
 			</div>
 		{/if}
 
 		{#if successMessage}
-			<div class="mt-4 p-3 bg-green-50 border border-green-200 rounded text-green-700">
+			<div class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400">
 				{successMessage}
 			</div>
 		{/if}

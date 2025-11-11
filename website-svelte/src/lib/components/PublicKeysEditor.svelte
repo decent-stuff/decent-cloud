@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { UserApiClient } from '$lib/services/user-api';
+	import { API_BASE_URL } from '$lib/services/api';
+	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
 
 	interface PublicKey {
 		key_type: string;
@@ -25,11 +26,7 @@
 	});
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-
-	const API_BASE =
-		typeof window !== 'undefined' && import.meta.env.VITE_DECENT_CLOUD_API_URL
-			? import.meta.env.VITE_DECENT_CLOUD_API_URL
-			: 'https://api.decent-cloud.org';
+	let successMessage = $state<string | null>(null);
 
 	onMount(() => {
 		loadKeys();
@@ -37,7 +34,7 @@
 
 	async function loadKeys() {
 		try {
-			const res = await fetch(`${API_BASE}/api/v1/users/${pubkey}/keys`);
+			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/keys`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -54,6 +51,7 @@
 
 		loading = true;
 		error = null;
+		successMessage = null;
 
 		try {
 			const res = await apiClient.addPublicKey(pubkey, {
@@ -62,6 +60,7 @@
 				key_fingerprint: newKey.fingerprint || undefined,
 				label: newKey.label || undefined
 			});
+			await handleApiResponse(res);
 
 			const data = await res.json();
 			if (!data.success) {
@@ -75,6 +74,10 @@
 				label: ''
 			};
 			await loadKeys();
+			successMessage = 'Public key added successfully!';
+			setTimeout(() => {
+				successMessage = null;
+			}, 3000);
 		} catch (err: unknown) {
 			error = err instanceof Error ? err.message : 'Failed to add public key';
 		} finally {
@@ -85,50 +88,59 @@
 	async function handleDelete(fingerprint: string) {
 		if (!confirm('Delete this public key?')) return;
 
+		error = null;
+		successMessage = null;
+
 		try {
 			const res = await apiClient.deletePublicKey(pubkey, fingerprint);
+			await handleApiResponse(res);
+
 			const data = await res.json();
 			if (!data.success) {
 				throw new Error(data.error || 'Failed to delete public key');
 			}
 			await loadKeys();
+			successMessage = 'Public key deleted successfully!';
+			setTimeout(() => {
+				successMessage = null;
+			}, 3000);
 		} catch (err: unknown) {
 			error = err instanceof Error ? err.message : 'Failed to delete public key';
 		}
 	}
 </script>
 
-<div class="bg-white border rounded-lg p-6">
-	<h2 class="text-xl font-semibold mb-4">Public Keys</h2>
+<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+	<h2 class="text-2xl font-bold text-white mb-4">Public Keys</h2>
 
 	<!-- Keys list -->
 	<div class="space-y-2 mb-4">
 		{#if keys.length === 0}
-			<p class="text-gray-500 text-sm">No public keys added yet.</p>
+			<p class="text-white/50 text-sm">No public keys added yet.</p>
 		{/if}
 		{#each keys as key}
-			<div class="p-3 bg-gray-50 rounded">
+			<div class="p-3 bg-white/5 rounded-lg border border-white/10">
 				<div class="flex items-start justify-between mb-2">
 					<div>
-						<span class="font-medium text-sm">{key.key_type}</span>
+						<span class="font-medium text-sm text-white">{key.key_type}</span>
 						{#if key.label}
-							<span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+							<span class="ml-2 text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded border border-blue-500/30">
 								{key.label}
 							</span>
 						{/if}
 					</div>
 					<button
 						onclick={() => handleDelete(key.key_fingerprint || key.key_data)}
-						class="text-red-600 hover:text-red-800 transition-colors text-sm"
+						class="text-red-400 hover:text-red-300 transition-colors text-sm"
 					>
 						Delete
 					</button>
 				</div>
-				<div class="text-xs text-gray-600 font-mono break-all">
+				<div class="text-xs text-white/60 font-mono break-all">
 					{key.key_data.substring(0, 80)}{key.key_data.length > 80 ? '...' : ''}
 				</div>
 				{#if key.key_fingerprint}
-					<div class="text-xs text-gray-500 mt-1">
+					<div class="text-xs text-white/50 mt-1">
 						Fingerprint: {key.key_fingerprint}
 					</div>
 				{/if}
@@ -141,7 +153,7 @@
 		<div class="flex gap-2">
 			<select
 				bind:value={newKey.type}
-				class="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+				class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
 			>
 				<option value="ssh-ed25519">SSH Ed25519</option>
 				<option value="ssh-rsa">SSH RSA</option>
@@ -150,13 +162,13 @@
 			<input
 				type="text"
 				bind:value={newKey.label}
-				class="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+				class="flex-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 				placeholder="Label (optional)"
 			/>
 		</div>
 		<textarea
 			bind:value={newKey.data}
-			class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+			class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
 			rows={3}
 			placeholder="Paste your public key here"
 		></textarea>
@@ -164,7 +176,7 @@
 			<input
 				type="text"
 				bind:value={newKey.fingerprint}
-				class="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+				class="flex-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 				placeholder="Fingerprint (optional)"
 			/>
 			<button
@@ -178,8 +190,14 @@
 	</div>
 
 	{#if error}
-		<div class="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
+		<div class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400">
 			{error}
+		</div>
+	{/if}
+
+	{#if successMessage}
+		<div class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400">
+			{successMessage}
 		</div>
 	{/if}
 </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { UserApiClient } from '$lib/services/user-api';
+	import { API_BASE_URL } from '$lib/services/api';
+	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
 
 	interface Social {
 		platform: string;
@@ -19,11 +20,7 @@
 	let newSocial = $state({ platform: 'twitter', username: '', profile_url: '' });
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-
-	const API_BASE =
-		typeof window !== 'undefined' && import.meta.env.VITE_DECENT_CLOUD_API_URL
-			? import.meta.env.VITE_DECENT_CLOUD_API_URL
-			: 'https://api.decent-cloud.org';
+	let successMessage = $state<string | null>(null);
 
 	onMount(() => {
 		loadSocials();
@@ -31,7 +28,7 @@
 
 	async function loadSocials() {
 		try {
-			const res = await fetch(`${API_BASE}/api/v1/users/${pubkey}/socials`);
+			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/socials`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -48,6 +45,7 @@
 
 		loading = true;
 		error = null;
+		successMessage = null;
 
 		try {
 			const res = await apiClient.upsertSocial(pubkey, {
@@ -55,6 +53,7 @@
 				username: newSocial.username,
 				profile_url: newSocial.profile_url || undefined
 			});
+			await handleApiResponse(res);
 
 			const data = await res.json();
 			if (!data.success) {
@@ -63,6 +62,10 @@
 
 			newSocial = { platform: 'twitter', username: '', profile_url: '' };
 			await loadSocials();
+			successMessage = 'Social account added successfully!';
+			setTimeout(() => {
+				successMessage = null;
+			}, 3000);
 		} catch (err: unknown) {
 			error = err instanceof Error ? err.message : 'Failed to add social account';
 		} finally {
@@ -73,38 +76,47 @@
 	async function handleDelete(platform: string) {
 		if (!confirm(`Delete ${platform} account?`)) return;
 
+		error = null;
+		successMessage = null;
+
 		try {
 			const res = await apiClient.deleteSocial(pubkey, platform);
+			await handleApiResponse(res);
+
 			const data = await res.json();
 			if (!data.success) {
 				throw new Error(data.error || 'Failed to delete social account');
 			}
 			await loadSocials();
+			successMessage = 'Social account deleted successfully!';
+			setTimeout(() => {
+				successMessage = null;
+			}, 3000);
 		} catch (err: unknown) {
 			error = err instanceof Error ? err.message : 'Failed to delete social account';
 		}
 	}
 </script>
 
-<div class="bg-white border rounded-lg p-6">
-	<h2 class="text-xl font-semibold mb-4">Social Media</h2>
+<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+	<h2 class="text-2xl font-bold text-white mb-4">Social Media</h2>
 
 	<!-- Socials list -->
 	<div class="space-y-2 mb-4">
 		{#if socials.length === 0}
-			<p class="text-gray-500 text-sm">No social media accounts added yet.</p>
+			<p class="text-white/50 text-sm">No social media accounts added yet.</p>
 		{/if}
 		{#each socials as social}
-			<div class="flex items-center justify-between p-3 bg-gray-50 rounded">
-				<div>
-					<span class="font-medium">{social.platform}:</span>
+			<div class="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+				<div class="text-white">
+					<span class="font-medium text-white/70">{social.platform}:</span>
 					{social.username}
 					{#if social.profile_url}
 						<a
 							href={social.profile_url}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="ml-2 text-blue-600 hover:underline text-sm"
+							class="ml-2 text-blue-400 hover:text-blue-300 hover:underline text-sm"
 						>
 							View Profile
 						</a>
@@ -112,7 +124,7 @@
 				</div>
 				<button
 					onclick={() => handleDelete(social.platform)}
-					class="text-red-600 hover:text-red-800 transition-colors"
+					class="text-red-400 hover:text-red-300 transition-colors"
 				>
 					Delete
 				</button>
@@ -125,7 +137,7 @@
 		<div class="flex gap-2">
 			<select
 				bind:value={newSocial.platform}
-				class="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+				class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
 			>
 				<option value="twitter">Twitter</option>
 				<option value="github">GitHub</option>
@@ -136,7 +148,7 @@
 			<input
 				type="text"
 				bind:value={newSocial.username}
-				class="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+				class="flex-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 				placeholder="Username"
 			/>
 		</div>
@@ -144,7 +156,7 @@
 			<input
 				type="url"
 				bind:value={newSocial.profile_url}
-				class="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+				class="flex-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 				placeholder="Profile URL (optional)"
 			/>
 			<button
@@ -158,8 +170,14 @@
 	</div>
 
 	{#if error}
-		<div class="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
+		<div class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400">
 			{error}
+		</div>
+	{/if}
+
+	{#if successMessage}
+		<div class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400">
+			{successMessage}
 		</div>
 	{/if}
 </div>

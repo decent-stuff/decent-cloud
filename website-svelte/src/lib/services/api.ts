@@ -4,7 +4,7 @@ const PROD_API_BASE_URL = 'https://api.decent-cloud.org';
 
 // Determine API URL based on build mode and environment variable
 // Priority: VITE_DECENT_CLOUD_API_URL env var > production mode > development mode
-const API_BASE_URL =
+export const API_BASE_URL =
 	import.meta.env.VITE_DECENT_CLOUD_API_URL?.replace(/\/+$/, '') ??
 	(import.meta.env.PROD ? PROD_API_BASE_URL : DEV_API_BASE_URL);
 

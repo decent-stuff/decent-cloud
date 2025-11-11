@@ -1,10 +1,7 @@
-import { sha512 } from '@noble/hashes/sha512';
-import * as ed from '@noble/ed25519';
+import { ed25519ph } from '@noble/curves/ed25519';
 import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
-// Set the sha512 hash for ed25519 v3
-ed.hashes.sha512 = sha512;
-ed.hashes.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
+const ED25519_SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
 
 export interface SignedRequest {
 	headers: {
@@ -38,11 +35,8 @@ export async function signRequest(
 	// Construct message: timestamp + method + path + body
 	const message = new TextEncoder().encode(timestampNs + method + path + body);
 
-	// Sign message (Ed25519 with SHA-512 prehashing)
-	const prehashed = sha512(message);
-
-	// Sign with Ed25519
-	const signature = await ed.sign(prehashed, secretKeyBytes.slice(0, 32));
+	// Sign message using Ed25519ph with SHA-512 prehashing and context (matching DccIdentity)
+	const signature = ed25519ph.sign(message, secretKeyBytes.slice(0, 32), { context: ED25519_SIGN_CONTEXT });
 
 	return {
 		headers: {

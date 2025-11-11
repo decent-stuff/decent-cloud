@@ -32,12 +32,15 @@
 	}
 </script>
 
-<div class="p-8 max-w-4xl mx-auto">
-	<h1 class="text-2xl font-bold mb-6">Profile Settings</h1>
+<div class="space-y-8">
+	<div>
+		<h1 class="text-4xl font-bold text-white mb-2">Profile Settings</h1>
+		<p class="text-white/60">Manage your account information and preferences</p>
+	</div>
 
 	{#if !signingIdentity}
-		<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-			<p class="text-yellow-800 mb-4">
+		<div class="bg-yellow-500/20 border border-yellow-500/30 rounded-xl p-6 backdrop-blur-lg">
+			<p class="text-yellow-300 mb-4">
 				You need a signing key (seed phrase identity) to edit your profile.
 			</p>
 			<button
@@ -50,6 +53,6 @@
 	{:else if currentIdentity}
 		<UserProfileEditor identity={currentIdentity} {signingIdentity} />
 	{:else}
-		<p class="text-gray-500">Loading...</p>
+		<p class="text-white/60">Loading...</p>
 	{/if}
 </div>

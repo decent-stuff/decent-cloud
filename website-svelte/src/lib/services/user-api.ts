@@ -1,10 +1,28 @@
 import { signRequest } from './auth-api';
+import { API_BASE_URL } from './api';
 import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
-const API_BASE =
-	typeof window !== 'undefined' && import.meta.env.VITE_DECENT_CLOUD_API_URL
-		? import.meta.env.VITE_DECENT_CLOUD_API_URL
-		: 'https://api.decent-cloud.org';
+/**
+ * Helper function to handle API response errors consistently
+ */
+export async function handleApiResponse(res: Response): Promise<void> {
+	if (!res.ok) {
+		let errorMsg = `HTTP ${res.status}: ${res.statusText}`;
+		try {
+			const contentType = res.headers.get('content-type');
+			if (contentType?.includes('application/json')) {
+				const data = await res.json();
+				errorMsg = data.error || errorMsg;
+			} else {
+				const text = await res.text();
+				errorMsg = text || errorMsg;
+			}
+		} catch {
+			// If parsing fails, use the default error message
+		}
+		throw new Error(errorMsg);
+	}
+}
 
 export class UserApiClient {
 	constructor(private signingIdentity: Ed25519KeyIdentity) {}
@@ -17,7 +35,7 @@ export class UserApiClient {
 			body
 		);
 
-		return fetch(`${API_BASE}${path}`, {
+		return fetch(`${API_BASE_URL}${path}`, {
 			method,
 			headers,
 			body: signedBody || undefined
