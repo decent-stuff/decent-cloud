@@ -6,7 +6,8 @@
 		{ href: '/dashboard', icon: '📊', label: 'Overview' },
 		{ href: '/dashboard/validators', icon: '✓', label: 'Validators' },
 		{ href: '/dashboard/offerings', icon: '📦', label: 'My Offerings' },
-		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' }
+		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' },
+		{ href: '/dashboard/profile', icon: '👤', label: 'Profile' }
 	];
 
 	let currentPath = '';

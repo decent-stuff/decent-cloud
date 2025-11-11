@@ -26,7 +26,8 @@ const mockStats = {
 	metadata: {
 		'ledger:num_blocks': 256,
 		'ledger:blocks_until_next_halving': 10_000,
-		'ledger:current_block_rewards_e9s': 50_000_000_000,
+		'ledger:reward_per_block_e9s': 50_000_000_000,
+		'ledger:current_block_rewards_e9s': 12_800_000_000_000,
 		'ledger:current_block_validators': 2,
 		'ledger:token_value_in_usd_e6': 1_000_000
 	}
