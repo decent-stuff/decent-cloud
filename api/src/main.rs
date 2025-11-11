@@ -1,4 +1,5 @@
 mod api_handlers;
+mod auth;
 mod database;
 mod ledger_client;
 mod ledger_path;
@@ -257,6 +258,35 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .at(
             "/api/v1/users/:pubkey/keys",
             poem::get(api_handlers::get_user_public_keys),
+        )
+        // User profile update endpoints (authenticated)
+        .at(
+            "/api/v1/users/:pubkey/profile",
+            poem::put(api_handlers::update_user_profile),
+        )
+        .at(
+            "/api/v1/users/:pubkey/contacts",
+            poem::post(api_handlers::upsert_user_contact),
+        )
+        .at(
+            "/api/v1/users/:pubkey/contacts/:contact_type",
+            poem::delete(api_handlers::delete_user_contact),
+        )
+        .at(
+            "/api/v1/users/:pubkey/socials",
+            poem::post(api_handlers::upsert_user_social),
+        )
+        .at(
+            "/api/v1/users/:pubkey/socials/:platform",
+            poem::delete(api_handlers::delete_user_social),
+        )
+        .at(
+            "/api/v1/users/:pubkey/keys",
+            poem::post(api_handlers::add_user_public_key),
+        )
+        .at(
+            "/api/v1/users/:pubkey/keys/:key_fingerprint",
+            poem::delete(api_handlers::delete_user_public_key),
         )
         // Token endpoints
         .at(

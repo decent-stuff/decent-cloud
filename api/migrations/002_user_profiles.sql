@@ -22,6 +22,7 @@ CREATE TABLE user_contacts (
     verified BOOLEAN DEFAULT FALSE,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_pubkey_hash, contact_type),
     FOREIGN KEY (user_pubkey_hash) REFERENCES user_registrations(pubkey_hash) ON DELETE CASCADE
 );
 
@@ -34,6 +35,7 @@ CREATE TABLE user_socials (
     profile_url TEXT,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_pubkey_hash, platform),
     FOREIGN KEY (user_pubkey_hash) REFERENCES user_registrations(pubkey_hash) ON DELETE CASCADE
 );
 

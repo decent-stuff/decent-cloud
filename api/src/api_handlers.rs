@@ -1,6 +1,7 @@
-use crate::{database::Database, metadata_cache::MetadataCache};
+use crate::{auth::AuthenticatedUser, database::Database, metadata_cache::MetadataCache};
 use poem::{
     handler,
+    http::StatusCode,
     web::{Data, Json, Path, Query},
     Result as PoemResult,
 };
@@ -394,6 +395,208 @@ pub async fn get_user_public_keys(
 
     match db.get_user_public_keys(&pubkey).await {
         Ok(keys) => Ok(Json(ApiResponse::success(keys))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+// ============ Authenticated User Update Endpoints ============
+
+/// Verify that the authenticated user owns the target resource
+fn verify_user_authorization(auth: &AuthenticatedUser, pubkey_hex: &str) -> PoemResult<()> {
+    let target_pubkey = hex::decode(pubkey_hex)
+        .map_err(|_| poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST))?;
+
+    if auth.pubkey_hash != target_pubkey {
+        return Err(poem::Error::from_string(
+            "Unauthorized: cannot modify another user's resource",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserProfileRequest {
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[handler]
+pub async fn update_user_profile(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+    Json(req): Json<UpdateUserProfileRequest>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    verify_user_authorization(&auth, &pubkey_hex)?;
+
+    match db
+        .upsert_user_profile(
+            &auth.pubkey_hash,
+            req.display_name.as_deref(),
+            req.bio.as_deref(),
+            req.avatar_url.as_deref(),
+        )
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Profile updated successfully".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertContactRequest {
+    pub contact_type: String,
+    pub contact_value: String,
+    #[serde(default)]
+    pub verified: bool,
+}
+
+#[handler]
+pub async fn upsert_user_contact(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+    Json(req): Json<UpsertContactRequest>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    verify_user_authorization(&auth, &pubkey_hex)?;
+
+    match db
+        .upsert_user_contact(
+            &auth.pubkey_hash,
+            &req.contact_type,
+            &req.contact_value,
+            req.verified,
+        )
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Contact updated successfully".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn delete_user_contact(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path((pubkey_hex, contact_type)): Path<(String, String)>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    verify_user_authorization(&auth, &pubkey_hex)?;
+
+    match db
+        .delete_user_contact(&auth.pubkey_hash, &contact_type)
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Contact deleted successfully".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertSocialRequest {
+    pub platform: String,
+    pub username: String,
+    pub profile_url: Option<String>,
+}
+
+#[handler]
+pub async fn upsert_user_social(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+    Json(req): Json<UpsertSocialRequest>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    verify_user_authorization(&auth, &pubkey_hex)?;
+
+    match db
+        .upsert_user_social(
+            &auth.pubkey_hash,
+            &req.platform,
+            &req.username,
+            req.profile_url.as_deref(),
+        )
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Social account updated successfully".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn delete_user_social(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path((pubkey_hex, platform)): Path<(String, String)>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    verify_user_authorization(&auth, &pubkey_hex)?;
+
+    match db.delete_user_social(&auth.pubkey_hash, &platform).await {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Social account deleted successfully".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddPublicKeyRequest {
+    pub key_type: String,
+    pub key_data: String,
+    pub key_fingerprint: Option<String>,
+    pub label: Option<String>,
+}
+
+#[handler]
+pub async fn add_user_public_key(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+    Json(req): Json<AddPublicKeyRequest>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    verify_user_authorization(&auth, &pubkey_hex)?;
+
+    match db
+        .add_user_public_key(
+            &auth.pubkey_hash,
+            &req.key_type,
+            &req.key_data,
+            req.key_fingerprint.as_deref(),
+            req.label.as_deref(),
+        )
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Public key added successfully".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn delete_user_public_key(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path((pubkey_hex, key_fingerprint)): Path<(String, String)>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    verify_user_authorization(&auth, &pubkey_hex)?;
+
+    match db
+        .delete_user_public_key(&auth.pubkey_hash, &key_fingerprint)
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Public key deleted successfully".to_string(),
+        ))),
         Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
     }
 }

@@ -102,4 +102,156 @@ impl Database {
 
         Ok(keys)
     }
+
+    /// Update or create user profile
+    pub async fn upsert_user_profile(
+        &self,
+        pubkey_hash: &[u8],
+        display_name: Option<&str>,
+        bio: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> Result<()> {
+        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query(
+            "INSERT INTO user_profiles (pubkey_hash, display_name, bio, avatar_url, updated_at_ns)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(pubkey_hash) DO UPDATE SET
+                 display_name = COALESCE(excluded.display_name, display_name),
+                 bio = COALESCE(excluded.bio, bio),
+                 avatar_url = COALESCE(excluded.avatar_url, avatar_url),
+                 updated_at_ns = excluded.updated_at_ns",
+        )
+        .bind(pubkey_hash)
+        .bind(display_name)
+        .bind(bio)
+        .bind(avatar_url)
+        .bind(updated_at_ns)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Add or update user contact
+    pub async fn upsert_user_contact(
+        &self,
+        pubkey_hash: &[u8],
+        contact_type: &str,
+        contact_value: &str,
+        verified: bool,
+    ) -> Result<()> {
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query(
+            "INSERT INTO user_contacts (user_pubkey_hash, contact_type, contact_value, verified, created_at_ns)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(user_pubkey_hash, contact_type) DO UPDATE SET
+                 contact_value = excluded.contact_value,
+                 verified = excluded.verified",
+        )
+        .bind(pubkey_hash)
+        .bind(contact_type)
+        .bind(contact_value)
+        .bind(verified)
+        .bind(created_at_ns)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete user contact
+    pub async fn delete_user_contact(&self, pubkey_hash: &[u8], contact_type: &str) -> Result<()> {
+        sqlx::query("DELETE FROM user_contacts WHERE user_pubkey_hash = ? AND contact_type = ?")
+            .bind(pubkey_hash)
+            .bind(contact_type)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Add or update user social account
+    pub async fn upsert_user_social(
+        &self,
+        pubkey_hash: &[u8],
+        platform: &str,
+        username: &str,
+        profile_url: Option<&str>,
+    ) -> Result<()> {
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query(
+            "INSERT INTO user_socials (user_pubkey_hash, platform, username, profile_url, created_at_ns)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(user_pubkey_hash, platform) DO UPDATE SET
+                 username = excluded.username,
+                 profile_url = excluded.profile_url",
+        )
+        .bind(pubkey_hash)
+        .bind(platform)
+        .bind(username)
+        .bind(profile_url)
+        .bind(created_at_ns)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete user social account
+    pub async fn delete_user_social(&self, pubkey_hash: &[u8], platform: &str) -> Result<()> {
+        sqlx::query("DELETE FROM user_socials WHERE user_pubkey_hash = ? AND platform = ?")
+            .bind(pubkey_hash)
+            .bind(platform)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Add user public key
+    pub async fn add_user_public_key(
+        &self,
+        pubkey_hash: &[u8],
+        key_type: &str,
+        key_data: &str,
+        key_fingerprint: Option<&str>,
+        label: Option<&str>,
+    ) -> Result<()> {
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query(
+            "INSERT INTO user_public_keys (user_pubkey_hash, key_type, key_data, key_fingerprint, label, created_at_ns)
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(pubkey_hash)
+        .bind(key_type)
+        .bind(key_data)
+        .bind(key_fingerprint)
+        .bind(label)
+        .bind(created_at_ns)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete user public key by fingerprint
+    pub async fn delete_user_public_key(
+        &self,
+        pubkey_hash: &[u8],
+        key_fingerprint: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            "DELETE FROM user_public_keys WHERE user_pubkey_hash = ? AND key_fingerprint = ?",
+        )
+        .bind(pubkey_hash)
+        .bind(key_fingerprint)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
