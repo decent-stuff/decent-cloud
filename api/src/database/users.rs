@@ -55,6 +55,24 @@ impl Database {
         Ok(())
     }
 
+    /// Ensure user registration exists in database (creates minimal entry if needed)
+    async fn ensure_user_registered(&self, pubkey_hash: &[u8]) -> Result<()> {
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query(
+            "INSERT OR IGNORE INTO user_registrations (pubkey_hash, pubkey_bytes, signature, created_at_ns)
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(pubkey_hash)
+        .bind(pubkey_hash) // Store pubkey_hash as pubkey_bytes
+        .bind(&[] as &[u8]) // Empty signature for web-created registrations
+        .bind(created_at_ns)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Get user profile by pubkey hash
     pub async fn get_user_profile(&self, pubkey_hash: &[u8]) -> Result<Option<UserProfile>> {
         let profile = sqlx::query_as::<_, UserProfile>(
@@ -111,6 +129,8 @@ impl Database {
         bio: Option<&str>,
         avatar_url: Option<&str>,
     ) -> Result<()> {
+        self.ensure_user_registered(pubkey_hash).await?;
+
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         sqlx::query(
@@ -141,6 +161,8 @@ impl Database {
         contact_value: &str,
         verified: bool,
     ) -> Result<()> {
+        self.ensure_user_registered(pubkey_hash).await?;
+
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         sqlx::query(
@@ -180,6 +202,8 @@ impl Database {
         username: &str,
         profile_url: Option<&str>,
     ) -> Result<()> {
+        self.ensure_user_registered(pubkey_hash).await?;
+
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         sqlx::query(
@@ -220,6 +244,8 @@ impl Database {
         key_fingerprint: Option<&str>,
         label: Option<&str>,
     ) -> Result<()> {
+        self.ensure_user_registered(pubkey_hash).await?;
+
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         sqlx::query(

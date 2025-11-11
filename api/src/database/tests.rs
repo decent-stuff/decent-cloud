@@ -498,3 +498,114 @@ async fn test_user_keys_empty_for_nonexistent_user() {
     let keys = db.get_user_public_keys(nonexistent_key).await.unwrap();
     assert_eq!(keys.len(), 0);
 }
+
+// Tests for automatic user registration
+#[tokio::test]
+async fn test_upsert_profile_auto_creates_registration() {
+    let db = setup_test_db().await;
+    let new_user_key = b"new_user_profile";
+
+    // Upsert profile without prior registration - should auto-create registration
+    let result = db
+        .upsert_user_profile(
+            new_user_key,
+            Some("Test User"),
+            Some("Bio"),
+            Some("https://example.com/avatar.png"),
+        )
+        .await;
+
+    assert!(result.is_ok());
+
+    // Verify profile was created
+    let profile = db.get_user_profile(new_user_key).await.unwrap();
+    assert!(profile.is_some());
+    assert_eq!(profile.unwrap().display_name, Some("Test User".to_string()));
+
+    // Verify registration was auto-created
+    let reg_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
+    )
+    .bind(&new_user_key[..])
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count.0, 1);
+}
+
+#[tokio::test]
+async fn test_upsert_contact_auto_creates_registration() {
+    let db = setup_test_db().await;
+    let new_user_key = b"new_user_contact";
+
+    let result = db
+        .upsert_user_contact(new_user_key, "email", "test@example.com", false)
+        .await;
+
+    assert!(result.is_ok());
+
+    // Verify registration was auto-created
+    let reg_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
+    )
+    .bind(&new_user_key[..])
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count.0, 1);
+}
+
+#[tokio::test]
+async fn test_upsert_social_auto_creates_registration() {
+    let db = setup_test_db().await;
+    let new_user_key = b"new_user_social";
+
+    let result = db
+        .upsert_user_social(
+            new_user_key,
+            "twitter",
+            "@testuser",
+            Some("https://twitter.com/testuser"),
+        )
+        .await;
+
+    assert!(result.is_ok());
+
+    // Verify registration was auto-created
+    let reg_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
+    )
+    .bind(&new_user_key[..])
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count.0, 1);
+}
+
+#[tokio::test]
+async fn test_add_public_key_auto_creates_registration() {
+    let db = setup_test_db().await;
+    let new_user_key = b"new_user_key";
+
+    let result = db
+        .add_user_public_key(
+            new_user_key,
+            "ssh-ed25519",
+            "AAAAC3NzaC1lZDI1NTE5...",
+            Some("SHA256:abc123"),
+            Some("Test key"),
+        )
+        .await;
+
+    assert!(result.is_ok());
+
+    // Verify registration was auto-created
+    let reg_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
+    )
+    .bind(&new_user_key[..])
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count.0, 1);
+}
