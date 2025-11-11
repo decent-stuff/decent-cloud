@@ -10,7 +10,7 @@ Decent Cloud uses a tunnel-based deployment for both the website and API, avoidi
 decent-cloud.org (website)
     ↓ Cloudflare Tunnel
     ↓ nginx container (port 3000)
-    ↓ Next.js static build
+    ↓ SvelteKit static build
 
 api.decent-cloud.org (API)
     ↓ Cloudflare Tunnel
@@ -21,7 +21,7 @@ api.decent-cloud.org (API)
 ## Components
 
 ### 1. Website (decent-cloud.org)
-- **Technology**: Next.js static export
+- **Technology**: SvelteKit static export
 - **Container**: nginx serving static files
 - **Port**: 3000 (internal), 59100 (host)
 - **Health**: `/health` endpoint
@@ -60,7 +60,7 @@ The tunnel must be configured in Cloudflare dashboard with two ingress rules:
 ## Current Status
 
 ### ✅ Completed
-- Website Docker container with nginx serving static Next.js build
+- Website Docker container with nginx serving static SvelteKit build
 - API Docker container with poem serving REST endpoints
 - Tunnel deployment scripts for production
 - Removed all Cloudflare Worker dependencies

@@ -1,10 +1,6 @@
 # Simplified build for Decent Cloud website
-# Assumes WASM modules are built natively first
-# Builds Next.js static website and serves with nginx
-
-# Simplified build for Decent Cloud website
-# Assumes WASM modules and website are built natively first
-# Serves pre-built Next.js static website with nginx
+# Assumes website is built natively first
+# Serves pre-built SvelteKit static website with nginx
 
 # Runtime with nginx
 FROM --platform=linux/amd64 nginx:alpine
@@ -22,36 +18,38 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # Serve static assets directly
-    location ~* \.(ico|png|svg|jpg|jpeg|wasm|js|css)$ {
+    # Serve static assets directly - return 404 if missing
+    location ~* \.(ico|png|svg|jpg|jpeg|js|css|json|txt|xml|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
     }
 
-    # Next.js static files
-    location /_next/static/ {
+    # SvelteKit build files - return 404 if missing
+    location /_app/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
     }
 
-    # Favicon
+    # Images directory - return 404 if missing
+    location /images/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
+    # Favicon - return 404 if missing
     location /favicon.svg {
         expires 1y;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
     }
 
-    # HTML pages - try exact file, then with .html extension, then 404
+    # SPA routing for HTML requests only - fallback to index.html
+    # This ensures that only navigation requests get the SPA fallback
     location / {
-        try_files \$uri \$uri.html \$uri/ =404;
-    }
-
-    # Custom 404 page
-    error_page 404 /404.html;
-    location = /404.html {
-        internal;
+        try_files \$uri \$uri/index.html /index.html;
     }
 
     # Health check endpoint
@@ -64,10 +62,7 @@ server {
 EOF
 
 # Copy pre-built website output (assumes website was built natively first)
-COPY website/out /usr/share/nginx/html
-
-# Copy images directory
-COPY images /usr/share/nginx/html/images
+COPY website/build /usr/share/nginx/html
 
 EXPOSE 3000
 

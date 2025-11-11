@@ -233,19 +233,6 @@ def check_prerequisites() -> bool:
         print_error("Node.js not found. Please install Node.js: https://nodejs.org/")
         return False
 
-    # Check wasm-pack
-    try:
-        subprocess.run(["wasm-pack", "--version"], check=True, capture_output=True)
-        print_success("wasm-pack found")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print_info("Installing wasm-pack...")
-        try:
-            subprocess.run(["cargo", "install", "wasm-pack"], check=True)
-            print_success("wasm-pack installed")
-        except subprocess.CalledProcessError:
-            print_error("Failed to install wasm-pack")
-            return False
-
     # Check Rust target for cross-compilation
     try:
         result = subprocess.run(["rustup", "target", "list"], check=True, capture_output=True, text=True)
@@ -302,11 +289,12 @@ def build_api_natively() -> bool:
         return False
 
 def build_website_natively() -> bool:
-    """Build website natively before Docker build."""
+    """Build SvelteKit website natively before Docker build."""
     cf_dir = Path(__file__).parent
     website_dir = cf_dir.parent / "website"
+    project_root = cf_dir.parent
 
-    print_header("Building website natively")
+    print_header("Building SvelteKit website natively")
 
     if not website_dir.exists():
         print_error("Website directory not found")
@@ -317,11 +305,17 @@ def build_website_natively() -> bool:
         os.chdir(website_dir)
         subprocess.run(["npm", "run", "build"], check=True)
         print_success("Website built successfully")
+
+        # Verify build output exists
+        build_dir = website_dir / "build"
+        if not build_dir.exists():
+            print_error(f"Build directory not found at {build_dir}")
+            return False
+
+        print_success(f"Build output verified at {build_dir}")
         return True
     except subprocess.CalledProcessError as e:
         print_error(f"Website build failed: {e}")
-        print_error(f"stdout: {e.stdout}")
-        print_error(f"stderr: {e.stderr}")
         return False
     except FileNotFoundError:
         print_error("Node.js not found. Please install Node.js")

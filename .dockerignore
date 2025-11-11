@@ -9,6 +9,7 @@
 **/dist/
 **/node_modules/
 **/build/
+!/website/build/
 **/.next/
 **/out/
 # Allow website/out and wasm/dist for Docker builds

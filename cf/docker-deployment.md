@@ -5,14 +5,14 @@ This guide explains how to deploy the Decent Cloud website with native build pro
 ## Overview
 
 The deployment consists of:
-- **website**: Static Next.js website served via nginx (this deployment)
+- **website**: Static SvelteKit website served via nginx (this deployment)
 - **cloudflared**: Cloudflare Tunnel connector for secure external access
 - **cloudflare-api**: Cloudflare Workers API (separate deployment, see `cloudflare-api/` directory)
 
 ## Docker Images
 
 This deployment uses simplified Dockerfiles that assume components are built natively first:
-- **cf/Dockerfile**: Builds website from externally-built WASM modules
+- **cf/Dockerfile**: Builds website from externally-built SvelteKit static output
 - **api/Dockerfile**: Runs API from externally-built Rust binary
 - **deploy.py**: Python script that handles native builds before Docker deployment
 
@@ -186,7 +186,7 @@ source .env && docker compose -f docker-compose.yml -f docker-compose.prod.yml u
 ```
 
 **Note:** The simplified Dockerfiles assume native builds have been completed first. When using manual docker compose, ensure you've built:
-- WASM modules: `cd wasm && node build.js`
+- Website: `cd website && npm run build`
 - API binary: `cargo build --release --bin api-server --target x86_64-unknown-linux-gnu`
 
 ### Step 6: Verify Deployment

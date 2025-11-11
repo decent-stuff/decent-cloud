@@ -9,7 +9,6 @@ members = [
     "provider-json-search",
     "provider-offering",
     "provider-profile",
-    "wasm",
 ]
 
 [workspace.package]
