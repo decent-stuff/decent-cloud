@@ -31,6 +31,7 @@
 		});
 
 		dashboardStore.load();
+		authStore.updateDisplayName();
 		const interval = setInterval(() => dashboardStore.load(), 10000);
 
 		return () => {
@@ -55,7 +56,13 @@
 					{/if}
 				</div>
 				<div class="flex-1">
-					<h2 class="text-2xl font-bold text-white mb-1">Welcome back!</h2>
+					<h2 class="text-2xl font-bold text-white mb-1">
+						{#if currentIdentity.displayName}
+							Welcome back, {currentIdentity.displayName}!
+						{:else}
+							Welcome back!
+						{/if}
+					</h2>
 					<p class="text-white/70 text-sm">
 						Logged in via {currentIdentity.type === 'ii' ? 'Internet Identity' : 'Recovery Phrase'}
 					</p>

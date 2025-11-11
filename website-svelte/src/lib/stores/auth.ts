@@ -13,12 +13,14 @@ import {
 	getStoredSeedPhrases,
 	setStoredSeedPhrases
 } from '../utils/seed-storage';
+import { API_BASE_URL } from '../services/api';
 
 export interface IdentityInfo {
 	identity: Identity;
 	principal: Principal;
 	type: 'ii' | 'seedPhrase';
 	name?: string;
+	displayName?: string;
 	publicKeyBytes?: Uint8Array;
 	secretKeyRaw?: Uint8Array;
 	seedPhrase?: string;
@@ -141,6 +143,24 @@ function createAuthStore() {
 		} else if (type === 'seedPhrase') {
 			signingIdentity.set(newIdentity);
 		}
+	}
+
+	async function fetchUserProfile(publicKeyBytes: Uint8Array): Promise<string | null> {
+		try {
+			const pubkey = Array.from(publicKeyBytes)
+				.map((b) => b.toString(16).padStart(2, '0'))
+				.join('');
+			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/profile`);
+			if (res.ok) {
+				const data = await res.json();
+				if (data.success && data.data?.display_name) {
+					return data.data.display_name;
+				}
+			}
+		} catch (error) {
+			console.error('Failed to fetch user profile:', error);
+		}
+		return null;
 	}
 
 	return {
@@ -410,6 +430,23 @@ function createAuthStore() {
 				publicKeyBytes: signing.publicKeyBytes,
 				secretKeyRaw: signing.secretKeyRaw
 			};
+		},
+
+		async updateDisplayName() {
+			const current = get(currentIdentity);
+			if (!current || !current.publicKeyBytes) {
+				return;
+			}
+
+			const displayName = await fetchUserProfile(current.publicKeyBytes);
+			if (displayName) {
+				currentIdentity.update((identity) => {
+					if (identity) {
+						return { ...identity, displayName };
+					}
+					return identity;
+				});
+			}
 		}
 	};
 }
