@@ -1,3 +1,0 @@
-service : () -> {
-  metadata : () -> (record { name : text; description : text; version : text }) query;
-}
