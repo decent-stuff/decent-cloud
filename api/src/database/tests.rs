@@ -87,11 +87,9 @@ async fn setup_test_db() -> Database {
 
     // Load and execute migration SQL at runtime for production-like schema
     let migration_sql_001 = include_str!("../../migrations/001_original_schema.sql");
-    let migration_sql_002 = include_str!("../../migrations/002_user_profiles.sql");
 
     // Execute migrations in order
     sqlx::query(migration_sql_001).execute(&pool).await.unwrap();
-    sqlx::query(migration_sql_002).execute(&pool).await.unwrap();
 
     // Create sync_state table and initialize
     sqlx::query("CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY, last_position INTEGER, last_sync_at TIMESTAMP)")
@@ -523,13 +521,12 @@ async fn test_upsert_profile_auto_creates_registration() {
     assert_eq!(profile.unwrap().display_name, Some("Test User".to_string()));
 
     // Verify registration was auto-created
-    let reg_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
-    )
-    .bind(&new_user_key[..])
-    .fetch_one(&db.pool)
-    .await
-    .unwrap();
+    let reg_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+            .bind(&new_user_key[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
     assert_eq!(reg_count.0, 1);
 }
 
@@ -545,13 +542,12 @@ async fn test_upsert_contact_auto_creates_registration() {
     assert!(result.is_ok());
 
     // Verify registration was auto-created
-    let reg_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
-    )
-    .bind(&new_user_key[..])
-    .fetch_one(&db.pool)
-    .await
-    .unwrap();
+    let reg_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+            .bind(&new_user_key[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
     assert_eq!(reg_count.0, 1);
 }
 
@@ -572,13 +568,12 @@ async fn test_upsert_social_auto_creates_registration() {
     assert!(result.is_ok());
 
     // Verify registration was auto-created
-    let reg_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
-    )
-    .bind(&new_user_key[..])
-    .fetch_one(&db.pool)
-    .await
-    .unwrap();
+    let reg_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+            .bind(&new_user_key[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
     assert_eq!(reg_count.0, 1);
 }
 
@@ -600,12 +595,11 @@ async fn test_add_public_key_auto_creates_registration() {
     assert!(result.is_ok());
 
     // Verify registration was auto-created
-    let reg_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?",
-    )
-    .bind(&new_user_key[..])
-    .fetch_one(&db.pool)
-    .await
-    .unwrap();
+    let reg_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+            .bind(&new_user_key[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
     assert_eq!(reg_count.0, 1);
 }

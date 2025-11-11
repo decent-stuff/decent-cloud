@@ -6,6 +6,7 @@ mod ledger_path;
 mod metadata_cache;
 mod network_metrics;
 mod sync_service;
+mod validation;
 
 use candid::Principal;
 use clap::{Parser, Subcommand};

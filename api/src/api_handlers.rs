@@ -465,6 +465,15 @@ pub async fn upsert_user_contact(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
+    if let Err(e) = crate::validation::validate_contact_type(&req.contact_type) {
+        return Ok(Json(ApiResponse::error(e.to_string())));
+    }
+
+    if let Err(e) = crate::validation::validate_contact_value(&req.contact_type, &req.contact_value)
+    {
+        return Ok(Json(ApiResponse::error(e.to_string())));
+    }
+
     match db
         .upsert_user_contact(
             &auth.pubkey_hash,
@@ -475,7 +484,7 @@ pub async fn upsert_user_contact(
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::success(
-            "Contact updated successfully".to_string(),
+            "Contact added successfully".to_string(),
         ))),
         Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
     }
@@ -485,12 +494,12 @@ pub async fn upsert_user_contact(
 pub async fn delete_user_contact(
     auth: AuthenticatedUser,
     db: Data<&Arc<Database>>,
-    Path((pubkey_hex, contact_type)): Path<(String, String)>,
+    Path((pubkey_hex, contact_id)): Path<(String, i64)>,
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
     match db
-        .delete_user_contact(&auth.pubkey_hash, &contact_type)
+        .delete_user_contact(&auth.pubkey_hash, contact_id)
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::success(
@@ -516,6 +525,20 @@ pub async fn upsert_user_social(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
+    if let Err(e) = crate::validation::validate_social_platform(&req.platform) {
+        return Ok(Json(ApiResponse::error(e.to_string())));
+    }
+
+    if let Err(e) = crate::validation::validate_social_username(&req.username) {
+        return Ok(Json(ApiResponse::error(e.to_string())));
+    }
+
+    if let Some(ref url) = req.profile_url {
+        if let Err(e) = crate::validation::validate_url(url) {
+            return Ok(Json(ApiResponse::error(e.to_string())));
+        }
+    }
+
     match db
         .upsert_user_social(
             &auth.pubkey_hash,
@@ -526,7 +549,7 @@ pub async fn upsert_user_social(
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::success(
-            "Social account updated successfully".to_string(),
+            "Social account added successfully".to_string(),
         ))),
         Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
     }
@@ -536,11 +559,11 @@ pub async fn upsert_user_social(
 pub async fn delete_user_social(
     auth: AuthenticatedUser,
     db: Data<&Arc<Database>>,
-    Path((pubkey_hex, platform)): Path<(String, String)>,
+    Path((pubkey_hex, social_id)): Path<(String, i64)>,
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
-    match db.delete_user_social(&auth.pubkey_hash, &platform).await {
+    match db.delete_user_social(&auth.pubkey_hash, social_id).await {
         Ok(_) => Ok(Json(ApiResponse::success(
             "Social account deleted successfully".to_string(),
         ))),
@@ -565,6 +588,10 @@ pub async fn add_user_public_key(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
+    if let Err(e) = crate::validation::validate_public_key(&req.key_type, &req.key_data) {
+        return Ok(Json(ApiResponse::error(e.to_string())));
+    }
+
     match db
         .add_user_public_key(
             &auth.pubkey_hash,
@@ -586,12 +613,12 @@ pub async fn add_user_public_key(
 pub async fn delete_user_public_key(
     auth: AuthenticatedUser,
     db: Data<&Arc<Database>>,
-    Path((pubkey_hex, key_fingerprint)): Path<(String, String)>,
+    Path((pubkey_hex, key_id)): Path<(String, i64)>,
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
     match db
-        .delete_user_public_key(&auth.pubkey_hash, &key_fingerprint)
+        .delete_user_public_key(&auth.pubkey_hash, key_id)
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::success(

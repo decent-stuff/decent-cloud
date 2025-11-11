@@ -13,6 +13,7 @@ pub struct UserProfile {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct UserContact {
+    pub id: i64,
     pub contact_type: String,
     pub contact_value: String,
     pub verified: bool,
@@ -20,6 +21,7 @@ pub struct UserContact {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct UserSocial {
+    pub id: i64,
     pub platform: String,
     pub username: String,
     pub profile_url: Option<String>,
@@ -27,6 +29,7 @@ pub struct UserSocial {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct UserPublicKey {
+    pub id: i64,
     pub key_type: String,
     pub key_data: String,
     pub key_fingerprint: Option<String>,
@@ -88,7 +91,7 @@ impl Database {
     /// Get user contacts
     pub async fn get_user_contacts(&self, pubkey_hash: &[u8]) -> Result<Vec<UserContact>> {
         let contacts = sqlx::query_as::<_, UserContact>(
-            "SELECT contact_type, contact_value, verified FROM user_contacts WHERE user_pubkey_hash = ?",
+            "SELECT id, contact_type, contact_value, verified FROM user_contacts WHERE user_pubkey_hash = ?",
         )
         .bind(pubkey_hash)
         .fetch_all(&self.pool)
@@ -100,7 +103,7 @@ impl Database {
     /// Get user social accounts
     pub async fn get_user_socials(&self, pubkey_hash: &[u8]) -> Result<Vec<UserSocial>> {
         let socials = sqlx::query_as::<_, UserSocial>(
-            "SELECT platform, username, profile_url FROM user_socials WHERE user_pubkey_hash = ?",
+            "SELECT id, platform, username, profile_url FROM user_socials WHERE user_pubkey_hash = ?",
         )
         .bind(pubkey_hash)
         .fetch_all(&self.pool)
@@ -112,7 +115,7 @@ impl Database {
     /// Get user public keys
     pub async fn get_user_public_keys(&self, pubkey_hash: &[u8]) -> Result<Vec<UserPublicKey>> {
         let keys = sqlx::query_as::<_, UserPublicKey>(
-            "SELECT key_type, key_data, key_fingerprint, label FROM user_public_keys WHERE user_pubkey_hash = ?",
+            "SELECT id, key_type, key_data, key_fingerprint, label FROM user_public_keys WHERE user_pubkey_hash = ?",
         )
         .bind(pubkey_hash)
         .fetch_all(&self.pool)
@@ -153,7 +156,7 @@ impl Database {
         Ok(())
     }
 
-    /// Add or update user contact
+    /// Add user contact
     pub async fn upsert_user_contact(
         &self,
         pubkey_hash: &[u8],
@@ -167,10 +170,7 @@ impl Database {
 
         sqlx::query(
             "INSERT INTO user_contacts (user_pubkey_hash, contact_type, contact_value, verified, created_at_ns)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(user_pubkey_hash, contact_type) DO UPDATE SET
-                 contact_value = excluded.contact_value,
-                 verified = excluded.verified",
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(pubkey_hash)
         .bind(contact_type)
@@ -183,18 +183,18 @@ impl Database {
         Ok(())
     }
 
-    /// Delete user contact
-    pub async fn delete_user_contact(&self, pubkey_hash: &[u8], contact_type: &str) -> Result<()> {
-        sqlx::query("DELETE FROM user_contacts WHERE user_pubkey_hash = ? AND contact_type = ?")
+    /// Delete user contact by ID
+    pub async fn delete_user_contact(&self, pubkey_hash: &[u8], contact_id: i64) -> Result<()> {
+        sqlx::query("DELETE FROM user_contacts WHERE user_pubkey_hash = ? AND id = ?")
             .bind(pubkey_hash)
-            .bind(contact_type)
+            .bind(contact_id)
             .execute(&self.pool)
             .await?;
 
         Ok(())
     }
 
-    /// Add or update user social account
+    /// Add user social account
     pub async fn upsert_user_social(
         &self,
         pubkey_hash: &[u8],
@@ -208,10 +208,7 @@ impl Database {
 
         sqlx::query(
             "INSERT INTO user_socials (user_pubkey_hash, platform, username, profile_url, created_at_ns)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(user_pubkey_hash, platform) DO UPDATE SET
-                 username = excluded.username,
-                 profile_url = excluded.profile_url",
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(pubkey_hash)
         .bind(platform)
@@ -224,11 +221,11 @@ impl Database {
         Ok(())
     }
 
-    /// Delete user social account
-    pub async fn delete_user_social(&self, pubkey_hash: &[u8], platform: &str) -> Result<()> {
-        sqlx::query("DELETE FROM user_socials WHERE user_pubkey_hash = ? AND platform = ?")
+    /// Delete user social account by ID
+    pub async fn delete_user_social(&self, pubkey_hash: &[u8], social_id: i64) -> Result<()> {
+        sqlx::query("DELETE FROM user_socials WHERE user_pubkey_hash = ? AND id = ?")
             .bind(pubkey_hash)
-            .bind(platform)
+            .bind(social_id)
             .execute(&self.pool)
             .await?;
 
@@ -264,19 +261,13 @@ impl Database {
         Ok(())
     }
 
-    /// Delete user public key by fingerprint
-    pub async fn delete_user_public_key(
-        &self,
-        pubkey_hash: &[u8],
-        key_fingerprint: &str,
-    ) -> Result<()> {
-        sqlx::query(
-            "DELETE FROM user_public_keys WHERE user_pubkey_hash = ? AND key_fingerprint = ?",
-        )
-        .bind(pubkey_hash)
-        .bind(key_fingerprint)
-        .execute(&self.pool)
-        .await?;
+    /// Delete user public key by ID
+    pub async fn delete_user_public_key(&self, pubkey_hash: &[u8], key_id: i64) -> Result<()> {
+        sqlx::query("DELETE FROM user_public_keys WHERE user_pubkey_hash = ? AND id = ?")
+            .bind(pubkey_hash)
+            .bind(key_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }

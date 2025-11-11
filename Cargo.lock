@@ -856,6 +856,7 @@ dependencies = [
  "poem",
  "provider-offering",
  "provider-profile",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
