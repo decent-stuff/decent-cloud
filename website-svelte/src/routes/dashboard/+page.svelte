@@ -64,7 +64,7 @@
 						{/if}
 					</h2>
 					<p class="text-white/70 text-sm">
-						Logged in via {currentIdentity.type === 'ii' ? 'Internet Identity' : 'Recovery Phrase'}
+						Logged in via {currentIdentity.type === 'ii' ? 'Internet Identity' : 'Seed Phrase'}
 					</p>
 					<p class="text-white/50 text-xs font-mono mt-2 break-all">
 						{currentIdentity.principal.toString()}

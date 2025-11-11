@@ -373,7 +373,7 @@ function createAuthStore() {
 			}
 
 			if (identity.type !== 'seedPhrase') {
-				errorMessage.set('This identity does not use a recovery phrase');
+				errorMessage.set('This identity does not use a seed phrase');
 				return null;
 			}
 
@@ -395,7 +395,7 @@ function createAuthStore() {
 				return matchingPhrase;
 			}
 
-			errorMessage.set('Recovery phrase not found - possible data loss');
+			errorMessage.set('Seed phrase not found - possible data loss');
 			return null;
 		},
 
