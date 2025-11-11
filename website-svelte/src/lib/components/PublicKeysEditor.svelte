@@ -4,6 +4,7 @@
 	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
 
 	interface PublicKey {
+		id: number;
 		key_type: string;
 		key_data: string;
 		key_fingerprint: string | null;
@@ -85,14 +86,14 @@
 		}
 	}
 
-	async function handleDelete(fingerprint: string) {
+	async function handleDelete(keyId: number) {
 		if (!confirm('Delete this public key?')) return;
 
 		error = null;
 		successMessage = null;
 
 		try {
-			const res = await apiClient.deletePublicKey(pubkey, fingerprint);
+			const res = await apiClient.deletePublicKey(pubkey, keyId);
 			await handleApiResponse(res);
 
 			const data = await res.json();
@@ -130,7 +131,7 @@
 						{/if}
 					</div>
 					<button
-						onclick={() => handleDelete(key.key_fingerprint || key.key_data)}
+						onclick={() => handleDelete(key.id)}
 						class="text-red-400 hover:text-red-300 transition-colors text-sm"
 					>
 						Delete

@@ -68,8 +68,8 @@ export class UserApiClient {
 		return this.authenticatedFetch('POST', path, contact);
 	}
 
-	async deleteContact(pubkey: string, contactType: string) {
-		const path = `/api/v1/users/${pubkey}/contacts/${contactType}`;
+	async deleteContact(pubkey: string, contactId: number) {
+		const path = `/api/v1/users/${pubkey}/contacts/${contactId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
 
@@ -86,8 +86,8 @@ export class UserApiClient {
 		return this.authenticatedFetch('POST', path, social);
 	}
 
-	async deleteSocial(pubkey: string, platform: string) {
-		const path = `/api/v1/users/${pubkey}/socials/${platform}`;
+	async deleteSocial(pubkey: string, socialId: number) {
+		const path = `/api/v1/users/${pubkey}/socials/${socialId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
 
@@ -105,8 +105,8 @@ export class UserApiClient {
 		return this.authenticatedFetch('POST', path, key);
 	}
 
-	async deletePublicKey(pubkey: string, fingerprint: string) {
-		const path = `/api/v1/users/${pubkey}/keys/${fingerprint}`;
+	async deletePublicKey(pubkey: string, keyId: number) {
+		const path = `/api/v1/users/${pubkey}/keys/${keyId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
 }

@@ -4,6 +4,7 @@
 	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
 
 	interface Contact {
+		id: number;
 		contact_type: string;
 		contact_value: string;
 		verified: boolean;
@@ -72,14 +73,14 @@
 		}
 	}
 
-	async function handleDelete(type: string) {
+	async function handleDelete(id: number, type: string) {
 		if (!confirm(`Delete ${type} contact?`)) return;
 
 		error = null;
 		successMessage = null;
 
 		try {
-			const res = await apiClient.deleteContact(pubkey, type);
+			const res = await apiClient.deleteContact(pubkey, id);
 			await handleApiResponse(res);
 
 			const data = await res.json();
@@ -117,7 +118,7 @@
 					{/if}
 				</div>
 				<button
-					onclick={() => handleDelete(contact.contact_type)}
+					onclick={() => handleDelete(contact.id, contact.contact_type)}
 					class="text-red-400 hover:text-red-300 transition-colors"
 				>
 					Delete

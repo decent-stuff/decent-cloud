@@ -4,6 +4,7 @@
 	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
 
 	interface Social {
+		id: number;
 		platform: string;
 		username: string;
 		profile_url: string | null;
@@ -73,14 +74,14 @@
 		}
 	}
 
-	async function handleDelete(platform: string) {
+	async function handleDelete(id: number, platform: string) {
 		if (!confirm(`Delete ${platform} account?`)) return;
 
 		error = null;
 		successMessage = null;
 
 		try {
-			const res = await apiClient.deleteSocial(pubkey, platform);
+			const res = await apiClient.deleteSocial(pubkey, id);
 			await handleApiResponse(res);
 
 			const data = await res.json();
@@ -123,7 +124,7 @@
 					{/if}
 				</div>
 				<button
-					onclick={() => handleDelete(social.platform)}
+					onclick={() => handleDelete(social.id, social.platform)}
 					class="text-red-400 hover:text-red-300 transition-colors"
 				>
 					Delete

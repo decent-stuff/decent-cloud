@@ -2,7 +2,9 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { dashboardStore } from '$lib/stores/dashboard';
+	import { authStore } from '$lib/stores/auth';
 	import type { DashboardData } from '$lib/services/dashboard-data';
+	import type { IdentityInfo } from '$lib/stores/auth';
 
 	let dashboardData = $state<DashboardData>({
 		dctPrice: 0,
@@ -13,32 +15,61 @@
 		accumulatedRewards: 0
 	});
 	let error = $state<string | null>(null);
+	let currentIdentity = $state<IdentityInfo | null>(null);
 
 	onMount(() => {
 		if (!browser) return;
-		
+
 		const unsubscribeData = dashboardStore.data.subscribe((value) => {
 			dashboardData = value;
 		});
 		const unsubscribeError = dashboardStore.error.subscribe((value) => {
 			error = value;
 		});
-		
+		const unsubscribeAuth = authStore.currentIdentity.subscribe((value) => {
+			currentIdentity = value;
+		});
+
 		dashboardStore.load();
 		const interval = setInterval(() => dashboardStore.load(), 10000);
-		
+
 		return () => {
 			unsubscribeData();
 			unsubscribeError();
+			unsubscribeAuth();
 			clearInterval(interval);
 		};
 	});
 </script>
 
 <div class="space-y-8">
+	<!-- User Info Section -->
+	{#if currentIdentity}
+		<div class="bg-gradient-to-r from-blue-500/20 to-purple-600/20 backdrop-blur-lg rounded-xl p-6 border border-blue-500/30">
+			<div class="flex items-center gap-4">
+				<div class="text-4xl">
+					{#if currentIdentity.type === 'ii'}
+						🌐
+					{:else}
+						🔑
+					{/if}
+				</div>
+				<div class="flex-1">
+					<h2 class="text-2xl font-bold text-white mb-1">Welcome back!</h2>
+					<p class="text-white/70 text-sm">
+						Logged in via {currentIdentity.type === 'ii' ? 'Internet Identity' : 'Recovery Phrase'}
+					</p>
+					<p class="text-white/50 text-xs font-mono mt-2 break-all">
+						{currentIdentity.principal.toString()}
+					</p>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<div>
 		<h1 class="text-4xl font-bold text-white mb-2">Dashboard Overview</h1>
-		<p class="text-white/60">Welcome to your Decent Cloud dashboard</p>
+		<p class="text-white/60">Network statistics and quick actions</p>
 	</div>
 
 	{#if error}

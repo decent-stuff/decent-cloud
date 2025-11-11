@@ -6,8 +6,7 @@
 		{ href: '/dashboard', icon: '📊', label: 'Overview' },
 		{ href: '/dashboard/validators', icon: '✓', label: 'Validators' },
 		{ href: '/dashboard/offerings', icon: '📦', label: 'My Offerings' },
-		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' },
-		{ href: '/dashboard/profile', icon: '👤', label: 'Profile' }
+		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' }
 	];
 
 	let currentPath = '';
@@ -48,13 +47,23 @@
 	</nav>
 
 	<!-- User Section -->
-	<div class="p-4 border-t border-white/10">
+	<div class="p-4 border-t border-white/10 space-y-2">
+		<a
+			href="/dashboard/profile"
+			class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath ===
+			'/dashboard/profile'
+				? 'bg-blue-600 text-white'
+				: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+		>
+			<span class="text-xl">👤</span>
+			<span class="font-medium">Profile</span>
+		</a>
 		<button
 			type="button"
 			onclick={handleLogout}
 			class="w-full px-4 py-3 text-left rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-3"
 		>
-			<span class="text-xl">👤</span>
+			<span class="text-xl">🚪</span>
 			<span class="font-medium">Logout</span>
 		</button>
 	</div>
