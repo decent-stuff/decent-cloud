@@ -241,6 +241,23 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/users/:pubkey/contracts",
             poem::get(api_handlers::get_user_contracts),
         )
+        // User profile endpoints
+        .at(
+            "/api/v1/users/:pubkey/profile",
+            poem::get(api_handlers::get_user_profile),
+        )
+        .at(
+            "/api/v1/users/:pubkey/contacts",
+            poem::get(api_handlers::get_user_contacts),
+        )
+        .at(
+            "/api/v1/users/:pubkey/socials",
+            poem::get(api_handlers::get_user_socials),
+        )
+        .at(
+            "/api/v1/users/:pubkey/keys",
+            poem::get(api_handlers::get_user_public_keys),
+        )
         // Token endpoints
         .at(
             "/api/v1/transfers",

@@ -86,10 +86,12 @@ async fn setup_test_db() -> Database {
     let pool = SqlitePool::connect(":memory:").await.unwrap();
 
     // Load and execute migration SQL at runtime for production-like schema
-    let migration_sql = include_str!("../../migrations/001_original_schema.sql");
+    let migration_sql_001 = include_str!("../../migrations/001_original_schema.sql");
+    let migration_sql_002 = include_str!("../../migrations/002_user_profiles.sql");
 
-    // Execute the entire migration as a single batch
-    sqlx::query(migration_sql).execute(&pool).await.unwrap();
+    // Execute migrations in order
+    sqlx::query(migration_sql_001).execute(&pool).await.unwrap();
+    sqlx::query(migration_sql_002).execute(&pool).await.unwrap();
 
     // Create sync_state table and initialize
     sqlx::query("CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY, last_position INTEGER, last_sync_at TIMESTAMP)")
@@ -264,4 +266,235 @@ async fn test_bulk_insert_performance() {
         "Bulk insert took too long: {:?}",
         duration
     );
+}
+
+// User profile tests
+#[tokio::test]
+async fn test_user_profile_storage_and_retrieval() {
+    let db = setup_test_db().await;
+    let user_key = b"user_profile_test_123";
+    let timestamp = 1234567890;
+
+    // First, register the user
+    let registration_entry = TestDataFactory::registration_entry("UserRegister", user_key);
+    assert!(db.insert_entries(vec![registration_entry]).await.is_ok());
+
+    // Insert user profile
+    sqlx::query(
+        "INSERT INTO user_profiles (pubkey_hash, display_name, bio, avatar_url, updated_at_ns)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(&user_key[..])
+    .bind("Test User")
+    .bind("A test user bio")
+    .bind("https://example.com/avatar.png")
+    .bind(timestamp as i64)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Retrieve user profile
+    let profile = db.get_user_profile(user_key).await.unwrap();
+    assert!(profile.is_some());
+
+    let profile = profile.unwrap();
+    assert_eq!(profile.pubkey_hash, user_key);
+    assert_eq!(profile.display_name, Some("Test User".to_string()));
+    assert_eq!(profile.bio, Some("A test user bio".to_string()));
+    assert_eq!(
+        profile.avatar_url,
+        Some("https://example.com/avatar.png".to_string())
+    );
+    assert_eq!(profile.updated_at_ns, timestamp as i64);
+}
+
+#[tokio::test]
+async fn test_user_profile_not_found() {
+    let db = setup_test_db().await;
+    let nonexistent_key = b"nonexistent_user";
+
+    let profile = db.get_user_profile(nonexistent_key).await.unwrap();
+    assert!(profile.is_none());
+}
+
+#[tokio::test]
+async fn test_user_contacts_storage_and_retrieval() {
+    let db = setup_test_db().await;
+    let user_key = b"user_contacts_test_123";
+    let timestamp = 1234567890;
+
+    // Register user first
+    let registration_entry = TestDataFactory::registration_entry("UserRegister", user_key);
+    assert!(db.insert_entries(vec![registration_entry]).await.is_ok());
+
+    // Insert multiple contacts
+    let contacts = vec![
+        ("email", "test@example.com", true),
+        ("telegram", "@testuser", false),
+        ("phone", "+1234567890", true),
+    ];
+
+    for (contact_type, contact_value, verified) in &contacts {
+        sqlx::query(
+            "INSERT INTO user_contacts (user_pubkey_hash, contact_type, contact_value, verified, created_at_ns)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&user_key[..])
+        .bind(contact_type)
+        .bind(contact_value)
+        .bind(verified)
+        .bind(timestamp as i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Retrieve contacts
+    let retrieved = db.get_user_contacts(user_key).await.unwrap();
+    assert_eq!(retrieved.len(), 3);
+
+    // Verify all contacts are present
+    assert!(retrieved
+        .iter()
+        .any(|c| c.contact_type == "email" && c.contact_value == "test@example.com" && c.verified));
+    assert!(retrieved
+        .iter()
+        .any(|c| c.contact_type == "telegram" && c.contact_value == "@testuser" && !c.verified));
+    assert!(retrieved
+        .iter()
+        .any(|c| c.contact_type == "phone" && c.contact_value == "+1234567890" && c.verified));
+}
+
+#[tokio::test]
+async fn test_user_socials_storage_and_retrieval() {
+    let db = setup_test_db().await;
+    let user_key = b"user_socials_test_123";
+    let timestamp = 1234567890;
+
+    // Register user first
+    let registration_entry = TestDataFactory::registration_entry("UserRegister", user_key);
+    assert!(db.insert_entries(vec![registration_entry]).await.is_ok());
+
+    // Insert social accounts
+    let socials = vec![
+        ("twitter", "testuser", Some("https://twitter.com/testuser")),
+        ("github", "testuser", Some("https://github.com/testuser")),
+        ("discord", "testuser#1234", None),
+    ];
+
+    for (platform, username, profile_url) in &socials {
+        sqlx::query(
+            "INSERT INTO user_socials (user_pubkey_hash, platform, username, profile_url, created_at_ns)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&user_key[..])
+        .bind(platform)
+        .bind(username)
+        .bind(profile_url)
+        .bind(timestamp as i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Retrieve socials
+    let retrieved = db.get_user_socials(user_key).await.unwrap();
+    assert_eq!(retrieved.len(), 3);
+
+    // Verify all socials are present
+    assert!(retrieved.iter().any(|s| s.platform == "twitter"
+        && s.username == "testuser"
+        && s.profile_url == Some("https://twitter.com/testuser".to_string())));
+    assert!(retrieved.iter().any(|s| s.platform == "github"
+        && s.username == "testuser"
+        && s.profile_url == Some("https://github.com/testuser".to_string())));
+    assert!(retrieved.iter().any(|s| s.platform == "discord"
+        && s.username == "testuser#1234"
+        && s.profile_url.is_none()));
+}
+
+#[tokio::test]
+async fn test_user_public_keys_storage_and_retrieval() {
+    let db = setup_test_db().await;
+    let user_key = b"user_keys_test_123";
+    let timestamp = 1234567890;
+
+    // Register user first
+    let registration_entry = TestDataFactory::registration_entry("UserRegister", user_key);
+    assert!(db.insert_entries(vec![registration_entry]).await.is_ok());
+
+    // Insert public keys
+    let keys = vec![
+        (
+            "ssh-ed25519",
+            "AAAAC3NzaC1lZDI1NTE5AAAAI...",
+            Some("SHA256:abc123"),
+            Some("Work laptop"),
+        ),
+        (
+            "ssh-rsa",
+            "AAAAB3NzaC1yc2EAAAADAQAB...",
+            Some("SHA256:def456"),
+            Some("Home desktop"),
+        ),
+        ("gpg", "-----BEGIN PGP PUBLIC KEY BLOCK-----...", None, None),
+    ];
+
+    for (key_type, key_data, fingerprint, label) in &keys {
+        sqlx::query(
+            "INSERT INTO user_public_keys (user_pubkey_hash, key_type, key_data, key_fingerprint, label, created_at_ns)
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&user_key[..])
+        .bind(key_type)
+        .bind(key_data)
+        .bind(fingerprint)
+        .bind(label)
+        .bind(timestamp as i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Retrieve keys
+    let retrieved = db.get_user_public_keys(user_key).await.unwrap();
+    assert_eq!(retrieved.len(), 3);
+
+    // Verify all keys are present
+    assert!(retrieved.iter().any(|k| k.key_type == "ssh-ed25519"
+        && k.key_fingerprint == Some("SHA256:abc123".to_string())
+        && k.label == Some("Work laptop".to_string())));
+    assert!(retrieved.iter().any(|k| k.key_type == "ssh-rsa"
+        && k.key_fingerprint == Some("SHA256:def456".to_string())
+        && k.label == Some("Home desktop".to_string())));
+    assert!(retrieved
+        .iter()
+        .any(|k| k.key_type == "gpg" && k.key_fingerprint.is_none() && k.label.is_none()));
+}
+
+#[tokio::test]
+async fn test_user_contacts_empty_for_nonexistent_user() {
+    let db = setup_test_db().await;
+    let nonexistent_key = b"nonexistent_user";
+
+    let contacts = db.get_user_contacts(nonexistent_key).await.unwrap();
+    assert_eq!(contacts.len(), 0);
+}
+
+#[tokio::test]
+async fn test_user_socials_empty_for_nonexistent_user() {
+    let db = setup_test_db().await;
+    let nonexistent_key = b"nonexistent_user";
+
+    let socials = db.get_user_socials(nonexistent_key).await.unwrap();
+    assert_eq!(socials.len(), 0);
+}
+
+#[tokio::test]
+async fn test_user_keys_empty_for_nonexistent_user() {
+    let db = setup_test_db().await;
+    let nonexistent_key = b"nonexistent_user";
+
+    let keys = db.get_user_public_keys(nonexistent_key).await.unwrap();
+    assert_eq!(keys.len(), 0);
 }

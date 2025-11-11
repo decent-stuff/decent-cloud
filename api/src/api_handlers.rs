@@ -313,6 +313,91 @@ pub async fn get_account_balance(
     }
 }
 
+// ============ User Endpoints ============
+
+#[handler]
+pub async fn get_user_profile(
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+) -> PoemResult<Json<ApiResponse<crate::database::users::UserProfile>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    match db.get_user_profile(&pubkey).await {
+        Ok(Some(profile)) => Ok(Json(ApiResponse::success(profile))),
+        Ok(None) => Ok(Json(ApiResponse::error(
+            "User profile not found".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn get_user_contacts(
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+) -> PoemResult<Json<ApiResponse<Vec<crate::database::users::UserContact>>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    match db.get_user_contacts(&pubkey).await {
+        Ok(contacts) => Ok(Json(ApiResponse::success(contacts))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn get_user_socials(
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+) -> PoemResult<Json<ApiResponse<Vec<crate::database::users::UserSocial>>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    match db.get_user_socials(&pubkey).await {
+        Ok(socials) => Ok(Json(ApiResponse::success(socials))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn get_user_public_keys(
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+) -> PoemResult<Json<ApiResponse<Vec<crate::database::users::UserPublicKey>>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    match db.get_user_public_keys(&pubkey).await {
+        Ok(keys) => Ok(Json(ApiResponse::success(keys))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
 // ============ Stats Endpoints ============
 
 #[handler]
