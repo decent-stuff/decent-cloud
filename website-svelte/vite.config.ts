@@ -20,7 +20,9 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			// Ensure buffer uses the polyfill package, not Node.js module
-			buffer: 'buffer/'
+			buffer: 'buffer/',
+			// Fix @noble/curves import paths for older package version
+			'@noble/curves/ed25519': '@noble/curves/ed25519.js'
 		}
 	}
 });
