@@ -3,6 +3,7 @@
 	import {
 		getProviderOfferings,
 		exportProviderOfferingsCSV,
+		updateProviderOffering,
 		type Offering,
 		type CsvImportResult,
 		downloadCSVTemplate,
@@ -69,10 +70,46 @@
 		loadOfferings();
 	}
 
-	function handleStockToggle(offering: Offering, event: Event) {
+	async function updateOfferingField(offering: Offering, updates: Partial<Offering>) {
+		if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes || offering.id === undefined) {
+			throw new Error('Authentication or offering data missing');
+		}
+
+		const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+		const path = `/api/v1/providers/${pubkeyHex}/offerings/${offering.id}`;
+		const params = { ...offering, ...updates };
+		const signed = await signRequest(currentIdentity.identity, 'PUT', path, params);
+
+		if (!signed.body) throw new Error('Failed to sign request');
+
+		await updateProviderOffering(currentIdentity.publicKeyBytes, offering.id, signed.body, signed.headers);
+		await loadOfferings();
+	}
+
+	async function handleStockToggle(offering: Offering, event: Event) {
 		event.stopPropagation();
-		editingOffering = offering;
-		showEditDialog = true;
+		const statuses = ['in_stock', 'out_of_stock', 'discontinued'];
+		const currentIndex = statuses.indexOf(offering.stock_status);
+		const newStatus = statuses[(currentIndex + 1) % statuses.length];
+
+		try {
+			await updateOfferingField(offering, { stock_status: newStatus });
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to update stock status';
+			console.error('Error updating stock status:', e);
+		}
+	}
+
+	async function handleVisibilityToggle(offering: Offering, event: Event) {
+		event.stopPropagation();
+		const newVisibility = offering.visibility === 'public' ? 'private' : 'public';
+
+		try {
+			await updateOfferingField(offering, { visibility: newVisibility });
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to update visibility';
+			console.error('Error updating visibility:', e);
+		}
 	}
 
 	async function openEditor() {
@@ -233,46 +270,55 @@
 		<!-- Offerings Grid -->
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 			{#each offerings as offering}
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-white/40 transition-all group"
+					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-white/40 transition-all group cursor-pointer"
+					onclick={() => handleEditClick(offering)}
 				>
+					<!-- Header: Icon and Badges -->
 					<div class="flex items-start justify-between mb-4">
 						<span class="text-4xl">{getTypeIcon(offering.product_type)}</span>
 						<div class="flex items-center gap-2">
-							<!-- Interactive stock status toggle -->
+							<!-- Visibility toggle -->
+							<button
+								onclick={(e) => handleVisibilityToggle(offering, e)}
+								class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-all hover:scale-105 cursor-pointer {offering.visibility === 'public'
+									? 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30'
+									: 'bg-gray-500/20 text-gray-400 border-gray-500/30 hover:bg-gray-500/30'}"
+								title="Click to toggle visibility: {offering.visibility}"
+							>
+								{#if offering.visibility === 'public'}
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+									</svg>
+								{:else}
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+									</svg>
+								{/if}
+							</button>
+							<!-- Stock status toggle -->
 							<button
 								onclick={(e) => handleStockToggle(offering, e)}
-								class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:scale-105 cursor-pointer {getStatusColor(
+								class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all hover:scale-105 cursor-pointer {getStatusColor(
 									offering.stock_status
 								)}"
-								title="Click to edit stock status"
+								title="Click to cycle stock status: {offering.stock_status.replace('_', ' ')}"
 							>
 								<span class="w-2 h-2 rounded-full bg-current"></span>
 								{offering.stock_status.replace('_', ' ')}
 							</button>
-							<!-- Edit pencil icon -->
-							<button
-								onclick={() => handleEditClick(offering)}
-								class="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition-all hover:scale-110"
-								title="Edit offering"
-								aria-label="Edit offering"
-							>
-								<svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-									/>
-								</svg>
-							</button>
 						</div>
 					</div>
 
-					<h3 class="text-xl font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">
+					<!-- Title -->
+					<h3 class="text-xl font-bold text-white mb-3 group-hover:text-blue-400 transition-colors">
 						{offering.offer_name}
 					</h3>
 
+					<!-- Details -->
 					<div class="space-y-2 text-sm">
 						<div class="flex items-center justify-between text-white/70">
 							<span>Type</span>
@@ -289,7 +335,7 @@
 							</div>
 						{/if}
 						{#if offering.description}
-							<div class="text-white/60 text-xs mt-2 line-clamp-2">{offering.description}</div>
+							<div class="text-white/60 text-xs mt-3 line-clamp-2">{offering.description}</div>
 						{/if}
 					</div>
 				</div>
