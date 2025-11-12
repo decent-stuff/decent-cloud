@@ -21,7 +21,8 @@ export async function signRequest(
 	identity: Ed25519KeyIdentity,
 	method: string,
 	path: string,
-	bodyData?: unknown
+	bodyData?: unknown,
+	contentType: string = 'application/json'
 ): Promise<SignedRequest> {
 	const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
 	const secretKeyBytes = new Uint8Array(identity.getKeyPair().secretKey);
@@ -30,7 +31,14 @@ export async function signRequest(
 	const timestampNs = (Date.now() * 1_000_000).toString();
 
 	// Serialize body
-	const body = bodyData ? JSON.stringify(bodyData) : '';
+	let body: string;
+	if (typeof bodyData === 'string') {
+		body = bodyData;
+	} else if (bodyData) {
+		body = JSON.stringify(bodyData);
+	} else {
+		body = '';
+	}
 
 	// Construct message: timestamp + method + path + body
 	const message = new TextEncoder().encode(timestampNs + method + path + body);
@@ -43,7 +51,7 @@ export async function signRequest(
 			'X-Public-Key': bytesToHex(publicKeyBytes),
 			'X-Signature': bytesToHex(signature),
 			'X-Timestamp': timestampNs,
-			'Content-Type': 'application/json'
+			'Content-Type': contentType
 		},
 		body
 	};

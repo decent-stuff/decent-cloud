@@ -102,10 +102,10 @@
 			const pubkeyHex = hexEncode(pubkeyBytes);
 			const path = `/api/v1/providers/${pubkeyHex}/offerings/import${upsertMode ? '?upsert=true' : ''}`;
 
-			// Sign the request - for CSV we need to pass the CSV content as body
-			const signed = await signRequest(identity, 'POST', path, undefined);
+			// Sign the request with CSV content as body and correct content type
+			const signed = await signRequest(identity, 'POST', path, csvContent, 'text/csv');
 
-			// Import CSV with signed headers but CSV body
+			// Import CSV with signed headers and CSV body
 			const importResult = await importProviderOfferingsCSV(
 				pubkeyBytes,
 				csvContent,
