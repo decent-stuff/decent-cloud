@@ -15,6 +15,7 @@ borsh.workspace = true
 candid.workspace = true
 chrono.workspace = true
 clap.workspace = true
+csv.workspace = true
 dcc-common = { path = "../common" }
 dotenv.workspace = true
 hex.workspace = true

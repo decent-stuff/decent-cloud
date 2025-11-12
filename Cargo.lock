@@ -836,6 +836,7 @@ dependencies = [
  "candid",
  "chrono",
  "clap",
+ "csv",
  "dcc-common",
  "dotenv",
  "hex",

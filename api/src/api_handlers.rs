@@ -315,6 +315,227 @@ pub async fn duplicate_provider_offering(
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct BulkUpdateStatusRequest {
+    pub offering_ids: Vec<i64>,
+    pub stock_status: String,
+}
+
+#[handler]
+pub async fn bulk_update_provider_offerings_status(
+    db: Data<&Arc<Database>>,
+    user: AuthenticatedUser,
+    Path(pubkey_hex): Path<String>,
+    Json(req): Json<BulkUpdateStatusRequest>,
+) -> PoemResult<Json<ApiResponse<usize>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    if pubkey != user.pubkey_hash {
+        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    }
+
+    match db
+        .bulk_update_stock_status(&pubkey, &req.offering_ids, &req.stock_status)
+        .await
+    {
+        Ok(count) => Ok(Json(ApiResponse::success(count))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn export_provider_offerings_csv(
+    db: Data<&Arc<Database>>,
+    user: AuthenticatedUser,
+    Path(pubkey_hex): Path<String>,
+) -> PoemResult<poem::Response> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(poem::Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("Invalid pubkey format"))
+        }
+    };
+
+    if pubkey != user.pubkey_hash {
+        return Ok(poem::Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body("Unauthorized"));
+    }
+
+    match db.get_provider_offerings(&pubkey).await {
+        Ok(offerings) => {
+            let mut csv_writer = csv::Writer::from_writer(vec![]);
+
+            // Write header
+            csv_writer
+                .write_record([
+                    "offering_id",
+                    "offer_name",
+                    "description",
+                    "product_page_url",
+                    "currency",
+                    "monthly_price",
+                    "setup_fee",
+                    "visibility",
+                    "product_type",
+                    "virtualization_type",
+                    "billing_interval",
+                    "stock_status",
+                    "processor_brand",
+                    "processor_amount",
+                    "processor_cores",
+                    "processor_speed",
+                    "processor_name",
+                    "memory_error_correction",
+                    "memory_type",
+                    "memory_amount",
+                    "hdd_amount",
+                    "total_hdd_capacity",
+                    "ssd_amount",
+                    "total_ssd_capacity",
+                    "unmetered_bandwidth",
+                    "uplink_speed",
+                    "traffic",
+                    "datacenter_country",
+                    "datacenter_city",
+                    "datacenter_latitude",
+                    "datacenter_longitude",
+                    "control_panel",
+                    "gpu_name",
+                    "min_contract_hours",
+                    "max_contract_hours",
+                ])
+                .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+            // Write data rows
+            for offering in offerings {
+                csv_writer
+                    .write_record([
+                        &offering.offering_id,
+                        &offering.offer_name,
+                        &offering.description.unwrap_or_default(),
+                        &offering.product_page_url.unwrap_or_default(),
+                        &offering.currency,
+                        &offering.monthly_price.to_string(),
+                        &offering.setup_fee.to_string(),
+                        &offering.visibility,
+                        &offering.product_type,
+                        &offering.virtualization_type.unwrap_or_default(),
+                        &offering.billing_interval,
+                        &offering.stock_status,
+                        &offering.processor_brand.unwrap_or_default(),
+                        &offering.processor_amount.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.processor_cores.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.processor_speed.unwrap_or_default(),
+                        &offering.processor_name.unwrap_or_default(),
+                        &offering.memory_error_correction.unwrap_or_default(),
+                        &offering.memory_type.unwrap_or_default(),
+                        &offering.memory_amount.unwrap_or_default(),
+                        &offering.hdd_amount.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.total_hdd_capacity.unwrap_or_default(),
+                        &offering.ssd_amount.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.total_ssd_capacity.unwrap_or_default(),
+                        &offering.unmetered_bandwidth.to_string(),
+                        &offering.uplink_speed.unwrap_or_default(),
+                        &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.datacenter_country,
+                        &offering.datacenter_city,
+                        &offering.datacenter_latitude.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.datacenter_longitude.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.control_panel.unwrap_or_default(),
+                        &offering.gpu_name.unwrap_or_default(),
+                        &offering.min_contract_hours.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.max_contract_hours.map(|v| v.to_string()).unwrap_or_default(),
+                    ])
+                    .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+            }
+
+            let csv_data = csv_writer
+                .into_inner()
+                .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+            Ok(poem::Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "text/csv")
+                .header("Content-Disposition", "attachment; filename=\"offerings.csv\"")
+                .body(csv_data))
+        }
+        Err(e) => Ok(poem::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(e.to_string())),
+    }
+}
+
+#[handler]
+pub async fn generate_csv_template() -> PoemResult<poem::Response> {
+    let mut csv_writer = csv::Writer::from_writer(vec![]);
+
+    csv_writer
+        .write_record([
+            "offering_id",
+            "offer_name",
+            "description",
+            "product_page_url",
+            "currency",
+            "monthly_price",
+            "setup_fee",
+            "visibility",
+            "product_type",
+            "virtualization_type",
+            "billing_interval",
+            "stock_status",
+            "processor_brand",
+            "processor_amount",
+            "processor_cores",
+            "processor_speed",
+            "processor_name",
+            "memory_error_correction",
+            "memory_type",
+            "memory_amount",
+            "hdd_amount",
+            "total_hdd_capacity",
+            "ssd_amount",
+            "total_ssd_capacity",
+            "unmetered_bandwidth",
+            "uplink_speed",
+            "traffic",
+            "datacenter_country",
+            "datacenter_city",
+            "datacenter_latitude",
+            "datacenter_longitude",
+            "control_panel",
+            "gpu_name",
+            "min_contract_hours",
+            "max_contract_hours",
+            "payment_methods",
+            "features",
+            "operating_systems",
+        ])
+        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    let csv_data = csv_writer
+        .into_inner()
+        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    Ok(poem::Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/csv")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"offerings-template.csv\"",
+        )
+        .body(csv_data))
+}
+
 // ============ Contract Endpoints ============
 
 #[handler]

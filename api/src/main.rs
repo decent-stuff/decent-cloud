@@ -246,6 +246,18 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/providers/:pubkey/offerings/:id/duplicate",
             poem::post(api_handlers::duplicate_provider_offering),
         )
+        .at(
+            "/api/v1/providers/:pubkey/offerings/bulk-status",
+            poem::put(api_handlers::bulk_update_provider_offerings_status),
+        )
+        .at(
+            "/api/v1/providers/:pubkey/offerings/export",
+            poem::get(api_handlers::export_provider_offerings_csv),
+        )
+        .at(
+            "/api/v1/offerings/template",
+            poem::get(api_handlers::generate_csv_template),
+        )
         // Contract endpoints
         .at("/api/v1/contracts", poem::get(api_handlers::list_contracts))
         .at(

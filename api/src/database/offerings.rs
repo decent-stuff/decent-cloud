@@ -546,6 +546,56 @@ impl Database {
         self.create_offering(pubkey_hash, params).await
     }
 
+    /// Bulk update stock_status for multiple offerings
+    pub async fn bulk_update_stock_status(
+        &self,
+        pubkey_hash: &[u8],
+        offering_ids: &[i64],
+        new_status: &str,
+    ) -> Result<usize> {
+        if offering_ids.is_empty() {
+            return Ok(0);
+        }
+
+        // Verify all offerings belong to this provider
+        let placeholders = offering_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let verify_query = format!(
+            "SELECT COUNT(*) as count FROM provider_offerings WHERE id IN ({}) AND pubkey_hash = ?",
+            placeholders
+        );
+
+        let mut query_builder = sqlx::query_scalar::<_, i64>(&verify_query);
+        for id in offering_ids {
+            query_builder = query_builder.bind(id);
+        }
+        query_builder = query_builder.bind(pubkey_hash);
+
+        let count: i64 = query_builder.fetch_one(&self.pool).await?;
+
+        if count != offering_ids.len() as i64 {
+            anyhow::bail!("Not all offerings belong to this provider or some IDs are invalid");
+        }
+
+        // Update stock_status
+        let update_query = format!(
+            "UPDATE provider_offerings SET stock_status = ? WHERE id IN ({})",
+            placeholders
+        );
+
+        let mut update_builder = sqlx::query(&update_query);
+        update_builder = update_builder.bind(new_status);
+        for id in offering_ids {
+            update_builder = update_builder.bind(id);
+        }
+
+        let result = update_builder.execute(&self.pool).await?;
+        Ok(result.rows_affected() as usize)
+    }
+
     // Helper function to calculate pricing from monthly price
     #[allow(dead_code)]
     fn calculate_pricing(monthly_price: f64) -> (i64, i64) {
@@ -1288,5 +1338,58 @@ mod tests {
         let result = db.duplicate_offering(&pubkey2, 1, "copy".to_string()).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unauthorized"));
+    }
+
+    #[tokio::test]
+    async fn test_bulk_update_stock_status_success() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        // Create 3 offerings
+        insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
+        insert_test_offering(&db, 2, &pubkey, "US", 200.0).await;
+        insert_test_offering(&db, 3, &pubkey, "US", 300.0).await;
+
+        // Bulk update status
+        let offering_ids = vec![1, 2, 3];
+        let result = db.bulk_update_stock_status(&pubkey, &offering_ids, "out_of_stock").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3);
+
+        // Verify all updated
+        for id in offering_ids {
+            let offering = db.get_offering(id).await.unwrap().unwrap();
+            assert_eq!(offering.stock_status, "out_of_stock");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bulk_update_stock_status_unauthorized() {
+        let db = setup_test_db().await;
+        let pubkey1 = vec![1u8; 32];
+        let pubkey2 = vec![2u8; 32];
+
+        // Create offerings with pubkey1
+        insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
+        insert_test_offering(&db, 2, &pubkey1, "US", 200.0).await;
+
+        // Try to update with pubkey2
+        let offering_ids = vec![1, 2];
+        let result = db.bulk_update_stock_status(&pubkey2, &offering_ids, "out_of_stock").await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Not all offerings belong to this provider"));
+    }
+
+    #[tokio::test]
+    async fn test_bulk_update_stock_status_empty() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        let result = db.bulk_update_stock_status(&pubkey, &[], "out_of_stock").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
     }
 }
