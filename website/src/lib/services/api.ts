@@ -1,3 +1,33 @@
+import type {
+	Offering,
+	ProviderProfile,
+	PlatformStats,
+	UserProfile,
+	UserContact,
+	UserSocial,
+	UserPublicKey,
+	CreateOfferingParams,
+	ApiResponse,
+	CsvImportError,
+	CsvImportResult,
+	OfferingSearchParams
+} from '$lib/types/api-types';
+
+// Re-export for consumers
+export type {
+	Offering,
+	ProviderProfile,
+	PlatformStats,
+	UserProfile,
+	UserContact,
+	UserSocial,
+	UserPublicKey,
+	CreateOfferingParams,
+	CsvImportError,
+	CsvImportResult,
+	OfferingSearchParams
+};
+
 // API URLs for different environments
 const DEV_API_BASE_URL = 'http://localhost:59001';
 const PROD_API_BASE_URL = 'https://api.decent-cloud.org';
@@ -7,24 +37,6 @@ const PROD_API_BASE_URL = 'https://api.decent-cloud.org';
 export const API_BASE_URL =
 	import.meta.env.VITE_DECENT_CLOUD_API_URL?.replace(/\/+$/, '') ??
 	(import.meta.env.PROD ? PROD_API_BASE_URL : DEV_API_BASE_URL);
-
-interface ApiResponse<T> {
-	success: boolean;
-	data?: T | null;
-	error?: string | null;
-}
-
-export interface PlatformStats {
-	total_providers: number;
-	active_providers: number;
-	total_offerings: number;
-	total_contracts: number;
-	total_transfers: number;
-	total_volume_e9s: number;
-	validator_count_24h: number;
-	latest_block_timestamp_ns: number | null;
-	metadata: Record<string, unknown>;
-}
 
 export async function fetchPlatformStats(): Promise<PlatformStats> {
 	const url = `${API_BASE_URL}/api/v1/stats`;
@@ -47,18 +59,6 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
 	return payload.data;
 }
 
-export interface ProviderProfile {
-	pubkey_hash: string | number[];
-	name: string;
-	description?: string;
-	website_url?: string;
-	logo_url?: string;
-	why_choose_us?: string;
-	api_version: string;
-	profile_version: string;
-	updated_at_ns: number;
-}
-
 function hexEncode(bytes: Uint8Array | number[]): string {
 	return Array.from(bytes)
 		.map((b) => b.toString(16).padStart(2, '0'))
@@ -72,61 +72,6 @@ function normalizePubkeyHash(pubkeyHash: string | number[]): string {
 		return pubkeyHash;
 	}
 	return hexEncode(new Uint8Array(pubkeyHash));
-}
-
-// Based on auto-generated type from Rust backend (see ../types/generated/Offering.ts)
-// Manually maintained to convert bigint to number and null to undefined for frontend convenience
-export interface Offering {
-	id?: number;
-	pubkey_hash: string | number[];
-	offering_id: string;
-	offer_name: string;
-	description?: string;
-	product_page_url?: string;
-	currency: string;
-	monthly_price: number;
-	setup_fee: number;
-	visibility: string;
-	product_type: string;
-	virtualization_type?: string;
-	billing_interval: string;
-	stock_status: string;
-	processor_brand?: string;
-	processor_amount?: number;
-	processor_cores?: number;
-	processor_speed?: string;
-	processor_name?: string;
-	memory_error_correction?: string;
-	memory_type?: string;
-	memory_amount?: string;
-	hdd_amount?: number;
-	total_hdd_capacity?: string;
-	ssd_amount?: number;
-	total_ssd_capacity?: string;
-	unmetered_bandwidth: boolean;
-	uplink_speed?: string;
-	traffic?: number;
-	datacenter_country: string;
-	datacenter_city: string;
-	datacenter_latitude?: number;
-	datacenter_longitude?: number;
-	control_panel?: string;
-	gpu_name?: string;
-	min_contract_hours?: number;
-	max_contract_hours?: number;
-	payment_methods?: string;
-	features?: string;
-	operating_systems?: string;
-}
-
-export interface OfferingSearchParams {
-	limit?: number;
-	offset?: number;
-	product_type?: string;
-	country?: string;
-	min_price_monthly?: number;
-	max_price_monthly?: number;
-	in_stock_only?: boolean;
 }
 
 export async function searchOfferings(params: OfferingSearchParams = {}): Promise<Offering[]> {
@@ -223,16 +168,6 @@ export async function exportProviderOfferingsCSV(
 	return await response.text();
 }
 
-export interface CsvImportError {
-	row: number;
-	message: string;
-}
-
-export interface CsvImportResult {
-	success_count: number;
-	errors: CsvImportError[];
-}
-
 export async function importProviderOfferingsCSV(
 	pubkeyHash: string | Uint8Array,
 	csvContent: string,
@@ -265,9 +200,6 @@ export async function importProviderOfferingsCSV(
 
 	return payload.data;
 }
-
-// CreateOfferingParams eliminated - use Offering (with id omitted) for creation
-export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey_hash'>;
 
 export async function createProviderOffering(
 	pubkeyHash: string | Uint8Array,

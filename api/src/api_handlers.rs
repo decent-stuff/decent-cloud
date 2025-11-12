@@ -34,6 +34,27 @@ impl<T> ApiResponse<T> {
             error: Some(msg),
         }
     }
+
+    /// Convert Result<T, E> to ApiResponse<T>
+    pub fn from_result<E: std::fmt::Display>(result: Result<T, E>) -> Self {
+        match result {
+            Ok(data) => Self::success(data),
+            Err(e) => Self::error(e.to_string()),
+        }
+    }
+}
+
+// Helper functions for common patterns
+fn decode_pubkey(pubkey_hex: &str) -> Result<Vec<u8>, String> {
+    hex::decode(pubkey_hex).map_err(|_| "Invalid pubkey format".to_string())
+}
+
+fn check_authorization(pubkey: &[u8], user: &AuthenticatedUser) -> Result<(), String> {
+    if pubkey != user.pubkey_hash {
+        Err("Unauthorized".to_string())
+    } else {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -207,27 +228,21 @@ pub async fn create_provider_offering(
     Path(pubkey_hex): Path<String>,
     Json(mut params): Json<crate::database::offerings::Offering>,
 ) -> PoemResult<Json<ApiResponse<i64>>> {
-    let pubkey = match hex::decode(&pubkey_hex) {
+    let pubkey = match decode_pubkey(&pubkey_hex) {
         Ok(pk) => pk,
-        Err(_) => {
-            return Ok(Json(ApiResponse::error(
-                "Invalid pubkey format".to_string(),
-            )))
-        }
+        Err(e) => return Ok(Json(ApiResponse::error(e))),
     };
 
-    if pubkey != user.pubkey_hash {
-        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    if let Err(e) = check_authorization(&pubkey, &user) {
+        return Ok(Json(ApiResponse::error(e)));
     }
 
     // Ensure id is None for creation and set pubkey_hash
     params.id = None;
     params.pubkey_hash = pubkey.clone();
 
-    match db.create_offering(&pubkey, params).await {
-        Ok(offering_id) => Ok(Json(ApiResponse::success(offering_id))),
-        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
-    }
+    let result = db.create_offering(&pubkey, params).await;
+    Ok(Json(ApiResponse::from_result(result)))
 }
 
 #[handler]
@@ -237,26 +252,20 @@ pub async fn update_provider_offering(
     Path((pubkey_hex, offering_id)): Path<(String, i64)>,
     Json(mut params): Json<crate::database::offerings::Offering>,
 ) -> PoemResult<Json<ApiResponse<()>>> {
-    let pubkey = match hex::decode(&pubkey_hex) {
+    let pubkey = match decode_pubkey(&pubkey_hex) {
         Ok(pk) => pk,
-        Err(_) => {
-            return Ok(Json(ApiResponse::error(
-                "Invalid pubkey format".to_string(),
-            )))
-        }
+        Err(e) => return Ok(Json(ApiResponse::error(e))),
     };
 
-    if pubkey != user.pubkey_hash {
-        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    if let Err(e) = check_authorization(&pubkey, &user) {
+        return Ok(Json(ApiResponse::error(e)));
     }
 
     // Set pubkey_hash from authenticated user
     params.pubkey_hash = pubkey.clone();
 
-    match db.update_offering(&pubkey, offering_id, params).await {
-        Ok(()) => Ok(Json(ApiResponse::success(()))),
-        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
-    }
+    let result = db.update_offering(&pubkey, offering_id, params).await;
+    Ok(Json(ApiResponse::from_result(result)))
 }
 
 #[handler]
@@ -265,23 +274,17 @@ pub async fn delete_provider_offering(
     user: AuthenticatedUser,
     Path((pubkey_hex, offering_id)): Path<(String, i64)>,
 ) -> PoemResult<Json<ApiResponse<()>>> {
-    let pubkey = match hex::decode(&pubkey_hex) {
+    let pubkey = match decode_pubkey(&pubkey_hex) {
         Ok(pk) => pk,
-        Err(_) => {
-            return Ok(Json(ApiResponse::error(
-                "Invalid pubkey format".to_string(),
-            )))
-        }
+        Err(e) => return Ok(Json(ApiResponse::error(e))),
     };
 
-    if pubkey != user.pubkey_hash {
-        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    if let Err(e) = check_authorization(&pubkey, &user) {
+        return Ok(Json(ApiResponse::error(e)));
     }
 
-    match db.delete_offering(&pubkey, offering_id).await {
-        Ok(()) => Ok(Json(ApiResponse::success(()))),
-        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
-    }
+    let result = db.delete_offering(&pubkey, offering_id).await;
+    Ok(Json(ApiResponse::from_result(result)))
 }
 
 #[derive(Debug, serde::Deserialize)]

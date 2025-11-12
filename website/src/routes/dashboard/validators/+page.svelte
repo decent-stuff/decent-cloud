@@ -20,8 +20,9 @@
 		}
 	});
 
-	function formatPubkeyHash(hash: string): string {
-		return `${hash.substring(0, 8)}...${hash.substring(hash.length - 8)}`;
+	function formatPubkeyHash(hash: string | number[]): string {
+		const hashStr = typeof hash === 'string' ? hash : hash.join('');
+		return `${hashStr.substring(0, 8)}...${hashStr.substring(hashStr.length - 8)}`;
 	}
 </script>
 

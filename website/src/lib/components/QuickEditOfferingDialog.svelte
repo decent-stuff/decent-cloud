@@ -109,6 +109,10 @@
 				throw new Error('Failed to sign request: signed body is empty');
 			}
 
+			if (offering.id === undefined) {
+				throw new Error('Offering ID is required for update');
+			}
+
 			// CRITICAL: Use signed.body (the exact string that was signed) not params
 			await updateProviderOffering(pubkeyBytes, offering.id, signed.body, signed.headers);
 
