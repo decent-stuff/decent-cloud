@@ -413,6 +413,9 @@ pub async fn export_provider_offerings_csv(
                     "gpu_name",
                     "min_contract_hours",
                     "max_contract_hours",
+                    "payment_methods",
+                    "features",
+                    "operating_systems",
                 ])
                 .map_err(|e| {
                     poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
@@ -481,6 +484,9 @@ pub async fn export_provider_offerings_csv(
                             .max_contract_hours
                             .map(|v| v.to_string())
                             .unwrap_or_default(),
+                        &offering.payment_methods.unwrap_or_default(),
+                        &offering.features.unwrap_or_default(),
+                        &offering.operating_systems.unwrap_or_default(),
                     ])
                     .map_err(|e| {
                         poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)

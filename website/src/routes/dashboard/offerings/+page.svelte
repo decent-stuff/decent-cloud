@@ -2,13 +2,14 @@
 	import { onMount } from 'svelte';
 	import {
 		getProviderOfferings,
+		exportProviderOfferingsCSV,
 		type Offering,
 		type CsvImportResult,
-		downloadCSVTemplate,
-		offeringsToCSV
+		downloadCSVTemplate
 	} from '$lib/services/api';
 	import { authStore } from '$lib/stores/auth';
 	import { hexEncode } from '$lib/services/api';
+	import { signRequest } from '$lib/services/auth-api';
 	import OfferingsEditor from '$lib/components/OfferingsEditor.svelte';
 	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
@@ -67,9 +68,36 @@
 		loadOfferings();
 	}
 
-	function openEditor() {
-		editorCsvContent = offerings.length > 0 ? offeringsToCSV(offerings) : '';
-		showEditorDialog = true;
+	function handleStockToggle(offering: Offering, event: Event) {
+		event.stopPropagation();
+		editingOffering = offering;
+		showEditDialog = true;
+	}
+
+	async function openEditor() {
+		try {
+			if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes) {
+				error = 'Please authenticate to edit offerings';
+				return;
+			}
+
+			if (offerings.length > 0) {
+				const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+				const path = `/api/v1/providers/${pubkeyHex}/offerings/export`;
+				const signed = await signRequest(currentIdentity.identity, 'GET', path);
+				editorCsvContent = await exportProviderOfferingsCSV(
+					currentIdentity.publicKeyBytes,
+					signed.headers
+				);
+			} else {
+				editorCsvContent = '';
+			}
+
+			showEditorDialog = true;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load CSV';
+			console.error('Error loading CSV:', e);
+		}
 	}
 
 	onMount(() => {
@@ -213,14 +241,35 @@
 				>
 					<div class="flex items-start justify-between mb-4">
 						<span class="text-4xl">{getTypeIcon(offering.product_type)}</span>
-						<span
-							class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border {getStatusColor(
-								offering.stock_status
-							)}"
-						>
-							<span class="w-2 h-2 rounded-full bg-current"></span>
-							{offering.stock_status.replace('_', ' ')}
-						</span>
+						<div class="flex items-center gap-2">
+							<!-- Interactive stock status toggle -->
+							<button
+								onclick={(e) => handleStockToggle(offering, e)}
+								class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all hover:scale-105 cursor-pointer {getStatusColor(
+									offering.stock_status
+								)}"
+								title="Click to edit stock status"
+							>
+								<span class="w-2 h-2 rounded-full bg-current"></span>
+								{offering.stock_status.replace('_', ' ')}
+							</button>
+							<!-- Edit pencil icon -->
+							<button
+								onclick={() => handleEditClick(offering)}
+								class="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition-all hover:scale-110"
+								title="Edit offering"
+								aria-label="Edit offering"
+							>
+								<svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+									/>
+								</svg>
+							</button>
+						</div>
 					</div>
 
 					<h3 class="text-xl font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">
@@ -245,21 +294,6 @@
 						{#if offering.description}
 							<div class="text-white/60 text-xs mt-2 line-clamp-2">{offering.description}</div>
 						{/if}
-					</div>
-
-					<div class="mt-4 pt-4 border-t border-white/10 flex gap-2">
-						<button
-							onclick={() => handleEditClick(offering)}
-							class="flex-1 px-4 py-2 bg-white/10 rounded-lg text-sm font-medium hover:bg-white/20 transition-all"
-						>
-							Edit
-						</button>
-						<button
-							class="flex-1 px-4 py-2 bg-white/10 rounded-lg text-sm font-medium hover:bg-white/20 transition-all"
-							title="Use Edit to change status"
-						>
-							{offering.stock_status === 'in_stock' ? 'In Stock' : 'Out of Stock'}
-						</button>
 					</div>
 				</div>
 			{/each}

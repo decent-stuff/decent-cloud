@@ -239,7 +239,7 @@
 						<select
 							id="stock-status"
 							bind:value={stockStatus}
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+							class="w-full px-4 py-3 bg-slate-800 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [&>option]:bg-slate-800 [&>option]:text-white"
 							disabled={saving}
 						>
 							<option value="in_stock">In Stock</option>
@@ -254,7 +254,7 @@
 						<select
 							id="visibility"
 							bind:value={visibility}
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+							class="w-full px-4 py-3 bg-slate-800 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [&>option]:bg-slate-800 [&>option]:text-white"
 							disabled={saving}
 						>
 							<option value="public">Public</option>

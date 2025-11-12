@@ -205,6 +205,24 @@ export async function getProviderOfferings(pubkeyHash: string | Uint8Array): Pro
 	}));
 }
 
+export async function exportProviderOfferingsCSV(
+	pubkeyHash: string | Uint8Array,
+	headers: Record<string, string>
+): Promise<string> {
+	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/export`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to export provider offerings: ${response.status} ${response.statusText}`);
+	}
+
+	return await response.text();
+}
+
 export interface CsvImportError {
 	row: number;
 	message: string;
