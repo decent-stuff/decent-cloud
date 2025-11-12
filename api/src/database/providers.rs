@@ -6,9 +6,13 @@ use borsh::BorshDeserialize;
 use dcc_common::{CheckInPayload, UpdateProfilePayload};
 use provider_profile::Profile;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct ProviderProfile {
+    #[ts(skip)]
+    #[serde(skip_deserializing)]
     pub pubkey_hash: Vec<u8>,
     pub name: String,
     pub description: Option<String>,
@@ -228,5 +232,15 @@ impl Database {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_typescript_types() {
+        ProviderProfile::export().expect("Failed to export ProviderProfile type");
     }
 }

@@ -1,8 +1,10 @@
 use super::types::Database;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct PlatformStats {
     pub total_providers: i64,
     pub active_providers: i64,
@@ -305,5 +307,10 @@ mod tests {
 
         let result = db.get_latest_block_timestamp_ns().await.unwrap();
         assert_eq!(result, Some(timestamp2));
+    }
+
+    #[test]
+    fn export_typescript_types() {
+        PlatformStats::export().expect("Failed to export PlatformStats type");
     }
 }

@@ -1,9 +1,13 @@
 use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserProfile {
+    #[ts(skip)]
+    #[serde(skip_deserializing)]
     pub pubkey_hash: Vec<u8>,
     pub display_name: Option<String>,
     pub bio: Option<String>,
@@ -11,7 +15,8 @@ pub struct UserProfile {
     pub updated_at_ns: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserContact {
     pub id: i64,
     pub contact_type: String,
@@ -19,7 +24,8 @@ pub struct UserContact {
     pub verified: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserSocial {
     pub id: i64,
     pub platform: String,
@@ -27,7 +33,8 @@ pub struct UserSocial {
     pub profile_url: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserPublicKey {
     pub id: i64,
     pub key_type: String,
@@ -270,5 +277,18 @@ impl Database {
             .await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_typescript_types() {
+        UserProfile::export().expect("Failed to export UserProfile type");
+        UserContact::export().expect("Failed to export UserContact type");
+        UserSocial::export().expect("Failed to export UserSocial type");
+        UserPublicKey::export().expect("Failed to export UserPublicKey type");
     }
 }
