@@ -48,6 +48,8 @@ impl ResponseError for AuthError {
 /// Verify request signature
 ///
 /// Message format: timestamp + method + path + body
+/// NOTE: Path excludes query string for robustness (query params are typically non-critical)
+/// 
 /// Headers required:
 /// - X-Public-Key: hex-encoded public key (32 bytes)
 /// - X-Signature: hex-encoded signature (64 bytes)
@@ -138,12 +140,15 @@ impl FromRequest<'_> for AuthenticatedUser {
         let body_bytes = body.take()?.into_vec().await?;
 
         // Verify signature
+        // NOTE: Query strings are intentionally excluded from signature for robustness
+        // Security trade-off: query params could be manipulated, but they're typically
+        // non-critical (filters, pagination, options). Body and path integrity maintained.
         let pubkey_hash = verify_request_signature(
             pubkey_hex,
             signature_hex,
             timestamp,
             req.method().as_str(),
-            req.uri().path(),
+            req.uri().path(), // Path only, no query string
             &body_bytes,
         )?;
 

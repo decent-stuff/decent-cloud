@@ -5,11 +5,11 @@
 		type Offering,
 		type CsvImportResult,
 		downloadCSVTemplate,
-		fetchCSVTemplate
+		offeringsToCSV
 	} from '$lib/services/api';
 	import { authStore } from '$lib/stores/auth';
 	import { hexEncode } from '$lib/services/api';
-	import CSVImportDialog from '$lib/components/CSVImportDialog.svelte';
+	import OfferingsEditor from '$lib/components/OfferingsEditor.svelte';
 	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
@@ -17,11 +17,11 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<any>(null);
-	let showImportDialog = $state(false);
+	let showEditorDialog = $state(false);
 	let showEditDialog = $state(false);
 	let editingOffering = $state<Offering | null>(null);
 	let importSuccess = $state<string | null>(null);
-	let prefilledCsvContent = $state('');
+	let editorCsvContent = $state('');
 
 	async function loadOfferings() {
 		try {
@@ -67,14 +67,9 @@
 		loadOfferings();
 	}
 
-	async function openImportWithTemplate() {
-		try {
-			prefilledCsvContent = await fetchCSVTemplate();
-			showImportDialog = true;
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load CSV template';
-			console.error('Error loading CSV template:', e);
-		}
+	function openEditor() {
+		editorCsvContent = offerings.length > 0 ? offeringsToCSV(offerings) : '';
+		showEditorDialog = true;
 	}
 
 	onMount(() => {
@@ -142,7 +137,7 @@
 				Download Template
 			</button>
 			<button
-				onclick={() => (showImportDialog = true)}
+				onclick={openEditor}
 				class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
 			>
 				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -150,10 +145,10 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"
 						stroke-width="2"
-						d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+						d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
 					/>
 				</svg>
-				Import / Create Offerings
+				Edit Offerings
 			</button>
 		</div>
 	</div>
@@ -277,7 +272,7 @@
 				<h3 class="text-2xl font-bold text-white mb-2">No Offerings Yet</h3>
 				<p class="text-white/60 mb-6">Create your first cloud service offering to get started</p>
 				<button
-					onclick={openImportWithTemplate}
+					onclick={openEditor}
 					class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Create Your First Offering
@@ -287,11 +282,11 @@
 	{/if}
 </div>
 
-<CSVImportDialog
-	bind:open={showImportDialog}
+<OfferingsEditor
+	bind:open={showEditorDialog}
 	identity={currentIdentity?.identity as Ed25519KeyIdentity}
 	pubkeyBytes={currentIdentity?.publicKeyBytes}
-	prefilledContent={prefilledCsvContent}
+	csvContent={editorCsvContent}
 	on:success={handleImportSuccess}
 />
 

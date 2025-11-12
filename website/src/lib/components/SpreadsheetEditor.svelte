@@ -38,9 +38,18 @@
 		});
 	}
 
-	// Convert 2D array to CSV
+	// Convert 2D array to CSV (RFC 4180 compliant)
 	function toCSV(data: string[][]): string {
-		return data.map((row) => row.join(',')).join('\n');
+		return data.map((row) => 
+			row.map((cell) => {
+				// Quote field if it contains comma, quote, or newline
+				if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+					// Escape quotes by doubling them
+					return '"' + cell.replace(/"/g, '""') + '"';
+				}
+				return cell;
+			}).join(',')
+		).join('\n');
 	}
 
 	// Initialize rows from value (only when value changes externally)

@@ -102,9 +102,15 @@
 				operating_systems: []
 			};
 
+			// Sign the request - this returns the exact JSON body that was signed
 			const signed = await signRequest(identity, 'PUT', path, params);
 
-			await updateProviderOffering(pubkeyBytes, offering.id, params, signed.headers);
+			if (!signed.body) {
+				throw new Error('Failed to sign request: signed body is empty');
+			}
+
+			// CRITICAL: Use signed.body (the exact string that was signed) not params
+			await updateProviderOffering(pubkeyBytes, offering.id, signed.body, signed.headers);
 
 			dispatch('success');
 			handleClose();
@@ -269,8 +275,7 @@
 				<div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
 					<p class="text-blue-400 text-sm">
 						<strong>Note:</strong> This quick editor only shows common fields. To edit all fields
-						(hardware specs, location, etc.), use CSV import with the "Update Existing Offerings"
-						option.
+						(hardware specs, location, etc.), use the "Edit Offerings" spreadsheet editor.
 					</p>
 				</div>
 			</div>

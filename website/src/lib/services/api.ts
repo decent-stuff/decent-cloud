@@ -110,6 +110,11 @@ export interface Offering {
 	datacenter_longitude?: number;
 	control_panel?: string;
 	gpu_name?: string;
+	min_contract_hours?: number;
+	max_contract_hours?: number;
+	payment_methods?: string;
+	features?: string;
+	operating_systems?: string;
 	price_per_hour_e9s?: number;
 	price_per_day_e9s?: number;
 }
@@ -221,10 +226,7 @@ export async function importProviderOfferingsCSV(
 
 	const response = await fetch(url, {
 		method: 'POST',
-		headers: {
-			...headers,
-			'Content-Type': 'text/csv'
-		},
+		headers, // Headers already include Content-Type from signRequest
 		body: csvContent
 	});
 
@@ -289,16 +291,19 @@ export interface CreateOfferingParams {
 
 export async function createProviderOffering(
 	pubkeyHash: string | Uint8Array,
-	params: CreateOfferingParams,
+	params: CreateOfferingParams | string,
 	headers: Record<string, string>
 ): Promise<number> {
 	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings`;
 
+	// Accept either params object or pre-signed JSON string
+	const body = typeof params === 'string' ? params : JSON.stringify(params);
+
 	const response = await fetch(url, {
 		method: 'POST',
 		headers,
-		body: JSON.stringify(params)
+		body
 	});
 
 	if (!response.ok) {
@@ -322,16 +327,19 @@ export async function createProviderOffering(
 export async function updateProviderOffering(
 	pubkeyHash: string | Uint8Array,
 	offeringId: number,
-	params: CreateOfferingParams,
+	params: CreateOfferingParams | string,
 	headers: Record<string, string>
 ): Promise<void> {
 	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}`;
 
+	// Accept either params object or pre-signed JSON string
+	const body = typeof params === 'string' ? params : JSON.stringify(params);
+
 	const response = await fetch(url, {
 		method: 'PUT',
 		headers,
-		body: JSON.stringify(params)
+		body
 	});
 
 	if (!response.ok) {
@@ -406,6 +414,73 @@ export function offeringToCSVRow(offering: Offering): string[] {
 		offering.datacenter_latitude?.toString() || '',
 		offering.datacenter_longitude?.toString() || '',
 		offering.control_panel || '',
-		offering.gpu_name || ''
+		offering.gpu_name || '',
+		offering.min_contract_hours?.toString() || '',
+		offering.max_contract_hours?.toString() || '',
+		offering.payment_methods || '',
+		offering.features || '',
+		offering.operating_systems || ''
 	];
+}
+
+// CSV header for offerings
+const OFFERINGS_CSV_HEADER = [
+	'offering_id',
+	'offer_name',
+	'description',
+	'product_page_url',
+	'currency',
+	'monthly_price',
+	'setup_fee',
+	'visibility',
+	'product_type',
+	'virtualization_type',
+	'billing_interval',
+	'stock_status',
+	'processor_brand',
+	'processor_amount',
+	'processor_cores',
+	'processor_speed',
+	'processor_name',
+	'memory_error_correction',
+	'memory_type',
+	'memory_amount',
+	'hdd_amount',
+	'total_hdd_capacity',
+	'ssd_amount',
+	'total_ssd_capacity',
+	'unmetered_bandwidth',
+	'uplink_speed',
+	'traffic',
+	'datacenter_country',
+	'datacenter_city',
+	'datacenter_latitude',
+	'datacenter_longitude',
+	'control_panel',
+	'gpu_name',
+	'min_contract_hours',
+	'max_contract_hours',
+	'payment_methods',
+	'features',
+	'operating_systems'
+];
+
+export function offeringsToCSV(offerings: Offering[]): string {
+	const rows = [OFFERINGS_CSV_HEADER, ...offerings.map(offeringToCSVRow)];
+	return rows.map((row) => row.join(',')).join('\n');
+}
+
+export async function downloadOfferingsCSV(offerings: Offering[], filename: string = 'offerings.csv'): Promise<void> {
+	const csv = offeringsToCSV(offerings);
+	const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+	const link = document.createElement('a');
+	const url = URL.createObjectURL(blob);
+
+	link.setAttribute('href', url);
+	link.setAttribute('download', filename);
+	link.style.visibility = 'hidden';
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+	URL.revokeObjectURL(url);
 }

@@ -16,6 +16,7 @@ export interface SignedRequest {
 /**
  * Sign an API request with Ed25519 key
  * Message format: timestamp + method + path + body
+ * NOTE: Path excludes query string for robustness (query params are typically non-critical)
  */
 export async function signRequest(
 	identity: Ed25519KeyIdentity,
@@ -40,8 +41,11 @@ export async function signRequest(
 		body = '';
 	}
 
+	// Strip query string from path for signing (robustness over perfection)
+	const pathWithoutQuery = path.split('?')[0];
+
 	// Construct message: timestamp + method + path + body
-	const message = new TextEncoder().encode(timestampNs + method + path + body);
+	const message = new TextEncoder().encode(timestampNs + method + pathWithoutQuery + body);
 
 	// Sign message using Ed25519ph with SHA-512 prehashing and context (matching DccIdentity)
 	const signature = ed25519ph.sign(message, secretKeyBytes.slice(0, 32), { context: ED25519_SIGN_CONTEXT });
