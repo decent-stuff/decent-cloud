@@ -111,7 +111,7 @@ impl Database {
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
         let mut query =
-            String::from("SELECT * FROM provider_offerings WHERE visibility != 'example'");
+            String::from("SELECT * FROM provider_offerings WHERE LOWER(visibility) = 'public'");
 
         if params.product_type.is_some() {
             query.push_str(" AND product_type = ?");
@@ -201,11 +201,11 @@ impl Database {
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {
         let query = if let Some(f) = filters {
             format!(
-                "SELECT COUNT(*) FROM provider_offerings WHERE visibility != 'example' AND ({})",
+                "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND ({})",
                 f
             )
         } else {
-            "SELECT COUNT(*) FROM provider_offerings WHERE visibility != 'example'".to_string()
+            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public'".to_string()
         };
 
         let count: (i64,) = sqlx::query_as(&query).fetch_one(&self.pool).await?;
@@ -558,6 +558,15 @@ impl Database {
         (price_per_hour_e9s, price_per_day_e9s)
     }
 
+    // Helper function to convert Vec<String> to Option<String> (comma-separated)
+    fn vec_to_csv(vec: &[String]) -> Option<String> {
+        if vec.is_empty() {
+            None
+        } else {
+            Some(vec.join(","))
+        }
+    }
+
     // Provider offerings
     pub async fn insert_provider_offerings(
         &self,
@@ -570,7 +579,7 @@ impl Database {
             ) {
                 Ok(payload) => payload,
                 Err(e) => {
-                    tracing::warn!("Skipping malformed offering entry with key {:?}: {}. Raw data (first 50 bytes): {:?}", 
+                    tracing::warn!("Skipping malformed offering entry with key {:?}: {}. Raw data (first 50 bytes): {:?}",
                         &entry.key, e, &entry.value.get(..50));
                     continue; // Skip this entry and continue with others
                 }
@@ -639,27 +648,9 @@ impl Database {
                 .bind(price_per_day_e9s)
                 .bind(Some(1)) // min contract hours
                 .bind(None::<i64>) // max contract hours
-                .bind({
-                    if offering.payment_methods.is_empty() {
-                        None
-                    } else {
-                        Some(offering.payment_methods.join(","))
-                    }
-                })
-                .bind({
-                    if offering.features.is_empty() {
-                        None
-                    } else {
-                        Some(offering.features.join(","))
-                    }
-                })
-                .bind({
-                    if offering.operating_systems.is_empty() {
-                        None
-                    } else {
-                        Some(offering.operating_systems.join(","))
-                    }
-                })
+                .bind(Self::vec_to_csv(&offering.payment_methods))
+                .bind(Self::vec_to_csv(&offering.features))
+                .bind(Self::vec_to_csv(&offering.operating_systems))
                 .bind(entry.block_timestamp_ns as i64)
                 .fetch_one(&mut **tx)
                 .await?;
@@ -780,16 +771,19 @@ impl Database {
                 })
                 .unwrap_or(false)
         };
-        let get_array = |idx: usize| -> Vec<String> {
-            record
-                .get(idx)
-                .map(|s| {
-                    s.split(',')
-                        .map(|v| v.trim().to_string())
-                        .filter(|v| !v.is_empty())
-                        .collect()
-                })
-                .unwrap_or_default()
+        let get_opt_csv = |idx: usize| -> Option<String> {
+            record.get(idx).and_then(|s| {
+                let items: Vec<&str> = s
+                    .split(',')
+                    .map(|v| v.trim())
+                    .filter(|v| !v.is_empty())
+                    .collect();
+                if items.is_empty() {
+                    None
+                } else {
+                    Some(items.join(","))
+                }
+            })
         };
 
         // Required fields validation
@@ -839,30 +833,9 @@ impl Database {
             gpu_name: get_opt_str(32),
             min_contract_hours: get_opt_i64(33),
             max_contract_hours: get_opt_i64(34),
-            payment_methods: {
-                let arr = get_array(35);
-                if arr.is_empty() {
-                    None
-                } else {
-                    Some(arr.join(","))
-                }
-            },
-            features: {
-                let arr = get_array(36);
-                if arr.is_empty() {
-                    None
-                } else {
-                    Some(arr.join(","))
-                }
-            },
-            operating_systems: {
-                let arr = get_array(37);
-                if arr.is_empty() {
-                    None
-                } else {
-                    Some(arr.join(","))
-                }
-            },
+            payment_methods: get_opt_csv(35),
+            features: get_opt_csv(36),
+            operating_systems: get_opt_csv(37),
         })
     }
 }
@@ -970,6 +943,40 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(results.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_search_offerings_excludes_private_and_example() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        // Insert public offering (should be shown)
+        insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
+
+        // Insert private offering (should NOT be shown)
+        let db_id_private = test_id_to_db_id(2);
+        let offering_id_private = "off-2";
+        let price_per_hour_e9s = (200.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
+        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, price_per_hour_e9s, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Private Offer', 'USD', ?, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, ?, NULL, NULL, NULL, 0)")
+            .bind(db_id_private).bind(&pubkey).bind(offering_id_private).bind(200.0).bind(price_per_hour_e9s).execute(&db.pool).await.unwrap();
+
+        let results = db
+            .search_offerings(SearchOfferingsParams {
+                product_type: None,
+                country: None,
+                min_price_e9s: None,
+                max_price_e9s: None,
+                in_stock_only: false,
+                limit: 10,
+                offset: 0,
+            })
+            .await
+            .unwrap();
+
+        // Should only return the public offering, not the private one or examples
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].offering_id, "off-1");
+        assert_eq!(results[0].visibility.to_lowercase(), "public");
     }
 
     #[tokio::test]

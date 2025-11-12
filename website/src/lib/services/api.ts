@@ -284,9 +284,9 @@ export interface CreateOfferingParams {
 	gpu_name?: string;
 	min_contract_hours?: number;
 	max_contract_hours?: number;
-	payment_methods: string[];
-	features: string[];
-	operating_systems: string[];
+	payment_methods?: string;
+	features?: string;
+	operating_systems?: string;
 }
 
 export async function createProviderOffering(
