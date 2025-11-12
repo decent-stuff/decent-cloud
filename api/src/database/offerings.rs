@@ -107,7 +107,8 @@ impl Database {
         &self,
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
-        let mut query = String::from("SELECT * FROM provider_offerings WHERE 1=1");
+        let mut query =
+            String::from("SELECT * FROM provider_offerings WHERE visibility != 'example'");
 
         if params.product_type.is_some() {
             query.push_str(" AND product_type = ?");
@@ -212,12 +213,31 @@ impl Database {
         Ok(oses.into_iter().map(|(os,)| os).collect())
     }
 
+    /// Get example offerings for CSV template generation
+    pub async fn get_example_offerings(&self) -> Result<Vec<Offering>> {
+        // Use the same distinctive hash as in migration 002
+        let example_pubkey_hash =
+            hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
+                .unwrap();
+        let offerings = sqlx::query_as::<_, Offering>(
+            "SELECT * FROM provider_offerings WHERE pubkey_hash = ? ORDER BY offering_id ASC",
+        )
+        .bind(example_pubkey_hash)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(offerings)
+    }
+
     /// Count offerings
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {
         let query = if let Some(f) = filters {
-            format!("SELECT COUNT(*) FROM provider_offerings WHERE {}", f)
+            format!(
+                "SELECT COUNT(*) FROM provider_offerings WHERE visibility != 'example' AND ({})",
+                f
+            )
         } else {
-            "SELECT COUNT(*) FROM provider_offerings".to_string()
+            "SELECT COUNT(*) FROM provider_offerings WHERE visibility != 'example'".to_string()
         };
 
         let count: (i64,) = sqlx::query_as(&query).fetch_one(&self.pool).await?;

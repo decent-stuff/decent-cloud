@@ -349,12 +349,18 @@ async fn test_structured_mixed_entries() {
     // Insert entries into database
     database.insert_entries(entries).await.unwrap();
 
-    // Verify structured entries
-    let provider_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM provider_registrations")
-        .fetch_one(database.pool())
-        .await
-        .unwrap()
-        .get("count");
+    // Verify structured entries (excluding example provider from migration 002)
+    let example_pubkey_hash =
+        hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
+            .unwrap();
+
+    let provider_count: i64 =
+        sqlx::query("SELECT COUNT(*) as count FROM provider_registrations WHERE pubkey_hash != ?")
+            .bind(&example_pubkey_hash)
+            .fetch_one(database.pool())
+            .await
+            .unwrap()
+            .get("count");
 
     let user_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM user_registrations")
         .fetch_one(database.pool())
@@ -362,11 +368,13 @@ async fn test_structured_mixed_entries() {
         .unwrap()
         .get("count");
 
-    let check_in_count: i64 = sqlx::query("SELECT COUNT(*) as count FROM provider_check_ins")
-        .fetch_one(database.pool())
-        .await
-        .unwrap()
-        .get("count");
+    let check_in_count: i64 =
+        sqlx::query("SELECT COUNT(*) as count FROM provider_check_ins WHERE pubkey_hash != ?")
+            .bind(&example_pubkey_hash)
+            .fetch_one(database.pool())
+            .await
+            .unwrap()
+            .get("count");
 
     assert_eq!(provider_count, 1);
     assert_eq!(user_count, 1);

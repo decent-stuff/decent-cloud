@@ -507,9 +507,10 @@ pub async fn export_provider_offerings_csv(
 }
 
 #[handler]
-pub async fn generate_csv_template() -> PoemResult<poem::Response> {
+pub async fn generate_csv_template(db: Data<&Arc<Database>>) -> PoemResult<poem::Response> {
     let mut csv_writer = csv::Writer::from_writer(vec![]);
 
+    // Write header row
     csv_writer
         .write_record([
             "offering_id",
@@ -552,6 +553,131 @@ pub async fn generate_csv_template() -> PoemResult<poem::Response> {
             "operating_systems",
         ])
         .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    // Get example offerings from database
+    let example_offerings = match db.get_example_offerings().await {
+        Ok(offerings) => offerings,
+        Err(e) => {
+            return Ok(poem::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(format!("Failed to retrieve example offerings: {}", e)))
+        }
+    };
+
+    // Write example offerings from database
+    for offering in example_offerings {
+        // Get related data for each offering
+        let payment_methods = db
+            .get_offering_payment_methods(offering.id)
+            .await
+            .map_err(|e| {
+                poem::Error::from_string(
+                    format!(
+                        "Failed to retrieve payment methods for offering {}: {}",
+                        offering.offering_id, e
+                    ),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?
+            .join(",");
+
+        let features = db
+            .get_offering_features(offering.id)
+            .await
+            .map_err(|e| {
+                poem::Error::from_string(
+                    format!(
+                        "Failed to retrieve features for offering {}: {}",
+                        offering.offering_id, e
+                    ),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?
+            .join(",");
+
+        let operating_systems = db
+            .get_offering_operating_systems(offering.id)
+            .await
+            .map_err(|e| {
+                poem::Error::from_string(
+                    format!(
+                        "Failed to retrieve operating systems for offering {}: {}",
+                        offering.offering_id, e
+                    ),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?
+            .join(",");
+
+        csv_writer
+            .write_record([
+                &offering.offering_id,
+                &offering.offer_name,
+                &offering.description.unwrap_or_default(),
+                &offering.product_page_url.unwrap_or_default(),
+                &offering.currency,
+                &offering.monthly_price.to_string(),
+                &offering.setup_fee.to_string(),
+                &offering.visibility,
+                &offering.product_type,
+                &offering.virtualization_type.unwrap_or_default(),
+                &offering.billing_interval,
+                &offering.stock_status,
+                &offering.processor_brand.unwrap_or_default(),
+                &offering
+                    .processor_amount
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .processor_cores
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.processor_speed.unwrap_or_default(),
+                &offering.processor_name.unwrap_or_default(),
+                &offering.memory_error_correction.unwrap_or_default(),
+                &offering.memory_type.unwrap_or_default(),
+                &offering.memory_amount.unwrap_or_default(),
+                &offering
+                    .hdd_amount
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.total_hdd_capacity.unwrap_or_default(),
+                &offering
+                    .ssd_amount
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.total_ssd_capacity.unwrap_or_default(),
+                &offering.unmetered_bandwidth.to_string(),
+                &offering.uplink_speed.unwrap_or_default(),
+                &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
+                &offering.datacenter_country,
+                &offering.datacenter_city,
+                &offering
+                    .datacenter_latitude
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .datacenter_longitude
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.control_panel.unwrap_or_default(),
+                &offering.gpu_name.unwrap_or_default(),
+                &offering
+                    .min_contract_hours
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .max_contract_hours
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &payment_methods,
+                &features,
+                &operating_systems,
+            ])
+            .map_err(|e| {
+                poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+            })?;
+    }
 
     let csv_data = csv_writer
         .into_inner()

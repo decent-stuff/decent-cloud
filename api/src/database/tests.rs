@@ -57,13 +57,34 @@ impl TestDataFactory {
     }
 }
 
-/// Test helper to count rows in a table
+/// Test helper to count rows in a table, excluding example provider data
 async fn count_table_rows(db: &Database, table: &str) -> i64 {
-    sqlx::query(&format!("SELECT COUNT(*) as count FROM {}", table))
-        .fetch_one(&db.pool)
-        .await
-        .unwrap()
-        .get("count")
+    // Example provider pubkey hash from migration 002
+    let example_pubkey_hash =
+        hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
+            .unwrap();
+
+    // For provider tables, exclude the example provider
+    let query = if table.starts_with("provider_") {
+        format!(
+            "SELECT COUNT(*) as count FROM {} WHERE pubkey_hash != ?",
+            table
+        )
+    } else {
+        format!("SELECT COUNT(*) as count FROM {}", table)
+    };
+
+    let result = if table.starts_with("provider_") {
+        sqlx::query(&query)
+            .bind(example_pubkey_hash)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap()
+    } else {
+        sqlx::query(&query).fetch_one(&db.pool).await.unwrap()
+    };
+
+    result.get("count")
 }
 
 /// Test helper to verify sync position
@@ -87,9 +108,11 @@ async fn setup_test_db() -> Database {
 
     // Load and execute migration SQL at runtime for production-like schema
     let migration_sql_001 = include_str!("../../migrations/001_original_schema.sql");
+    let migration_sql_002 = include_str!("../../migrations/002_add_example_offerings.sql");
 
     // Execute migrations in order
     sqlx::query(migration_sql_001).execute(&pool).await.unwrap();
+    sqlx::query(migration_sql_002).execute(&pool).await.unwrap();
 
     // Create sync_state table and initialize
     sqlx::query("CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY, last_position INTEGER, last_sync_at TIMESTAMP)")
@@ -602,4 +625,179 @@ async fn test_add_public_key_auto_creates_registration() {
             .await
             .unwrap();
     assert_eq!(reg_count.0, 1);
+}
+
+// Example offerings tests
+#[tokio::test]
+async fn test_get_example_offerings() {
+    let db = setup_test_db().await;
+
+    // Test retrieving example offerings
+    let example_offerings = db.get_example_offerings().await.unwrap();
+
+    // Should have exactly 2 example offerings from migration
+    assert_eq!(example_offerings.len(), 2);
+
+    // Verify first example offering (ds-premium-002, comes first alphabetically)
+    let ds_offering = &example_offerings[0];
+    assert_eq!(ds_offering.offering_id, "ds-premium-002");
+    assert_eq!(ds_offering.offer_name, "Premium Dedicated Server");
+    assert_eq!(ds_offering.monthly_price, 299.99);
+    assert_eq!(ds_offering.currency, "USD");
+    assert_eq!(ds_offering.product_type, "dedicated");
+
+    // Verify second example offering (vm-basic-001)
+    let vm_offering = &example_offerings[1];
+    assert_eq!(vm_offering.offering_id, "vm-basic-001");
+    assert_eq!(vm_offering.offer_name, "Basic Virtual Machine");
+    assert_eq!(vm_offering.monthly_price, 29.99);
+    assert_eq!(vm_offering.currency, "USD");
+    assert_eq!(vm_offering.product_type, "compute");
+
+    // Test that related data exists for each offering
+    let vm_payment_methods = db
+        .get_offering_payment_methods(vm_offering.id)
+        .await
+        .unwrap();
+    assert_eq!(vm_payment_methods.len(), 2);
+    assert!(vm_payment_methods.contains(&"Credit Card".to_string()));
+    assert!(vm_payment_methods.contains(&"PayPal".to_string()));
+
+    let vm_features = db.get_offering_features(vm_offering.id).await.unwrap();
+    assert_eq!(vm_features.len(), 3);
+    assert!(vm_features.contains(&"Auto Backup".to_string()));
+    assert!(vm_features.contains(&"SSH Access".to_string()));
+    assert!(vm_features.contains(&"Root Access".to_string()));
+
+    let vm_os = db
+        .get_offering_operating_systems(vm_offering.id)
+        .await
+        .unwrap();
+    assert_eq!(vm_os.len(), 3);
+    assert!(vm_os.contains(&"Ubuntu 22.04".to_string()));
+    assert!(vm_os.contains(&"Debian 11".to_string()));
+    assert!(vm_os.contains(&"CentOS 8".to_string()));
+
+    let ds_payment_methods = db
+        .get_offering_payment_methods(ds_offering.id)
+        .await
+        .unwrap();
+    assert_eq!(ds_payment_methods.len(), 3);
+    assert!(ds_payment_methods.contains(&"BTC".to_string()));
+    assert!(ds_payment_methods.contains(&"Bank Transfer".to_string()));
+    assert!(ds_payment_methods.contains(&"Credit Card".to_string()));
+
+    let ds_features = db.get_offering_features(ds_offering.id).await.unwrap();
+    assert_eq!(ds_features.len(), 4);
+    assert!(ds_features.contains(&"RAID 1".to_string()));
+    assert!(ds_features.contains(&"IPMI Access".to_string()));
+    assert!(ds_features.contains(&"DDoS Protection".to_string()));
+    assert!(ds_features.contains(&"24/7 Support".to_string()));
+
+    let ds_os = db
+        .get_offering_operating_systems(ds_offering.id)
+        .await
+        .unwrap();
+    assert_eq!(ds_os.len(), 4);
+    assert!(ds_os.contains(&"Ubuntu 22.04".to_string()));
+    assert!(ds_os.contains(&"CentOS 8".to_string()));
+    assert!(ds_os.contains(&"Windows Server 2022".to_string()));
+    assert!(ds_os.contains(&"Debian 11".to_string()));
+}
+
+#[tokio::test]
+async fn test_csv_template_data_retrieval() {
+    let db = setup_test_db().await;
+
+    // Verify we can retrieve all data needed for CSV template generation
+    let example_offerings = db.get_example_offerings().await.unwrap();
+    assert_eq!(example_offerings.len(), 2);
+
+    // For each example offering, verify we can fetch all related data without errors
+    for offering in &example_offerings {
+        let payment_methods = db
+            .get_offering_payment_methods(offering.id)
+            .await
+            .unwrap_or_else(|_| {
+                panic!("Failed to get payment methods for {}", offering.offering_id)
+            });
+        assert!(
+            !payment_methods.is_empty(),
+            "Payment methods should not be empty for {}",
+            offering.offering_id
+        );
+
+        let features = db
+            .get_offering_features(offering.id)
+            .await
+            .unwrap_or_else(|_| panic!("Failed to get features for {}", offering.offering_id));
+        assert!(
+            !features.is_empty(),
+            "Features should not be empty for {}",
+            offering.offering_id
+        );
+
+        let operating_systems = db
+            .get_offering_operating_systems(offering.id)
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to get operating systems for {}",
+                    offering.offering_id
+                )
+            });
+        assert!(
+            !operating_systems.is_empty(),
+            "Operating systems should not be empty for {}",
+            offering.offering_id
+        );
+    }
+
+    // Verify example offerings have correct visibility
+    for offering in &example_offerings {
+        assert_eq!(
+            offering.visibility, "example",
+            "Example offerings should have visibility='example'"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_example_offerings_excluded_from_search() {
+    let db = setup_test_db().await;
+
+    // Create a regular public offering
+    let pubkey_hash = vec![1u8; 32];
+    sqlx::query("INSERT INTO provider_registrations (pubkey_hash, pubkey_bytes, signature, created_at_ns) VALUES (?, ?, ?, 0)")
+        .bind(&pubkey_hash).bind(&pubkey_hash).bind(&pubkey_hash).execute(&db.pool).await.unwrap();
+
+    sqlx::query("INSERT INTO provider_offerings (pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', 0, 0)")
+        .bind(&pubkey_hash).execute(&db.pool).await.unwrap();
+
+    // Search offerings - should only return the public offering, not examples
+    let search_params = crate::database::offerings::SearchOfferingsParams {
+        product_type: None,
+        country: None,
+        min_price_e9s: None,
+        max_price_e9s: None,
+        in_stock_only: false,
+        limit: 10,
+        offset: 0,
+    };
+
+    let search_results = db.search_offerings(search_params).await.unwrap();
+    assert_eq!(
+        search_results.len(),
+        1,
+        "Search should only return 1 public offering, not example offerings"
+    );
+    assert_eq!(search_results[0].offering_id, "test-public-001");
+    assert_eq!(search_results[0].visibility, "public");
+
+    // Verify count_offerings also excludes examples
+    let total_count = db.count_offerings(None).await.unwrap();
+    assert_eq!(
+        total_count, 1,
+        "Count should only include public offerings, not examples"
+    );
 }

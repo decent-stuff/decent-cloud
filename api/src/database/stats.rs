@@ -52,9 +52,10 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
-        let total_offerings: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM provider_offerings")
-            .fetch_one(&self.pool)
-            .await?;
+        let total_offerings: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE visibility != 'example'")
+                .fetch_one(&self.pool)
+                .await?;
 
         let total_contracts: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM contract_sign_requests")
             .fetch_one(&self.pool)
