@@ -2,6 +2,8 @@
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/stores/auth';
 
+	let { isOpen = $bindable(false) } = $props();
+
 	const navItems = [
 		{ href: '/dashboard', icon: '📊', label: 'Overview' },
 		{ href: '/dashboard/validators', icon: '✓', label: 'Validators' },
@@ -9,7 +11,7 @@
 		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' }
 	];
 
-	let currentPath = '';
+	let currentPath = $state('');
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
 	});
@@ -18,10 +20,26 @@
 		await authStore.logout();
 		window.location.href = '/';
 	}
+
+	function closeSidebar() {
+		isOpen = false;
+	}
 </script>
 
+<!-- Mobile overlay -->
+{#if isOpen}
+	<button
+		type="button"
+		class="fixed inset-0 bg-black/50 z-40 md:hidden"
+		onclick={closeSidebar}
+		aria-label="Close sidebar"
+	></button>
+{/if}
+
 <aside
-	class="fixed left-0 top-0 h-screen w-64 bg-gray-900/95 backdrop-blur-lg border-r border-white/10 flex flex-col"
+	class="fixed left-0 top-0 h-screen w-64 bg-gray-900/95 backdrop-blur-lg border-r border-white/10 flex flex-col z-50 transition-transform duration-300 {isOpen
+		? 'translate-x-0'
+		: '-translate-x-full md:translate-x-0'}"
 >
 	<!-- Logo -->
 	<div class="p-6 border-b border-white/10">
@@ -35,6 +53,7 @@
 		{#each navItems as item}
 			<a
 				href={item.href}
+				onclick={closeSidebar}
 				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath ===
 				item.href
 					? 'bg-blue-600 text-white'
@@ -50,6 +69,7 @@
 	<div class="p-4 border-t border-white/10 space-y-2">
 		<a
 			href="/dashboard/profile"
+			onclick={closeSidebar}
 			class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath ===
 			'/dashboard/profile'
 				? 'bg-blue-600 text-white'
