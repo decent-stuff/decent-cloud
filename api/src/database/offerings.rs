@@ -749,6 +749,183 @@ impl Database {
         }
         Ok(())
     }
+
+    /// Import offerings from CSV data
+    /// Returns (success_count, errors) where errors is Vec<(row_number, error_message)>
+    pub async fn import_offerings_csv(
+        &self,
+        pubkey_hash: &[u8],
+        csv_data: &str,
+        upsert: bool,
+    ) -> Result<(usize, Vec<(usize, String)>)> {
+        let mut reader = csv::Reader::from_reader(csv_data.as_bytes());
+        let mut success_count = 0;
+        let mut errors = Vec::new();
+
+        for (row_idx, result) in reader.records().enumerate() {
+            let row_number = row_idx + 2; // +2 because row 1 is header, 0-indexed
+
+            match result {
+                Ok(record) => {
+                    match Self::parse_csv_record(&record) {
+                        Ok(params) => {
+                            let result = if upsert {
+                                // Try to find existing offering by offering_id
+                                let existing = sqlx::query_scalar::<_, i64>(
+                                    "SELECT id FROM provider_offerings WHERE offering_id = ? AND pubkey_hash = ?"
+                                )
+                                .bind(&params.offering_id)
+                                .bind(pubkey_hash)
+                                .fetch_optional(&self.pool)
+                                .await;
+
+                                match existing {
+                                    Ok(Some(id)) => {
+                                        self.update_offering(pubkey_hash, id, params).await
+                                    }
+                                    Ok(None) => {
+                                        self.create_offering(pubkey_hash, params).await.map(|_| ())
+                                    }
+                                    Err(e) => Err(e.into()),
+                                }
+                            } else {
+                                self.create_offering(pubkey_hash, params).await.map(|_| ())
+                            };
+
+                            match result {
+                                Ok(_) => success_count += 1,
+                                Err(e) => errors.push((row_number, e.to_string())),
+                            }
+                        }
+                        Err(e) => errors.push((row_number, e)),
+                    }
+                }
+                Err(e) => errors.push((row_number, format!("CSV parse error: {}", e))),
+            }
+        }
+
+        Ok((success_count, errors))
+    }
+
+    /// Parse a single CSV record into CreateOfferingParams
+    fn parse_csv_record(record: &csv::StringRecord) -> Result<CreateOfferingParams, String> {
+        if record.len() < 35 {
+            return Err(format!(
+                "Expected at least 35 columns, found {}",
+                record.len()
+            ));
+        }
+
+        let get_str = |idx: usize| record.get(idx).unwrap_or("").to_string();
+        let get_opt_str = |idx: usize| {
+            let val = record.get(idx).unwrap_or("").trim();
+            if val.is_empty() {
+                None
+            } else {
+                Some(val.to_string())
+            }
+        };
+        let get_opt_i64 = |idx: usize| {
+            record.get(idx).and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    trimmed.parse::<i64>().ok()
+                }
+            })
+        };
+        let get_opt_f64 = |idx: usize| {
+            record.get(idx).and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    trimmed.parse::<f64>().ok()
+                }
+            })
+        };
+        let get_f64 = |idx: usize| -> Result<f64, String> {
+            record
+                .get(idx)
+                .ok_or_else(|| format!("Missing column {}", idx))?
+                .trim()
+                .parse::<f64>()
+                .map_err(|_| format!("Invalid number at column {}", idx))
+        };
+        let get_bool = |idx: usize| {
+            record
+                .get(idx)
+                .map(|s| {
+                    let lower = s.trim().to_lowercase();
+                    lower == "true" || lower == "1" || lower == "yes"
+                })
+                .unwrap_or(false)
+        };
+        let get_array = |idx: usize| -> Vec<String> {
+            record
+                .get(idx)
+                .map(|s| {
+                    s.split(',')
+                        .map(|v| v.trim().to_string())
+                        .filter(|v| !v.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        // Required fields validation
+        let offering_id = get_str(0);
+        let offer_name = get_str(1);
+
+        if offering_id.trim().is_empty() {
+            return Err("offering_id is required".to_string());
+        }
+        if offer_name.trim().is_empty() {
+            return Err("offer_name is required".to_string());
+        }
+
+        Ok(CreateOfferingParams {
+            offering_id,
+            offer_name,
+            description: get_opt_str(2),
+            product_page_url: get_opt_str(3),
+            currency: get_str(4),
+            monthly_price: get_f64(5)?,
+            setup_fee: get_f64(6)?,
+            visibility: get_str(7),
+            product_type: get_str(8),
+            virtualization_type: get_opt_str(9),
+            billing_interval: get_str(10),
+            stock_status: get_str(11),
+            processor_brand: get_opt_str(12),
+            processor_amount: get_opt_i64(13),
+            processor_cores: get_opt_i64(14),
+            processor_speed: get_opt_str(15),
+            processor_name: get_opt_str(16),
+            memory_error_correction: get_opt_str(17),
+            memory_type: get_opt_str(18),
+            memory_amount: get_opt_str(19),
+            hdd_amount: get_opt_i64(20),
+            total_hdd_capacity: get_opt_str(21),
+            ssd_amount: get_opt_i64(22),
+            total_ssd_capacity: get_opt_str(23),
+            unmetered_bandwidth: get_bool(24),
+            uplink_speed: get_opt_str(25),
+            traffic: get_opt_i64(26),
+            datacenter_country: get_str(27),
+            datacenter_city: get_str(28),
+            datacenter_latitude: get_opt_f64(29),
+            datacenter_longitude: get_opt_f64(30),
+            control_panel: get_opt_str(31),
+            gpu_name: get_opt_str(32),
+            min_contract_hours: get_opt_i64(33),
+            max_contract_hours: get_opt_i64(34),
+            payment_methods: get_array(35),
+            features: get_array(36),
+            operating_systems: get_array(37),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1352,7 +1529,9 @@ mod tests {
 
         // Bulk update status
         let offering_ids = vec![1, 2, 3];
-        let result = db.bulk_update_stock_status(&pubkey, &offering_ids, "out_of_stock").await;
+        let result = db
+            .bulk_update_stock_status(&pubkey, &offering_ids, "out_of_stock")
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 3);
 
@@ -1375,7 +1554,9 @@ mod tests {
 
         // Try to update with pubkey2
         let offering_ids = vec![1, 2];
-        let result = db.bulk_update_stock_status(&pubkey2, &offering_ids, "out_of_stock").await;
+        let result = db
+            .bulk_update_stock_status(&pubkey2, &offering_ids, "out_of_stock")
+            .await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -1388,8 +1569,143 @@ mod tests {
         let db = setup_test_db().await;
         let pubkey = vec![1u8; 32];
 
-        let result = db.bulk_update_stock_status(&pubkey, &[], "out_of_stock").await;
+        let result = db
+            .bulk_update_stock_status(&pubkey, &[], "out_of_stock")
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_csv_import_success() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
+off-1,Test Server,Great server,https://example.com,USD,100.0,0.0,public,dedicated,,monthly,in_stock,Intel,2,8,3.5GHz,Xeon,ECC,DDR4,32GB,2,2TB,1,500GB,true,1Gbps,10000,US,New York,40.7128,-74.0060,cPanel,RTX 3090,1,720,BTC,SSD,Ubuntu
+off-2,Test Server 2,Another server,,EUR,200.0,50.0,public,vps,kvm,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,\"BTC,ETH\",\"SSD,NVMe\",\"Ubuntu,Debian\"";
+
+        let (success_count, errors) = db
+            .import_offerings_csv(&pubkey, csv_data, false)
+            .await
+            .unwrap();
+
+        assert_eq!(success_count, 2);
+        assert_eq!(errors.len(), 0);
+
+        // Verify first offering
+        let off1 =
+            sqlx::query_scalar::<_, i64>("SELECT id FROM provider_offerings WHERE offering_id = ?")
+                .bind("off-1")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        let offering = db.get_offering(off1).await.unwrap().unwrap();
+        assert_eq!(offering.offer_name, "Test Server");
+        assert_eq!(offering.monthly_price, 100.0);
+        assert_eq!(offering.datacenter_country, "US");
+
+        // Verify metadata
+        let methods = db.get_offering_payment_methods(off1).await.unwrap();
+        assert_eq!(methods.len(), 1);
+        assert_eq!(methods[0], "BTC");
+
+        let features = db.get_offering_features(off1).await.unwrap();
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0], "SSD");
+
+        let os = db.get_offering_operating_systems(off1).await.unwrap();
+        assert_eq!(os.len(), 1);
+        assert_eq!(os[0], "Ubuntu");
+    }
+
+    #[tokio::test]
+    async fn test_csv_import_with_errors() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
+off-1,Test Server,desc,,USD,100.0,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,
+,Missing ID,desc,,USD,100.0,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,
+off-3,,desc,,USD,100.0,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,
+off-4,Bad Price,desc,,USD,invalid,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,";
+
+        let (success_count, errors) = db
+            .import_offerings_csv(&pubkey, csv_data, false)
+            .await
+            .unwrap();
+
+        assert_eq!(success_count, 1);
+        assert_eq!(errors.len(), 3);
+        assert_eq!(errors[0].0, 3);
+        assert!(errors[0].1.contains("offering_id is required"));
+        assert_eq!(errors[1].0, 4);
+        assert!(errors[1].1.contains("offer_name is required"));
+        assert_eq!(errors[2].0, 5);
+        assert!(errors[2].1.contains("Invalid number"));
+    }
+
+    #[tokio::test]
+    async fn test_csv_import_upsert() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        // Insert initial offering
+        insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
+
+        let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
+off-1,Updated Offer,Updated desc,,USD,200.0,10.0,public,dedicated,,monthly,out_of_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,
+off-2,New Offer,New desc,,EUR,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,,,";
+
+        let (success_count, errors) = db
+            .import_offerings_csv(&pubkey, csv_data, true)
+            .await
+            .unwrap();
+
+        assert_eq!(success_count, 2);
+        assert_eq!(errors.len(), 0);
+
+        // Verify update
+        let offering = db.get_offering(1).await.unwrap().unwrap();
+        assert_eq!(offering.offer_name, "Updated Offer");
+        assert_eq!(offering.monthly_price, 200.0);
+        assert_eq!(offering.stock_status, "out_of_stock");
+
+        // Verify new offering was created
+        let off2 =
+            sqlx::query_scalar::<_, i64>("SELECT id FROM provider_offerings WHERE offering_id = ?")
+                .bind("off-2")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert!(off2 > 1);
+    }
+
+    #[tokio::test]
+    async fn test_csv_import_unauthorized() {
+        let db = setup_test_db().await;
+        let pubkey1 = vec![1u8; 32];
+        let pubkey2 = vec![2u8; 32];
+
+        // Create offering for pubkey1
+        insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
+
+        // Try to upsert with pubkey2
+        let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
+off-1,Hacked,Unauthorized update,,USD,1.0,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,";
+
+        let (success_count, errors) = db
+            .import_offerings_csv(&pubkey2, csv_data, true)
+            .await
+            .unwrap();
+
+        // Should create new offering for pubkey2, not update pubkey1's offering
+        assert_eq!(success_count, 1);
+        assert_eq!(errors.len(), 0);
+
+        // Verify original offering unchanged
+        let original = db.get_offering(1).await.unwrap().unwrap();
+        assert_eq!(original.offer_name, "Test Offer");
+        assert_eq!(original.monthly_price, 100.0);
     }
 }

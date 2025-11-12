@@ -414,7 +414,9 @@ pub async fn export_provider_offerings_csv(
                     "min_contract_hours",
                     "max_contract_hours",
                 ])
-                .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+                .map_err(|e| {
+                    poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+                })?;
 
             // Write data rows
             for offering in offerings {
@@ -433,40 +435,69 @@ pub async fn export_provider_offerings_csv(
                         &offering.billing_interval,
                         &offering.stock_status,
                         &offering.processor_brand.unwrap_or_default(),
-                        &offering.processor_amount.map(|v| v.to_string()).unwrap_or_default(),
-                        &offering.processor_cores.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering
+                            .processor_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .processor_cores
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
                         &offering.processor_speed.unwrap_or_default(),
                         &offering.processor_name.unwrap_or_default(),
                         &offering.memory_error_correction.unwrap_or_default(),
                         &offering.memory_type.unwrap_or_default(),
                         &offering.memory_amount.unwrap_or_default(),
-                        &offering.hdd_amount.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering
+                            .hdd_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
                         &offering.total_hdd_capacity.unwrap_or_default(),
-                        &offering.ssd_amount.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering
+                            .ssd_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
                         &offering.total_ssd_capacity.unwrap_or_default(),
                         &offering.unmetered_bandwidth.to_string(),
                         &offering.uplink_speed.unwrap_or_default(),
                         &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
                         &offering.datacenter_country,
                         &offering.datacenter_city,
-                        &offering.datacenter_latitude.map(|v| v.to_string()).unwrap_or_default(),
-                        &offering.datacenter_longitude.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering
+                            .datacenter_latitude
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .datacenter_longitude
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
                         &offering.control_panel.unwrap_or_default(),
                         &offering.gpu_name.unwrap_or_default(),
-                        &offering.min_contract_hours.map(|v| v.to_string()).unwrap_or_default(),
-                        &offering.max_contract_hours.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering
+                            .min_contract_hours
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .max_contract_hours
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
                     ])
-                    .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+                    .map_err(|e| {
+                        poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+                    })?;
             }
 
-            let csv_data = csv_writer
-                .into_inner()
-                .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+            let csv_data = csv_writer.into_inner().map_err(|e| {
+                poem::Error::from_string(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+            })?;
 
             Ok(poem::Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "text/csv")
-                .header("Content-Disposition", "attachment; filename=\"offerings.csv\"")
+                .header(
+                    "Content-Disposition",
+                    "attachment; filename=\"offerings.csv\"",
+                )
                 .body(csv_data))
         }
         Err(e) => Ok(poem::Response::builder()
@@ -534,6 +565,60 @@ pub async fn generate_csv_template() -> PoemResult<poem::Response> {
             "attachment; filename=\"offerings-template.csv\"",
         )
         .body(csv_data))
+}
+
+#[derive(Debug, Serialize)]
+pub struct CsvImportResult {
+    pub success_count: usize,
+    pub errors: Vec<CsvImportError>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CsvImportError {
+    pub row: usize,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportOfferingsQuery {
+    #[serde(default)]
+    pub upsert: bool,
+}
+
+#[handler]
+pub async fn import_provider_offerings_csv(
+    db: Data<&Arc<Database>>,
+    user: AuthenticatedUser,
+    Path(pubkey_hex): Path<String>,
+    Query(query): Query<ImportOfferingsQuery>,
+    body: String,
+) -> PoemResult<Json<ApiResponse<CsvImportResult>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    if pubkey != user.pubkey_hash {
+        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    }
+
+    match db.import_offerings_csv(&pubkey, &body, query.upsert).await {
+        Ok((success_count, errors)) => {
+            let result = CsvImportResult {
+                success_count,
+                errors: errors
+                    .into_iter()
+                    .map(|(row, message)| CsvImportError { row, message })
+                    .collect(),
+            };
+            Ok(Json(ApiResponse::success(result)))
+        }
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
 }
 
 // ============ Contract Endpoints ============
