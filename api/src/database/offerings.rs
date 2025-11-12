@@ -1,7 +1,7 @@
 use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use borsh::BorshDeserialize;
-use dcc_common::{offerings, DC_TOKEN_DECIMALS_DIV};
+use dcc_common::offerings;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -41,8 +41,6 @@ pub struct Offering {
     pub datacenter_longitude: Option<f64>,
     pub control_panel: Option<String>,
     pub gpu_name: Option<String>,
-    pub price_per_hour_e9s: Option<i64>,
-    pub price_per_day_e9s: Option<i64>,
     pub min_contract_hours: Option<i64>,
     pub max_contract_hours: Option<i64>,
     pub payment_methods: Option<String>,
@@ -54,8 +52,6 @@ pub struct Offering {
 pub struct SearchOfferingsParams<'a> {
     pub product_type: Option<&'a str>,
     pub country: Option<&'a str>,
-    pub min_price_e9s: Option<i64>,
-    pub max_price_e9s: Option<i64>,
     pub in_stock_only: bool,
     pub limit: i64,
     pub offset: i64,
@@ -119,17 +115,11 @@ impl Database {
         if params.country.is_some() {
             query.push_str(" AND datacenter_country = ?");
         }
-        if params.min_price_e9s.is_some() {
-            query.push_str(" AND price_per_hour_e9s >= ?");
-        }
-        if params.max_price_e9s.is_some() {
-            query.push_str(" AND price_per_hour_e9s <= ?");
-        }
         if params.in_stock_only {
             query.push_str(" AND stock_status = ?");
         }
 
-        query.push_str(" ORDER BY price_per_hour_e9s ASC LIMIT ? OFFSET ?");
+        query.push_str(" ORDER BY monthly_price ASC LIMIT ? OFFSET ?");
 
         let mut query_builder = sqlx::query_as::<_, Offering>(&query);
 
@@ -138,12 +128,6 @@ impl Database {
         }
         if let Some(c) = params.country {
             query_builder = query_builder.bind(c);
-        }
-        if let Some(min) = params.min_price_e9s {
-            query_builder = query_builder.bind(min);
-        }
-        if let Some(max) = params.max_price_e9s {
-            query_builder = query_builder.bind(max);
         }
         if params.in_stock_only {
             query_builder = query_builder.bind("in_stock");
@@ -245,9 +229,6 @@ impl Database {
             ));
         }
 
-        // Calculate pricing
-        let (price_per_hour_e9s, price_per_day_e9s) = Self::calculate_pricing(params.monthly_price);
-
         // Insert main offering record
         let offering_id = sqlx::query_scalar::<_, i64>(
             "INSERT INTO provider_offerings (
@@ -259,9 +240,9 @@ impl Database {
                 total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth,
                 uplink_speed, traffic, datacenter_country, datacenter_city,
                 datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
-                price_per_hour_e9s, price_per_day_e9s, min_contract_hours,
-                max_contract_hours, payment_methods, features, operating_systems, created_at_ns
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                min_contract_hours, max_contract_hours, payment_methods, features,
+                operating_systems, created_at_ns
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id",
         )
         .bind(pubkey_hash)
@@ -298,8 +279,6 @@ impl Database {
         .bind(params.datacenter_longitude)
         .bind(&params.control_panel)
         .bind(&params.gpu_name)
-        .bind(price_per_hour_e9s)
-        .bind(price_per_day_e9s)
         .bind(params.min_contract_hours)
         .bind(params.max_contract_hours)
         .bind(&params.payment_methods)
@@ -339,8 +318,6 @@ impl Database {
             _ => {}
         }
 
-        let (price_per_hour_e9s, price_per_day_e9s) = Self::calculate_pricing(params.monthly_price);
-
         sqlx::query(
             "UPDATE provider_offerings SET
                 offering_id = ?, offer_name = ?, description = ?, product_page_url = ?,
@@ -351,8 +328,7 @@ impl Database {
                 hdd_amount = ?, total_hdd_capacity = ?, ssd_amount = ?, total_ssd_capacity = ?,
                 unmetered_bandwidth = ?, uplink_speed = ?, traffic = ?, datacenter_country = ?,
                 datacenter_city = ?, datacenter_latitude = ?, datacenter_longitude = ?,
-                control_panel = ?, gpu_name = ?, price_per_hour_e9s = ?, price_per_day_e9s = ?,
-                min_contract_hours = ?, max_contract_hours = ?,
+                control_panel = ?, gpu_name = ?, min_contract_hours = ?, max_contract_hours = ?,
                 payment_methods = ?, features = ?, operating_systems = ?
             WHERE id = ?",
         )
@@ -389,8 +365,6 @@ impl Database {
         .bind(params.datacenter_longitude)
         .bind(&params.control_panel)
         .bind(&params.gpu_name)
-        .bind(price_per_hour_e9s)
-        .bind(price_per_day_e9s)
         .bind(params.min_contract_hours)
         .bind(params.max_contract_hours)
         .bind(&params.payment_methods)
@@ -550,14 +524,6 @@ impl Database {
         Ok(result.rows_affected() as usize)
     }
 
-    // Helper function to calculate pricing from monthly price
-    fn calculate_pricing(monthly_price: f64) -> (i64, i64) {
-        let price_per_hour_e9s =
-            (monthly_price / 30.0 / 24.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
-        let price_per_day_e9s = (monthly_price / 30.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
-        (price_per_hour_e9s, price_per_day_e9s)
-    }
-
     // Helper function to convert Vec<String> to Option<String> (comma-separated)
     fn vec_to_csv(vec: &[String]) -> Option<String> {
         if vec.is_empty() {
@@ -591,9 +557,6 @@ impl Database {
 
             // Store each offering as a fully structured record
             for offering in &provider_offerings.server_offerings {
-                let (price_per_hour_e9s, price_per_day_e9s) =
-                    Self::calculate_pricing(offering.monthly_price);
-
                 // Insert main offering record
                 let _offering_id = sqlx::query_scalar::<_, i64>(
                     "INSERT INTO provider_offerings (
@@ -605,9 +568,9 @@ impl Database {
                         total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth,
                         uplink_speed, traffic, datacenter_country, datacenter_city,
                         datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
-                        price_per_hour_e9s, price_per_day_e9s, min_contract_hours,
-                        max_contract_hours, payment_methods, features, operating_systems, created_at_ns
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        min_contract_hours, max_contract_hours, payment_methods, features,
+                        operating_systems, created_at_ns
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     RETURNING id"
                 )
                 .bind(provider_key)
@@ -644,8 +607,6 @@ impl Database {
                 .bind(offering.datacenter_coordinates.map(|c| c.1))
                 .bind(&offering.control_panel)
                 .bind(&offering.gpu_name)
-                .bind(price_per_hour_e9s)
-                .bind(price_per_day_e9s)
                 .bind(Some(1)) // min contract hours
                 .bind(None::<i64>) // max contract hours
                 .bind(Self::vec_to_csv(&offering.payment_methods))
@@ -849,10 +810,7 @@ mod tests {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
         let migration1_sql = include_str!("../../migrations/001_original_schema.sql");
         sqlx::query(migration1_sql).execute(&pool).await.unwrap();
-        let migration2_sql = include_str!("../../migrations/002_add_example_offerings.sql");
-        sqlx::query(migration2_sql).execute(&pool).await.unwrap();
-        let migration3_sql = include_str!("../../migrations/003_simplify_offering_metadata.sql");
-        sqlx::query(migration3_sql).execute(&pool).await.unwrap();
+        // Add more migrations below as needed
         Database { pool }
     }
 
@@ -934,8 +892,6 @@ mod tests {
             .search_offerings(SearchOfferingsParams {
                 product_type: None,
                 country: None,
-                min_price_e9s: None,
-                max_price_e9s: None,
                 in_stock_only: false,
                 limit: 10,
                 offset: 0,
@@ -964,8 +920,6 @@ mod tests {
             .search_offerings(SearchOfferingsParams {
                 product_type: None,
                 country: None,
-                min_price_e9s: None,
-                max_price_e9s: None,
                 in_stock_only: false,
                 limit: 10,
                 offset: 0,
@@ -989,8 +943,6 @@ mod tests {
             .search_offerings(SearchOfferingsParams {
                 product_type: None,
                 country: Some("US"),
-                min_price_e9s: None,
-                max_price_e9s: None,
                 in_stock_only: false,
                 limit: 10,
                 offset: 0,
@@ -1015,8 +967,6 @@ mod tests {
             .search_offerings(SearchOfferingsParams {
                 product_type: None,
                 country: None,
-                min_price_e9s: Some(min_price),
-                max_price_e9s: Some(max_price),
                 in_stock_only: false,
                 limit: 10,
                 offset: 0,
@@ -1038,8 +988,6 @@ mod tests {
             .search_offerings(SearchOfferingsParams {
                 product_type: None,
                 country: None,
-                min_price_e9s: None,
-                max_price_e9s: None,
                 in_stock_only: false,
                 limit: 2,
                 offset: 0,
@@ -1052,8 +1000,6 @@ mod tests {
             .search_offerings(SearchOfferingsParams {
                 product_type: None,
                 country: None,
-                min_price_e9s: None,
-                max_price_e9s: None,
                 in_stock_only: false,
                 limit: 2,
                 offset: 2,

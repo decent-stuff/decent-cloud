@@ -77,8 +77,6 @@ pub struct OfferingSearchQuery {
     pub offset: i64,
     pub product_type: Option<String>,
     pub country: Option<String>,
-    pub min_price_e9s: Option<i64>,
-    pub max_price_e9s: Option<i64>,
     #[serde(default)]
     pub in_stock_only: bool,
 }
@@ -159,8 +157,6 @@ pub async fn search_offerings(
         .search_offerings(crate::database::offerings::SearchOfferingsParams {
             product_type: params.product_type.as_deref(),
             country: params.country.as_deref(),
-            min_price_e9s: params.min_price_e9s,
-            max_price_e9s: params.max_price_e9s,
             in_stock_only: params.in_stock_only,
             limit: params.limit,
             offset: params.offset,

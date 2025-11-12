@@ -132,10 +132,6 @@
 	}
 
 	function formatPrice(offering: Offering): string {
-		if (offering.price_per_hour_e9s) {
-			const price = offering.price_per_hour_e9s / 1_000_000_000;
-			return `${price.toFixed(4)} DCT/hr`;
-		}
 		if (offering.monthly_price) {
 			return `${offering.monthly_price.toFixed(2)} ${offering.currency}/mo`;
 		}

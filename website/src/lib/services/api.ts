@@ -115,8 +115,6 @@ export interface Offering {
 	payment_methods?: string;
 	features?: string;
 	operating_systems?: string;
-	price_per_hour_e9s?: number;
-	price_per_day_e9s?: number;
 }
 
 export interface OfferingSearchParams {
@@ -124,8 +122,8 @@ export interface OfferingSearchParams {
 	offset?: number;
 	product_type?: string;
 	country?: string;
-	min_price_e9s?: number;
-	max_price_e9s?: number;
+	min_price_monthly?: number;
+	max_price_monthly?: number;
 	in_stock_only?: boolean;
 }
 
@@ -135,8 +133,8 @@ export async function searchOfferings(params: OfferingSearchParams = {}): Promis
 	if (params.offset !== undefined) searchParams.set('offset', params.offset.toString());
 	if (params.product_type) searchParams.set('product_type', params.product_type);
 	if (params.country) searchParams.set('country', params.country);
-	if (params.min_price_e9s !== undefined) searchParams.set('min_price_e9s', params.min_price_e9s.toString());
-	if (params.max_price_e9s !== undefined) searchParams.set('max_price_e9s', params.max_price_e9s.toString());
+	if (params.min_price_monthly !== undefined) searchParams.set('min_price_monthly', params.min_price_monthly.toString());
+	if (params.max_price_monthly !== undefined) searchParams.set('max_price_monthly', params.max_price_monthly.toString());
 	if (params.in_stock_only) searchParams.set('in_stock_only', 'true');
 
 	const url = `${API_BASE_URL}/api/v1/offerings?${searchParams.toString()}`;

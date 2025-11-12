@@ -98,23 +98,14 @@ async fn assert_table_count(db: &Database, table: &str, expected: i64) {
 }
 
 // Core functionality tests
-// Test database setup - using in-memory for simplicity
-///
-/// NOTE: Using in-memory SQLite for fast, isolated tests.
-/// While migrations would be ideal, they're complex with in-memory DBs.
-/// For now, manual setup gives us reliable test isolation.
+// Test database setup - using in-memory for simplicity and fast, isolated tests.
 async fn setup_test_db() -> Database {
     let pool = SqlitePool::connect(":memory:").await.unwrap();
 
-    // Load and execute migration SQL at runtime for production-like schema
-    let migration_sql_001 = include_str!("../../migrations/001_original_schema.sql");
-    let migration_sql_002 = include_str!("../../migrations/002_add_example_offerings.sql");
-    let migration_sql_003 = include_str!("../../migrations/003_simplify_offering_metadata.sql");
-
-    // Execute migrations in order
-    sqlx::query(migration_sql_001).execute(&pool).await.unwrap();
-    sqlx::query(migration_sql_002).execute(&pool).await.unwrap();
-    sqlx::query(migration_sql_003).execute(&pool).await.unwrap();
+    // Load and execute migrations SQL at runtime for production-like schema
+    let migration1_sql = include_str!("../../migrations/001_original_schema.sql");
+    sqlx::query(migration1_sql).execute(&pool).await.unwrap();
+    // Add more migrations below as needed
 
     // Create sync_state table and initialize
     sqlx::query("CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY, last_position INTEGER, last_sync_at TIMESTAMP)")
@@ -788,8 +779,6 @@ async fn test_example_offerings_excluded_from_search() {
     let search_params = crate::database::offerings::SearchOfferingsParams {
         product_type: None,
         country: None,
-        min_price_e9s: None,
-        max_price_e9s: None,
         in_stock_only: false,
         limit: 10,
         offset: 0,

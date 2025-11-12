@@ -81,37 +81,14 @@ CREATE TABLE provider_offerings (
     datacenter_longitude REAL,
     control_panel TEXT,
     gpu_name TEXT,
-    price_per_hour_e9s INTEGER,
-    price_per_day_e9s INTEGER,
     min_contract_hours INTEGER,
     max_contract_hours INTEGER,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    payment_methods TEXT,
+    features TEXT,
+    operating_systems TEXT,
     UNIQUE(pubkey_hash, offering_id)
-);
-
--- Provider offering payment methods (normalized)
-CREATE TABLE provider_offerings_payment_methods (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    offering_id INTEGER NOT NULL,
-    payment_method TEXT NOT NULL,
-    FOREIGN KEY (offering_id) REFERENCES provider_offerings(id) ON DELETE CASCADE
-);
-
--- Provider offering features (normalized)
-CREATE TABLE provider_offerings_features (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    offering_id INTEGER NOT NULL,
-    feature TEXT NOT NULL,
-    FOREIGN KEY (offering_id) REFERENCES provider_offerings(id) ON DELETE CASCADE
-);
-
--- Provider offering operating systems (normalized)
-CREATE TABLE provider_offerings_operating_systems (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    offering_id INTEGER NOT NULL,
-    operating_system TEXT NOT NULL,
-    FOREIGN KEY (offering_id) REFERENCES provider_offerings(id) ON DELETE CASCADE
 );
 
 -- User registrations
@@ -290,6 +267,197 @@ CREATE TABLE user_public_keys (
 -- Insert initial sync state
 INSERT OR IGNORE INTO sync_state (id, last_position) VALUES (1, 0);
 
+-- Add example offerings data
+
+-- Create a special example provider using a distinctive hash
+-- Using a distinctive 32-byte value that's clearly not a real pubkey
+INSERT OR IGNORE INTO provider_registrations (
+    pubkey_hash,
+    pubkey_bytes,
+    signature,
+    created_at_ns
+) VALUES (
+    x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    1609459200000000000  -- 2021-01-01 00:00:00 UTC
+);
+
+-- Create example provider profile
+INSERT OR IGNORE INTO provider_profiles (
+    pubkey_hash,
+    name,
+    description,
+    website_url,
+    logo_url,
+    why_choose_us,
+    api_version,
+    profile_version,
+    updated_at_ns
+) VALUES (
+    x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    'Example Provider',
+    'Example provider for template and demonstration purposes',
+    'https://example.com',
+    'https://example.com/logo.png',
+    'This is an example provider used to demonstrate the offerings system',
+    '1.0.0',
+    '1.0.0',
+    1609459200000000000  -- 2021-01-01 00:00:00 UTC
+);
+
+-- Insert example offering 1: Basic VM
+INSERT OR IGNORE INTO provider_offerings (
+    pubkey_hash,
+    offering_id,
+    offer_name,
+    description,
+    product_page_url,
+    currency,
+    monthly_price,
+    setup_fee,
+    visibility,
+    product_type,
+    virtualization_type,
+    billing_interval,
+    stock_status,
+    processor_brand,
+    processor_amount,
+    processor_cores,
+    processor_speed,
+    processor_name,
+    memory_type,
+    memory_amount,
+    ssd_amount,
+    total_ssd_capacity,
+    unmetered_bandwidth,
+    uplink_speed,
+    datacenter_country,
+    datacenter_city,
+    datacenter_latitude,
+    datacenter_longitude,
+    control_panel,
+    min_contract_hours,
+    max_contract_hours,
+    payment_methods,
+    features,
+    operating_systems,
+    created_at_ns
+) VALUES (
+    x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    'vm-basic-001',
+    'Basic Virtual Machine',
+    '2 vCPU 4GB RAM 80GB SSD - Perfect for small applications',
+    'https://example.com/vm-basic',
+    'USD',
+    29.99,
+    0.0,
+    'example',
+    'compute',
+    'KVM',
+    'monthly',
+    'in_stock',
+    'Intel',
+    1,
+    2,
+    '2.4 GHz',
+    'Intel Xeon E5-2680v4',
+    'DDR4',
+    '4GB',
+    1,
+    '80GB',
+    TRUE,
+    '1 Gbps',
+    'US',
+    'New York',
+    40.7128,
+    -74.0060,
+    'cPanel',
+    1,
+    720,
+    'Credit Card,PayPal',
+    'Auto Backup,SSH Access,Root Access',
+    'Ubuntu 22.04,Debian 11,CentOS 8',
+    1609459200000000000  -- 2021-01-01 00:00:00 UTC
+);
+
+-- Insert example offering 2: Premium Dedicated Server
+INSERT OR IGNORE INTO provider_offerings (
+    pubkey_hash,
+    offering_id,
+    offer_name,
+    description,
+    product_page_url,
+    currency,
+    monthly_price,
+    setup_fee,
+    visibility,
+    product_type,
+    virtualization_type,
+    billing_interval,
+    stock_status,
+    processor_brand,
+    processor_amount,
+    processor_cores,
+    processor_speed,
+    processor_name,
+    memory_error_correction,
+    memory_type,
+    memory_amount,
+    ssd_amount,
+    total_ssd_capacity,
+    unmetered_bandwidth,
+    uplink_speed,
+    datacenter_country,
+    datacenter_city,
+    datacenter_latitude,
+    datacenter_longitude,
+    control_panel,
+    min_contract_hours,
+    max_contract_hours,
+    payment_methods,
+    features,
+    operating_systems,
+    created_at_ns
+) VALUES (
+    x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    'ds-premium-002',
+    'Premium Dedicated Server',
+    'Dual Xeon 128GB RAM 2x1TB NVMe - High performance dedicated hardware',
+    'https://example.com/dedicated-premium',
+    'USD',
+    299.99,
+    99.0,
+    'example',
+    'dedicated',
+    'bare-metal',
+    'monthly',
+    'in_stock',
+    'Intel',
+    2,
+    32,
+    '3.2 GHz',
+    'Intel Xeon Gold 6248R',
+    'ECC',
+    'DDR4 ECC',
+    '128GB',
+    2,
+    '2TB',
+    TRUE,
+    '10 Gbps',
+    'DE',
+    'Frankfurt',
+    50.1109,
+    8.6821,
+    'IPMI',
+    24,
+    720,
+    'BTC,Bank Transfer',
+    'RAID 1,IPMI Access,DDoS Protection,24/7 Support',
+    'Ubuntu 22.04,CentOS 8,Windows Server 2022,Debian 11',
+    1609459200000000000  -- 2021-01-01 00:00:00 UTC
+);
+
 -- Optimized indexes for efficient querying
 CREATE INDEX idx_provider_registrations_pubkey_hash ON provider_registrations(pubkey_hash);
 CREATE INDEX idx_provider_check_ins_pubkey_hash ON provider_check_ins(pubkey_hash);
@@ -299,13 +467,10 @@ CREATE INDEX idx_provider_profiles_contacts_provider ON provider_profiles_contac
 CREATE INDEX idx_provider_profiles_contacts_type ON provider_profiles_contacts(contact_type);
 CREATE INDEX idx_provider_offerings_pubkey_hash ON provider_offerings(pubkey_hash);
 CREATE INDEX idx_provider_offerings_offering_id ON provider_offerings(offering_id);
-CREATE INDEX idx_provider_offerings_region ON provider_offerings(datacenter_country);
+CREATE INDEX idx_provider_offerings_visibility ON provider_offerings(visibility);
+CREATE INDEX idx_provider_offerings_country ON provider_offerings(datacenter_country);
 CREATE INDEX idx_provider_offerings_product_type ON provider_offerings(product_type);
-CREATE INDEX idx_provider_offerings_price_hour ON provider_offerings(price_per_hour_e9s);
 CREATE INDEX idx_provider_offerings_stock ON provider_offerings(stock_status);
-CREATE INDEX idx_provider_offerings_payment_methods_offering ON provider_offerings_payment_methods(offering_id);
-CREATE INDEX idx_provider_offerings_features_offering ON provider_offerings_features(offering_id);
-CREATE INDEX idx_provider_offerings_os_offering ON provider_offerings_operating_systems(offering_id);
 CREATE INDEX idx_token_transfers_from_account ON token_transfers(from_account);
 CREATE INDEX idx_token_transfers_to_account ON token_transfers(to_account);
 CREATE INDEX idx_token_transfers_timestamp ON token_transfers(created_at_ns);
