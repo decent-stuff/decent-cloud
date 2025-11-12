@@ -1,19 +1,29 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getProviderOfferings, type Offering } from '$lib/services/api';
+	import {
+		getProviderOfferings,
+		type Offering,
+		type CsvImportResult,
+		downloadCSVTemplate,
+		fetchCSVTemplate
+	} from '$lib/services/api';
 	import { authStore } from '$lib/stores/auth';
 	import { hexEncode } from '$lib/services/api';
+	import CSVImportDialog from '$lib/components/CSVImportDialog.svelte';
+	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
+	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<any>(null);
+	let showImportDialog = $state(false);
+	let showEditDialog = $state(false);
+	let editingOffering = $state<Offering | null>(null);
+	let importSuccess = $state<string | null>(null);
+	let prefilledCsvContent = $state('');
 
-	onMount(async () => {
-		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
-			currentIdentity = identity;
-		});
-
+	async function loadOfferings() {
 		try {
 			loading = true;
 			error = null;
@@ -23,7 +33,6 @@
 				return;
 			}
 
-			// Convert public key bytes to hex for API
 			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
 			offerings = await getProviderOfferings(pubkeyHex);
 		} catch (e) {
@@ -32,7 +41,48 @@
 		} finally {
 			loading = false;
 		}
+	}
 
+	function handleImportSuccess(event: CustomEvent<CsvImportResult>) {
+		const result = event.detail;
+		importSuccess = `Successfully imported ${result.success_count} offering${result.success_count !== 1 ? 's' : ''}`;
+
+		setTimeout(() => {
+			importSuccess = null;
+		}, 5000);
+
+		loadOfferings();
+	}
+
+	function handleEditClick(offering: Offering) {
+		editingOffering = offering;
+		showEditDialog = true;
+	}
+
+	function handleEditSuccess() {
+		importSuccess = 'Offering updated successfully';
+		setTimeout(() => {
+			importSuccess = null;
+		}, 5000);
+		loadOfferings();
+	}
+
+	async function openImportWithTemplate() {
+		try {
+			prefilledCsvContent = await fetchCSVTemplate();
+			showImportDialog = true;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load CSV template';
+			console.error('Error loading CSV template:', e);
+		}
+	}
+
+	onMount(() => {
+		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
+			currentIdentity = identity;
+		});
+
+		loadOfferings();
 		return unsubscribe;
 	});
 
@@ -75,12 +125,47 @@
 			<h1 class="text-4xl font-bold text-white mb-2">My Offerings</h1>
 			<p class="text-white/60">Manage your cloud service offerings</p>
 		</div>
-		<button
-			class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
-		>
-			+ Create Offering
-		</button>
+		<div class="flex gap-3">
+			<button
+				onclick={downloadCSVTemplate}
+				class="px-6 py-3 bg-white/10 backdrop-blur rounded-lg font-semibold hover:bg-white/20 transition-all flex items-center gap-2"
+				title="Download CSV template with example offerings"
+			>
+				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+					/>
+				</svg>
+				Download Template
+			</button>
+			<button
+				onclick={() => (showImportDialog = true)}
+				class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
+			>
+				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+					/>
+				</svg>
+				Import / Create Offerings
+			</button>
+		</div>
 	</div>
+
+	{#if importSuccess}
+		<div
+			class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 flex items-center gap-2 animate-fade-in"
+		>
+			<span class="text-2xl">✅</span>
+			<p class="text-green-400 font-semibold">{importSuccess}</p>
+		</div>
+	{/if}
 
 	{#if error}
 		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">
@@ -169,14 +254,16 @@
 
 					<div class="mt-4 pt-4 border-t border-white/10 flex gap-2">
 						<button
+							onclick={() => handleEditClick(offering)}
 							class="flex-1 px-4 py-2 bg-white/10 rounded-lg text-sm font-medium hover:bg-white/20 transition-all"
 						>
 							Edit
 						</button>
 						<button
 							class="flex-1 px-4 py-2 bg-white/10 rounded-lg text-sm font-medium hover:bg-white/20 transition-all"
+							title="Use Edit to change status"
 						>
-							{offering.stock_status === 'in_stock' ? 'Disable' : 'Enable'}
+							{offering.stock_status === 'in_stock' ? 'In Stock' : 'Out of Stock'}
 						</button>
 					</div>
 				</div>
@@ -190,6 +277,7 @@
 				<h3 class="text-2xl font-bold text-white mb-2">No Offerings Yet</h3>
 				<p class="text-white/60 mb-6">Create your first cloud service offering to get started</p>
 				<button
+					onclick={openImportWithTemplate}
 					class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Create Your First Offering
@@ -198,3 +286,19 @@
 		{/if}
 	{/if}
 </div>
+
+<CSVImportDialog
+	bind:open={showImportDialog}
+	identity={currentIdentity?.identity as Ed25519KeyIdentity}
+	pubkeyBytes={currentIdentity?.publicKeyBytes}
+	prefilledContent={prefilledCsvContent}
+	on:success={handleImportSuccess}
+/>
+
+<QuickEditOfferingDialog
+	bind:open={showEditDialog}
+	offering={editingOffering}
+	identity={currentIdentity?.identity as Ed25519KeyIdentity}
+	pubkeyBytes={currentIdentity?.publicKeyBytes}
+	on:success={handleEditSuccess}
+/>

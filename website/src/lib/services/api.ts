@@ -199,3 +199,213 @@ export async function getProviderOfferings(pubkeyHash: string | Uint8Array): Pro
 		pubkey_hash: normalizePubkeyHash(o.pubkey_hash)
 	}));
 }
+
+export interface CsvImportError {
+	row: number;
+	message: string;
+}
+
+export interface CsvImportResult {
+	success_count: number;
+	errors: CsvImportError[];
+}
+
+export async function importProviderOfferingsCSV(
+	pubkeyHash: string | Uint8Array,
+	csvContent: string,
+	upsert: boolean,
+	headers: Record<string, string>
+): Promise<CsvImportResult> {
+	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/import${upsert ? '?upsert=true' : ''}`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: {
+			...headers,
+			'Content-Type': 'text/csv'
+		},
+		body: csvContent
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to import CSV: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<CsvImportResult>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'CSV import failed');
+	}
+
+	if (!payload.data) {
+		throw new Error('CSV import response did not include data');
+	}
+
+	return payload.data;
+}
+
+export interface CreateOfferingParams {
+	offering_id: string;
+	offer_name: string;
+	description?: string;
+	product_page_url?: string;
+	currency: string;
+	monthly_price: number;
+	setup_fee: number;
+	visibility: string;
+	product_type: string;
+	virtualization_type?: string;
+	billing_interval: string;
+	stock_status: string;
+	processor_brand?: string;
+	processor_amount?: number;
+	processor_cores?: number;
+	processor_speed?: string;
+	processor_name?: string;
+	memory_error_correction?: string;
+	memory_type?: string;
+	memory_amount?: string;
+	hdd_amount?: number;
+	total_hdd_capacity?: string;
+	ssd_amount?: number;
+	total_ssd_capacity?: string;
+	unmetered_bandwidth: boolean;
+	uplink_speed?: string;
+	traffic?: number;
+	datacenter_country: string;
+	datacenter_city: string;
+	datacenter_latitude?: number;
+	datacenter_longitude?: number;
+	control_panel?: string;
+	gpu_name?: string;
+	min_contract_hours?: number;
+	max_contract_hours?: number;
+	payment_methods: string[];
+	features: string[];
+	operating_systems: string[];
+}
+
+export async function createProviderOffering(
+	pubkeyHash: string | Uint8Array,
+	params: CreateOfferingParams,
+	headers: Record<string, string>
+): Promise<number> {
+	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to create offering: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<number>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to create offering');
+	}
+
+	if (payload.data === null || payload.data === undefined) {
+		throw new Error('Create offering response did not include offering ID');
+	}
+
+	return payload.data;
+}
+
+export async function updateProviderOffering(
+	pubkeyHash: string | Uint8Array,
+	offeringId: number,
+	params: CreateOfferingParams,
+	headers: Record<string, string>
+): Promise<void> {
+	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}`;
+
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to update offering: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<void>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update offering');
+	}
+}
+
+export async function fetchCSVTemplate(): Promise<string> {
+	const url = `${API_BASE_URL}/api/v1/offerings/template`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch CSV template: ${response.status} ${response.statusText}`);
+	}
+
+	return await response.text();
+}
+
+export async function downloadCSVTemplate(): Promise<void> {
+	const csv = await fetchCSVTemplate();
+	const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+	const link = document.createElement('a');
+	const url = URL.createObjectURL(blob);
+
+	link.setAttribute('href', url);
+	link.setAttribute('download', 'offerings-template.csv');
+	link.style.visibility = 'hidden';
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+	URL.revokeObjectURL(url);
+}
+
+export function offeringToCSVRow(offering: Offering): string[] {
+	return [
+		offering.offering_id,
+		offering.offer_name,
+		offering.description || '',
+		offering.product_page_url || '',
+		offering.currency,
+		offering.monthly_price.toString(),
+		offering.setup_fee.toString(),
+		offering.visibility,
+		offering.product_type,
+		offering.virtualization_type || '',
+		offering.billing_interval,
+		offering.stock_status,
+		offering.processor_brand || '',
+		offering.processor_amount?.toString() || '',
+		offering.processor_cores?.toString() || '',
+		offering.processor_speed || '',
+		offering.processor_name || '',
+		offering.memory_error_correction || '',
+		offering.memory_type || '',
+		offering.memory_amount || '',
+		offering.hdd_amount?.toString() || '',
+		offering.total_hdd_capacity || '',
+		offering.ssd_amount?.toString() || '',
+		offering.total_ssd_capacity || '',
+		offering.unmetered_bandwidth.toString(),
+		offering.uplink_speed || '',
+		offering.traffic?.toString() || '',
+		offering.datacenter_country,
+		offering.datacenter_city,
+		offering.datacenter_latitude?.toString() || '',
+		offering.datacenter_longitude?.toString() || '',
+		offering.control_panel || '',
+		offering.gpu_name || ''
+	];
+}
