@@ -74,8 +74,10 @@ function normalizePubkeyHash(pubkeyHash: string | number[]): string {
 	return hexEncode(new Uint8Array(pubkeyHash));
 }
 
+// Based on auto-generated type from Rust backend (see ../types/generated/Offering.ts)
+// Manually maintained to convert bigint to number and null to undefined for frontend convenience
 export interface Offering {
-	id: number;
+	id?: number;
 	pubkey_hash: string | number[];
 	offering_id: string;
 	offer_name: string;
@@ -264,46 +266,8 @@ export async function importProviderOfferingsCSV(
 	return payload.data;
 }
 
-export interface CreateOfferingParams {
-	offering_id: string;
-	offer_name: string;
-	description?: string;
-	product_page_url?: string;
-	currency: string;
-	monthly_price: number;
-	setup_fee: number;
-	visibility: string;
-	product_type: string;
-	virtualization_type?: string;
-	billing_interval: string;
-	stock_status: string;
-	processor_brand?: string;
-	processor_amount?: number;
-	processor_cores?: number;
-	processor_speed?: string;
-	processor_name?: string;
-	memory_error_correction?: string;
-	memory_type?: string;
-	memory_amount?: string;
-	hdd_amount?: number;
-	total_hdd_capacity?: string;
-	ssd_amount?: number;
-	total_ssd_capacity?: string;
-	unmetered_bandwidth: boolean;
-	uplink_speed?: string;
-	traffic?: number;
-	datacenter_country: string;
-	datacenter_city: string;
-	datacenter_latitude?: number;
-	datacenter_longitude?: number;
-	control_panel?: string;
-	gpu_name?: string;
-	min_contract_hours?: number;
-	max_contract_hours?: number;
-	payment_methods?: string;
-	features?: string;
-	operating_systems?: string;
-}
+// CreateOfferingParams eliminated - use Offering (with id omitted) for creation
+export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey_hash'>;
 
 export async function createProviderOffering(
 	pubkeyHash: string | Uint8Array,

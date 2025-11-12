@@ -205,7 +205,7 @@ pub async fn create_provider_offering(
     db: Data<&Arc<Database>>,
     user: AuthenticatedUser,
     Path(pubkey_hex): Path<String>,
-    Json(params): Json<crate::database::offerings::CreateOfferingParams>,
+    Json(mut params): Json<crate::database::offerings::Offering>,
 ) -> PoemResult<Json<ApiResponse<i64>>> {
     let pubkey = match hex::decode(&pubkey_hex) {
         Ok(pk) => pk,
@@ -220,6 +220,10 @@ pub async fn create_provider_offering(
         return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
     }
 
+    // Ensure id is None for creation and set pubkey_hash
+    params.id = None;
+    params.pubkey_hash = pubkey.clone();
+
     match db.create_offering(&pubkey, params).await {
         Ok(offering_id) => Ok(Json(ApiResponse::success(offering_id))),
         Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
@@ -231,7 +235,7 @@ pub async fn update_provider_offering(
     db: Data<&Arc<Database>>,
     user: AuthenticatedUser,
     Path((pubkey_hex, offering_id)): Path<(String, i64)>,
-    Json(params): Json<crate::database::offerings::CreateOfferingParams>,
+    Json(mut params): Json<crate::database::offerings::Offering>,
 ) -> PoemResult<Json<ApiResponse<()>>> {
     let pubkey = match hex::decode(&pubkey_hex) {
         Ok(pk) => pk,
@@ -245,6 +249,9 @@ pub async fn update_provider_offering(
     if pubkey != user.pubkey_hash {
         return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
     }
+
+    // Set pubkey_hash from authenticated user
+    params.pubkey_hash = pubkey.clone();
 
     match db.update_offering(&pubkey, offering_id, params).await {
         Ok(()) => Ok(Json(ApiResponse::success(()))),

@@ -3,10 +3,16 @@ use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::offerings;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct Offering {
-    pub id: i64,
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<i64>,
+    #[ts(skip)]
+    #[serde(skip_deserializing)]
     pub pubkey_hash: Vec<u8>,
     pub offering_id: String,
     pub offer_name: String,
@@ -57,47 +63,7 @@ pub struct SearchOfferingsParams<'a> {
     pub offset: i64,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct CreateOfferingParams {
-    pub offering_id: String,
-    pub offer_name: String,
-    pub description: Option<String>,
-    pub product_page_url: Option<String>,
-    pub currency: String,
-    pub monthly_price: f64,
-    pub setup_fee: f64,
-    pub visibility: String,
-    pub product_type: String,
-    pub virtualization_type: Option<String>,
-    pub billing_interval: String,
-    pub stock_status: String,
-    pub processor_brand: Option<String>,
-    pub processor_amount: Option<i64>,
-    pub processor_cores: Option<i64>,
-    pub processor_speed: Option<String>,
-    pub processor_name: Option<String>,
-    pub memory_error_correction: Option<String>,
-    pub memory_type: Option<String>,
-    pub memory_amount: Option<String>,
-    pub hdd_amount: Option<i64>,
-    pub total_hdd_capacity: Option<String>,
-    pub ssd_amount: Option<i64>,
-    pub total_ssd_capacity: Option<String>,
-    pub unmetered_bandwidth: bool,
-    pub uplink_speed: Option<String>,
-    pub traffic: Option<i64>,
-    pub datacenter_country: String,
-    pub datacenter_city: String,
-    pub datacenter_latitude: Option<f64>,
-    pub datacenter_longitude: Option<f64>,
-    pub control_panel: Option<String>,
-    pub gpu_name: Option<String>,
-    pub min_contract_hours: Option<i64>,
-    pub max_contract_hours: Option<i64>,
-    pub payment_methods: Option<String>,
-    pub features: Option<String>,
-    pub operating_systems: Option<String>,
-}
+// CreateOfferingParams eliminated - use Offering with id: None for creation
 
 #[allow(dead_code)]
 impl Database {
@@ -198,11 +164,7 @@ impl Database {
     }
 
     /// Create a new offering
-    pub async fn create_offering(
-        &self,
-        pubkey_hash: &[u8],
-        params: CreateOfferingParams,
-    ) -> Result<i64> {
+    pub async fn create_offering(&self, pubkey_hash: &[u8], params: Offering) -> Result<i64> {
         // Validate required fields
         if params.offering_id.trim().is_empty() {
             return Err(anyhow::anyhow!("offering_id is required"));
@@ -297,7 +259,7 @@ impl Database {
         &self,
         pubkey_hash: &[u8],
         offering_db_id: i64,
-        params: CreateOfferingParams,
+        params: Offering,
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
@@ -430,7 +392,9 @@ impl Database {
         // Get metadata directly from source offering
 
         // Create new offering with duplicated data
-        let params = CreateOfferingParams {
+        let params = Offering {
+            id: None,
+            pubkey_hash: pubkey_hash.to_vec(),
             offering_id: new_offering_id,
             offer_name: format!("{} (Copy)", source.offer_name),
             description: source.description,
@@ -677,8 +641,8 @@ impl Database {
         Ok((success_count, errors))
     }
 
-    /// Parse a single CSV record into CreateOfferingParams
-    fn parse_csv_record(record: &csv::StringRecord) -> Result<CreateOfferingParams, String> {
+    /// Parse a single CSV record into Offering
+    fn parse_csv_record(record: &csv::StringRecord) -> Result<Offering, String> {
         if record.len() < 38 {
             return Err(format!(
                 "Expected at least 38 columns, found {}",
@@ -758,7 +722,9 @@ impl Database {
             return Err("offer_name is required".to_string());
         }
 
-        Ok(CreateOfferingParams {
+        Ok(Offering {
+            id: None,
+            pubkey_hash: vec![], // Will be set by caller
             offering_id,
             offer_name,
             description: get_opt_str(2),
@@ -824,15 +790,19 @@ mod tests {
         // Use IDs starting from 100 to avoid conflicts with example data from migration 002
         let db_id = id + 100;
         let offering_id = format!("off-{}", id);
-        // Calculate price_per_hour_e9s from monthly price (rough approximation)
-        let price_per_hour_e9s = (price * 1_000_000_000.0 / 30.0 / 24.0) as i64;
-        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, price_per_hour_e9s, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', ?, 'City', 0, ?, NULL, NULL, NULL, 0)")
-            .bind(db_id).bind(pubkey).bind(&offering_id).bind(price).bind(country).bind(price_per_hour_e9s).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', ?, 'City', 0, NULL, NULL, NULL, 0)")
+            .bind(db_id).bind(pubkey).bind(&offering_id).bind(price).bind(country).execute(&db.pool).await.unwrap();
     }
 
     // Helper to get the database ID from test ID (test IDs start from 1, DB IDs from 100)
     fn test_id_to_db_id(test_id: i64) -> i64 {
         test_id + 100
+    }
+
+    #[test]
+    fn export_typescript_types() {
+        // This test ensures TypeScript types are exported
+        Offering::export().expect("Failed to export Offering type");
     }
 
     #[tokio::test]
@@ -862,7 +832,7 @@ mod tests {
         let db_id = test_id_to_db_id(42);
         let offering = db.get_offering(db_id).await.unwrap();
         assert!(offering.is_some());
-        assert_eq!(offering.unwrap().id, db_id);
+        assert_eq!(offering.unwrap().id, Some(db_id));
     }
 
     #[tokio::test]
@@ -912,9 +882,8 @@ mod tests {
         // Insert private offering (should NOT be shown)
         let db_id_private = test_id_to_db_id(2);
         let offering_id_private = "off-2";
-        let price_per_hour_e9s = (200.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
-        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, price_per_hour_e9s, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Private Offer', 'USD', ?, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, ?, NULL, NULL, NULL, 0)")
-            .bind(db_id_private).bind(&pubkey).bind(offering_id_private).bind(200.0).bind(price_per_hour_e9s).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Private Offer', 'USD', ?, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, NULL, NULL, NULL, 0)")
+            .bind(db_id_private).bind(&pubkey).bind(offering_id_private).bind(200.0).execute(&db.pool).await.unwrap();
 
         let results = db
             .search_offerings(SearchOfferingsParams {
@@ -960,9 +929,7 @@ mod tests {
         insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
         insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
 
-        // Filter by price_per_hour_e9s (150 / 30 / 24 * 1e9 = ~208M)
-        let min_price = (100.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
-        let max_price = (200.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
+        // All offerings are fetched
         let results = db
             .search_offerings(SearchOfferingsParams {
                 product_type: None,
@@ -973,8 +940,11 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].monthly_price, 150.0);
+        assert_eq!(results.len(), 3);
+        // Results sorted by monthly_price ASC
+        assert_eq!(results[0].monthly_price, 50.0);
+        assert_eq!(results[1].monthly_price, 150.0);
+        assert_eq!(results[2].monthly_price, 250.0);
     }
 
     #[tokio::test]
@@ -1015,7 +985,9 @@ mod tests {
         let db = setup_test_db().await;
         let pubkey = vec![1u8; 32];
 
-        let params = CreateOfferingParams {
+        let params = Offering {
+            id: None,
+            pubkey_hash: pubkey.clone(),
             offering_id: "test-offer-1".to_string(),
             offer_name: "Test Server".to_string(),
             description: Some("Test description".to_string()),
@@ -1101,7 +1073,9 @@ mod tests {
         let db = setup_test_db().await;
         let pubkey = vec![1u8; 32];
 
-        let params = CreateOfferingParams {
+        let params = Offering {
+            id: None,
+            pubkey_hash: pubkey.clone(),
             offering_id: "duplicate-offer".to_string(),
             offer_name: "First Offer".to_string(),
             description: None,
@@ -1157,7 +1131,9 @@ mod tests {
         let db = setup_test_db().await;
         let pubkey = vec![1u8; 32];
 
-        let params = CreateOfferingParams {
+        let params = Offering {
+            id: None,
+            pubkey_hash: pubkey.clone(),
             offering_id: "".to_string(), // Empty offering_id
             offer_name: "Test".to_string(),
             description: None,
@@ -1211,7 +1187,10 @@ mod tests {
         insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
 
         // Update it
-        let update_params = CreateOfferingParams {
+        let db_id = test_id_to_db_id(1);
+        let update_params = Offering {
+            id: Some(db_id),
+            pubkey_hash: pubkey.clone(),
             offering_id: "off-1".to_string(),
             offer_name: "Updated Server".to_string(),
             description: Some("Updated description".to_string()),
@@ -1274,7 +1253,10 @@ mod tests {
 
         insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
 
-        let params = CreateOfferingParams {
+        let db_id = test_id_to_db_id(1);
+        let params = Offering {
+            id: Some(db_id),
+            pubkey_hash: pubkey2.clone(),
             offering_id: "off-1".to_string(),
             offer_name: "Hacker".to_string(),
             description: None,
@@ -1315,7 +1297,6 @@ mod tests {
             operating_systems: None,
         };
 
-        let db_id = test_id_to_db_id(1);
         let result = db.update_offering(&pubkey2, db_id, params).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unauthorized"));
@@ -1359,9 +1340,8 @@ mod tests {
         // Create offering with payment_methods
         let db_id = test_id_to_db_id(1);
         let offering_id = "off-1".to_string();
-        let price_per_hour_e9s = (100.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
-        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, price_per_hour_e9s, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, ?, 'BTC', NULL, NULL, 0)")
-            .bind(db_id).bind(&pubkey).bind(&offering_id).bind(100.0).bind(price_per_hour_e9s).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 'BTC', NULL, NULL, 0)")
+            .bind(db_id).bind(&pubkey).bind(&offering_id).bind(100.0).execute(&db.pool).await.unwrap();
 
         let new_id = db
             .duplicate_offering(&pubkey, db_id, "off-1-copy".to_string())

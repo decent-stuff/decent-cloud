@@ -32,13 +32,19 @@ impl Database {
     /// Get platform-wide statistics
     pub async fn get_platform_stats(&self) -> Result<PlatformStats> {
         // Total providers = all who have ever checked in or created a profile
+        // Exclude the example provider used for template generation
+        let example_provider_hash =
+            hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
+                .unwrap();
         let total_providers: (i64,) = sqlx::query_as(
             "SELECT COUNT(DISTINCT pubkey_hash) FROM (
-                SELECT pubkey_hash FROM provider_profiles
+                SELECT pubkey_hash FROM provider_profiles WHERE pubkey_hash != ?
                 UNION
-                SELECT pubkey_hash FROM provider_check_ins
+                SELECT pubkey_hash FROM provider_check_ins WHERE pubkey_hash != ?
             )",
         )
+        .bind(&example_provider_hash)
+        .bind(&example_provider_hash)
         .fetch_one(&self.pool)
         .await?;
 
@@ -46,9 +52,10 @@ impl Database {
         let cutoff_ns =
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 365 * 24 * 3600 * 1_000_000_000;
         let active_providers: (i64,) = sqlx::query_as(
-            "SELECT COUNT(DISTINCT pubkey_hash) FROM provider_check_ins WHERE block_timestamp_ns > ?"
+            "SELECT COUNT(DISTINCT pubkey_hash) FROM provider_check_ins WHERE block_timestamp_ns > ? AND pubkey_hash != ?"
         )
         .bind(cutoff_ns)
+        .bind(&example_provider_hash)
         .fetch_one(&self.pool)
         .await?;
 

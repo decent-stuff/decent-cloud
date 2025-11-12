@@ -271,7 +271,7 @@ INSERT OR IGNORE INTO sync_state (id, last_position) VALUES (1, 0);
 
 -- Create a special example provider using a distinctive hash
 -- Using a distinctive 32-byte value that's clearly not a real pubkey
-INSERT OR IGNORE INTO provider_registrations (
+INSERT OR REPLACE INTO provider_registrations (
     pubkey_hash,
     pubkey_bytes,
     signature,
@@ -284,7 +284,7 @@ INSERT OR IGNORE INTO provider_registrations (
 );
 
 -- Create example provider profile
-INSERT OR IGNORE INTO provider_profiles (
+INSERT OR REPLACE INTO provider_profiles (
     pubkey_hash,
     name,
     description,
@@ -307,7 +307,7 @@ INSERT OR IGNORE INTO provider_profiles (
 );
 
 -- Insert example offering 1: Basic VM
-INSERT OR IGNORE INTO provider_offerings (
+INSERT OR REPLACE INTO provider_offerings (
     pubkey_hash,
     offering_id,
     offer_name,
@@ -382,7 +382,7 @@ INSERT OR IGNORE INTO provider_offerings (
 );
 
 -- Insert example offering 2: Premium Dedicated Server
-INSERT OR IGNORE INTO provider_offerings (
+INSERT OR REPLACE INTO provider_offerings (
     pubkey_hash,
     offering_id,
     offer_name,
@@ -452,7 +452,7 @@ INSERT OR IGNORE INTO provider_offerings (
     'IPMI',
     24,
     720,
-    'BTC,Bank Transfer',
+    'BTC,Bank Transfer,Credit Card',
     'RAID 1,IPMI Access,DDoS Protection,24/7 Support',
     'Ubuntu 22.04,CentOS 8,Windows Server 2022,Debian 11',
     1609459200000000000  -- 2021-01-01 00:00:00 UTC
