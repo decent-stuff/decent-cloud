@@ -45,6 +45,9 @@ pub struct Offering {
     pub price_per_day_e9s: Option<i64>,
     pub min_contract_hours: Option<i64>,
     pub max_contract_hours: Option<i64>,
+    pub payment_methods: Option<String>,
+    pub features: Option<String>,
+    pub operating_systems: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -95,9 +98,9 @@ pub struct CreateOfferingParams {
     pub gpu_name: Option<String>,
     pub min_contract_hours: Option<i64>,
     pub max_contract_hours: Option<i64>,
-    pub payment_methods: Vec<String>,
-    pub features: Vec<String>,
-    pub operating_systems: Vec<String>,
+    pub payment_methods: Option<String>,
+    pub features: Option<String>,
+    pub operating_systems: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -176,41 +179,6 @@ impl Database {
                 .await?;
 
         Ok(offering)
-    }
-
-    /// Get offering features
-    pub async fn get_offering_features(&self, offering_id: i64) -> Result<Vec<String>> {
-        let features: Vec<(String,)> =
-            sqlx::query_as("SELECT feature FROM provider_offerings_features WHERE offering_id = ?")
-                .bind(offering_id)
-                .fetch_all(&self.pool)
-                .await?;
-
-        Ok(features.into_iter().map(|(f,)| f).collect())
-    }
-
-    /// Get offering payment methods
-    pub async fn get_offering_payment_methods(&self, offering_id: i64) -> Result<Vec<String>> {
-        let methods: Vec<(String,)> = sqlx::query_as(
-            "SELECT payment_method FROM provider_offerings_payment_methods WHERE offering_id = ?",
-        )
-        .bind(offering_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(methods.into_iter().map(|(m,)| m).collect())
-    }
-
-    /// Get offering operating systems
-    pub async fn get_offering_operating_systems(&self, offering_id: i64) -> Result<Vec<String>> {
-        let oses: Vec<(String,)> = sqlx::query_as(
-            "SELECT operating_system FROM provider_offerings_operating_systems WHERE offering_id = ?"
-        )
-        .bind(offering_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(oses.into_iter().map(|(os,)| os).collect())
     }
 
     /// Get example offerings for CSV template generation
@@ -292,8 +260,8 @@ impl Database {
                 uplink_speed, traffic, datacenter_country, datacenter_city,
                 datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
                 price_per_hour_e9s, price_per_day_e9s, min_contract_hours,
-                max_contract_hours, created_at_ns
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                max_contract_hours, payment_methods, features, operating_systems, created_at_ns
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id",
         )
         .bind(pubkey_hash)
@@ -334,18 +302,11 @@ impl Database {
         .bind(price_per_day_e9s)
         .bind(params.min_contract_hours)
         .bind(params.max_contract_hours)
+        .bind(&params.payment_methods)
+        .bind(&params.features)
+        .bind(&params.operating_systems)
         .bind(chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0))
         .fetch_one(&mut *tx)
-        .await?;
-
-        // Insert metadata
-        Self::insert_offering_metadata(
-            &mut tx,
-            offering_id,
-            &params.payment_methods,
-            &params.features,
-            &params.operating_systems,
-        )
         .await?;
 
         tx.commit().await?;
@@ -391,7 +352,8 @@ impl Database {
                 unmetered_bandwidth = ?, uplink_speed = ?, traffic = ?, datacenter_country = ?,
                 datacenter_city = ?, datacenter_latitude = ?, datacenter_longitude = ?,
                 control_panel = ?, gpu_name = ?, price_per_hour_e9s = ?, price_per_day_e9s = ?,
-                min_contract_hours = ?, max_contract_hours = ?
+                min_contract_hours = ?, max_contract_hours = ?,
+                payment_methods = ?, features = ?, operating_systems = ?
             WHERE id = ?",
         )
         .bind(&params.offering_id)
@@ -431,32 +393,11 @@ impl Database {
         .bind(price_per_day_e9s)
         .bind(params.min_contract_hours)
         .bind(params.max_contract_hours)
+        .bind(&params.payment_methods)
+        .bind(&params.features)
+        .bind(&params.operating_systems)
         .bind(offering_db_id)
         .execute(&mut *tx)
-        .await?;
-
-        // Delete old metadata
-        sqlx::query("DELETE FROM provider_offerings_payment_methods WHERE offering_id = ?")
-            .bind(offering_db_id)
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DELETE FROM provider_offerings_features WHERE offering_id = ?")
-            .bind(offering_db_id)
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DELETE FROM provider_offerings_operating_systems WHERE offering_id = ?")
-            .bind(offering_db_id)
-            .execute(&mut *tx)
-            .await?;
-
-        // Insert new metadata
-        Self::insert_offering_metadata(
-            &mut tx,
-            offering_db_id,
-            &params.payment_methods,
-            &params.features,
-            &params.operating_systems,
-        )
         .await?;
 
         tx.commit().await?;
@@ -512,14 +453,7 @@ impl Database {
             ));
         }
 
-        // Get metadata
-        let payment_methods = self
-            .get_offering_payment_methods(source_offering_id)
-            .await?;
-        let features = self.get_offering_features(source_offering_id).await?;
-        let operating_systems = self
-            .get_offering_operating_systems(source_offering_id)
-            .await?;
+        // Get metadata directly from source offering
 
         // Create new offering with duplicated data
         let params = CreateOfferingParams {
@@ -558,9 +492,9 @@ impl Database {
             gpu_name: source.gpu_name,
             min_contract_hours: source.min_contract_hours,
             max_contract_hours: source.max_contract_hours,
-            payment_methods,
-            features,
-            operating_systems,
+            payment_methods: source.payment_methods,
+            features: source.features,
+            operating_systems: source.operating_systems,
         };
 
         self.create_offering(pubkey_hash, params).await
@@ -617,7 +551,6 @@ impl Database {
     }
 
     // Helper function to calculate pricing from monthly price
-    #[allow(dead_code)]
     fn calculate_pricing(monthly_price: f64) -> (i64, i64) {
         let price_per_hour_e9s =
             (monthly_price / 30.0 / 24.0 * DC_TOKEN_DECIMALS_DIV as f64) as i64;
@@ -625,53 +558,7 @@ impl Database {
         (price_per_hour_e9s, price_per_day_e9s)
     }
 
-    // Helper function to insert offering metadata
-    #[allow(dead_code)]
-    async fn insert_offering_metadata(
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        offering_id: i64,
-        payment_methods: &[String],
-        features: &[String],
-        operating_systems: &[String],
-    ) -> Result<()> {
-        // Insert payment methods in normalized table
-        for payment_method in payment_methods {
-            sqlx::query(
-                "INSERT INTO provider_offerings_payment_methods (offering_id, payment_method) VALUES (?, ?)"
-            )
-            .bind(offering_id)
-            .bind(payment_method)
-            .execute(&mut **tx)
-            .await?;
-        }
-
-        // Insert features in normalized table
-        for feature in features {
-            sqlx::query(
-                "INSERT INTO provider_offerings_features (offering_id, feature) VALUES (?, ?)",
-            )
-            .bind(offering_id)
-            .bind(feature)
-            .execute(&mut **tx)
-            .await?;
-        }
-
-        // Insert operating systems in normalized table
-        for os in operating_systems {
-            sqlx::query(
-                "INSERT INTO provider_offerings_operating_systems (offering_id, operating_system) VALUES (?, ?)"
-            )
-            .bind(offering_id)
-            .bind(os)
-            .execute(&mut **tx)
-            .await?;
-        }
-
-        Ok(())
-    }
-
     // Provider offerings
-    #[allow(dead_code)]
     pub async fn insert_provider_offerings(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -699,7 +586,7 @@ impl Database {
                     Self::calculate_pricing(offering.monthly_price);
 
                 // Insert main offering record
-                let offering_id = sqlx::query_scalar::<_, i64>(
+                let _offering_id = sqlx::query_scalar::<_, i64>(
                     "INSERT INTO provider_offerings (
                         pubkey_hash, offering_id, offer_name, description, product_page_url,
                         currency, monthly_price, setup_fee, visibility, product_type,
@@ -710,8 +597,8 @@ impl Database {
                         uplink_speed, traffic, datacenter_country, datacenter_city,
                         datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
                         price_per_hour_e9s, price_per_day_e9s, min_contract_hours,
-                        max_contract_hours, created_at_ns
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        max_contract_hours, payment_methods, features, operating_systems, created_at_ns
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     RETURNING id"
                 )
                 .bind(provider_key)
@@ -752,18 +639,29 @@ impl Database {
                 .bind(price_per_day_e9s)
                 .bind(Some(1)) // min contract hours
                 .bind(None::<i64>) // max contract hours
+                .bind({
+                    if offering.payment_methods.is_empty() {
+                        None
+                    } else {
+                        Some(offering.payment_methods.join(","))
+                    }
+                })
+                .bind({
+                    if offering.features.is_empty() {
+                        None
+                    } else {
+                        Some(offering.features.join(","))
+                    }
+                })
+                .bind({
+                    if offering.operating_systems.is_empty() {
+                        None
+                    } else {
+                        Some(offering.operating_systems.join(","))
+                    }
+                })
                 .bind(entry.block_timestamp_ns as i64)
                 .fetch_one(&mut **tx)
-                .await?;
-
-                // Insert metadata (payment methods, features, operating systems)
-                Database::insert_offering_metadata(
-                    &mut *tx,
-                    offering_id,
-                    &offering.payment_methods,
-                    &offering.features,
-                    &offering.operating_systems,
-                )
                 .await?;
             }
         }
@@ -941,9 +839,30 @@ impl Database {
             gpu_name: get_opt_str(32),
             min_contract_hours: get_opt_i64(33),
             max_contract_hours: get_opt_i64(34),
-            payment_methods: get_array(35),
-            features: get_array(36),
-            operating_systems: get_array(37),
+            payment_methods: {
+                let arr = get_array(35);
+                if arr.is_empty() {
+                    None
+                } else {
+                    Some(arr.join(","))
+                }
+            },
+            features: {
+                let arr = get_array(36);
+                if arr.is_empty() {
+                    None
+                } else {
+                    Some(arr.join(","))
+                }
+            },
+            operating_systems: {
+                let arr = get_array(37);
+                if arr.is_empty() {
+                    None
+                } else {
+                    Some(arr.join(","))
+                }
+            },
         })
     }
 }
@@ -955,8 +874,12 @@ mod tests {
 
     async fn setup_test_db() -> Database {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
-        let migration_sql = include_str!("../../migrations/001_original_schema.sql");
-        sqlx::query(migration_sql).execute(&pool).await.unwrap();
+        let migration1_sql = include_str!("../../migrations/001_original_schema.sql");
+        sqlx::query(migration1_sql).execute(&pool).await.unwrap();
+        let migration2_sql = include_str!("../../migrations/002_add_example_offerings.sql");
+        sqlx::query(migration2_sql).execute(&pool).await.unwrap();
+        let migration3_sql = include_str!("../../migrations/003_simplify_offering_metadata.sql");
+        sqlx::query(migration3_sql).execute(&pool).await.unwrap();
         Database { pool }
     }
 
@@ -967,11 +890,18 @@ mod tests {
         country: &str,
         price: f64,
     ) {
+        // Use IDs starting from 100 to avoid conflicts with example data from migration 002
+        let db_id = id + 100;
         let offering_id = format!("off-{}", id);
         // Calculate price_per_hour_e9s from monthly price (rough approximation)
         let price_per_hour_e9s = (price * 1_000_000_000.0 / 30.0 / 24.0) as i64;
-        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, price_per_hour_e9s, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', ?, 'City', 0, ?, 0)")
-            .bind(id).bind(pubkey).bind(&offering_id).bind(price).bind(country).bind(price_per_hour_e9s).execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, price_per_hour_e9s, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', ?, 'City', 0, ?, NULL, NULL, NULL, 0)")
+            .bind(db_id).bind(pubkey).bind(&offering_id).bind(price).bind(country).bind(price_per_hour_e9s).execute(&db.pool).await.unwrap();
+    }
+
+    // Helper to get the database ID from test ID (test IDs start from 1, DB IDs from 100)
+    fn test_id_to_db_id(test_id: i64) -> i64 {
+        test_id + 100
     }
 
     #[tokio::test]
@@ -998,9 +928,10 @@ mod tests {
         let db = setup_test_db().await;
         insert_test_offering(&db, 42, &[1u8; 32], "US", 100.0).await;
 
-        let offering = db.get_offering(42).await.unwrap();
+        let db_id = test_id_to_db_id(42);
+        let offering = db.get_offering(db_id).await.unwrap();
         assert!(offering.is_some());
-        assert_eq!(offering.unwrap().id, 42);
+        assert_eq!(offering.unwrap().id, db_id);
     }
 
     #[tokio::test]
@@ -1008,57 +939,6 @@ mod tests {
         let db = setup_test_db().await;
         let offering = db.get_offering(999).await.unwrap();
         assert!(offering.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_get_offering_features() {
-        let db = setup_test_db().await;
-        insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
-
-        sqlx::query(
-            "INSERT INTO provider_offerings_features (offering_id, feature) VALUES (?, 'SSD')",
-        )
-        .bind(1)
-        .execute(&db.pool)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO provider_offerings_features (offering_id, feature) VALUES (?, 'Backup')",
-        )
-        .bind(1)
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        let features = db.get_offering_features(1).await.unwrap();
-        assert_eq!(features.len(), 2);
-        assert!(features.contains(&"SSD".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_get_offering_payment_methods() {
-        let db = setup_test_db().await;
-        insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
-
-        sqlx::query("INSERT INTO provider_offerings_payment_methods (offering_id, payment_method) VALUES (?, 'BTC')")
-            .bind(1).execute(&db.pool).await.unwrap();
-
-        let methods = db.get_offering_payment_methods(1).await.unwrap();
-        assert_eq!(methods.len(), 1);
-        assert_eq!(methods[0], "BTC");
-    }
-
-    #[tokio::test]
-    async fn test_get_offering_operating_systems() {
-        let db = setup_test_db().await;
-        insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
-
-        sqlx::query("INSERT INTO provider_offerings_operating_systems (offering_id, operating_system) VALUES (?, 'Ubuntu')")
-            .bind(1).execute(&db.pool).await.unwrap();
-
-        let oses = db.get_offering_operating_systems(1).await.unwrap();
-        assert_eq!(oses.len(), 1);
-        assert_eq!(oses[0], "Ubuntu");
     }
 
     #[tokio::test]
@@ -1218,9 +1098,9 @@ mod tests {
             gpu_name: None,
             min_contract_hours: Some(1),
             max_contract_hours: None,
-            payment_methods: vec!["BTC".to_string(), "ETH".to_string()],
-            features: vec!["RAID".to_string(), "Backup".to_string()],
-            operating_systems: vec!["Ubuntu 22.04".to_string()],
+            payment_methods: Some("BTC,ETH".to_string()),
+            features: Some("RAID,Backup".to_string()),
+            operating_systems: Some("Ubuntu 22.04".to_string()),
         };
 
         let offering_id = db.create_offering(&pubkey, params).await.unwrap();
@@ -1234,17 +1114,32 @@ mod tests {
         assert_eq!(offering.monthly_price, 99.99);
 
         // Verify metadata
-        let methods = db.get_offering_payment_methods(offering_id).await.unwrap();
+        let methods: Vec<&str> = offering
+            .payment_methods
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(methods.len(), 2);
-        assert!(methods.contains(&"BTC".to_string()));
+        assert!(methods.contains(&"BTC"));
 
-        let features = db.get_offering_features(offering_id).await.unwrap();
+        let features: Vec<&str> = offering
+            .features
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(features.len(), 2);
 
-        let oses = db
-            .get_offering_operating_systems(offering_id)
-            .await
-            .unwrap();
+        let oses: Vec<&str> = offering
+            .operating_systems
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(oses.len(), 1);
     }
 
@@ -1289,9 +1184,9 @@ mod tests {
             gpu_name: None,
             min_contract_hours: Some(1),
             max_contract_hours: None,
-            payment_methods: vec![],
-            features: vec![],
-            operating_systems: vec![],
+            payment_methods: None,
+            features: None,
+            operating_systems: None,
         };
 
         // First creation should succeed
@@ -1345,9 +1240,9 @@ mod tests {
             gpu_name: None,
             min_contract_hours: None,
             max_contract_hours: None,
-            payment_methods: vec![],
-            features: vec![],
-            operating_systems: vec![],
+            payment_methods: None,
+            features: None,
+            operating_systems: None,
         };
 
         let result = db.create_offering(&pubkey, params).await;
@@ -1399,19 +1294,23 @@ mod tests {
             gpu_name: None,
             min_contract_hours: None,
             max_contract_hours: None,
-            payment_methods: vec!["ETH".to_string()],
-            features: vec!["Backup".to_string()],
-            operating_systems: vec!["Debian 12".to_string()],
+            payment_methods: Some("ETH".to_string()),
+            features: Some("Backup".to_string()),
+            operating_systems: Some("Debian 12".to_string()),
         };
 
-        let result = db.update_offering(&pubkey, 1, update_params).await;
+        let db_id = test_id_to_db_id(1);
+        let result = db.update_offering(&pubkey, db_id, update_params).await;
         assert!(result.is_ok());
 
         // Verify update
-        let offering = db.get_offering(1).await.unwrap().unwrap();
+        let offering = db.get_offering(db_id).await.unwrap().unwrap();
         assert_eq!(offering.offer_name, "Updated Server");
         assert_eq!(offering.monthly_price, 199.99);
         assert_eq!(offering.currency, "EUR");
+        assert_eq!(offering.payment_methods, Some("ETH".to_string()));
+        assert_eq!(offering.features, Some("Backup".to_string()));
+        assert_eq!(offering.operating_systems, Some("Debian 12".to_string()));
     }
 
     #[tokio::test]
@@ -1458,12 +1357,13 @@ mod tests {
             gpu_name: None,
             min_contract_hours: None,
             max_contract_hours: None,
-            payment_methods: vec![],
-            features: vec![],
-            operating_systems: vec![],
+            payment_methods: None,
+            features: None,
+            operating_systems: None,
         };
 
-        let result = db.update_offering(&pubkey2, 1, params).await;
+        let db_id = test_id_to_db_id(1);
+        let result = db.update_offering(&pubkey2, db_id, params).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unauthorized"));
     }
@@ -1475,11 +1375,12 @@ mod tests {
 
         insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
 
-        let result = db.delete_offering(&pubkey, 1).await;
+        let db_id = test_id_to_db_id(1);
+        let result = db.delete_offering(&pubkey, db_id).await;
         assert!(result.is_ok());
 
         // Verify deletion
-        let offering = db.get_offering(1).await.unwrap();
+        let offering = db.get_offering(db_id).await.unwrap();
         assert!(offering.is_none());
     }
 
@@ -1491,7 +1392,8 @@ mod tests {
 
         insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
 
-        let result = db.delete_offering(&pubkey2, 1).await;
+        let db_id = test_id_to_db_id(1);
+        let result = db.delete_offering(&pubkey2, db_id).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unauthorized"));
     }
@@ -1501,16 +1403,19 @@ mod tests {
         let db = setup_test_db().await;
         let pubkey = vec![1u8; 32];
 
-        insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
-        sqlx::query("INSERT INTO provider_offerings_payment_methods (offering_id, payment_method) VALUES (?, 'BTC')")
-            .bind(1).execute(&db.pool).await.unwrap();
+        // Create offering with payment_methods
+        let db_id = test_id_to_db_id(1);
+        let offering_id = "off-1".to_string();
+        let price_per_hour_e9s = (100.0 * 1_000_000_000.0 / 30.0 / 24.0) as i64;
+        sqlx::query("INSERT INTO provider_offerings (id, pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, price_per_hour_e9s, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, ?, 'BTC', NULL, NULL, 0)")
+            .bind(db_id).bind(&pubkey).bind(&offering_id).bind(100.0).bind(price_per_hour_e9s).execute(&db.pool).await.unwrap();
 
         let new_id = db
-            .duplicate_offering(&pubkey, 1, "off-1-copy".to_string())
+            .duplicate_offering(&pubkey, db_id, "off-1-copy".to_string())
             .await
             .unwrap();
 
-        assert!(new_id > 1);
+        assert!(new_id > db_id);
 
         // Verify duplication
         let duplicated = db.get_offering(new_id).await.unwrap().unwrap();
@@ -1519,7 +1424,13 @@ mod tests {
         assert_eq!(duplicated.datacenter_country, "US");
 
         // Verify metadata was duplicated
-        let methods = db.get_offering_payment_methods(new_id).await.unwrap();
+        let methods: Vec<&str> = duplicated
+            .payment_methods
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(methods.len(), 1);
         assert_eq!(methods[0], "BTC");
     }
@@ -1532,7 +1443,10 @@ mod tests {
 
         insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
 
-        let result = db.duplicate_offering(&pubkey2, 1, "copy".to_string()).await;
+        let db_id = test_id_to_db_id(1);
+        let result = db
+            .duplicate_offering(&pubkey2, db_id, "copy".to_string())
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unauthorized"));
     }
@@ -1548,7 +1462,8 @@ mod tests {
         insert_test_offering(&db, 3, &pubkey, "US", 300.0).await;
 
         // Bulk update status
-        let offering_ids = vec![1, 2, 3];
+        let test_ids = [1, 2, 3];
+        let offering_ids: Vec<i64> = test_ids.iter().map(|&id| test_id_to_db_id(id)).collect();
         let result = db
             .bulk_update_stock_status(&pubkey, &offering_ids, "out_of_stock")
             .await;
@@ -1573,7 +1488,8 @@ mod tests {
         insert_test_offering(&db, 2, &pubkey1, "US", 200.0).await;
 
         // Try to update with pubkey2
-        let offering_ids = vec![1, 2];
+        let test_ids = [1, 2];
+        let offering_ids: Vec<i64> = test_ids.iter().map(|&id| test_id_to_db_id(id)).collect();
         let result = db
             .bulk_update_stock_status(&pubkey2, &offering_ids, "out_of_stock")
             .await;
@@ -1626,15 +1542,33 @@ off-2,Test Server 2,Another server,,EUR,200.0,50.0,public,vps,kvm,monthly,in_sto
         assert_eq!(offering.datacenter_country, "US");
 
         // Verify metadata
-        let methods = db.get_offering_payment_methods(off1).await.unwrap();
+        let methods: Vec<&str> = offering
+            .payment_methods
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(methods.len(), 1);
         assert_eq!(methods[0], "BTC");
 
-        let features = db.get_offering_features(off1).await.unwrap();
+        let features: Vec<&str> = offering
+            .features
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(features.len(), 1);
         assert_eq!(features[0], "SSD");
 
-        let os = db.get_offering_operating_systems(off1).await.unwrap();
+        let os: Vec<&str> = offering
+            .operating_systems
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(os.len(), 1);
         assert_eq!(os[0], "Ubuntu");
     }
@@ -1686,7 +1620,8 @@ off-2,New Offer,New desc,,EUR,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,
         assert_eq!(errors.len(), 0);
 
         // Verify update
-        let offering = db.get_offering(1).await.unwrap().unwrap();
+        let db_id = test_id_to_db_id(1);
+        let offering = db.get_offering(db_id).await.unwrap().unwrap();
         assert_eq!(offering.offer_name, "Updated Offer");
         assert_eq!(offering.monthly_price, 200.0);
         assert_eq!(offering.stock_status, "out_of_stock");
@@ -1698,7 +1633,7 @@ off-2,New Offer,New desc,,EUR,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,
                 .fetch_one(&db.pool)
                 .await
                 .unwrap();
-        assert!(off2 > 1);
+        assert!(off2 > db_id);
     }
 
     #[tokio::test]
@@ -1724,7 +1659,8 @@ off-1,Hacked,Unauthorized update,,USD,1.0,0.0,public,dedicated,,monthly,in_stock
         assert_eq!(errors.len(), 0);
 
         // Verify original offering unchanged
-        let original = db.get_offering(1).await.unwrap().unwrap();
+        let db_id = test_id_to_db_id(1);
+        let original = db.get_offering(db_id).await.unwrap().unwrap();
         assert_eq!(original.offer_name, "Test Offer");
         assert_eq!(original.monthly_price, 100.0);
     }

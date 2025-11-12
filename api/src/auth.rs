@@ -49,7 +49,7 @@ impl ResponseError for AuthError {
 ///
 /// Message format: timestamp + method + path + body
 /// NOTE: Path excludes query string for robustness (query params are typically non-critical)
-/// 
+///
 /// Headers required:
 /// - X-Public-Key: hex-encoded public key (32 bytes)
 /// - X-Signature: hex-encoded signature (64 bytes)

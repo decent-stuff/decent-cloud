@@ -109,10 +109,12 @@ async fn setup_test_db() -> Database {
     // Load and execute migration SQL at runtime for production-like schema
     let migration_sql_001 = include_str!("../../migrations/001_original_schema.sql");
     let migration_sql_002 = include_str!("../../migrations/002_add_example_offerings.sql");
+    let migration_sql_003 = include_str!("../../migrations/003_simplify_offering_metadata.sql");
 
     // Execute migrations in order
     sqlx::query(migration_sql_001).execute(&pool).await.unwrap();
     sqlx::query(migration_sql_002).execute(&pool).await.unwrap();
+    sqlx::query(migration_sql_003).execute(&pool).await.unwrap();
 
     // Create sync_state table and initialize
     sqlx::query("CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY, last_position INTEGER, last_sync_at TIMESTAMP)")
@@ -655,54 +657,78 @@ async fn test_get_example_offerings() {
     assert_eq!(vm_offering.product_type, "compute");
 
     // Test that related data exists for each offering
-    let vm_payment_methods = db
-        .get_offering_payment_methods(vm_offering.id)
-        .await
-        .unwrap();
+    let vm_payment_methods: Vec<&str> = vm_offering
+        .payment_methods
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(vm_payment_methods.len(), 2);
-    assert!(vm_payment_methods.contains(&"Credit Card".to_string()));
-    assert!(vm_payment_methods.contains(&"PayPal".to_string()));
+    assert!(vm_payment_methods.contains(&"Credit Card"));
+    assert!(vm_payment_methods.contains(&"PayPal"));
 
-    let vm_features = db.get_offering_features(vm_offering.id).await.unwrap();
+    let vm_features: Vec<&str> = vm_offering
+        .features
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(vm_features.len(), 3);
-    assert!(vm_features.contains(&"Auto Backup".to_string()));
-    assert!(vm_features.contains(&"SSH Access".to_string()));
-    assert!(vm_features.contains(&"Root Access".to_string()));
+    assert!(vm_features.contains(&"Auto Backup"));
+    assert!(vm_features.contains(&"SSH Access"));
+    assert!(vm_features.contains(&"Root Access"));
 
-    let vm_os = db
-        .get_offering_operating_systems(vm_offering.id)
-        .await
-        .unwrap();
+    let vm_os: Vec<&str> = vm_offering
+        .operating_systems
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(vm_os.len(), 3);
-    assert!(vm_os.contains(&"Ubuntu 22.04".to_string()));
-    assert!(vm_os.contains(&"Debian 11".to_string()));
-    assert!(vm_os.contains(&"CentOS 8".to_string()));
+    assert!(vm_os.contains(&"Ubuntu 22.04"));
+    assert!(vm_os.contains(&"Debian 11"));
+    assert!(vm_os.contains(&"CentOS 8"));
 
-    let ds_payment_methods = db
-        .get_offering_payment_methods(ds_offering.id)
-        .await
-        .unwrap();
+    let ds_payment_methods: Vec<&str> = ds_offering
+        .payment_methods
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(ds_payment_methods.len(), 3);
-    assert!(ds_payment_methods.contains(&"BTC".to_string()));
-    assert!(ds_payment_methods.contains(&"Bank Transfer".to_string()));
-    assert!(ds_payment_methods.contains(&"Credit Card".to_string()));
+    assert!(ds_payment_methods.contains(&"BTC"));
+    assert!(ds_payment_methods.contains(&"Bank Transfer"));
+    assert!(ds_payment_methods.contains(&"Credit Card"));
 
-    let ds_features = db.get_offering_features(ds_offering.id).await.unwrap();
+    let ds_features: Vec<&str> = ds_offering
+        .features
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(ds_features.len(), 4);
-    assert!(ds_features.contains(&"RAID 1".to_string()));
-    assert!(ds_features.contains(&"IPMI Access".to_string()));
-    assert!(ds_features.contains(&"DDoS Protection".to_string()));
-    assert!(ds_features.contains(&"24/7 Support".to_string()));
+    assert!(ds_features.contains(&"RAID 1"));
+    assert!(ds_features.contains(&"IPMI Access"));
+    assert!(ds_features.contains(&"DDoS Protection"));
+    assert!(ds_features.contains(&"24/7 Support"));
 
-    let ds_os = db
-        .get_offering_operating_systems(ds_offering.id)
-        .await
-        .unwrap();
+    let ds_os: Vec<&str> = ds_offering
+        .operating_systems
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .collect();
     assert_eq!(ds_os.len(), 4);
-    assert!(ds_os.contains(&"Ubuntu 22.04".to_string()));
-    assert!(ds_os.contains(&"CentOS 8".to_string()));
-    assert!(ds_os.contains(&"Windows Server 2022".to_string()));
-    assert!(ds_os.contains(&"Debian 11".to_string()));
+    assert!(ds_os.contains(&"Ubuntu 22.04"));
+    assert!(ds_os.contains(&"CentOS 8"));
+    assert!(ds_os.contains(&"Windows Server 2022"));
+    assert!(ds_os.contains(&"Debian 11"));
 }
 
 #[tokio::test]
@@ -715,37 +741,21 @@ async fn test_csv_template_data_retrieval() {
 
     // For each example offering, verify we can fetch all related data without errors
     for offering in &example_offerings {
-        let payment_methods = db
-            .get_offering_payment_methods(offering.id)
-            .await
-            .unwrap_or_else(|_| {
-                panic!("Failed to get payment methods for {}", offering.offering_id)
-            });
+        let payment_methods = offering.payment_methods.as_deref().unwrap_or("");
         assert!(
             !payment_methods.is_empty(),
             "Payment methods should not be empty for {}",
             offering.offering_id
         );
 
-        let features = db
-            .get_offering_features(offering.id)
-            .await
-            .unwrap_or_else(|_| panic!("Failed to get features for {}", offering.offering_id));
+        let features = offering.features.as_deref().unwrap_or("");
         assert!(
             !features.is_empty(),
             "Features should not be empty for {}",
             offering.offering_id
         );
 
-        let operating_systems = db
-            .get_offering_operating_systems(offering.id)
-            .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to get operating systems for {}",
-                    offering.offering_id
-                )
-            });
+        let operating_systems = offering.operating_systems.as_deref().unwrap_or("");
         assert!(
             !operating_systems.is_empty(),
             "Operating systems should not be empty for {}",
