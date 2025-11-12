@@ -6,15 +6,12 @@ static EMAIL_REGEX: OnceLock<Regex> = OnceLock::new();
 static URL_REGEX: OnceLock<Regex> = OnceLock::new();
 
 fn email_regex() -> &'static Regex {
-    EMAIL_REGEX.get_or_init(|| {
-        Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
-    })
+    EMAIL_REGEX
+        .get_or_init(|| Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap())
 }
 
 fn url_regex() -> &'static Regex {
-    URL_REGEX.get_or_init(|| {
-        Regex::new(r"^https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/.*)?$").unwrap()
-    })
+    URL_REGEX.get_or_init(|| Regex::new(r"^https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/.*)?$").unwrap())
 }
 
 pub fn validate_email(email: &str) -> Result<()> {

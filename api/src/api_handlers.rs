@@ -204,6 +204,117 @@ pub async fn get_offering(
     }
 }
 
+#[handler]
+pub async fn create_provider_offering(
+    db: Data<&Arc<Database>>,
+    user: AuthenticatedUser,
+    Path(pubkey_hex): Path<String>,
+    Json(params): Json<crate::database::offerings::CreateOfferingParams>,
+) -> PoemResult<Json<ApiResponse<i64>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    if pubkey != user.pubkey_hash {
+        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    }
+
+    match db.create_offering(&pubkey, params).await {
+        Ok(offering_id) => Ok(Json(ApiResponse::success(offering_id))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn update_provider_offering(
+    db: Data<&Arc<Database>>,
+    user: AuthenticatedUser,
+    Path((pubkey_hex, offering_id)): Path<(String, i64)>,
+    Json(params): Json<crate::database::offerings::CreateOfferingParams>,
+) -> PoemResult<Json<ApiResponse<()>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    if pubkey != user.pubkey_hash {
+        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    }
+
+    match db.update_offering(&pubkey, offering_id, params).await {
+        Ok(()) => Ok(Json(ApiResponse::success(()))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn delete_provider_offering(
+    db: Data<&Arc<Database>>,
+    user: AuthenticatedUser,
+    Path((pubkey_hex, offering_id)): Path<(String, i64)>,
+) -> PoemResult<Json<ApiResponse<()>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    if pubkey != user.pubkey_hash {
+        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    }
+
+    match db.delete_offering(&pubkey, offering_id).await {
+        Ok(()) => Ok(Json(ApiResponse::success(()))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct DuplicateOfferingRequest {
+    pub new_offering_id: String,
+}
+
+#[handler]
+pub async fn duplicate_provider_offering(
+    db: Data<&Arc<Database>>,
+    user: AuthenticatedUser,
+    Path((pubkey_hex, offering_id)): Path<(String, i64)>,
+    Json(req): Json<DuplicateOfferingRequest>,
+) -> PoemResult<Json<ApiResponse<i64>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    if pubkey != user.pubkey_hash {
+        return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
+    }
+
+    match db
+        .duplicate_offering(&pubkey, offering_id, req.new_offering_id)
+        .await
+    {
+        Ok(new_id) => Ok(Json(ApiResponse::success(new_id))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
 // ============ Contract Endpoints ============
 
 #[handler]
@@ -498,10 +609,7 @@ pub async fn delete_user_contact(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
-    match db
-        .delete_user_contact(&auth.pubkey_hash, contact_id)
-        .await
-    {
+    match db.delete_user_contact(&auth.pubkey_hash, contact_id).await {
         Ok(_) => Ok(Json(ApiResponse::success(
             "Contact deleted successfully".to_string(),
         ))),
@@ -617,10 +725,7 @@ pub async fn delete_user_public_key(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
-    match db
-        .delete_user_public_key(&auth.pubkey_hash, key_id)
-        .await
-    {
+    match db.delete_user_public_key(&auth.pubkey_hash, key_id).await {
         Ok(_) => Ok(Json(ApiResponse::success(
             "Public key deleted successfully".to_string(),
         ))),

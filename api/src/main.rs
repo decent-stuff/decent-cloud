@@ -233,6 +233,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/offerings/:id",
             poem::get(api_handlers::get_offering),
         )
+        .at(
+            "/api/v1/providers/:pubkey/offerings",
+            poem::post(api_handlers::create_provider_offering),
+        )
+        .at(
+            "/api/v1/providers/:pubkey/offerings/:id",
+            poem::put(api_handlers::update_provider_offering)
+                .delete(api_handlers::delete_provider_offering),
+        )
+        .at(
+            "/api/v1/providers/:pubkey/offerings/:id/duplicate",
+            poem::post(api_handlers::duplicate_provider_offering),
+        )
         // Contract endpoints
         .at("/api/v1/contracts", poem::get(api_handlers::list_contracts))
         .at(
@@ -246,13 +259,11 @@ async fn serve_command() -> Result<(), std::io::Error> {
         // User profile endpoints
         .at(
             "/api/v1/users/:pubkey/profile",
-            poem::get(api_handlers::get_user_profile)
-                .put(api_handlers::update_user_profile),
+            poem::get(api_handlers::get_user_profile).put(api_handlers::update_user_profile),
         )
         .at(
             "/api/v1/users/:pubkey/contacts",
-            poem::get(api_handlers::get_user_contacts)
-                .post(api_handlers::upsert_user_contact),
+            poem::get(api_handlers::get_user_contacts).post(api_handlers::upsert_user_contact),
         )
         .at(
             "/api/v1/users/:pubkey/contacts/:contact_type",
@@ -260,8 +271,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         )
         .at(
             "/api/v1/users/:pubkey/socials",
-            poem::get(api_handlers::get_user_socials)
-                .post(api_handlers::upsert_user_social),
+            poem::get(api_handlers::get_user_socials).post(api_handlers::upsert_user_social),
         )
         .at(
             "/api/v1/users/:pubkey/socials/:platform",
@@ -269,8 +279,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         )
         .at(
             "/api/v1/users/:pubkey/keys",
-            poem::get(api_handlers::get_user_public_keys)
-                .post(api_handlers::add_user_public_key),
+            poem::get(api_handlers::get_user_public_keys).post(api_handlers::add_user_public_key),
         )
         .at(
             "/api/v1/users/:pubkey/keys/:key_fingerprint",

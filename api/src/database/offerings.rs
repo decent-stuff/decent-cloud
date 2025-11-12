@@ -58,6 +58,48 @@ pub struct SearchOfferingsParams<'a> {
     pub offset: i64,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CreateOfferingParams {
+    pub offering_id: String,
+    pub offer_name: String,
+    pub description: Option<String>,
+    pub product_page_url: Option<String>,
+    pub currency: String,
+    pub monthly_price: f64,
+    pub setup_fee: f64,
+    pub visibility: String,
+    pub product_type: String,
+    pub virtualization_type: Option<String>,
+    pub billing_interval: String,
+    pub stock_status: String,
+    pub processor_brand: Option<String>,
+    pub processor_amount: Option<i64>,
+    pub processor_cores: Option<i64>,
+    pub processor_speed: Option<String>,
+    pub processor_name: Option<String>,
+    pub memory_error_correction: Option<String>,
+    pub memory_type: Option<String>,
+    pub memory_amount: Option<String>,
+    pub hdd_amount: Option<i64>,
+    pub total_hdd_capacity: Option<String>,
+    pub ssd_amount: Option<i64>,
+    pub total_ssd_capacity: Option<String>,
+    pub unmetered_bandwidth: bool,
+    pub uplink_speed: Option<String>,
+    pub traffic: Option<i64>,
+    pub datacenter_country: String,
+    pub datacenter_city: String,
+    pub datacenter_latitude: Option<f64>,
+    pub datacenter_longitude: Option<f64>,
+    pub control_panel: Option<String>,
+    pub gpu_name: Option<String>,
+    pub min_contract_hours: Option<i64>,
+    pub max_contract_hours: Option<i64>,
+    pub payment_methods: Vec<String>,
+    pub features: Vec<String>,
+    pub operating_systems: Vec<String>,
+}
+
 #[allow(dead_code)]
 impl Database {
     /// Search offerings with filters
@@ -182,6 +224,328 @@ impl Database {
 
         Ok(count.0)
     }
+
+    /// Create a new offering
+    pub async fn create_offering(
+        &self,
+        pubkey_hash: &[u8],
+        params: CreateOfferingParams,
+    ) -> Result<i64> {
+        // Validate required fields
+        if params.offering_id.trim().is_empty() {
+            return Err(anyhow::anyhow!("offering_id is required"));
+        }
+        if params.offer_name.trim().is_empty() {
+            return Err(anyhow::anyhow!("offer_name is required"));
+        }
+
+        let mut tx = self.pool.begin().await?;
+
+        // Check for duplicate offering_id for this provider
+        let existing: Option<(i64,)> = sqlx::query_as(
+            "SELECT id FROM provider_offerings WHERE pubkey_hash = ? AND offering_id = ?",
+        )
+        .bind(pubkey_hash)
+        .bind(&params.offering_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        if existing.is_some() {
+            return Err(anyhow::anyhow!(
+                "Offering with ID '{}' already exists for this provider",
+                params.offering_id
+            ));
+        }
+
+        // Calculate pricing
+        let (price_per_hour_e9s, price_per_day_e9s) = Self::calculate_pricing(params.monthly_price);
+
+        // Insert main offering record
+        let offering_id = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO provider_offerings (
+                pubkey_hash, offering_id, offer_name, description, product_page_url,
+                currency, monthly_price, setup_fee, visibility, product_type,
+                virtualization_type, billing_interval, stock_status, processor_brand,
+                processor_amount, processor_cores, processor_speed, processor_name,
+                memory_error_correction, memory_type, memory_amount, hdd_amount,
+                total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth,
+                uplink_speed, traffic, datacenter_country, datacenter_city,
+                datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
+                price_per_hour_e9s, price_per_day_e9s, min_contract_hours,
+                max_contract_hours, created_at_ns
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id",
+        )
+        .bind(pubkey_hash)
+        .bind(&params.offering_id)
+        .bind(&params.offer_name)
+        .bind(&params.description)
+        .bind(&params.product_page_url)
+        .bind(&params.currency)
+        .bind(params.monthly_price)
+        .bind(params.setup_fee)
+        .bind(&params.visibility)
+        .bind(&params.product_type)
+        .bind(&params.virtualization_type)
+        .bind(&params.billing_interval)
+        .bind(&params.stock_status)
+        .bind(&params.processor_brand)
+        .bind(params.processor_amount)
+        .bind(params.processor_cores)
+        .bind(&params.processor_speed)
+        .bind(&params.processor_name)
+        .bind(&params.memory_error_correction)
+        .bind(&params.memory_type)
+        .bind(&params.memory_amount)
+        .bind(params.hdd_amount)
+        .bind(&params.total_hdd_capacity)
+        .bind(params.ssd_amount)
+        .bind(&params.total_ssd_capacity)
+        .bind(params.unmetered_bandwidth)
+        .bind(&params.uplink_speed)
+        .bind(params.traffic)
+        .bind(&params.datacenter_country)
+        .bind(&params.datacenter_city)
+        .bind(params.datacenter_latitude)
+        .bind(params.datacenter_longitude)
+        .bind(&params.control_panel)
+        .bind(&params.gpu_name)
+        .bind(price_per_hour_e9s)
+        .bind(price_per_day_e9s)
+        .bind(params.min_contract_hours)
+        .bind(params.max_contract_hours)
+        .bind(chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0))
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Insert metadata
+        Self::insert_offering_metadata(
+            &mut tx,
+            offering_id,
+            &params.payment_methods,
+            &params.features,
+            &params.operating_systems,
+        )
+        .await?;
+
+        tx.commit().await?;
+        Ok(offering_id)
+    }
+
+    /// Update an existing offering
+    pub async fn update_offering(
+        &self,
+        pubkey_hash: &[u8],
+        offering_db_id: i64,
+        params: CreateOfferingParams,
+    ) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        // Verify ownership
+        let owner: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT pubkey_hash FROM provider_offerings WHERE id = ?")
+                .bind(offering_db_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        match owner {
+            None => return Err(anyhow::anyhow!("Offering not found")),
+            Some((owner_pubkey,)) if owner_pubkey != pubkey_hash => {
+                return Err(anyhow::anyhow!(
+                    "Unauthorized: You do not own this offering"
+                ))
+            }
+            _ => {}
+        }
+
+        let (price_per_hour_e9s, price_per_day_e9s) = Self::calculate_pricing(params.monthly_price);
+
+        sqlx::query(
+            "UPDATE provider_offerings SET
+                offering_id = ?, offer_name = ?, description = ?, product_page_url = ?,
+                currency = ?, monthly_price = ?, setup_fee = ?, visibility = ?, product_type = ?,
+                virtualization_type = ?, billing_interval = ?, stock_status = ?,
+                processor_brand = ?, processor_amount = ?, processor_cores = ?, processor_speed = ?,
+                processor_name = ?, memory_error_correction = ?, memory_type = ?, memory_amount = ?,
+                hdd_amount = ?, total_hdd_capacity = ?, ssd_amount = ?, total_ssd_capacity = ?,
+                unmetered_bandwidth = ?, uplink_speed = ?, traffic = ?, datacenter_country = ?,
+                datacenter_city = ?, datacenter_latitude = ?, datacenter_longitude = ?,
+                control_panel = ?, gpu_name = ?, price_per_hour_e9s = ?, price_per_day_e9s = ?,
+                min_contract_hours = ?, max_contract_hours = ?
+            WHERE id = ?",
+        )
+        .bind(&params.offering_id)
+        .bind(&params.offer_name)
+        .bind(&params.description)
+        .bind(&params.product_page_url)
+        .bind(&params.currency)
+        .bind(params.monthly_price)
+        .bind(params.setup_fee)
+        .bind(&params.visibility)
+        .bind(&params.product_type)
+        .bind(&params.virtualization_type)
+        .bind(&params.billing_interval)
+        .bind(&params.stock_status)
+        .bind(&params.processor_brand)
+        .bind(params.processor_amount)
+        .bind(params.processor_cores)
+        .bind(&params.processor_speed)
+        .bind(&params.processor_name)
+        .bind(&params.memory_error_correction)
+        .bind(&params.memory_type)
+        .bind(&params.memory_amount)
+        .bind(params.hdd_amount)
+        .bind(&params.total_hdd_capacity)
+        .bind(params.ssd_amount)
+        .bind(&params.total_ssd_capacity)
+        .bind(params.unmetered_bandwidth)
+        .bind(&params.uplink_speed)
+        .bind(params.traffic)
+        .bind(&params.datacenter_country)
+        .bind(&params.datacenter_city)
+        .bind(params.datacenter_latitude)
+        .bind(params.datacenter_longitude)
+        .bind(&params.control_panel)
+        .bind(&params.gpu_name)
+        .bind(price_per_hour_e9s)
+        .bind(price_per_day_e9s)
+        .bind(params.min_contract_hours)
+        .bind(params.max_contract_hours)
+        .bind(offering_db_id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Delete old metadata
+        sqlx::query("DELETE FROM provider_offerings_payment_methods WHERE offering_id = ?")
+            .bind(offering_db_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM provider_offerings_features WHERE offering_id = ?")
+            .bind(offering_db_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM provider_offerings_operating_systems WHERE offering_id = ?")
+            .bind(offering_db_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Insert new metadata
+        Self::insert_offering_metadata(
+            &mut tx,
+            offering_db_id,
+            &params.payment_methods,
+            &params.features,
+            &params.operating_systems,
+        )
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Delete an offering
+    pub async fn delete_offering(&self, pubkey_hash: &[u8], offering_db_id: i64) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        // Verify ownership
+        let owner: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT pubkey_hash FROM provider_offerings WHERE id = ?")
+                .bind(offering_db_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        match owner {
+            None => return Err(anyhow::anyhow!("Offering not found")),
+            Some((owner_pubkey,)) if owner_pubkey != pubkey_hash => {
+                return Err(anyhow::anyhow!(
+                    "Unauthorized: You do not own this offering"
+                ))
+            }
+            _ => {}
+        }
+
+        // Delete offering (CASCADE will handle metadata tables)
+        sqlx::query("DELETE FROM provider_offerings WHERE id = ?")
+            .bind(offering_db_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Duplicate an offering
+    pub async fn duplicate_offering(
+        &self,
+        pubkey_hash: &[u8],
+        source_offering_id: i64,
+        new_offering_id: String,
+    ) -> Result<i64> {
+        // Get source offering
+        let source = self.get_offering(source_offering_id).await?;
+        let source = source.ok_or_else(|| anyhow::anyhow!("Source offering not found"))?;
+
+        // Verify ownership
+        if source.pubkey_hash != pubkey_hash {
+            return Err(anyhow::anyhow!(
+                "Unauthorized: You do not own this offering"
+            ));
+        }
+
+        // Get metadata
+        let payment_methods = self
+            .get_offering_payment_methods(source_offering_id)
+            .await?;
+        let features = self.get_offering_features(source_offering_id).await?;
+        let operating_systems = self
+            .get_offering_operating_systems(source_offering_id)
+            .await?;
+
+        // Create new offering with duplicated data
+        let params = CreateOfferingParams {
+            offering_id: new_offering_id,
+            offer_name: format!("{} (Copy)", source.offer_name),
+            description: source.description,
+            product_page_url: source.product_page_url,
+            currency: source.currency,
+            monthly_price: source.monthly_price,
+            setup_fee: source.setup_fee,
+            visibility: source.visibility,
+            product_type: source.product_type,
+            virtualization_type: source.virtualization_type,
+            billing_interval: source.billing_interval,
+            stock_status: source.stock_status,
+            processor_brand: source.processor_brand,
+            processor_amount: source.processor_amount,
+            processor_cores: source.processor_cores,
+            processor_speed: source.processor_speed,
+            processor_name: source.processor_name,
+            memory_error_correction: source.memory_error_correction,
+            memory_type: source.memory_type,
+            memory_amount: source.memory_amount,
+            hdd_amount: source.hdd_amount,
+            total_hdd_capacity: source.total_hdd_capacity,
+            ssd_amount: source.ssd_amount,
+            total_ssd_capacity: source.total_ssd_capacity,
+            unmetered_bandwidth: source.unmetered_bandwidth,
+            uplink_speed: source.uplink_speed,
+            traffic: source.traffic,
+            datacenter_country: source.datacenter_country,
+            datacenter_city: source.datacenter_city,
+            datacenter_latitude: source.datacenter_latitude,
+            datacenter_longitude: source.datacenter_longitude,
+            control_panel: source.control_panel,
+            gpu_name: source.gpu_name,
+            min_contract_hours: source.min_contract_hours,
+            max_contract_hours: source.max_contract_hours,
+            payment_methods,
+            features,
+            operating_systems,
+        };
+
+        self.create_offering(pubkey_hash, params).await
+    }
+
     // Helper function to calculate pricing from monthly price
     #[allow(dead_code)]
     fn calculate_pricing(monthly_price: f64) -> (i64, i64) {
@@ -563,5 +927,366 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(page2.len(), 2);
+    }
+
+    // CRUD Tests
+    #[tokio::test]
+    async fn test_create_offering_success() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        let params = CreateOfferingParams {
+            offering_id: "test-offer-1".to_string(),
+            offer_name: "Test Server".to_string(),
+            description: Some("Test description".to_string()),
+            product_page_url: None,
+            currency: "USD".to_string(),
+            monthly_price: 99.99,
+            setup_fee: 0.0,
+            visibility: "public".to_string(),
+            product_type: "dedicated_server".to_string(),
+            virtualization_type: None,
+            billing_interval: "monthly".to_string(),
+            stock_status: "in_stock".to_string(),
+            processor_brand: Some("Intel".to_string()),
+            processor_amount: Some(2),
+            processor_cores: Some(16),
+            processor_speed: Some("3.0GHz".to_string()),
+            processor_name: Some("Xeon E5-2670".to_string()),
+            memory_error_correction: None,
+            memory_type: Some("DDR4".to_string()),
+            memory_amount: Some("64GB".to_string()),
+            hdd_amount: Some(0),
+            total_hdd_capacity: None,
+            ssd_amount: Some(2),
+            total_ssd_capacity: Some("1TB".to_string()),
+            unmetered_bandwidth: true,
+            uplink_speed: Some("1Gbps".to_string()),
+            traffic: None,
+            datacenter_country: "US".to_string(),
+            datacenter_city: "New York".to_string(),
+            datacenter_latitude: Some(40.7128),
+            datacenter_longitude: Some(-74.0060),
+            control_panel: None,
+            gpu_name: None,
+            min_contract_hours: Some(1),
+            max_contract_hours: None,
+            payment_methods: vec!["BTC".to_string(), "ETH".to_string()],
+            features: vec!["RAID".to_string(), "Backup".to_string()],
+            operating_systems: vec!["Ubuntu 22.04".to_string()],
+        };
+
+        let offering_id = db.create_offering(&pubkey, params).await.unwrap();
+        assert!(offering_id > 0);
+
+        // Verify the offering was created
+        let offering = db.get_offering(offering_id).await.unwrap();
+        assert!(offering.is_some());
+        let offering = offering.unwrap();
+        assert_eq!(offering.offer_name, "Test Server");
+        assert_eq!(offering.monthly_price, 99.99);
+
+        // Verify metadata
+        let methods = db.get_offering_payment_methods(offering_id).await.unwrap();
+        assert_eq!(methods.len(), 2);
+        assert!(methods.contains(&"BTC".to_string()));
+
+        let features = db.get_offering_features(offering_id).await.unwrap();
+        assert_eq!(features.len(), 2);
+
+        let oses = db
+            .get_offering_operating_systems(offering_id)
+            .await
+            .unwrap();
+        assert_eq!(oses.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_offering_duplicate_id() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        let params = CreateOfferingParams {
+            offering_id: "duplicate-offer".to_string(),
+            offer_name: "First Offer".to_string(),
+            description: None,
+            product_page_url: None,
+            currency: "USD".to_string(),
+            monthly_price: 50.0,
+            setup_fee: 0.0,
+            visibility: "public".to_string(),
+            product_type: "vps".to_string(),
+            virtualization_type: Some("kvm".to_string()),
+            billing_interval: "monthly".to_string(),
+            stock_status: "in_stock".to_string(),
+            processor_brand: None,
+            processor_amount: None,
+            processor_cores: Some(2),
+            processor_speed: None,
+            processor_name: None,
+            memory_error_correction: None,
+            memory_type: None,
+            memory_amount: Some("4GB".to_string()),
+            hdd_amount: None,
+            total_hdd_capacity: None,
+            ssd_amount: Some(1),
+            total_ssd_capacity: Some("50GB".to_string()),
+            unmetered_bandwidth: false,
+            uplink_speed: None,
+            traffic: Some(1000),
+            datacenter_country: "US".to_string(),
+            datacenter_city: "Dallas".to_string(),
+            datacenter_latitude: None,
+            datacenter_longitude: None,
+            control_panel: None,
+            gpu_name: None,
+            min_contract_hours: Some(1),
+            max_contract_hours: None,
+            payment_methods: vec![],
+            features: vec![],
+            operating_systems: vec![],
+        };
+
+        // First creation should succeed
+        let result1 = db.create_offering(&pubkey, params.clone()).await;
+        assert!(result1.is_ok());
+
+        // Second creation with same offering_id should fail
+        let result2 = db.create_offering(&pubkey, params).await;
+        assert!(result2.is_err());
+        assert!(result2.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn test_create_offering_missing_required_fields() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        let params = CreateOfferingParams {
+            offering_id: "".to_string(), // Empty offering_id
+            offer_name: "Test".to_string(),
+            description: None,
+            product_page_url: None,
+            currency: "USD".to_string(),
+            monthly_price: 10.0,
+            setup_fee: 0.0,
+            visibility: "public".to_string(),
+            product_type: "vps".to_string(),
+            virtualization_type: None,
+            billing_interval: "monthly".to_string(),
+            stock_status: "in_stock".to_string(),
+            processor_brand: None,
+            processor_amount: None,
+            processor_cores: None,
+            processor_speed: None,
+            processor_name: None,
+            memory_error_correction: None,
+            memory_type: None,
+            memory_amount: None,
+            hdd_amount: None,
+            total_hdd_capacity: None,
+            ssd_amount: None,
+            total_ssd_capacity: None,
+            unmetered_bandwidth: false,
+            uplink_speed: None,
+            traffic: None,
+            datacenter_country: "US".to_string(),
+            datacenter_city: "Test".to_string(),
+            datacenter_latitude: None,
+            datacenter_longitude: None,
+            control_panel: None,
+            gpu_name: None,
+            min_contract_hours: None,
+            max_contract_hours: None,
+            payment_methods: vec![],
+            features: vec![],
+            operating_systems: vec![],
+        };
+
+        let result = db.create_offering(&pubkey, params).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_offering_success() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        // Create offering first
+        insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
+
+        // Update it
+        let update_params = CreateOfferingParams {
+            offering_id: "off-1".to_string(),
+            offer_name: "Updated Server".to_string(),
+            description: Some("Updated description".to_string()),
+            product_page_url: None,
+            currency: "EUR".to_string(),
+            monthly_price: 199.99,
+            setup_fee: 50.0,
+            visibility: "private".to_string(),
+            product_type: "vps".to_string(),
+            virtualization_type: Some("kvm".to_string()),
+            billing_interval: "monthly".to_string(),
+            stock_status: "out_of_stock".to_string(),
+            processor_brand: None,
+            processor_amount: None,
+            processor_cores: Some(4),
+            processor_speed: None,
+            processor_name: None,
+            memory_error_correction: None,
+            memory_type: None,
+            memory_amount: Some("16GB".to_string()),
+            hdd_amount: None,
+            total_hdd_capacity: None,
+            ssd_amount: Some(1),
+            total_ssd_capacity: Some("500GB".to_string()),
+            unmetered_bandwidth: false,
+            uplink_speed: None,
+            traffic: Some(500),
+            datacenter_country: "DE".to_string(),
+            datacenter_city: "Berlin".to_string(),
+            datacenter_latitude: None,
+            datacenter_longitude: None,
+            control_panel: None,
+            gpu_name: None,
+            min_contract_hours: None,
+            max_contract_hours: None,
+            payment_methods: vec!["ETH".to_string()],
+            features: vec!["Backup".to_string()],
+            operating_systems: vec!["Debian 12".to_string()],
+        };
+
+        let result = db.update_offering(&pubkey, 1, update_params).await;
+        assert!(result.is_ok());
+
+        // Verify update
+        let offering = db.get_offering(1).await.unwrap().unwrap();
+        assert_eq!(offering.offer_name, "Updated Server");
+        assert_eq!(offering.monthly_price, 199.99);
+        assert_eq!(offering.currency, "EUR");
+    }
+
+    #[tokio::test]
+    async fn test_update_offering_unauthorized() {
+        let db = setup_test_db().await;
+        let pubkey1 = vec![1u8; 32];
+        let pubkey2 = vec![2u8; 32];
+
+        insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
+
+        let params = CreateOfferingParams {
+            offering_id: "off-1".to_string(),
+            offer_name: "Hacker".to_string(),
+            description: None,
+            product_page_url: None,
+            currency: "USD".to_string(),
+            monthly_price: 1.0,
+            setup_fee: 0.0,
+            visibility: "public".to_string(),
+            product_type: "vps".to_string(),
+            virtualization_type: None,
+            billing_interval: "monthly".to_string(),
+            stock_status: "in_stock".to_string(),
+            processor_brand: None,
+            processor_amount: None,
+            processor_cores: None,
+            processor_speed: None,
+            processor_name: None,
+            memory_error_correction: None,
+            memory_type: None,
+            memory_amount: None,
+            hdd_amount: None,
+            total_hdd_capacity: None,
+            ssd_amount: None,
+            total_ssd_capacity: None,
+            unmetered_bandwidth: false,
+            uplink_speed: None,
+            traffic: None,
+            datacenter_country: "US".to_string(),
+            datacenter_city: "Test".to_string(),
+            datacenter_latitude: None,
+            datacenter_longitude: None,
+            control_panel: None,
+            gpu_name: None,
+            min_contract_hours: None,
+            max_contract_hours: None,
+            payment_methods: vec![],
+            features: vec![],
+            operating_systems: vec![],
+        };
+
+        let result = db.update_offering(&pubkey2, 1, params).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unauthorized"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_offering_success() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
+
+        let result = db.delete_offering(&pubkey, 1).await;
+        assert!(result.is_ok());
+
+        // Verify deletion
+        let offering = db.get_offering(1).await.unwrap();
+        assert!(offering.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_offering_unauthorized() {
+        let db = setup_test_db().await;
+        let pubkey1 = vec![1u8; 32];
+        let pubkey2 = vec![2u8; 32];
+
+        insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
+
+        let result = db.delete_offering(&pubkey2, 1).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unauthorized"));
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_offering_success() {
+        let db = setup_test_db().await;
+        let pubkey = vec![1u8; 32];
+
+        insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
+        sqlx::query("INSERT INTO provider_offerings_payment_methods (offering_id, payment_method) VALUES (?, 'BTC')")
+            .bind(1).execute(&db.pool).await.unwrap();
+
+        let new_id = db
+            .duplicate_offering(&pubkey, 1, "off-1-copy".to_string())
+            .await
+            .unwrap();
+
+        assert!(new_id > 1);
+
+        // Verify duplication
+        let duplicated = db.get_offering(new_id).await.unwrap().unwrap();
+        assert_eq!(duplicated.offer_name, "Test Offer (Copy)");
+        assert_eq!(duplicated.monthly_price, 100.0);
+        assert_eq!(duplicated.datacenter_country, "US");
+
+        // Verify metadata was duplicated
+        let methods = db.get_offering_payment_methods(new_id).await.unwrap();
+        assert_eq!(methods.len(), 1);
+        assert_eq!(methods[0], "BTC");
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_offering_unauthorized() {
+        let db = setup_test_db().await;
+        let pubkey1 = vec![1u8; 32];
+        let pubkey2 = vec![2u8; 32];
+
+        insert_test_offering(&db, 1, &pubkey1, "US", 100.0).await;
+
+        let result = db.duplicate_offering(&pubkey2, 1, "copy".to_string()).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unauthorized"));
     }
 }
