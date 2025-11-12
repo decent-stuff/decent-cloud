@@ -57,22 +57,32 @@ fn check_authorization(pubkey: &[u8], user: &AuthenticatedUser) -> Result<(), St
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct PlatformOverview {
     // Database-derived statistics (always available, reliable)
+    #[ts(type = "number")]
     pub total_providers: i64,
+    #[ts(type = "number")]
     pub active_providers: i64,
+    #[ts(type = "number")]
     pub total_offerings: i64,
+    #[ts(type = "number")]
     pub total_contracts: i64,
+    #[ts(type = "number")]
     pub total_transfers: i64,
+    #[ts(type = "number")]
     pub total_volume_e9s: i64,
+    #[ts(type = "number")]
     pub validator_count_24h: i64,
+    #[ts(type = "number | undefined")]
     pub latest_block_timestamp_ns: Option<u64>,
 
     // All canister metadata (flexible, future-proof)
     // Includes: num_blocks, blocks_until_next_halving, current_block_validators,
     // current_block_rewards_e9s, reward_per_block_e9s, token_value_in_usd_e6,
     // latest_block_hash, and any future metadata fields
+    #[ts(type = "Record<string, any>")]
     pub metadata: BTreeMap<String, JsonValue>,
 }
 
@@ -1236,5 +1246,16 @@ pub async fn get_reputation(
         Ok(Some(rep)) => Ok(Json(ApiResponse::success(rep))),
         Ok(None) => Ok(Json(ApiResponse::error("No reputation found".to_string()))),
         Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ts_rs::TS;
+
+    #[test]
+    fn export_typescript_types() {
+        PlatformOverview::export().expect("Failed to export PlatformOverview type");
     }
 }

@@ -21,6 +21,7 @@ pub struct ProviderProfile {
     pub why_choose_us: Option<String>,
     pub api_version: String,
     pub profile_version: String,
+    #[ts(type = "number")]
     pub updated_at_ns: i64,
 }
 

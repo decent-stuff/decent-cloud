@@ -1,32 +1,55 @@
-import type {
-	Offering,
-	ProviderProfile,
-	PlatformStats,
-	UserProfile,
-	UserContact,
-	UserSocial,
-	UserPublicKey,
-	CreateOfferingParams,
-	ApiResponse,
-	CsvImportError,
-	CsvImportResult,
-	OfferingSearchParams
-} from '$lib/types/api-types';
+// Import auto-generated types from Rust (these have pubkey_hash as Vec<u8> which is skipped in TS)
+import type { Offering as OfferingRaw } from '$lib/types/generated/Offering';
+import type { ProviderProfile as ProviderProfileRaw } from '$lib/types/generated/ProviderProfile';
+import type { PlatformOverview } from '$lib/types/generated/PlatformOverview';
+import type { UserProfile as UserProfileRaw } from '$lib/types/generated/UserProfile';
+import type { UserContact } from '$lib/types/generated/UserContact';
+import type { UserSocial } from '$lib/types/generated/UserSocial';
+import type { UserPublicKey } from '$lib/types/generated/UserPublicKey';
 
-// Re-export for consumers
-export type {
-	Offering,
-	ProviderProfile,
-	PlatformStats,
-	UserProfile,
-	UserContact,
-	UserSocial,
-	UserPublicKey,
-	CreateOfferingParams,
-	CsvImportError,
-	CsvImportResult,
-	OfferingSearchParams
+// Utility type to convert null to undefined (Rust Option -> TS optional)
+type NullToUndefined<T> = T extends null ? undefined : T;
+type ConvertNullToUndefined<T> = {
+	[K in keyof T]: NullToUndefined<T[K]>;
 };
+
+// Frontend types: add pubkey_hash as string and convert null to undefined for convenience
+export type Offering = ConvertNullToUndefined<OfferingRaw> & { pubkey_hash: string };
+export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pubkey_hash: string };
+export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey_hash: string };
+export type PlatformStats = ConvertNullToUndefined<PlatformOverview>;
+
+// Generic API response wrapper
+export interface ApiResponse<T> {
+	success: boolean;
+	data?: T | null;
+	error?: string | null;
+}
+
+// Offering search parameters
+export interface OfferingSearchParams {
+	limit?: number;
+	offset?: number;
+	product_type?: string;
+	country?: string;
+	min_price_monthly?: number;
+	max_price_monthly?: number;
+	in_stock_only?: boolean;
+}
+
+// CSV import types
+export interface CsvImportError {
+	row: number;
+	message: string;
+}
+
+export interface CsvImportResult {
+	success_count: number;
+	errors: CsvImportError[];
+}
+
+// Create offering params (omit id and pubkey_hash for creation)
+export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey_hash'>;
 
 // API URLs for different environments
 const DEV_API_BASE_URL = 'http://localhost:59001';

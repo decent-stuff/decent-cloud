@@ -6,11 +6,17 @@ use ts_rs::TS;
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct PlatformStats {
+    #[ts(type = "number")]
     pub total_providers: i64,
+    #[ts(type = "number")]
     pub active_providers: i64,
+    #[ts(type = "number")]
     pub total_offerings: i64,
+    #[ts(type = "number")]
     pub total_contracts: i64,
+    #[ts(type = "number")]
     pub total_transfers: i64,
+    #[ts(type = "number")]
     pub total_volume_e9s: i64,
 }
 

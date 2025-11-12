@@ -8,8 +8,8 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct Offering {
-    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
     pub id: Option<i64>,
     #[ts(skip)]
     #[serde(skip_deserializing)]
@@ -27,19 +27,24 @@ pub struct Offering {
     pub billing_interval: String,
     pub stock_status: String,
     pub processor_brand: Option<String>,
+    #[ts(type = "number | undefined")]
     pub processor_amount: Option<i64>,
+    #[ts(type = "number | undefined")]
     pub processor_cores: Option<i64>,
     pub processor_speed: Option<String>,
     pub processor_name: Option<String>,
     pub memory_error_correction: Option<String>,
     pub memory_type: Option<String>,
     pub memory_amount: Option<String>,
+    #[ts(type = "number | undefined")]
     pub hdd_amount: Option<i64>,
     pub total_hdd_capacity: Option<String>,
+    #[ts(type = "number | undefined")]
     pub ssd_amount: Option<i64>,
     pub total_ssd_capacity: Option<String>,
     pub unmetered_bandwidth: bool,
     pub uplink_speed: Option<String>,
+    #[ts(type = "number | undefined")]
     pub traffic: Option<i64>,
     pub datacenter_country: String,
     pub datacenter_city: String,
@@ -47,7 +52,9 @@ pub struct Offering {
     pub datacenter_longitude: Option<f64>,
     pub control_panel: Option<String>,
     pub gpu_name: Option<String>,
+    #[ts(type = "number | undefined")]
     pub min_contract_hours: Option<i64>,
+    #[ts(type = "number | undefined")]
     pub max_contract_hours: Option<i64>,
     pub payment_methods: Option<String>,
     pub features: Option<String>,

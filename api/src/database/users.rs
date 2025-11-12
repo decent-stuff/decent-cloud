@@ -12,12 +12,14 @@ pub struct UserProfile {
     pub display_name: Option<String>,
     pub bio: Option<String>,
     pub avatar_url: Option<String>,
+    #[ts(type = "number")]
     pub updated_at_ns: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserContact {
+    #[ts(type = "number")]
     pub id: i64,
     pub contact_type: String,
     pub contact_value: String,
@@ -27,6 +29,7 @@ pub struct UserContact {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserSocial {
+    #[ts(type = "number")]
     pub id: i64,
     pub platform: String,
     pub username: String,
@@ -36,6 +39,7 @@ pub struct UserSocial {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserPublicKey {
+    #[ts(type = "number")]
     pub id: i64,
     pub key_type: String,
     pub key_data: String,
