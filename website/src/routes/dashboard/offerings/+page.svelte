@@ -5,7 +5,8 @@
 		exportProviderOfferingsCSV,
 		type Offering,
 		type CsvImportResult,
-		downloadCSVTemplate
+		downloadCSVTemplate,
+		fetchCSVTemplate
 	} from '$lib/services/api';
 	import { authStore } from '$lib/stores/auth';
 	import { hexEncode } from '$lib/services/api';
@@ -90,7 +91,7 @@
 					signed.headers
 				);
 			} else {
-				editorCsvContent = '';
+				editorCsvContent = await fetchCSVTemplate();
 			}
 
 			showEditorDialog = true;

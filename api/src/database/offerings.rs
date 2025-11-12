@@ -718,9 +718,9 @@ impl Database {
 
     /// Parse a single CSV record into CreateOfferingParams
     fn parse_csv_record(record: &csv::StringRecord) -> Result<CreateOfferingParams, String> {
-        if record.len() < 35 {
+        if record.len() < 38 {
             return Err(format!(
-                "Expected at least 35 columns, found {}",
+                "Expected at least 38 columns, found {}",
                 record.len()
             ));
         }
