@@ -16,8 +16,8 @@ def get_env_config(environment: str) -> tuple[dict[str, str], list[str]]:
     if environment == "production":
         env_vars = {"ENVIRONMENT": "production", "NETWORK_NAME": "decent-cloud-prod"}
         compose_files = [str(cf_dir / "docker-compose.yml"), str(cf_dir / "docker-compose.prod.yml")]
-    else:  # development
-        env_vars = {"ENVIRONMENT": "development", "NETWORK_NAME": "decent-cloud-dev"}
+    else:  # dev
+        env_vars = {"ENVIRONMENT": "dev", "NETWORK_NAME": "decent-cloud-dev"}
         compose_files = [str(cf_dir / "docker-compose.yml"), str(cf_dir / "docker-compose.dev.yml")]
 
     return env_vars, compose_files
@@ -256,7 +256,7 @@ def check_prerequisites() -> bool:
     return True
 
 
-def build_api_natively() -> bool:
+def build_rust_binaries_natively() -> bool:
     """Build API server binary natively before Docker build."""
     cf_dir = Path(__file__).parent
     api_dir = cf_dir.parent / "api"
@@ -273,7 +273,10 @@ def build_api_natively() -> bool:
         os.chdir(project_root)
 
         # Build for linux/amd64 target (required for Docker)
-        subprocess.run(["cargo", "build", "--release", "--bin", "api-server", "--target", "x86_64-unknown-linux-gnu"], check=True)
+        subprocess.run(
+            ["cargo", "build", "--release", "--bin", "api-server", "--bin", "dc", "--target", "x86_64-unknown-linux-gnu"],
+            check=True,
+        )
 
         # Verify binary was created
         binary_path = project_root / "target" / "x86_64-unknown-linux-gnu" / "release" / "api-server"
@@ -299,8 +302,8 @@ def build_api_natively() -> bool:
 def build_website_natively() -> bool:
     """Build SvelteKit website natively before Docker build."""
     cf_dir = Path(__file__).parent
-    website_dir = cf_dir.parent / "website"
     project_root = cf_dir.parent
+    website_dir = project_root / "website"
 
     print_header("Building SvelteKit website natively")
 
@@ -382,7 +385,7 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     print()
 
     # Build API server natively first
-    if not build_api_natively():
+    if not build_rust_binaries_natively():
         print_error("Failed to build API server")
         return 1
     print()

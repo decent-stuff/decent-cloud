@@ -14,13 +14,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = parse_args();
     utils::init_logger(cli.verbose);
 
-    let ledger_path = cli.local_ledger_dir.map(PathBuf::from).unwrap_or_else(|| {
-        dirs::home_dir()
-            .expect("Could not get home directory")
-            .join(".dcc")
-            .join("ledger")
-            .join("main.bin")
-    });
+    let ledger_path = cli
+        .local_ledger_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .expect("Could not get home directory")
+                .join(".dcc")
+                .join("ledger")
+        })
+        .join("main.bin");
 
     let ledger_local =
         LedgerMap::new_with_path(None, Some(ledger_path)).expect("Failed to load the local ledger");

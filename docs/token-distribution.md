@@ -37,9 +37,26 @@ dc ledger-remote get-registration-fee
 
 ### Provider Participation
 
+**Recommended: Automated Docker Deployment**
+
+The easiest way to participate in token distribution is using the automated Docker validator:
+
+```bash
+# See cf/README.md for complete setup
+python3 cf/deploy.py deploy prod
+```
+
+This automatically validates every 10 minutes and earns you a share of block rewards. See [cf/README.md](../cf/README.md#blockchain-validator-optional) for setup instructions.
+
+**Manual Participation (CLI)**
+
+For testing or one-off participation:
+
 ```bash
 dc provider check-in --identity my-id --memo "Your optional memo here"
 ```
+
+**Note:** Manual check-ins must be done every 10 minutes to maximize rewards. The Docker deployment handles this automatically.
 
 ### Viewing Distribution Status
 

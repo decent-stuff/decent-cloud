@@ -10,7 +10,7 @@ services:
   website:
     container_name: decent-cloud-website-dev
     ports:
-      - "59000:3000"  # Dev: host 59000 -> container 3000
+      - "59000:3000" # Dev: host 59000 -> container 3000
     networks:
       - decent-cloud-dev
 
@@ -18,11 +18,17 @@ services:
     <<: *api-base
     container_name: decent-cloud-api-serve-dev
     ports:
-      - "59001:8080"  # Dev: host 59001 -> container 8080
+      - "59001:8080" # Dev: host 59001 -> container 8080
 
   api-sync:
     <<: *api-base
     container_name: decent-cloud-api-sync-dev
+
+  api-validate:
+    <<: *api-base
+    container_name: decent-cloud-api-validate-dev
+    # Validator disabled by default in dev, comment out to enable it
+    profiles: ["validator"]
 
 networks:
   decent-cloud-dev:

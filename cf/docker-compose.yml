@@ -15,7 +15,7 @@ x-api-base: &api-base
     - RUST_LOG=${RUST_LOG:-info}
     - PORT=8080
     - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
-    - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30}  # Used for the sync service only
+    - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30} # Used for the sync service only
     - LEDGER_DIR=/data/ledger
   volumes:
     - ../data/api-data-prod:/data
@@ -51,3 +51,25 @@ services:
   api-sync:
     <<: *api-base
     command: ["api-server", "sync"]
+
+  api-validate:
+    <<: *api-base
+    command: ["/usr/local/bin/validator-entrypoint.sh"]
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - NETWORK=${NETWORK:-ic}
+      - VALIDATION_INTERVAL_SECS=${VALIDATION_INTERVAL_SECS:-600} # 10 minutes (block time)
+      - VALIDATION_MEMO=${VALIDATION_MEMO:-Automated periodic validation}
+      - LOCAL_LEDGER_DIR=/data/ledger
+      - IDENTITY_PATH=/identity
+    volumes:
+      - ../data/api-data-prod:/data
+      # REQUIRED: Mount your validator identity directory containing private.pem and public.pem
+      # If your identity is at ~/.dcc/identity/my-identity, mount it as:
+      # - ${HOME}/.dcc/identity/my-identity:/identity:ro
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/validator-healthy"]
+      interval: 15m
+      timeout: 10s
+      start_period: 1m
+      retries: 2

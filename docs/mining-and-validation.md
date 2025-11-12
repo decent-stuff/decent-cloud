@@ -77,10 +77,37 @@ Registration fee: 0.5 DCT (one-time)
 
 By running the validation command, you automatically fetch the latest ledger and sign its hash, proving you have a full, unaltered copy. The more validators that run this process, the safer the network—and the reputation system—becomes.
 
+#### Recommended: Automated Docker Deployment
+
+**The recommended way to validate is using the Docker deployment** which automates the entire validation process:
+
 ```bash
-dc provider validate --identity my-validator --memo "Your optional memo"
+# See cf/README.md for full setup instructions
+# 1. Mount your identity directory in docker-compose.yml
+# 2. Deploy with validator included
+python3 cf/deploy.py deploy prod
 ```
 
+**Benefits:**
+- ✅ Automated validation every 10 minutes
+- ✅ Runs continuously in the background
+- ✅ Includes health monitoring
+- ✅ Easy setup and maintenance
+- ✅ Shares infrastructure with sync service
+
+See [cf/README.md](../cf/README.md#blockchain-validator-optional) for complete setup instructions.
+
+#### Manual Validation (CLI)
+
+For testing or one-off validations, you can use the CLI directly:
+
+```bash
+dc provider check-in --identity my-validator --memo "Your optional memo"
+```
+
+**Note:** Manual validation requires running the command every 10 minutes to maximize rewards. The Docker deployment handles this automatically.
+
+**Validation Details:**
 - Cost: 0.5 DCT per block
 - Reward: Share of 50 DCT block reward
 - Frequency: Every 10 minutes
@@ -88,19 +115,26 @@ dc provider validate --identity my-validator --memo "Your optional memo"
 
 ### Best Practices
 
-1. **Automation**
+1. **Use Docker Deployment**
 
-   - Schedule regular validations
-   - Keep an eye on system health
-   - Ensure you always have enough token balance
+   - Recommended for continuous validation
+   - Automatic scheduling every 10 minutes
+   - Built-in health monitoring
+   - See [cf/README.md](../cf/README.md#blockchain-validator-optional)
 
 2. **Token Management**
 
-   - Maintain reserve for fees
+   - Maintain reserve for fees (minimum 0.5 DCT per validation)
+   - Monitor balance regularly: `dc account --identity my-validator --balance`
    - Track your rewards over time
    - Plan any reinvestments in validation or other services
 
-3. **Community Engagement**
+3. **System Monitoring**
+   - Check validator logs: `docker logs decent-cloud-api-validate-prod`
+   - Monitor health status: `docker ps --filter name=validate`
+   - Ensure ledger stays synchronized
+
+4. **Community Engagement**
    - Participate in forums and discussions
    - Collaborate with fellow validators
    - Contribute ideas for platform improvements

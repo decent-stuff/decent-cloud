@@ -102,17 +102,44 @@ dc contract sign-reply --identity my-provider --contract-id <contract-id-base64>
 
 ## Participating in Token Distribution
 
-### Regular Check-ins
+Providers earn DCT rewards through blockchain validation (also called "check-ins" or "mining").
+
+### Recommended: Automated Docker Validation
+
+**The recommended way to participate is using the automated Docker deployment:**
+
+```bash
+# See cf/README.md for complete setup instructions
+python3 cf/deploy.py deploy prod
+```
+
+This automatically validates the blockchain every 10 minutes, earning you a share of block rewards.
+
+**Benefits:**
+- ✅ Runs continuously without manual intervention
+- ✅ Automatic validation every 10 minutes
+- ✅ Built-in monitoring and health checks
+- ✅ Easy to set up and maintain
+
+See [cf/README.md](../cf/README.md#blockchain-validator-optional) and [mining-and-validation.md](mining-and-validation.md) for detailed setup instructions.
+
+### Manual Check-ins (CLI)
+
+For testing or one-off validations:
 
 ```bash
 dc provider check-in --identity my-id --memo "Active and serving customers!"
 ```
 
+**Note:** Manual validation requires running the command every 10 minutes. The Docker deployment handles this automatically.
+
 ### Best Practices
 
-- Maintain regular check-ins
+- Use Docker deployment for continuous automated validation
+- Maintain sufficient DCT balance for validation fees (0.5 DCT per validation)
+- Monitor validator health: `docker logs decent-cloud-api-validate-prod`
 - Keep your local ledger synchronized
-- Monitor reward distribution
+- Track reward distribution regularly
 
 ## Monitoring and Maintenance
 

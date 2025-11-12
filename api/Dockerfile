@@ -1,6 +1,6 @@
 # API Dockerfile - expects binary to be built natively first and then COPYed into the image
 # Cloudflare Containers require linux/amd64 architecture
-FROM --platform=linux/amd64 debian:bookworm-slim
+FROM --platform=linux/amd64 debian:trixie-slim
 
 # Build arguments for user/group IDs (defaults to 1000)
 ARG USER_ID=1000
@@ -17,21 +17,21 @@ RUN apt-get update && apt-get install -y \
 RUN groupadd -g ${GROUP_ID} appuser && \
     useradd -r -u ${USER_ID} -g appuser -s /bin/false appuser
 
-# Copy pre-built binary from host (assumes cargo build --target x86_64-unknown-linux-gnu)
+# Copy pre-built binaries from host (assumes cargo build --target x86_64-unknown-linux-gnu)
 COPY target/x86_64-unknown-linux-gnu/release/api-server /usr/local/bin/api-server
+COPY target/x86_64-unknown-linux-gnu/release/dc /usr/local/bin/dc
 
-# Copy migrations
+# Copy migrations and validation script
 COPY api/migrations /migrations
+COPY cf/validator-entrypoint.sh /usr/local/bin/validator-entrypoint.sh
 
 # Create data directory and set permissions
-RUN mkdir -p /data && \
-    chown -R appuser:appuser /usr/local/bin/api-server /migrations /data
+RUN mkdir -p /data /identity && \
+    chown -R appuser:appuser /usr/local/bin/api-server /usr/local/bin/dc /usr/local/bin/validator-entrypoint.sh /migrations /data /identity && \
+    chmod +x /usr/local/bin/validator-entrypoint.sh
 
 # Switch to non-root user
 USER appuser
-
-# Expose port
-EXPOSE 8080
 
 # Run the application
 CMD ["api-server"]
