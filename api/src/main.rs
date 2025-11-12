@@ -5,6 +5,7 @@ mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
 mod network_metrics;
+mod request_logging;
 mod sync_service;
 mod validation;
 
@@ -319,6 +320,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         )
         .data(ctx.database)
         .data(ctx.metadata_cache.clone())
+        .with(request_logging::RequestLogging)
         .with(Cors::new());
 
     // Start metadata cache service in background
