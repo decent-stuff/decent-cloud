@@ -891,10 +891,22 @@ async fn test_get_active_validators() {
         .find(|v| v.pubkey_hash == validator1)
         .expect("Validator 1 should be in results");
 
-    assert_eq!(v1.total_check_ins, 3, "Validator 1 should have 3 total check-ins");
-    assert_eq!(v1.check_ins_24h, 2, "Validator 1 should have 2 check-ins in last 24h");
-    assert_eq!(v1.check_ins_7d, 3, "Validator 1 should have 3 check-ins in last 7d");
-    assert_eq!(v1.check_ins_30d, 3, "Validator 1 should have 3 check-ins in last 30d");
+    assert_eq!(
+        v1.total_check_ins, 3,
+        "Validator 1 should have 3 total check-ins"
+    );
+    assert_eq!(
+        v1.check_ins_24h, 2,
+        "Validator 1 should have 2 check-ins in last 24h"
+    );
+    assert_eq!(
+        v1.check_ins_7d, 3,
+        "Validator 1 should have 3 check-ins in last 7d"
+    );
+    assert_eq!(
+        v1.check_ins_30d, 3,
+        "Validator 1 should have 3 check-ins in last 30d"
+    );
 
     // Find validator2 in results
     let v2 = validators_30d
@@ -902,10 +914,22 @@ async fn test_get_active_validators() {
         .find(|v| v.pubkey_hash == validator2)
         .expect("Validator 2 should be in results");
 
-    assert_eq!(v2.total_check_ins, 1, "Validator 2 should have 1 total check-in");
-    assert_eq!(v2.check_ins_24h, 0, "Validator 2 should have 0 check-ins in last 24h");
-    assert_eq!(v2.check_ins_7d, 0, "Validator 2 should have 0 check-ins in last 7d");
-    assert_eq!(v2.check_ins_30d, 1, "Validator 2 should have 1 check-in in last 30d");
+    assert_eq!(
+        v2.total_check_ins, 1,
+        "Validator 2 should have 1 total check-in"
+    );
+    assert_eq!(
+        v2.check_ins_24h, 0,
+        "Validator 2 should have 0 check-ins in last 24h"
+    );
+    assert_eq!(
+        v2.check_ins_7d, 0,
+        "Validator 2 should have 0 check-ins in last 7d"
+    );
+    assert_eq!(
+        v2.check_ins_30d, 1,
+        "Validator 2 should have 1 check-in in last 30d"
+    );
 
     // Test: Get validators active in last 7 days (should only have validator1)
     let validators_7d = db.get_active_validators(7).await.unwrap();
@@ -926,7 +950,10 @@ async fn test_get_active_validators() {
         1,
         "Should have 1 validator active in last 24 hours"
     );
-    assert_eq!(validators_1d[0].check_ins_24h, 2, "Should have 2 check-ins in 24h");
+    assert_eq!(
+        validators_1d[0].check_ins_24h, 2,
+        "Should have 2 check-ins in 24h"
+    );
 }
 
 #[tokio::test]
@@ -982,7 +1009,10 @@ async fn test_get_active_validators_with_profile() {
     let validator = &validators[0];
     assert_eq!(validator.name, Some("Test Validator".to_string()));
     assert_eq!(validator.description, Some("A test validator".to_string()));
-    assert_eq!(validator.website_url, Some("https://example.com".to_string()));
+    assert_eq!(
+        validator.website_url,
+        Some("https://example.com".to_string())
+    );
     assert_eq!(
         validator.logo_url,
         Some("https://example.com/logo.png".to_string())

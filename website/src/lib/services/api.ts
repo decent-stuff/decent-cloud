@@ -1,6 +1,7 @@
 // Import auto-generated types from Rust (these have pubkey_hash as Vec<u8> which is skipped in TS)
 import type { Offering as OfferingRaw } from '$lib/types/generated/Offering';
 import type { ProviderProfile as ProviderProfileRaw } from '$lib/types/generated/ProviderProfile';
+import type { Validator as ValidatorRaw } from '$lib/types/generated/Validator';
 import type { PlatformOverview } from '$lib/types/generated/PlatformOverview';
 import type { UserProfile as UserProfileRaw } from '$lib/types/generated/UserProfile';
 import type { UserContact } from '$lib/types/generated/UserContact';
@@ -16,6 +17,7 @@ type ConvertNullToUndefined<T> = {
 // Frontend types: add pubkey_hash as string and convert null to undefined for convenience
 export type Offering = ConvertNullToUndefined<OfferingRaw> & { pubkey_hash: string };
 export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pubkey_hash: string };
+export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey_hash: string };
 export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey_hash: string };
 export type PlatformStats = ConvertNullToUndefined<PlatformOverview>;
 
@@ -147,6 +149,28 @@ export async function getActiveProviders(days: number = 1): Promise<ProviderProf
 	return providers.map((p) => ({
 		...p,
 		pubkey_hash: normalizePubkeyHash(p.pubkey_hash)
+	}));
+}
+
+export async function getActiveValidators(days: number = 1): Promise<Validator[]> {
+	const url = `${API_BASE_URL}/api/v1/validators/active/${days}`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch active validators: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Validator[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Decent Cloud API validators response failed');
+	}
+
+	const validators = payload.data ?? [];
+	// Normalize pubkey_hash to hex string
+	return validators.map((v) => ({
+		...v,
+		pubkey_hash: normalizePubkeyHash(v.pubkey_hash)
 	}));
 }
 
