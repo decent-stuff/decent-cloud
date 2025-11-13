@@ -828,7 +828,7 @@ async fn test_get_active_validators() {
             &dcc_common::CheckInPayload::new("recent1".to_string(), vec![1, 2, 3, 4])
                 .to_bytes()
                 .unwrap(),
-            (now_ns - 1 * 3600 * 1_000_000_000) as u64, // 1 hour ago
+            (now_ns - 3600 * 1_000_000_000) as u64, // 1 hour ago
             1,
         ),
         TestDataFactory::ledger_entry(

@@ -1,0 +1,256 @@
+use super::*;
+use sqlx::SqlitePool;
+
+async fn setup_test_db() -> Database {
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let migration_sql = include_str!("../../../migrations/001_original_schema.sql");
+    sqlx::query(migration_sql).execute(&pool).await.unwrap();
+    Database { pool }
+}
+
+#[tokio::test]
+async fn test_get_user_contracts_empty() {
+    let db = setup_test_db().await;
+    let contracts = db.get_user_contracts(&[1u8; 32]).await.unwrap();
+    assert_eq!(contracts.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_user_contracts() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+            .bind(&contract_id).bind(&user_pk).bind(&provider_pk).execute(&db.pool).await.unwrap();
+
+    let contracts = db.get_user_contracts(&user_pk).await.unwrap();
+    assert_eq!(contracts.len(), 1);
+    assert_eq!(contracts[0].contract_id, contract_id);
+}
+
+#[tokio::test]
+async fn test_get_provider_contracts() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+            .bind(&contract_id).bind(&user_pk).bind(&provider_pk).execute(&db.pool).await.unwrap();
+
+    let contracts = db.get_provider_contracts(&provider_pk).await.unwrap();
+    assert_eq!(contracts.len(), 1);
+    assert_eq!(contracts[0].provider_pubkey_hash, provider_pk);
+}
+
+#[tokio::test]
+async fn test_get_pending_provider_contracts() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+            .bind(vec![1u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 1000, 'active')")
+            .bind(vec![2u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
+
+    let contracts = db
+        .get_pending_provider_contracts(&provider_pk)
+        .await
+        .unwrap();
+    assert_eq!(contracts.len(), 1);
+    assert_eq!(contracts[0].status, "pending");
+}
+
+#[tokio::test]
+async fn test_get_contract_by_id() {
+    let db = setup_test_db().await;
+    let contract_id = vec![3u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+            .bind(&contract_id).bind(vec![1u8; 32]).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap();
+    assert!(contract.is_some());
+    assert_eq!(contract.unwrap().contract_id, contract_id);
+}
+
+#[tokio::test]
+async fn test_get_contract_by_id_not_found() {
+    let db = setup_test_db().await;
+    let contract = db.get_contract(&[99u8; 32]).await.unwrap();
+    assert!(contract.is_none());
+}
+
+#[tokio::test]
+async fn test_get_contract_reply() {
+    let db = setup_test_db().await;
+    let contract_id = vec![3u8; 32];
+
+    // Insert contract first (foreign key requirement)
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+            .bind(&contract_id).bind(vec![1u8; 32]).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+
+    sqlx::query("INSERT INTO contract_sign_replies (contract_id, provider_pubkey_hash, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, 'accepted', 'ok', 'details', 0)")
+            .bind(&contract_id).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+
+    let reply = db.get_contract_reply(&contract_id).await.unwrap();
+    assert!(reply.is_some());
+    let reply = reply.unwrap();
+    assert_eq!(reply.reply_status, "accepted");
+}
+
+#[tokio::test]
+async fn test_get_contract_payments() {
+    let db = setup_test_db().await;
+    let contract_id = vec![3u8; 32];
+
+    // Insert contract first (foreign key requirement)
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+            .bind(&contract_id).bind(vec![1u8; 32]).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+
+    sqlx::query("INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'fixed', 'month', 1, 1000)")
+            .bind(&contract_id).execute(&db.pool).await.unwrap();
+    sqlx::query("INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'usage', 'hour', 10, 500)")
+            .bind(&contract_id).execute(&db.pool).await.unwrap();
+
+    let payments = db.get_contract_payments(&contract_id).await.unwrap();
+    assert_eq!(payments.len(), 2);
+    assert_eq!(payments[0].amount_e9s, 1000);
+}
+
+#[tokio::test]
+async fn test_list_contracts_pagination() {
+    let db = setup_test_db().await;
+
+    for i in 0..5 {
+        sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', ?, 'pending')")
+                .bind(vec![i as u8; 32]).bind(vec![1u8; 32]).bind(vec![2u8; 32]).bind(i * 1000).execute(&db.pool).await.unwrap();
+    }
+
+    let page1 = db.list_contracts(2, 0).await.unwrap();
+    assert_eq!(page1.len(), 2);
+
+    let page2 = db.list_contracts(2, 2).await.unwrap();
+    assert_eq!(page2.len(), 2);
+
+    let page3 = db.list_contracts(2, 4).await.unwrap();
+    assert_eq!(page3.len(), 1);
+}
+
+#[tokio::test]
+async fn test_create_rental_request_success() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Create offering first (no explicit id, let it auto-increment)
+    let offering_id = sqlx::query_scalar::<_, i64>("INSERT INTO provider_offerings (pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id")
+            .bind(&provider_pk).fetch_one(&db.pool).await.unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some("ssh-rsa AAAAB3...".to_string()),
+        contact_method: Some("email:test@example.com".to_string()),
+        request_memo: Some("Test rental".to_string()),
+    };
+
+    let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
+    assert_eq!(contract_id.len(), 32);
+
+    // Verify contract was created
+    let contract = db.get_contract(&contract_id).await.unwrap();
+    assert!(contract.is_some());
+    let contract = contract.unwrap();
+    assert_eq!(contract.requester_pubkey_hash, user_pk);
+    assert_eq!(contract.provider_pubkey_hash, provider_pk);
+    assert_eq!(contract.offering_id, "off-rental-1");
+    assert_eq!(contract.status, "requested");
+    assert_eq!(contract.requester_ssh_pubkey, "ssh-rsa AAAAB3...");
+    assert_eq!(contract.requester_contact, "email:test@example.com");
+    assert_eq!(contract.request_memo, "Test rental");
+    assert_eq!(contract.payment_amount_e9s, 100_000_000_000);
+}
+
+#[tokio::test]
+async fn test_create_rental_request_with_defaults() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Create user registration first
+    sqlx::query("INSERT INTO user_registrations (pubkey_hash, pubkey_bytes, signature, created_at_ns) VALUES (?, ?, ?, 0)")
+            .bind(&user_pk).bind(&user_pk).bind(&user_pk).execute(&db.pool).await.unwrap();
+
+    // Create offering (no explicit id)
+    let offering_id = sqlx::query_scalar::<_, i64>("INSERT INTO provider_offerings (pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-2', 'Test Server', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id")
+            .bind(&provider_pk).fetch_one(&db.pool).await.unwrap();
+
+    // Create user SSH key
+    sqlx::query("INSERT INTO user_public_keys (user_pubkey_hash, key_type, key_data, created_at_ns) VALUES (?, 'ssh-ed25519', 'AAAAC3...user-key', 0)")
+            .bind(&user_pk).execute(&db.pool).await.unwrap();
+
+    // Create user contact
+    sqlx::query("INSERT INTO user_contacts (user_pubkey_hash, contact_type, contact_value, verified, created_at_ns) VALUES (?, 'email', 'user@example.com', 1, 0)")
+            .bind(&user_pk).execute(&db.pool).await.unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: None,
+        contact_method: None,
+        request_memo: None,
+    };
+
+    let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
+
+    // Verify defaults were used
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.requester_ssh_pubkey, "AAAAC3...user-key");
+    assert_eq!(contract.requester_contact, "email:user@example.com");
+    assert_eq!(contract.request_memo, "Rental request for Test Server");
+}
+
+#[tokio::test]
+async fn test_create_rental_request_offering_not_found() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+
+    let params = RentalRequestParams {
+        offering_db_id: 999,
+        ssh_pubkey: Some("ssh-key".to_string()),
+        contact_method: Some("email:test@example.com".to_string()),
+        request_memo: None,
+    };
+
+    let result = db.create_rental_request(&user_pk, params).await;
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Offering not found"));
+}
+
+#[tokio::test]
+async fn test_create_rental_request_calculates_price() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Create offering with specific price (no explicit id)
+    let offering_id = sqlx::query_scalar::<_, i64>("INSERT INTO provider_offerings (pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-3', 'Expensive Server', 'USD', 499.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id")
+            .bind(&provider_pk).fetch_one(&db.pool).await.unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some("ssh-key".to_string()),
+        contact_method: Some("contact".to_string()),
+        request_memo: None,
+    };
+
+    let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    // 499.99 * 1_000_000_000 = 499_990_000_000
+    assert_eq!(contract.payment_amount_e9s, 499_990_000_000);
+}

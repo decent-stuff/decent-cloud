@@ -816,6 +816,30 @@ pub async fn get_contract(
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct RentalRequestResponse {
+    pub contract_id: String,
+    pub message: String,
+}
+
+#[handler]
+pub async fn create_rental_request(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Json(params): Json<crate::database::contracts::RentalRequestParams>,
+) -> PoemResult<Json<ApiResponse<RentalRequestResponse>>> {
+    match db.create_rental_request(&auth.pubkey_hash, params).await {
+        Ok(contract_id) => {
+            let contract_id_hex = hex::encode(&contract_id);
+            Ok(Json(ApiResponse::success(RentalRequestResponse {
+                contract_id: contract_id_hex,
+                message: "Rental request created successfully".to_string(),
+            })))
+        }
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
 // ============ Token Endpoints ============
 
 #[handler]

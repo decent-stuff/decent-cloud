@@ -265,7 +265,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
             poem::post(api_handlers::import_provider_offerings_csv),
         )
         // Contract endpoints
-        .at("/api/v1/contracts", poem::get(api_handlers::list_contracts))
+        .at(
+            "/api/v1/contracts",
+            poem::get(api_handlers::list_contracts).post(api_handlers::create_rental_request),
+        )
         .at(
             "/api/v1/contracts/:id",
             poem::get(api_handlers::get_contract),
@@ -359,56 +362,4 @@ async fn sync_command() -> Result<(), std::io::Error> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use regex::Regex;
-    use std::collections::HashSet;
-
-    const MAIN_RS_SOURCE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-
-    fn collect_route_paths(source: &str) -> Vec<String> {
-        let regex = Regex::new(r#"\.at\(\s*"([^"]+)""#).expect("invalid route regex");
-        regex
-            .captures_iter(source)
-            .map(|captures| captures[1].to_string())
-            .collect()
-    }
-
-    fn duplicate_paths(paths: &[String]) -> Vec<String> {
-        let mut seen = HashSet::new();
-        let mut duplicates = Vec::new();
-        for path in paths {
-            let inserted = seen.insert(path.clone());
-            if !inserted && !duplicates.contains(path) {
-                duplicates.push(path.clone());
-            }
-        }
-        duplicates
-    }
-
-    #[test]
-    fn router_configuration_has_unique_paths() {
-        let paths = collect_route_paths(MAIN_RS_SOURCE);
-        let duplicates = duplicate_paths(&paths);
-        assert!(
-            duplicates.is_empty(),
-            "Duplicate route paths detected: {:?}",
-            duplicates
-        );
-    }
-
-    #[test]
-    fn duplicate_detector_identifies_duplicates() {
-        let sample = vec![
-            "/first".to_string(),
-            "/second".to_string(),
-            "/first".to_string(),
-            "/second".to_string(),
-        ];
-        let duplicates = duplicate_paths(&sample);
-        assert_eq!(
-            duplicates,
-            vec!["/first".to_string(), "/second".to_string()]
-        );
-    }
-}
+mod tests;

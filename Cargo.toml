@@ -18,6 +18,7 @@ edition = "2021"
 [workspace.dependencies]
 ahash = { version = "0.8", default-features = false }
 anyhow = "1.0"
+async-trait = "0.1"
 base32 = "0.5"
 base64 = "0.22"
 borsh = { version = "1.5.7", features = ["derive"] }
@@ -67,7 +68,10 @@ pretty_env_logger = "0.5"
 provider-offering = { path = "provider-offering" }
 provider-profile = { path = "provider-profile" }
 regex = "1.12.2"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = [
+    "json",
+    "rustls-tls",
+], default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
@@ -81,6 +85,7 @@ tabular = "0.2"
 tempfile = "3.23"
 tiny-bip39 = "2.0"
 tokio = { version = "1.48", features = ["full"] }
+ts-rs = "11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 which = "8.0"
