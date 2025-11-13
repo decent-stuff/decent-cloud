@@ -1,5 +1,6 @@
 use super::*;
 use dcc_common::DccIdentity;
+use ts_rs::TS;
 
 fn create_test_identity() -> (DccIdentity, Vec<u8>) {
     let seed = [42u8; 32];
@@ -137,4 +138,9 @@ fn test_verify_invalid_signature_length() {
 
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), AuthError::InvalidFormat(_)));
+}
+
+#[test]
+fn export_typescript_types() {
+    SignedRequestHeaders::export().expect("Failed to export SignedRequestHeaders type");
 }

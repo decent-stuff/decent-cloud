@@ -1,12 +1,32 @@
 use anyhow::Result;
 use dcc_common::DccIdentity;
 use poem::{error::ResponseError, http::StatusCode, FromRequest, Request, RequestBody};
+use serde::{Deserialize, Serialize};
 use std::fmt;
+use ts_rs::TS;
 
 /// Authenticated user with verified public key
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
     pub pubkey_hash: Vec<u8>,
+}
+
+/// Headers for signed API requests
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct SignedRequestHeaders {
+    #[serde(rename = "X-Public-Key")]
+    #[ts(rename = "X-Public-Key")]
+    pub x_public_key: String,
+    #[serde(rename = "X-Signature")]
+    #[ts(rename = "X-Signature")]
+    pub x_signature: String,
+    #[serde(rename = "X-Timestamp")]
+    #[ts(rename = "X-Timestamp")]
+    pub x_timestamp: String,
+    #[serde(rename = "Content-Type")]
+    #[ts(rename = "Content-Type")]
+    pub content_type: String,
 }
 
 /// Authentication error types

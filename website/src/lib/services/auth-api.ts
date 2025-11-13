@@ -1,15 +1,11 @@
 import { ed25519ph } from '@noble/curves/ed25519';
 import type { Ed25519KeyIdentity } from '@dfinity/identity';
+import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 
 const ED25519_SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
 
 export interface SignedRequest {
-	headers: {
-		'X-Public-Key': string;
-		'X-Signature': string;
-		'X-Timestamp': string;
-		'Content-Type': string;
-	};
+	headers: SignedRequestHeaders;
 	body: string;
 }
 
