@@ -840,6 +840,181 @@ pub async fn create_rental_request(
     }
 }
 
+// ============ Provider Rental Management Endpoints ============
+
+#[handler]
+pub async fn get_pending_rental_requests(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+) -> PoemResult<Json<ApiResponse<Vec<crate::database::contracts::Contract>>>> {
+    match db.get_pending_provider_contracts(&auth.pubkey_hash).await {
+        Ok(contracts) => Ok(Json(ApiResponse::success(contracts))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RentalResponseRequest {
+    pub accept: bool,
+    #[allow(dead_code)]
+    pub memo: Option<String>,
+}
+
+#[handler]
+pub async fn respond_to_rental_request(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(contract_id_hex): Path<String>,
+    Json(req): Json<RentalResponseRequest>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    let contract_id = match hex::decode(&contract_id_hex) {
+        Ok(id) => id,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid contract ID format".to_string(),
+            )))
+        }
+    };
+
+    let new_status = if req.accept { "accepted" } else { "rejected" };
+
+    match db
+        .update_contract_status(&contract_id, new_status, &auth.pubkey_hash)
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(format!(
+            "Contract {}",
+            new_status
+        )))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProvisioningStatusRequest {
+    pub status: String,
+    pub instance_details: Option<String>,
+}
+
+#[handler]
+pub async fn update_provisioning_status(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(contract_id_hex): Path<String>,
+    Json(req): Json<ProvisioningStatusRequest>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    let contract_id = match hex::decode(&contract_id_hex) {
+        Ok(id) => id,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid contract ID format".to_string(),
+            )))
+        }
+    };
+
+    // Update status
+    match db
+        .update_contract_status(&contract_id, &req.status, &auth.pubkey_hash)
+        .await
+    {
+        Ok(_) => {
+            // If provisioned status and instance details provided, add details
+            if req.status == "provisioned" {
+                if let Some(details) = req.instance_details {
+                    if let Err(e) = db.add_provisioning_details(&contract_id, &details).await {
+                        return Ok(Json(ApiResponse::error(format!(
+                            "Status updated but failed to save details: {}",
+                            e
+                        ))));
+                    }
+                }
+            }
+            Ok(Json(ApiResponse::success(
+                "Provisioning status updated".to_string(),
+            )))
+        }
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExtendContractRequest {
+    pub extension_hours: i64,
+    pub memo: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExtendContractResponse {
+    pub extension_payment_e9s: i64,
+    pub new_end_timestamp_ns: i64,
+    pub message: String,
+}
+
+#[handler]
+pub async fn extend_contract(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(contract_id_hex): Path<String>,
+    Json(req): Json<ExtendContractRequest>,
+) -> PoemResult<Json<ApiResponse<ExtendContractResponse>>> {
+    let contract_id = match hex::decode(&contract_id_hex) {
+        Ok(id) => id,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid contract ID format".to_string(),
+            )))
+        }
+    };
+
+    match db
+        .extend_contract(
+            &contract_id,
+            &auth.pubkey_hash,
+            req.extension_hours,
+            req.memo,
+        )
+        .await
+    {
+        Ok(extension_payment_e9s) => {
+            // Get updated contract to return new end timestamp
+            match db.get_contract(&contract_id).await {
+                Ok(Some(contract)) => {
+                    let new_end_timestamp_ns = contract.end_timestamp_ns.unwrap_or(0);
+                    Ok(Json(ApiResponse::success(ExtendContractResponse {
+                        extension_payment_e9s,
+                        new_end_timestamp_ns,
+                        message: format!("Contract extended by {} hours", req.extension_hours),
+                    })))
+                }
+                _ => Ok(Json(ApiResponse::error(
+                    "Contract extended but failed to retrieve updated details".to_string(),
+                ))),
+            }
+        }
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
+pub async fn get_contract_extensions(
+    db: Data<&Arc<Database>>,
+    Path(contract_id_hex): Path<String>,
+) -> PoemResult<Json<ApiResponse<Vec<crate::database::contracts::ContractExtension>>>> {
+    let contract_id = match hex::decode(&contract_id_hex) {
+        Ok(id) => id,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid contract ID format".to_string(),
+            )))
+        }
+    };
+
+    match db.get_contract_extensions(&contract_id).await {
+        Ok(extensions) => Ok(Json(ApiResponse::success(extensions))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
 // ============ Token Endpoints ============
 
 #[handler]

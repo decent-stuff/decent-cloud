@@ -138,11 +138,18 @@ CREATE TABLE contract_sign_requests (
     region_name TEXT,
     instance_config TEXT,
     payment_amount_e9s INTEGER NOT NULL,
-    start_timestamp INTEGER,
+    start_timestamp_ns INTEGER,
+    end_timestamp_ns INTEGER,
+    duration_hours INTEGER,
+    original_duration_hours INTEGER,
     request_memo TEXT NOT NULL,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    status TEXT DEFAULT 'pending' -- pending, accepted, rejected, completed, cancelled
+    status TEXT DEFAULT 'pending', -- requested, pending, accepted, rejected, provisioning, provisioned, active, completed, cancelled
+    status_updated_at_ns INTEGER,
+    status_updated_by BLOB,
+    provisioning_instance_details TEXT,
+    provisioning_completed_at_ns INTEGER
 );
 
 -- Contract payment entries (properly normalized)
@@ -164,6 +171,21 @@ CREATE TABLE contract_sign_replies (
     reply_status TEXT NOT NULL, -- accepted, rejected
     reply_memo TEXT,
     instance_details TEXT, -- connection details, IP addresses, etc.
+    created_at_ns INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE
+);
+
+-- Contract extensions tracking
+CREATE TABLE contract_extensions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id BLOB NOT NULL,
+    extended_by_pubkey BLOB NOT NULL,
+    extension_hours INTEGER NOT NULL,
+    extension_payment_e9s INTEGER NOT NULL,
+    previous_end_timestamp_ns INTEGER NOT NULL,
+    new_end_timestamp_ns INTEGER NOT NULL,
+    extension_memo TEXT,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE
@@ -484,6 +506,8 @@ CREATE INDEX idx_contract_sign_requests_status ON contract_sign_requests(status)
 CREATE INDEX idx_contract_sign_requests_offering ON contract_sign_requests(offering_id);
 CREATE INDEX idx_contract_payment_entries_contract_id ON contract_payment_entries(contract_id);
 CREATE INDEX idx_contract_sign_replies_contract_id ON contract_sign_replies(contract_id);
+CREATE INDEX idx_contract_extensions_contract_id ON contract_extensions(contract_id);
+CREATE INDEX idx_contract_extensions_extended_by ON contract_extensions(extended_by_pubkey);
 CREATE INDEX idx_reputation_changes_pubkey_hash ON reputation_changes(pubkey_hash);
 CREATE INDEX idx_reputation_changes_timestamp ON reputation_changes(block_timestamp_ns);
 CREATE INDEX idx_linked_ic_ids_pubkey_hash ON linked_ic_ids(pubkey_hash);

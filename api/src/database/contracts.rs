@@ -15,13 +15,19 @@ pub struct Contract {
     pub region_name: Option<String>,
     pub instance_config: Option<String>,
     pub payment_amount_e9s: i64,
-    pub start_timestamp: Option<i64>,
+    pub start_timestamp_ns: Option<i64>,
+    pub end_timestamp_ns: Option<i64>,
+    pub duration_hours: Option<i64>,
+    pub original_duration_hours: Option<i64>,
     pub request_memo: String,
     pub created_at_ns: i64,
     pub status: String,
+    pub provisioning_instance_details: Option<String>,
+    pub provisioning_completed_at_ns: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct ContractReply {
     pub contract_id: Vec<u8>,
     pub provider_pubkey_hash: Vec<u8>,
@@ -32,6 +38,7 @@ pub struct ContractReply {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct PaymentEntry {
     pub pricing_model: String,
     pub time_period_unit: String,
@@ -45,6 +52,20 @@ pub struct RentalRequestParams {
     pub ssh_pubkey: Option<String>,
     pub contact_method: Option<String>,
     pub request_memo: Option<String>,
+    pub duration_hours: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ContractExtension {
+    pub id: i64,
+    pub contract_id: Vec<u8>,
+    pub extended_by_pubkey: Vec<u8>,
+    pub extension_hours: i64,
+    pub extension_payment_e9s: i64,
+    pub previous_end_timestamp_ns: i64,
+    pub new_end_timestamp_ns: i64,
+    pub extension_memo: Option<String>,
+    pub created_at_ns: i64,
 }
 
 impl Database {
@@ -100,6 +121,7 @@ impl Database {
     }
 
     /// Get contract reply
+    #[allow(dead_code)]
     pub async fn get_contract_reply(&self, contract_id: &[u8]) -> Result<Option<ContractReply>> {
         let reply = sqlx::query_as::<_, ContractReply>(
             "SELECT * FROM contract_sign_replies WHERE contract_id = ?",
@@ -112,6 +134,7 @@ impl Database {
     }
 
     /// Get contract payment entries
+    #[allow(dead_code)]
     pub async fn get_contract_payments(&self, contract_id: &[u8]) -> Result<Vec<PaymentEntry>> {
         let payments = sqlx::query_as::<_, PaymentEntry>(
             "SELECT pricing_model, time_period_unit, quantity, amount_e9s FROM contract_payment_entries WHERE contract_id = ?"
@@ -176,7 +199,15 @@ impl Database {
             .unwrap_or_else(|| format!("Rental request for {}", offering.offer_name));
 
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let payment_amount_e9s = (offering.monthly_price * 1_000_000_000.0) as i64;
+
+        // Calculate duration and timestamps
+        let duration_hours = params.duration_hours.unwrap_or(720); // Default: 30 days
+        let start_timestamp_ns = created_at_ns;
+        let end_timestamp_ns = start_timestamp_ns + (duration_hours * 3600 * 1_000_000_000);
+
+        // Calculate payment based on duration (monthly_price is per ~720 hours)
+        let payment_amount_e9s =
+            ((offering.monthly_price * duration_hours as f64 / 720.0) * 1_000_000_000.0) as i64;
 
         // Generate deterministic contract ID from SHA256 hash of request data
         use sha2::{Digest, Sha256};
@@ -196,8 +227,10 @@ impl Database {
             "INSERT INTO contract_sign_requests (
                 contract_id, requester_pubkey_hash, requester_ssh_pubkey,
                 requester_contact, provider_pubkey_hash, offering_id,
-                payment_amount_e9s, request_memo, created_at_ns, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+                duration_hours, original_duration_hours, request_memo,
+                created_at_ns, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&contract_id)
         .bind(requester_pubkey)
@@ -206,6 +239,10 @@ impl Database {
         .bind(&offering.pubkey_hash)
         .bind(&offering.offering_id)
         .bind(payment_amount_e9s)
+        .bind(start_timestamp_ns)
+        .bind(end_timestamp_ns)
+        .bind(duration_hours)
+        .bind(duration_hours) // original_duration_hours
         .bind(&memo)
         .bind(created_at_ns)
         .bind("requested")
@@ -214,6 +251,172 @@ impl Database {
 
         Ok(contract_id)
     }
+
+    /// Update contract status with authorization check
+    pub async fn update_contract_status(
+        &self,
+        contract_id: &[u8],
+        new_status: &str,
+        updated_by_pubkey: &[u8],
+    ) -> Result<()> {
+        // Get contract to verify authorization
+        let contract = self
+            .get_contract(contract_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
+
+        // Only provider can update status
+        if contract.provider_pubkey_hash != updated_by_pubkey {
+            return Err(anyhow::anyhow!(
+                "Unauthorized: only provider can update contract status"
+            ));
+        }
+
+        // Update status
+        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        sqlx::query(
+            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+        )
+        .bind(new_status)
+        .bind(updated_at_ns)
+        .bind(updated_by_pubkey)
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Add provisioning details to a contract
+    pub async fn add_provisioning_details(
+        &self,
+        contract_id: &[u8],
+        instance_details: &str,
+    ) -> Result<()> {
+        let provisioned_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query(
+            "UPDATE contract_sign_requests SET provisioning_instance_details = ?, provisioning_completed_at_ns = ? WHERE contract_id = ?",
+        )
+        .bind(instance_details)
+        .bind(provisioned_at_ns)
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Extend contract duration
+    pub async fn extend_contract(
+        &self,
+        contract_id: &[u8],
+        extended_by_pubkey: &[u8],
+        extension_hours: i64,
+        extension_memo: Option<String>,
+    ) -> Result<i64> {
+        // Get contract to verify it exists and is extendable
+        let contract = self
+            .get_contract(contract_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
+
+        // Verify authorization: only requester or provider can extend
+        if contract.requester_pubkey_hash != extended_by_pubkey
+            && contract.provider_pubkey_hash != extended_by_pubkey
+        {
+            return Err(anyhow::anyhow!(
+                "Unauthorized: only requester or provider can extend contract"
+            ));
+        }
+
+        // Verify contract is in extendable status (active or provisioned)
+        if contract.status != "active" && contract.status != "provisioned" {
+            return Err(anyhow::anyhow!(
+                "Contract cannot be extended in '{}' status",
+                contract.status
+            ));
+        }
+
+        // Get current end timestamp
+        let previous_end_timestamp_ns = contract
+            .end_timestamp_ns
+            .ok_or_else(|| anyhow::anyhow!("Contract has no end timestamp"))?;
+
+        // Calculate new end timestamp
+        let new_end_timestamp_ns =
+            previous_end_timestamp_ns + (extension_hours * 3600 * 1_000_000_000);
+
+        // Get offering to calculate extension payment
+        let offering = self
+            .get_offering_by_id(&contract.offering_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Offering not found"))?;
+
+        let extension_payment_e9s =
+            ((offering.monthly_price * extension_hours as f64 / 720.0) * 1_000_000_000.0) as i64;
+
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        // Update contract end timestamp and duration
+        let new_duration_hours = contract.duration_hours.unwrap_or(0) + extension_hours;
+        sqlx::query(
+            "UPDATE contract_sign_requests SET end_timestamp_ns = ?, duration_hours = ? WHERE contract_id = ?",
+        )
+        .bind(new_end_timestamp_ns)
+        .bind(new_duration_hours)
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?;
+
+        // Record extension in history
+        sqlx::query(
+            "INSERT INTO contract_extensions (contract_id, extended_by_pubkey, extension_hours, extension_payment_e9s, previous_end_timestamp_ns, new_end_timestamp_ns, extension_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(contract_id)
+        .bind(extended_by_pubkey)
+        .bind(extension_hours)
+        .bind(extension_payment_e9s)
+        .bind(previous_end_timestamp_ns)
+        .bind(new_end_timestamp_ns)
+        .bind(extension_memo)
+        .bind(created_at_ns)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(extension_payment_e9s)
+    }
+
+    /// Get extension history for a contract
+    pub async fn get_contract_extensions(
+        &self,
+        contract_id: &[u8],
+    ) -> Result<Vec<ContractExtension>> {
+        let extensions = sqlx::query_as::<_, ContractExtension>(
+            "SELECT * FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC",
+        )
+        .bind(contract_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(extensions)
+    }
+
+    /// Get offering by offering_id string
+    async fn get_offering_by_id(
+        &self,
+        offering_id: &str,
+    ) -> Result<Option<crate::database::offerings::Offering>> {
+        let offering = sqlx::query_as::<_, crate::database::offerings::Offering>(
+            "SELECT * FROM provider_offerings WHERE offering_id = ?",
+        )
+        .bind(offering_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(offering)
+    }
+
     // Contract sign requests
     pub async fn insert_contract_sign_requests(
         &self,
@@ -238,12 +441,12 @@ impl Database {
             let region_name = request.region_name().cloned();
             let instance_config = request.instance_config().cloned();
             let payment_amount_e9s = request.payment_amount_e9s() as i64;
-            let start_timestamp = request.contract_start_timestamp();
+            let start_timestamp_ns = request.contract_start_timestamp().map(|t| t as i64);
             let request_memo = request.request_memo().clone();
 
             // Insert the main contract request
             sqlx::query(
-                "INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp, request_memo, created_at_ns, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp_ns, request_memo, created_at_ns, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&contract_id)
             .bind(&requester_pubkey_hash)
@@ -254,7 +457,7 @@ impl Database {
             .bind(region_name.as_deref())
             .bind(instance_config.as_deref())
             .bind(payment_amount_e9s)
-            .bind(start_timestamp.map(|t| t as i64))
+            .bind(start_timestamp_ns)
             .bind(&request_memo)
             .bind(entry.block_timestamp_ns as i64)
             .bind("pending") // Default status

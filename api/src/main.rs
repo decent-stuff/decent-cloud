@@ -274,8 +274,29 @@ async fn serve_command() -> Result<(), std::io::Error> {
             poem::get(api_handlers::get_contract),
         )
         .at(
+            "/api/v1/contracts/:id/extend",
+            poem::post(api_handlers::extend_contract),
+        )
+        .at(
+            "/api/v1/contracts/:id/extensions",
+            poem::get(api_handlers::get_contract_extensions),
+        )
+        .at(
             "/api/v1/users/:pubkey/contracts",
             poem::get(api_handlers::get_user_contracts),
+        )
+        // Provider rental management endpoints
+        .at(
+            "/api/v1/provider/rental-requests/pending",
+            poem::get(api_handlers::get_pending_rental_requests),
+        )
+        .at(
+            "/api/v1/provider/rental-requests/:id/respond",
+            poem::post(api_handlers::respond_to_rental_request),
+        )
+        .at(
+            "/api/v1/provider/rental-requests/:id/provisioning",
+            poem::put(api_handlers::update_provisioning_status),
         )
         // User profile endpoints
         .at(

@@ -14,6 +14,7 @@ pub struct TokenTransfer {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct TokenApproval {
     pub owner_account: String,
     pub spender_account: String,
@@ -77,6 +78,7 @@ impl Database {
     }
 
     /// Get token approvals for an account
+    #[allow(dead_code)]
     pub async fn get_account_approvals(&self, account: &str) -> Result<Vec<TokenApproval>> {
         let approvals = sqlx::query_as::<_, TokenApproval>(
             "SELECT owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns

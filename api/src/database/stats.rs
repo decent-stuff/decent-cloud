@@ -112,6 +112,7 @@ impl Database {
     }
 
     /// Get top providers by reputation
+    #[allow(dead_code)]
     pub async fn get_top_providers_by_reputation(&self, limit: i64) -> Result<Vec<ReputationInfo>> {
         let top = sqlx::query_as::<_, ReputationInfo>(
             "SELECT pubkey_hash, SUM(change_amount) as total_reputation, COUNT(*) as change_count

@@ -154,6 +154,7 @@ async fn test_create_rental_request_success() {
         ssh_pubkey: Some("ssh-rsa AAAAB3...".to_string()),
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: Some("Test rental".to_string()),
+        duration_hours: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -200,6 +201,7 @@ async fn test_create_rental_request_with_defaults() {
         ssh_pubkey: None,
         contact_method: None,
         request_memo: None,
+        duration_hours: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -221,6 +223,7 @@ async fn test_create_rental_request_offering_not_found() {
         ssh_pubkey: Some("ssh-key".to_string()),
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: None,
+        duration_hours: None,
     };
 
     let result = db.create_rental_request(&user_pk, params).await;
@@ -246,6 +249,7 @@ async fn test_create_rental_request_calculates_price() {
         ssh_pubkey: Some("ssh-key".to_string()),
         contact_method: Some("contact".to_string()),
         request_memo: None,
+        duration_hours: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
