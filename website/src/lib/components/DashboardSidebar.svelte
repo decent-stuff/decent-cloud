@@ -8,7 +8,8 @@
 		{ href: '/dashboard', icon: '📊', label: 'Overview' },
 		{ href: '/dashboard/validators', icon: '✓', label: 'Validators' },
 		{ href: '/dashboard/offerings', icon: '📦', label: 'My Offerings' },
-		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' }
+		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' },
+		{ href: '/dashboard/rentals', icon: '🔑', label: 'My Rentals' }
 	];
 
 	let currentPath = $state('');

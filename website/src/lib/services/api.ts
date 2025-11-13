@@ -340,74 +340,90 @@ export async function downloadCSVTemplate(): Promise<void> {
 	URL.revokeObjectURL(url);
 }
 
-// Generate CSV headers from the Offering type structure
-function getOfferingsCSVHeader(): string[] {
-	// Create a sample Offering object with all possible properties
-	const sampleOffering: Offering = {
-		id: undefined,
-		offering_id: '',
-		offer_name: '',
-		description: null,
-		product_page_url: null,
-		currency: '',
-		monthly_price: 0,
-		setup_fee: 0,
-		visibility: '',
-		product_type: '',
-		virtualization_type: null,
-		billing_interval: '',
-		stock_status: '',
-		processor_brand: null,
-		processor_amount: undefined,
-		processor_cores: undefined,
-		processor_speed: null,
-		processor_name: null,
-		memory_error_correction: null,
-		memory_type: null,
-		memory_amount: null,
-		hdd_amount: undefined,
-		total_hdd_capacity: null,
-		ssd_amount: undefined,
-		total_ssd_capacity: null,
-		unmetered_bandwidth: false,
-		uplink_speed: null,
-		traffic: undefined,
-		datacenter_country: '',
-		datacenter_city: '',
-		datacenter_latitude: null,
-		datacenter_longitude: null,
-		control_panel: null,
-		gpu_name: null,
-		min_contract_hours: undefined,
-		max_contract_hours: undefined,
-		payment_methods: null,
-		features: null,
-		operating_systems: null,
-		pubkey_hash: ''
-	};
-	
-	// Exclude id and pubkey_hash as they are not part of the CSV export
-	return Object.keys(sampleOffering)
-		.filter(key => key !== 'id' && key !== 'pubkey_hash')
-		.sort(); // Sort to maintain consistent order
-}
-
 export function offeringToCSVRow(offering: Offering): string[] {
-	const headers = getOfferingsCSVHeader();
-	return headers.map(header => {
-		const value = offering[header as keyof Offering];
-		if (value === null || value === undefined) {
-			return '';
-		}
-		if (typeof value === 'number' || typeof value === 'boolean') {
-			return value.toString();
-		}
-		return value;
-	});
+	return [
+		offering.offering_id,
+		offering.offer_name,
+		offering.description || '',
+		offering.product_page_url || '',
+		offering.currency,
+		offering.monthly_price.toString(),
+		offering.setup_fee.toString(),
+		offering.visibility,
+		offering.product_type,
+		offering.virtualization_type || '',
+		offering.billing_interval,
+		offering.stock_status,
+		offering.processor_brand || '',
+		offering.processor_amount?.toString() || '',
+		offering.processor_cores?.toString() || '',
+		offering.processor_speed || '',
+		offering.processor_name || '',
+		offering.memory_error_correction || '',
+		offering.memory_type || '',
+		offering.memory_amount || '',
+		offering.hdd_amount?.toString() || '',
+		offering.total_hdd_capacity || '',
+		offering.ssd_amount?.toString() || '',
+		offering.total_ssd_capacity || '',
+		offering.unmetered_bandwidth.toString(),
+		offering.uplink_speed || '',
+		offering.traffic?.toString() || '',
+		offering.datacenter_country,
+		offering.datacenter_city,
+		offering.datacenter_latitude?.toString() || '',
+		offering.datacenter_longitude?.toString() || '',
+		offering.control_panel || '',
+		offering.gpu_name || '',
+		offering.min_contract_hours?.toString() || '',
+		offering.max_contract_hours?.toString() || '',
+		offering.payment_methods || '',
+		offering.features || '',
+		offering.operating_systems || ''
+	];
 }
 
-// CSV header for offerings - generated dynamically
-const OFFERINGS_CSV_HEADER = getOfferingsCSVHeader();
+// CSV header for offerings
+const OFFERINGS_CSV_HEADER = [
+	'offering_id',
+	'offer_name',
+	'description',
+	'product_page_url',
+	'currency',
+	'monthly_price',
+	'setup_fee',
+	'visibility',
+	'product_type',
+	'virtualization_type',
+	'billing_interval',
+	'stock_status',
+	'processor_brand',
+	'processor_amount',
+	'processor_cores',
+	'processor_speed',
+	'processor_name',
+	'memory_error_correction',
+	'memory_type',
+	'memory_amount',
+	'hdd_amount',
+	'total_hdd_capacity',
+	'ssd_amount',
+	'total_ssd_capacity',
+	'unmetered_bandwidth',
+	'uplink_speed',
+	'traffic',
+	'datacenter_country',
+	'datacenter_city',
+	'datacenter_latitude',
+	'datacenter_longitude',
+	'control_panel',
+	'gpu_name',
+	'min_contract_hours',
+	'max_contract_hours',
+	'payment_methods',
+	'features',
+	'operating_systems'
+];
 
 export function offeringsToCSV(offerings: Offering[]): string {
 	const rows = [OFFERINGS_CSV_HEADER, ...offerings.map(offeringToCSVRow)];
@@ -430,6 +446,27 @@ export async function downloadOfferingsCSV(offerings: Offering[], filename: stri
 }
 
 // ============ Rental Request Endpoints ============
+
+export interface Contract {
+	contract_id: string;
+	requester_pubkey_hash: string;
+	requester_ssh_pubkey: string;
+	requester_contact: string;
+	provider_pubkey_hash: string;
+	offering_id: string;
+	region_name?: string;
+	instance_config?: string;
+	payment_amount_e9s: number;
+	start_timestamp_ns?: number;
+	end_timestamp_ns?: number;
+	duration_hours?: number;
+	original_duration_hours?: number;
+	request_memo: string;
+	created_at_ns: number;
+	status: string;
+	provisioning_instance_details?: string;
+	provisioning_completed_at_ns?: number;
+}
 
 export interface RentalRequestParams {
 	offering_db_id: number;
@@ -472,4 +509,31 @@ export async function createRentalRequest(
 	}
 
 	return payload.data;
+}
+
+export async function getUserContracts(headers: SignedRequestHeaders): Promise<Contract[]> {
+	const url = `${API_BASE_URL}/api/v1/contracts/user`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch user contracts: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Contract[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch user contracts');
+	}
+
+	const contracts = payload.data ?? [];
+	return contracts.map((c) => ({
+		...c,
+		contract_id: normalizePubkeyHash(c.contract_id),
+		requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
+		provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+	}));
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, hexEncode } from './api';
+import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, hexEncode, getUserContracts } from './api';
 
 const sampleStats = {
 	total_providers: 10,
@@ -264,5 +264,108 @@ describe('hexEncode', () => {
 	it('pads single digit hex values', () => {
 		const bytes = new Uint8Array([0x0a, 0x0b]);
 		expect(hexEncode(bytes)).toBe('0a0b');
+	});
+});
+
+describe('getUserContracts', () => {
+	const sampleContracts = [
+		{
+			contract_id: [1, 2, 3, 4],
+			requester_pubkey_hash: [5, 6, 7, 8],
+			provider_pubkey_hash: [9, 10, 11, 12],
+			requester_ssh_pubkey: 'ssh-ed25519 AAAA...',
+			requester_contact: 'user@example.com',
+			offering_id: 'off-123',
+			payment_amount_e9s: 1000000000,
+			request_memo: 'Test rental',
+			created_at_ns: 1234567890000000,
+			status: 'requested'
+		}
+	];
+
+	const mockHeaders = {
+		'Content-Type': 'application/json',
+		'X-DCC-Pubkey': 'test-pubkey',
+		'X-DCC-Timestamp': '123456789',
+		'X-DCC-Signature': 'test-signature'
+	};
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('fetches and normalizes user contracts successfully', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: sampleContracts })
+		});
+
+		const contracts = await getUserContracts(mockHeaders);
+
+		expect(contracts).toHaveLength(1);
+		expect(contracts[0].contract_id).toBe('01020304');
+		expect(contracts[0].requester_pubkey_hash).toBe('05060708');
+		expect(contracts[0].provider_pubkey_hash).toBe('090a0b0c');
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/contracts/user'),
+			expect.objectContaining({
+				method: 'GET',
+				headers: mockHeaders
+			})
+		);
+	});
+
+	it('handles string pubkey hashes', async () => {
+		const contractsWithStringHashes = [
+			{
+				...sampleContracts[0],
+				contract_id: 'abc123',
+				requester_pubkey_hash: 'def456',
+				provider_pubkey_hash: 'ghi789'
+			}
+		];
+
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: contractsWithStringHashes })
+		});
+
+		const contracts = await getUserContracts(mockHeaders);
+
+		expect(contracts[0].contract_id).toBe('abc123');
+		expect(contracts[0].requester_pubkey_hash).toBe('def456');
+		expect(contracts[0].provider_pubkey_hash).toBe('ghi789');
+	});
+
+	it('returns empty array when no contracts exist', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: [] })
+		});
+
+		const contracts = await getUserContracts(mockHeaders);
+
+		expect(contracts).toEqual([]);
+	});
+
+	it('throws when API response is not ok', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 401,
+			statusText: 'Unauthorized'
+		});
+
+		await expect(getUserContracts(mockHeaders)).rejects.toThrow(
+			'Failed to fetch user contracts: 401 Unauthorized'
+		);
+	});
+
+	it('throws when API reports failure', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: false, error: 'Database error' })
+		});
+
+		await expect(getUserContracts(mockHeaders)).rejects.toThrow('Database error');
 	});
 });
