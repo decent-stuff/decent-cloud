@@ -1,12 +1,21 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { searchOfferings, type Offering } from "$lib/services/api";
+	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
+	import { authStore } from "$lib/stores/auth";
 
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let searchQuery = $state("");
 	let selectedType = $state<"all" | string>("all");
+	let selectedOffering = $state<Offering | null>(null);
+	let successMessage = $state<string | null>(null);
+	let isAuthenticated = $state(false);
+
+	authStore.isAuthenticated.subscribe((value) => {
+		isAuthenticated = value;
+	});
 
 	onMount(async () => {
 		try {
@@ -23,6 +32,26 @@
 			loading = false;
 		}
 	});
+
+	function handleRentClick(offering: Offering) {
+		if (!isAuthenticated) {
+			error = "Please log in to rent resources";
+			return;
+		}
+		selectedOffering = offering;
+	}
+
+	function handleDialogClose() {
+		selectedOffering = null;
+	}
+
+	function handleRentalSuccess(contractId: string) {
+		selectedOffering = null;
+		successMessage = `Rental request created successfully! Contract ID: ${contractId}`;
+		setTimeout(() => {
+			successMessage = null;
+		}, 5000);
+	}
 
 	const filteredOfferings = $derived(
 		offerings.filter((offering) => {
@@ -89,6 +118,15 @@
 			Discover and purchase cloud services from trusted providers
 		</p>
 	</div>
+
+	{#if successMessage}
+		<div
+			class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-400"
+		>
+			<p class="font-semibold">Success!</p>
+			<p class="text-sm mt-1">{successMessage}</p>
+		</div>
+	{/if}
 
 	{#if error}
 		<div
@@ -225,9 +263,10 @@
 					</div>
 
 					<button
+						onclick={() => handleRentClick(offering)}
 						class="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
 					>
-						Deploy Now
+						🚀 Rent Resource
 					</button>
 				</div>
 			{/each}
@@ -247,3 +286,10 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- Rental Request Dialog -->
+<RentalRequestDialog
+	offering={selectedOffering}
+	onClose={handleDialogClose}
+	onSuccess={handleRentalSuccess}
+/>
