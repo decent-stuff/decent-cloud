@@ -511,8 +511,16 @@ export async function createRentalRequest(
 	return payload.data;
 }
 
-export async function getUserContracts(headers: SignedRequestHeaders): Promise<Contract[]> {
-	const url = `${API_BASE_URL}/api/v1/contracts/user`;
+export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?: string): Promise<Contract[]> {
+	if (!pubkeyHex) {
+		const pubkey = headers['X-Public-Key'];
+		if (!pubkey) {
+			throw new Error('Public key is required to fetch user contracts');
+		}
+		pubkeyHex = pubkey;
+	}
+	
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/contracts`;
 
 	const response = await fetch(url, {
 		method: 'GET',

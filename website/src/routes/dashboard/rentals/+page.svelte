@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { getUserContracts, type Contract } from "$lib/services/api";
+	import { getUserContracts, type Contract, hexEncode } from "$lib/services/api";
 	import { authStore } from "$lib/stores/auth";
+	import { signRequest } from "$lib/services/auth-api";
 
 	let contracts = $state<Contract[]>([]);
 	let loading = $state(true);
@@ -11,11 +12,20 @@
 		try {
 			loading = true;
 			error = null;
-			const signedHeaders = await authStore.sign({
-				method: "GET",
-				path: "/api/v1/contracts/user",
-			});
-			contracts = await getUserContracts(signedHeaders);
+			
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				error = "You must be authenticated to view rentals";
+				return;
+			}
+			
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/users/${hexEncode(signingIdentityInfo.publicKeyBytes)}/contracts`
+			);
+			
+			contracts = await getUserContracts(headers, hexEncode(signingIdentityInfo.publicKeyBytes));
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load rentals";
 			console.error("Error loading rentals:", e);
