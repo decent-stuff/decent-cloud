@@ -800,3 +800,232 @@ async fn test_example_offerings_excluded_from_search() {
         "Count should only include public offerings, not examples"
     );
 }
+
+// Validator tests
+#[tokio::test]
+async fn test_get_active_validators() {
+    let db = setup_test_db().await;
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    // Create test validators with different activity patterns
+    let validator1 = b"validator_1_active_now";
+    let validator2 = b"validator_2_active_week";
+    let validator3 = b"validator_3_inactive";
+
+    // Register all validators
+    let registrations = vec![
+        TestDataFactory::registration_entry("ProvRegister", validator1),
+        TestDataFactory::registration_entry("ProvRegister", validator2),
+        TestDataFactory::registration_entry("ProvRegister", validator3),
+    ];
+    db.insert_entries(registrations).await.unwrap();
+
+    // Validator 1: Multiple recent check-ins (last 24h, 7d, 30d)
+    let check_ins_v1 = vec![
+        TestDataFactory::ledger_entry(
+            "ProvCheckIn",
+            validator1,
+            &dcc_common::CheckInPayload::new("recent1".to_string(), vec![1, 2, 3, 4])
+                .to_bytes()
+                .unwrap(),
+            (now_ns - 1 * 3600 * 1_000_000_000) as u64, // 1 hour ago
+            1,
+        ),
+        TestDataFactory::ledger_entry(
+            "ProvCheckIn",
+            validator1,
+            &dcc_common::CheckInPayload::new("recent2".to_string(), vec![5, 6, 7, 8])
+                .to_bytes()
+                .unwrap(),
+            (now_ns - 12 * 3600 * 1_000_000_000) as u64, // 12 hours ago
+            2,
+        ),
+        TestDataFactory::ledger_entry(
+            "ProvCheckIn",
+            validator1,
+            &dcc_common::CheckInPayload::new("week_ago".to_string(), vec![9, 10, 11, 12])
+                .to_bytes()
+                .unwrap(),
+            (now_ns - 3 * 24 * 3600 * 1_000_000_000) as u64, // 3 days ago
+            3,
+        ),
+    ];
+
+    // Validator 2: Only checked in 10 days ago (within 30d but not 7d)
+    let check_ins_v2 = vec![TestDataFactory::ledger_entry(
+        "ProvCheckIn",
+        validator2,
+        &dcc_common::CheckInPayload::new("ten_days_ago".to_string(), vec![13, 14, 15, 16])
+            .to_bytes()
+            .unwrap(),
+        (now_ns - 10 * 24 * 3600 * 1_000_000_000) as u64, // 10 days ago
+        4,
+    )];
+
+    // Validator 3: Checked in 35 days ago (inactive)
+    let check_ins_v3 = vec![TestDataFactory::ledger_entry(
+        "ProvCheckIn",
+        validator3,
+        &dcc_common::CheckInPayload::new("old".to_string(), vec![17, 18, 19, 20])
+            .to_bytes()
+            .unwrap(),
+        (now_ns - 35 * 24 * 3600 * 1_000_000_000) as u64, // 35 days ago
+        5,
+    )];
+
+    db.insert_entries(check_ins_v1).await.unwrap();
+    db.insert_entries(check_ins_v2).await.unwrap();
+    db.insert_entries(check_ins_v3).await.unwrap();
+
+    // Test: Get validators active in last 30 days
+    let validators_30d = db.get_active_validators(30).await.unwrap();
+    assert_eq!(
+        validators_30d.len(),
+        2,
+        "Should have 2 validators active in last 30 days"
+    );
+
+    // Find validator1 in results
+    let v1 = validators_30d
+        .iter()
+        .find(|v| v.pubkey_hash == validator1)
+        .expect("Validator 1 should be in results");
+
+    assert_eq!(v1.total_check_ins, 3, "Validator 1 should have 3 total check-ins");
+    assert_eq!(v1.check_ins_24h, 2, "Validator 1 should have 2 check-ins in last 24h");
+    assert_eq!(v1.check_ins_7d, 3, "Validator 1 should have 3 check-ins in last 7d");
+    assert_eq!(v1.check_ins_30d, 3, "Validator 1 should have 3 check-ins in last 30d");
+
+    // Find validator2 in results
+    let v2 = validators_30d
+        .iter()
+        .find(|v| v.pubkey_hash == validator2)
+        .expect("Validator 2 should be in results");
+
+    assert_eq!(v2.total_check_ins, 1, "Validator 2 should have 1 total check-in");
+    assert_eq!(v2.check_ins_24h, 0, "Validator 2 should have 0 check-ins in last 24h");
+    assert_eq!(v2.check_ins_7d, 0, "Validator 2 should have 0 check-ins in last 7d");
+    assert_eq!(v2.check_ins_30d, 1, "Validator 2 should have 1 check-in in last 30d");
+
+    // Test: Get validators active in last 7 days (should only have validator1)
+    let validators_7d = db.get_active_validators(7).await.unwrap();
+    assert_eq!(
+        validators_7d.len(),
+        1,
+        "Should have 1 validator active in last 7 days"
+    );
+    assert_eq!(
+        validators_7d[0].pubkey_hash, validator1,
+        "Only validator 1 should be active in last 7 days"
+    );
+
+    // Test: Get validators active in last 1 day (should only have validator1)
+    let validators_1d = db.get_active_validators(1).await.unwrap();
+    assert_eq!(
+        validators_1d.len(),
+        1,
+        "Should have 1 validator active in last 24 hours"
+    );
+    assert_eq!(validators_1d[0].check_ins_24h, 2, "Should have 2 check-ins in 24h");
+}
+
+#[tokio::test]
+async fn test_get_active_validators_with_profile() {
+    let db = setup_test_db().await;
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    let validator_key = b"validator_with_profile";
+
+    // Register validator
+    db.insert_entries(vec![TestDataFactory::registration_entry(
+        "ProvRegister",
+        validator_key,
+    )])
+    .await
+    .unwrap();
+
+    // Add check-in
+    db.insert_entries(vec![TestDataFactory::ledger_entry(
+        "ProvCheckIn",
+        validator_key,
+        &dcc_common::CheckInPayload::new("test".to_string(), vec![1, 2, 3, 4])
+            .to_bytes()
+            .unwrap(),
+        (now_ns - 3600 * 1_000_000_000) as u64,
+        1,
+    )])
+    .await
+    .unwrap();
+
+    // Add profile for this validator
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey_hash, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&validator_key[..])
+    .bind("Test Validator")
+    .bind(Some("A test validator"))
+    .bind(Some("https://example.com"))
+    .bind(Some("https://example.com/logo.png"))
+    .bind(Some("We're reliable!"))
+    .bind("v1")
+    .bind("0.1.0")
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Get active validators
+    let validators = db.get_active_validators(1).await.unwrap();
+    assert_eq!(validators.len(), 1);
+
+    let validator = &validators[0];
+    assert_eq!(validator.name, Some("Test Validator".to_string()));
+    assert_eq!(validator.description, Some("A test validator".to_string()));
+    assert_eq!(validator.website_url, Some("https://example.com".to_string()));
+    assert_eq!(
+        validator.logo_url,
+        Some("https://example.com/logo.png".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_get_active_validators_without_profile() {
+    let db = setup_test_db().await;
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    let validator_key = b"validator_no_profile";
+
+    // Register validator (no profile)
+    db.insert_entries(vec![TestDataFactory::registration_entry(
+        "ProvRegister",
+        validator_key,
+    )])
+    .await
+    .unwrap();
+
+    // Add check-in
+    db.insert_entries(vec![TestDataFactory::ledger_entry(
+        "ProvCheckIn",
+        validator_key,
+        &dcc_common::CheckInPayload::new("test".to_string(), vec![1, 2, 3, 4])
+            .to_bytes()
+            .unwrap(),
+        (now_ns - 3600 * 1_000_000_000) as u64,
+        1,
+    )])
+    .await
+    .unwrap();
+
+    // Get active validators - should still return the validator even without a profile
+    let validators = db.get_active_validators(1).await.unwrap();
+    assert_eq!(validators.len(), 1);
+
+    let validator = &validators[0];
+    assert_eq!(validator.name, None);
+    assert_eq!(validator.description, None);
+    assert_eq!(validator.website_url, None);
+    assert_eq!(validator.logo_url, None);
+    assert_eq!(validator.total_check_ins, 1);
+    assert_eq!(validator.check_ins_24h, 1);
+}

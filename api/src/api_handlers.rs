@@ -137,6 +137,17 @@ pub async fn get_active_providers(
 }
 
 #[handler]
+pub async fn get_active_validators(
+    db: Data<&Arc<Database>>,
+    Path(days): Path<i64>,
+) -> PoemResult<Json<ApiResponse<Vec<crate::database::providers::Validator>>>> {
+    match db.get_active_validators(days).await {
+        Ok(validators) => Ok(Json(ApiResponse::success(validators))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
+#[handler]
 pub async fn get_provider_profile(
     db: Data<&Arc<Database>>,
     Path(pubkey_hex): Path<String>,

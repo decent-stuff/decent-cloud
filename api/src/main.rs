@@ -206,6 +206,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
             poem::get(api_handlers::get_active_providers),
         )
         .at(
+            "/api/v1/validators/active/:days",
+            poem::get(api_handlers::get_active_validators),
+        )
+        .at(
             "/api/v1/providers/:pubkey",
             poem::get(api_handlers::get_provider_profile),
         )
