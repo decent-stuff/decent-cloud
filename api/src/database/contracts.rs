@@ -258,6 +258,7 @@ impl Database {
         contract_id: &[u8],
         new_status: &str,
         updated_by_pubkey: &[u8],
+        change_memo: Option<&str>,
     ) -> Result<()> {
         // Get contract to verify authorization
         let contract = self
@@ -272,8 +273,9 @@ impl Database {
             ));
         }
 
-        // Update status
+        // Update status and history atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let mut tx = self.pool.begin().await?;
         sqlx::query(
             "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
         )
@@ -281,8 +283,20 @@ impl Database {
         .bind(updated_at_ns)
         .bind(updated_by_pubkey)
         .bind(contract_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+
+        sqlx::query("INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(contract_id)
+            .bind(&contract.status)
+            .bind(new_status)
+            .bind(updated_by_pubkey)
+            .bind(updated_at_ns)
+            .bind(change_memo)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }
@@ -295,14 +309,27 @@ impl Database {
     ) -> Result<()> {
         let provisioned_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
+        let mut tx = self.pool.begin().await?;
+
         sqlx::query(
             "UPDATE contract_sign_requests SET provisioning_instance_details = ?, provisioning_completed_at_ns = ? WHERE contract_id = ?",
         )
         .bind(instance_details)
         .bind(provisioned_at_ns)
         .bind(contract_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+
+        sqlx::query("INSERT INTO contract_provisioning_details (contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns) VALUES (?, ?, ?, ?, ?) ON CONFLICT(contract_id) DO UPDATE SET instance_ip = excluded.instance_ip, instance_credentials = excluded.instance_credentials, connection_instructions = excluded.connection_instructions, provisioned_at_ns = excluded.provisioned_at_ns")
+            .bind(contract_id)
+            .bind(Option::<&str>::None)
+            .bind(Option::<&str>::None)
+            .bind(instance_details)
+            .bind(provisioned_at_ns)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }

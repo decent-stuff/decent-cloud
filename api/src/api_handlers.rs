@@ -856,7 +856,6 @@ pub async fn get_pending_rental_requests(
 #[derive(Debug, Deserialize)]
 pub struct RentalResponseRequest {
     pub accept: bool,
-    #[allow(dead_code)]
     pub memo: Option<String>,
 }
 
@@ -879,7 +878,12 @@ pub async fn respond_to_rental_request(
     let new_status = if req.accept { "accepted" } else { "rejected" };
 
     match db
-        .update_contract_status(&contract_id, new_status, &auth.pubkey_hash)
+        .update_contract_status(
+            &contract_id,
+            new_status,
+            &auth.pubkey_hash,
+            req.memo.as_deref(),
+        )
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::success(format!(
@@ -894,6 +898,28 @@ pub async fn respond_to_rental_request(
 pub struct ProvisioningStatusRequest {
     pub status: String,
     pub instance_details: Option<String>,
+}
+
+fn normalize_provisioning_details(
+    status: &str,
+    details: Option<String>,
+) -> Result<Option<String>, String> {
+    let sanitized = details.and_then(|raw| {
+        let trimmed = raw.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+
+    if status == "provisioned" && sanitized.is_none() {
+        return Err(
+            "Instance details are required when marking a contract as provisioned".to_string(),
+        );
+    }
+
+    Ok(sanitized)
 }
 
 #[handler]
@@ -912,16 +938,26 @@ pub async fn update_provisioning_status(
         }
     };
 
+    let ProvisioningStatusRequest {
+        status,
+        instance_details,
+    } = req;
+
+    let sanitized_details = match normalize_provisioning_details(&status, instance_details) {
+        Ok(details) => details,
+        Err(msg) => return Ok(Json(ApiResponse::error(msg))),
+    };
+
     // Update status
     match db
-        .update_contract_status(&contract_id, &req.status, &auth.pubkey_hash)
+        .update_contract_status(&contract_id, &status, &auth.pubkey_hash, None)
         .await
     {
         Ok(_) => {
             // If provisioned status and instance details provided, add details
-            if req.status == "provisioned" {
-                if let Some(details) = req.instance_details {
-                    if let Err(e) = db.add_provisioning_details(&contract_id, &details).await {
+            if status == "provisioned" {
+                if let Some(details) = sanitized_details.as_deref() {
+                    if let Err(e) = db.add_provisioning_details(&contract_id, details).await {
                         return Ok(Json(ApiResponse::error(format!(
                             "Status updated but failed to save details: {}",
                             e
@@ -1467,5 +1503,21 @@ mod tests {
     #[test]
     fn export_typescript_types() {
         PlatformOverview::export().expect("Failed to export PlatformOverview type");
+    }
+
+    #[test]
+    fn normalize_provisioning_details_trims_value() {
+        let result = normalize_provisioning_details(
+            "provisioning",
+            Some("   ip:1.2.3.4\nuser:root   ".to_string()),
+        )
+        .unwrap();
+        assert_eq!(result.as_deref(), Some("ip:1.2.3.4\nuser:root"));
+    }
+
+    #[test]
+    fn normalize_provisioning_details_requires_data_when_provisioned() {
+        assert!(normalize_provisioning_details("provisioned", None).is_err());
+        assert!(normalize_provisioning_details("provisioned", Some("   ".to_string())).is_err());
     }
 }

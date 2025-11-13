@@ -258,3 +258,110 @@ async fn test_create_rental_request_calculates_price() {
     // 499.99 * 1_000_000_000 = 499_990_000_000
     assert_eq!(contract.payment_amount_e9s, 499_990_000_000);
 }
+
+#[tokio::test]
+async fn test_update_contract_status_records_history() {
+    let db = setup_test_db().await;
+    let contract_id = vec![9u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+        .bind(&contract_id)
+        .bind(&requester_pk)
+        .bind(&provider_pk)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    db.update_contract_status(&contract_id, "accepted", &provider_pk, Some("all good"))
+        .await
+        .unwrap();
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "accepted");
+
+    let history = sqlx::query_as::<_, (String, String, Option<String>)>("SELECT old_status, new_status, change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1")
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(history.0, "pending");
+    assert_eq!(history.1, "accepted");
+    assert_eq!(history.2.as_deref(), Some("all good"));
+}
+
+#[tokio::test]
+async fn test_update_contract_status_rejects_non_provider() {
+    let db = setup_test_db().await;
+    let contract_id = vec![5u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let attacker_pk = vec![3u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-2', 1000, 'memo', 0, 'requested')")
+        .bind(&contract_id)
+        .bind(&requester_pk)
+        .bind(&provider_pk)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    let result = db
+        .update_contract_status(&contract_id, "accepted", &attacker_pk, None)
+        .await;
+    assert!(result.is_err());
+
+    let history_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM contract_status_history WHERE contract_id = ?")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(history_count, 0);
+}
+
+#[tokio::test]
+async fn test_add_provisioning_details_persists_connection_info() {
+    let db = setup_test_db().await;
+    let contract_id = vec![7u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-3', 1000, 'memo', 0, 'accepted')")
+        .bind(&contract_id)
+        .bind(&requester_pk)
+        .bind(&provider_pk)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    db.add_provisioning_details(&contract_id, "ip:1.2.3.4\nuser:root")
+        .await
+        .unwrap();
+
+    let provisioning: Option<String> = sqlx::query_scalar(
+        "SELECT provisioning_instance_details FROM contract_sign_requests WHERE contract_id = ?",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(provisioning.as_deref(), Some("ip:1.2.3.4\nuser:root"));
+
+    let detail_row = sqlx::query_as::<_, (Vec<u8>, Option<String>, Option<String>, Option<String>, i64)>("SELECT contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns FROM contract_provisioning_details WHERE contract_id = ?")
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(detail_row.0, contract_id);
+    assert_eq!(detail_row.1, None);
+    assert_eq!(detail_row.2, None);
+    assert_eq!(detail_row.3.as_deref(), Some("ip:1.2.3.4\nuser:root"));
+    assert!(detail_row.4 > 0);
+}

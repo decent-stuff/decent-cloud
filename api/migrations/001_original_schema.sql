@@ -152,6 +152,33 @@ CREATE TABLE contract_sign_requests (
     provisioning_completed_at_ns INTEGER
 );
 
+-- Detailed provisioning data per contract
+CREATE TABLE IF NOT EXISTS contract_provisioning_details (
+    contract_id BLOB PRIMARY KEY,
+    instance_ip TEXT,
+    instance_credentials TEXT,
+    connection_instructions TEXT,
+    provisioned_at_ns INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE
+);
+
+-- Status change history
+CREATE TABLE IF NOT EXISTS contract_status_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id BLOB NOT NULL,
+    old_status TEXT NOT NULL,
+    new_status TEXT NOT NULL,
+    changed_by BLOB NOT NULL,
+    changed_at_ns INTEGER NOT NULL,
+    change_memo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_contract_status_history_contract ON contract_status_history(contract_id);
+CREATE INDEX IF NOT EXISTS idx_contract_status_history_changed_at ON contract_status_history(changed_at_ns);
+
 -- Contract payment entries (properly normalized)
 CREATE TABLE contract_payment_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
