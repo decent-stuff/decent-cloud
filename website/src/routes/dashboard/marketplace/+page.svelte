@@ -109,6 +109,11 @@
 			? specs.join(", ")
 			: offering.description || "No details available";
 	}
+
+	function shortPubkey(pubkey: string): string {
+		if (pubkey.length <= 12) return pubkey;
+		return `${pubkey.slice(0, 6)}...${pubkey.slice(-6)}`;
+	}
 </script>
 
 <div class="space-y-8">
@@ -223,9 +228,19 @@
 					>
 						{offering.offer_name}
 					</h3>
-					<p class="text-white/60 text-sm mb-4">
+					<p class="text-white/60 text-sm mb-2">
 						{offering.product_type}
 					</p>
+
+					<!-- Provider Info -->
+					<a
+						href="/dashboard/user/{offering.pubkey_hash}"
+						class="flex items-center gap-2 text-sm text-white/70 hover:text-blue-400 transition-colors mb-4"
+					>
+						<span class="text-xs">👤</span>
+						<span class="font-mono text-xs">{shortPubkey(offering.pubkey_hash)}</span>
+						<span class="text-xs">→</span>
+					</a>
 
 					<div class="space-y-2 text-sm mb-4">
 						<div

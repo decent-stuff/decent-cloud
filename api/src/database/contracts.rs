@@ -8,15 +8,12 @@ use ts_rs::TS;
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct Contract {
-    #[ts(skip)]
     #[serde(skip_deserializing)]
     pub contract_id: Vec<u8>,
-    #[ts(skip)]
     #[serde(skip_deserializing)]
     pub requester_pubkey_hash: Vec<u8>,
     pub requester_ssh_pubkey: String,
     pub requester_contact: String,
-    #[ts(skip)]
     #[serde(skip_deserializing)]
     pub provider_pubkey_hash: Vec<u8>,
     pub offering_id: String,

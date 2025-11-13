@@ -96,14 +96,14 @@ describe('UserApiClient', () => {
 	describe('deleteContact', () => {
 		it('calls DELETE with contact type', async () => {
 			const pubkey = 'test-pubkey';
-			const contactType = 'email';
+			const contactId = 123;
 
-			await client.deleteContact(pubkey, contactType);
+			await client.deleteContact(pubkey, contactId);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'DELETE',
-				`/api/v1/users/${pubkey}/contacts/${contactType}`,
+				`/api/v1/users/${pubkey}/contacts/${contactId}`,
 				undefined
 			);
 		});
@@ -132,14 +132,14 @@ describe('UserApiClient', () => {
 	describe('deleteSocial', () => {
 		it('calls DELETE with platform', async () => {
 			const pubkey = 'test-pubkey';
-			const platform = 'twitter';
+			const socialId = 456;
 
-			await client.deleteSocial(pubkey, platform);
+			await client.deleteSocial(pubkey, socialId);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'DELETE',
-				`/api/v1/users/${pubkey}/socials/${platform}`,
+				`/api/v1/users/${pubkey}/socials/${socialId}`,
 				undefined
 			);
 		});
@@ -169,14 +169,14 @@ describe('UserApiClient', () => {
 	describe('deletePublicKey', () => {
 		it('calls DELETE with fingerprint', async () => {
 			const pubkey = 'test-pubkey';
-			const fingerprint = 'SHA256:abc123';
+			const keyId = 789;
 
-			await client.deletePublicKey(pubkey, fingerprint);
+			await client.deletePublicKey(pubkey, keyId);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'DELETE',
-				`/api/v1/users/${pubkey}/keys/${fingerprint}`,
+				`/api/v1/users/${pubkey}/keys/${keyId}`,
 				undefined
 			);
 		});

@@ -55,12 +55,14 @@ let signingIdentityInfo = $state<SigningIdentity | null>(null);
 			};
 			signingIdentityInfo = normalizedIdentity;
 			providerHex = hexEncode(normalizedIdentity.publicKeyBytes);
+			console.log('[Provider Requests] Authenticated as provider:', providerHex);
 			const pendingSigned = await signRequest(
 				normalizedIdentity.identity,
 				"GET",
 				"/api/v1/provider/rental-requests/pending",
 			);
 			pendingRequests = await getPendingProviderRequests(pendingSigned.headers);
+			console.log('[Provider Requests] Found pending requests:', pendingRequests.length);
 			const contractsSigned = await signRequest(
 				normalizedIdentity.identity,
 				"GET",

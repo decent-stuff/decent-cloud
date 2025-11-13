@@ -29,9 +29,14 @@
 					{statusBadge.text}
 				</span>
 			</div>
-			<p class="text-white/60 text-sm">
+			<a
+				href="/dashboard/user/{contract.requester_pubkey_hash}"
+				class="text-white/60 text-sm hover:text-blue-400 transition-colors inline-flex items-center gap-1"
+			>
+				<span class="text-xs">👤</span>
 				Requester: {truncateContractHash(contract.requester_pubkey_hash)}
-			</p>
+				<span class="text-xs">→</span>
+			</a>
 		</div>
 		<div class="text-right">
 			<div class="text-2xl font-bold text-white">
