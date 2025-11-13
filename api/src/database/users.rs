@@ -47,6 +47,14 @@ pub struct UserPublicKey {
     pub label: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct UserActivity {
+    pub offerings_provided: Vec<crate::database::offerings::Offering>,
+    pub rentals_as_requester: Vec<crate::database::contracts::Contract>,
+    pub rentals_as_provider: Vec<crate::database::contracts::Contract>,
+}
+
 impl Database {
     // User registrations
     pub(crate) async fn insert_user_registrations(
@@ -281,6 +289,19 @@ impl Database {
             .await?;
 
         Ok(())
+    }
+
+    /// Get all user activity: offerings provided and rentals (as both requester and provider)
+    pub async fn get_user_activity(&self, pubkey_hash: &[u8]) -> Result<UserActivity> {
+        let offerings_provided = self.get_provider_offerings(pubkey_hash).await?;
+        let rentals_as_requester = self.get_user_contracts(pubkey_hash).await?;
+        let rentals_as_provider = self.get_provider_contracts(pubkey_hash).await?;
+
+        Ok(UserActivity {
+            offerings_provided,
+            rentals_as_requester,
+            rentals_as_provider,
+        })
     }
 }
 

@@ -3,26 +3,41 @@ use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::{ContractSignReplyPayload, ContractSignRequestPayload};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct Contract {
+    #[ts(skip)]
+    #[serde(skip_deserializing)]
     pub contract_id: Vec<u8>,
+    #[ts(skip)]
+    #[serde(skip_deserializing)]
     pub requester_pubkey_hash: Vec<u8>,
     pub requester_ssh_pubkey: String,
     pub requester_contact: String,
+    #[ts(skip)]
+    #[serde(skip_deserializing)]
     pub provider_pubkey_hash: Vec<u8>,
     pub offering_id: String,
     pub region_name: Option<String>,
     pub instance_config: Option<String>,
+    #[ts(type = "number")]
     pub payment_amount_e9s: i64,
+    #[ts(type = "number | undefined")]
     pub start_timestamp_ns: Option<i64>,
+    #[ts(type = "number | undefined")]
     pub end_timestamp_ns: Option<i64>,
+    #[ts(type = "number | undefined")]
     pub duration_hours: Option<i64>,
+    #[ts(type = "number | undefined")]
     pub original_duration_hours: Option<i64>,
     pub request_memo: String,
+    #[ts(type = "number")]
     pub created_at_ns: i64,
     pub status: String,
     pub provisioning_instance_details: Option<String>,
+    #[ts(type = "number | undefined")]
     pub provisioning_completed_at_ns: Option<i64>,
 }
 

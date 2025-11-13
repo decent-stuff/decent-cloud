@@ -1172,6 +1172,26 @@ pub async fn get_user_public_keys(
     }
 }
 
+#[handler]
+pub async fn get_user_activity(
+    db: Data<&Arc<Database>>,
+    Path(pubkey_hex): Path<String>,
+) -> PoemResult<Json<ApiResponse<crate::database::users::UserActivity>>> {
+    let pubkey = match hex::decode(&pubkey_hex) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid pubkey format".to_string(),
+            )))
+        }
+    };
+
+    match db.get_user_activity(&pubkey).await {
+        Ok(activity) => Ok(Json(ApiResponse::success(activity))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
 // ============ Authenticated User Update Endpoints ============
 
 /// Verify that the authenticated user owns the target resource

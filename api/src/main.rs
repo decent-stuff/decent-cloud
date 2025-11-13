@@ -327,6 +327,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/users/:pubkey/keys/:key_fingerprint",
             poem::delete(api_handlers::delete_user_public_key),
         )
+        .at(
+            "/api/v1/users/:pubkey/activity",
+            poem::get(api_handlers::get_user_activity),
+        )
         // Token endpoints
         .at(
             "/api/v1/transfers",
