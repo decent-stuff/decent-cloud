@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha2';
+import { hexEncode } from '$lib/services/api';
+
 export function formatContractDate(timestamp_ns?: number): string {
 	if (!timestamp_ns) return 'N/A';
 	const date = new Date(timestamp_ns / 1_000_000);
@@ -14,4 +17,9 @@ export function truncateContractHash(hash: string, visible: number = 6): string 
 		return hash;
 	}
 	return `${hash.slice(0, visible)}...${hash.slice(-visible)}`;
+}
+
+export function computePubkeyHash(publicKeyBytes: Uint8Array): string {
+	const hash = sha256(publicKeyBytes);
+	return hexEncode(hash);
 }

@@ -9,14 +9,18 @@
 	let activity = $state<UserActivity | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let isNotFound = $state(false);
 
 	onMount(async () => {
 		try {
 			loading = true;
 			error = null;
+			isNotFound = false;
 			activity = await getUserActivity(pubkey);
 		} catch (e) {
-			error = e instanceof Error ? e.message : "Failed to load user activity";
+			const errorMessage = e instanceof Error ? e.message : "Failed to load user activity";
+			error = errorMessage;
+			isNotFound = errorMessage.includes('404') || errorMessage.includes('Not Found');
 			console.error("Error loading user activity:", e);
 		} finally {
 			loading = false;
@@ -38,11 +42,32 @@
 	</div>
 
 	{#if error}
-		<div
-			class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400"
-		>
-			<p class="font-semibold">Error loading user info</p>
-			<p class="text-sm mt-1">{error}</p>
+		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-400">
+			{#if isNotFound}
+				<div class="text-center">
+					<div class="text-6xl mb-4">🔍</div>
+					<h2 class="text-2xl font-bold mb-2">User Not Found</h2>
+					<p class="mb-4">
+						The user with pubkey <span class="font-mono text-sm">{shortPubkey(pubkey)}</span> was not found in the system.
+					</p>
+					<p class="text-sm text-red-300/70">
+						This could mean:
+					</p>
+					<ul class="text-sm text-red-300/70 list-disc list-inside mt-2">
+						<li>The user hasn't created any offerings or contracts yet</li>
+						<li>The pubkey address is incorrect</li>
+						<li>The user is new to the platform</li>
+					</ul>
+					<div class="mt-6">
+						<a href="/dashboard/marketplace" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+							← Back to Marketplace
+						</a>
+					</div>
+				</div>
+			{:else}
+				<p class="font-semibold">Error loading user info</p>
+				<p class="text-sm mt-1">{error}</p>
+			{/if}
 		</div>
 	{/if}
 
