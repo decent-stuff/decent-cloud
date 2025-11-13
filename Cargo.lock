@@ -102,6 +102,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
+name = "api"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "borsh",
+ "candid",
+ "chrono",
+ "clap",
+ "csv",
+ "dcc-common",
+ "dotenv",
+ "hex",
+ "ic-agent",
+ "icrc-ledger-types",
+ "ledger-map",
+ "num-bigint",
+ "poem",
+ "provider-offering",
+ "provider-profile",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "ts-rs",
+]
+
+[[package]]
 name = "ar_archive_writer"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -823,41 +858,6 @@ dependencies = [
  "tempfile",
  "tiny-bip39",
  "tokio",
-]
-
-[[package]]
-name = "decent-cloud-api"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
- "borsh",
- "candid",
- "chrono",
- "clap",
- "csv",
- "dcc-common",
- "dotenv",
- "hex",
- "ic-agent",
- "icrc-ledger-types",
- "ledger-map",
- "num-bigint",
- "poem",
- "provider-offering",
- "provider-profile",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "ts-rs",
 ]
 
 [[package]]

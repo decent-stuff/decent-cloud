@@ -50,7 +50,7 @@
 			const signed = await signRequest(
 				signingIdentityInfo.identity as Ed25519KeyIdentity,
 				"POST",
-				"/api/v1/contracts/rental-request",
+				"/api/v1/contracts",
 				params
 			);
 

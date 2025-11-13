@@ -1,5 +1,5 @@
 [package]
-name = "decent-cloud-api"
+name = "api"
 version.workspace = true
 edition = "2021"
 

@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createRentalRequest, type RentalRequestParams } from './api';
+import {
+	createRentalRequest,
+	getPendingProviderRequests,
+	respondToRentalRequest,
+	updateProvisioningStatus,
+	type ProviderRentalResponseParams,
+	type ProvisioningStatusUpdateParams,
+	type RentalRequestParams
+} from './api';
 
 // Mock fetch
 globalThis.fetch = vi.fn() as typeof fetch;
@@ -41,7 +49,7 @@ describe('createRentalRequest', () => {
 		const result = await createRentalRequest(params, mockHeaders);
 
 		expect(fetch).toHaveBeenCalledWith(
-			expect.stringContaining('/api/v1/contracts/rental-request'),
+			expect.stringContaining('/api/v1/contracts'),
 			expect.objectContaining({
 				method: 'POST',
 				headers: mockHeaders,
@@ -225,8 +233,172 @@ describe('createRentalRequest', () => {
 		await createRentalRequest(params, mockHeaders);
 
 		expect(fetch).toHaveBeenCalledWith(
-			expect.stringMatching(/\/api\/v1\/contracts\/rental-request$/),
+			expect.stringMatching(/\/api\/v1\/contracts$/),
 			expect.anything()
 		);
+	});
+});
+
+describe('getPendingProviderRequests', () => {
+	const mockHeaders = {
+		'X-Public-Key': 'provider-key',
+		'X-Signature': 'sig',
+		'X-Timestamp': '123',
+		'Content-Type': 'application/json'
+	};
+
+	it('returns normalized contracts when API succeeds', async () => {
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: true,
+				data: [
+					{
+						contract_id: [1, 2],
+						requester_pubkey_hash: [10, 11],
+						provider_pubkey_hash: [12, 13],
+						requester_ssh_pubkey: 'ssh-key',
+						requester_contact: 'email:user@example.com',
+						provider_pubkey_hash_hex: 'ignored',
+						offering_id: 'offer-1',
+						payment_amount_e9s: 1_000_000_000,
+						request_memo: 'memo',
+						created_at_ns: 1,
+						status: 'pending'
+					}
+				]
+			})
+		} as Response);
+
+		const result = await getPendingProviderRequests(mockHeaders);
+		expect(result).toHaveLength(1);
+		expect(result[0].contract_id).toBe('0102');
+		expect(result[0].requester_pubkey_hash).toBe('0a0b');
+		expect(fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/provider/rental-requests/pending'),
+			expect.objectContaining({ method: 'GET' })
+		);
+	});
+
+	it('throws when API indicates failure', async () => {
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: false,
+				error: 'Not authorized'
+			})
+		} as Response);
+
+		await expect(getPendingProviderRequests(mockHeaders)).rejects.toThrow('Not authorized');
+	});
+});
+
+describe('respondToRentalRequest', () => {
+	const mockHeaders = {
+		'X-Public-Key': 'provider-key',
+		'X-Signature': 'sig',
+		'X-Timestamp': '123',
+		'Content-Type': 'application/json'
+	};
+
+	it('sends provider response payload', async () => {
+		const params: ProviderRentalResponseParams = {
+			accept: true,
+			memo: 'Ready'
+		};
+
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: true,
+				data: 'Contract accepted'
+			})
+		} as Response);
+
+		const message = await respondToRentalRequest('abcd', params, mockHeaders);
+		expect(message).toBe('Contract accepted');
+
+		expect(fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/provider/rental-requests/abcd/respond'),
+			expect.objectContaining({
+				method: 'POST',
+				body: JSON.stringify(params)
+			})
+		);
+	});
+
+	it('throws when HTTP layer fails', async () => {
+		vi.mocked(fetch).mockResolvedValue({
+			ok: false,
+			status: 403,
+			statusText: 'Forbidden',
+			text: async () => 'Forbidden'
+		} as Response);
+
+		await expect(
+			respondToRentalRequest(
+				'abcd',
+				{
+					accept: false
+				},
+				mockHeaders
+			)
+		).rejects.toThrow('Failed to respond to rental request');
+	});
+});
+
+describe('updateProvisioningStatus', () => {
+	const mockHeaders = {
+		'X-Public-Key': 'provider-key',
+		'X-Signature': 'sig',
+		'X-Timestamp': '123',
+		'Content-Type': 'application/json'
+	};
+
+	it('updates provisioning status successfully', async () => {
+		const params: ProvisioningStatusUpdateParams = {
+			status: 'provisioning',
+			instance_details: 'Starting install'
+		};
+
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: true,
+				data: 'Provisioning status updated'
+			})
+		} as Response);
+
+		const message = await updateProvisioningStatus('abcd', params, mockHeaders);
+		expect(message).toBe('Provisioning status updated');
+
+		expect(fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/provider/rental-requests/abcd/provisioning'),
+			expect.objectContaining({
+				method: 'PUT',
+				body: JSON.stringify(params)
+			})
+		);
+	});
+
+	it('throws when API returns no message', async () => {
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: true,
+				data: null
+			})
+		} as Response);
+
+		await expect(
+			updateProvisioningStatus(
+				'abcd',
+				{
+					status: 'provisioned',
+					instance_details: 'ip:1.2.3.4'
+				},
+				mockHeaders
+			)
+		).rejects.toThrow('Provisioning status response did not include confirmation message');
 	});
 });

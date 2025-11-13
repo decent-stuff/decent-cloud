@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, hexEncode, getUserContracts } from './api';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, hexEncode, getUserContracts, getProviderContracts } from './api';
+import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 
 const sampleStats = {
 	total_providers: 10,
@@ -283,11 +284,11 @@ describe('getUserContracts', () => {
 		}
 	];
 
-	const mockHeaders = {
+	const mockHeaders: SignedRequestHeaders = {
 		'Content-Type': 'application/json',
-		'X-DCC-Pubkey': 'test-pubkey',
-		'X-DCC-Timestamp': '123456789',
-		'X-DCC-Signature': 'test-signature'
+		'X-Public-Key': 'test-pubkey',
+		'X-Timestamp': '123456789',
+		'X-Signature': 'test-signature'
 	};
 
 	afterEach(() => {
@@ -306,8 +307,8 @@ describe('getUserContracts', () => {
 		expect(contracts[0].contract_id).toBe('01020304');
 		expect(contracts[0].requester_pubkey_hash).toBe('05060708');
 		expect(contracts[0].provider_pubkey_hash).toBe('090a0b0c');
-		expect(globalThis.fetch).toHaveBeenCalledWith(
-			expect.stringContaining('/api/v1/contracts/user'),
+			expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/users/test-pubkey/contracts'),
 			expect.objectContaining({
 				method: 'GET',
 				headers: mockHeaders
@@ -367,5 +368,71 @@ describe('getUserContracts', () => {
 		});
 
 		await expect(getUserContracts(mockHeaders)).rejects.toThrow('Database error');
+	});
+});
+
+describe('getProviderContracts', () => {
+	const providerHex = 'abcd1234';
+	const providerHeaders: SignedRequestHeaders = {
+		'X-Public-Key': providerHex,
+		'X-Signature': 'sig',
+		'X-Timestamp': '123',
+		'Content-Type': 'application/json'
+	};
+
+	beforeEach(() => {
+		globalThis.fetch = vi.fn();
+	});
+
+	it('fetches provider contracts for the given pubkey', async () => {
+		const contracts = [
+			{
+				contract_id: [0xde, 0xad],
+				requester_pubkey_hash: [0xbe, 0xef],
+				provider_pubkey_hash: [0xca, 0xfe],
+				requester_ssh_pubkey: 'ssh',
+				requester_contact: 'contact',
+				offering_id: 'offer-42',
+				payment_amount_e9s: 500,
+				request_memo: 'memo',
+				created_at_ns: 0,
+				status: 'accepted'
+			}
+		];
+
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: contracts })
+		} as Response);
+
+		const result = await getProviderContracts(providerHeaders, providerHex);
+		expect(result[0].contract_id).toBe('dead');
+		expect(result[0].requester_pubkey_hash).toBe('beef');
+
+		expect(fetch).toHaveBeenCalledWith(
+			expect.stringContaining(`/api/v1/providers/${providerHex}/contracts`),
+			expect.objectContaining({ method: 'GET', headers: providerHeaders })
+		);
+	});
+
+	it('throws when HTTP request fails', async () => {
+		vi.mocked(fetch).mockResolvedValue({
+			ok: false,
+			status: 500,
+			statusText: 'Server Error'
+		} as Response);
+
+		await expect(getProviderContracts(providerHeaders, providerHex)).rejects.toThrow(
+			'Failed to fetch provider contracts: 500 Server Error'
+		);
+	});
+
+	it('throws when API indicates an error', async () => {
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: false, error: 'Unauthorized' })
+		} as Response);
+
+		await expect(getProviderContracts(providerHeaders, providerHex)).rejects.toThrow('Unauthorized');
 	});
 });

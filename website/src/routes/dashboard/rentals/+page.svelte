@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { getUserContracts, type Contract, hexEncode } from "$lib/services/api";
+import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
+import {
+	formatContractDate as formatDate,
+	formatContractPrice as formatPrice,
+	truncateContractHash as truncateHash,
+} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 
@@ -34,68 +40,6 @@
 		}
 	});
 
-	function getStatusBadge(status: string): { text: string; class: string; icon: string } {
-		switch (status.toLowerCase()) {
-			case "requested":
-				return {
-					text: "Requested",
-					class: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-					icon: "🟡",
-				};
-			case "pending":
-				return {
-					text: "Pending",
-					class: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-					icon: "🔵",
-				};
-			case "accepted":
-				return {
-					text: "Accepted",
-					class: "bg-green-500/20 text-green-400 border-green-500/30",
-					icon: "🟢",
-				};
-			case "provisioning":
-				return {
-					text: "Provisioning",
-					class: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-					icon: "⚙️",
-				};
-			case "provisioned":
-			case "active":
-				return {
-					text: "Active",
-					class: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-					icon: "✅",
-				};
-			case "rejected":
-				return {
-					text: "Rejected",
-					class: "bg-red-500/20 text-red-400 border-red-500/30",
-					icon: "🔴",
-				};
-			default:
-				return {
-					text: status,
-					class: "bg-gray-500/20 text-gray-400 border-gray-500/30",
-					icon: "⚪",
-				};
-		}
-	}
-
-	function formatDate(timestamp_ns?: number): string {
-		if (!timestamp_ns) return "N/A";
-		const date = new Date(timestamp_ns / 1_000_000);
-		return date.toLocaleDateString() + " " + date.toLocaleTimeString();
-	}
-
-	function formatPrice(amount_e9s: number): string {
-		return (amount_e9s / 1_000_000_000).toFixed(2) + " ICP";
-	}
-
-	function truncateHash(hash: string): string {
-		if (hash.length <= 12) return hash;
-		return hash.slice(0, 6) + "..." + hash.slice(-6);
-	}
 </script>
 
 <div class="space-y-8">

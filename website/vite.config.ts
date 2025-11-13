@@ -6,11 +6,7 @@ export default defineConfig({
 	plugins: [
 		sveltekit(),
 		nodePolyfills({
-			include: ['buffer', 'util', 'stream'],
-			// Prevent polyfills from being injected into SSR/server code
-			overrides: {
-				fs: false
-			}
+			include: ['buffer', 'util', 'stream']
 		})
 	],
 	// Ensure Node.js built-ins are not polyfilled in SSR

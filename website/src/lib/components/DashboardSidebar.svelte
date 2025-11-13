@@ -9,7 +9,8 @@
 		{ href: '/dashboard/validators', icon: '✓', label: 'Validators' },
 		{ href: '/dashboard/offerings', icon: '📦', label: 'My Offerings' },
 		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' },
-		{ href: '/dashboard/rentals', icon: '🔑', label: 'My Rentals' }
+		{ href: '/dashboard/rentals', icon: '🔑', label: 'My Rentals' },
+		{ href: '/dashboard/provider/requests', icon: '🤝', label: 'Provider Requests' }
 	];
 
 	let currentPath = $state('');

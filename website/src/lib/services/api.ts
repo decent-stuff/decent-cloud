@@ -481,11 +481,21 @@ export interface RentalRequestResponse {
 	message: string;
 }
 
+export interface ProviderRentalResponseParams {
+	accept: boolean;
+	memo?: string;
+}
+
+export interface ProvisioningStatusUpdateParams {
+	status: string;
+	instance_details?: string;
+}
+
 export async function createRentalRequest(
 	params: RentalRequestParams,
 	headers: SignedRequestHeaders
 ): Promise<RentalRequestResponse> {
-	const url = `${API_BASE_URL}/api/v1/contracts/rental-request`;
+	const url = `${API_BASE_URL}/api/v1/contracts`;
 
 	const response = await fetch(url, {
 		method: 'POST',
@@ -544,4 +554,127 @@ export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?
 		requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
 		provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
 	}));
+}
+
+export async function getProviderContracts(
+	headers: SignedRequestHeaders,
+	providerHex: string
+): Promise<Contract[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${providerHex}/contracts`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch provider contracts: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Contract[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch provider contracts');
+	}
+
+	const contracts = payload.data ?? [];
+	return contracts.map((c) => ({
+		...c,
+		contract_id: normalizePubkeyHash(c.contract_id),
+		requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
+		provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+	}));
+}
+
+export async function getPendingProviderRequests(headers: SignedRequestHeaders): Promise<Contract[]> {
+	const url = `${API_BASE_URL}/api/v1/provider/rental-requests/pending`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch pending rental requests: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Contract[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch pending rental requests');
+	}
+
+	const contracts = payload.data ?? [];
+	return contracts.map((c) => ({
+		...c,
+		contract_id: normalizePubkeyHash(c.contract_id),
+		requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
+		provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+	}));
+}
+
+export async function respondToRentalRequest(
+	contractIdHex: string,
+	params: ProviderRentalResponseParams,
+	headers: SignedRequestHeaders
+): Promise<string> {
+	const url = `${API_BASE_URL}/api/v1/provider/rental-requests/${contractIdHex}/respond`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(
+			`Failed to respond to rental request: ${response.status} ${response.statusText}\n${errorText}`
+		);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to respond to rental request');
+	}
+
+	if (!payload.data) {
+		throw new Error('Rental response did not include confirmation message');
+	}
+
+	return payload.data;
+}
+
+export async function updateProvisioningStatus(
+	contractIdHex: string,
+	params: ProvisioningStatusUpdateParams,
+	headers: SignedRequestHeaders
+): Promise<string> {
+	const url = `${API_BASE_URL}/api/v1/provider/rental-requests/${contractIdHex}/provisioning`;
+
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(
+			`Failed to update provisioning status: ${response.status} ${response.statusText}\n${errorText}`
+		);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update provisioning status');
+	}
+
+	if (!payload.data) {
+		throw new Error('Provisioning status response did not include confirmation message');
+	}
+
+	return payload.data;
 }

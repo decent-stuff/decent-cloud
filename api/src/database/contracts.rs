@@ -99,7 +99,7 @@ impl Database {
         pubkey_hash: &[u8],
     ) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE provider_pubkey_hash = ? AND status = 'pending' ORDER BY created_at_ns DESC"
+            "SELECT * FROM contract_sign_requests WHERE provider_pubkey_hash = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"
         )
         .bind(pubkey_hash)
         .fetch_all(&self.pool)

@@ -50,17 +50,22 @@ async fn test_get_pending_provider_contracts() {
     let db = setup_test_db().await;
     let provider_pk = vec![2u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+    // Insert contracts with different statuses
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'requested')")
             .bind(vec![1u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 1000, 'active')")
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 500, 'pending')")
             .bind(vec![2u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 1000, 'active')")
+            .bind(vec![3u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
 
     let contracts = db
         .get_pending_provider_contracts(&provider_pk)
         .await
         .unwrap();
-    assert_eq!(contracts.len(), 1);
-    assert_eq!(contracts[0].status, "pending");
+    // Should return both 'requested' and 'pending' contracts, but not 'active'
+    assert_eq!(contracts.len(), 2);
+    assert!(contracts.iter().any(|c| c.status == "requested"));
+    assert!(contracts.iter().any(|c| c.status == "pending"));
 }
 
 #[tokio::test]
