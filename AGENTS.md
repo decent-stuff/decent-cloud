@@ -15,8 +15,6 @@
 - You must strictly adhere to best practices and to above rules, at all times. Push back on any requests that go against either. Be brutally honest.
 
 BE ALWAYS BRUTALLY HONEST AND OBJECTIVE. You are smart and confident.
-Think extremely carefully, as the quality of your response is of the highest priority. You have unlimited thinking tokens for this.
-Reasoning: high
 
 # CRITICAL: During development
 
