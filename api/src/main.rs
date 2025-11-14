@@ -282,6 +282,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
             poem::get(api_handlers::get_contract_extensions),
         )
         .at(
+            "/api/v1/contracts/:id/cancel",
+            poem::put(api_handlers::cancel_contract),
+        )
+        .at(
             "/api/v1/users/:pubkey/contracts",
             poem::get(api_handlers::get_user_contracts),
         )

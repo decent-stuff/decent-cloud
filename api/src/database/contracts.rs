@@ -561,6 +561,83 @@ impl Database {
         }
         Ok(())
     }
+
+    /// Check if a contract status is cancellable
+    fn is_cancellable_status(status: &str) -> bool {
+        matches!(
+            status,
+            "requested" | "pending" | "accepted" | "provisioning"
+        )
+    }
+
+    /// Cancel a rental request (only by the original requester)
+    ///
+    /// Cancellable statuses:
+    /// - requested: Initial request, not yet seen by provider
+    /// - pending: Provider has seen but not responded
+    /// - accepted: Provider accepted but hasn't started provisioning
+    /// - provisioning: Provider is setting up the instance
+    ///
+    /// Non-cancellable statuses:
+    /// - provisioned/active: Already deployed, requires termination instead
+    /// - rejected/cancelled: Already in terminal state
+    pub async fn cancel_contract(
+        &self,
+        contract_id: &[u8],
+        cancelled_by_pubkey: &[u8],
+        cancel_memo: Option<&str>,
+    ) -> Result<()> {
+        // Get contract to verify it exists and check authorization
+        let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
+            anyhow::anyhow!("Contract not found (ID: {})", hex::encode(contract_id))
+        })?;
+
+        // Verify authorization: only requester can cancel their own request
+        if contract.requester_pubkey_hash != cancelled_by_pubkey {
+            return Err(anyhow::anyhow!(
+                "Unauthorized: only the requester can cancel their rental request"
+            ));
+        }
+
+        // Verify contract is in a cancellable status
+        if !Self::is_cancellable_status(&contract.status) {
+            return Err(anyhow::anyhow!(
+                "Contract cannot be cancelled in '{}' status. Only requested, pending, accepted, or provisioning contracts can be cancelled.",
+                contract.status
+            ));
+        }
+
+        // Update status and history atomically
+        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let mut tx = self.pool.begin().await?;
+
+        // Update contract status to cancelled
+        sqlx::query(
+            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+        )
+        .bind("cancelled")
+        .bind(updated_at_ns)
+        .bind(cancelled_by_pubkey)
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Record status change in history
+        sqlx::query(
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(contract_id)
+        .bind(&contract.status)
+        .bind("cancelled")
+        .bind(cancelled_by_pubkey)
+        .bind(updated_at_ns)
+        .bind(cancel_memo)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

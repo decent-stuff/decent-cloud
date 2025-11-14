@@ -678,3 +678,33 @@ export async function updateProvisioningStatus(
 
 	return payload.data;
 }
+
+export async function cancelRentalRequest(
+	contractIdHex: string,
+	params: { memo?: string },
+	headers: SignedRequestHeaders
+): Promise<string> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractIdHex}/cancel`;
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to cancel rental request: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to cancel rental request');
+	}
+
+	if (!payload.data) {
+		throw new Error('Cancel rental request response did not include confirmation message');
+	}
+
+	return payload.data;
+}

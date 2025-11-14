@@ -1051,6 +1051,38 @@ pub async fn get_contract_extensions(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CancelContractRequest {
+    pub memo: Option<String>,
+}
+
+#[handler]
+pub async fn cancel_contract(
+    auth: AuthenticatedUser,
+    db: Data<&Arc<Database>>,
+    Path(contract_id_hex): Path<String>,
+    Json(req): Json<CancelContractRequest>,
+) -> PoemResult<Json<ApiResponse<String>>> {
+    let contract_id = match hex::decode(&contract_id_hex) {
+        Ok(id) => id,
+        Err(_) => {
+            return Ok(Json(ApiResponse::error(
+                "Invalid contract ID format".to_string(),
+            )))
+        }
+    };
+
+    match db
+        .cancel_contract(&contract_id, &auth.pubkey_hash, req.memo.as_deref())
+        .await
+    {
+        Ok(_) => Ok(Json(ApiResponse::success(
+            "Rental request cancelled successfully".to_string(),
+        ))),
+        Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
+    }
+}
+
 // ============ Token Endpoints ============
 
 #[handler]

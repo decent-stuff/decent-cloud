@@ -39,6 +39,11 @@ const STATUS_BADGES: Record<string, ContractStatusBadge> = {
 		text: 'Rejected',
 		class: 'bg-red-500/20 text-red-400 border-red-500/30',
 		icon: '🔴'
+	},
+	cancelled: {
+		text: 'Cancelled',
+		class: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+		icon: '⚫'
 	}
 };
 

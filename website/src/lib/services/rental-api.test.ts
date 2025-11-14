@@ -4,6 +4,7 @@ import {
 	getPendingProviderRequests,
 	respondToRentalRequest,
 	updateProvisioningStatus,
+	cancelRentalRequest,
 	type ProviderRentalResponseParams,
 	type ProvisioningStatusUpdateParams,
 	type RentalRequestParams
@@ -400,5 +401,88 @@ describe('updateProvisioningStatus', () => {
 				mockHeaders
 			)
 		).rejects.toThrow('Provisioning status response did not include confirmation message');
+	});
+});
+
+describe('cancelRentalRequest', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('sends PUT request with correct parameters', async () => {
+		const mockHeaders = {
+			'X-Public-Key': 'test-pubkey',
+			'X-Signature': 'test-signature',
+			'X-Timestamp': '1234567890000000000',
+			'Content-Type': 'application/json'
+		};
+
+		const mockResponse = 'Rental request cancelled successfully';
+
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: true,
+				data: mockResponse
+			})
+		} as Response);
+
+		const result = await cancelRentalRequest('abc123', { memo: 'User cancellation' }, mockHeaders);
+
+		expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/contracts/abc123/cancel'),
+			expect.objectContaining({
+				method: 'PUT',
+				headers: mockHeaders,
+				body: JSON.stringify({ memo: 'User cancellation' })
+			})
+		);
+
+		expect(result).toBe(mockResponse);
+	});
+
+	it('handles API errors correctly', async () => {
+		const mockHeaders = {
+			'X-Public-Key': 'test-pubkey',
+			'X-Signature': 'test-signature',
+			'X-Timestamp': '1234567890000000000',
+			'Content-Type': 'application/json'
+		};
+
+		vi.mocked(fetch).mockResolvedValue({
+			ok: false,
+			status: 404,
+			statusText: 'Not Found',
+			json: async () => ({
+				success: false,
+				error: 'Contract not found'
+			}),
+			text: async () => 'Not Found'
+		} as Response);
+
+		await expect(
+			cancelRentalRequest('nonexistent', { memo: 'Test' }, mockHeaders)
+		).rejects.toThrow('Failed to cancel rental request: 404 Not Found');
+	});
+
+	it('handles missing data in response', async () => {
+		const mockHeaders = {
+			'X-Public-Key': 'test-pubkey',
+			'X-Signature': 'test-signature',
+			'X-Timestamp': '1234567890000000000',
+			'Content-Type': 'application/json'
+		};
+
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: true,
+				data: null
+			})
+		} as Response);
+
+		await expect(
+			cancelRentalRequest('abc123', { memo: 'Test' }, mockHeaders)
+		).rejects.toThrow('Cancel rental request response did not include confirmation message');
 	});
 });

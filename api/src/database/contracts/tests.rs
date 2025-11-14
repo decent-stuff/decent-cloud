@@ -370,3 +370,190 @@ async fn test_add_provisioning_details_persists_connection_info() {
     assert_eq!(detail_row.3.as_deref(), Some("ip:1.2.3.4\nuser:root"));
     assert!(detail_row.4 > 0);
 }
+
+#[tokio::test]
+async fn test_cancel_contract_success_requested() {
+    let db = setup_test_db().await;
+    let contract_id = vec![10u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'requested')")
+        .bind(&contract_id)
+        .bind(&requester_pk)
+        .bind(&provider_pk)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    db.cancel_contract(
+        &contract_id,
+        &requester_pk,
+        Some("User requested cancellation"),
+    )
+    .await
+    .unwrap();
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "cancelled");
+
+    let history = sqlx::query_as::<_, (String, String, Option<String>)>("SELECT old_status, new_status, change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1")
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(history.0, "requested");
+    assert_eq!(history.1, "cancelled");
+    assert_eq!(history.2.as_deref(), Some("User requested cancellation"));
+}
+
+#[tokio::test]
+async fn test_cancel_contract_success_all_cancellable_statuses() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    let cancellable_statuses = ["requested", "pending", "accepted", "provisioning"];
+
+    for (i, status) in cancellable_statuses.iter().enumerate() {
+        let contract_id = vec![10 + i as u8; 32];
+
+        sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, ?)")
+            .bind(&contract_id)
+            .bind(&requester_pk)
+            .bind(&provider_pk)
+            .bind(status)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        let result = db.cancel_contract(&contract_id, &requester_pk, None).await;
+        assert!(
+            result.is_ok(),
+            "Cancellation should succeed for status '{}', but got error: {:?}",
+            status,
+            result.err()
+        );
+
+        let new_status: String =
+            sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
+                .bind(&contract_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(new_status, "cancelled");
+    }
+}
+
+#[tokio::test]
+async fn test_cancel_contract_rejects_unauthorized_user() {
+    let db = setup_test_db().await;
+    let contract_id = vec![11u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let attacker_pk = vec![3u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'requested')")
+        .bind(&contract_id)
+        .bind(&requester_pk)
+        .bind(&provider_pk)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    let result = db.cancel_contract(&contract_id, &attacker_pk, None).await;
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("only the requester can cancel"));
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "requested");
+}
+
+#[tokio::test]
+async fn test_cancel_contract_rejects_provider_cancellation() {
+    let db = setup_test_db().await;
+    let contract_id = vec![12u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
+        .bind(&contract_id)
+        .bind(&requester_pk)
+        .bind(&provider_pk)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    let result = db.cancel_contract(&contract_id, &provider_pk, None).await;
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("only the requester can cancel"));
+}
+
+#[tokio::test]
+async fn test_cancel_contract_fails_for_non_cancellable_statuses() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    let non_cancellable_statuses = ["provisioned", "active", "rejected", "cancelled"];
+
+    for (i, status) in non_cancellable_statuses.iter().enumerate() {
+        let contract_id = vec![20 + i as u8; 32];
+
+        sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, ?)")
+            .bind(&contract_id)
+            .bind(&requester_pk)
+            .bind(&provider_pk)
+            .bind(status)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+
+        let result = db.cancel_contract(&contract_id, &requester_pk, None).await;
+        assert!(
+            result.is_err(),
+            "Cancellation should fail for status '{}'",
+            status
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be cancelled"),
+            "Error message should indicate status cannot be cancelled for '{}'",
+            status
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_cancel_contract_not_found_includes_hex_id() {
+    let db = setup_test_db().await;
+    let nonexistent_id = vec![99u8; 32];
+    let requester_pk = vec![1u8; 32];
+
+    let result = db
+        .cancel_contract(&nonexistent_id, &requester_pk, None)
+        .await;
+    assert!(result.is_err());
+
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Contract not found"));
+    assert!(error_msg.contains(&hex::encode(&nonexistent_id)));
+}

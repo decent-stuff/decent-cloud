@@ -1,37 +1,46 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { getUserContracts, type Contract, hexEncode } from "$lib/services/api";
-import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
-import {
-	formatContractDate as formatDate,
-	formatContractPrice as formatPrice,
-	truncateContractHash as truncateHash,
-} from "$lib/utils/contract-format";
+	import {
+		getUserContracts,
+		cancelRentalRequest,
+		type Contract,
+		hexEncode,
+	} from "$lib/services/api";
+	import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
+	import {
+		formatContractDate as formatDate,
+		formatContractPrice as formatPrice,
+		truncateContractHash as truncateHash,
+	} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 
 	let contracts = $state<Contract[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let cancellingContractId = $state<string | null>(null);
 
 	onMount(async () => {
 		try {
 			loading = true;
 			error = null;
-			
+
 			const signingIdentityInfo = await authStore.getSigningIdentity();
 			if (!signingIdentityInfo) {
 				error = "You must be authenticated to view rentals";
 				return;
 			}
-			
+
 			const { headers } = await signRequest(
 				signingIdentityInfo.identity as any,
 				"GET",
-				`/api/v1/users/${hexEncode(signingIdentityInfo.publicKeyBytes)}/contracts`
+				`/api/v1/users/${hexEncode(signingIdentityInfo.publicKeyBytes)}/contracts`,
 			);
-			
-			contracts = await getUserContracts(headers, hexEncode(signingIdentityInfo.publicKeyBytes));
+
+			contracts = await getUserContracts(
+				headers,
+				hexEncode(signingIdentityInfo.publicKeyBytes),
+			);
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load rentals";
 			console.error("Error loading rentals:", e);
@@ -40,6 +49,60 @@ import {
 		}
 	});
 
+	function isCancellable(status: string): boolean {
+		return ["requested", "pending", "accepted", "provisioning"].includes(
+			status.toLowerCase(),
+		);
+	}
+
+	async function handleCancelContract(
+		contractId: string,
+		contractStatus: string,
+	) {
+		if (!isCancellable(contractStatus)) {
+			return;
+		}
+
+		if (!confirm("Are you sure you want to cancel this rental request?")) {
+			return;
+		}
+
+		try {
+			cancellingContractId = contractId;
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				error = "You must be authenticated to cancel rental requests";
+				return;
+			}
+
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"PUT",
+				`/api/v1/contracts/${contractId}/cancel`,
+				{ memo: "Cancelled by user" },
+			);
+
+			await cancelRentalRequest(
+				contractId,
+				{ memo: "Cancelled by user" },
+				headers,
+			);
+
+			// Refresh contracts list
+			contracts = await getUserContracts(
+				headers,
+				hexEncode(signingIdentityInfo.publicKeyBytes),
+			);
+		} catch (e) {
+			error =
+				e instanceof Error
+					? e.message
+					: "Failed to cancel rental request";
+			console.error("Error cancelling rental request:", e);
+		} finally {
+			cancellingContractId = null;
+		}
+	}
 </script>
 
 <div class="space-y-8">
@@ -98,9 +161,36 @@ import {
 									<span>{statusBadge.icon}</span>
 									{statusBadge.text}
 								</span>
+								<!-- Cancel button for cancelable contracts -->
+								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
+									<button
+										onclick={() =>
+											handleCancelContract(
+												contract.contract_id,
+												contract.status,
+											)}
+										class="px-2 py-1 text-xs bg-red-600/80 text-white rounded hover:bg-red-700 transition-colors"
+										title="Cancel this rental request"
+									>
+										Cancel
+									</button>
+								{/if}
+								<!-- Cancellation state -->
+								{#if cancellingContractId === contract.contract_id}
+									<div
+										class="flex items-center gap-1 text-xs text-red-400"
+									>
+										<div
+											class="animate-spin rounded-full h-3 w-3 border-t border-b border-red-400"
+										></div>
+										Cancelling...
+									</div>
+								{/if}
 							</div>
 							<p class="text-white/60 text-sm">
-								Contract ID: {truncateHash(contract.contract_id)}
+								Contract ID: {truncateHash(
+									contract.contract_id,
+								)}
 							</p>
 						</div>
 						<div class="text-right">
@@ -148,7 +238,9 @@ import {
 								<div
 									class="text-white text-sm font-mono truncate"
 								>
-									{truncateHash(contract.requester_ssh_pubkey)}
+									{truncateHash(
+										contract.requester_ssh_pubkey,
+									)}
 								</div>
 							</div>
 						{/if}
