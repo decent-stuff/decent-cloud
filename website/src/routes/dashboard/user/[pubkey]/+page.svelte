@@ -133,7 +133,13 @@
 										Offering: {contract.offering_id}
 									</p>
 									<p class="text-sm text-white/60">
-										Provider: {shortPubkey(contract.provider_pubkey_hash)}
+										Provider:
+										<a
+											href="/dashboard/reputation/{contract.provider_pubkey_hash}"
+											class="text-blue-400 hover:text-blue-300"
+										>
+											{shortPubkey(contract.provider_pubkey_hash)}
+										</a>
 									</p>
 								</div>
 								<span
@@ -175,7 +181,13 @@
 										Offering: {contract.offering_id}
 									</p>
 									<p class="text-sm text-white/60">
-										Requester: {shortPubkey(contract.requester_pubkey_hash)}
+										Requester:
+										<a
+											href="/dashboard/reputation/{contract.requester_pubkey_hash}"
+											class="text-blue-400 hover:text-blue-300"
+										>
+											{shortPubkey(contract.requester_pubkey_hash)}
+										</a>
 									</p>
 								</div>
 								<span

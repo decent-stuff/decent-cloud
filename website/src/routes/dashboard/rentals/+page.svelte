@@ -250,9 +250,9 @@
 							<div class="text-white/60 text-xs mb-1">
 								Provider
 							</div>
-							<div class="text-white text-sm font-mono">
+							<a href="/dashboard/reputation/{contract.provider_pubkey_hash}" class="text-white text-sm font-mono hover:text-blue-400 transition-colors">
 								{truncateHash(contract.provider_pubkey_hash)}
-							</div>
+							</a>
 						</div>
 					</div>
 

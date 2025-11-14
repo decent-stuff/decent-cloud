@@ -25,6 +25,10 @@
 		return `${hashStr.substring(0, 8)}...${hashStr.substring(hashStr.length - 8)}`;
 	}
 
+	function getPubkeyHashString(hash: string | number[]): string {
+		return typeof hash === 'string' ? hash : hash.join('');
+	}
+
 	function formatTimestamp(timestampNs: number): string {
 		const date = new Date(timestampNs / 1_000_000);
 		const now = new Date();
@@ -122,7 +126,12 @@
 											</div>
 											<div>
 												<p class="text-white font-medium">{validator.name || 'Unnamed Validator'}</p>
-												<p class="text-white/50 text-sm font-mono">{formatPubkeyHash(validator.pubkey_hash)}</p>
+												<a
+													href="/dashboard/reputation/{getPubkeyHashString(validator.pubkey_hash)}"
+													class="text-white/50 hover:text-blue-400 text-sm font-mono transition-colors"
+												>
+													{formatPubkeyHash(validator.pubkey_hash)}
+												</a>
 												{#if validator.description}
 													<p class="text-white/50 text-xs mt-0.5 max-w-xs truncate">{validator.description}</p>
 												{/if}

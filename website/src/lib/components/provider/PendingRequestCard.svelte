@@ -30,7 +30,7 @@
 				</span>
 			</div>
 			<a
-				href="/dashboard/user/{contract.requester_pubkey_hash}"
+				href="/dashboard/reputation/{contract.requester_pubkey_hash}"
 				class="text-white/60 text-sm hover:text-blue-400 transition-colors inline-flex items-center gap-1"
 			>
 				<span class="text-xs">👤</span>

@@ -234,7 +234,7 @@
 
 					<!-- Provider Info -->
 					<a
-						href="/dashboard/user/{offering.pubkey_hash}"
+						href="/dashboard/reputation/{offering.pubkey_hash}"
 						class="flex items-center gap-2 text-sm text-white/70 hover:text-blue-400 transition-colors mb-4"
 					>
 						<span class="text-xs">👤</span>

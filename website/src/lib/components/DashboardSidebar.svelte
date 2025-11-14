@@ -1,17 +1,32 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/stores/auth';
+	import { computePubkeyHash } from '$lib/utils/contract-format';
+	import type { IdentityInfo } from '$lib/stores/auth';
 
 	let { isOpen = $bindable(false) } = $props();
 
-	const navItems = [
+	let currentIdentity = $state<IdentityInfo | null>(null);
+
+	authStore.currentIdentity.subscribe((value) => {
+		currentIdentity = value;
+	});
+
+	const navItems = $derived([
 		{ href: '/dashboard', icon: '📊', label: 'Overview' },
 		{ href: '/dashboard/validators', icon: '✓', label: 'Validators' },
 		{ href: '/dashboard/offerings', icon: '📦', label: 'My Offerings' },
 		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' },
 		{ href: '/dashboard/rentals', icon: '🔑', label: 'My Rentals' },
-		{ href: '/dashboard/provider/requests', icon: '🤝', label: 'Provider Requests' }
-	];
+		{ href: '/dashboard/provider/requests', icon: '🤝', label: 'Provider Requests' },
+		{
+			href: currentIdentity?.publicKeyBytes
+				? `/dashboard/reputation/${computePubkeyHash(currentIdentity.publicKeyBytes)}`
+				: '/dashboard/reputation',
+			icon: '⭐',
+			label: 'My Reputation'
+		}
+	]);
 
 	let currentPath = $state('');
 	page.subscribe((p) => {
@@ -53,11 +68,13 @@
 	<!-- Navigation -->
 	<nav class="flex-1 p-4 space-y-2">
 		{#each navItems as item}
+			{@const isActive =
+				currentPath === item.href ||
+				(item.label === 'My Reputation' && currentPath.startsWith('/dashboard/reputation'))}
 			<a
 				href={item.href}
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath ===
-				item.href
+				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {isActive
 					? 'bg-blue-600 text-white'
 					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
 			>
