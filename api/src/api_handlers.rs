@@ -50,7 +50,7 @@ fn decode_pubkey(pubkey_hex: &str) -> Result<Vec<u8>, String> {
 }
 
 fn check_authorization(pubkey: &[u8], user: &AuthenticatedUser) -> Result<(), String> {
-    if pubkey != user.pubkey_hash {
+    if pubkey != user.pubkey {
         Err("Unauthorized".to_string())
     } else {
         Ok(())
@@ -258,9 +258,9 @@ pub async fn create_provider_offering(
         return Ok(Json(ApiResponse::error(e)));
     }
 
-    // Ensure id is None for creation and set pubkey_hash
+    // Ensure id is None for creation and set (pubkey)
     params.id = None;
-    params.pubkey_hash = pubkey.clone();
+    params.pubkey = pubkey.clone();
 
     let result = db.create_offering(&pubkey, params).await;
     Ok(Json(ApiResponse::from_result(result)))
@@ -282,8 +282,8 @@ pub async fn update_provider_offering(
         return Ok(Json(ApiResponse::error(e)));
     }
 
-    // Set pubkey_hash from authenticated user
-    params.pubkey_hash = pubkey.clone();
+    // Set (pubkey) from authenticated user
+    params.pubkey = pubkey.clone();
 
     let result = db.update_offering(&pubkey, offering_id, params).await;
     Ok(Json(ApiResponse::from_result(result)))
@@ -329,7 +329,7 @@ pub async fn duplicate_provider_offering(
         }
     };
 
-    if pubkey != user.pubkey_hash {
+    if pubkey != user.pubkey {
         return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
     }
 
@@ -364,7 +364,7 @@ pub async fn bulk_update_provider_offerings_status(
         }
     };
 
-    if pubkey != user.pubkey_hash {
+    if pubkey != user.pubkey {
         return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
     }
 
@@ -392,7 +392,7 @@ pub async fn export_provider_offerings_csv(
         }
     };
 
-    if pubkey != user.pubkey_hash {
+    if pubkey != user.pubkey {
         return Ok(poem::Response::builder()
             .status(StatusCode::UNAUTHORIZED)
             .body("Unauthorized"));
@@ -723,7 +723,7 @@ pub async fn import_provider_offerings_csv(
         }
     };
 
-    if pubkey != user.pubkey_hash {
+    if pubkey != user.pubkey {
         return Ok(Json(ApiResponse::error("Unauthorized".to_string())));
     }
 
@@ -828,7 +828,7 @@ pub async fn create_rental_request(
     db: Data<&Arc<Database>>,
     Json(params): Json<crate::database::contracts::RentalRequestParams>,
 ) -> PoemResult<Json<ApiResponse<RentalRequestResponse>>> {
-    match db.create_rental_request(&auth.pubkey_hash, params).await {
+    match db.create_rental_request(&auth.pubkey, params).await {
         Ok(contract_id) => {
             let contract_id_hex = hex::encode(&contract_id);
             Ok(Json(ApiResponse::success(RentalRequestResponse {
@@ -847,7 +847,7 @@ pub async fn get_pending_rental_requests(
     auth: AuthenticatedUser,
     db: Data<&Arc<Database>>,
 ) -> PoemResult<Json<ApiResponse<Vec<crate::database::contracts::Contract>>>> {
-    match db.get_pending_provider_contracts(&auth.pubkey_hash).await {
+    match db.get_pending_provider_contracts(&auth.pubkey).await {
         Ok(contracts) => Ok(Json(ApiResponse::success(contracts))),
         Err(e) => Ok(Json(ApiResponse::error(e.to_string()))),
     }
@@ -878,12 +878,7 @@ pub async fn respond_to_rental_request(
     let new_status = if req.accept { "accepted" } else { "rejected" };
 
     match db
-        .update_contract_status(
-            &contract_id,
-            new_status,
-            &auth.pubkey_hash,
-            req.memo.as_deref(),
-        )
+        .update_contract_status(&contract_id, new_status, &auth.pubkey, req.memo.as_deref())
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::success(format!(
@@ -950,7 +945,7 @@ pub async fn update_provisioning_status(
 
     // Update status
     match db
-        .update_contract_status(&contract_id, &status, &auth.pubkey_hash, None)
+        .update_contract_status(&contract_id, &status, &auth.pubkey, None)
         .await
     {
         Ok(_) => {
@@ -1003,12 +998,7 @@ pub async fn extend_contract(
     };
 
     match db
-        .extend_contract(
-            &contract_id,
-            &auth.pubkey_hash,
-            req.extension_hours,
-            req.memo,
-        )
+        .extend_contract(&contract_id, &auth.pubkey, req.extension_hours, req.memo)
         .await
     {
         Ok(extension_payment_e9s) => {
@@ -1073,7 +1063,7 @@ pub async fn cancel_contract(
     };
 
     match db
-        .cancel_contract(&contract_id, &auth.pubkey_hash, req.memo.as_deref())
+        .cancel_contract(&contract_id, &auth.pubkey, req.memo.as_deref())
         .await
     {
         Ok(_) => Ok(Json(ApiResponse::success(
@@ -1231,7 +1221,7 @@ fn verify_user_authorization(auth: &AuthenticatedUser, pubkey_hex: &str) -> Poem
     let target_pubkey = hex::decode(pubkey_hex)
         .map_err(|_| poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST))?;
 
-    if auth.pubkey_hash != target_pubkey {
+    if auth.pubkey != target_pubkey {
         return Err(poem::Error::from_string(
             "Unauthorized: cannot modify another user's resource",
             StatusCode::FORBIDDEN,
@@ -1259,7 +1249,7 @@ pub async fn update_user_profile(
 
     match db
         .upsert_user_profile(
-            &auth.pubkey_hash,
+            &auth.pubkey,
             req.display_name.as_deref(),
             req.bio.as_deref(),
             req.avatar_url.as_deref(),
@@ -1301,7 +1291,7 @@ pub async fn upsert_user_contact(
 
     match db
         .upsert_user_contact(
-            &auth.pubkey_hash,
+            &auth.pubkey,
             &req.contact_type,
             &req.contact_value,
             req.verified,
@@ -1323,7 +1313,7 @@ pub async fn delete_user_contact(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
-    match db.delete_user_contact(&auth.pubkey_hash, contact_id).await {
+    match db.delete_user_contact(&auth.pubkey, contact_id).await {
         Ok(_) => Ok(Json(ApiResponse::success(
             "Contact deleted successfully".to_string(),
         ))),
@@ -1363,7 +1353,7 @@ pub async fn upsert_user_social(
 
     match db
         .upsert_user_social(
-            &auth.pubkey_hash,
+            &auth.pubkey,
             &req.platform,
             &req.username,
             req.profile_url.as_deref(),
@@ -1385,7 +1375,7 @@ pub async fn delete_user_social(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
-    match db.delete_user_social(&auth.pubkey_hash, social_id).await {
+    match db.delete_user_social(&auth.pubkey, social_id).await {
         Ok(_) => Ok(Json(ApiResponse::success(
             "Social account deleted successfully".to_string(),
         ))),
@@ -1416,7 +1406,7 @@ pub async fn add_user_public_key(
 
     match db
         .add_user_public_key(
-            &auth.pubkey_hash,
+            &auth.pubkey,
             &req.key_type,
             &req.key_data,
             req.key_fingerprint.as_deref(),
@@ -1439,7 +1429,7 @@ pub async fn delete_user_public_key(
 ) -> PoemResult<Json<ApiResponse<String>>> {
     verify_user_authorization(&auth, &pubkey_hex)?;
 
-    match db.delete_user_public_key(&auth.pubkey_hash, key_id).await {
+    match db.delete_user_public_key(&auth.pubkey, key_id).await {
         Ok(_) => Ok(Json(ApiResponse::success(
             "Public key deleted successfully".to_string(),
         ))),
@@ -1463,7 +1453,7 @@ pub async fn get_platform_stats(
     let cutoff_24h =
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 24 * 3600 * 1_000_000_000;
     let validator_count: (i64,) = match sqlx::query_as(
-        "SELECT COUNT(DISTINCT pubkey_hash) FROM provider_check_ins WHERE block_timestamp_ns > ?",
+        "SELECT COUNT(DISTINCT pubkey) FROM provider_check_ins WHERE block_timestamp_ns > ?",
     )
     .bind(cutoff_24h)
     .fetch_one(&db.pool)

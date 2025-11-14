@@ -13,7 +13,7 @@ pub struct Offering {
     pub id: Option<i64>,
     #[ts(skip)]
     #[serde(skip_deserializing)]
-    pub pubkey_hash: Vec<u8>,
+    pub pubkey: Vec<u8>,
     pub offering_id: String,
     pub offer_name: String,
     pub description: Option<String>,
@@ -116,11 +116,11 @@ impl Database {
     }
 
     /// Get offerings by provider
-    pub async fn get_provider_offerings(&self, pubkey_hash: &[u8]) -> Result<Vec<Offering>> {
+    pub async fn get_provider_offerings(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
         let offerings = sqlx::query_as::<_, Offering>(
-            "SELECT * FROM provider_offerings WHERE pubkey_hash = ? ORDER BY monthly_price ASC",
+            "SELECT * FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC",
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -141,13 +141,13 @@ impl Database {
     /// Get example offerings for CSV template generation
     pub async fn get_example_offerings(&self) -> Result<Vec<Offering>> {
         // Use the same distinctive hash as in migration 002
-        let example_pubkey_hash =
+        let example_provider_pubkey =
             hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
                 .unwrap();
         let offerings = sqlx::query_as::<_, Offering>(
-            "SELECT * FROM provider_offerings WHERE pubkey_hash = ? ORDER BY offering_id ASC",
+            "SELECT * FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC",
         )
-        .bind(example_pubkey_hash)
+        .bind(example_provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -171,7 +171,7 @@ impl Database {
     }
 
     /// Create a new offering
-    pub async fn create_offering(&self, pubkey_hash: &[u8], params: Offering) -> Result<i64> {
+    pub async fn create_offering(&self, pubkey: &[u8], params: Offering) -> Result<i64> {
         // Validate required fields
         if params.offering_id.trim().is_empty() {
             return Err(anyhow::anyhow!("offering_id is required"));
@@ -184,9 +184,9 @@ impl Database {
 
         // Check for duplicate offering_id for this provider
         let existing: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM provider_offerings WHERE pubkey_hash = ? AND offering_id = ?",
+            "SELECT id FROM provider_offerings WHERE pubkey = ? AND offering_id = ?",
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .bind(&params.offering_id)
         .fetch_optional(&mut *tx)
         .await?;
@@ -201,7 +201,7 @@ impl Database {
         // Insert main offering record
         let offering_id = sqlx::query_scalar::<_, i64>(
             "INSERT INTO provider_offerings (
-                pubkey_hash, offering_id, offer_name, description, product_page_url,
+                pubkey, offering_id, offer_name, description, product_page_url,
                 currency, monthly_price, setup_fee, visibility, product_type,
                 virtualization_type, billing_interval, stock_status, processor_brand,
                 processor_amount, processor_cores, processor_speed, processor_name,
@@ -214,7 +214,7 @@ impl Database {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id",
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .bind(&params.offering_id)
         .bind(&params.offer_name)
         .bind(&params.description)
@@ -264,7 +264,7 @@ impl Database {
     /// Update an existing offering
     pub async fn update_offering(
         &self,
-        pubkey_hash: &[u8],
+        pubkey: &[u8],
         offering_db_id: i64,
         params: Offering,
     ) -> Result<()> {
@@ -272,14 +272,14 @@ impl Database {
 
         // Verify ownership
         let owner: Option<(Vec<u8>,)> =
-            sqlx::query_as("SELECT pubkey_hash FROM provider_offerings WHERE id = ?")
+            sqlx::query_as("SELECT pubkey FROM provider_offerings WHERE id = ?")
                 .bind(offering_db_id)
                 .fetch_optional(&mut *tx)
                 .await?;
 
         match owner {
             None => return Err(anyhow::anyhow!("Offering not found")),
-            Some((owner_pubkey,)) if owner_pubkey != pubkey_hash => {
+            Some((owner_pubkey,)) if owner_pubkey != (pubkey) => {
                 return Err(anyhow::anyhow!(
                     "Unauthorized: You do not own this offering"
                 ))
@@ -348,19 +348,19 @@ impl Database {
     }
 
     /// Delete an offering
-    pub async fn delete_offering(&self, pubkey_hash: &[u8], offering_db_id: i64) -> Result<()> {
+    pub async fn delete_offering(&self, pubkey: &[u8], offering_db_id: i64) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
         // Verify ownership
         let owner: Option<(Vec<u8>,)> =
-            sqlx::query_as("SELECT pubkey_hash FROM provider_offerings WHERE id = ?")
+            sqlx::query_as("SELECT pubkey FROM provider_offerings WHERE id = ?")
                 .bind(offering_db_id)
                 .fetch_optional(&mut *tx)
                 .await?;
 
         match owner {
             None => return Err(anyhow::anyhow!("Offering not found")),
-            Some((owner_pubkey,)) if owner_pubkey != pubkey_hash => {
+            Some((owner_pubkey,)) if owner_pubkey != (pubkey) => {
                 return Err(anyhow::anyhow!(
                     "Unauthorized: You do not own this offering"
                 ))
@@ -381,7 +381,7 @@ impl Database {
     /// Duplicate an offering
     pub async fn duplicate_offering(
         &self,
-        pubkey_hash: &[u8],
+        pubkey: &[u8],
         source_offering_id: i64,
         new_offering_id: String,
     ) -> Result<i64> {
@@ -390,7 +390,7 @@ impl Database {
         let source = source.ok_or_else(|| anyhow::anyhow!("Source offering not found"))?;
 
         // Verify ownership
-        if source.pubkey_hash != pubkey_hash {
+        if source.pubkey != (pubkey) {
             return Err(anyhow::anyhow!(
                 "Unauthorized: You do not own this offering"
             ));
@@ -401,7 +401,7 @@ impl Database {
         // Create new offering with duplicated data
         let params = Offering {
             id: None,
-            pubkey_hash: pubkey_hash.to_vec(),
+            pubkey: (pubkey).to_vec(),
             offering_id: new_offering_id,
             offer_name: format!("{} (Copy)", source.offer_name),
             description: source.description,
@@ -442,13 +442,13 @@ impl Database {
             operating_systems: source.operating_systems,
         };
 
-        self.create_offering(pubkey_hash, params).await
+        self.create_offering(pubkey, params).await
     }
 
     /// Bulk update stock_status for multiple offerings
     pub async fn bulk_update_stock_status(
         &self,
-        pubkey_hash: &[u8],
+        pubkey: &[u8],
         offering_ids: &[i64],
         new_status: &str,
     ) -> Result<usize> {
@@ -463,7 +463,7 @@ impl Database {
             .collect::<Vec<_>>()
             .join(",");
         let verify_query = format!(
-            "SELECT COUNT(*) as count FROM provider_offerings WHERE id IN ({}) AND pubkey_hash = ?",
+            "SELECT COUNT(*) as count FROM provider_offerings WHERE id IN ({}) AND (pubkey) = ?",
             placeholders
         );
 
@@ -471,7 +471,7 @@ impl Database {
         for id in offering_ids {
             query_builder = query_builder.bind(id);
         }
-        query_builder = query_builder.bind(pubkey_hash);
+        query_builder = query_builder.bind(pubkey);
 
         let count: i64 = query_builder.fetch_one(&self.pool).await?;
 
@@ -531,7 +531,7 @@ impl Database {
                 // Insert main offering record
                 let _offering_id = sqlx::query_scalar::<_, i64>(
                     "INSERT INTO provider_offerings (
-                        pubkey_hash, offering_id, offer_name, description, product_page_url,
+                        pubkey, offering_id, offer_name, description, product_page_url,
                         currency, monthly_price, setup_fee, visibility, product_type,
                         virtualization_type, billing_interval, stock_status, processor_brand,
                         processor_amount, processor_cores, processor_speed, processor_name,
@@ -595,7 +595,7 @@ impl Database {
     /// Returns (success_count, errors) where errors is Vec<(row_number, error_message)>
     pub async fn import_offerings_csv(
         &self,
-        pubkey_hash: &[u8],
+        pubkey: &[u8],
         csv_data: &str,
         upsert: bool,
     ) -> Result<(usize, Vec<(usize, String)>)> {
@@ -613,24 +613,22 @@ impl Database {
                             let result = if upsert {
                                 // Try to find existing offering by offering_id
                                 let existing = sqlx::query_scalar::<_, i64>(
-                                    "SELECT id FROM provider_offerings WHERE offering_id = ? AND pubkey_hash = ?"
+                                    "SELECT id FROM provider_offerings WHERE offering_id = ? AND (pubkey) = ?"
                                 )
                                 .bind(&params.offering_id)
-                                .bind(pubkey_hash)
+                                .bind(pubkey)
                                 .fetch_optional(&self.pool)
                                 .await;
 
                                 match existing {
-                                    Ok(Some(id)) => {
-                                        self.update_offering(pubkey_hash, id, params).await
-                                    }
+                                    Ok(Some(id)) => self.update_offering(pubkey, id, params).await,
                                     Ok(None) => {
-                                        self.create_offering(pubkey_hash, params).await.map(|_| ())
+                                        self.create_offering(pubkey, params).await.map(|_| ())
                                     }
                                     Err(e) => Err(e.into()),
                                 }
                             } else {
-                                self.create_offering(pubkey_hash, params).await.map(|_| ())
+                                self.create_offering(pubkey, params).await.map(|_| ())
                             };
 
                             match result {
@@ -731,7 +729,7 @@ impl Database {
 
         Ok(Offering {
             id: None,
-            pubkey_hash: vec![], // Will be set by caller
+            pubkey: vec![], // Will be set by caller
             offering_id,
             offer_name,
             description: get_opt_str(2),

@@ -17,7 +17,7 @@ impl Database {
             // Insert added principals
             for principal in linked_ids.alt_principals_add() {
                 sqlx::query(
-                    "INSERT INTO linked_ic_ids (pubkey_hash, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
+                    "INSERT INTO linked_ic_ids (pubkey, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
                 )
                 .bind(&entry.key)
                 .bind(principal.to_text())
@@ -30,7 +30,7 @@ impl Database {
             // Insert removed principals
             for principal in linked_ids.alt_principals_rm() {
                 sqlx::query(
-                    "INSERT INTO linked_ic_ids (pubkey_hash, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
+                    "INSERT INTO linked_ic_ids (pubkey, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
                 )
                 .bind(&entry.key)
                 .bind(principal.to_text())

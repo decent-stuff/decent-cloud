@@ -23,7 +23,7 @@ const sampleStats = {
 const sampleOfferings = [
 	{
 		id: 1,
-		pubkey_hash: [1, 2, 3, 4],
+		pubkey: [1, 2, 3, 4],
 		offering_id: 'off-1',
 		offer_name: 'Test VM',
 		product_type: 'compute',
@@ -41,7 +41,7 @@ const sampleOfferings = [
 
 const sampleProviders = [
 	{
-		pubkey_hash: [5, 6, 7, 8],
+		pubkey: [5, 6, 7, 8],
 		name: 'Test Provider',
 		api_version: '1.0',
 		profile_version: '1.0',
@@ -109,30 +109,30 @@ describe('searchOfferings', () => {
 		const offerings = await searchOfferings();
 
 		expect(offerings).toHaveLength(1);
-		expect(offerings[0].pubkey_hash).toBe('01020304'); // Normalized to hex string
+		expect(offerings[0].pubkey).toBe('01020304'); // Normalized to hex string
 		expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/v1/offerings'));
 	});
 
-	it('normalizes pubkey_hash from array to hex string', async () => {
+	it('normalizes pubkey from array to hex string', async () => {
 		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({ success: true, data: sampleOfferings })
 		});
 
 		const offerings = await searchOfferings();
-		expect(typeof offerings[0].pubkey_hash).toBe('string');
-		expect(offerings[0].pubkey_hash).toBe('01020304');
+		expect(typeof offerings[0].pubkey).toBe('string');
+		expect(offerings[0].pubkey).toBe('01020304');
 	});
 
-	it('handles string pubkey_hash', async () => {
-		const offeringWithStringHash = [{ ...sampleOfferings[0], pubkey_hash: 'abcd1234' }];
+	it('handles string pubkey', async () => {
+		const offeringWithStringHash = [{ ...sampleOfferings[0], pubkey: 'abcd1234' }];
 		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({ success: true, data: offeringWithStringHash })
 		});
 
 		const offerings = await searchOfferings();
-		expect(offerings[0].pubkey_hash).toBe('abcd1234');
+		expect(offerings[0].pubkey).toBe('abcd1234');
 	});
 
 	it('passes query parameters correctly', async () => {
@@ -174,19 +174,19 @@ describe('getActiveProviders', () => {
 		const providers = await getActiveProviders(1);
 
 		expect(providers).toHaveLength(1);
-		expect(providers[0].pubkey_hash).toBe('05060708'); // Normalized to hex string
+		expect(providers[0].pubkey).toBe('05060708'); // Normalized to hex string
 		expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/v1/providers/active/1'));
 	});
 
-	it('normalizes pubkey_hash from array to hex string', async () => {
+	it('normalizes pubkey from array to hex string', async () => {
 		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({ success: true, data: sampleProviders })
 		});
 
 		const providers = await getActiveProviders(1);
-		expect(typeof providers[0].pubkey_hash).toBe('string');
-		expect(providers[0].pubkey_hash).toBe('05060708');
+		expect(typeof providers[0].pubkey).toBe('string');
+		expect(providers[0].pubkey).toBe('05060708');
 	});
 
 	it('throws when API fails', async () => {
@@ -229,15 +229,15 @@ describe('getProviderOfferings', () => {
 		expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/v1/providers/abcd1234/offerings'));
 	});
 
-	it('normalizes pubkey_hash in response', async () => {
+	it('normalizes pubkey in response', async () => {
 		globalThis.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({ success: true, data: sampleOfferings })
 		});
 
 		const offerings = await getProviderOfferings('test');
-		expect(typeof offerings[0].pubkey_hash).toBe('string');
-		expect(offerings[0].pubkey_hash).toBe('01020304');
+		expect(typeof offerings[0].pubkey).toBe('string');
+		expect(offerings[0].pubkey).toBe('01020304');
 	});
 
 	it('throws when API fails', async () => {
@@ -272,8 +272,8 @@ describe('getUserContracts', () => {
 	const sampleContracts = [
 		{
 			contract_id: [1, 2, 3, 4],
-			requester_pubkey_hash: [5, 6, 7, 8],
-			provider_pubkey_hash: [9, 10, 11, 12],
+			requester_pubkey: [5, 6, 7, 8],
+			provider_pubkey: [9, 10, 11, 12],
 			requester_ssh_pubkey: 'ssh-ed25519 AAAA...',
 			requester_contact: 'user@example.com',
 			offering_id: 'off-123',
@@ -305,9 +305,9 @@ describe('getUserContracts', () => {
 
 		expect(contracts).toHaveLength(1);
 		expect(contracts[0].contract_id).toBe('01020304');
-		expect(contracts[0].requester_pubkey_hash).toBe('05060708');
-		expect(contracts[0].provider_pubkey_hash).toBe('090a0b0c');
-			expect(globalThis.fetch).toHaveBeenCalledWith(
+		expect(contracts[0].requester_pubkey).toBe('05060708');
+		expect(contracts[0].provider_pubkey).toBe('090a0b0c');
+		expect(globalThis.fetch).toHaveBeenCalledWith(
 			expect.stringContaining('/api/v1/users/test-pubkey/contracts'),
 			expect.objectContaining({
 				method: 'GET',
@@ -321,8 +321,8 @@ describe('getUserContracts', () => {
 			{
 				...sampleContracts[0],
 				contract_id: 'abc123',
-				requester_pubkey_hash: 'def456',
-				provider_pubkey_hash: 'ghi789'
+				requester_pubkey: 'def456',
+				provider_pubkey: 'ghi789'
 			}
 		];
 
@@ -334,8 +334,8 @@ describe('getUserContracts', () => {
 		const contracts = await getUserContracts(mockHeaders);
 
 		expect(contracts[0].contract_id).toBe('abc123');
-		expect(contracts[0].requester_pubkey_hash).toBe('def456');
-		expect(contracts[0].provider_pubkey_hash).toBe('ghi789');
+		expect(contracts[0].requester_pubkey).toBe('def456');
+		expect(contracts[0].provider_pubkey).toBe('ghi789');
 	});
 
 	it('returns empty array when no contracts exist', async () => {
@@ -388,8 +388,8 @@ describe('getProviderContracts', () => {
 		const contracts = [
 			{
 				contract_id: [0xde, 0xad],
-				requester_pubkey_hash: [0xbe, 0xef],
-				provider_pubkey_hash: [0xca, 0xfe],
+				requester_pubkey: [0xbe, 0xef],
+				provider_pubkey: [0xca, 0xfe],
 				requester_ssh_pubkey: 'ssh',
 				requester_contact: 'contact',
 				offering_id: 'offer-42',
@@ -407,7 +407,7 @@ describe('getProviderContracts', () => {
 
 		const result = await getProviderContracts(providerHeaders, providerHex);
 		expect(result[0].contract_id).toBe('dead');
-		expect(result[0].requester_pubkey_hash).toBe('beef');
+		expect(result[0].requester_pubkey).toBe('beef');
 
 		expect(fetch).toHaveBeenCalledWith(
 			expect.stringContaining(`/api/v1/providers/${providerHex}/contracts`),

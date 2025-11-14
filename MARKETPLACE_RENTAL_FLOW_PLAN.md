@@ -84,10 +84,10 @@ pub async fn create_rental_request(
 ```
 
 Fields needed:
-- `requester_pubkey_hash` (from auth)
+- `requester_pubkey` (from auth)
 - `requester_ssh_pubkey` (from request or user profile)
 - `requester_contact` (from request or user profile)
-- `provider_pubkey_hash` (from offering)
+- `provider_pubkey` (from offering)
 - `offering_id`
 - `payment_amount_e9s`
 - `request_memo`

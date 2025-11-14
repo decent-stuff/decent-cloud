@@ -3,7 +3,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import UserProfileEditor from "$lib/components/UserProfileEditor.svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
-	import { computePubkeyHash } from "$lib/utils/contract-format";
+	import { computePubkey } from "$lib/utils/contract-format";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let signingIdentity = $state<IdentityInfo | null>(null);
@@ -67,7 +67,7 @@
 				{#if currentIdentity.publicKeyBytes}
 					<p class="text-white/70 font-mono">
 						Public key (hex): <span class="text-white text-xs"
-							>{computePubkeyHash(
+							>{computePubkey(
 								currentIdentity.publicKeyBytes,
 							)}</span
 						>

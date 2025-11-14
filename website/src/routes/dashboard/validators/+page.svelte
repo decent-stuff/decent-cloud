@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { getActiveValidators, type Validator } from '$lib/services/api';
+	import { onMount } from "svelte";
+	import { getActiveValidators, type Validator } from "$lib/services/api";
 
 	let validators = $state<Validator[]>([]);
 	let loading = $state(true);
@@ -13,20 +13,21 @@
 			// Get validators active in the last 30 days
 			validators = await getActiveValidators(30);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load validators';
-			console.error('Error loading validators:', e);
+			error =
+				e instanceof Error ? e.message : "Failed to load validators";
+			console.error("Error loading validators:", e);
 		} finally {
 			loading = false;
 		}
 	});
 
-	function formatPubkeyHash(hash: string | number[]): string {
-		const hashStr = typeof hash === 'string' ? hash : hash.join('');
+	function formatPubkey(hash: string | number[]): string {
+		const hashStr = typeof hash === "string" ? hash : hash.join("");
 		return `${hashStr.substring(0, 8)}...${hashStr.substring(hashStr.length - 8)}`;
 	}
 
-	function getPubkeyHashString(hash: string | number[]): string {
-		return typeof hash === 'string' ? hash : hash.join('');
+	function getPubkeyString(hash: string | number[]): string {
+		return typeof hash === "string" ? hash : hash.join("");
 	}
 
 	function formatTimestamp(timestampNs: number): string {
@@ -43,8 +44,12 @@
 	}
 
 	// Calculate active validators by different time periods
-	const activeIn24h = $derived(validators.filter(v => v.check_ins_24h > 0).length);
-	const activeIn7d = $derived(validators.filter(v => v.check_ins_7d > 0).length);
+	const activeIn24h = $derived(
+		validators.filter((v) => v.check_ins_24h > 0).length,
+	);
+	const activeIn7d = $derived(
+		validators.filter((v) => v.check_ins_7d > 0).length,
+	);
 </script>
 
 <div class="space-y-8">
@@ -54,7 +59,9 @@
 	</div>
 
 	{#if error}
-		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">
+		<div
+			class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400"
+		>
 			<p class="font-semibold">Error loading validators</p>
 			<p class="text-sm mt-1">{error}</p>
 		</div>
@@ -62,55 +69,92 @@
 
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
-			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"></div>
+			<div
+				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"
+			></div>
 		</div>
 	{:else}
 		<!-- Stats Summary -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<div class="flex items-center justify-between mb-2">
-					<h3 class="text-white/70 text-sm font-medium">Active (24h)</h3>
+					<h3 class="text-white/70 text-sm font-medium">
+						Active (24h)
+					</h3>
 					<span class="text-2xl">✓</span>
 				</div>
 				<p class="text-3xl font-bold text-white">{activeIn24h}</p>
-				<p class="text-white/50 text-sm mt-1">Validators checked in today</p>
+				<p class="text-white/50 text-sm mt-1">
+					Validators checked in today
+				</p>
 			</div>
 
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<div class="flex items-center justify-between mb-2">
-					<h3 class="text-white/70 text-sm font-medium">Active (7d)</h3>
+					<h3 class="text-white/70 text-sm font-medium">
+						Active (7d)
+					</h3>
 					<span class="text-2xl">🔗</span>
 				</div>
 				<p class="text-3xl font-bold text-white">{activeIn7d}</p>
-				<p class="text-white/50 text-sm mt-1">Validators active this week</p>
+				<p class="text-white/50 text-sm mt-1">
+					Validators active this week
+				</p>
 			</div>
 
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<div class="flex items-center justify-between mb-2">
-					<h3 class="text-white/70 text-sm font-medium">Total (30d)</h3>
+					<h3 class="text-white/70 text-sm font-medium">
+						Total (30d)
+					</h3>
 					<span class="text-2xl">🌐</span>
 				</div>
 				<p class="text-3xl font-bold text-white">{validators.length}</p>
-				<p class="text-white/50 text-sm mt-1">Validators active this month</p>
+				<p class="text-white/50 text-sm mt-1">
+					Validators active this month
+				</p>
 			</div>
 		</div>
 
 		<!-- Validators Table -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 overflow-hidden">
+		<div
+			class="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 overflow-hidden"
+		>
 			<div class="overflow-x-auto">
 				<table class="w-full">
 					<thead class="bg-white/5 border-b border-white/10">
 						<tr>
-							<th class="px-6 py-4 text-left text-sm font-semibold text-white">Validator</th>
-							<th class="px-6 py-4 text-left text-sm font-semibold text-white">Check-ins</th>
-							<th class="px-6 py-4 text-left text-sm font-semibold text-white">Last Seen</th>
-							<th class="px-6 py-4 text-left text-sm font-semibold text-white">Status</th>
+							<th
+								class="px-6 py-4 text-left text-sm font-semibold text-white"
+								>Validator</th
+							>
+							<th
+								class="px-6 py-4 text-left text-sm font-semibold text-white"
+								>Check-ins</th
+							>
+							<th
+								class="px-6 py-4 text-left text-sm font-semibold text-white"
+								>Last Seen</th
+							>
+							<th
+								class="px-6 py-4 text-left text-sm font-semibold text-white"
+								>Status</th
+							>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-white/10">
 						{#if validators.length === 0}
 							<tr>
-								<td colspan="4" class="px-6 py-8 text-center text-white/60">
+								<td
+									colspan="4"
+									class="px-6 py-8 text-center text-white/60"
+								>
 									No active validators found
 								</td>
 							</tr>
@@ -122,43 +166,83 @@
 											<div
 												class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold"
 											>
-												{validator.name ? validator.name.charAt(0).toUpperCase() : 'V'}
+												{validator.name
+													? validator.name
+															.charAt(0)
+															.toUpperCase()
+													: "V"}
 											</div>
 											<div>
-												<p class="text-white font-medium">{validator.name || 'Unnamed Validator'}</p>
+												<p
+													class="text-white font-medium"
+												>
+													{validator.name ||
+														"Unnamed Validator"}
+												</p>
 												<a
-													href="/dashboard/reputation/{getPubkeyHashString(validator.pubkey_hash)}"
+													href="/dashboard/reputation/{getPubkeyString(
+														validator.pubkey,
+													)}"
 													class="text-white/50 hover:text-blue-400 text-sm font-mono transition-colors"
 												>
-													{formatPubkeyHash(validator.pubkey_hash)}
+													{formatPubkey(
+														validator.pubkey,
+													)}
 												</a>
 												{#if validator.description}
-													<p class="text-white/50 text-xs mt-0.5 max-w-xs truncate">{validator.description}</p>
+													<p
+														class="text-white/50 text-xs mt-0.5 max-w-xs truncate"
+													>
+														{validator.description}
+													</p>
 												{/if}
 											</div>
 										</div>
 									</td>
 									<td class="px-6 py-4">
 										<div class="text-sm">
-											<div class="text-white font-medium">{validator.total_check_ins} total</div>
-											<div class="text-white/50 space-x-2 mt-1">
-												<span>24h: {validator.check_ins_24h}</span>
-												<span>7d: {validator.check_ins_7d}</span>
-												<span>30d: {validator.check_ins_30d}</span>
+											<div class="text-white font-medium">
+												{validator.total_check_ins} total
+											</div>
+											<div
+												class="text-white/50 space-x-2 mt-1"
+											>
+												<span
+													>24h: {validator.check_ins_24h}</span
+												>
+												<span
+													>7d: {validator.check_ins_7d}</span
+												>
+												<span
+													>30d: {validator.check_ins_30d}</span
+												>
 											</div>
 										</div>
 									</td>
 									<td class="px-6 py-4">
 										<div class="text-sm text-white">
-											{formatTimestamp(validator.last_check_in_ns)}
+											{formatTimestamp(
+												validator.last_check_in_ns,
+											)}
 										</div>
 									</td>
 									<td class="px-6 py-4">
 										<span
-											class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium {validator.check_ins_24h > 0 ? 'bg-green-500/20 text-green-400 border-green-500/30' : validator.check_ins_7d > 0 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'} border"
+											class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium {validator.check_ins_24h >
+											0
+												? 'bg-green-500/20 text-green-400 border-green-500/30'
+												: validator.check_ins_7d > 0
+													? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+													: 'bg-gray-500/20 text-gray-400 border-gray-500/30'} border"
 										>
-											<span class="w-2 h-2 rounded-full bg-current"></span>
-											{validator.check_ins_24h > 0 ? 'active' : validator.check_ins_7d > 0 ? 'recent' : 'idle'}
+											<span
+												class="w-2 h-2 rounded-full bg-current"
+											></span>
+											{validator.check_ins_24h > 0
+												? "active"
+												: validator.check_ins_7d > 0
+													? "recent"
+													: "idle"}
 										</span>
 										{#if validator.website_url}
 											<a
@@ -183,7 +267,9 @@
 		<div
 			class="bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-xl p-8 border border-blue-500/30"
 		>
-			<h2 class="text-2xl font-bold text-white mb-2">Become a Validator</h2>
+			<h2 class="text-2xl font-bold text-white mb-2">
+				Become a Validator
+			</h2>
 			<p class="text-white/70 mb-4">
 				Help secure the network and earn rewards by becoming a validator
 			</p>

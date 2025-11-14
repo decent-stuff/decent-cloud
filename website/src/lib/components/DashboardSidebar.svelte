@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { authStore } from '$lib/stores/auth';
-	import { computePubkeyHash } from '$lib/utils/contract-format';
-	import type { IdentityInfo } from '$lib/stores/auth';
+	import { page } from "$app/stores";
+	import { authStore } from "$lib/stores/auth";
+	import { computePubkey } from "$lib/utils/contract-format";
+	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let { isOpen = $bindable(false) } = $props();
 
@@ -13,29 +13,33 @@
 	});
 
 	const navItems = $derived([
-		{ href: '/dashboard', icon: '📊', label: 'Overview' },
-		{ href: '/dashboard/validators', icon: '✓', label: 'Validators' },
-		{ href: '/dashboard/offerings', icon: '📦', label: 'My Offerings' },
-		{ href: '/dashboard/marketplace', icon: '🛒', label: 'Marketplace' },
-		{ href: '/dashboard/rentals', icon: '🔑', label: 'My Rentals' },
-		{ href: '/dashboard/provider/requests', icon: '🤝', label: 'Provider Requests' },
+		{ href: "/dashboard", icon: "📊", label: "Overview" },
+		{ href: "/dashboard/validators", icon: "✓", label: "Validators" },
+		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
+		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
+		{ href: "/dashboard/rentals", icon: "🔑", label: "My Rentals" },
+		{
+			href: "/dashboard/provider/requests",
+			icon: "🤝",
+			label: "Provider Requests",
+		},
 		{
 			href: currentIdentity?.publicKeyBytes
-				? `/dashboard/reputation/${computePubkeyHash(currentIdentity.publicKeyBytes)}`
-				: '/dashboard/reputation',
-			icon: '⭐',
-			label: 'My Reputation'
-		}
+				? `/dashboard/reputation/${computePubkey(currentIdentity.publicKeyBytes)}`
+				: "/dashboard/reputation",
+			icon: "⭐",
+			label: "My Reputation",
+		},
 	]);
 
-	let currentPath = $state('');
+	let currentPath = $state("");
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
 	});
 
 	async function handleLogout() {
 		await authStore.logout();
-		window.location.href = '/';
+		window.location.href = "/";
 	}
 
 	function closeSidebar() {
@@ -60,7 +64,10 @@
 >
 	<!-- Logo -->
 	<div class="p-6 border-b border-white/10">
-		<a href="/" class="text-2xl font-bold text-white hover:text-blue-400 transition-colors">
+		<a
+			href="/"
+			class="text-2xl font-bold text-white hover:text-blue-400 transition-colors"
+		>
 			Decent Cloud
 		</a>
 	</div>
@@ -70,7 +77,8 @@
 		{#each navItems as item}
 			{@const isActive =
 				currentPath === item.href ||
-				(item.label === 'My Reputation' && currentPath.startsWith('/dashboard/reputation'))}
+				(item.label === "My Reputation" &&
+					currentPath.startsWith("/dashboard/reputation"))}
 			<a
 				href={item.href}
 				onclick={closeSidebar}

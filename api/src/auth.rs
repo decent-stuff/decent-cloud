@@ -8,7 +8,7 @@ use ts_rs::TS;
 /// Authenticated user with verified public key
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
-    pub pubkey_hash: Vec<u8>,
+    pub pubkey: Vec<u8>,
 }
 
 /// Headers for signed API requests
@@ -163,7 +163,7 @@ impl FromRequest<'_> for AuthenticatedUser {
         // NOTE: Query strings are intentionally excluded from signature for robustness
         // Security trade-off: query params could be manipulated, but they're typically
         // non-critical (filters, pagination, options). Body and path integrity maintained.
-        let pubkey_hash = verify_request_signature(
+        let pubkey = verify_request_signature(
             pubkey_hex,
             signature_hex,
             timestamp,
@@ -175,7 +175,7 @@ impl FromRequest<'_> for AuthenticatedUser {
         // Restore body for downstream handlers
         *body = RequestBody::new(poem::Body::from(body_bytes));
 
-        Ok(AuthenticatedUser { pubkey_hash })
+        Ok(AuthenticatedUser { pubkey })
     }
 }
 

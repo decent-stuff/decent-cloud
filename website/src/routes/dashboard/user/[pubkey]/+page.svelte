@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
-	import { getUserActivity, type UserActivity } from "$lib/services/api-user-activity";
+	import {
+		getUserActivity,
+		type UserActivity,
+	} from "$lib/services/api-user-activity";
 	import { formatContractDate } from "$lib/utils/contract-format";
 
 	const pubkey = $page.params.pubkey ?? "";
@@ -18,9 +21,12 @@
 			isNotFound = false;
 			activity = await getUserActivity(pubkey);
 		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : "Failed to load user activity";
+			const errorMessage =
+				e instanceof Error ? e.message : "Failed to load user activity";
 			error = errorMessage;
-			isNotFound = errorMessage.includes('404') || errorMessage.includes('Not Found');
+			isNotFound =
+				errorMessage.includes("404") ||
+				errorMessage.includes("Not Found");
 			console.error("Error loading user activity:", e);
 		} finally {
 			loading = false;
@@ -37,29 +43,41 @@
 	<div>
 		<h1 class="text-4xl font-bold text-white mb-2">User Info</h1>
 		<p class="text-white/60">
-			Public Key: <span class="font-mono text-sm">{shortPubkey(pubkey)}</span>
+			Public Key: <span class="font-mono text-sm"
+				>{shortPubkey(pubkey)}</span
+			>
 		</p>
 	</div>
 
 	{#if error}
-		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-400">
+		<div
+			class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-400"
+		>
 			{#if isNotFound}
 				<div class="text-center">
 					<div class="text-6xl mb-4">🔍</div>
 					<h2 class="text-2xl font-bold mb-2">User Not Found</h2>
 					<p class="mb-4">
-						The user with pubkey <span class="font-mono text-sm">{shortPubkey(pubkey)}</span> was not found in the system.
+						The user with pubkey <span class="font-mono text-sm"
+							>{shortPubkey(pubkey)}</span
+						> was not found in the system.
 					</p>
-					<p class="text-sm text-red-300/70">
-						This could mean:
-					</p>
-					<ul class="text-sm text-red-300/70 list-disc list-inside mt-2">
-						<li>The user hasn't created any offerings or contracts yet</li>
+					<p class="text-sm text-red-300/70">This could mean:</p>
+					<ul
+						class="text-sm text-red-300/70 list-disc list-inside mt-2"
+					>
+						<li>
+							The user hasn't created any offerings or contracts
+							yet
+						</li>
 						<li>The pubkey address is incorrect</li>
 						<li>The user is new to the platform</li>
 					</ul>
 					<div class="mt-6">
-						<a href="/dashboard/marketplace" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+						<a
+							href="/dashboard/marketplace"
+							class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+						>
 							← Back to Marketplace
 						</a>
 					</div>
@@ -86,7 +104,9 @@
 			{#if activity.offerings_provided.length === 0}
 				<p class="text-white/60">No offerings provided yet.</p>
 			{:else}
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				<div
+					class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+				>
 					{#each activity.offerings_provided as offering}
 						<div
 							class="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20"
@@ -98,7 +118,8 @@
 								{offering.product_type}
 							</p>
 							<p class="text-white font-medium">
-								{offering.monthly_price.toFixed(2)} {offering.currency}/mo
+								{offering.monthly_price.toFixed(2)}
+								{offering.currency}/mo
 							</p>
 							<span
 								class="inline-block mt-2 px-2 py-1 rounded text-xs font-medium {offering.stock_status ===
@@ -135,10 +156,12 @@
 									<p class="text-sm text-white/60">
 										Provider:
 										<a
-											href="/dashboard/reputation/{contract.provider_pubkey_hash}"
+											href="/dashboard/reputation/{contract.provider_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(contract.provider_pubkey_hash)}
+											{shortPubkey(
+												contract.provider_pubkey,
+											)}
 										</a>
 									</p>
 								</div>
@@ -149,7 +172,9 @@
 								</span>
 							</div>
 							<p class="text-sm text-white/60">
-								Created: {formatContractDate(contract.created_at_ns)}
+								Created: {formatContractDate(
+									contract.created_at_ns,
+								)}
 							</p>
 							{#if contract.duration_hours}
 								<p class="text-sm text-white/60">
@@ -183,10 +208,12 @@
 									<p class="text-sm text-white/60">
 										Requester:
 										<a
-											href="/dashboard/reputation/{contract.requester_pubkey_hash}"
+											href="/dashboard/reputation/{contract.requester_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(contract.requester_pubkey_hash)}
+											{shortPubkey(
+												contract.requester_pubkey,
+											)}
 										</a>
 									</p>
 								</div>
@@ -197,7 +224,9 @@
 								</span>
 							</div>
 							<p class="text-sm text-white/60">
-								Created: {formatContractDate(contract.created_at_ns)}
+								Created: {formatContractDate(
+									contract.created_at_ns,
+								)}
 							</p>
 							{#if contract.duration_hours}
 								<p class="text-sm text-white/60">

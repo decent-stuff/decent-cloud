@@ -15,7 +15,7 @@ impl Database {
                 .map_err(|e| anyhow::anyhow!("Failed to parse reputation change: {}", e))?;
 
             sqlx::query(
-                "INSERT INTO reputation_changes (pubkey_hash, change_amount, reason, block_timestamp_ns) VALUES (?, ?, ?, ?)"
+                "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, ?, ?, ?)"
             )
             .bind(&entry.key)
             .bind(change.changes()[0].1) // Get the delta amount from first change

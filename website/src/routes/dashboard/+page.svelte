@@ -5,7 +5,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
-	import { computePubkeyHash } from "$lib/utils/contract-format";
+	import { computePubkey } from "$lib/utils/contract-format";
 
 	let dashboardData = $state<DashboardData>({
 		dctPrice: 0,
@@ -76,7 +76,7 @@
 					</p>
 					{#if currentIdentity.publicKeyBytes}
 						<p class="text-white/50 text-xs font-mono">
-							Public key (hex): {computePubkeyHash(
+							Public key (hex): {computePubkey(
 								currentIdentity.publicKeyBytes,
 							)}
 						</p>

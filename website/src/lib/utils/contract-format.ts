@@ -20,7 +20,7 @@ export function truncateContractHash(hash: string, visible: number = 6): string 
 	return `${hash.slice(0, visible)}...${hash.slice(-visible)}`;
 }
 
-export function computePubkeyHash(publicKeyBytes: Uint8Array): string {
+export function computePubkey(publicKeyBytes: Uint8Array): string {
 	const hash = sha256(publicKeyBytes);
 	return hexEncode(hash);
 }

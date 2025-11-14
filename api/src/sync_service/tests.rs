@@ -217,7 +217,7 @@ async fn test_structured_provider_registration() {
     database.insert_entries(entries).await.unwrap();
 
     // Verify to entry was inserted into the structured table
-    let row = sqlx::query("SELECT * FROM provider_registrations WHERE pubkey_hash = ?")
+    let row = sqlx::query("SELECT * FROM provider_registrations WHERE pubkey = ?")
         .bind(&[1, 2, 3, 4][..])
         .fetch_one(database.pool())
         .await
@@ -250,7 +250,7 @@ async fn test_structured_provider_check_in() {
     database.insert_entries(entries).await.unwrap();
 
     // Verify to entry was inserted into the structured table
-    let row = sqlx::query("SELECT * FROM provider_check_ins WHERE pubkey_hash = ?")
+    let row = sqlx::query("SELECT * FROM provider_check_ins WHERE pubkey = ?")
         .bind(&[1, 2, 3, 4][..])
         .fetch_one(database.pool())
         .await
@@ -350,13 +350,13 @@ async fn test_structured_mixed_entries() {
     database.insert_entries(entries).await.unwrap();
 
     // Verify structured entries (excluding example provider from migration 002)
-    let example_pubkey_hash =
+    let example_provider_pubkey =
         hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
             .unwrap();
 
     let provider_count: i64 =
-        sqlx::query("SELECT COUNT(*) as count FROM provider_registrations WHERE pubkey_hash != ?")
-            .bind(&example_pubkey_hash)
+        sqlx::query("SELECT COUNT(*) as count FROM provider_registrations WHERE pubkey != ?")
+            .bind(&example_provider_pubkey)
             .fetch_one(database.pool())
             .await
             .unwrap()
@@ -369,8 +369,8 @@ async fn test_structured_mixed_entries() {
         .get("count");
 
     let check_in_count: i64 =
-        sqlx::query("SELECT COUNT(*) as count FROM provider_check_ins WHERE pubkey_hash != ?")
-            .bind(&example_pubkey_hash)
+        sqlx::query("SELECT COUNT(*) as count FROM provider_check_ins WHERE pubkey != ?")
+            .bind(&example_provider_pubkey)
             .fetch_one(database.pool())
             .await
             .unwrap()

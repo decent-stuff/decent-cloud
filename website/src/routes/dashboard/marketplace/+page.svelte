@@ -234,11 +234,13 @@
 
 					<!-- Provider Info -->
 					<a
-						href="/dashboard/reputation/{offering.pubkey_hash}"
+						href="/dashboard/reputation/{offering.pubkey}"
 						class="flex items-center gap-2 text-sm text-white/70 hover:text-blue-400 transition-colors mb-4"
 					>
 						<span class="text-xs">👤</span>
-						<span class="font-mono text-xs">{shortPubkey(offering.pubkey_hash)}</span>
+						<span class="font-mono text-xs"
+							>{shortPubkey(offering.pubkey)}</span
+						>
 						<span class="text-xs">→</span>
 					</a>
 

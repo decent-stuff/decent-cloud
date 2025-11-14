@@ -11,11 +11,11 @@ pub struct Contract {
     #[serde(skip_deserializing)]
     pub contract_id: Vec<u8>,
     #[serde(skip_deserializing)]
-    pub requester_pubkey_hash: Vec<u8>,
+    pub requester_pubkey: Vec<u8>,
     pub requester_ssh_pubkey: String,
     pub requester_contact: String,
     #[serde(skip_deserializing)]
-    pub provider_pubkey_hash: Vec<u8>,
+    pub provider_pubkey: Vec<u8>,
     pub offering_id: String,
     pub region_name: Option<String>,
     pub instance_config: Option<String>,
@@ -42,7 +42,7 @@ pub struct Contract {
 #[allow(dead_code)]
 pub struct ContractReply {
     pub contract_id: Vec<u8>,
-    pub provider_pubkey_hash: Vec<u8>,
+    pub provider_pubkey: Vec<u8>,
     pub reply_status: String,
     pub reply_memo: Option<String>,
     pub instance_details: Option<String>,
@@ -82,11 +82,11 @@ pub struct ContractExtension {
 
 impl Database {
     /// Get contracts for a user (as requester)
-    pub async fn get_user_contracts(&self, pubkey_hash: &[u8]) -> Result<Vec<Contract>> {
+    pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE requester_pubkey_hash = ? ORDER BY created_at_ns DESC"
+            "SELECT * FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -94,11 +94,11 @@ impl Database {
     }
 
     /// Get contracts for a provider
-    pub async fn get_provider_contracts(&self, pubkey_hash: &[u8]) -> Result<Vec<Contract>> {
+    pub async fn get_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE provider_pubkey_hash = ? ORDER BY created_at_ns DESC"
+            "SELECT * FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -106,14 +106,11 @@ impl Database {
     }
 
     /// Get pending contracts for a provider
-    pub async fn get_pending_provider_contracts(
-        &self,
-        pubkey_hash: &[u8],
-    ) -> Result<Vec<Contract>> {
+    pub async fn get_pending_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE provider_pubkey_hash = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"
+            "SELECT * FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -225,7 +222,7 @@ impl Database {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(requester_pubkey);
-        hasher.update(&offering.pubkey_hash);
+        hasher.update(&offering.pubkey);
         hasher.update(offering.offering_id.as_bytes());
         hasher.update(ssh_pubkey.as_bytes());
         hasher.update(contact.as_bytes());
@@ -237,8 +234,8 @@ impl Database {
         // Insert contract request
         sqlx::query(
             "INSERT INTO contract_sign_requests (
-                contract_id, requester_pubkey_hash, requester_ssh_pubkey,
-                requester_contact, provider_pubkey_hash, offering_id,
+                contract_id, requester_pubkey, requester_ssh_pubkey,
+                requester_contact, provider_pubkey, offering_id,
                 payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                 duration_hours, original_duration_hours, request_memo,
                 created_at_ns, status
@@ -248,7 +245,7 @@ impl Database {
         .bind(requester_pubkey)
         .bind(&ssh_pubkey)
         .bind(&contact)
-        .bind(&offering.pubkey_hash)
+        .bind(&offering.pubkey)
         .bind(&offering.offering_id)
         .bind(payment_amount_e9s)
         .bind(start_timestamp_ns)
@@ -279,7 +276,7 @@ impl Database {
             .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
 
         // Only provider can update status
-        if contract.provider_pubkey_hash != updated_by_pubkey {
+        if contract.provider_pubkey != updated_by_pubkey {
             return Err(anyhow::anyhow!(
                 "Unauthorized: only provider can update contract status"
             ));
@@ -361,8 +358,8 @@ impl Database {
             .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
 
         // Verify authorization: only requester or provider can extend
-        if contract.requester_pubkey_hash != extended_by_pubkey
-            && contract.provider_pubkey_hash != extended_by_pubkey
+        if contract.requester_pubkey != extended_by_pubkey
+            && contract.provider_pubkey != extended_by_pubkey
         {
             return Err(anyhow::anyhow!(
                 "Unauthorized: only requester or provider can extend contract"
@@ -472,10 +469,10 @@ impl Database {
 
             // Use the calculated contract ID from the payload
             let contract_id = csr.calc_contract_id().to_vec();
-            let requester_pubkey_hash = request.requester_pubkey_bytes().to_vec();
+            let requester_pubkey = request.requester_pubkey_bytes().to_vec();
             let requester_ssh_pubkey = request.requester_ssh_pubkey().clone();
             let requester_contact = request.requester_contact().clone();
-            let provider_pubkey_hash = request.provider_pubkey_bytes().to_vec();
+            let provider_pubkey = request.provider_pubkey_bytes().to_vec();
             let offering_id = request.offering_id().clone();
             let region_name = request.region_name().cloned();
             let instance_config = request.instance_config().cloned();
@@ -485,13 +482,13 @@ impl Database {
 
             // Insert the main contract request
             sqlx::query(
-                "INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey_hash, requester_ssh_pubkey, requester_contact, provider_pubkey_hash, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp_ns, request_memo, created_at_ns, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp_ns, request_memo, created_at_ns, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&contract_id)
-            .bind(&requester_pubkey_hash)
+            .bind(&requester_pubkey)
             .bind(&requester_ssh_pubkey)
             .bind(&requester_contact)
-            .bind(&provider_pubkey_hash)
+            .bind(&provider_pubkey)
             .bind(&offering_id)
             .bind(region_name.as_deref())
             .bind(instance_config.as_deref())
@@ -536,7 +533,7 @@ impl Database {
 
             // Use the contract ID from the reply structure
             let contract_id = reply.contract_id().to_vec();
-            let provider_pubkey_hash = entry.key.clone(); // Provider who signed the reply (from entry key)
+            let provider_pubkey = entry.key.clone(); // Provider who signed the reply (from entry key)
 
             // Extract reply status and memo from the reply structure
             let reply_status = if reply.sign_accepted() {
@@ -548,10 +545,10 @@ impl Database {
             let instance_details = reply.response_details();
 
             sqlx::query(
-                "INSERT INTO contract_sign_replies (contract_id, provider_pubkey_hash, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, ?, ?, ?, ?)"
+                "INSERT INTO contract_sign_replies (contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, ?, ?, ?, ?)"
             )
             .bind(&contract_id)
-            .bind(&provider_pubkey_hash)
+            .bind(&provider_pubkey)
             .bind(reply_status)
             .bind(reply_memo)
             .bind(instance_details)
@@ -593,7 +590,7 @@ impl Database {
         })?;
 
         // Verify authorization: only requester can cancel their own request
-        if contract.requester_pubkey_hash != cancelled_by_pubkey {
+        if contract.requester_pubkey != cancelled_by_pubkey {
             return Err(anyhow::anyhow!(
                 "Unauthorized: only the requester can cancel their rental request"
             ));

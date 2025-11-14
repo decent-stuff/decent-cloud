@@ -24,17 +24,19 @@
 				<h3 class="text-xl font-semibold text-white">
 					{contract.offering_id}
 				</h3>
-				<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border {statusBadge.class}">
+				<span
+					class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border {statusBadge.class}"
+				>
 					<span>{statusBadge.icon}</span>
 					{statusBadge.text}
 				</span>
 			</div>
 			<a
-				href="/dashboard/reputation/{contract.requester_pubkey_hash}"
+				href="/dashboard/reputation/{contract.requester_pubkey}"
 				class="text-white/60 text-sm hover:text-blue-400 transition-colors inline-flex items-center gap-1"
 			>
 				<span class="text-xs">👤</span>
-				Requester: {truncateContractHash(contract.requester_pubkey_hash)}
+				Requester: {truncateContractHash(contract.requester_pubkey)}
 				<span class="text-xs">→</span>
 			</a>
 		</div>

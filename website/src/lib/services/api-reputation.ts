@@ -3,7 +3,7 @@ import { API_BASE_URL, hexEncode, type ApiResponse } from './api';
 // ============ Reputation & Account Info Types ============
 
 export interface ReputationInfo {
-	pubkey_hash: string;
+	pubkey: string;
 	total_reputation: number;
 	change_count: number;
 }
@@ -22,18 +22,18 @@ export interface TokenTransfer {
 }
 
 export interface AccountRegistration {
-	pubkey_hash: string;
+	pubkey: string;
 	created_at_ns: number;
 	account_type: 'user' | 'provider' | 'both';
 }
 
 // ============ Helper Functions ============
 
-function normalizePubkeyHash(pubkeyHash: string | number[]): string {
-	if (typeof pubkeyHash === 'string') {
-		return pubkeyHash;
+function normalizePubkey(pubkey: string | number[]): string {
+	if (typeof pubkey === 'string') {
+		return pubkey;
 	}
-	return hexEncode(new Uint8Array(pubkeyHash));
+	return hexEncode(new Uint8Array(pubkey));
 }
 
 // ============ API Functions ============
@@ -61,7 +61,7 @@ export async function getReputation(pubkeyHex: string): Promise<ReputationInfo |
 
 	return {
 		...payload.data,
-		pubkey_hash: normalizePubkeyHash(payload.data.pubkey_hash)
+		pubkey: normalizePubkey(payload.data.pubkey)
 	};
 }
 

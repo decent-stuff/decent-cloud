@@ -3,8 +3,8 @@
 -- Provider registrations
 CREATE TABLE provider_registrations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL UNIQUE,
-    pubkey_bytes BLOB NOT NULL,
+    pubkey BLOB NOT NULL UNIQUE,
+    
     signature BLOB NOT NULL,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -13,7 +13,7 @@ CREATE TABLE provider_registrations (
 -- Provider check-ins
 CREATE TABLE provider_check_ins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL,
+    pubkey BLOB NOT NULL,
     memo TEXT NOT NULL,
     nonce_signature BLOB NOT NULL,
     block_timestamp_ns INTEGER NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE provider_check_ins (
 -- Provider profiles (main table)
 CREATE TABLE provider_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL UNIQUE,
+    pubkey BLOB NOT NULL UNIQUE,
     name TEXT NOT NULL,
     description TEXT,
     website_url TEXT,
@@ -38,16 +38,16 @@ CREATE TABLE provider_profiles (
 -- Provider profile contacts (normalized table)
 CREATE TABLE provider_profiles_contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider_pubkey_hash BLOB NOT NULL,
+    provider_pubkey BLOB NOT NULL,
     contact_type TEXT NOT NULL, -- email, phone, twitter, linkedin, etc.
     contact_value TEXT NOT NULL,
-    FOREIGN KEY (provider_pubkey_hash) REFERENCES provider_profiles(pubkey_hash) ON DELETE CASCADE
+    FOREIGN KEY (provider_pubkey) REFERENCES provider_profiles(pubkey) ON DELETE CASCADE
 );
 
 -- Provider offerings (main table)
 CREATE TABLE provider_offerings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL,
+    pubkey BLOB NOT NULL,
     offering_id TEXT NOT NULL,
     offer_name TEXT NOT NULL,
     description TEXT,
@@ -88,14 +88,14 @@ CREATE TABLE provider_offerings (
     payment_methods TEXT,
     features TEXT,
     operating_systems TEXT,
-    UNIQUE(pubkey_hash, offering_id)
+    UNIQUE(pubkey, offering_id)
 );
 
 -- User registrations
 CREATE TABLE user_registrations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL UNIQUE,
-    pubkey_bytes BLOB NOT NULL,
+    pubkey BLOB NOT NULL UNIQUE,
+    
     signature BLOB NOT NULL,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -130,10 +130,10 @@ CREATE TABLE token_approvals (
 CREATE TABLE contract_sign_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contract_id BLOB NOT NULL UNIQUE,
-    requester_pubkey_hash BLOB NOT NULL,
+    requester_pubkey BLOB NOT NULL,
     requester_ssh_pubkey TEXT NOT NULL,
     requester_contact TEXT NOT NULL,
-    provider_pubkey_hash BLOB NOT NULL,
+    provider_pubkey BLOB NOT NULL,
     offering_id TEXT NOT NULL,
     region_name TEXT,
     instance_config TEXT,
@@ -194,7 +194,7 @@ CREATE TABLE contract_payment_entries (
 CREATE TABLE contract_sign_replies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     contract_id BLOB NOT NULL,
-    provider_pubkey_hash BLOB NOT NULL,
+    provider_pubkey BLOB NOT NULL,
     reply_status TEXT NOT NULL, -- accepted, rejected
     reply_memo TEXT,
     instance_details TEXT, -- connection details, IP addresses, etc.
@@ -221,7 +221,7 @@ CREATE TABLE contract_extensions (
 -- Reputation changes
 CREATE TABLE reputation_changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL,
+    pubkey BLOB NOT NULL,
     change_amount INTEGER NOT NULL,
     reason TEXT NOT NULL DEFAULT '',
     block_timestamp_ns INTEGER NOT NULL,
@@ -249,7 +249,7 @@ CREATE TABLE reward_distributions (
 -- Linked IC identities
 CREATE TABLE linked_ic_ids (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL,
+    pubkey BLOB NOT NULL,
     ic_principal TEXT NOT NULL,
     operation TEXT NOT NULL, -- add, remove
     linked_at_ns INTEGER NOT NULL,
@@ -267,50 +267,50 @@ CREATE TABLE sync_state (
 -- User profiles (main table for user display information)
 CREATE TABLE user_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    pubkey_hash BLOB NOT NULL UNIQUE,
+    pubkey BLOB NOT NULL UNIQUE,
     display_name TEXT,
     bio TEXT,
     avatar_url TEXT,
     updated_at_ns INTEGER NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (pubkey_hash) REFERENCES user_registrations(pubkey_hash) ON DELETE CASCADE
+    FOREIGN KEY (pubkey) REFERENCES user_registrations(pubkey) ON DELETE CASCADE
 );
 
 -- User contacts (email, phone, etc.)
 CREATE TABLE user_contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_pubkey_hash BLOB NOT NULL,
+    user_pubkey BLOB NOT NULL,
     contact_type TEXT NOT NULL, -- email, phone, telegram, etc.
     contact_value TEXT NOT NULL,
     verified BOOLEAN DEFAULT FALSE,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_pubkey_hash) REFERENCES user_registrations(pubkey_hash) ON DELETE CASCADE
+    FOREIGN KEY (user_pubkey) REFERENCES user_registrations(pubkey) ON DELETE CASCADE
 );
 
 -- User social media accounts
 CREATE TABLE user_socials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_pubkey_hash BLOB NOT NULL,
+    user_pubkey BLOB NOT NULL,
     platform TEXT NOT NULL, -- twitter, github, discord, linkedin, etc.
     username TEXT NOT NULL,
     profile_url TEXT,
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_pubkey_hash) REFERENCES user_registrations(pubkey_hash) ON DELETE CASCADE
+    FOREIGN KEY (user_pubkey) REFERENCES user_registrations(pubkey) ON DELETE CASCADE
 );
 
 -- User additional public keys (SSH, GPG, etc.)
 CREATE TABLE user_public_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_pubkey_hash BLOB NOT NULL,
+    user_pubkey BLOB NOT NULL,
     key_type TEXT NOT NULL, -- ssh-ed25519, ssh-rsa, gpg, secp256k1, etc.
     key_data TEXT NOT NULL, -- The actual public key
     key_fingerprint TEXT, -- Optional fingerprint for quick identification
     label TEXT, -- User-provided label for this key
     created_at_ns INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_pubkey_hash) REFERENCES user_registrations(pubkey_hash) ON DELETE CASCADE
+    FOREIGN KEY (user_pubkey) REFERENCES user_registrations(pubkey) ON DELETE CASCADE
 );
 
 -- Insert initial sync state
@@ -321,12 +321,10 @@ INSERT OR IGNORE INTO sync_state (id, last_position) VALUES (1, 0);
 -- Create a special example provider using a distinctive hash
 -- Using a distinctive 32-byte value that's clearly not a real pubkey
 INSERT OR REPLACE INTO provider_registrations (
-    pubkey_hash,
-    pubkey_bytes,
+    pubkey,
     signature,
     created_at_ns
 ) VALUES (
-    x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
     x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
     x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
     1609459200000000000  -- 2021-01-01 00:00:00 UTC
@@ -334,7 +332,7 @@ INSERT OR REPLACE INTO provider_registrations (
 
 -- Create example provider profile
 INSERT OR REPLACE INTO provider_profiles (
-    pubkey_hash,
+    pubkey,
     name,
     description,
     website_url,
@@ -357,7 +355,7 @@ INSERT OR REPLACE INTO provider_profiles (
 
 -- Insert example offering 1: Basic VM
 INSERT OR REPLACE INTO provider_offerings (
-    pubkey_hash,
+    pubkey,
     offering_id,
     offer_name,
     description,
@@ -432,7 +430,7 @@ INSERT OR REPLACE INTO provider_offerings (
 
 -- Insert example offering 2: Premium Dedicated Server
 INSERT OR REPLACE INTO provider_offerings (
-    pubkey_hash,
+    pubkey,
     offering_id,
     offer_name,
     description,
@@ -508,13 +506,13 @@ INSERT OR REPLACE INTO provider_offerings (
 );
 
 -- Optimized indexes for efficient querying
-CREATE INDEX idx_provider_registrations_pubkey_hash ON provider_registrations(pubkey_hash);
-CREATE INDEX idx_provider_check_ins_pubkey_hash ON provider_check_ins(pubkey_hash);
+CREATE INDEX idx_provider_registrations_pubkey ON provider_registrations(pubkey);
+CREATE INDEX idx_provider_check_ins_pubkey ON provider_check_ins(pubkey);
 CREATE INDEX idx_provider_check_ins_timestamp ON provider_check_ins(block_timestamp_ns);
-CREATE INDEX idx_provider_profiles_pubkey_hash ON provider_profiles(pubkey_hash);
-CREATE INDEX idx_provider_profiles_contacts_provider ON provider_profiles_contacts(provider_pubkey_hash);
+CREATE INDEX idx_provider_profiles_pubkey ON provider_profiles(pubkey);
+CREATE INDEX idx_provider_profiles_contacts_provider ON provider_profiles_contacts(provider_pubkey);
 CREATE INDEX idx_provider_profiles_contacts_type ON provider_profiles_contacts(contact_type);
-CREATE INDEX idx_provider_offerings_pubkey_hash ON provider_offerings(pubkey_hash);
+CREATE INDEX idx_provider_offerings_pubkey ON provider_offerings(pubkey);
 CREATE INDEX idx_provider_offerings_offering_id ON provider_offerings(offering_id);
 CREATE INDEX idx_provider_offerings_visibility ON provider_offerings(visibility);
 CREATE INDEX idx_provider_offerings_country ON provider_offerings(datacenter_country);
@@ -527,24 +525,24 @@ CREATE INDEX idx_token_transfers_block_hash ON token_transfers(block_hash);
 CREATE INDEX idx_token_approvals_owner_account ON token_approvals(owner_account);
 CREATE INDEX idx_token_approvals_spender_account ON token_approvals(spender_account);
 CREATE INDEX idx_contract_sign_requests_contract_id ON contract_sign_requests(contract_id);
-CREATE INDEX idx_contract_sign_requests_requester_pubkey_hash ON contract_sign_requests(requester_pubkey_hash);
-CREATE INDEX idx_contract_sign_requests_provider ON contract_sign_requests(provider_pubkey_hash);
+CREATE INDEX idx_contract_sign_requests_requester_pubkey ON contract_sign_requests(requester_pubkey);
+CREATE INDEX idx_contract_sign_requests_provider ON contract_sign_requests(provider_pubkey);
 CREATE INDEX idx_contract_sign_requests_status ON contract_sign_requests(status);
 CREATE INDEX idx_contract_sign_requests_offering ON contract_sign_requests(offering_id);
 CREATE INDEX idx_contract_payment_entries_contract_id ON contract_payment_entries(contract_id);
 CREATE INDEX idx_contract_sign_replies_contract_id ON contract_sign_replies(contract_id);
 CREATE INDEX idx_contract_extensions_contract_id ON contract_extensions(contract_id);
 CREATE INDEX idx_contract_extensions_extended_by ON contract_extensions(extended_by_pubkey);
-CREATE INDEX idx_reputation_changes_pubkey_hash ON reputation_changes(pubkey_hash);
+CREATE INDEX idx_reputation_changes_pubkey ON reputation_changes(pubkey);
 CREATE INDEX idx_reputation_changes_timestamp ON reputation_changes(block_timestamp_ns);
-CREATE INDEX idx_linked_ic_ids_pubkey_hash ON linked_ic_ids(pubkey_hash);
+CREATE INDEX idx_linked_ic_ids_pubkey ON linked_ic_ids(pubkey);
 CREATE INDEX idx_linked_ic_ids_principal ON linked_ic_ids(ic_principal);
 CREATE INDEX idx_linked_ic_ids_operation ON linked_ic_ids(operation);
-CREATE INDEX idx_user_profiles_pubkey_hash ON user_profiles(pubkey_hash);
-CREATE INDEX idx_user_contacts_pubkey_hash ON user_contacts(user_pubkey_hash);
+CREATE INDEX idx_user_profiles_pubkey ON user_profiles(pubkey);
+CREATE INDEX idx_user_contacts_pubkey ON user_contacts(user_pubkey);
 CREATE INDEX idx_user_contacts_type ON user_contacts(contact_type);
-CREATE INDEX idx_user_socials_pubkey_hash ON user_socials(user_pubkey_hash);
+CREATE INDEX idx_user_socials_pubkey ON user_socials(user_pubkey);
 CREATE INDEX idx_user_socials_platform ON user_socials(platform);
-CREATE INDEX idx_user_public_keys_pubkey_hash ON user_public_keys(user_pubkey_hash);
+CREATE INDEX idx_user_public_keys_pubkey ON user_public_keys(user_pubkey);
 CREATE INDEX idx_user_public_keys_type ON user_public_keys(key_type);
 CREATE INDEX idx_user_public_keys_fingerprint ON user_public_keys(key_fingerprint);

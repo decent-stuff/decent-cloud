@@ -429,7 +429,7 @@ Successfully implemented full CRUD functionality for server offerings in the API
 3. **Transactions**: Create/update use SQL transactions for atomicity
 4. **Validation**: Required fields (offering_id, offer_name) validated before DB operations
 5. **Metadata Handling**: Payment methods, features, and operating systems stored in normalized tables
-6. **Duplicate Detection**: offering_id + pubkey_hash unique constraint enforced
+6. **Duplicate Detection**: offering_id + pubkey unique constraint enforced
 
 ### Testing Coverage
 

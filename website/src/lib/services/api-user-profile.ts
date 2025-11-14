@@ -12,8 +12,8 @@ interface ApiResponse<T> {
 /**
  * Get user profile (public, no auth required)
  */
-export async function getUserProfile(pubkeyHash: string): Promise<UserProfile | null> {
-	const response = await fetch(`${API_BASE_URL}/api/v1/users/${pubkeyHash}/profile`);
+export async function getUserProfile(pubkey: string): Promise<UserProfile | null> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/profile`);
 
 	if (!response.ok) {
 		if (response.status === 404) {
@@ -34,8 +34,8 @@ export async function getUserProfile(pubkeyHash: string): Promise<UserProfile | 
 /**
  * Get user contacts (public, no auth required)
  */
-export async function getUserContacts(pubkeyHash: string): Promise<UserContact[]> {
-	const response = await fetch(`${API_BASE_URL}/api/v1/users/${pubkeyHash}/contacts`);
+export async function getUserContacts(pubkey: string): Promise<UserContact[]> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/contacts`);
 
 	if (!response.ok) {
 		if (response.status === 404) {
@@ -56,8 +56,8 @@ export async function getUserContacts(pubkeyHash: string): Promise<UserContact[]
 /**
  * Get user social links (public, no auth required)
  */
-export async function getUserSocials(pubkeyHash: string): Promise<UserSocial[]> {
-	const response = await fetch(`${API_BASE_URL}/api/v1/users/${pubkeyHash}/socials`);
+export async function getUserSocials(pubkey: string): Promise<UserSocial[]> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/socials`);
 
 	if (!response.ok) {
 		if (response.status === 404) {

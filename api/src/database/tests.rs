@@ -52,31 +52,28 @@ impl TestDataFactory {
         ]
     }
 
-    fn registration_entry(label: &str, pubkey_hash: &[u8]) -> LedgerEntryData {
-        Self::ledger_entry(label, pubkey_hash, b"signature_data", 1234567890, 1)
+    fn registration_entry(label: &str, pubkey: &[u8]) -> LedgerEntryData {
+        Self::ledger_entry(label, pubkey, b"signature_data", 1234567890, 1)
     }
 }
 
 /// Test helper to count rows in a table, excluding example provider data
 async fn count_table_rows(db: &Database, table: &str) -> i64 {
     // Example provider pubkey hash from migration 002
-    let example_pubkey_hash =
+    let example_provider_pubkey =
         hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
             .unwrap();
 
     // For provider tables, exclude the example provider
     let query = if table.starts_with("provider_") {
-        format!(
-            "SELECT COUNT(*) as count FROM {} WHERE pubkey_hash != ?",
-            table
-        )
+        format!("SELECT COUNT(*) as count FROM {} WHERE pubkey != ?", table)
     } else {
         format!("SELECT COUNT(*) as count FROM {}", table)
     };
 
     let result = if table.starts_with("provider_") {
         sqlx::query(&query)
-            .bind(example_pubkey_hash)
+            .bind(example_provider_pubkey)
             .fetch_one(&db.pool)
             .await
             .unwrap()
@@ -295,7 +292,7 @@ async fn test_user_profile_storage_and_retrieval() {
 
     // Insert user profile
     sqlx::query(
-        "INSERT INTO user_profiles (pubkey_hash, display_name, bio, avatar_url, updated_at_ns)
+        "INSERT INTO user_profiles (pubkey, display_name, bio, avatar_url, updated_at_ns)
          VALUES (?, ?, ?, ?, ?)",
     )
     .bind(&user_key[..])
@@ -312,7 +309,7 @@ async fn test_user_profile_storage_and_retrieval() {
     assert!(profile.is_some());
 
     let profile = profile.unwrap();
-    assert_eq!(profile.pubkey_hash, user_key);
+    assert_eq!(profile.pubkey, user_key);
     assert_eq!(profile.display_name, Some("Test User".to_string()));
     assert_eq!(profile.bio, Some("A test user bio".to_string()));
     assert_eq!(
@@ -350,7 +347,7 @@ async fn test_user_contacts_storage_and_retrieval() {
 
     for (contact_type, contact_value, verified) in &contacts {
         sqlx::query(
-            "INSERT INTO user_contacts (user_pubkey_hash, contact_type, contact_value, verified, created_at_ns)
+            "INSERT INTO user_contacts (user_pubkey, contact_type, contact_value, verified, created_at_ns)
              VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&user_key[..])
@@ -398,7 +395,7 @@ async fn test_user_socials_storage_and_retrieval() {
 
     for (platform, username, profile_url) in &socials {
         sqlx::query(
-            "INSERT INTO user_socials (user_pubkey_hash, platform, username, profile_url, created_at_ns)
+            "INSERT INTO user_socials (user_pubkey, platform, username, profile_url, created_at_ns)
              VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&user_key[..])
@@ -456,7 +453,7 @@ async fn test_user_public_keys_storage_and_retrieval() {
 
     for (key_type, key_data, fingerprint, label) in &keys {
         sqlx::query(
-            "INSERT INTO user_public_keys (user_pubkey_hash, key_type, key_data, key_fingerprint, label, created_at_ns)
+            "INSERT INTO user_public_keys (user_pubkey, key_type, key_data, key_fingerprint, label, created_at_ns)
              VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(&user_key[..])
@@ -538,7 +535,7 @@ async fn test_upsert_profile_auto_creates_registration() {
 
     // Verify registration was auto-created
     let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
             .bind(&new_user_key[..])
             .fetch_one(&db.pool)
             .await
@@ -559,7 +556,7 @@ async fn test_upsert_contact_auto_creates_registration() {
 
     // Verify registration was auto-created
     let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
             .bind(&new_user_key[..])
             .fetch_one(&db.pool)
             .await
@@ -585,7 +582,7 @@ async fn test_upsert_social_auto_creates_registration() {
 
     // Verify registration was auto-created
     let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
             .bind(&new_user_key[..])
             .fetch_one(&db.pool)
             .await
@@ -612,7 +609,7 @@ async fn test_add_public_key_auto_creates_registration() {
 
     // Verify registration was auto-created
     let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey_hash = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
             .bind(&new_user_key[..])
             .fetch_one(&db.pool)
             .await
@@ -768,12 +765,18 @@ async fn test_example_offerings_excluded_from_search() {
     let db = setup_test_db().await;
 
     // Create a regular public offering
-    let pubkey_hash = vec![1u8; 32];
-    sqlx::query("INSERT INTO provider_registrations (pubkey_hash, pubkey_bytes, signature, created_at_ns) VALUES (?, ?, ?, 0)")
-        .bind(&pubkey_hash).bind(&pubkey_hash).bind(&pubkey_hash).execute(&db.pool).await.unwrap();
+    let pubkey = vec![1u8; 32];
+    sqlx::query(
+        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, 0)",
+    )
+    .bind(&(pubkey))
+    .bind(&(pubkey))
+    .execute(&db.pool)
+    .await
+    .unwrap();
 
-    sqlx::query("INSERT INTO provider_offerings (pubkey_hash, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', 0, 0)")
-        .bind(&pubkey_hash).execute(&db.pool).await.unwrap();
+    sqlx::query("INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', 0, 0)")
+        .bind(&(pubkey)).execute(&db.pool).await.unwrap();
 
     // Search offerings - should only return the public offering, not examples
     let search_params = crate::database::offerings::SearchOfferingsParams {
@@ -888,7 +891,7 @@ async fn test_get_active_validators() {
     // Find validator1 in results
     let v1 = validators_30d
         .iter()
-        .find(|v| v.pubkey_hash == validator1)
+        .find(|v| v.pubkey == validator1)
         .expect("Validator 1 should be in results");
 
     assert_eq!(
@@ -911,7 +914,7 @@ async fn test_get_active_validators() {
     // Find validator2 in results
     let v2 = validators_30d
         .iter()
-        .find(|v| v.pubkey_hash == validator2)
+        .find(|v| v.pubkey == validator2)
         .expect("Validator 2 should be in results");
 
     assert_eq!(
@@ -939,7 +942,7 @@ async fn test_get_active_validators() {
         "Should have 1 validator active in last 7 days"
     );
     assert_eq!(
-        validators_7d[0].pubkey_hash, validator1,
+        validators_7d[0].pubkey, validator1,
         "Only validator 1 should be active in last 7 days"
     );
 
@@ -986,7 +989,7 @@ async fn test_get_active_validators_with_profile() {
 
     // Add profile for this validator
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey_hash, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns)
+        "INSERT INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&validator_key[..])

@@ -1,4 +1,4 @@
-// Import auto-generated types from Rust (these have pubkey_hash as Vec<u8> which is skipped in TS)
+// Import auto-generated types from Rust (these have pubkey as Vec<u8> which is skipped in TS)
 import type { Offering as OfferingRaw } from '$lib/types/generated/Offering';
 import type { ProviderProfile as ProviderProfileRaw } from '$lib/types/generated/ProviderProfile';
 import type { Validator as ValidatorRaw } from '$lib/types/generated/Validator';
@@ -15,11 +15,11 @@ type ConvertNullToUndefined<T> = {
 	[K in keyof T]: NullToUndefined<T[K]>;
 };
 
-// Frontend types: add pubkey_hash as string and convert null to undefined for convenience
-export type Offering = ConvertNullToUndefined<OfferingRaw> & { pubkey_hash: string };
-export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pubkey_hash: string };
-export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey_hash: string };
-export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey_hash: string };
+// Frontend types: add pubkey as string and convert null to undefined for convenience
+export type Offering = ConvertNullToUndefined<OfferingRaw> & { pubkey: string };
+export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pubkey: string };
+export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey: string };
+export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey: string };
 export type PlatformStats = ConvertNullToUndefined<PlatformOverview>;
 
 // Generic API response wrapper
@@ -51,8 +51,8 @@ export interface CsvImportResult {
 	errors: CsvImportError[];
 }
 
-// Create offering params (omit id and pubkey_hash for creation)
-export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey_hash'>;
+// Create offering params (omit id and pubkey for creation)
+export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey'>;
 
 // API URLs for different environments
 const DEV_API_BASE_URL = 'http://localhost:59001';
@@ -93,11 +93,11 @@ function hexEncode(bytes: Uint8Array | number[]): string {
 
 export { hexEncode };
 
-function normalizePubkeyHash(pubkeyHash: string | number[]): string {
-	if (typeof pubkeyHash === 'string') {
-		return pubkeyHash;
+function normalizePubkey(pubkey: string | number[]): string {
+	if (typeof pubkey === 'string') {
+		return pubkey;
 	}
-	return hexEncode(new Uint8Array(pubkeyHash));
+	return hexEncode(new Uint8Array(pubkey));
 }
 
 export async function searchOfferings(params: OfferingSearchParams = {}): Promise<Offering[]> {
@@ -124,10 +124,10 @@ export async function searchOfferings(params: OfferingSearchParams = {}): Promis
 	}
 
 	const offerings = payload.data ?? [];
-	// Normalize pubkey_hash to hex string
+	// Normalize pubkey to hex string
 	return offerings.map((o) => ({
 		...o,
-		pubkey_hash: normalizePubkeyHash(o.pubkey_hash)
+		pubkey: normalizePubkey(o.pubkey)
 	}));
 }
 
@@ -146,10 +146,10 @@ export async function getActiveProviders(days: number = 1): Promise<ProviderProf
 	}
 
 	const providers = payload.data ?? [];
-	// Normalize pubkey_hash to hex string
+	// Normalize pubkey to hex string
 	return providers.map((p) => ({
 		...p,
-		pubkey_hash: normalizePubkeyHash(p.pubkey_hash)
+		pubkey: normalizePubkey(p.pubkey)
 	}));
 }
 
@@ -168,15 +168,15 @@ export async function getActiveValidators(days: number = 1): Promise<Validator[]
 	}
 
 	const validators = payload.data ?? [];
-	// Normalize pubkey_hash to hex string
+	// Normalize pubkey to hex string
 	return validators.map((v) => ({
 		...v,
-		pubkey_hash: normalizePubkeyHash(v.pubkey_hash)
+		pubkey: normalizePubkey(v.pubkey)
 	}));
 }
 
-export async function getProviderOfferings(pubkeyHash: string | Uint8Array): Promise<Offering[]> {
-	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+export async function getProviderOfferings(pubkey: string | Uint8Array): Promise<Offering[]> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings`;
 	const response = await fetch(url);
 
@@ -191,18 +191,18 @@ export async function getProviderOfferings(pubkeyHash: string | Uint8Array): Pro
 	}
 
 	const offerings = payload.data ?? [];
-	// Normalize pubkey_hash to hex string
+	// Normalize pubkey to hex string
 	return offerings.map((o) => ({
 		...o,
-		pubkey_hash: normalizePubkeyHash(o.pubkey_hash)
+		pubkey: normalizePubkey(o.pubkey)
 	}));
 }
 
 export async function exportProviderOfferingsCSV(
-	pubkeyHash: string | Uint8Array,
+	pubkey: string | Uint8Array,
 	headers: SignedRequestHeaders
 ): Promise<string> {
-	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/export`;
 	const response = await fetch(url, {
 		method: 'GET',
@@ -217,12 +217,12 @@ export async function exportProviderOfferingsCSV(
 }
 
 export async function importProviderOfferingsCSV(
-	pubkeyHash: string | Uint8Array,
+	pubkey: string | Uint8Array,
 	csvContent: string,
 	upsert: boolean,
 	headers: SignedRequestHeaders
 ): Promise<CsvImportResult> {
-	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/import${upsert ? '?upsert=true' : ''}`;
 
 	const response = await fetch(url, {
@@ -250,11 +250,11 @@ export async function importProviderOfferingsCSV(
 }
 
 export async function createProviderOffering(
-	pubkeyHash: string | Uint8Array,
+	pubkey: string | Uint8Array,
 	params: CreateOfferingParams | string,
 	headers: SignedRequestHeaders
 ): Promise<number> {
-	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings`;
 
 	// Accept either params object or pre-signed JSON string
@@ -285,12 +285,12 @@ export async function createProviderOffering(
 }
 
 export async function updateProviderOffering(
-	pubkeyHash: string | Uint8Array,
+	pubkey: string | Uint8Array,
 	offeringId: number,
 	params: CreateOfferingParams | string,
 	headers: SignedRequestHeaders
 ): Promise<void> {
-	const pubkeyHex = typeof pubkeyHash === 'string' ? pubkeyHash : hexEncode(pubkeyHash);
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}`;
 
 	// Accept either params object or pre-signed JSON string
@@ -449,10 +449,10 @@ export async function downloadOfferingsCSV(offerings: Offering[], filename: stri
 
 export interface Contract {
 	contract_id: string;
-	requester_pubkey_hash: string;
+	requester_pubkey: string;
 	requester_ssh_pubkey: string;
 	requester_contact: string;
-	provider_pubkey_hash: string;
+	provider_pubkey: string;
 	offering_id: string;
 	region_name?: string;
 	instance_config?: string;
@@ -529,7 +529,7 @@ export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?
 		}
 		pubkeyHex = pubkey;
 	}
-	
+
 	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/contracts`;
 
 	const response = await fetch(url, {
@@ -550,9 +550,9 @@ export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?
 	const contracts = payload.data ?? [];
 	return contracts.map((c) => ({
 		...c,
-		contract_id: normalizePubkeyHash(c.contract_id),
-		requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
-		provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+		contract_id: normalizePubkey(c.contract_id),
+		requester_pubkey: normalizePubkey(c.requester_pubkey),
+		provider_pubkey: normalizePubkey(c.provider_pubkey)
 	}));
 }
 
@@ -580,9 +580,9 @@ export async function getProviderContracts(
 	const contracts = payload.data ?? [];
 	return contracts.map((c) => ({
 		...c,
-		contract_id: normalizePubkeyHash(c.contract_id),
-		requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
-		provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+		contract_id: normalizePubkey(c.contract_id),
+		requester_pubkey: normalizePubkey(c.requester_pubkey),
+		provider_pubkey: normalizePubkey(c.provider_pubkey)
 	}));
 }
 
@@ -607,9 +607,9 @@ export async function getPendingProviderRequests(headers: SignedRequestHeaders):
 	const contracts = payload.data ?? [];
 	return contracts.map((c) => ({
 		...c,
-		contract_id: normalizePubkeyHash(c.contract_id),
-		requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
-		provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+		contract_id: normalizePubkey(c.contract_id),
+		requester_pubkey: normalizePubkey(c.requester_pubkey),
+		provider_pubkey: normalizePubkey(c.provider_pubkey)
 	}));
 }
 

@@ -20,7 +20,9 @@
 				<h3 class="text-xl font-semibold text-white">
 					{contract.offering_id}
 				</h3>
-				<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border {badge.class}">
+				<span
+					class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border {badge.class}"
+				>
 					<span>{badge.icon}</span>
 					{badge.text}
 				</span>
@@ -30,12 +32,14 @@
 			</p>
 		</div>
 		<div class="text-right text-white/80 text-sm">
-			Requester: {truncateContractHash(contract.requester_pubkey_hash)}
+			Requester: {truncateContractHash(contract.requester_pubkey)}
 		</div>
 	</div>
 
 	{#if contract.provisioning_instance_details}
-		<div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-white whitespace-pre-wrap">
+		<div
+			class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-white whitespace-pre-wrap"
+		>
 			{contract.provisioning_instance_details}
 		</div>
 	{/if}

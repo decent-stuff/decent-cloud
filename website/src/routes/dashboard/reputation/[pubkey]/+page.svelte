@@ -1,31 +1,34 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
-	import { getUserActivity, type UserActivity } from '$lib/services/api-user-activity';
+	import { onMount } from "svelte";
+	import { page } from "$app/stores";
+	import {
+		getUserActivity,
+		type UserActivity,
+	} from "$lib/services/api-user-activity";
 	import {
 		getReputation,
 		getAccountBalance,
 		getAccountTransfers,
 		type ReputationInfo,
-		type TokenTransfer
-	} from '$lib/services/api-reputation';
+		type TokenTransfer,
+	} from "$lib/services/api-reputation";
 	import {
 		getUserProfile,
 		getUserContacts,
-		getUserSocials
-	} from '$lib/services/api-user-profile';
-	import type { UserProfile } from '$lib/types/generated/UserProfile';
-	import type { UserContact } from '$lib/types/generated/UserContact';
-	import type { UserSocial } from '$lib/types/generated/UserSocial';
+		getUserSocials,
+	} from "$lib/services/api-user-profile";
+	import type { UserProfile } from "$lib/types/generated/UserProfile";
+	import type { UserContact } from "$lib/types/generated/UserContact";
+	import type { UserSocial } from "$lib/types/generated/UserSocial";
 	import {
 		formatContractDate,
-		computePubkeyHash,
-		derivePrincipalFromPubkey
-	} from '$lib/utils/contract-format';
-	import { authStore } from '$lib/stores/auth';
-	import type { IdentityInfo } from '$lib/stores/auth';
+		computePubkey,
+		derivePrincipalFromPubkey,
+	} from "$lib/utils/contract-format";
+	import { authStore } from "$lib/stores/auth";
+	import type { IdentityInfo } from "$lib/stores/auth";
 
-	const pubkey = $page.params.pubkey ?? '';
+	const pubkey = $page.params.pubkey ?? "";
 
 	let activity = $state<UserActivity | null>(null);
 	let reputation = $state<ReputationInfo | null>(null);
@@ -46,13 +49,13 @@
 	// Check if viewing own profile and derive principal
 	const isOwnProfile = $derived(
 		currentIdentity?.publicKeyBytes &&
-			computePubkeyHash(currentIdentity.publicKeyBytes) === pubkey
+			computePubkey(currentIdentity.publicKeyBytes) === pubkey,
 	);
 
 	const derivedPrincipal = $derived(
 		isOwnProfile && currentIdentity?.publicKeyBytes
 			? derivePrincipalFromPubkey(currentIdentity.publicKeyBytes).toText()
-			: null
+			: null,
 	);
 
 	// Helper to format account addresses
@@ -73,7 +76,10 @@
 	}
 
 	// Calculate total spent and received
-	function calculateTransactionStats(transfers: TokenTransfer[], account: string) {
+	function calculateTransactionStats(
+		transfers: TokenTransfer[],
+		account: string,
+	) {
 		let totalSent = 0;
 		let totalReceived = 0;
 
@@ -96,14 +102,22 @@
 			isNotFound = false;
 
 			// Fetch all data in parallel
-			const [activityData, reputationData, balanceData, transfersData, profileData, contactsData, socialsData] = await Promise.all([
+			const [
+				activityData,
+				reputationData,
+				balanceData,
+				transfersData,
+				profileData,
+				contactsData,
+				socialsData,
+			] = await Promise.all([
 				getUserActivity(pubkey).catch(() => null),
 				getReputation(pubkey).catch(() => null),
 				getAccountBalance(pubkey).catch(() => 0),
 				getAccountTransfers(pubkey, 100).catch(() => []),
 				getUserProfile(pubkey).catch(() => null),
 				getUserContacts(pubkey).catch(() => []),
-				getUserSocials(pubkey).catch(() => [])
+				getUserSocials(pubkey).catch(() => []),
 			]);
 
 			activity = activityData;
@@ -115,38 +129,52 @@
 			socials = socialsData;
 
 			// If we have no data at all, mark as not found
-			if (!activity && !reputation && balance === 0 && transfers.length === 0 && !profile) {
+			if (
+				!activity &&
+				!reputation &&
+				balance === 0 &&
+				transfers.length === 0 &&
+				!profile
+			) {
 				isNotFound = true;
-				error = 'Account not found';
+				error = "Account not found";
 			}
 		} catch (e) {
-			const errorMessage = e instanceof Error ? e.message : 'Failed to load account information';
+			const errorMessage =
+				e instanceof Error
+					? e.message
+					: "Failed to load account information";
 			error = errorMessage;
 			isNotFound =
-				errorMessage.includes('404') ||
-				errorMessage.includes('Not Found') ||
-				errorMessage.includes('not found');
-			console.error('Error loading account information:', e);
+				errorMessage.includes("404") ||
+				errorMessage.includes("Not Found") ||
+				errorMessage.includes("not found");
+			console.error("Error loading account information:", e);
 		} finally {
 			loading = false;
 		}
 	});
 
 	const txStats = $derived(
-		transfers.length > 0 ? calculateTransactionStats(transfers, pubkey) : null
+		transfers.length > 0
+			? calculateTransactionStats(transfers, pubkey)
+			: null,
 	);
 	const totalContracts = $derived(
-		(activity?.rentals_as_requester.length ?? 0) + (activity?.rentals_as_provider.length ?? 0)
+		(activity?.rentals_as_requester.length ?? 0) +
+			(activity?.rentals_as_provider.length ?? 0),
 	);
 </script>
 
 <div class="space-y-8 max-w-7xl mx-auto p-6">
 	<!-- Page Header -->
-	<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+	<div
+		class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+	>
 		<div class="flex items-start justify-between gap-4 mb-4">
 			<div class="flex-1">
 				<h1 class="text-4xl font-bold text-white mb-2">
-					{profile?.display_name || 'Account Reputation'}
+					{profile?.display_name || "Account Reputation"}
 				</h1>
 				{#if profile?.bio}
 					<p class="text-white/70 text-sm mb-3">{profile.bio}</p>
@@ -163,17 +191,22 @@
 		<div class="space-y-3">
 			<div>
 				<p class="text-white/80 text-sm">Public Key Hash:</p>
-				<p class="font-mono text-sm text-white/90 break-all">{pubkey}</p>
+				<p class="font-mono text-sm text-white/90 break-all">
+					{pubkey}
+				</p>
 			</div>
 			{#if derivedPrincipal}
 				<div>
 					<p class="text-white/80 text-sm">IC Principal:</p>
-					<p class="font-mono text-sm text-white/90 break-all">{derivedPrincipal}</p>
+					<p class="font-mono text-sm text-white/90 break-all">
+						{derivedPrincipal}
+					</p>
 				</div>
 			{:else if !isOwnProfile}
 				<div>
 					<p class="text-white/60 text-xs italic">
-						IC Principal cannot be derived from hash - API needs to return original public key bytes (see
+						IC Principal cannot be derived from hash - API needs to
+						return original public key bytes (see
 						website/PUBKEY_CLEANUP_TASK.md)
 					</p>
 				</div>
@@ -187,25 +220,39 @@
 					<!-- Contacts -->
 					{#if contacts.length > 0}
 						<div>
-							<h3 class="text-sm font-semibold text-white/80 mb-2">Contact</h3>
+							<h3
+								class="text-sm font-semibold text-white/80 mb-2"
+							>
+								Contact
+							</h3>
 							<div class="space-y-2">
 								{#each contacts as contact}
-									<div class="flex items-center gap-2 text-sm">
-										<span class="text-white/60 capitalize">{contact.contact_type}:</span>
-										{#if contact.contact_type === 'email'}
+									<div
+										class="flex items-center gap-2 text-sm"
+									>
+										<span class="text-white/60 capitalize"
+											>{contact.contact_type}:</span
+										>
+										{#if contact.contact_type === "email"}
 											<a
 												href="mailto:{contact.contact_value}"
 												class="text-blue-400 hover:text-blue-300"
 											>
 												{contact.contact_value}
 											</a>
-										{:else if contact.contact_type === 'discord'}
-											<span class="text-white/90">{contact.contact_value}</span>
+										{:else if contact.contact_type === "discord"}
+											<span class="text-white/90"
+												>{contact.contact_value}</span
+											>
 										{:else}
-											<span class="text-white/90">{contact.contact_value}</span>
+											<span class="text-white/90"
+												>{contact.contact_value}</span
+											>
 										{/if}
 										{#if contact.verified}
-											<span class="text-green-400 text-xs">✓</span>
+											<span class="text-green-400 text-xs"
+												>✓</span
+											>
 										{/if}
 									</div>
 								{/each}
@@ -216,11 +263,19 @@
 					<!-- Social Links -->
 					{#if socials.length > 0}
 						<div>
-							<h3 class="text-sm font-semibold text-white/80 mb-2">Social</h3>
+							<h3
+								class="text-sm font-semibold text-white/80 mb-2"
+							>
+								Social
+							</h3>
 							<div class="space-y-2">
 								{#each socials as social}
-									<div class="flex items-center gap-2 text-sm">
-										<span class="text-white/60 capitalize">{social.platform}:</span>
+									<div
+										class="flex items-center gap-2 text-sm"
+									>
+										<span class="text-white/60 capitalize"
+											>{social.platform}:</span
+										>
 										{#if social.profile_url}
 											<a
 												href={social.profile_url}
@@ -231,7 +286,9 @@
 												@{social.username} →
 											</a>
 										{:else}
-											<span class="text-white/90">@{social.username}</span>
+											<span class="text-white/90"
+												>@{social.username}</span
+											>
 										{/if}
 									</div>
 								{/each}
@@ -250,12 +307,16 @@
 			></div>
 		</div>
 	{:else if error && isNotFound}
-		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-400">
+		<div
+			class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-400"
+		>
 			<div class="text-center">
 				<div class="text-6xl mb-4">🔍</div>
 				<h2 class="text-2xl font-bold mb-2">Account Not Found</h2>
 				<p class="mb-4">
-					The account with public key <span class="font-mono text-sm">{shortPubkey(pubkey)}</span>
+					The account with public key <span class="font-mono text-sm"
+						>{shortPubkey(pubkey)}</span
+					>
 					was not found in the system.
 				</p>
 				<p class="text-sm text-red-300/70">This could mean:</p>
@@ -278,7 +339,9 @@
 		<!-- Overview Stats -->
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 			<!-- Balance -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<div class="text-white/60 text-sm mb-1">Account Balance</div>
 				<div class="text-3xl font-bold text-white">
 					{formatBalance(balance)}
@@ -287,7 +350,9 @@
 			</div>
 
 			<!-- Reputation -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<div class="text-white/60 text-sm mb-1">Reputation Score</div>
 				<div class="text-3xl font-bold text-white">
 					{reputation?.total_reputation ?? 0}
@@ -300,9 +365,13 @@
 			</div>
 
 			<!-- Total Contracts -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<div class="text-white/60 text-sm mb-1">Total Contracts</div>
-				<div class="text-3xl font-bold text-white">{totalContracts}</div>
+				<div class="text-3xl font-bold text-white">
+					{totalContracts}
+				</div>
 				<div class="text-xs text-white/50 mt-1">
 					{activity?.rentals_as_requester.length ?? 0} as requester, {activity
 						?.rentals_as_provider.length ?? 0} as provider
@@ -310,7 +379,9 @@
 			</div>
 
 			<!-- Total Offerings -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<div class="text-white/60 text-sm mb-1">Offerings</div>
 				<div class="text-3xl font-bold text-white">
 					{activity?.offerings_provided.length ?? 0}
@@ -320,24 +391,36 @@
 
 		<!-- Transaction Statistics -->
 		{#if txStats}
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-				<h2 class="text-2xl font-bold text-white mb-4">Transaction Statistics</h2>
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
+				<h2 class="text-2xl font-bold text-white mb-4">
+					Transaction Statistics
+				</h2>
 				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 					<div>
-						<div class="text-white/60 text-sm mb-1">Total Spent</div>
+						<div class="text-white/60 text-sm mb-1">
+							Total Spent
+						</div>
 						<div class="text-2xl font-bold text-red-400">
 							{formatBalance(txStats.totalSent)} DC
 						</div>
 					</div>
 					<div>
-						<div class="text-white/60 text-sm mb-1">Total Received</div>
+						<div class="text-white/60 text-sm mb-1">
+							Total Received
+						</div>
 						<div class="text-2xl font-bold text-green-400">
 							{formatBalance(txStats.totalReceived)} DC
 						</div>
 					</div>
 					<div>
-						<div class="text-white/60 text-sm mb-1">Total Transactions</div>
-						<div class="text-2xl font-bold text-white">{transfers.length}</div>
+						<div class="text-white/60 text-sm mb-1">
+							Total Transactions
+						</div>
+						<div class="text-2xl font-bold text-white">
+							{transfers.length}
+						</div>
 					</div>
 				</div>
 			</div>
@@ -345,15 +428,23 @@
 
 		<!-- Recent Transactions -->
 		{#if transfers.length > 0}
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-				<h2 class="text-2xl font-bold text-white mb-4">Recent Transactions</h2>
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
+				<h2 class="text-2xl font-bold text-white mb-4">
+					Recent Transactions
+				</h2>
 				<div class="space-y-3 max-h-96 overflow-y-auto">
 					{#each transfers.slice(0, 20) as transfer}
-						<div class="bg-white/5 rounded-lg p-4 border border-white/10">
+						<div
+							class="bg-white/5 rounded-lg p-4 border border-white/10"
+						>
 							<div class="flex justify-between items-start mb-2">
 								<div class="flex-1">
 									<div class="flex items-center gap-2 mb-1">
-										<span class="text-white/60 text-sm">From:</span>
+										<span class="text-white/60 text-sm"
+											>From:</span
+										>
 										<a
 											href="/dashboard/reputation/{transfer.from_account}"
 											class="font-mono text-sm text-blue-400 hover:text-blue-300"
@@ -362,7 +453,9 @@
 										</a>
 									</div>
 									<div class="flex items-center gap-2">
-										<span class="text-white/60 text-sm">To:</span>
+										<span class="text-white/60 text-sm"
+											>To:</span
+										>
 										<a
 											href="/dashboard/reputation/{transfer.to_account}"
 											class="font-mono text-sm text-blue-400 hover:text-blue-300"
@@ -396,13 +489,19 @@
 
 		<!-- Offerings Provided -->
 		{#if activity && activity.offerings_provided.length > 0}
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Offerings Provided ({activity.offerings_provided.length})
 				</h2>
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				<div
+					class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+				>
 					{#each activity.offerings_provided as offering}
-						<div class="bg-white/5 rounded-xl p-4 border border-white/10">
+						<div
+							class="bg-white/5 rounded-xl p-4 border border-white/10"
+						>
 							<h3 class="text-lg font-semibold text-white mb-2">
 								{offering.offer_name}
 							</h3>
@@ -429,13 +528,18 @@
 
 		<!-- Rentals as Requester -->
 		{#if activity && activity.rentals_as_requester.length > 0}
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<h2 class="text-2xl font-bold text-white mb-4">
-					Rentals as Requester ({activity.rentals_as_requester.length})
+					Rentals as Requester ({activity.rentals_as_requester
+						.length})
 				</h2>
 				<div class="space-y-3">
 					{#each activity.rentals_as_requester as contract}
-						<div class="bg-white/5 rounded-lg p-4 border border-white/10">
+						<div
+							class="bg-white/5 rounded-lg p-4 border border-white/10"
+						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
 									<p class="text-white font-semibold">
@@ -444,14 +548,18 @@
 									<p class="text-sm text-white/60">
 										Provider:
 										<a
-											href="/dashboard/reputation/{contract.provider_pubkey_hash}"
+											href="/dashboard/reputation/{contract.provider_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(contract.provider_pubkey_hash)}
+											{shortPubkey(
+												contract.provider_pubkey,
+											)}
 										</a>
 									</p>
 									<p class="text-sm text-white/60">
-										Amount: {formatBalance(contract.payment_amount_e9s)} DC
+										Amount: {formatBalance(
+											contract.payment_amount_e9s,
+										)} DC
 									</p>
 								</div>
 								<span
@@ -461,7 +569,9 @@
 								</span>
 							</div>
 							<p class="text-sm text-white/60">
-								Created: {formatContractDate(contract.created_at_ns)}
+								Created: {formatContractDate(
+									contract.created_at_ns,
+								)}
 							</p>
 							{#if contract.duration_hours}
 								<p class="text-sm text-white/60">
@@ -476,13 +586,17 @@
 
 		<!-- Rentals as Provider -->
 		{#if activity && activity.rentals_as_provider.length > 0}
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Rentals as Provider ({activity.rentals_as_provider.length})
 				</h2>
 				<div class="space-y-3">
 					{#each activity.rentals_as_provider as contract}
-						<div class="bg-white/5 rounded-lg p-4 border border-white/10">
+						<div
+							class="bg-white/5 rounded-lg p-4 border border-white/10"
+						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
 									<p class="text-white font-semibold">
@@ -491,14 +605,18 @@
 									<p class="text-sm text-white/60">
 										Requester:
 										<a
-											href="/dashboard/reputation/{contract.requester_pubkey_hash}"
+											href="/dashboard/reputation/{contract.requester_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(contract.requester_pubkey_hash)}
+											{shortPubkey(
+												contract.requester_pubkey,
+											)}
 										</a>
 									</p>
 									<p class="text-sm text-white/60">
-										Amount: {formatBalance(contract.payment_amount_e9s)} DC
+										Amount: {formatBalance(
+											contract.payment_amount_e9s,
+										)} DC
 									</p>
 								</div>
 								<span
@@ -508,7 +626,9 @@
 								</span>
 							</div>
 							<p class="text-sm text-white/60">
-								Created: {formatContractDate(contract.created_at_ns)}
+								Created: {formatContractDate(
+									contract.created_at_ns,
+								)}
 							</p>
 							{#if contract.duration_hours}
 								<p class="text-sm text-white/60">

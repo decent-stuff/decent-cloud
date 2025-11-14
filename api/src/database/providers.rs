@@ -13,7 +13,7 @@ use ts_rs::TS;
 pub struct ProviderProfile {
     #[ts(skip)]
     #[serde(skip_deserializing)]
-    pub pubkey_hash: Vec<u8>,
+    pub pubkey: Vec<u8>,
     pub name: String,
     pub description: Option<String>,
     pub website_url: Option<String>,
@@ -28,7 +28,7 @@ pub struct ProviderProfile {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 #[allow(dead_code)]
 pub struct ProviderCheckIn {
-    pub pubkey_hash: Vec<u8>,
+    pub pubkey: Vec<u8>,
     pub memo: String,
     pub block_timestamp_ns: i64,
 }
@@ -44,7 +44,7 @@ pub struct ProviderContact {
 pub struct Validator {
     #[ts(skip)]
     #[serde(skip_deserializing)]
-    pub pubkey_hash: Vec<u8>,
+    pub pubkey: Vec<u8>,
     pub name: Option<String>,
     pub description: Option<String>,
     pub website_url: Option<String>,
@@ -71,7 +71,7 @@ impl Database {
 
         let profiles = sqlx::query_as::<_, ProviderProfile>(
             "SELECT DISTINCT p.* FROM provider_profiles p
-             INNER JOIN provider_check_ins c ON p.pubkey_hash = c.pubkey_hash
+             INNER JOIN provider_check_ins c ON p.pubkey = c.pubkey
              WHERE c.block_timestamp_ns > ?
              ORDER BY p.name",
         )
@@ -82,15 +82,12 @@ impl Database {
         Ok(profiles)
     }
 
-    /// Get provider profile by pubkey hash
-    pub async fn get_provider_profile(
-        &self,
-        pubkey_hash: &[u8],
-    ) -> Result<Option<ProviderProfile>> {
+    /// Get provider profile by pubkey
+    pub async fn get_provider_profile(&self, pubkey: &[u8]) -> Result<Option<ProviderProfile>> {
         let profile = sqlx::query_as::<_, ProviderProfile>(
-            "SELECT * FROM provider_profiles WHERE pubkey_hash = ?",
+            "SELECT * FROM provider_profiles WHERE pubkey = ?",
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -98,11 +95,11 @@ impl Database {
     }
 
     /// Get provider contacts
-    pub async fn get_provider_contacts(&self, pubkey_hash: &[u8]) -> Result<Vec<ProviderContact>> {
+    pub async fn get_provider_contacts(&self, pubkey: &[u8]) -> Result<Vec<ProviderContact>> {
         let contacts = sqlx::query_as::<_, ProviderContact>(
-            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey_hash = ?"
+            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = ?"
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -113,14 +110,14 @@ impl Database {
     #[allow(dead_code)]
     pub async fn get_provider_check_ins(
         &self,
-        pubkey_hash: &[u8],
+        pubkey: &[u8],
         limit: i64,
     ) -> Result<Vec<ProviderCheckIn>> {
         let check_ins = sqlx::query_as::<_, ProviderCheckIn>(
-            "SELECT pubkey_hash, memo, block_timestamp_ns FROM provider_check_ins
-             WHERE pubkey_hash = ? ORDER BY block_timestamp_ns DESC LIMIT ?",
+            "SELECT pubkey, memo, block_timestamp_ns FROM provider_check_ins
+             WHERE pubkey = ? ORDER BY block_timestamp_ns DESC LIMIT ?",
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -162,7 +159,7 @@ impl Database {
 
         let validators = sqlx::query_as::<_, Validator>(
             "SELECT
-                r.pubkey_hash,
+                r.pubkey,
                 p.name,
                 p.description,
                 p.website_url,
@@ -174,10 +171,10 @@ impl Database {
                 MAX(c.block_timestamp_ns) as last_check_in_ns,
                 r.created_at_ns as registered_at_ns
              FROM provider_registrations r
-             INNER JOIN provider_check_ins c ON r.pubkey_hash = c.pubkey_hash
-             LEFT JOIN provider_profiles p ON r.pubkey_hash = p.pubkey_hash
+             INNER JOIN provider_check_ins c ON r.pubkey = c.pubkey
+             LEFT JOIN provider_profiles p ON r.pubkey = p.pubkey
              WHERE c.block_timestamp_ns > ?
-             GROUP BY r.pubkey_hash
+             GROUP BY r.pubkey
              ORDER BY last_check_in_ns DESC",
         )
         .bind(cutoff_24h)
@@ -197,13 +194,12 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            // For now, store raw data since registration is just signature
+            // Store raw Ed25519 public key (32 bytes) and signature
             sqlx::query(
-                "INSERT OR REPLACE INTO provider_registrations (pubkey_hash, pubkey_bytes, signature, created_at_ns) VALUES (?, ?, ?, ?)"
+                "INSERT OR REPLACE INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, ?)"
             )
-            .bind(&entry.key)
-            .bind(&entry.key)
-            .bind(&entry.value) // Store signature directly
+            .bind(&entry.key) // Raw Ed25519 public key
+            .bind(&entry.value) // Signature
             .bind(entry.block_timestamp_ns as i64)
             .execute(&mut **tx)
             .await?;
@@ -237,7 +233,7 @@ impl Database {
             };
 
             sqlx::query(
-                "INSERT INTO provider_check_ins (pubkey_hash, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
+                "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
             )
             .bind(&entry.key)
             .bind(check_in.memo())
@@ -267,7 +263,7 @@ impl Database {
                 Profile::V0_1_0(profile_v0_1_0) => {
                     // Insert main profile record
                     sqlx::query(
-                        "INSERT OR REPLACE INTO provider_profiles (pubkey_hash, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        "INSERT OR REPLACE INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     )
                     .bind(&entry.key)
                     .bind(&profile_v0_1_0.metadata.name)
@@ -284,7 +280,7 @@ impl Database {
                     // Insert contact information in normalized table
                     for (contact_type, contact_value) in &profile_v0_1_0.spec.contacts {
                         sqlx::query(
-                            "INSERT OR REPLACE INTO provider_profiles_contacts (provider_pubkey_hash, contact_type, contact_value) VALUES (?, ?, ?)"
+                            "INSERT OR REPLACE INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, ?, ?)"
                         )
                         .bind(&entry.key)
                         .bind(contact_type)

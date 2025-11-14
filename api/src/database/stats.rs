@@ -22,7 +22,7 @@ pub struct PlatformStats {
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ReputationInfo {
-    pub pubkey_hash: Vec<u8>,
+    pub pubkey: Vec<u8>,
     pub total_reputation: i64,
     pub change_count: i64,
 }
@@ -45,10 +45,10 @@ impl Database {
             hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
                 .unwrap();
         let total_providers: (i64,) = sqlx::query_as(
-            "SELECT COUNT(DISTINCT pubkey_hash) FROM (
-                SELECT pubkey_hash FROM provider_profiles WHERE pubkey_hash != ?
+            "SELECT COUNT(DISTINCT pubkey) FROM (
+                SELECT pubkey FROM provider_profiles WHERE pubkey != ?
                 UNION
-                SELECT pubkey_hash FROM provider_check_ins WHERE pubkey_hash != ?
+                SELECT pubkey FROM provider_check_ins WHERE pubkey != ?
             )",
         )
         .bind(&example_provider_hash)
@@ -60,7 +60,7 @@ impl Database {
         let cutoff_ns =
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 365 * 24 * 3600 * 1_000_000_000;
         let active_providers: (i64,) = sqlx::query_as(
-            "SELECT COUNT(DISTINCT pubkey_hash) FROM provider_check_ins WHERE block_timestamp_ns > ? AND pubkey_hash != ?"
+            "SELECT COUNT(DISTINCT pubkey) FROM provider_check_ins WHERE block_timestamp_ns > ? AND (pubkey) != ?"
         )
         .bind(cutoff_ns)
         .bind(&example_provider_hash)
@@ -97,14 +97,14 @@ impl Database {
     }
 
     /// Get reputation for an identity
-    pub async fn get_reputation(&self, pubkey_hash: &[u8]) -> Result<Option<ReputationInfo>> {
+    pub async fn get_reputation(&self, pubkey: &[u8]) -> Result<Option<ReputationInfo>> {
         let info = sqlx::query_as::<_, ReputationInfo>(
-            "SELECT pubkey_hash, SUM(change_amount) as total_reputation, COUNT(*) as change_count
+            "SELECT pubkey, SUM(change_amount) as total_reputation, COUNT(*) as change_count
              FROM reputation_changes
-             WHERE pubkey_hash = ?
-             GROUP BY pubkey_hash",
+             WHERE pubkey = ?
+             GROUP BY pubkey",
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -115,9 +115,9 @@ impl Database {
     #[allow(dead_code)]
     pub async fn get_top_providers_by_reputation(&self, limit: i64) -> Result<Vec<ReputationInfo>> {
         let top = sqlx::query_as::<_, ReputationInfo>(
-            "SELECT pubkey_hash, SUM(change_amount) as total_reputation, COUNT(*) as change_count
+            "SELECT pubkey, SUM(change_amount) as total_reputation, COUNT(*) as change_count
              FROM reputation_changes
-             GROUP BY pubkey_hash
+             GROUP BY pubkey
              ORDER BY total_reputation DESC
              LIMIT ?",
         )
@@ -129,31 +129,30 @@ impl Database {
     }
 
     /// Get contract stats for a provider
-    pub async fn get_provider_stats(&self, pubkey_hash: &[u8]) -> Result<ProviderStats> {
-        let total_contracts: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey_hash = ?",
-        )
-        .bind(pubkey_hash)
-        .fetch_one(&self.pool)
-        .await?;
+    pub async fn get_provider_stats(&self, pubkey: &[u8]) -> Result<ProviderStats> {
+        let total_contracts: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ?")
+                .bind(pubkey)
+                .fetch_one(&self.pool)
+                .await?;
 
         let pending_contracts: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey_hash = ? AND status = 'pending'"
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'pending'"
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_one(&self.pool)
         .await?;
 
         let total_revenue: (Option<i64>,) = sqlx::query_as(
-            "SELECT SUM(payment_amount_e9s) FROM contract_sign_requests WHERE provider_pubkey_hash = ?"
+            "SELECT SUM(payment_amount_e9s) FROM contract_sign_requests WHERE provider_pubkey = ?",
         )
-        .bind(pubkey_hash)
+        .bind(pubkey)
         .fetch_one(&self.pool)
         .await?;
 
         let offerings_count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE pubkey_hash = ?")
-                .bind(pubkey_hash)
+            sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE pubkey = ?")
+                .bind(pubkey)
                 .fetch_one(&self.pool)
                 .await?;
 

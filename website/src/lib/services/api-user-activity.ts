@@ -9,11 +9,11 @@ export interface UserActivity {
 	rentals_as_provider: Contract[];
 }
 
-function normalizePubkeyHash(pubkeyHash: string | number[]): string {
-	if (typeof pubkeyHash === 'string') {
-		return pubkeyHash;
+function normalizePubkey(pubkey: string | number[]): string {
+	if (typeof pubkey === 'string') {
+		return pubkey;
 	}
-	return hexEncode(new Uint8Array(pubkeyHash));
+	return hexEncode(new Uint8Array(pubkey));
 }
 
 export async function getUserActivity(pubkeyHex: string): Promise<UserActivity> {
@@ -35,23 +35,23 @@ export async function getUserActivity(pubkeyHex: string): Promise<UserActivity> 
 		throw new Error('User activity response did not include data');
 	}
 
-	// Normalize pubkey_hash fields in all nested objects
+	// Normalize pubkey fields in all nested objects
 	return {
 		offerings_provided: payload.data.offerings_provided.map((o: any) => ({
 			...o,
-			pubkey_hash: normalizePubkeyHash(o.pubkey_hash)
+			pubkey: normalizePubkey(o.pubkey)
 		})),
 		rentals_as_requester: payload.data.rentals_as_requester.map((c: any) => ({
 			...c,
-			contract_id: normalizePubkeyHash(c.contract_id),
-			requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
-			provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+			contract_id: normalizePubkey(c.contract_id),
+			requester_pubkey: normalizePubkey(c.requester_pubkey),
+			provider_pubkey: normalizePubkey(c.provider_pubkey)
 		})),
 		rentals_as_provider: payload.data.rentals_as_provider.map((c: any) => ({
 			...c,
-			contract_id: normalizePubkeyHash(c.contract_id),
-			requester_pubkey_hash: normalizePubkeyHash(c.requester_pubkey_hash),
-			provider_pubkey_hash: normalizePubkeyHash(c.provider_pubkey_hash)
+			contract_id: normalizePubkey(c.contract_id),
+			requester_pubkey: normalizePubkey(c.requester_pubkey),
+			provider_pubkey: normalizePubkey(c.provider_pubkey)
 		}))
 	};
 }
