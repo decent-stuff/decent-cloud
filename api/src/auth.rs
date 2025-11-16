@@ -1,6 +1,7 @@
 use anyhow::Result;
 use dcc_common::DccIdentity;
 use poem::{error::ResponseError, http::StatusCode, FromRequest, Request, RequestBody};
+use poem_openapi::registry::MetaSecurityScheme;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use ts_rs::TS;
@@ -176,6 +177,99 @@ impl FromRequest<'_> for AuthenticatedUser {
         *body = RequestBody::new(poem::Body::from(body_bytes));
 
         Ok(AuthenticatedUser { pubkey })
+    }
+}
+
+/// poem-openapi compatible authenticated user
+/// Uses custom headers for signature-based authentication
+#[derive(Debug, Clone)]
+pub struct ApiAuthenticatedUser {
+    pub pubkey: Vec<u8>,
+}
+
+impl ApiAuthenticatedUser {
+    fn from_headers(
+        pubkey_hex: &str,
+        signature_hex: &str,
+        timestamp: &str,
+        method: &str,
+        path: &str,
+        body: &[u8],
+    ) -> Result<Self, AuthError> {
+        let pubkey =
+            verify_request_signature(pubkey_hex, signature_hex, timestamp, method, path, body)?;
+        Ok(ApiAuthenticatedUser { pubkey })
+    }
+}
+
+impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
+    const TYPES: &'static [poem_openapi::ApiExtractorType] =
+        &[poem_openapi::ApiExtractorType::RequestObject];
+    const PARAM_IS_REQUIRED: bool = true;
+
+    type ParamType = ();
+    type ParamRawType = ();
+
+    fn register(registry: &mut poem_openapi::registry::Registry) {
+        // Register custom security scheme
+        registry.create_security_scheme(
+            "SignatureAuth",
+            MetaSecurityScheme {
+                ty: "apiKey",
+                description: Some("Signature-based authentication using X-Public-Key, X-Signature, and X-Timestamp headers"),
+                name: Some("X-Public-Key"),
+                key_in: Some("header"),
+                scheme: None,
+                bearer_format: None,
+                flows: None,
+                openid_connect_url: None,
+            },
+        );
+    }
+
+    fn security_schemes() -> Vec<&'static str> {
+        vec!["SignatureAuth"]
+    }
+
+    async fn from_request(
+        request: &'a poem::Request,
+        body: &mut poem::RequestBody,
+        _param_opts: poem_openapi::ExtractParamOptions<Self::ParamType>,
+    ) -> poem::Result<Self> {
+        let headers = request.headers();
+
+        let pubkey_hex = headers
+            .get("X-Public-Key")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Public-Key".to_string()))?;
+
+        let signature_hex = headers
+            .get("X-Signature")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+
+        let timestamp = headers
+            .get("X-Timestamp")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+
+        // Read body
+        let body_bytes = body.take()?.into_vec().await?;
+
+        // Verify signature
+        let pubkey = verify_request_signature(
+            pubkey_hex,
+            signature_hex,
+            timestamp,
+            request.method().as_str(),
+            request.uri().path(),
+            &body_bytes,
+        )?;
+
+        // Restore body for downstream handlers
+        *body = poem::RequestBody::new(poem::Body::from(body_bytes));
+
+        Ok(ApiAuthenticatedUser { pubkey })
     }
 }
 

@@ -690,13 +690,13 @@ pub async fn generate_csv_template(db: Data<&Arc<Database>>) -> PoemResult<poem:
         .body(csv_data))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, poem_openapi::Object)]
 pub struct CsvImportResult {
     pub success_count: usize,
     pub errors: Vec<CsvImportError>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, poem_openapi::Object)]
 pub struct CsvImportError {
     pub row: usize,
     pub message: String,
@@ -897,7 +897,7 @@ pub struct ProvisioningStatusRequest {
     pub instance_details: Option<String>,
 }
 
-fn normalize_provisioning_details(
+pub fn normalize_provisioning_details(
     status: &str,
     details: Option<String>,
 ) -> Result<Option<String>, String> {
