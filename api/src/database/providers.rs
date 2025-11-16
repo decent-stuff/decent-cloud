@@ -4,20 +4,27 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::BorshDeserialize;
 use dcc_common::{CheckInPayload, UpdateProfilePayload};
+use poem_openapi::Object;
 use provider_profile::Profile;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct ProviderProfile {
     #[ts(skip)]
     #[serde(skip_deserializing)]
+    #[oai(skip)]
     pub pubkey: Vec<u8>,
     pub name: String,
+    #[oai(skip_serializing_if_is_none)]
     pub description: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub website_url: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub logo_url: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub why_choose_us: Option<String>,
     pub api_version: String,
     pub profile_version: String,
@@ -33,21 +40,27 @@ pub struct ProviderCheckIn {
     pub block_timestamp_ns: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
 pub struct ProviderContact {
     pub contact_type: String,
     pub contact_value: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct Validator {
     #[ts(skip)]
     #[serde(skip_deserializing)]
+    #[oai(skip)]
     pub pubkey: Vec<u8>,
+    #[oai(skip_serializing_if_is_none)]
     pub name: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub description: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub website_url: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub logo_url: Option<String>,
     #[ts(type = "number")]
     pub total_check_ins: i64,

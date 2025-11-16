@@ -2,39 +2,52 @@ use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::{ContractSignReplyPayload, ContractSignRequestPayload};
+use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct Contract {
     #[serde(skip_deserializing)]
+    #[oai(skip)]
     pub contract_id: Vec<u8>,
     #[serde(skip_deserializing)]
+    #[oai(skip)]
     pub requester_pubkey: Vec<u8>,
     pub requester_ssh_pubkey: String,
     pub requester_contact: String,
     #[serde(skip_deserializing)]
+    #[oai(skip)]
     pub provider_pubkey: Vec<u8>,
     pub offering_id: String,
+    #[oai(skip_serializing_if_is_none)]
     pub region_name: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub instance_config: Option<String>,
     #[ts(type = "number")]
     pub payment_amount_e9s: i64,
     #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
     pub start_timestamp_ns: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
     pub end_timestamp_ns: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
     pub duration_hours: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
     pub original_duration_hours: Option<i64>,
     pub request_memo: String,
     #[ts(type = "number")]
     pub created_at_ns: i64,
     pub status: String,
+    #[oai(skip_serializing_if_is_none)]
     pub provisioning_instance_details: Option<String>,
     #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
     pub provisioning_completed_at_ns: Option<i64>,
 }
 
@@ -58,24 +71,33 @@ pub struct PaymentEntry {
     pub amount_e9s: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Object)]
+#[oai(skip_serializing_if_is_none)]
 pub struct RentalRequestParams {
     pub offering_db_id: i64,
+    #[oai(skip_serializing_if_is_none)]
     pub ssh_pubkey: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub contact_method: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub request_memo: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub duration_hours: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
+#[oai(skip_serializing_if_is_none)]
 pub struct ContractExtension {
     pub id: i64,
+    #[oai(skip)]
     pub contract_id: Vec<u8>,
+    #[oai(skip)]
     pub extended_by_pubkey: Vec<u8>,
     pub extension_hours: i64,
     pub extension_payment_e9s: i64,
     pub previous_end_timestamp_ns: i64,
     pub new_end_timestamp_ns: i64,
+    #[oai(skip_serializing_if_is_none)]
     pub extension_memo: Option<String>,
     pub created_at_ns: i64,
 }

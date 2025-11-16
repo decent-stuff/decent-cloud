@@ -1,22 +1,28 @@
 use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
+use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct UserProfile {
     #[ts(skip)]
     #[serde(skip_deserializing)]
+    #[oai(skip)]
     pub pubkey: Vec<u8>,
+    #[oai(skip_serializing_if_is_none)]
     pub display_name: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub bio: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub avatar_url: Option<String>,
     #[ts(type = "number")]
     pub updated_at_ns: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserContact {
     #[ts(type = "number")]
@@ -26,28 +32,33 @@ pub struct UserContact {
     pub verified: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct UserSocial {
     #[ts(type = "number")]
     pub id: i64,
     pub platform: String,
     pub username: String,
+    #[oai(skip_serializing_if_is_none)]
     pub profile_url: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct UserPublicKey {
     #[ts(type = "number")]
     pub id: i64,
     pub key_type: String,
     pub key_data: String,
+    #[oai(skip_serializing_if_is_none)]
     pub key_fingerprint: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
     pub label: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, TS)]
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct UserActivity {
     pub offerings_provided: Vec<crate::database::offerings::Offering>,

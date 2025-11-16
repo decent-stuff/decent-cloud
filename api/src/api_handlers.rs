@@ -57,8 +57,9 @@ fn check_authorization(pubkey: &[u8], user: &AuthenticatedUser) -> Result<(), St
     }
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Serialize, ts_rs::TS, poem_openapi::Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct PlatformOverview {
     // Database-derived statistics (always available, reliable)
     #[ts(type = "number")]
@@ -76,6 +77,7 @@ pub struct PlatformOverview {
     #[ts(type = "number")]
     pub validator_count_24h: i64,
     #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
     pub latest_block_timestamp_ns: Option<u64>,
 
     // All canister metadata (flexible, future-proof)
@@ -816,7 +818,7 @@ pub async fn get_contract(
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, poem_openapi::Object)]
 pub struct RentalRequestResponse {
     pub contract_id: String,
     pub message: String,

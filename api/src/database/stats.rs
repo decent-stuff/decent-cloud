@@ -20,8 +20,9 @@ pub struct PlatformStats {
     pub total_volume_e9s: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object)]
 pub struct ReputationInfo {
+    #[oai(skip)]
     pub pubkey: Vec<u8>,
     pub total_reputation: i64,
     pub change_count: i64,
@@ -165,7 +166,7 @@ impl Database {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, poem_openapi::Object)]
 pub struct ProviderStats {
     pub total_contracts: i64,
     pub pending_contracts: i64,

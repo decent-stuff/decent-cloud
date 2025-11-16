@@ -24,6 +24,7 @@ icrc-ledger-types.workspace = true
 ledger-map = { path = "../ledger-map" }
 num-bigint.workspace = true
 poem.workspace = true
+poem-openapi = { version = "5", features = ["swagger-ui", "chrono"] }
 provider-offering = { path = "../provider-offering" }
 provider-profile = { path = "../provider-profile" }
 regex.workspace = true

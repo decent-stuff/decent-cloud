@@ -5,6 +5,7 @@ mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
 mod network_metrics;
+mod openapi_demo;
 mod request_logging;
 mod sync_service;
 mod validation;
@@ -14,10 +15,12 @@ use clap::{Parser, Subcommand};
 use database::Database;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
+use openapi_demo::MainApi;
 use poem::{
     handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
     Route, Server,
 };
+use poem_openapi::OpenApiService;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::Arc;
@@ -194,51 +197,61 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
+    // Set up OpenAPI service with Swagger UI
+    let api_service = OpenApiService::new(MainApi, "Decent Cloud API", "1.0.0");
+    let swagger_ui = api_service.swagger_ui();
+    let openapi_spec = api_service.spec_endpoint();
+
     let app = Route::new()
-        // Health check
-        .at("/api/v1/health", poem::get(health))
+        // OpenAPI documentation and Swagger UI
+        .nest("/api/v1/swagger", swagger_ui)
+        .nest("/api/v1/openapi", openapi_spec)
+        .nest("/api/v1", api_service)
         // Legacy canister proxy
         .at("/api/v1/canister/:method", post(canister_proxy))
-        // Provider endpoints
-        .at("/api/v1/providers", poem::get(api_handlers::list_providers))
-        .at(
-            "/api/v1/providers/active/:days",
-            poem::get(api_handlers::get_active_providers),
-        )
-        .at(
-            "/api/v1/validators/active/:days",
-            poem::get(api_handlers::get_active_validators),
-        )
-        .at(
-            "/api/v1/providers/:pubkey",
-            poem::get(api_handlers::get_provider_profile),
-        )
-        .at(
-            "/api/v1/providers/:pubkey/contacts",
-            poem::get(api_handlers::get_provider_contacts),
-        )
+        // Provider endpoints (converted to poem-openapi above)
+        // .at("/api/v1/providers", poem::get(api_handlers::list_providers))
+        // .at(
+        //     "/api/v1/providers/active/:days",
+        //     poem::get(api_handlers::get_active_providers),
+        // )
+        // Converted to poem-openapi:
+        // .at(
+        //     "/api/v1/validators/active/:days",
+        //     poem::get(api_handlers::get_active_validators),
+        // )
+        // .at(
+        //     "/api/v1/providers/:pubkey",
+        //     poem::get(api_handlers::get_provider_profile),
+        // )
+        // .at(
+        //     "/api/v1/providers/:pubkey/contacts",
+        //     poem::get(api_handlers::get_provider_contacts),
+        // )
         .at(
             "/api/v1/providers/:pubkey/offerings",
             poem::get(api_handlers::get_provider_offerings)
                 .post(api_handlers::create_provider_offering),
         )
-        .at(
-            "/api/v1/providers/:pubkey/contracts",
-            poem::get(api_handlers::get_provider_contracts),
-        )
-        .at(
-            "/api/v1/providers/:pubkey/stats",
-            poem::get(api_handlers::get_provider_stats),
-        )
-        // Offering endpoints
-        .at(
-            "/api/v1/offerings",
-            poem::get(api_handlers::search_offerings),
-        )
-        .at(
-            "/api/v1/offerings/:id",
-            poem::get(api_handlers::get_offering),
-        )
+        // Converted to poem-openapi:
+        // .at(
+        //     "/api/v1/providers/:pubkey/contracts",
+        //     poem::get(api_handlers::get_provider_contracts),
+        // )
+        // .at(
+        //     "/api/v1/providers/:pubkey/stats",
+        //     poem::get(api_handlers::get_provider_stats),
+        // )
+        // Offering endpoints (search_offerings converted to poem-openapi above)
+        // .at(
+        //     "/api/v1/offerings",
+        //     poem::get(api_handlers::search_offerings),
+        // )
+        // Converted to poem-openapi:
+        // .at(
+        //     "/api/v1/offerings/:id",
+        //     poem::get(api_handlers::get_offering),
+        // )
         .at(
             "/api/v1/providers/:pubkey/offerings/:id",
             poem::put(api_handlers::update_provider_offering)
@@ -264,15 +277,20 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/providers/:pubkey/offerings/import",
             poem::post(api_handlers::import_provider_offerings_csv),
         )
-        // Contract endpoints
+        // Contract endpoints (read-only converted to poem-openapi)
+        // .at(
+        //     "/api/v1/contracts",
+        //     poem::get(api_handlers::list_contracts).post(api_handlers::create_rental_request),
+        // )
         .at(
             "/api/v1/contracts",
-            poem::get(api_handlers::list_contracts).post(api_handlers::create_rental_request),
+            poem::post(api_handlers::create_rental_request),
         )
-        .at(
-            "/api/v1/contracts/:id",
-            poem::get(api_handlers::get_contract),
-        )
+        // Converted to poem-openapi:
+        // .at(
+        //     "/api/v1/contracts/:id",
+        //     poem::get(api_handlers::get_contract),
+        // )
         .at(
             "/api/v1/contracts/:id/extend",
             poem::post(api_handlers::extend_contract),
@@ -285,10 +303,11 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/contracts/:id/cancel",
             poem::put(api_handlers::cancel_contract),
         )
-        .at(
-            "/api/v1/users/:pubkey/contracts",
-            poem::get(api_handlers::get_user_contracts),
-        )
+        // Converted to poem-openapi:
+        // .at(
+        //     "/api/v1/users/:pubkey/contracts",
+        //     poem::get(api_handlers::get_user_contracts),
+        // )
         // Provider rental management endpoints
         .at(
             "/api/v1/provider/rental-requests/pending",
@@ -302,58 +321,75 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/provider/rental-requests/:id/provisioning",
             poem::put(api_handlers::update_provisioning_status),
         )
-        // User profile endpoints
+        // User profile endpoints (read-only converted to poem-openapi)
+        // .at(
+        //     "/api/v1/users/:pubkey/profile",
+        //     poem::get(api_handlers::get_user_profile).put(api_handlers::update_user_profile),
+        // )
         .at(
             "/api/v1/users/:pubkey/profile",
-            poem::get(api_handlers::get_user_profile).put(api_handlers::update_user_profile),
+            poem::put(api_handlers::update_user_profile),
         )
+        // .at(
+        //     "/api/v1/users/:pubkey/contacts",
+        //     poem::get(api_handlers::get_user_contacts).post(api_handlers::upsert_user_contact),
+        // )
         .at(
             "/api/v1/users/:pubkey/contacts",
-            poem::get(api_handlers::get_user_contacts).post(api_handlers::upsert_user_contact),
+            poem::post(api_handlers::upsert_user_contact),
         )
         .at(
             "/api/v1/users/:pubkey/contacts/:contact_type",
             poem::delete(api_handlers::delete_user_contact),
         )
+        // .at(
+        //     "/api/v1/users/:pubkey/socials",
+        //     poem::get(api_handlers::get_user_socials).post(api_handlers::upsert_user_social),
+        // )
         .at(
             "/api/v1/users/:pubkey/socials",
-            poem::get(api_handlers::get_user_socials).post(api_handlers::upsert_user_social),
+            poem::post(api_handlers::upsert_user_social),
         )
         .at(
             "/api/v1/users/:pubkey/socials/:platform",
             poem::delete(api_handlers::delete_user_social),
         )
+        // .at(
+        //     "/api/v1/users/:pubkey/keys",
+        //     poem::get(api_handlers::get_user_public_keys).post(api_handlers::add_user_public_key),
+        // )
         .at(
             "/api/v1/users/:pubkey/keys",
-            poem::get(api_handlers::get_user_public_keys).post(api_handlers::add_user_public_key),
+            poem::post(api_handlers::add_user_public_key),
         )
         .at(
             "/api/v1/users/:pubkey/keys/:key_fingerprint",
             poem::delete(api_handlers::delete_user_public_key),
         )
-        .at(
-            "/api/v1/users/:pubkey/activity",
-            poem::get(api_handlers::get_user_activity),
-        )
-        // Token endpoints
-        .at(
-            "/api/v1/transfers",
-            poem::get(api_handlers::get_recent_transfers),
-        )
-        .at(
-            "/api/v1/accounts/:account/transfers",
-            poem::get(api_handlers::get_account_transfers),
-        )
-        .at(
-            "/api/v1/accounts/:account/balance",
-            poem::get(api_handlers::get_account_balance),
-        )
-        // Stats endpoints
-        .at("/api/v1/stats", poem::get(api_handlers::get_platform_stats))
-        .at(
-            "/api/v1/reputation/:pubkey",
-            poem::get(api_handlers::get_reputation),
-        )
+        // Converted to poem-openapi:
+        // .at(
+        //     "/api/v1/users/:pubkey/activity",
+        //     poem::get(api_handlers::get_user_activity),
+        // )
+        // Token endpoints (converted to poem-openapi)
+        // .at(
+        //     "/api/v1/transfers",
+        //     poem::get(api_handlers::get_recent_transfers),
+        // )
+        // .at(
+        //     "/api/v1/accounts/:account/transfers",
+        //     poem::get(api_handlers::get_account_transfers),
+        // )
+        // .at(
+        //     "/api/v1/accounts/:account/balance",
+        //     poem::get(api_handlers::get_account_balance),
+        // )
+        // Stats endpoints (converted to poem-openapi)
+        // .at("/api/v1/stats", poem::get(api_handlers::get_platform_stats))
+        // .at(
+        //     "/api/v1/reputation/:pubkey",
+        //     poem::get(api_handlers::get_reputation),
+        // )
         .data(ctx.database)
         .data(ctx.metadata_cache.clone())
         .with(request_logging::RequestLogging)

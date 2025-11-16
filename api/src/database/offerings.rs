@@ -2,17 +2,21 @@ use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use borsh::BorshDeserialize;
 use dcc_common::offerings;
+use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
 pub struct Offering {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
+    #[oai(skip_serializing_if_is_none)]
     pub id: Option<i64>,
     #[ts(skip)]
     #[serde(skip_deserializing)]
+    #[oai(skip)]
     pub pubkey: Vec<u8>,
     pub offering_id: String,
     pub offer_name: String,

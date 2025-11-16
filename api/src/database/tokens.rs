@@ -1,14 +1,17 @@
 use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use dcc_common::{FundsTransfer, FundsTransferApproval};
+use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
+#[oai(skip_serializing_if_is_none)]
 pub struct TokenTransfer {
     pub from_account: String,
     pub to_account: String,
     pub amount_e9s: i64,
     pub fee_e9s: i64,
+    #[oai(skip_serializing_if_is_none)]
     pub memo: Option<String>,
     pub created_at_ns: i64,
 }
