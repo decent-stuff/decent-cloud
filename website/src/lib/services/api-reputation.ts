@@ -120,7 +120,7 @@ export async function getAccountTransfers(
  * Get recent transfers across the platform
  */
 export async function getRecentTransfers(limit: number = 50): Promise<TokenTransfer[]> {
-	const url = `${API_BASE_URL}/api/v1/transfers/recent?limit=${limit}`;
+	const url = `${API_BASE_URL}/api/v1/transfers?limit=${limit}`;
 
 	const response = await fetch(url);
 

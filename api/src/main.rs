@@ -181,8 +181,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
     // Set up OpenAPI service with Swagger UI
-    let api_service = OpenApiService::new(MainApi, "Decent Cloud API", "1.0.0")
-        .server("/api/v1");
+    let api_service = OpenApiService::new(MainApi, "Decent Cloud API", "1.0.0").server("/api/v1");
     let swagger_ui = api_service.swagger_ui();
     let openapi_spec = api_service.spec_endpoint();
 
@@ -191,20 +190,9 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .nest("/api/v1/swagger", swagger_ui)
         .nest("/api/v1/openapi", openapi_spec)
         .nest("/api/v1", api_service)
-        // Legacy endpoints (canister proxy + CSV operations that don't fit OpenAPI)
+        // Legacy endpoints (canister proxy - ICP integration pending)
+        // NOTE: CSV operations are now included in OpenAPI schema above
         .at("/api/v1/canister/:method", post(canister_proxy))
-        .at(
-            "/api/v1/providers/:pubkey/offerings/export",
-            poem::get(api_handlers::export_provider_offerings_csv),
-        )
-        .at(
-            "/api/v1/offerings/template",
-            poem::get(api_handlers::generate_csv_template),
-        )
-        .at(
-            "/api/v1/providers/:pubkey/offerings/import",
-            poem::post(api_handlers::import_provider_offerings_csv),
-        )
         .data(ctx.database)
         .data(ctx.metadata_cache.clone())
         .with(request_logging::RequestLogging)

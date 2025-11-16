@@ -109,6 +109,18 @@ pub struct AddPublicKeyRequest {
     pub label: Option<String>,
 }
 
+#[derive(Debug, Serialize, Object)]
+pub struct CsvImportResult {
+    pub success_count: usize,
+    pub errors: Vec<CsvImportError>,
+}
+
+#[derive(Debug, Serialize, Object)]
+pub struct CsvImportError {
+    pub row: usize,
+    pub message: String,
+}
+
 // Helper functions
 fn decode_pubkey(pubkey_hex: &str) -> Result<Vec<u8>, String> {
     hex::decode(pubkey_hex).map_err(|_| "Invalid pubkey format".to_string())
@@ -1583,7 +1595,7 @@ impl MainApi {
     ///
     /// Deletes a user contact (requires authentication)
     #[oai(
-        path = "/users/:pubkey/contacts/:contact_type",
+        path = "/users/:pubkey/contacts/:contact_id",
         method = "delete",
         tag = "ApiTags::Users"
     )]
@@ -1713,7 +1725,7 @@ impl MainApi {
     ///
     /// Deletes a user social profile (requires authentication)
     #[oai(
-        path = "/users/:pubkey/socials/:platform",
+        path = "/users/:pubkey/socials/:social_id",
         method = "delete",
         tag = "ApiTags::Users"
     )]
@@ -1822,7 +1834,7 @@ impl MainApi {
     ///
     /// Deletes a user public key (requires authentication)
     #[oai(
-        path = "/users/:pubkey/keys/:key_fingerprint",
+        path = "/users/:pubkey/keys/:key_id",
         method = "delete",
         tag = "ApiTags::Users"
     )]
@@ -1935,6 +1947,354 @@ impl MainApi {
                 error: None,
             }),
             Err(e) => Json(self::ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Export provider offerings as CSV
+    ///
+    /// Returns all offerings for a provider in CSV format (requires authentication)
+    #[oai(
+        path = "/providers/:pubkey/offerings/export",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn export_provider_offerings_csv(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> poem_openapi::payload::PlainText<String> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => return poem_openapi::payload::PlainText("Invalid pubkey format".to_string()),
+        };
+
+        if let Err(_) = check_authorization(&pubkey_bytes, &auth) {
+            return poem_openapi::payload::PlainText("Unauthorized".to_string());
+        }
+
+        match db.get_provider_offerings(&pubkey_bytes).await {
+            Ok(offerings) => {
+                let mut csv_writer = csv::Writer::from_writer(vec![]);
+
+                // Write header
+                let _ = csv_writer.write_record([
+                    "offering_id",
+                    "offer_name",
+                    "description",
+                    "product_page_url",
+                    "currency",
+                    "monthly_price",
+                    "setup_fee",
+                    "visibility",
+                    "product_type",
+                    "virtualization_type",
+                    "billing_interval",
+                    "stock_status",
+                    "processor_brand",
+                    "processor_amount",
+                    "processor_cores",
+                    "processor_speed",
+                    "processor_name",
+                    "memory_error_correction",
+                    "memory_type",
+                    "memory_amount",
+                    "hdd_amount",
+                    "total_hdd_capacity",
+                    "ssd_amount",
+                    "total_ssd_capacity",
+                    "unmetered_bandwidth",
+                    "uplink_speed",
+                    "traffic",
+                    "datacenter_country",
+                    "datacenter_city",
+                    "datacenter_latitude",
+                    "datacenter_longitude",
+                    "control_panel",
+                    "gpu_name",
+                    "min_contract_hours",
+                    "max_contract_hours",
+                    "payment_methods",
+                    "features",
+                    "operating_systems",
+                ]);
+
+                // Write data rows
+                for offering in offerings {
+                    let _ = csv_writer.write_record([
+                        &offering.offering_id,
+                        &offering.offer_name,
+                        &offering.description.unwrap_or_default(),
+                        &offering.product_page_url.unwrap_or_default(),
+                        &offering.currency,
+                        &offering.monthly_price.to_string(),
+                        &offering.setup_fee.to_string(),
+                        &offering.visibility,
+                        &offering.product_type,
+                        &offering.virtualization_type.unwrap_or_default(),
+                        &offering.billing_interval,
+                        &offering.stock_status,
+                        &offering.processor_brand.unwrap_or_default(),
+                        &offering
+                            .processor_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .processor_cores
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.processor_speed.unwrap_or_default(),
+                        &offering.processor_name.unwrap_or_default(),
+                        &offering.memory_error_correction.unwrap_or_default(),
+                        &offering.memory_type.unwrap_or_default(),
+                        &offering.memory_amount.unwrap_or_default(),
+                        &offering
+                            .hdd_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.total_hdd_capacity.unwrap_or_default(),
+                        &offering
+                            .ssd_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.total_ssd_capacity.unwrap_or_default(),
+                        &offering.unmetered_bandwidth.to_string(),
+                        &offering.uplink_speed.unwrap_or_default(),
+                        &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.datacenter_country,
+                        &offering.datacenter_city,
+                        &offering
+                            .datacenter_latitude
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .datacenter_longitude
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.control_panel.unwrap_or_default(),
+                        &offering.gpu_name.unwrap_or_default(),
+                        &offering
+                            .min_contract_hours
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .max_contract_hours
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.payment_methods.unwrap_or_default(),
+                        &offering.features.unwrap_or_default(),
+                        &offering.operating_systems.unwrap_or_default(),
+                    ]);
+                }
+
+                match csv_writer.into_inner() {
+                    Ok(csv_data) => poem_openapi::payload::PlainText(
+                        String::from_utf8_lossy(&csv_data).to_string(),
+                    ),
+                    Err(e) => {
+                        poem_openapi::payload::PlainText(format!("CSV generation error: {}", e))
+                    }
+                }
+            }
+            Err(e) => poem_openapi::payload::PlainText(format!("Error: {}", e)),
+        }
+    }
+
+    /// Get CSV template for offerings
+    ///
+    /// Returns a CSV template with example offerings
+    #[oai(
+        path = "/offerings/template",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn get_offerings_csv_template(
+        &self,
+        db: Data<&Arc<Database>>,
+    ) -> poem_openapi::payload::PlainText<String> {
+        let mut csv_writer = csv::Writer::from_writer(vec![]);
+
+        // Write header
+        let _ = csv_writer.write_record([
+            "offering_id",
+            "offer_name",
+            "description",
+            "product_page_url",
+            "currency",
+            "monthly_price",
+            "setup_fee",
+            "visibility",
+            "product_type",
+            "virtualization_type",
+            "billing_interval",
+            "stock_status",
+            "processor_brand",
+            "processor_amount",
+            "processor_cores",
+            "processor_speed",
+            "processor_name",
+            "memory_error_correction",
+            "memory_type",
+            "memory_amount",
+            "hdd_amount",
+            "total_hdd_capacity",
+            "ssd_amount",
+            "total_ssd_capacity",
+            "unmetered_bandwidth",
+            "uplink_speed",
+            "traffic",
+            "datacenter_country",
+            "datacenter_city",
+            "datacenter_latitude",
+            "datacenter_longitude",
+            "control_panel",
+            "gpu_name",
+            "min_contract_hours",
+            "max_contract_hours",
+            "payment_methods",
+            "features",
+            "operating_systems",
+        ]);
+
+        // Get example offerings
+        match db.get_example_offerings().await {
+            Ok(offerings) => {
+                for offering in offerings {
+                    let _ = csv_writer.write_record([
+                        &offering.offering_id,
+                        &offering.offer_name,
+                        &offering.description.unwrap_or_default(),
+                        &offering.product_page_url.unwrap_or_default(),
+                        &offering.currency,
+                        &offering.monthly_price.to_string(),
+                        &offering.setup_fee.to_string(),
+                        &offering.visibility,
+                        &offering.product_type,
+                        &offering.virtualization_type.unwrap_or_default(),
+                        &offering.billing_interval,
+                        &offering.stock_status,
+                        &offering.processor_brand.unwrap_or_default(),
+                        &offering
+                            .processor_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .processor_cores
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.processor_speed.unwrap_or_default(),
+                        &offering.processor_name.unwrap_or_default(),
+                        &offering.memory_error_correction.unwrap_or_default(),
+                        &offering.memory_type.unwrap_or_default(),
+                        &offering.memory_amount.unwrap_or_default(),
+                        &offering
+                            .hdd_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.total_hdd_capacity.unwrap_or_default(),
+                        &offering
+                            .ssd_amount
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.total_ssd_capacity.unwrap_or_default(),
+                        &offering.unmetered_bandwidth.to_string(),
+                        &offering.uplink_speed.unwrap_or_default(),
+                        &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
+                        &offering.datacenter_country,
+                        &offering.datacenter_city,
+                        &offering
+                            .datacenter_latitude
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .datacenter_longitude
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.control_panel.unwrap_or_default(),
+                        &offering.gpu_name.unwrap_or_default(),
+                        &offering
+                            .min_contract_hours
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering
+                            .max_contract_hours
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
+                        &offering.payment_methods.unwrap_or_default(),
+                        &offering.features.unwrap_or_default(),
+                        &offering.operating_systems.unwrap_or_default(),
+                    ]);
+                }
+            }
+            Err(_) => {}
+        }
+
+        match csv_writer.into_inner() {
+            Ok(csv_data) => {
+                poem_openapi::payload::PlainText(String::from_utf8_lossy(&csv_data).to_string())
+            }
+            Err(e) => poem_openapi::payload::PlainText(format!("CSV generation error: {}", e)),
+        }
+    }
+
+    /// Import provider offerings from CSV
+    ///
+    /// Imports offerings from CSV format (requires authentication)
+    #[oai(
+        path = "/providers/:pubkey/offerings/import",
+        method = "post",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn import_provider_offerings_csv(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        #[oai(default)] upsert: poem_openapi::param::Query<bool>,
+        csv_data: poem_openapi::payload::PlainText<String>,
+    ) -> Json<ApiResponse<CsvImportResult>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db
+            .import_offerings_csv(&pubkey_bytes, &csv_data.0, upsert.0)
+            .await
+        {
+            Ok((success_count, errors)) => {
+                let result = CsvImportResult {
+                    success_count,
+                    errors: errors
+                        .into_iter()
+                        .map(|(row, message)| CsvImportError { row, message })
+                        .collect(),
+                };
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(result),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,
                 error: Some(e.to_string()),
