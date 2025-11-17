@@ -254,7 +254,7 @@ impl Database {
 
             let timestamp_i64 = entry.block_timestamp_ns as i64;
             let memo = check_in.memo().to_string();
-            let nonce_signature = check_in.nonce_signature().clone();
+            let nonce_signature = check_in.nonce_signature();
             sqlx::query!(
                 "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)",
                 entry.key,

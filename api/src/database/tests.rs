@@ -180,15 +180,12 @@ async fn test_historical_tables_store_all_entries() {
     assert_table_count(&db, "provider_check_ins", 10).await;
 
     // Verify timestamps are sequential and unique
-    let timestamps: Vec<i64> = sqlx::query(
-        "SELECT block_timestamp_ns FROM provider_check_ins ORDER BY block_timestamp_ns",
+    let timestamps: Vec<i64> = sqlx::query_scalar!(
+        r#"SELECT block_timestamp_ns as "block_timestamp_ns!: i64" FROM provider_check_ins ORDER BY block_timestamp_ns"#,
     )
     .fetch_all(&db.pool)
     .await
-    .unwrap()
-    .into_iter()
-    .map(|row| row.get("block_timestamp_ns"))
-    .collect();
+    .unwrap();
 
     // All timestamps should be unique and ordered
     assert_eq!(timestamps.len(), 10);
@@ -291,18 +288,22 @@ async fn test_user_profile_storage_and_retrieval() {
     assert!(db.insert_entries(vec![registration_entry]).await.is_ok());
 
     // Insert user profile
-    sqlx::query(
-        "INSERT INTO user_profiles (pubkey, display_name, bio, avatar_url, updated_at_ns)
-         VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(&user_key[..])
-    .bind("Test User")
-    .bind("A test user bio")
-    .bind("https://example.com/avatar.png")
-    .bind(timestamp as i64)
-    .execute(&db.pool)
-    .await
-    .unwrap();
+    let timestamp_i64 = timestamp as i64;
+    {
+        let user_key_ref = &user_key[..];
+        sqlx::query!(
+            "INSERT INTO user_profiles (pubkey, display_name, bio, avatar_url, updated_at_ns)
+             VALUES (?, ?, ?, ?, ?)",
+            user_key_ref,
+            "Test User",
+            "A test user bio",
+            "https://example.com/avatar.png",
+            timestamp_i64
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
     // Retrieve user profile
     let profile = db.get_user_profile(user_key).await.unwrap();
@@ -333,6 +334,7 @@ async fn test_user_contacts_storage_and_retrieval() {
     let db = setup_test_db().await;
     let user_key = b"user_contacts_test_123";
     let timestamp = 1234567890;
+    let timestamp_i64 = timestamp as i64;
 
     // Register user first
     let registration_entry = TestDataFactory::registration_entry("UserRegister", user_key);
@@ -346,15 +348,16 @@ async fn test_user_contacts_storage_and_retrieval() {
     ];
 
     for (contact_type, contact_value, verified) in &contacts {
-        sqlx::query(
+        let user_key_ref = &user_key[..];
+        sqlx::query!(
             "INSERT INTO user_contacts (user_pubkey, contact_type, contact_value, verified, created_at_ns)
              VALUES (?, ?, ?, ?, ?)",
+            user_key_ref,
+            *contact_type,
+            *contact_value,
+            *verified,
+            timestamp_i64
         )
-        .bind(&user_key[..])
-        .bind(contact_type)
-        .bind(contact_value)
-        .bind(verified)
-        .bind(timestamp as i64)
         .execute(&db.pool)
         .await
         .unwrap();
@@ -381,6 +384,7 @@ async fn test_user_socials_storage_and_retrieval() {
     let db = setup_test_db().await;
     let user_key = b"user_socials_test_123";
     let timestamp = 1234567890;
+    let timestamp_i64 = timestamp as i64;
 
     // Register user first
     let registration_entry = TestDataFactory::registration_entry("UserRegister", user_key);
@@ -394,15 +398,16 @@ async fn test_user_socials_storage_and_retrieval() {
     ];
 
     for (platform, username, profile_url) in &socials {
-        sqlx::query(
+        let user_key_ref = &user_key[..];
+        sqlx::query!(
             "INSERT INTO user_socials (user_pubkey, platform, username, profile_url, created_at_ns)
              VALUES (?, ?, ?, ?, ?)",
+            user_key_ref,
+            *platform,
+            *username,
+            *profile_url,
+            timestamp_i64
         )
-        .bind(&user_key[..])
-        .bind(platform)
-        .bind(username)
-        .bind(profile_url)
-        .bind(timestamp as i64)
         .execute(&db.pool)
         .await
         .unwrap();
@@ -429,6 +434,7 @@ async fn test_user_public_keys_storage_and_retrieval() {
     let db = setup_test_db().await;
     let user_key = b"user_keys_test_123";
     let timestamp = 1234567890;
+    let timestamp_i64 = timestamp as i64;
 
     // Register user first
     let registration_entry = TestDataFactory::registration_entry("UserRegister", user_key);
@@ -452,16 +458,17 @@ async fn test_user_public_keys_storage_and_retrieval() {
     ];
 
     for (key_type, key_data, fingerprint, label) in &keys {
-        sqlx::query(
+        let user_key_ref = &user_key[..];
+        sqlx::query!(
             "INSERT INTO user_public_keys (user_pubkey, key_type, key_data, key_fingerprint, label, created_at_ns)
              VALUES (?, ?, ?, ?, ?, ?)",
+            user_key_ref,
+            *key_type,
+            *key_data,
+            *fingerprint,
+            *label,
+            timestamp_i64
         )
-        .bind(&user_key[..])
-        .bind(key_type)
-        .bind(key_data)
-        .bind(fingerprint)
-        .bind(label)
-        .bind(timestamp as i64)
         .execute(&db.pool)
         .await
         .unwrap();
@@ -534,13 +541,15 @@ async fn test_upsert_profile_auto_creates_registration() {
     assert_eq!(profile.unwrap().display_name, Some("Test User".to_string()));
 
     // Verify registration was auto-created
-    let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
-            .bind(&new_user_key[..])
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
-    assert_eq!(reg_count.0, 1);
+    let new_user_key_ref = &new_user_key[..];
+    let reg_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64" FROM user_registrations WHERE pubkey = ?"#,
+        new_user_key_ref
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count, 1);
 }
 
 #[tokio::test]
@@ -555,13 +564,15 @@ async fn test_upsert_contact_auto_creates_registration() {
     assert!(result.is_ok());
 
     // Verify registration was auto-created
-    let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
-            .bind(&new_user_key[..])
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
-    assert_eq!(reg_count.0, 1);
+    let new_user_key_ref = &new_user_key[..];
+    let reg_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64" FROM user_registrations WHERE pubkey = ?"#,
+        new_user_key_ref
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count, 1);
 }
 
 #[tokio::test]
@@ -581,13 +592,15 @@ async fn test_upsert_social_auto_creates_registration() {
     assert!(result.is_ok());
 
     // Verify registration was auto-created
-    let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
-            .bind(&new_user_key[..])
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
-    assert_eq!(reg_count.0, 1);
+    let new_user_key_ref = &new_user_key[..];
+    let reg_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64" FROM user_registrations WHERE pubkey = ?"#,
+        new_user_key_ref
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count, 1);
 }
 
 #[tokio::test]
@@ -608,13 +621,15 @@ async fn test_add_public_key_auto_creates_registration() {
     assert!(result.is_ok());
 
     // Verify registration was auto-created
-    let reg_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM user_registrations WHERE pubkey = ?")
-            .bind(&new_user_key[..])
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
-    assert_eq!(reg_count.0, 1);
+    let new_user_key_ref = &new_user_key[..];
+    let reg_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64" FROM user_registrations WHERE pubkey = ?"#,
+        new_user_key_ref
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(reg_count, 1);
 }
 
 // Example offerings tests
@@ -766,17 +781,28 @@ async fn test_example_offerings_excluded_from_search() {
 
     // Create a regular public offering
     let pubkey = vec![1u8; 32];
-    sqlx::query(
-        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, 0)",
-    )
-    .bind(&(pubkey))
-    .bind(&(pubkey))
-    .execute(&db.pool)
-    .await
-    .unwrap();
+    {
+        let pubkey_ref = &pubkey;
+        sqlx::query!(
+            "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, 0)",
+            pubkey_ref,
+            pubkey_ref
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
-    sqlx::query("INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', 0, 0)")
-        .bind(&(pubkey)).execute(&db.pool).await.unwrap();
+    {
+        let pubkey_ref = &pubkey;
+        sqlx::query!(
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', 0, 0)",
+            pubkey_ref
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
     // Search offerings - should only return the public offering, not examples
     let search_params = crate::database::offerings::SearchOfferingsParams {
@@ -988,22 +1014,25 @@ async fn test_get_active_validators_with_profile() {
     .unwrap();
 
     // Add profile for this validator
-    sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&validator_key[..])
-    .bind("Test Validator")
-    .bind(Some("A test validator"))
-    .bind(Some("https://example.com"))
-    .bind(Some("https://example.com/logo.png"))
-    .bind(Some("We're reliable!"))
-    .bind("v1")
-    .bind("0.1.0")
-    .bind(now_ns)
-    .execute(&db.pool)
-    .await
-    .unwrap();
+    {
+        let validator_key_ref = &validator_key[..];
+        sqlx::query!(
+            "INSERT INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            validator_key_ref,
+            "Test Validator",
+            Some("A test validator"),
+            Some("https://example.com"),
+            Some("https://example.com/logo.png"),
+            Some("We're reliable!"),
+            "v1",
+            "0.1.0",
+            now_ns
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
     // Get active validators
     let validators = db.get_active_validators(1).await.unwrap();

@@ -13,8 +13,17 @@ async fn insert_test_offering(db: &Database, id: i64, pubkey: &[u8], country: &s
     // Use IDs starting from 100 to avoid conflicts with example data from migration 002
     let db_id = id + 100;
     let offering_id = format!("off-{}", id);
-    sqlx::query("INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', ?, 'City', 0, NULL, NULL, NULL, 0)")
-            .bind(db_id).bind(pubkey).bind(&offering_id).bind(price).bind(country).execute(&db.pool).await.unwrap();
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', ?, 'City', 0, NULL, NULL, NULL, 0)",
+        db_id,
+        pubkey,
+        offering_id,
+        price,
+        country
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
 }
 
 // Helper to get the database ID from test ID (test IDs start from 1, DB IDs from 100)
@@ -105,8 +114,19 @@ async fn test_search_offerings_excludes_private_and_example() {
     // Insert private offering (should NOT be shown)
     let db_id_private = test_id_to_db_id(2);
     let offering_id_private = "off-2";
-    sqlx::query("INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Private Offer', 'USD', ?, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, NULL, NULL, NULL, 0)")
-            .bind(db_id_private).bind(&pubkey).bind(offering_id_private).bind(200.0).execute(&db.pool).await.unwrap();
+    {
+        let pubkey_ref = &pubkey;
+        sqlx::query!(
+            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Private Offer', 'USD', ?, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, NULL, NULL, NULL, 0)",
+            db_id_private,
+            pubkey_ref,
+            offering_id_private,
+            200.0
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
     let results = db
         .search_offerings(SearchOfferingsParams {
@@ -563,8 +583,20 @@ async fn test_duplicate_offering_success() {
     // Create offering with payment_methods
     let db_id = test_id_to_db_id(1);
     let offering_id = "off-1".to_string();
-    sqlx::query("INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 'BTC', NULL, NULL, 0)")
-            .bind(db_id).bind(&pubkey).bind(&offering_id).bind(100.0).execute(&db.pool).await.unwrap();
+    {
+        let pubkey_ref = &pubkey;
+        let offering_id_ref = &offering_id;
+        sqlx::query!(
+            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 'BTC', NULL, NULL, 0)",
+            db_id,
+            pubkey_ref,
+            offering_id_ref,
+            100.0
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
     let new_id = db
         .duplicate_offering(&pubkey, db_id, "off-1-copy".to_string())
@@ -686,12 +718,13 @@ off-2,Test Server 2,Another server,,EUR,200.0,50.0,public,vps,kvm,monthly,in_sto
     assert_eq!(errors.len(), 0);
 
     // Verify first offering
-    let off1 =
-        sqlx::query_scalar::<_, i64>("SELECT id FROM provider_offerings WHERE offering_id = ?")
-            .bind("off-1")
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
+    let off1 = sqlx::query_scalar!(
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        "off-1"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
     let offering = db.get_offering(off1).await.unwrap().unwrap();
     assert_eq!(offering.offer_name, "Test Server");
     assert_eq!(offering.monthly_price, 100.0);
@@ -783,12 +816,13 @@ off-2,New Offer,New desc,,EUR,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,
     assert_eq!(offering.stock_status, "out_of_stock");
 
     // Verify new offering was created
-    let off2 =
-        sqlx::query_scalar::<_, i64>("SELECT id FROM provider_offerings WHERE offering_id = ?")
-            .bind("off-2")
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
+    let off2 = sqlx::query_scalar!(
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        "off-2"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
     assert!(off2 > db_id);
 }
 

@@ -8,6 +8,29 @@ async fn setup_test_db() -> Database {
     Database { pool }
 }
 
+async fn insert_contract_request(
+    db: &Database,
+    contract_id: &[u8],
+    requester_pubkey: &[u8],
+    provider_pubkey: &[u8],
+    offering_id: &str,
+    created_at_ns: i64,
+    status: &str,
+) {
+    sqlx::query!(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?)",
+        contract_id,
+        requester_pubkey,
+        provider_pubkey,
+        offering_id,
+        created_at_ns,
+        status
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
 async fn test_get_user_contracts_empty() {
     let db = setup_test_db().await;
@@ -22,8 +45,16 @@ async fn test_get_user_contracts() {
     let provider_pk = vec![2u8; 32];
     let contract_id = vec![3u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
-            .bind(&contract_id).bind(&user_pk).bind(&provider_pk).execute(&db.pool).await.unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
 
     let contracts = db.get_user_contracts(&user_pk).await.unwrap();
     assert_eq!(contracts.len(), 1);
@@ -37,8 +68,16 @@ async fn test_get_provider_contracts() {
     let provider_pk = vec![2u8; 32];
     let contract_id = vec![3u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
-            .bind(&contract_id).bind(&user_pk).bind(&provider_pk).execute(&db.pool).await.unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
 
     let contracts = db.get_provider_contracts(&provider_pk).await.unwrap();
     assert_eq!(contracts.len(), 1);
@@ -51,12 +90,40 @@ async fn test_get_pending_provider_contracts() {
     let provider_pk = vec![2u8; 32];
 
     // Insert contracts with different statuses
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'requested')")
-            .bind(vec![1u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 500, 'pending')")
-            .bind(vec![2u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 1000, 'active')")
-            .bind(vec![3u8; 32]).bind(vec![1u8; 32]).bind(&provider_pk).execute(&db.pool).await.unwrap();
+    let contract1 = vec![1u8; 32];
+    let requester = vec![1u8; 32];
+    insert_contract_request(
+        &db,
+        &contract1,
+        &requester,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
+    let contract2 = vec![2u8; 32];
+    insert_contract_request(
+        &db,
+        &contract2,
+        &requester,
+        &provider_pk,
+        "off-1",
+        500,
+        "pending",
+    )
+    .await;
+    let contract3 = vec![3u8; 32];
+    insert_contract_request(
+        &db,
+        &contract3,
+        &requester,
+        &provider_pk,
+        "off-1",
+        1000,
+        "active",
+    )
+    .await;
 
     let contracts = db
         .get_pending_provider_contracts(&provider_pk)
@@ -73,8 +140,18 @@ async fn test_get_contract_by_id() {
     let db = setup_test_db().await;
     let contract_id = vec![3u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
-            .bind(&contract_id).bind(vec![1u8; 32]).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
 
     let contract = db.get_contract(&contract_id).await.unwrap();
     assert!(contract.is_some());
@@ -94,11 +171,31 @@ async fn test_get_contract_reply() {
     let contract_id = vec![3u8; 32];
 
     // Insert contract first (foreign key requirement)
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
-            .bind(&contract_id).bind(vec![1u8; 32]).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+    let requester = vec![1u8; 32];
+    let provider = vec![2u8; 32];
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester,
+        &provider,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
 
-    sqlx::query("INSERT INTO contract_sign_replies (contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, 'accepted', 'ok', 'details', 0)")
-            .bind(&contract_id).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+    {
+        let contract_id_slice = contract_id.as_slice();
+        let provider_slice = provider.as_slice();
+        sqlx::query!(
+            "INSERT INTO contract_sign_replies (contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, 'accepted', 'ok', 'details', 0)",
+            contract_id_slice,
+            provider_slice
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
     let reply = db.get_contract_reply(&contract_id).await.unwrap();
     assert!(reply.is_some());
@@ -112,13 +209,39 @@ async fn test_get_contract_payments() {
     let contract_id = vec![3u8; 32];
 
     // Insert contract first (foreign key requirement)
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
-            .bind(&contract_id).bind(vec![1u8; 32]).bind(vec![2u8; 32]).execute(&db.pool).await.unwrap();
+    let requester = vec![1u8; 32];
+    let provider = vec![2u8; 32];
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester,
+        &provider,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
 
-    sqlx::query("INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'fixed', 'month', 1, 1000)")
-            .bind(&contract_id).execute(&db.pool).await.unwrap();
-    sqlx::query("INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'usage', 'hour', 10, 500)")
-            .bind(&contract_id).execute(&db.pool).await.unwrap();
+    {
+        let contract_id_slice = contract_id.as_slice();
+        sqlx::query!(
+            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'fixed', 'month', 1, 1000)",
+            contract_id_slice
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    {
+        let contract_id_slice = contract_id.as_slice();
+        sqlx::query!(
+            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'usage', 'hour', 10, 500)",
+            contract_id_slice
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
 
     let payments = db.get_contract_payments(&contract_id).await.unwrap();
     assert_eq!(payments.len(), 2);
@@ -129,9 +252,20 @@ async fn test_get_contract_payments() {
 async fn test_list_contracts_pagination() {
     let db = setup_test_db().await;
 
+    let requester = vec![1u8; 32];
+    let provider = vec![2u8; 32];
     for i in 0..5 {
-        sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', ?, 'pending')")
-                .bind(vec![i as u8; 32]).bind(vec![1u8; 32]).bind(vec![2u8; 32]).bind(i * 1000).execute(&db.pool).await.unwrap();
+        let contract_id = vec![i as u8; 32];
+        insert_contract_request(
+            &db,
+            &contract_id,
+            &requester,
+            &provider,
+            "off-1",
+            i * 1000,
+            "pending",
+        )
+        .await;
     }
 
     let page1 = db.list_contracts(2, 0).await.unwrap();
@@ -151,8 +285,14 @@ async fn test_create_rental_request_success() {
     let provider_pk = vec![2u8; 32];
 
     // Create offering first (no explicit id, let it auto-increment)
-    let offering_id = sqlx::query_scalar::<_, i64>("INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id")
-            .bind(&provider_pk).fetch_one(&db.pool).await.unwrap();
+    let provider_pk_clone = provider_pk.clone();
+    let offering_id = sqlx::query_scalar!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        provider_pk_clone
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
 
     let params = RentalRequestParams {
         offering_db_id: offering_id,
@@ -186,26 +326,46 @@ async fn test_create_rental_request_with_defaults() {
     let provider_pk = vec![2u8; 32];
 
     // Create user registration first
-    sqlx::query(
+    let user_pk_reg = user_pk.clone();
+    let user_sig_reg = user_pk.clone();
+    sqlx::query!(
         "INSERT INTO user_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, 0)",
+        user_pk_reg,
+        user_sig_reg
     )
-    .bind(&user_pk)
-    .bind(&user_pk)
     .execute(&db.pool)
     .await
     .unwrap();
 
     // Create offering (no explicit id)
-    let offering_id = sqlx::query_scalar::<_, i64>("INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-2', 'Test Server', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id")
-            .bind(&provider_pk).fetch_one(&db.pool).await.unwrap();
+    let provider_pk_clone = provider_pk.clone();
+    let offering_id = sqlx::query_scalar!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-2', 'Test Server', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        provider_pk_clone
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
 
     // Create user SSH key
-    sqlx::query("INSERT INTO user_public_keys (user_pubkey, key_type, key_data, created_at_ns) VALUES (?, 'ssh-ed25519', 'AAAAC3...user-key', 0)")
-            .bind(&user_pk).execute(&db.pool).await.unwrap();
+    let user_pk_key = user_pk.clone();
+    sqlx::query!(
+        "INSERT INTO user_public_keys (user_pubkey, key_type, key_data, created_at_ns) VALUES (?, 'ssh-ed25519', 'AAAAC3...user-key', 0)",
+        user_pk_key
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
 
     // Create user contact
-    sqlx::query("INSERT INTO user_contacts (user_pubkey, contact_type, contact_value, verified, created_at_ns) VALUES (?, 'email', 'user@example.com', 1, 0)")
-            .bind(&user_pk).execute(&db.pool).await.unwrap();
+    let user_pk_contact = user_pk.clone();
+    sqlx::query!(
+        "INSERT INTO user_contacts (user_pubkey, contact_type, contact_value, verified, created_at_ns) VALUES (?, 'email', 'user@example.com', 1, 0)",
+        user_pk_contact
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
 
     let params = RentalRequestParams {
         offering_db_id: offering_id,
@@ -252,8 +412,14 @@ async fn test_create_rental_request_calculates_price() {
     let provider_pk = vec![2u8; 32];
 
     // Create offering with specific price (no explicit id)
-    let offering_id = sqlx::query_scalar::<_, i64>("INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-3', 'Expensive Server', 'USD', 499.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id")
-            .bind(&provider_pk).fetch_one(&db.pool).await.unwrap();
+    let provider_pk_clone = provider_pk.clone();
+    let offering_id = sqlx::query_scalar!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-3', 'Expensive Server', 'USD', 499.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        provider_pk_clone
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
 
     let params = RentalRequestParams {
         offering_db_id: offering_id,
@@ -277,34 +443,42 @@ async fn test_update_contract_status_records_history() {
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
-        .bind(&contract_id)
-        .bind(&requester_pk)
-        .bind(&provider_pk)
-        .execute(&db.pool)
-        .await
-        .unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
 
     db.update_contract_status(&contract_id, "accepted", &provider_pk, Some("all good"))
         .await
         .unwrap();
 
-    let status: String =
-        sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
-            .bind(&contract_id)
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
+    let contract_id_param = contract_id.clone();
+    let status: String = sqlx::query_scalar!(
+        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
     assert_eq!(status, "accepted");
 
-    let history = sqlx::query_as::<_, (String, String, Option<String>)>("SELECT old_status, new_status, change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1")
-        .bind(&contract_id)
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
-    assert_eq!(history.0, "pending");
-    assert_eq!(history.1, "accepted");
-    assert_eq!(history.2.as_deref(), Some("all good"));
+    let contract_id_param = contract_id.clone();
+    let history = sqlx::query!(
+        r#"SELECT old_status as "old_status!", new_status as "new_status!", change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(history.old_status, "pending");
+    assert_eq!(history.new_status, "accepted");
+    assert_eq!(history.change_memo.as_deref(), Some("all good"));
 }
 
 #[tokio::test]
@@ -315,25 +489,30 @@ async fn test_update_contract_status_rejects_non_provider() {
     let provider_pk = vec![2u8; 32];
     let attacker_pk = vec![3u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-2', 1000, 'memo', 0, 'requested')")
-        .bind(&contract_id)
-        .bind(&requester_pk)
-        .bind(&provider_pk)
-        .execute(&db.pool)
-        .await
-        .unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-2",
+        0,
+        "requested",
+    )
+    .await;
 
     let result = db
         .update_contract_status(&contract_id, "accepted", &attacker_pk, None)
         .await;
     assert!(result.is_err());
 
-    let history_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM contract_status_history WHERE contract_id = ?")
-            .bind(&contract_id)
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
+    let contract_id_param = contract_id.clone();
+    let history_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!: i64" FROM contract_status_history WHERE contract_id = ?"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
     assert_eq!(history_count, 0);
 }
 
@@ -344,37 +523,50 @@ async fn test_add_provisioning_details_persists_connection_info() {
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-3', 1000, 'memo', 0, 'accepted')")
-        .bind(&contract_id)
-        .bind(&requester_pk)
-        .bind(&provider_pk)
-        .execute(&db.pool)
-        .await
-        .unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-3",
+        0,
+        "accepted",
+    )
+    .await;
 
     db.add_provisioning_details(&contract_id, "ip:1.2.3.4\nuser:root")
         .await
         .unwrap();
 
-    let provisioning: Option<String> = sqlx::query_scalar(
+    let contract_id_param = contract_id.clone();
+    let provisioning = sqlx::query!(
         "SELECT provisioning_instance_details FROM contract_sign_requests WHERE contract_id = ?",
+        contract_id_param
     )
-    .bind(&contract_id)
     .fetch_one(&db.pool)
     .await
     .unwrap();
-    assert_eq!(provisioning.as_deref(), Some("ip:1.2.3.4\nuser:root"));
+    assert_eq!(
+        provisioning.provisioning_instance_details.as_deref(),
+        Some("ip:1.2.3.4\nuser:root")
+    );
 
-    let detail_row = sqlx::query_as::<_, (Vec<u8>, Option<String>, Option<String>, Option<String>, i64)>("SELECT contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns FROM contract_provisioning_details WHERE contract_id = ?")
-        .bind(&contract_id)
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
-    assert_eq!(detail_row.0, contract_id);
-    assert_eq!(detail_row.1, None);
-    assert_eq!(detail_row.2, None);
-    assert_eq!(detail_row.3.as_deref(), Some("ip:1.2.3.4\nuser:root"));
-    assert!(detail_row.4 > 0);
+    let contract_id_param = contract_id.clone();
+    let detail_row = sqlx::query!(
+        r#"SELECT contract_id as "contract_id!", instance_ip, instance_credentials, connection_instructions, provisioned_at_ns as "provisioned_at_ns!" FROM contract_provisioning_details WHERE contract_id = ?"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(detail_row.contract_id, contract_id);
+    assert_eq!(detail_row.instance_ip, None);
+    assert_eq!(detail_row.instance_credentials, None);
+    assert_eq!(
+        detail_row.connection_instructions.as_deref(),
+        Some("ip:1.2.3.4\nuser:root")
+    );
+    assert!(detail_row.provisioned_at_ns > 0);
 }
 
 #[tokio::test]
@@ -384,13 +576,16 @@ async fn test_cancel_contract_success_requested() {
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'requested')")
-        .bind(&contract_id)
-        .bind(&requester_pk)
-        .bind(&provider_pk)
-        .execute(&db.pool)
-        .await
-        .unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
 
     db.cancel_contract(
         &contract_id,
@@ -400,22 +595,30 @@ async fn test_cancel_contract_success_requested() {
     .await
     .unwrap();
 
-    let status: String =
-        sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
-            .bind(&contract_id)
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
+    let contract_id_param = contract_id.clone();
+    let status: String = sqlx::query_scalar!(
+        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
     assert_eq!(status, "cancelled");
 
-    let history = sqlx::query_as::<_, (String, String, Option<String>)>("SELECT old_status, new_status, change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1")
-        .bind(&contract_id)
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
-    assert_eq!(history.0, "requested");
-    assert_eq!(history.1, "cancelled");
-    assert_eq!(history.2.as_deref(), Some("User requested cancellation"));
+    let contract_id_param = contract_id.clone();
+    let history = sqlx::query!(
+        r#"SELECT old_status as "old_status!", new_status as "new_status!", change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(history.old_status, "requested");
+    assert_eq!(history.new_status, "cancelled");
+    assert_eq!(
+        history.change_memo.as_deref(),
+        Some("User requested cancellation")
+    );
 }
 
 #[tokio::test]
@@ -429,14 +632,16 @@ async fn test_cancel_contract_success_all_cancellable_statuses() {
     for (i, status) in cancellable_statuses.iter().enumerate() {
         let contract_id = vec![10 + i as u8; 32];
 
-        sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, ?)")
-            .bind(&contract_id)
-            .bind(&requester_pk)
-            .bind(&provider_pk)
-            .bind(status)
-            .execute(&db.pool)
-            .await
-            .unwrap();
+        insert_contract_request(
+            &db,
+            &contract_id,
+            &requester_pk,
+            &provider_pk,
+            "off-1",
+            0,
+            status,
+        )
+        .await;
 
         let result = db.cancel_contract(&contract_id, &requester_pk, None).await;
         assert!(
@@ -446,12 +651,14 @@ async fn test_cancel_contract_success_all_cancellable_statuses() {
             result.err()
         );
 
-        let new_status: String =
-            sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
-                .bind(&contract_id)
-                .fetch_one(&db.pool)
-                .await
-                .unwrap();
+        let contract_id_param = contract_id.clone();
+        let new_status: String = sqlx::query_scalar!(
+            r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+            contract_id_param
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
         assert_eq!(new_status, "cancelled");
     }
 }
@@ -464,13 +671,16 @@ async fn test_cancel_contract_rejects_unauthorized_user() {
     let provider_pk = vec![2u8; 32];
     let attacker_pk = vec![3u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'requested')")
-        .bind(&contract_id)
-        .bind(&requester_pk)
-        .bind(&provider_pk)
-        .execute(&db.pool)
-        .await
-        .unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
 
     let result = db.cancel_contract(&contract_id, &attacker_pk, None).await;
     assert!(result.is_err());
@@ -479,12 +689,14 @@ async fn test_cancel_contract_rejects_unauthorized_user() {
         .to_string()
         .contains("only the requester can cancel"));
 
-    let status: String =
-        sqlx::query_scalar("SELECT status FROM contract_sign_requests WHERE contract_id = ?")
-            .bind(&contract_id)
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
+    let contract_id_param = contract_id.clone();
+    let status: String = sqlx::query_scalar!(
+        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
     assert_eq!(status, "requested");
 }
 
@@ -495,13 +707,16 @@ async fn test_cancel_contract_rejects_provider_cancellation() {
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
 
-    sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')")
-        .bind(&contract_id)
-        .bind(&requester_pk)
-        .bind(&provider_pk)
-        .execute(&db.pool)
-        .await
-        .unwrap();
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
 
     let result = db.cancel_contract(&contract_id, &provider_pk, None).await;
     assert!(result.is_err());
@@ -522,14 +737,16 @@ async fn test_cancel_contract_fails_for_non_cancellable_statuses() {
     for (i, status) in non_cancellable_statuses.iter().enumerate() {
         let contract_id = vec![20 + i as u8; 32];
 
-        sqlx::query("INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, ?)")
-            .bind(&contract_id)
-            .bind(&requester_pk)
-            .bind(&provider_pk)
-            .bind(status)
-            .execute(&db.pool)
-            .await
-            .unwrap();
+        insert_contract_request(
+            &db,
+            &contract_id,
+            &requester_pk,
+            &provider_pk,
+            "off-1",
+            0,
+            status,
+        )
+        .await;
 
         let result = db.cancel_contract(&contract_id, &requester_pk, None).await;
         assert!(
