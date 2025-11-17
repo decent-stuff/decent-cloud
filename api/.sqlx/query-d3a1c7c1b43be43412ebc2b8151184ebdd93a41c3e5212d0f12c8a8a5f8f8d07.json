@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_socials (user_pubkey, platform, username, profile_url, created_at_ns)\n             VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "d3a1c7c1b43be43412ebc2b8151184ebdd93a41c3e5212d0f12c8a8a5f8f8d07"
+}

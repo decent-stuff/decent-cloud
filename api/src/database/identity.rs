@@ -16,26 +16,30 @@ impl Database {
 
             // Insert added principals
             for principal in linked_ids.alt_principals_add() {
-                sqlx::query(
-                    "INSERT INTO linked_ic_ids (pubkey, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
+                let timestamp_i64 = entry.block_timestamp_ns as i64;
+                let principal_text = principal.to_text();
+                sqlx::query!(
+                    "INSERT INTO linked_ic_ids (pubkey, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)",
+                    entry.key,
+                    principal_text,
+                    "add",
+                    timestamp_i64
                 )
-                .bind(&entry.key)
-                .bind(principal.to_text())
-                .bind("add")
-                .bind(entry.block_timestamp_ns as i64)
                 .execute(&mut **tx)
                 .await?;
             }
 
             // Insert removed principals
             for principal in linked_ids.alt_principals_rm() {
-                sqlx::query(
-                    "INSERT INTO linked_ic_ids (pubkey, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)"
+                let timestamp_i64 = entry.block_timestamp_ns as i64;
+                let principal_text = principal.to_text();
+                sqlx::query!(
+                    "INSERT INTO linked_ic_ids (pubkey, ic_principal, operation, linked_at_ns) VALUES (?, ?, ?, ?)",
+                    entry.key,
+                    principal_text,
+                    "remove",
+                    timestamp_i64
                 )
-                .bind(&entry.key)
-                .bind(principal.to_text())
-                .bind("remove")
-                .bind(entry.block_timestamp_ns as i64)
                 .execute(&mut **tx)
                 .await?;
             }

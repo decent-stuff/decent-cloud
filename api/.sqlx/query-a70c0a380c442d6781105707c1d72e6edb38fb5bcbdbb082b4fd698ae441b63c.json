@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(DISTINCT pubkey) FROM (\n                SELECT pubkey FROM provider_profiles WHERE pubkey != ?\n                UNION\n                SELECT pubkey FROM provider_check_ins WHERE pubkey != ?\n            )",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(DISTINCT pubkey)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a70c0a380c442d6781105707c1d72e6edb38fb5bcbdbb082b4fd698ae441b63c"
+}

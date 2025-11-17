@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", contract_id, extended_by_pubkey, extension_hours as \"extension_hours!\", \n               extension_payment_e9s as \"extension_payment_e9s!\", previous_end_timestamp_ns as \"previous_end_timestamp_ns!\",\n               new_end_timestamp_ns as \"new_end_timestamp_ns!\", extension_memo, created_at_ns as \"created_at_ns!\"\n               FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "contract_id",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "extended_by_pubkey",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "extension_hours!",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "extension_payment_e9s!",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "previous_end_timestamp_ns!",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "new_end_timestamp_ns!",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "extension_memo",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns!",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "d4755726d7e3e8f2b1063c8cbce604b4f7dbfc2e6fe3932876ab6253f74777dc"
+}

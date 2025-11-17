@@ -82,13 +82,14 @@ impl Database {
         let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
             - days.max(1) * 24 * 3600 * 1_000_000_000;
 
-        let profiles = sqlx::query_as::<_, ProviderProfile>(
-            "SELECT DISTINCT p.* FROM provider_profiles p
+        let profiles = sqlx::query_as!(
+            ProviderProfile,
+            r#"SELECT DISTINCT p.pubkey, p.name, p.description, p.website_url, p.logo_url, p.why_choose_us, p.api_version, p.profile_version, p.updated_at_ns FROM provider_profiles p
              INNER JOIN provider_check_ins c ON p.pubkey = c.pubkey
              WHERE c.block_timestamp_ns > ?
-             ORDER BY p.name",
+             ORDER BY p.name"#,
+            cutoff_ns
         )
-        .bind(cutoff_ns)
         .fetch_all(&self.pool)
         .await?;
 
@@ -97,10 +98,11 @@ impl Database {
 
     /// Get provider profile by pubkey
     pub async fn get_provider_profile(&self, pubkey: &[u8]) -> Result<Option<ProviderProfile>> {
-        let profile = sqlx::query_as::<_, ProviderProfile>(
-            "SELECT * FROM provider_profiles WHERE pubkey = ?",
+        let profile = sqlx::query_as!(
+            ProviderProfile,
+            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns FROM provider_profiles WHERE pubkey = ?",
+            pubkey
         )
-        .bind(pubkey)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -109,10 +111,11 @@ impl Database {
 
     /// Get provider contacts
     pub async fn get_provider_contacts(&self, pubkey: &[u8]) -> Result<Vec<ProviderContact>> {
-        let contacts = sqlx::query_as::<_, ProviderContact>(
-            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = ?"
+        let contacts = sqlx::query_as!(
+            ProviderContact,
+            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = ?",
+            pubkey
         )
-        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -126,12 +129,13 @@ impl Database {
         pubkey: &[u8],
         limit: i64,
     ) -> Result<Vec<ProviderCheckIn>> {
-        let check_ins = sqlx::query_as::<_, ProviderCheckIn>(
-            "SELECT pubkey, memo, block_timestamp_ns FROM provider_check_ins
-             WHERE pubkey = ? ORDER BY block_timestamp_ns DESC LIMIT ?",
+        let check_ins = sqlx::query_as!(
+            ProviderCheckIn,
+            r#"SELECT pubkey, memo, block_timestamp_ns FROM provider_check_ins
+             WHERE pubkey = ? ORDER BY block_timestamp_ns DESC LIMIT ?"#,
+            pubkey,
+            limit
         )
-        .bind(pubkey)
-        .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
@@ -140,11 +144,12 @@ impl Database {
 
     /// Get all providers with profiles
     pub async fn list_providers(&self, limit: i64, offset: i64) -> Result<Vec<ProviderProfile>> {
-        let profiles = sqlx::query_as::<_, ProviderProfile>(
-            "SELECT * FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT ? OFFSET ?",
+        let profiles = sqlx::query_as!(
+            ProviderProfile,
+            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT ? OFFSET ?",
+            limit,
+            offset
         )
-        .bind(limit)
-        .bind(offset)
         .fetch_all(&self.pool)
         .await?;
 
@@ -154,11 +159,11 @@ impl Database {
     /// Count total providers
     #[allow(dead_code)]
     pub async fn count_providers(&self) -> Result<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM provider_profiles")
+        let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM provider_profiles")
             .fetch_one(&self.pool)
             .await?;
 
-        Ok(count.0)
+        Ok(count)
     }
 
     /// Get list of active validators (checked in recently, with or without profiles)
@@ -170,30 +175,31 @@ impl Database {
         let cutoff_7d = now_ns - 7 * 24 * 3600 * 1_000_000_000;
         let cutoff_30d = now_ns - 30 * 24 * 3600 * 1_000_000_000;
 
-        let validators = sqlx::query_as::<_, Validator>(
-            "SELECT
+        let validators = sqlx::query_as!(
+            Validator,
+            r#"SELECT
                 r.pubkey,
-                p.name,
-                p.description,
-                p.website_url,
-                p.logo_url,
-                COUNT(DISTINCT c.block_timestamp_ns) as total_check_ins,
-                SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END) as check_ins_24h,
-                SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END) as check_ins_7d,
-                SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END) as check_ins_30d,
-                MAX(c.block_timestamp_ns) as last_check_in_ns,
-                r.created_at_ns as registered_at_ns
+                NULLIF(p.name, '') as "name?: String",
+                NULLIF(p.description, '') as "description?: String",
+                NULLIF(p.website_url, '') as "website_url?: String",
+                NULLIF(p.logo_url, '') as "logo_url?: String",
+                COUNT(DISTINCT c.block_timestamp_ns) as "total_check_ins!: i64",
+                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END), 0) as "check_ins_24h!: i64",
+                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END), 0) as "check_ins_7d!: i64",
+                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END), 0) as "check_ins_30d!: i64",
+                MAX(c.block_timestamp_ns) as "last_check_in_ns!: i64",
+                r.created_at_ns as "registered_at_ns!: i64"
              FROM provider_registrations r
              INNER JOIN provider_check_ins c ON r.pubkey = c.pubkey
              LEFT JOIN provider_profiles p ON r.pubkey = p.pubkey
              WHERE c.block_timestamp_ns > ?
              GROUP BY r.pubkey
-             ORDER BY last_check_in_ns DESC",
+             ORDER BY MAX(c.block_timestamp_ns) DESC"#,
+            cutoff_24h,
+            cutoff_7d,
+            cutoff_30d,
+            cutoff_ns
         )
-        .bind(cutoff_24h)
-        .bind(cutoff_7d)
-        .bind(cutoff_30d)
-        .bind(cutoff_ns)
         .fetch_all(&self.pool)
         .await?;
 
@@ -208,12 +214,13 @@ impl Database {
     ) -> Result<()> {
         for entry in entries {
             // Store raw Ed25519 public key (32 bytes) and signature
-            sqlx::query(
-                "INSERT OR REPLACE INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, ?)"
+            let timestamp_i64 = entry.block_timestamp_ns as i64;
+            sqlx::query!(
+                "INSERT OR REPLACE INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, ?)",
+                entry.key,
+                entry.value,
+                timestamp_i64
             )
-            .bind(&entry.key) // Raw Ed25519 public key
-            .bind(&entry.value) // Signature
-            .bind(entry.block_timestamp_ns as i64)
             .execute(&mut **tx)
             .await?;
         }
@@ -245,13 +252,16 @@ impl Database {
                 }
             };
 
-            sqlx::query(
-                "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)"
+            let timestamp_i64 = entry.block_timestamp_ns as i64;
+            let memo = check_in.memo().to_string();
+            let nonce_signature = check_in.nonce_signature().clone();
+            sqlx::query!(
+                "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)",
+                entry.key,
+                memo,
+                nonce_signature,
+                timestamp_i64
             )
-            .bind(&entry.key)
-            .bind(check_in.memo())
-            .bind(check_in.nonce_signature())
-            .bind(entry.block_timestamp_ns as i64)
             .execute(&mut **tx)
             .await?;
         }
@@ -275,29 +285,30 @@ impl Database {
             match profile {
                 Profile::V0_1_0(profile_v0_1_0) => {
                     // Insert main profile record
-                    sqlx::query(
-                        "INSERT OR REPLACE INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    let timestamp_i64 = entry.block_timestamp_ns as i64;
+                    sqlx::query!(
+                        "INSERT OR REPLACE INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        entry.key,
+                        profile_v0_1_0.metadata.name,
+                        profile_v0_1_0.spec.description,
+                        profile_v0_1_0.spec.url,
+                        profile_v0_1_0.spec.logo_url,
+                        profile_v0_1_0.spec.why_choose_us,
+                        profile_v0_1_0.api_version,
+                        profile_v0_1_0.metadata.version,
+                        timestamp_i64
                     )
-                    .bind(&entry.key)
-                    .bind(&profile_v0_1_0.metadata.name)
-                    .bind(&profile_v0_1_0.spec.description)
-                    .bind(&profile_v0_1_0.spec.url)
-                    .bind(&profile_v0_1_0.spec.logo_url)
-                    .bind(&profile_v0_1_0.spec.why_choose_us)
-                    .bind(&profile_v0_1_0.api_version)
-                    .bind(&profile_v0_1_0.metadata.version)
-                    .bind(entry.block_timestamp_ns as i64)
                     .execute(&mut **tx)
                     .await?;
 
                     // Insert contact information in normalized table
                     for (contact_type, contact_value) in &profile_v0_1_0.spec.contacts {
-                        sqlx::query(
-                            "INSERT OR REPLACE INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, ?, ?)"
+                        sqlx::query!(
+                            "INSERT OR REPLACE INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, ?, ?)",
+                            entry.key,
+                            contact_type,
+                            contact_value
                         )
-                        .bind(&entry.key)
-                        .bind(contact_type)
-                        .bind(contact_value)
                         .execute(&mut **tx)
                         .await?;
                     }

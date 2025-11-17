@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", key_type, key_data, key_fingerprint, label FROM user_public_keys WHERE user_pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "key_type",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "key_data",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "key_fingerprint",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "label",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "c8a2b174a77b8996b19ae3f2e001e535b2b472bb0db3b512fd6f0e6d4f616e31"
+}

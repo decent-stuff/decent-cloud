@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR REPLACE INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "329be38160aff1584ead7f7ba235434ab39e6d6f97a4ce892a7436c41fcd34ea"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM user_contacts WHERE user_pubkey = ? AND id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b5285cf92c35b5fd7f418c6482613b6470afdf8abc61e35cead46c9fe466cea3"
+}

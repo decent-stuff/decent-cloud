@@ -14,13 +14,17 @@ impl Database {
             let change = ReputationChange::try_from_slice(&entry.value)
                 .map_err(|e| anyhow::anyhow!("Failed to parse reputation change: {}", e))?;
 
-            sqlx::query(
-                "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, ?, ?, ?)"
+            let timestamp_i64 = entry.block_timestamp_ns as i64;
+            let delta_amount = change.changes()[0].1; // Get delta amount from first change
+
+            sqlx::query!(
+                "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, ?, ?, ?)",
+                entry.key,
+                delta_amount,
+                "", // Reason is not stored in structure, use empty string
+                timestamp_i64 // Use actual block timestamp
             )
-            .bind(&entry.key)
-            .bind(change.changes()[0].1) // Get the delta amount from first change
-            .bind("") // Reason is not stored in the structure, use empty string
-            .bind(entry.block_timestamp_ns as i64) // Use actual block timestamp
+
             .execute(&mut **tx)
             .await?;
         }
@@ -37,11 +41,14 @@ impl Database {
             let age = ReputationAge::try_from_slice(&entry.value)
                 .map_err(|e| anyhow::anyhow!("Failed to parse reputation age: {}", e))?;
 
-            sqlx::query(
+            let timestamp_i64 = entry.block_timestamp_ns as i64;
+            let aging_factor = age.reductions_ppm() as i64;
+
+            sqlx::query!(
                 "INSERT INTO reputation_aging (block_timestamp_ns, aging_factor_ppm) VALUES (?, ?)",
+                timestamp_i64,
+                aging_factor
             )
-            .bind(entry.block_timestamp_ns as i64)
-            .bind(age.reductions_ppm() as i64)
             .execute(&mut **tx)
             .await?;
         }

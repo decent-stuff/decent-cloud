@@ -105,10 +105,15 @@ pub struct ContractExtension {
 impl Database {
     /// Get contracts for a user (as requester)
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
-        let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
+               provisioning_instance_details, provisioning_completed_at_ns 
+               FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
+            pubkey
         )
-        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -117,10 +122,15 @@ impl Database {
 
     /// Get contracts for a provider
     pub async fn get_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
-        let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
+               provisioning_instance_details, provisioning_completed_at_ns 
+               FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
+            pubkey
         )
-        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -129,10 +139,15 @@ impl Database {
 
     /// Get pending contracts for a provider
     pub async fn get_pending_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
-        let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
+               provisioning_instance_details, provisioning_completed_at_ns 
+               FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
+            pubkey
         )
-        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -141,10 +156,15 @@ impl Database {
 
     /// Get contract by ID
     pub async fn get_contract(&self, contract_id: &[u8]) -> Result<Option<Contract>> {
-        let contract = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests WHERE contract_id = ?",
+        let contract = sqlx::query_as!(
+            Contract,
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
+               provisioning_instance_details, provisioning_completed_at_ns 
+               FROM contract_sign_requests WHERE contract_id = ?"#,
+            contract_id
         )
-        .bind(contract_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -154,10 +174,11 @@ impl Database {
     /// Get contract reply
     #[allow(dead_code)]
     pub async fn get_contract_reply(&self, contract_id: &[u8]) -> Result<Option<ContractReply>> {
-        let reply = sqlx::query_as::<_, ContractReply>(
-            "SELECT * FROM contract_sign_replies WHERE contract_id = ?",
+        let reply = sqlx::query_as!(
+            ContractReply,
+            "SELECT contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns FROM contract_sign_replies WHERE contract_id = ?",
+            contract_id
         )
-        .bind(contract_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -167,10 +188,11 @@ impl Database {
     /// Get contract payment entries
     #[allow(dead_code)]
     pub async fn get_contract_payments(&self, contract_id: &[u8]) -> Result<Vec<PaymentEntry>> {
-        let payments = sqlx::query_as::<_, PaymentEntry>(
-            "SELECT pricing_model, time_period_unit, quantity, amount_e9s FROM contract_payment_entries WHERE contract_id = ?"
+        let payments = sqlx::query_as!(
+            PaymentEntry,
+            "SELECT pricing_model, time_period_unit, quantity, amount_e9s FROM contract_payment_entries WHERE contract_id = ?",
+            contract_id
         )
-        .bind(contract_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -179,11 +201,16 @@ impl Database {
 
     /// Get all contracts with pagination
     pub async fn list_contracts(&self, limit: i64, offset: i64) -> Result<Vec<Contract>> {
-        let contracts = sqlx::query_as::<_, Contract>(
-            "SELECT * FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?",
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
+               provisioning_instance_details, provisioning_completed_at_ns 
+               FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
+            limit,
+            offset
         )
-        .bind(limit)
-        .bind(offset)
         .fetch_all(&self.pool)
         .await?;
 
@@ -254,29 +281,31 @@ impl Database {
         let contract_id = hasher.finalize().to_vec();
 
         // Insert contract request
-        sqlx::query(
-            "INSERT INTO contract_sign_requests (
+        let original_duration_hours = duration_hours;
+        let requested_status = "requested";
+        sqlx::query!(
+            r#"INSERT INTO contract_sign_requests (
                 contract_id, requester_pubkey, requester_ssh_pubkey,
                 requester_contact, provider_pubkey, offering_id,
                 payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                 duration_hours, original_duration_hours, request_memo,
                 created_at_ns, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            contract_id,
+            requester_pubkey,
+            ssh_pubkey,
+            contact,
+            offering.pubkey,
+            offering.offering_id,
+            payment_amount_e9s,
+            start_timestamp_ns,
+            end_timestamp_ns,
+            duration_hours,
+            original_duration_hours,
+            memo,
+            created_at_ns,
+            requested_status
         )
-        .bind(&contract_id)
-        .bind(requester_pubkey)
-        .bind(&ssh_pubkey)
-        .bind(&contact)
-        .bind(&offering.pubkey)
-        .bind(&offering.offering_id)
-        .bind(payment_amount_e9s)
-        .bind(start_timestamp_ns)
-        .bind(end_timestamp_ns)
-        .bind(duration_hours)
-        .bind(duration_hours) // original_duration_hours
-        .bind(&memo)
-        .bind(created_at_ns)
-        .bind("requested")
         .execute(&self.pool)
         .await?;
 
@@ -307,23 +336,24 @@ impl Database {
         // Update status and history atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let mut tx = self.pool.begin().await?;
-        sqlx::query(
+        sqlx::query!(
             "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+            new_status,
+            updated_at_ns,
+            updated_by_pubkey,
+            contract_id
         )
-        .bind(new_status)
-        .bind(updated_at_ns)
-        .bind(updated_by_pubkey)
-        .bind(contract_id)
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query("INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(contract_id)
-            .bind(&contract.status)
-            .bind(new_status)
-            .bind(updated_by_pubkey)
-            .bind(updated_at_ns)
-            .bind(change_memo)
+        sqlx::query!("INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            contract_id,
+            contract.status,
+            new_status,
+            updated_by_pubkey,
+            updated_at_ns,
+            change_memo
+        )
             .execute(&mut *tx)
             .await?;
 
@@ -342,23 +372,29 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query(
+        sqlx::query!(
             "UPDATE contract_sign_requests SET provisioning_instance_details = ?, provisioning_completed_at_ns = ? WHERE contract_id = ?",
+            instance_details,
+            provisioned_at_ns,
+            contract_id
         )
-        .bind(instance_details)
-        .bind(provisioned_at_ns)
-        .bind(contract_id)
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query("INSERT INTO contract_provisioning_details (contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns) VALUES (?, ?, ?, ?, ?) ON CONFLICT(contract_id) DO UPDATE SET instance_ip = excluded.instance_ip, instance_credentials = excluded.instance_credentials, connection_instructions = excluded.connection_instructions, provisioned_at_ns = excluded.provisioned_at_ns")
-            .bind(contract_id)
-            .bind(Option::<&str>::None)
-            .bind(Option::<&str>::None)
-            .bind(instance_details)
-            .bind(provisioned_at_ns)
-            .execute(&mut *tx)
-            .await?;
+        let empty_instance_ip: Option<&str> = None;
+        let empty_credentials: Option<&str> = None;
+        sqlx::query!(
+            r#"INSERT INTO contract_provisioning_details (contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(contract_id) DO UPDATE SET instance_ip = excluded.instance_ip, instance_credentials = excluded.instance_credentials, connection_instructions = excluded.connection_instructions, provisioned_at_ns = excluded.provisioned_at_ns"#,
+            contract_id,
+            empty_instance_ip,
+            empty_credentials,
+            instance_details,
+            provisioned_at_ns
+        )
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
 
@@ -418,27 +454,27 @@ impl Database {
 
         // Update contract end timestamp and duration
         let new_duration_hours = contract.duration_hours.unwrap_or(0) + extension_hours;
-        sqlx::query(
+        sqlx::query!(
             "UPDATE contract_sign_requests SET end_timestamp_ns = ?, duration_hours = ? WHERE contract_id = ?",
+            new_end_timestamp_ns,
+            new_duration_hours,
+            contract_id
         )
-        .bind(new_end_timestamp_ns)
-        .bind(new_duration_hours)
-        .bind(contract_id)
         .execute(&self.pool)
         .await?;
 
         // Record extension in history
-        sqlx::query(
+        sqlx::query!(
             "INSERT INTO contract_extensions (contract_id, extended_by_pubkey, extension_hours, extension_payment_e9s, previous_end_timestamp_ns, new_end_timestamp_ns, extension_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            contract_id,
+            extended_by_pubkey,
+            extension_hours,
+            extension_payment_e9s,
+            previous_end_timestamp_ns,
+            new_end_timestamp_ns,
+            extension_memo,
+            created_at_ns
         )
-        .bind(contract_id)
-        .bind(extended_by_pubkey)
-        .bind(extension_hours)
-        .bind(extension_payment_e9s)
-        .bind(previous_end_timestamp_ns)
-        .bind(new_end_timestamp_ns)
-        .bind(extension_memo)
-        .bind(created_at_ns)
         .execute(&self.pool)
         .await?;
 
@@ -450,10 +486,14 @@ impl Database {
         &self,
         contract_id: &[u8],
     ) -> Result<Vec<ContractExtension>> {
-        let extensions = sqlx::query_as::<_, ContractExtension>(
-            "SELECT * FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC",
+        let extensions = sqlx::query_as!(
+            ContractExtension,
+            r#"SELECT id as "id!", contract_id, extended_by_pubkey, extension_hours as "extension_hours!", 
+               extension_payment_e9s as "extension_payment_e9s!", previous_end_timestamp_ns as "previous_end_timestamp_ns!",
+               new_end_timestamp_ns as "new_end_timestamp_ns!", extension_memo, created_at_ns as "created_at_ns!"
+               FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC"#,
+            contract_id
         )
-        .bind(contract_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -465,10 +505,18 @@ impl Database {
         &self,
         offering_id: &str,
     ) -> Result<Option<crate::database::offerings::Offering>> {
-        let offering = sqlx::query_as::<_, crate::database::offerings::Offering>(
-            "SELECT * FROM provider_offerings WHERE offering_id = ?",
+        let offering = sqlx::query_as!(
+            crate::database::offerings::Offering,
+            r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
+               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
+               FROM provider_offerings WHERE offering_id = ?"#,
+            offering_id
         )
-        .bind(offering_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -503,35 +551,44 @@ impl Database {
             let request_memo = request.request_memo().clone();
 
             // Insert the main contract request
-            sqlx::query(
-                "INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp_ns, request_memo, created_at_ns, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            let created_at_ns = entry.block_timestamp_ns as i64;
+            let pending_status = "pending";
+            let contract_id_param = contract_id.clone();
+            sqlx::query!(
+                r#"INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp_ns, request_memo, created_at_ns, status) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                contract_id_param,
+                requester_pubkey,
+                requester_ssh_pubkey,
+                requester_contact,
+                provider_pubkey,
+                offering_id,
+                region_name,
+                instance_config,
+                payment_amount_e9s,
+                start_timestamp_ns,
+                request_memo,
+                created_at_ns,
+                pending_status
             )
-            .bind(&contract_id)
-            .bind(&requester_pubkey)
-            .bind(&requester_ssh_pubkey)
-            .bind(&requester_contact)
-            .bind(&provider_pubkey)
-            .bind(&offering_id)
-            .bind(region_name.as_deref())
-            .bind(instance_config.as_deref())
-            .bind(payment_amount_e9s)
-            .bind(start_timestamp_ns)
-            .bind(&request_memo)
-            .bind(entry.block_timestamp_ns as i64)
-            .bind("pending") // Default status
             .execute(&mut **tx)
             .await?;
 
             // Insert payment entries from the request
             for payment_entry in request.payment_entries() {
-                sqlx::query(
-                            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, ?, ?, ?, ?)"
+                let pricing_model = &payment_entry.e.pricing_model;
+                let time_period_unit = &payment_entry.e.time_period_unit;
+                let quantity = payment_entry.e.quantity as i64;
+                let amount_e9s = payment_entry.amount_e9s as i64;
+
+                sqlx::query!(
+                            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, ?, ?, ?, ?)",
+                            contract_id,
+                            pricing_model,
+                            time_period_unit,
+                            quantity,
+                            amount_e9s
                         )
-                        .bind(&contract_id)
-                        .bind(&payment_entry.e.pricing_model)
-                        .bind(&payment_entry.e.time_period_unit)
-                        .bind(payment_entry.e.quantity as i64)
-                        .bind(payment_entry.amount_e9s as i64)
                         .execute(&mut **tx)
                         .await?;
             }
@@ -566,15 +623,16 @@ impl Database {
             let reply_memo = reply.response_text();
             let instance_details = reply.response_details();
 
-            sqlx::query(
-                "INSERT INTO contract_sign_replies (contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, ?, ?, ?, ?)"
+            let block_timestamp_ns = entry.block_timestamp_ns as i64;
+            sqlx::query!(
+                "INSERT INTO contract_sign_replies (contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, ?, ?, ?, ?)",
+                contract_id,
+                provider_pubkey,
+                reply_status,
+                reply_memo,
+                instance_details,
+                block_timestamp_ns
             )
-            .bind(&contract_id)
-            .bind(&provider_pubkey)
-            .bind(reply_status)
-            .bind(reply_memo)
-            .bind(instance_details)
-            .bind(entry.block_timestamp_ns as i64)
             .execute(&mut **tx)
             .await?;
         }
@@ -631,26 +689,26 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Update contract status to cancelled
-        sqlx::query(
+        sqlx::query!(
             "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+            "cancelled",
+            updated_at_ns,
+            cancelled_by_pubkey,
+            contract_id
         )
-        .bind("cancelled")
-        .bind(updated_at_ns)
-        .bind(cancelled_by_pubkey)
-        .bind(contract_id)
         .execute(&mut *tx)
         .await?;
 
         // Record status change in history
-        sqlx::query(
-            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)"
+        sqlx::query!(
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            contract_id,
+            contract.status,
+            "cancelled",
+            cancelled_by_pubkey,
+            updated_at_ns,
+            cancel_memo
         )
-        .bind(contract_id)
-        .bind(&contract.status)
-        .bind("cancelled")
-        .bind(cancelled_by_pubkey)
-        .bind(updated_at_ns)
-        .bind(cancel_memo)
         .execute(&mut *tx)
         .await?;
 

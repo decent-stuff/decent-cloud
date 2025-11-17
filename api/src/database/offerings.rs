@@ -121,10 +121,18 @@ impl Database {
 
     /// Get offerings by provider
     pub async fn get_provider_offerings(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
-        let offerings = sqlx::query_as::<_, Offering>(
-            "SELECT * FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC",
+        let offerings = sqlx::query_as!(
+            Offering,
+            r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
+               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
+               FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#,
+            pubkey
         )
-        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -134,8 +142,14 @@ impl Database {
     /// Get single offering by id
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
         let offering =
-            sqlx::query_as::<_, Offering>("SELECT * FROM provider_offerings WHERE id = ?")
-                .bind(offering_id)
+            sqlx::query_as!(Offering, r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
+               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
+               FROM provider_offerings WHERE id = ?"#, offering_id)
                 .fetch_optional(&self.pool)
                 .await?;
 
@@ -148,10 +162,18 @@ impl Database {
         let example_provider_pubkey =
             hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
                 .unwrap();
-        let offerings = sqlx::query_as::<_, Offering>(
-            "SELECT * FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC",
+        let offerings = sqlx::query_as!(
+            Offering,
+            r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
+               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
+               FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#,
+            example_provider_pubkey
         )
-        .bind(example_provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -184,27 +206,72 @@ impl Database {
             return Err(anyhow::anyhow!("offer_name is required"));
         }
 
+        let Offering {
+            id: _,
+            pubkey: _,
+            offering_id,
+            offer_name,
+            description,
+            product_page_url,
+            currency,
+            monthly_price,
+            setup_fee,
+            visibility,
+            product_type,
+            virtualization_type,
+            billing_interval,
+            stock_status,
+            processor_brand,
+            processor_amount,
+            processor_cores,
+            processor_speed,
+            processor_name,
+            memory_error_correction,
+            memory_type,
+            memory_amount,
+            hdd_amount,
+            total_hdd_capacity,
+            ssd_amount,
+            total_ssd_capacity,
+            unmetered_bandwidth,
+            uplink_speed,
+            traffic,
+            datacenter_country,
+            datacenter_city,
+            datacenter_latitude,
+            datacenter_longitude,
+            control_panel,
+            gpu_name,
+            min_contract_hours,
+            max_contract_hours,
+            payment_methods,
+            features,
+            operating_systems,
+        } = params;
+
         let mut tx = self.pool.begin().await?;
 
         // Check for duplicate offering_id for this provider
-        let existing: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM provider_offerings WHERE pubkey = ? AND offering_id = ?",
+        let existing: Option<i64> = sqlx::query_scalar!(
+            r#"SELECT id as "id!: i64" FROM provider_offerings WHERE pubkey = ? AND offering_id = ?"#,
+            pubkey,
+            offering_id
         )
-        .bind(pubkey)
-        .bind(&params.offering_id)
         .fetch_optional(&mut *tx)
         .await?;
 
         if existing.is_some() {
             return Err(anyhow::anyhow!(
                 "Offering with ID '{}' already exists for this provider",
-                params.offering_id
+                offering_id.as_str()
             ));
         }
 
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
         // Insert main offering record
-        let offering_id = sqlx::query_scalar::<_, i64>(
-            "INSERT INTO provider_offerings (
+        let offering_id = sqlx::query_scalar!(
+            r#"INSERT INTO provider_offerings (
                 pubkey, offering_id, offer_name, description, product_page_url,
                 currency, monthly_price, setup_fee, visibility, product_type,
                 virtualization_type, billing_interval, stock_status, processor_brand,
@@ -215,49 +282,59 @@ impl Database {
                 datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
                 min_contract_hours, max_contract_hours, payment_methods, features,
                 operating_systems, created_at_ns
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id",
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?
+            )
+            RETURNING id"#,
+            pubkey,
+            offering_id,
+            offer_name,
+            description,
+            product_page_url,
+            currency,
+            monthly_price,
+            setup_fee,
+            visibility,
+            product_type,
+            virtualization_type,
+            billing_interval,
+            stock_status,
+            processor_brand,
+            processor_amount,
+            processor_cores,
+            processor_speed,
+            processor_name,
+            memory_error_correction,
+            memory_type,
+            memory_amount,
+            hdd_amount,
+            total_hdd_capacity,
+            ssd_amount,
+            total_ssd_capacity,
+            unmetered_bandwidth,
+            uplink_speed,
+            traffic,
+            datacenter_country,
+            datacenter_city,
+            datacenter_latitude,
+            datacenter_longitude,
+            control_panel,
+            gpu_name,
+            min_contract_hours,
+            max_contract_hours,
+            payment_methods,
+            features,
+            operating_systems,
+            created_at_ns
         )
-        .bind(pubkey)
-        .bind(&params.offering_id)
-        .bind(&params.offer_name)
-        .bind(&params.description)
-        .bind(&params.product_page_url)
-        .bind(&params.currency)
-        .bind(params.monthly_price)
-        .bind(params.setup_fee)
-        .bind(&params.visibility)
-        .bind(&params.product_type)
-        .bind(&params.virtualization_type)
-        .bind(&params.billing_interval)
-        .bind(&params.stock_status)
-        .bind(&params.processor_brand)
-        .bind(params.processor_amount)
-        .bind(params.processor_cores)
-        .bind(&params.processor_speed)
-        .bind(&params.processor_name)
-        .bind(&params.memory_error_correction)
-        .bind(&params.memory_type)
-        .bind(&params.memory_amount)
-        .bind(params.hdd_amount)
-        .bind(&params.total_hdd_capacity)
-        .bind(params.ssd_amount)
-        .bind(&params.total_ssd_capacity)
-        .bind(params.unmetered_bandwidth)
-        .bind(&params.uplink_speed)
-        .bind(params.traffic)
-        .bind(&params.datacenter_country)
-        .bind(&params.datacenter_city)
-        .bind(params.datacenter_latitude)
-        .bind(params.datacenter_longitude)
-        .bind(&params.control_panel)
-        .bind(&params.gpu_name)
-        .bind(params.min_contract_hours)
-        .bind(params.max_contract_hours)
-        .bind(&params.payment_methods)
-        .bind(&params.features)
-        .bind(&params.operating_systems)
-        .bind(chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0))
         .fetch_one(&mut *tx)
         .await?;
 
@@ -275,15 +352,16 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Verify ownership
-        let owner: Option<(Vec<u8>,)> =
-            sqlx::query_as("SELECT pubkey FROM provider_offerings WHERE id = ?")
-                .bind(offering_db_id)
-                .fetch_optional(&mut *tx)
-                .await?;
+        let owner: Option<Vec<u8>> = sqlx::query_scalar!(
+            "SELECT pubkey FROM provider_offerings WHERE id = ?",
+            offering_db_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
 
         match owner {
             None => return Err(anyhow::anyhow!("Offering not found")),
-            Some((owner_pubkey,)) if owner_pubkey != (pubkey) => {
+            Some(owner_pubkey) if owner_pubkey != pubkey => {
                 return Err(anyhow::anyhow!(
                     "Unauthorized: You do not own this offering"
                 ))
@@ -291,8 +369,51 @@ impl Database {
             _ => {}
         }
 
-        sqlx::query(
-            "UPDATE provider_offerings SET
+        let Offering {
+            id: _,
+            pubkey: _,
+            offering_id,
+            offer_name,
+            description,
+            product_page_url,
+            currency,
+            monthly_price,
+            setup_fee,
+            visibility,
+            product_type,
+            virtualization_type,
+            billing_interval,
+            stock_status,
+            processor_brand,
+            processor_amount,
+            processor_cores,
+            processor_speed,
+            processor_name,
+            memory_error_correction,
+            memory_type,
+            memory_amount,
+            hdd_amount,
+            total_hdd_capacity,
+            ssd_amount,
+            total_ssd_capacity,
+            unmetered_bandwidth,
+            uplink_speed,
+            traffic,
+            datacenter_country,
+            datacenter_city,
+            datacenter_latitude,
+            datacenter_longitude,
+            control_panel,
+            gpu_name,
+            min_contract_hours,
+            max_contract_hours,
+            payment_methods,
+            features,
+            operating_systems,
+        } = params;
+
+        sqlx::query!(
+            r#"UPDATE provider_offerings SET
                 offering_id = ?, offer_name = ?, description = ?, product_page_url = ?,
                 currency = ?, monthly_price = ?, setup_fee = ?, visibility = ?, product_type = ?,
                 virtualization_type = ?, billing_interval = ?, stock_status = ?,
@@ -303,47 +424,47 @@ impl Database {
                 datacenter_city = ?, datacenter_latitude = ?, datacenter_longitude = ?,
                 control_panel = ?, gpu_name = ?, min_contract_hours = ?, max_contract_hours = ?,
                 payment_methods = ?, features = ?, operating_systems = ?
-            WHERE id = ?",
+            WHERE id = ?"#,
+            offering_id,
+            offer_name,
+            description,
+            product_page_url,
+            currency,
+            monthly_price,
+            setup_fee,
+            visibility,
+            product_type,
+            virtualization_type,
+            billing_interval,
+            stock_status,
+            processor_brand,
+            processor_amount,
+            processor_cores,
+            processor_speed,
+            processor_name,
+            memory_error_correction,
+            memory_type,
+            memory_amount,
+            hdd_amount,
+            total_hdd_capacity,
+            ssd_amount,
+            total_ssd_capacity,
+            unmetered_bandwidth,
+            uplink_speed,
+            traffic,
+            datacenter_country,
+            datacenter_city,
+            datacenter_latitude,
+            datacenter_longitude,
+            control_panel,
+            gpu_name,
+            min_contract_hours,
+            max_contract_hours,
+            payment_methods,
+            features,
+            operating_systems,
+            offering_db_id
         )
-        .bind(&params.offering_id)
-        .bind(&params.offer_name)
-        .bind(&params.description)
-        .bind(&params.product_page_url)
-        .bind(&params.currency)
-        .bind(params.monthly_price)
-        .bind(params.setup_fee)
-        .bind(&params.visibility)
-        .bind(&params.product_type)
-        .bind(&params.virtualization_type)
-        .bind(&params.billing_interval)
-        .bind(&params.stock_status)
-        .bind(&params.processor_brand)
-        .bind(params.processor_amount)
-        .bind(params.processor_cores)
-        .bind(&params.processor_speed)
-        .bind(&params.processor_name)
-        .bind(&params.memory_error_correction)
-        .bind(&params.memory_type)
-        .bind(&params.memory_amount)
-        .bind(params.hdd_amount)
-        .bind(&params.total_hdd_capacity)
-        .bind(params.ssd_amount)
-        .bind(&params.total_ssd_capacity)
-        .bind(params.unmetered_bandwidth)
-        .bind(&params.uplink_speed)
-        .bind(params.traffic)
-        .bind(&params.datacenter_country)
-        .bind(&params.datacenter_city)
-        .bind(params.datacenter_latitude)
-        .bind(params.datacenter_longitude)
-        .bind(&params.control_panel)
-        .bind(&params.gpu_name)
-        .bind(params.min_contract_hours)
-        .bind(params.max_contract_hours)
-        .bind(&params.payment_methods)
-        .bind(&params.features)
-        .bind(&params.operating_systems)
-        .bind(offering_db_id)
         .execute(&mut *tx)
         .await?;
 
@@ -356,15 +477,16 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Verify ownership
-        let owner: Option<(Vec<u8>,)> =
-            sqlx::query_as("SELECT pubkey FROM provider_offerings WHERE id = ?")
-                .bind(offering_db_id)
-                .fetch_optional(&mut *tx)
-                .await?;
+        let owner: Option<Vec<u8>> = sqlx::query_scalar!(
+            "SELECT pubkey FROM provider_offerings WHERE id = ?",
+            offering_db_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
 
         match owner {
             None => return Err(anyhow::anyhow!("Offering not found")),
-            Some((owner_pubkey,)) if owner_pubkey != (pubkey) => {
+            Some(owner_pubkey) if owner_pubkey != pubkey => {
                 return Err(anyhow::anyhow!(
                     "Unauthorized: You do not own this offering"
                 ))
@@ -373,10 +495,12 @@ impl Database {
         }
 
         // Delete offering (CASCADE will handle metadata tables)
-        sqlx::query("DELETE FROM provider_offerings WHERE id = ?")
-            .bind(offering_db_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM provider_offerings WHERE id = ?",
+            offering_db_id
+        )
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(())
@@ -525,16 +649,53 @@ impl Database {
                     continue; // Skip this entry and continue with others
                 }
             };
-            let provider_key = &entry.key;
+            let provider_key = entry.key.clone();
             let provider_offerings = offering_payload
-                .deserialize_offerings(provider_key)
+                .deserialize_offerings(&provider_key)
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize offering: {}", e))?;
 
             // Store each offering as a fully structured record
             for offering in &provider_offerings.server_offerings {
+                let currency = offering.currency.to_string();
+                let visibility = offering.visibility.to_string();
+                let product_type = offering.product_type.to_string();
+                let virtualization_type =
+                    offering.virtualization_type.as_ref().map(|t| t.to_string());
+                let billing_interval = offering.billing_interval.to_string();
+                let stock = offering.stock.to_string();
+                let memory_error_correction = offering
+                    .memory_error_correction
+                    .as_ref()
+                    .map(|e| e.to_string());
+                let datacenter_latitude = offering.datacenter_coordinates.map(|c| c.0);
+                let datacenter_longitude = offering.datacenter_coordinates.map(|c| c.1);
+                let unmetered_bandwidth = !offering.unmetered.is_empty();
+                let min_contract_hours: Option<i64> = Some(1);
+                let max_contract_hours: Option<i64> = None;
+                let payment_methods = Self::vec_to_csv(&offering.payment_methods);
+                let features = Self::vec_to_csv(&offering.features);
+                let operating_systems = Self::vec_to_csv(&offering.operating_systems);
+                let created_at_ns = entry.block_timestamp_ns as i64;
+                let offering_identifier = offering.unique_internal_identifier.clone();
+                let offer_name = offering.offer_name.clone();
+                let description = offering.description.clone();
+                let product_page_url = offering.product_page_url.clone();
+                let processor_brand = offering.processor_brand.clone();
+                let processor_speed = offering.processor_speed.clone();
+                let processor_name = offering.processor_name.clone();
+                let memory_type = offering.memory_type.clone();
+                let memory_amount = offering.memory_amount.clone();
+                let total_hdd_capacity = offering.total_hdd_capacity.clone();
+                let total_ssd_capacity = offering.total_ssd_capacity.clone();
+                let uplink_speed = offering.uplink_speed.clone();
+                let datacenter_country = offering.datacenter_country.clone();
+                let datacenter_city = offering.datacenter_city.clone();
+                let control_panel = offering.control_panel.clone();
+                let gpu_name = offering.gpu_name.clone();
+
                 // Insert main offering record
-                let _offering_id = sqlx::query_scalar::<_, i64>(
-                    "INSERT INTO provider_offerings (
+                let _offering_id = sqlx::query_scalar!(
+                    r#"INSERT INTO provider_offerings (
                         pubkey, offering_id, offer_name, description, product_page_url,
                         currency, monthly_price, setup_fee, visibility, product_type,
                         virtualization_type, billing_interval, stock_status, processor_brand,
@@ -545,49 +706,59 @@ impl Database {
                         datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
                         min_contract_hours, max_contract_hours, payment_methods, features,
                         operating_systems, created_at_ns
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    RETURNING id"
+                    ) VALUES (
+                        ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?
+                    )
+                    RETURNING id"#,
+                    provider_key,
+                    offering_identifier,
+                    offer_name,
+                    description,
+                    product_page_url,
+                    currency,
+                    offering.monthly_price,
+                    offering.setup_fee,
+                    visibility,
+                    product_type,
+                    virtualization_type,
+                    billing_interval,
+                    stock,
+                    processor_brand,
+                    offering.processor_amount,
+                    offering.processor_cores,
+                    processor_speed,
+                    processor_name,
+                    memory_error_correction,
+                    memory_type,
+                    memory_amount,
+                    offering.hdd_amount,
+                    total_hdd_capacity,
+                    offering.ssd_amount,
+                    total_ssd_capacity,
+                    unmetered_bandwidth,
+                    uplink_speed,
+                    offering.traffic,
+                    datacenter_country,
+                    datacenter_city,
+                    datacenter_latitude,
+                    datacenter_longitude,
+                    control_panel,
+                    gpu_name,
+                    min_contract_hours,
+                    max_contract_hours,
+                    payment_methods,
+                    features,
+                    operating_systems,
+                    created_at_ns
                 )
-                .bind(provider_key)
-                .bind(&offering.unique_internal_identifier)
-                .bind(&offering.offer_name)
-                .bind(&offering.description)
-                .bind(&offering.product_page_url)
-                .bind(offering.currency.to_string())
-                .bind(offering.monthly_price)
-                .bind(offering.setup_fee)
-                .bind(offering.visibility.to_string())
-                .bind(offering.product_type.to_string())
-                .bind(offering.virtualization_type.as_ref().map(|t| t.to_string()))
-                .bind(offering.billing_interval.to_string())
-                .bind(offering.stock.to_string())
-                .bind(&offering.processor_brand)
-                .bind(offering.processor_amount)
-                .bind(offering.processor_cores)
-                .bind(&offering.processor_speed)
-                .bind(&offering.processor_name)
-                .bind(offering.memory_error_correction.as_ref().map(|e| e.to_string()))
-                .bind(&offering.memory_type)
-                .bind(&offering.memory_amount)
-                .bind(offering.hdd_amount)
-                .bind(&offering.total_hdd_capacity)
-                .bind(offering.ssd_amount)
-                .bind(&offering.total_ssd_capacity)
-                .bind(!offering.unmetered.is_empty())
-                .bind(&offering.uplink_speed)
-                .bind(offering.traffic)
-                .bind(&offering.datacenter_country)
-                .bind(&offering.datacenter_city)
-                .bind(offering.datacenter_coordinates.map(|c| c.0))
-                .bind(offering.datacenter_coordinates.map(|c| c.1))
-                .bind(&offering.control_panel)
-                .bind(&offering.gpu_name)
-                .bind(Some(1)) // min contract hours
-                .bind(None::<i64>) // max contract hours
-                .bind(Self::vec_to_csv(&offering.payment_methods))
-                .bind(Self::vec_to_csv(&offering.features))
-                .bind(Self::vec_to_csv(&offering.operating_systems))
-                .bind(entry.block_timestamp_ns as i64)
                 .fetch_one(&mut **tx)
                 .await?;
             }
@@ -616,11 +787,12 @@ impl Database {
                         Ok(params) => {
                             let result = if upsert {
                                 // Try to find existing offering by offering_id
-                                let existing = sqlx::query_scalar::<_, i64>(
-                                    "SELECT id FROM provider_offerings WHERE offering_id = ? AND (pubkey) = ?"
+                                let existing_offering_id = &params.offering_id;
+                                let existing = sqlx::query_scalar!(
+                                    r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ? AND (pubkey) = ?"#,
+                                    existing_offering_id,
+                                    pubkey
                                 )
-                                .bind(&params.offering_id)
-                                .bind(pubkey)
                                 .fetch_optional(&self.pool)
                                 .await;
 

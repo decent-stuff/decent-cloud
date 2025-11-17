@@ -33,15 +33,16 @@ impl Database {
         account: &str,
         limit: i64,
     ) -> Result<Vec<TokenTransfer>> {
-        let transfers = sqlx::query_as::<_, TokenTransfer>(
-            "SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
+        let transfers = sqlx::query_as!(
+            TokenTransfer,
+            r#"SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
              FROM token_transfers
              WHERE from_account = ? OR to_account = ?
-             ORDER BY created_at_ns DESC LIMIT ?",
+             ORDER BY created_at_ns DESC LIMIT ?"#,
+            account,
+            account,
+            limit
         )
-        .bind(account)
-        .bind(account)
-        .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
@@ -50,12 +51,13 @@ impl Database {
 
     /// Get recent token transfers
     pub async fn get_recent_transfers(&self, limit: i64) -> Result<Vec<TokenTransfer>> {
-        let transfers = sqlx::query_as::<_, TokenTransfer>(
-            "SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
+        let transfers = sqlx::query_as!(
+            TokenTransfer,
+            r#"SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
              FROM token_transfers
-             ORDER BY created_at_ns DESC LIMIT ?",
+             ORDER BY created_at_ns DESC LIMIT ?"#,
+            limit
         )
-        .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
@@ -64,33 +66,35 @@ impl Database {
 
     /// Get account balance (sum of all transfers)
     pub async fn get_account_balance(&self, account: &str) -> Result<i64> {
-        let received: (Option<i64>,) =
-            sqlx::query_as("SELECT SUM(amount_e9s) FROM token_transfers WHERE to_account = ?")
-                .bind(account)
-                .fetch_one(&self.pool)
-                .await?;
-
-        let sent: (Option<i64>,) = sqlx::query_as(
-            "SELECT SUM(amount_e9s + fee_e9s) FROM token_transfers WHERE from_account = ?",
+        let received: i64 = sqlx::query_scalar!(
+            "SELECT COALESCE(SUM(amount_e9s), 0) FROM token_transfers WHERE to_account = ?",
+            account
         )
-        .bind(account)
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(received.0.unwrap_or(0) - sent.0.unwrap_or(0))
+        let sent: i64 = sqlx::query_scalar!(
+            "SELECT COALESCE(SUM(amount_e9s + fee_e9s), 0) FROM token_transfers WHERE from_account = ?", 
+            account
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(received - sent)
     }
 
     /// Get token approvals for an account
     #[allow(dead_code)]
     pub async fn get_account_approvals(&self, account: &str) -> Result<Vec<TokenApproval>> {
-        let approvals = sqlx::query_as::<_, TokenApproval>(
-            "SELECT owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns
+        let approvals = sqlx::query_as!(
+            TokenApproval,
+            r#"SELECT owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns
              FROM token_approvals
              WHERE owner_account = ? OR spender_account = ?
-             ORDER BY created_at_ns DESC",
+             ORDER BY created_at_ns DESC"#,
+            account,
+            account
         )
-        .bind(account)
-        .bind(account)
         .fetch_all(&self.pool)
         .await?;
 
@@ -106,17 +110,25 @@ impl Database {
             let transfer = FundsTransfer::from_bytes(&entry.value)
                 .map_err(|e| anyhow::anyhow!("Failed to parse transfer: {}", e))?;
 
-            sqlx::query(
-                "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns, block_hash, block_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            let from_account = transfer.from().to_string();
+            let to_account = transfer.to().to_string();
+            let amount_i64 = transfer.amount() as i64;
+            let fee_i64 = transfer.fee().unwrap_or(0) as i64;
+            let memo = String::from_utf8_lossy(transfer.memo()).to_string();
+            let timestamp_i64 = entry.block_timestamp_ns as i64;
+            let block_offset_i64 = entry.block_offset as i64;
+
+            sqlx::query!(
+                "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns, block_hash, block_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                from_account,
+                to_account,
+                amount_i64,
+                fee_i64,
+                memo,
+                timestamp_i64,
+                entry.block_hash,
+                block_offset_i64
             )
-            .bind(transfer.from().to_string())
-            .bind(transfer.to().to_string())
-            .bind(transfer.amount() as i64)
-            .bind(transfer.fee().unwrap_or(0) as i64)
-            .bind(String::from_utf8_lossy(transfer.memo()).to_string())
-            .bind(entry.block_timestamp_ns as i64)
-            .bind(&entry.block_hash)
-            .bind(entry.block_offset as i64)
             .execute(&mut **tx)
             .await?;
         }
@@ -133,14 +145,26 @@ impl Database {
             let approval = FundsTransferApproval::deserialize(&entry.value)
                 .map_err(|e| anyhow::anyhow!("Failed to parse approval: {}", e))?;
 
-            sqlx::query(
-                "INSERT INTO token_approvals (owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns) VALUES (?, ?, ?, ?, ?)"
+            let approver = approval.approver().to_string();
+            let spender = approval.spender().to_string();
+            let amount_e9s = approval
+                .allowance()
+                .allowance
+                .0
+                .to_string()
+                .parse::<i64>()
+                .unwrap_or(0);
+            let expires_at = approval.allowance().expires_at.map(|v| v as i64);
+            let timestamp_i64 = entry.block_timestamp_ns as i64;
+
+            sqlx::query!(
+                "INSERT INTO token_approvals (owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns) VALUES (?, ?, ?, ?, ?)",
+                approver,
+                spender,
+                amount_e9s,
+                expires_at,
+                timestamp_i64
             )
-            .bind(approval.approver().to_string())
-            .bind(approval.spender().to_string())
-            .bind(approval.allowance().allowance.0.to_string().parse::<i64>().unwrap_or(0))
-            .bind(approval.allowance().expires_at.map(|v| v as i64))
-            .bind(entry.block_timestamp_ns as i64)
             .execute(&mut **tx)
             .await?;
         }
