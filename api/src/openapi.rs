@@ -1973,7 +1973,7 @@ impl MainApi {
             Err(_) => return poem_openapi::payload::PlainText("Invalid pubkey format".to_string()),
         };
 
-        if let Err(_) = check_authorization(&pubkey_bytes, &auth) {
+        if check_authorization(&pubkey_bytes, &auth).is_err() {
             return poem_openapi::payload::PlainText("Unauthorized".to_string());
         }
 
@@ -2161,76 +2161,73 @@ impl MainApi {
         ]);
 
         // Get example offerings
-        match db.get_example_offerings().await {
-            Ok(offerings) => {
-                for offering in offerings {
-                    let _ = csv_writer.write_record([
-                        &offering.offering_id,
-                        &offering.offer_name,
-                        &offering.description.unwrap_or_default(),
-                        &offering.product_page_url.unwrap_or_default(),
-                        &offering.currency,
-                        &offering.monthly_price.to_string(),
-                        &offering.setup_fee.to_string(),
-                        &offering.visibility,
-                        &offering.product_type,
-                        &offering.virtualization_type.unwrap_or_default(),
-                        &offering.billing_interval,
-                        &offering.stock_status,
-                        &offering.processor_brand.unwrap_or_default(),
-                        &offering
-                            .processor_amount
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering
-                            .processor_cores
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering.processor_speed.unwrap_or_default(),
-                        &offering.processor_name.unwrap_or_default(),
-                        &offering.memory_error_correction.unwrap_or_default(),
-                        &offering.memory_type.unwrap_or_default(),
-                        &offering.memory_amount.unwrap_or_default(),
-                        &offering
-                            .hdd_amount
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering.total_hdd_capacity.unwrap_or_default(),
-                        &offering
-                            .ssd_amount
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering.total_ssd_capacity.unwrap_or_default(),
-                        &offering.unmetered_bandwidth.to_string(),
-                        &offering.uplink_speed.unwrap_or_default(),
-                        &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
-                        &offering.datacenter_country,
-                        &offering.datacenter_city,
-                        &offering
-                            .datacenter_latitude
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering
-                            .datacenter_longitude
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering.control_panel.unwrap_or_default(),
-                        &offering.gpu_name.unwrap_or_default(),
-                        &offering
-                            .min_contract_hours
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering
-                            .max_contract_hours
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
-                        &offering.payment_methods.unwrap_or_default(),
-                        &offering.features.unwrap_or_default(),
-                        &offering.operating_systems.unwrap_or_default(),
-                    ]);
-                }
+        if let Ok(offerings) = db.get_example_offerings().await {
+            for offering in offerings {
+                let _ = csv_writer.write_record([
+                    &offering.offering_id,
+                    &offering.offer_name,
+                    &offering.description.unwrap_or_default(),
+                    &offering.product_page_url.unwrap_or_default(),
+                    &offering.currency,
+                    &offering.monthly_price.to_string(),
+                    &offering.setup_fee.to_string(),
+                    &offering.visibility,
+                    &offering.product_type,
+                    &offering.virtualization_type.unwrap_or_default(),
+                    &offering.billing_interval,
+                    &offering.stock_status,
+                    &offering.processor_brand.unwrap_or_default(),
+                    &offering
+                        .processor_amount
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering
+                        .processor_cores
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.processor_speed.unwrap_or_default(),
+                    &offering.processor_name.unwrap_or_default(),
+                    &offering.memory_error_correction.unwrap_or_default(),
+                    &offering.memory_type.unwrap_or_default(),
+                    &offering.memory_amount.unwrap_or_default(),
+                    &offering
+                        .hdd_amount
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.total_hdd_capacity.unwrap_or_default(),
+                    &offering
+                        .ssd_amount
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.total_ssd_capacity.unwrap_or_default(),
+                    &offering.unmetered_bandwidth.to_string(),
+                    &offering.uplink_speed.unwrap_or_default(),
+                    &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
+                    &offering.datacenter_country,
+                    &offering.datacenter_city,
+                    &offering
+                        .datacenter_latitude
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering
+                        .datacenter_longitude
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.control_panel.unwrap_or_default(),
+                    &offering.gpu_name.unwrap_or_default(),
+                    &offering
+                        .min_contract_hours
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering
+                        .max_contract_hours
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.payment_methods.unwrap_or_default(),
+                    &offering.features.unwrap_or_default(),
+                    &offering.operating_systems.unwrap_or_default(),
+                ]);
             }
-            Err(_) => {}
         }
 
         match csv_writer.into_inner() {

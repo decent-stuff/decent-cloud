@@ -90,14 +90,15 @@ impl Database {
     /// Ensure user registration exists in database (creates minimal entry if needed)
     async fn ensure_user_registered(&self, pubkey: &[u8]) -> Result<()> {
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let empty_sig: &[u8] = &[]; // Empty signature for web-created registrations
 
-        sqlx::query(
+        sqlx::query!(
             "INSERT OR IGNORE INTO user_registrations (pubkey, signature, created_at_ns)
              VALUES (?, ?, ?)",
+            pubkey,
+            empty_sig,
+            created_at_ns
         )
-        .bind(pubkey)
-        .bind(&[] as &[u8]) // Empty signature for web-created registrations
-        .bind(created_at_ns)
         .execute(&self.pool)
         .await?;
 
@@ -106,10 +107,11 @@ impl Database {
 
     /// Get user profile by pubkey
     pub async fn get_user_profile(&self, pubkey: &[u8]) -> Result<Option<UserProfile>> {
-        let profile = sqlx::query_as::<_, UserProfile>(
+        let profile = sqlx::query_as!(
+            UserProfile,
             "SELECT pubkey, display_name, bio, avatar_url, updated_at_ns FROM user_profiles WHERE pubkey = ?",
+            pubkey
         )
-        .bind(pubkey)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -118,10 +120,11 @@ impl Database {
 
     /// Get user contacts
     pub async fn get_user_contacts(&self, pubkey: &[u8]) -> Result<Vec<UserContact>> {
-        let contacts = sqlx::query_as::<_, UserContact>(
-            "SELECT id, contact_type, contact_value, verified FROM user_contacts WHERE user_pubkey = ?",
+        let contacts = sqlx::query_as!(
+            UserContact,
+            r#"SELECT id as "id!", contact_type, contact_value, verified as "verified!" FROM user_contacts WHERE user_pubkey = ?"#,
+            pubkey
         )
-        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
