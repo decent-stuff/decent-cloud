@@ -3,4 +3,4 @@
 /**
  * Headers for signed API requests
  */
-export type SignedRequestHeaders = { "X-Public-Key": string, "X-Signature": string, "X-Timestamp": string, "Content-Type": string, };
+export type SignedRequestHeaders = { "X-Public-Key": string, "X-Signature": string, "X-Timestamp": string, "X-Nonce": string, "Content-Type": string, };

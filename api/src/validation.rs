@@ -31,8 +31,7 @@ fn url_regex() -> &'static Regex {
 }
 
 fn username_regex() -> &'static Regex {
-    USERNAME_REGEX
-        .get_or_init(|| Regex::new(r"^[a-z0-9][a-z0-9._@-]{1,62}[a-z0-9]$").unwrap())
+    USERNAME_REGEX.get_or_init(|| Regex::new(r"^[a-z0-9][a-z0-9._@-]{1,62}[a-z0-9]$").unwrap())
 }
 
 pub fn validate_email(email: &str) -> Result<()> {

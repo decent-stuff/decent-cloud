@@ -111,8 +111,15 @@ async fn test_disable_account_key() {
 
     assert_eq!(key1_after.is_active, 1, "Key1 should still be active");
     assert_eq!(key2_after.is_active, 0, "Key2 should be disabled");
-    assert!(key2_after.disabled_at.is_some(), "Key2 should have disabled_at set");
-    assert_eq!(key2_after.disabled_by_key_id, Some(key1_id.clone()), "Key2 should be disabled by key1");
+    assert!(
+        key2_after.disabled_at.is_some(),
+        "Key2 should have disabled_at set"
+    );
+    assert_eq!(
+        key2_after.disabled_by_key_id,
+        Some(key1_id.clone()),
+        "Key2 should be disabled by key1"
+    );
 }
 
 #[tokio::test]

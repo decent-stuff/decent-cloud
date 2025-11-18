@@ -157,10 +157,11 @@ fn test_verify_invalid_signature_length() {
 #[test]
 fn test_verify_invalid_nonce_format() {
     let (_, pubkey) = create_test_identity();
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let result = verify_request_signature(
         &hex::encode(&pubkey),
         &hex::encode([0u8; 64]),
-        "1234567890",
+        &timestamp.to_string(),
         "not-a-uuid", // Invalid nonce
         "POST",
         "/test",

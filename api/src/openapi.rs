@@ -150,6 +150,599 @@ impl MainApi {
         })
     }
 
+    /// Register account
+    ///
+    /// Creates a new account with a username and initial public key
+    #[oai(path = "/accounts", method = "post", tag = "ApiTags::Accounts")]
+    async fn register_account(
+        &self,
+        db: Data<&Arc<Database>>,
+        req: Json<RegisterAccountRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
+        // Validate username
+        let username = match crate::validation::validate_account_username(&req.username) {
+            Ok(u) => u,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Decode public key
+        let public_key = match hex::decode(&req.public_key) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid public key format".to_string()),
+                })
+            }
+        };
+
+        if public_key.len() != 32 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Public key must be 32 bytes".to_string()),
+            });
+        }
+
+        // Parse nonce
+        let nonce = match uuid::Uuid::parse_str(&req.nonce) {
+            Ok(n) => n,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid nonce format".to_string()),
+                })
+            }
+        };
+
+        // Verify signature
+        let body = serde_json::json!({
+            "username": req.username,
+            "publicKey": req.public_key,
+            "timestamp": req.timestamp,
+            "nonce": req.nonce,
+        })
+        .to_string();
+
+        if let Err(e) = crate::auth::verify_request_signature(
+            &req.public_key,
+            &req.signature,
+            &req.timestamp.to_string(),
+            &req.nonce,
+            "POST",
+            "/api/v1/accounts",
+            body.as_bytes(),
+        ) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Signature verification failed: {}", e)),
+            });
+        }
+
+        // Check nonce hasn't been used
+        match db.check_nonce_exists(&nonce, 10).await {
+            Ok(true) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Nonce already used (replay attack)".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Database error: {}", e)),
+                })
+            }
+            _ => {}
+        }
+
+        // Create account
+        match db.create_account(&username, &public_key).await {
+            Ok(account) => {
+                // Insert audit record
+                if let Err(e) = db
+                    .insert_signature_audit(
+                        Some(&account.id),
+                        "register_account",
+                        &body,
+                        &hex::decode(&req.signature).unwrap(),
+                        &public_key,
+                        req.timestamp,
+                        &nonce,
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to insert audit record: {}", e);
+                }
+
+                // Fetch full account with keys
+                match db.get_account_with_keys(&username).await {
+                    Ok(Some(account_with_keys)) => Json(ApiResponse {
+                        success: true,
+                        data: Some(account_with_keys),
+                        error: None,
+                    }),
+                    Ok(None) => Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Account created but not found".to_string()),
+                    }),
+                    Err(e) => Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(e.to_string()),
+                    }),
+                }
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get account
+    ///
+    /// Returns account information with all public keys
+    #[oai(
+        path = "/accounts/:username",
+        method = "get",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_account(
+        &self,
+        db: Data<&Arc<Database>>,
+        username: Path<String>,
+    ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
+        match db.get_account_with_keys(&username.0).await {
+            Ok(Some(account)) => Json(ApiResponse {
+                success: true,
+                data: Some(account),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Account not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Add public key to account
+    ///
+    /// Adds a new public key to an existing account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/keys",
+        method = "post",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn add_account_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        username: Path<String>,
+        req: Json<AddAccountKeyRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::PublicKeyInfo>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Decode public keys
+        let new_public_key = match hex::decode(&req.new_public_key) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid new public key format".to_string()),
+                })
+            }
+        };
+
+        let signing_public_key = match hex::decode(&req.signing_public_key) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid signing public key format".to_string()),
+                })
+            }
+        };
+
+        if new_public_key.len() != 32 || signing_public_key.len() != 32 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Public keys must be 32 bytes".to_string()),
+            });
+        }
+
+        // Parse nonce
+        let nonce = match uuid::Uuid::parse_str(&req.nonce) {
+            Ok(n) => n,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid nonce format".to_string()),
+                })
+            }
+        };
+
+        // Verify signature
+        let path = format!("/api/v1/accounts/{}/keys", username.0);
+        let body = serde_json::json!({
+            "newPublicKey": req.new_public_key,
+            "signingPublicKey": req.signing_public_key,
+            "timestamp": req.timestamp,
+            "nonce": req.nonce,
+        })
+        .to_string();
+
+        if let Err(e) = crate::auth::verify_request_signature(
+            &req.signing_public_key,
+            &req.signature,
+            &req.timestamp.to_string(),
+            &req.nonce,
+            "POST",
+            &path,
+            body.as_bytes(),
+        ) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Signature verification failed: {}", e)),
+            });
+        }
+
+        // Check nonce hasn't been used
+        match db.check_nonce_exists(&nonce, 10).await {
+            Ok(true) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Nonce already used (replay attack)".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Database error: {}", e)),
+                })
+            }
+            _ => {}
+        }
+
+        // Verify signing key belongs to account and is active
+        match db.get_account_id_by_public_key(&signing_public_key).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Signing key does not belong to this account".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Signing key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Add new key
+        match db.add_account_key(&account.id, &new_public_key).await {
+            Ok(key) => {
+                // Insert audit record
+                if let Err(e) = db
+                    .insert_signature_audit(
+                        Some(&account.id),
+                        "add_key",
+                        &body,
+                        &hex::decode(&req.signature).unwrap(),
+                        &signing_public_key,
+                        req.timestamp,
+                        &nonce,
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to insert audit record: {}", e);
+                }
+
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(crate::database::accounts::PublicKeyInfo {
+                        id: hex::encode(&key.id),
+                        public_key: hex::encode(&key.public_key),
+                        added_at: key.added_at,
+                        is_active: key.is_active != 0,
+                        disabled_at: key.disabled_at,
+                        disabled_by_key_id: key.disabled_by_key_id.map(|id| hex::encode(&id)),
+                    }),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Remove public key from account
+    ///
+    /// Removes (disables) a public key from an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/keys/:key_id",
+        method = "delete",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn remove_account_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        username: Path<String>,
+        key_id: Path<String>,
+        req: Json<RemoveAccountKeyRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::PublicKeyInfo>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Decode key IDs
+        let key_id_bytes = match hex::decode(&key_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid key ID format".to_string()),
+                })
+            }
+        };
+
+        let signing_public_key = match hex::decode(&req.signing_public_key) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid signing public key format".to_string()),
+                })
+            }
+        };
+
+        if signing_public_key.len() != 32 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Signing public key must be 32 bytes".to_string()),
+            });
+        }
+
+        // Parse nonce
+        let nonce = match uuid::Uuid::parse_str(&req.nonce) {
+            Ok(n) => n,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid nonce format".to_string()),
+                })
+            }
+        };
+
+        // Verify signature
+        let path = format!("/api/v1/accounts/{}/keys/{}", username.0, key_id.0);
+        let body = serde_json::json!({
+            "signingPublicKey": req.signing_public_key,
+            "timestamp": req.timestamp,
+            "nonce": req.nonce,
+        })
+        .to_string();
+
+        if let Err(e) = crate::auth::verify_request_signature(
+            &req.signing_public_key,
+            &req.signature,
+            &req.timestamp.to_string(),
+            &req.nonce,
+            "DELETE",
+            &path,
+            body.as_bytes(),
+        ) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Signature verification failed: {}", e)),
+            });
+        }
+
+        // Check nonce hasn't been used
+        match db.check_nonce_exists(&nonce, 10).await {
+            Ok(true) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Nonce already used (replay attack)".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Database error: {}", e)),
+                })
+            }
+            _ => {}
+        }
+
+        // Verify signing key belongs to account and is active
+        let signing_key_id = match db.get_account_id_by_public_key(&signing_public_key).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {
+                // Find the signing key ID
+                let keys = match db.get_account_keys(&account.id).await {
+                    Ok(keys) => keys,
+                    Err(e) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(e.to_string()),
+                        })
+                    }
+                };
+                match keys.iter().find(|k| k.public_key == signing_public_key) {
+                    Some(k) => k.id.clone(),
+                    None => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("Signing key not found".to_string()),
+                        })
+                    }
+                }
+            }
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Signing key does not belong to this account".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Signing key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Disable key
+        match db.disable_account_key(&key_id_bytes, &signing_key_id).await {
+            Ok(_) => {
+                // Insert audit record
+                if let Err(e) = db
+                    .insert_signature_audit(
+                        Some(&account.id),
+                        "remove_key",
+                        &body,
+                        &hex::decode(&req.signature).unwrap(),
+                        &signing_public_key,
+                        req.timestamp,
+                        &nonce,
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to insert audit record: {}", e);
+                }
+
+                // Fetch updated key
+                let keys = match db.get_account_keys(&account.id).await {
+                    Ok(keys) => keys,
+                    Err(e) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(e.to_string()),
+                        })
+                    }
+                };
+
+                match keys.iter().find(|k| k.id == key_id_bytes) {
+                    Some(key) => Json(ApiResponse {
+                        success: true,
+                        data: Some(crate::database::accounts::PublicKeyInfo {
+                            id: hex::encode(&key.id),
+                            public_key: hex::encode(&key.public_key),
+                            added_at: key.added_at,
+                            is_active: key.is_active != 0,
+                            disabled_at: key.disabled_at,
+                            disabled_by_key_id: key
+                                .disabled_by_key_id
+                                .as_ref()
+                                .map(|id| hex::encode(id)),
+                        }),
+                        error: None,
+                    }),
+                    None => Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Key not found after disable".to_string()),
+                    }),
+                }
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// List all providers
     ///
     /// Returns a paginated list of registered providers
@@ -2300,11 +2893,44 @@ impl MainApi {
     }
 }
 
+// Request/response types for account endpoints
+#[derive(Debug, Deserialize, Object)]
+pub struct RegisterAccountRequest {
+    pub username: String,
+    #[serde(rename = "publicKey")]
+    pub public_key: String,
+    pub timestamp: i64,
+    pub nonce: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Deserialize, Object)]
+pub struct AddAccountKeyRequest {
+    #[serde(rename = "newPublicKey")]
+    pub new_public_key: String,
+    #[serde(rename = "signingPublicKey")]
+    pub signing_public_key: String,
+    pub timestamp: i64,
+    pub nonce: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Deserialize, Object)]
+pub struct RemoveAccountKeyRequest {
+    #[serde(rename = "signingPublicKey")]
+    pub signing_public_key: String,
+    pub timestamp: i64,
+    pub nonce: String,
+    pub signature: String,
+}
+
 // API Tags for grouping endpoints
 #[derive(poem_openapi::Tags)]
 enum ApiTags {
     /// System endpoints
     System,
+    /// Account management endpoints
+    Accounts,
     /// Provider management endpoints
     Providers,
     /// Validator management endpoints

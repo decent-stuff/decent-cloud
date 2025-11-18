@@ -125,8 +125,9 @@ pub fn verify_request_signature(
     }
 
     // Validate nonce format (UUID v4)
-    uuid::Uuid::parse_str(nonce_str)
-        .map_err(|e| AuthError::InvalidFormat(format!("Invalid nonce format (must be UUID v4): {}", e)))?;
+    uuid::Uuid::parse_str(nonce_str).map_err(|e| {
+        AuthError::InvalidFormat(format!("Invalid nonce format (must be UUID v4): {}", e))
+    })?;
 
     // Construct message: timestamp + nonce + method + path + body
     let mut message = timestamp_str.as_bytes().to_vec();
@@ -213,8 +214,15 @@ impl ApiAuthenticatedUser {
         path: &str,
         body: &[u8],
     ) -> Result<Self, AuthError> {
-        let pubkey =
-            verify_request_signature(pubkey_hex, signature_hex, timestamp, nonce, method, path, body)?;
+        let pubkey = verify_request_signature(
+            pubkey_hex,
+            signature_hex,
+            timestamp,
+            nonce,
+            method,
+            path,
+            body,
+        )?;
         Ok(ApiAuthenticatedUser { pubkey })
     }
 }

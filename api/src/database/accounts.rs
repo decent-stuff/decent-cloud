@@ -25,7 +25,7 @@ pub struct AccountPublicKey {
 }
 
 /// Full account response with keys
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
 pub struct AccountWithKeys {
     pub id: String,
     pub username: String,
@@ -35,23 +35,21 @@ pub struct AccountWithKeys {
 }
 
 /// Public key information for API responses
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
 pub struct PublicKeyInfo {
     pub id: String,
     pub public_key: String,
     pub added_at: i64,
     pub is_active: bool,
+    #[oai(skip_serializing_if_is_none)]
     pub disabled_at: Option<i64>,
+    #[oai(skip_serializing_if_is_none)]
     pub disabled_by_key_id: Option<String>,
 }
 
 impl Database {
     /// Create a new account with initial public key
-    pub async fn create_account(
-        &self,
-        username: &str,
-        public_key: &[u8],
-    ) -> Result<Account> {
+    pub async fn create_account(&self, username: &str, public_key: &[u8]) -> Result<Account> {
         if public_key.len() != 32 {
             bail!("Public key must be 32 bytes");
         }
@@ -69,25 +67,28 @@ impl Database {
 
         // Insert initial public key
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        sqlx::query("INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)")
-            .bind(&key_id)
-            .bind(&account_id)
-            .bind(public_key)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+        )
+        .bind(&key_id)
+        .bind(&account_id)
+        .bind(public_key)
+        .execute(&mut *tx)
+        .await?;
 
         // Commit transaction
         tx.commit().await?;
 
         // Fetch and return the account
-        self.get_account(&account_id).await?
+        self.get_account(&account_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Account not found after creation"))
     }
 
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at FROM accounts WHERE id = ?"
+            "SELECT id, username, created_at, updated_at FROM accounts WHERE id = ?",
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -99,7 +100,7 @@ impl Database {
     /// Get account by username
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at FROM accounts WHERE username = ?"
+            "SELECT id, username, created_at, updated_at FROM accounts WHERE username = ?",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -120,14 +121,17 @@ impl Database {
                 username: account.username,
                 created_at: account.created_at,
                 updated_at: account.updated_at,
-                public_keys: keys.into_iter().map(|k| PublicKeyInfo {
-                    id: hex::encode(&k.id),
-                    public_key: hex::encode(&k.public_key),
-                    added_at: k.added_at,
-                    is_active: k.is_active != 0,
-                    disabled_at: k.disabled_at,
-                    disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
-                }).collect(),
+                public_keys: keys
+                    .into_iter()
+                    .map(|k| PublicKeyInfo {
+                        id: hex::encode(&k.id),
+                        public_key: hex::encode(&k.public_key),
+                        added_at: k.added_at,
+                        is_active: k.is_active != 0,
+                        disabled_at: k.disabled_at,
+                        disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
+                    })
+                    .collect(),
             }))
         } else {
             Ok(None)
@@ -150,7 +154,10 @@ impl Database {
     }
 
     /// Get active public keys for an account
-    pub async fn get_active_account_keys(&self, account_id: &[u8]) -> Result<Vec<AccountPublicKey>> {
+    pub async fn get_active_account_keys(
+        &self,
+        account_id: &[u8],
+    ) -> Result<Vec<AccountPublicKey>> {
         let keys = sqlx::query_as::<_, AccountPublicKey>(
             "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id
              FROM account_public_keys
@@ -167,7 +174,7 @@ impl Database {
     /// Get account ID by public key
     pub async fn get_account_id_by_public_key(&self, public_key: &[u8]) -> Result<Option<Vec<u8>>> {
         let result: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT account_id FROM account_public_keys WHERE public_key = ? AND is_active = 1"
+            "SELECT account_id FROM account_public_keys WHERE public_key = ? AND is_active = 1",
         )
         .bind(public_key)
         .fetch_optional(&self.pool)
@@ -194,12 +201,14 @@ impl Database {
 
         // Insert new key
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        sqlx::query("INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)")
-            .bind(&key_id)
-            .bind(account_id)
-            .bind(public_key)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+        )
+        .bind(&key_id)
+        .bind(account_id)
+        .bind(public_key)
+        .execute(&self.pool)
+        .await?;
 
         // Fetch and return the key
         let key = sqlx::query_as::<_, AccountPublicKey>(
@@ -223,12 +232,11 @@ impl Database {
         let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         // Get the key to check account_id
-        let key: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT account_id FROM account_public_keys WHERE id = ?"
-        )
-        .bind(key_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let key: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT account_id FROM account_public_keys WHERE id = ?")
+                .bind(key_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         let account_id = key.ok_or_else(|| anyhow::anyhow!("Key not found"))?.0;
 
@@ -242,7 +250,7 @@ impl Database {
         sqlx::query(
             "UPDATE account_public_keys
              SET is_active = 0, disabled_at = ?, disabled_by_key_id = ?
-             WHERE id = ?"
+             WHERE id = ?",
         )
         .bind(now)
         .bind(disabled_by_key_id)
@@ -254,14 +262,19 @@ impl Database {
     }
 
     /// Check if a nonce has been used (for replay prevention)
-    pub async fn check_nonce_exists(&self, nonce: &uuid::Uuid, max_age_minutes: i64) -> Result<bool> {
-        let cutoff_time = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - (max_age_minutes * 60 * 1_000_000_000);
+    pub async fn check_nonce_exists(
+        &self,
+        nonce: &uuid::Uuid,
+        max_age_minutes: i64,
+    ) -> Result<bool> {
+        let cutoff_time = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+            - (max_age_minutes * 60 * 1_000_000_000);
         let nonce_bytes = nonce.as_bytes().to_vec();
 
         let result: Option<(i64,)> = sqlx::query_as(
             "SELECT 1 FROM signature_audit
              WHERE nonce = ? AND created_at > ?
-             LIMIT 1"
+             LIMIT 1",
         )
         .bind(nonce_bytes)
         .bind(cutoff_time)
@@ -287,7 +300,7 @@ impl Database {
         sqlx::query(
             "INSERT INTO signature_audit
              (account_id, action, payload, signature, public_key, timestamp, nonce)
-             VALUES (?, ?, ?, ?, ?, ?, ?)"
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(account_id)
         .bind(action)
