@@ -49,3 +49,20 @@ fn duplicate_detector_identifies_duplicates() {
         vec!["/first".to_string(), "/second".to_string()]
     );
 }
+
+#[test]
+fn root_route_configured() {
+    let paths = collect_route_paths(MAIN_RS_SOURCE);
+    assert!(
+        paths.contains(&"/".to_string()),
+        "Root path '/' should be configured in routes"
+    );
+}
+
+#[test]
+fn root_redirect_targets_swagger() {
+    assert!(
+        MAIN_RS_SOURCE.contains("Redirect::temporary(\"/api/v1/swagger\")"),
+        "Root redirect should target /api/v1/swagger"
+    );
+}

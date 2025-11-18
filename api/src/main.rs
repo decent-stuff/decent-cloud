@@ -16,6 +16,7 @@ use database::Database;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::MainApi;
+use poem::web::Redirect;
 use poem::{
     handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
     Route, Server,
@@ -110,6 +111,12 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     })
 }
 
+/// Redirect from root to Swagger UI
+#[handler]
+fn root_redirect() -> Redirect {
+    Redirect::temporary("/api/v1/swagger")
+}
+
 /// Proxy ICP canister methods
 ///
 /// Expected methods from cf-service.ts:
@@ -186,6 +193,8 @@ async fn serve_command() -> Result<(), std::io::Error> {
     let openapi_spec = api_service.spec_endpoint();
 
     let app = Route::new()
+        // Redirect root to Swagger UI
+        .at("/", root_redirect)
         // OpenAPI documentation and Swagger UI
         .nest("/api/v1/swagger", swagger_ui)
         .nest("/api/v1/openapi", openapi_spec)
