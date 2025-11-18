@@ -25,6 +25,9 @@ pub struct SignedRequestHeaders {
     #[serde(rename = "X-Timestamp")]
     #[ts(rename = "X-Timestamp")]
     pub x_timestamp: String,
+    #[serde(rename = "X-Nonce")]
+    #[ts(rename = "X-Nonce")]
+    pub x_nonce: String,
     #[serde(rename = "Content-Type")]
     #[ts(rename = "Content-Type")]
     pub content_type: String,
@@ -68,17 +71,19 @@ impl ResponseError for AuthError {
 
 /// Verify request signature
 ///
-/// Message format: timestamp + method + path + body
+/// Message format: timestamp + nonce + method + path + body
 /// NOTE: Path excludes query string for robustness (query params are typically non-critical)
 ///
 /// Headers required:
 /// - X-Public-Key: hex-encoded public key (32 bytes)
 /// - X-Signature: hex-encoded signature (64 bytes)
 /// - X-Timestamp: unix timestamp in nanoseconds
+/// - X-Nonce: UUID v4 for replay prevention
 pub fn verify_request_signature(
     pubkey_hex: &str,
     signature_hex: &str,
     timestamp_str: &str,
+    nonce_str: &str,
     method: &str,
     path: &str,
     body: &[u8],
@@ -119,8 +124,13 @@ pub fn verify_request_signature(
         return Err(AuthError::TimestampExpired);
     }
 
-    // Construct message: timestamp + method + path + body
+    // Validate nonce format (UUID v4)
+    uuid::Uuid::parse_str(nonce_str)
+        .map_err(|e| AuthError::InvalidFormat(format!("Invalid nonce format (must be UUID v4): {}", e)))?;
+
+    // Construct message: timestamp + nonce + method + path + body
     let mut message = timestamp_str.as_bytes().to_vec();
+    message.extend_from_slice(nonce_str.as_bytes());
     message.extend_from_slice(method.as_bytes());
     message.extend_from_slice(path.as_bytes());
     message.extend_from_slice(body);
@@ -157,6 +167,11 @@ impl FromRequest<'_> for AuthenticatedUser {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
 
+        let nonce = headers
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+
         // Read body
         let body_bytes = body.take()?.into_vec().await?;
 
@@ -168,6 +183,7 @@ impl FromRequest<'_> for AuthenticatedUser {
             pubkey_hex,
             signature_hex,
             timestamp,
+            nonce,
             req.method().as_str(),
             req.uri().path(), // Path only, no query string
             &body_bytes,
@@ -192,12 +208,13 @@ impl ApiAuthenticatedUser {
         pubkey_hex: &str,
         signature_hex: &str,
         timestamp: &str,
+        nonce: &str,
         method: &str,
         path: &str,
         body: &[u8],
     ) -> Result<Self, AuthError> {
         let pubkey =
-            verify_request_signature(pubkey_hex, signature_hex, timestamp, method, path, body)?;
+            verify_request_signature(pubkey_hex, signature_hex, timestamp, nonce, method, path, body)?;
         Ok(ApiAuthenticatedUser { pubkey })
     }
 }
@@ -253,6 +270,11 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
 
+        let nonce = headers
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+
         // Read body
         let body_bytes = body.take()?.into_vec().await?;
 
@@ -261,6 +283,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
             pubkey_hex,
             signature_hex,
             timestamp,
+            nonce,
             request.method().as_str(),
             request.uri().path(),
             &body_bytes,

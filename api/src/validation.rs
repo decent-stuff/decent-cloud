@@ -4,6 +4,22 @@ use std::sync::OnceLock;
 
 static EMAIL_REGEX: OnceLock<Regex> = OnceLock::new();
 static URL_REGEX: OnceLock<Regex> = OnceLock::new();
+static USERNAME_REGEX: OnceLock<Regex> = OnceLock::new();
+
+const RESERVED_USERNAMES: &[&str] = &[
+    "admin",
+    "api",
+    "system",
+    "root",
+    "support",
+    "moderator",
+    "administrator",
+    "test",
+    "null",
+    "undefined",
+    "decent",
+    "cloud",
+];
 
 fn email_regex() -> &'static Regex {
     EMAIL_REGEX
@@ -12,6 +28,11 @@ fn email_regex() -> &'static Regex {
 
 fn url_regex() -> &'static Regex {
     URL_REGEX.get_or_init(|| Regex::new(r"^https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/.*)?$").unwrap())
+}
+
+fn username_regex() -> &'static Regex {
+    USERNAME_REGEX
+        .get_or_init(|| Regex::new(r"^[a-z0-9][a-z0-9._@-]{1,62}[a-z0-9]$").unwrap())
 }
 
 pub fn validate_email(email: &str) -> Result<()> {
@@ -130,6 +151,39 @@ pub fn validate_social_username(username: &str) -> Result<()> {
         bail!("Username is too long (max 100 characters)");
     }
     Ok(())
+}
+
+/// Normalize username to lowercase and trim whitespace
+pub fn normalize_username(username: &str) -> String {
+    username.trim().to_lowercase()
+}
+
+/// Validate account username
+/// Rules:
+/// - Length: 3-64 characters
+/// - Characters: [a-z0-9._@-] (lowercase alphanumeric, period, underscore, hyphen, at-sign)
+/// - Format: Must start and end with alphanumeric character
+/// - Not in reserved list
+pub fn validate_account_username(username: &str) -> Result<String> {
+    let normalized = normalize_username(username);
+
+    if normalized.len() < 3 {
+        bail!("Username must be at least 3 characters");
+    }
+
+    if normalized.len() > 64 {
+        bail!("Username must be at most 64 characters");
+    }
+
+    if !username_regex().is_match(&normalized) {
+        bail!("Username must start and end with alphanumeric character and contain only lowercase letters, numbers, period, underscore, hyphen, or at-sign");
+    }
+
+    if RESERVED_USERNAMES.contains(&normalized.as_str()) {
+        bail!("Username is reserved");
+    }
+
+    Ok(normalized)
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod contracts;
 pub mod core;
 pub mod handlers;
