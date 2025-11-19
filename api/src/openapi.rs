@@ -1,4 +1,8 @@
-use crate::{auth::ApiAuthenticatedUser, database::Database, metadata_cache::MetadataCache};
+use crate::{
+    auth::{AdminAuthenticatedUser, ApiAuthenticatedUser},
+    database::Database,
+    metadata_cache::MetadataCache,
+};
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::{Deserialize, Serialize};
@@ -260,6 +264,7 @@ impl MainApi {
                         &public_key,
                         req.timestamp,
                         &nonce,
+                        false,
                     )
                     .await
                 {
@@ -485,6 +490,7 @@ impl MainApi {
                         &signing_public_key,
                         req.timestamp,
                         &nonce,
+                        false,
                     )
                     .await
                 {
@@ -694,6 +700,7 @@ impl MainApi {
                         &signing_public_key,
                         req.timestamp,
                         &nonce,
+                        false,
                     )
                     .await
                 {
@@ -734,6 +741,210 @@ impl MainApi {
                         error: Some("Key not found after disable".to_string()),
                     }),
                 }
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Disable an account key
+    ///
+    /// Allows an admin to disable a specific key for an account. Useful for security incidents or account recovery.
+    #[oai(
+        path = "/admin/accounts/:username/keys/:key_id/disable",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_disable_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        username: Path<String>,
+        key_id: Path<String>,
+        req: Json<AdminDisableKeyRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::PublicKeyInfo>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Decode key ID
+        let key_id_bytes = match hex::decode(&key_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid key ID format".to_string()),
+                })
+            }
+        };
+
+        // Disable key (admin action bypasses last-key check)
+        // Create a dummy disabled_by_key_id for admin actions
+        let admin_marker_id = [0u8; 16]; // All zeros indicates admin action
+
+        match db
+            .disable_account_key(&key_id_bytes, &admin_marker_id)
+            .await
+        {
+            Ok(_) => {
+                // Insert audit record with is_admin_action = true
+                if let Err(e) = db
+                    .insert_signature_audit(
+                        Some(&account.id),
+                        "admin_disable_key",
+                        &serde_json::to_string(&req.0).unwrap_or_default(),
+                        &[0u8; 64], // No signature for admin action
+                        &_admin.pubkey,
+                        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                        &uuid::Uuid::new_v4(),
+                        true, // is_admin_action
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to insert admin audit record: {}", e);
+                }
+
+                // Fetch updated key
+                let keys = match db.get_account_keys(&account.id).await {
+                    Ok(keys) => keys,
+                    Err(e) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(e.to_string()),
+                        })
+                    }
+                };
+
+                let disabled_key = keys.iter().find(|k| k.id == key_id_bytes).map(|k| {
+                    crate::database::accounts::PublicKeyInfo {
+                        id: hex::encode(&k.id),
+                        public_key: hex::encode(&k.public_key),
+                        added_at: k.added_at,
+                        is_active: k.is_active != 0,
+                        disabled_at: k.disabled_at,
+                        disabled_by_key_id: k.disabled_by_key_id.as_ref().map(|id| hex::encode(id)),
+                    }
+                });
+
+                match disabled_key {
+                    Some(key) => Json(ApiResponse {
+                        success: true,
+                        data: Some(key),
+                        error: None,
+                    }),
+                    None => Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Key not found after disable".to_string()),
+                    }),
+                }
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Add recovery key to account
+    ///
+    /// Allows an admin to add a new public key to an account. Used for account recovery when user loses all keys.
+    #[oai(
+        path = "/admin/accounts/:username/recovery-key",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_add_recovery_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        username: Path<String>,
+        req: Json<AdminAddRecoveryKeyRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::PublicKeyInfo>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Decode public key
+        let public_key = match hex::decode(&req.public_key) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid public key format".to_string()),
+                })
+            }
+        };
+
+        // Add recovery key
+        match db.add_account_key(&account.id, &public_key).await {
+            Ok(key) => {
+                // Insert audit record with is_admin_action = true
+                if let Err(e) = db
+                    .insert_signature_audit(
+                        Some(&account.id),
+                        "admin_add_recovery_key",
+                        &serde_json::to_string(&req.0).unwrap_or_default(),
+                        &[0u8; 64], // No signature for admin action
+                        &_admin.pubkey,
+                        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                        &uuid::Uuid::new_v4(),
+                        true, // is_admin_action
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to insert admin audit record: {}", e);
+                }
+
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(crate::database::accounts::PublicKeyInfo {
+                        id: hex::encode(&key.id),
+                        public_key: hex::encode(&key.public_key),
+                        added_at: key.added_at,
+                        is_active: key.is_active != 0,
+                        disabled_at: key.disabled_at,
+                        disabled_by_key_id: key.disabled_by_key_id.map(|id| hex::encode(id)),
+                    }),
+                    error: None,
+                })
             }
             Err(e) => Json(ApiResponse {
                 success: false,
@@ -2924,6 +3135,18 @@ pub struct RemoveAccountKeyRequest {
     pub signature: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct AdminDisableKeyRequest {
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct AdminAddRecoveryKeyRequest {
+    #[serde(rename = "publicKey")]
+    pub public_key: String,
+    pub reason: String,
+}
+
 // API Tags for grouping endpoints
 #[derive(poem_openapi::Tags)]
 enum ApiTags {
@@ -2931,6 +3154,8 @@ enum ApiTags {
     System,
     /// Account management endpoints
     Accounts,
+    /// Admin operations endpoints
+    Admin,
     /// Provider management endpoints
     Providers,
     /// Validator management endpoints

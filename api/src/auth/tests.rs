@@ -176,3 +176,68 @@ fn test_verify_invalid_nonce_format() {
 fn export_typescript_types() {
     SignedRequestHeaders::export().expect("Failed to export SignedRequestHeaders type");
 }
+
+#[test]
+fn test_get_admin_pubkeys_empty() {
+    // No environment variable set
+    std::env::remove_var("ADMIN_PUBLIC_KEYS");
+    let keys = get_admin_pubkeys();
+    assert_eq!(keys.len(), 0);
+}
+
+#[test]
+fn test_get_admin_pubkeys_single() {
+    let (_, pubkey) = create_test_identity();
+    let pubkey_hex = hex::encode(&pubkey);
+    std::env::set_var("ADMIN_PUBLIC_KEYS", &pubkey_hex);
+
+    let keys = get_admin_pubkeys();
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0], pubkey);
+
+    std::env::remove_var("ADMIN_PUBLIC_KEYS");
+}
+
+#[test]
+fn test_get_admin_pubkeys_multiple() {
+    let (_, pubkey1) = create_test_identity();
+    let seed2 = [99u8; 32];
+    let identity2 = DccIdentity::new_from_seed(&seed2).unwrap();
+    let pubkey2 = identity2.to_bytes_verifying();
+
+    let pubkey_hex1 = hex::encode(&pubkey1);
+    let pubkey_hex2 = hex::encode(&pubkey2);
+    let combined = format!("{},{}", pubkey_hex1, pubkey_hex2);
+    std::env::set_var("ADMIN_PUBLIC_KEYS", &combined);
+
+    let keys = get_admin_pubkeys();
+    assert_eq!(keys.len(), 2);
+    assert!(keys.contains(&pubkey1));
+    assert!(keys.contains(&pubkey2));
+
+    std::env::remove_var("ADMIN_PUBLIC_KEYS");
+}
+
+#[test]
+fn test_get_admin_pubkeys_with_whitespace() {
+    let (_, pubkey) = create_test_identity();
+    let pubkey_hex = hex::encode(&pubkey);
+    let with_spaces = format!(" {} , ", pubkey_hex);
+    std::env::set_var("ADMIN_PUBLIC_KEYS", with_spaces);
+
+    let keys = get_admin_pubkeys();
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0], pubkey);
+
+    std::env::remove_var("ADMIN_PUBLIC_KEYS");
+}
+
+#[test]
+fn test_get_admin_pubkeys_invalid_hex() {
+    std::env::set_var("ADMIN_PUBLIC_KEYS", "not-valid-hex");
+
+    let keys = get_admin_pubkeys();
+    assert_eq!(keys.len(), 0); // Should return empty on parse error
+
+    std::env::remove_var("ADMIN_PUBLIC_KEYS");
+}

@@ -1,5 +1,6 @@
 mod api_handlers;
 mod auth;
+mod cleanup_service;
 mod database;
 mod ledger_client;
 mod ledger_path;
@@ -12,6 +13,7 @@ mod validation;
 
 use candid::Principal;
 use clap::{Parser, Subcommand};
+use cleanup_service::CleanupService;
 use database::Database;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
@@ -202,7 +204,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         // Legacy endpoints (canister proxy - ICP integration pending)
         // NOTE: CSV operations are now included in OpenAPI schema above
         .at("/api/v1/canister/:method", post(canister_proxy))
-        .data(ctx.database)
+        .data(ctx.database.clone())
         .data(ctx.metadata_cache.clone())
         .with(request_logging::RequestLogging)
         .with(Cors::new());
@@ -213,9 +215,35 @@ async fn serve_command() -> Result<(), std::io::Error> {
         cache_for_task.run().await;
     });
 
+    // Start cleanup service in background (runs every 24 hours, 180-day retention)
+    let cleanup_interval_hours = env::var("CLEANUP_INTERVAL_HOURS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(24);
+    let cleanup_retention_days = env::var("CLEANUP_RETENTION_DAYS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(180);
+
+    let db_for_cleanup = ctx.database.clone();
+    let cleanup_task = tokio::spawn(async move {
+        let cleanup_service = CleanupService::new(
+            db_for_cleanup,
+            cleanup_interval_hours,
+            cleanup_retention_days,
+        );
+        tracing::info!(
+            "Starting cleanup service (interval: {}h, retention: {}d)",
+            cleanup_interval_hours,
+            cleanup_retention_days
+        );
+        cleanup_service.run().await;
+    });
+
     let server_result = Server::new(TcpListener::bind(&addr)).run(app).await;
 
     metadata_cache_task.abort();
+    cleanup_task.abort();
     server_result
 }
 

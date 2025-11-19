@@ -204,6 +204,12 @@ pub struct ApiAuthenticatedUser {
     pub pubkey: Vec<u8>,
 }
 
+/// Admin authenticated user (signature-based with admin public key list)
+#[derive(Debug, Clone)]
+pub struct AdminAuthenticatedUser {
+    pub pubkey: Vec<u8>,
+}
+
 impl ApiAuthenticatedUser {
     fn from_headers(
         pubkey_hex: &str,
@@ -301,6 +307,108 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
         *body = poem::RequestBody::new(poem::Body::from(body_bytes));
 
         Ok(ApiAuthenticatedUser { pubkey })
+    }
+}
+
+/// Get admin public keys from environment variable
+/// Format: comma-separated hex-encoded Ed25519 public keys (32 bytes each)
+/// Example: ADMIN_PUBLIC_KEYS="abc123...,def456..."
+pub(crate) fn get_admin_pubkeys() -> Vec<Vec<u8>> {
+    std::env::var("ADMIN_PUBLIC_KEYS")
+        .ok()
+        .and_then(|keys_str| {
+            let keys: Result<Vec<Vec<u8>>, _> = keys_str
+                .split(',')
+                .map(|k| k.trim())
+                .filter(|k| !k.is_empty())
+                .map(hex::decode)
+                .collect();
+            keys.ok()
+        })
+        .unwrap_or_default()
+}
+
+impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
+    const TYPES: &'static [poem_openapi::ApiExtractorType] =
+        &[poem_openapi::ApiExtractorType::RequestObject];
+    const PARAM_IS_REQUIRED: bool = true;
+
+    type ParamType = ();
+    type ParamRawType = ();
+
+    fn register(registry: &mut poem_openapi::registry::Registry) {
+        registry.create_security_scheme(
+            "AdminSignatureAuth",
+            MetaSecurityScheme {
+                ty: "apiKey",
+                description: Some(
+                    "Admin signature-based authentication using X-Public-Key, X-Signature, and X-Timestamp headers",
+                ),
+                name: Some("X-Public-Key"),
+                key_in: Some("header"),
+                scheme: None,
+                bearer_format: None,
+                flows: None,
+                openid_connect_url: None,
+            },
+        );
+    }
+
+    fn security_schemes() -> Vec<&'static str> {
+        vec!["AdminSignatureAuth"]
+    }
+
+    async fn from_request(
+        request: &'a poem::Request,
+        body: &mut poem::RequestBody,
+        _param_opts: poem_openapi::ExtractParamOptions<Self::ParamType>,
+    ) -> poem::Result<Self> {
+        let headers = request.headers();
+
+        let pubkey_hex = headers
+            .get("X-Public-Key")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Public-Key".to_string()))?;
+
+        let signature_hex = headers
+            .get("X-Signature")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+
+        let timestamp = headers
+            .get("X-Timestamp")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+
+        let nonce = headers
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+
+        // Read body
+        let body_bytes = body.take()?.into_vec().await?;
+
+        // Verify signature
+        let pubkey = verify_request_signature(
+            pubkey_hex,
+            signature_hex,
+            timestamp,
+            nonce,
+            request.method().as_str(),
+            request.uri().path(),
+            &body_bytes,
+        )?;
+
+        // Check if public key is in admin list
+        let admin_pubkeys = get_admin_pubkeys();
+        if !admin_pubkeys.iter().any(|admin_key| admin_key == &pubkey) {
+            return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+        }
+
+        // Restore body for downstream handlers
+        *body = poem::RequestBody::new(poem::Body::from(body_bytes));
+
+        Ok(AdminAuthenticatedUser { pubkey })
     }
 }
 

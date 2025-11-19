@@ -159,6 +159,7 @@ async fn test_check_nonce_exists() {
         &public_key,
         timestamp,
         &nonce,
+        false,
     )
     .await
     .unwrap();
@@ -166,4 +167,76 @@ async fn test_check_nonce_exists() {
     // Now nonce should exist
     let exists = db.check_nonce_exists(&nonce, 10).await.unwrap();
     assert!(exists);
+}
+
+#[tokio::test]
+async fn test_signature_audit_cleanup() {
+    let db = create_test_db().await;
+    let public_key = [22u8; 32];
+    let signature = [0u8; 64];
+    let old_nonce = uuid::Uuid::new_v4();
+    let recent_nonce = uuid::Uuid::new_v4();
+
+    // Calculate timestamps
+    let old_created_at =
+        chrono::Utc::now().timestamp_nanos_opt().unwrap() - (200 * 24 * 60 * 60 * 1_000_000_000);
+    let recent_created_at =
+        chrono::Utc::now().timestamp_nanos_opt().unwrap() - (10 * 24 * 60 * 60 * 1_000_000_000);
+    let client_timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+
+    // Insert old audit record directly with SQL to control created_at
+    sqlx::query(
+        "INSERT INTO signature_audit
+         (account_id, action, payload, signature, public_key, timestamp, nonce, is_admin_action, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(None::<&[u8]>)
+    .bind("old_action")
+    .bind("{}")
+    .bind(&signature[..])
+    .bind(&public_key[..])
+    .bind(client_timestamp)
+    .bind(&old_nonce.as_bytes()[..])
+    .bind(0)
+    .bind(old_created_at)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Insert recent audit record directly with SQL to control created_at
+    sqlx::query(
+        "INSERT INTO signature_audit
+         (account_id, action, payload, signature, public_key, timestamp, nonce, is_admin_action, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(None::<&[u8]>)
+    .bind("recent_action")
+    .bind("{}")
+    .bind(&signature[..])
+    .bind(&public_key[..])
+    .bind(client_timestamp)
+    .bind(&recent_nonce.as_bytes()[..])
+    .bind(0)
+    .bind(recent_created_at)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Clean up records older than 180 days
+    let deleted_count = db.cleanup_signature_audit(180).await.unwrap();
+    assert_eq!(deleted_count, 1, "Should delete 1 old record");
+
+    // Verify old nonce no longer exists
+    let old_exists = db
+        .check_nonce_exists(&old_nonce, 365 * 24 * 60)
+        .await
+        .unwrap();
+    assert!(!old_exists, "Old nonce should not exist after cleanup");
+
+    // Verify recent nonce still exists
+    let recent_exists = db
+        .check_nonce_exists(&recent_nonce, 365 * 24 * 60)
+        .await
+        .unwrap();
+    assert!(recent_exists, "Recent nonce should still exist");
 }

@@ -294,13 +294,15 @@ impl Database {
         public_key: &[u8],
         timestamp: i64,
         nonce: &uuid::Uuid,
+        is_admin_action: bool,
     ) -> Result<()> {
         let nonce_bytes = nonce.as_bytes().to_vec();
+        let is_admin = if is_admin_action { 1 } else { 0 };
 
         sqlx::query(
             "INSERT INTO signature_audit
-             (account_id, action, payload, signature, public_key, timestamp, nonce)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+             (account_id, action, payload, signature, public_key, timestamp, nonce, is_admin_action)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(account_id)
         .bind(action)
@@ -309,10 +311,25 @@ impl Database {
         .bind(public_key)
         .bind(timestamp)
         .bind(&nonce_bytes)
+        .bind(is_admin)
         .execute(&self.pool)
         .await?;
 
         Ok(())
+    }
+
+    /// Clean up old signature audit records (older than retention_days)
+    /// Should be run periodically (e.g., daily) to maintain database hygiene
+    pub async fn cleanup_signature_audit(&self, retention_days: i64) -> Result<u64> {
+        let cutoff_time = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+            - (retention_days * 24 * 60 * 60 * 1_000_000_000);
+
+        let result = sqlx::query("DELETE FROM signature_audit WHERE created_at < ?")
+            .bind(cutoff_time)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
     }
 }
 
