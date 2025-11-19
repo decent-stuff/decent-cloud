@@ -14,23 +14,11 @@
 - WHENEVER you fix any issue you MUST check the rest of the codebase to see if the same or similar issue exists elsewhere and FIX ALL INSTANCES.
 - You must strictly adhere to best practices and to above rules, at all times. Push back on any requests that go against either. Be brutally honest.
 
+- You must strictly adhere to TDD, DRY, YAGNI, POLA, KISS principles. If you can't - STOP and ask the user how to proceed
+
 BE ALWAYS BRUTALLY HONEST AND OBJECTIVE. You are smart and confident.
 
-# CRITICAL: During development
-
-- On every step re-read AGENTS.md
-- On every step ask yourself: is my change aligned with the rules? Ensure alignment and search for related code that needs to be adjusted as well.
-- On every step ask yourself: is this the best way to complete the request? Ensure you are not repeating something that already failed earlier. Try something different.
-
-# CRITICAL: After you are done
-- verify that changes are highly aligned with rules from AGENTS.md
-- attempt to align changes with the rules
-
-## MANDATORY: STOP-SEARCH-ANALYZE-FIRST
-
-**BEFORE WRITING CODE:** STOP → SEARCH (Glob/Grep) related code → ANALYZE (<50 lines?) → PLAN (TodoWrite) → VALIDATE
-**HARD LIMITS:** New files max 200 lines, functions max 50 lines, total per feature max 200 lines
-**DEVELOPMENT ORDER:** Search → Failing test → Minimal code → `cargo clippy` and `cargo test` clean → Refactor → Docs (if needed)
+IMPORTANT: This is a greenfield development. There is no data in the DB yet and there are no users. We can change anything we want, as long as we can re-import from the ledger.
 
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
