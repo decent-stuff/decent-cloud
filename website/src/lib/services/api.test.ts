@@ -288,6 +288,7 @@ describe('getUserContracts', () => {
 		'Content-Type': 'application/json',
 		'X-Public-Key': 'test-pubkey',
 		'X-Timestamp': '123456789',
+		'X-Nonce': 'test-nonce-uuid',
 		'X-Signature': 'test-signature'
 	};
 
@@ -377,6 +378,7 @@ describe('getProviderContracts', () => {
 		'X-Public-Key': providerHex,
 		'X-Signature': 'sig',
 		'X-Timestamp': '123',
+		'X-Nonce': 'test-nonce-uuid',
 		'Content-Type': 'application/json'
 	};
 

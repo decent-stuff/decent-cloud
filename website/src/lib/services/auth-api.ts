@@ -11,7 +11,7 @@ export interface SignedRequest {
 
 /**
  * Sign an API request with Ed25519 key
- * Message format: timestamp + method + path + body
+ * Message format: timestamp + nonce + method + path + body
  * NOTE: Path excludes query string for robustness (query params are typically non-critical)
  */
 export async function signRequest(
@@ -24,8 +24,11 @@ export async function signRequest(
 	const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
 	const secretKeyBytes = new Uint8Array(identity.getKeyPair().secretKey);
 
+	// Generate nonce (UUID v4) for replay prevention
+	const nonce = crypto.randomUUID();
+
 	// Get current timestamp in nanoseconds
-	const timestampNs = (Date.now() * 1_000_000).toString();
+	const timestampNs = (BigInt(Date.now()) * BigInt(1_000_000)).toString();
 
 	// Serialize body
 	let body: string;
@@ -40,8 +43,8 @@ export async function signRequest(
 	// Strip query string from path for signing (robustness over perfection)
 	const pathWithoutQuery = path.split('?')[0];
 
-	// Construct message: timestamp + method + path + body
-	const message = new TextEncoder().encode(timestampNs + method + pathWithoutQuery + body);
+	// Construct message: timestamp + nonce + method + path + body
+	const message = new TextEncoder().encode(timestampNs + nonce + method + pathWithoutQuery + body);
 
 	// Sign message using Ed25519ph with SHA-512 prehashing and context (matching DccIdentity)
 	const signature = ed25519ph.sign(message, secretKeyBytes.slice(0, 32), { context: ED25519_SIGN_CONTEXT });
@@ -51,6 +54,7 @@ export async function signRequest(
 			'X-Public-Key': bytesToHex(publicKeyBytes),
 			'X-Signature': bytesToHex(signature),
 			'X-Timestamp': timestampNs,
+			'X-Nonce': nonce,
 			'Content-Type': contentType
 		},
 		body

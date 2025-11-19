@@ -28,6 +28,7 @@ describe('UserApiClient', () => {
 				'X-Public-Key': 'test-pubkey-hex',
 				'X-Signature': 'test-signature-hex',
 				'X-Timestamp': '1234567890000000000',
+				'X-Nonce': 'test-nonce-uuid',
 				'Content-Type': 'application/json'
 			},
 			body: JSON.stringify({ test: 'data' })

@@ -31,6 +31,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -71,6 +72,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -105,6 +107,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -129,6 +132,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -154,6 +158,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -183,6 +188,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -217,6 +223,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -245,6 +252,7 @@ describe('getPendingProviderRequests', () => {
 		'X-Public-Key': 'provider-key',
 		'X-Signature': 'sig',
 		'X-Timestamp': '123',
+		'X-Nonce': 'test-nonce-uuid',
 		'Content-Type': 'application/json'
 	};
 
@@ -299,6 +307,7 @@ describe('respondToRentalRequest', () => {
 		'X-Public-Key': 'provider-key',
 		'X-Signature': 'sig',
 		'X-Timestamp': '123',
+		'X-Nonce': 'test-nonce-uuid',
 		'Content-Type': 'application/json'
 	};
 
@@ -353,6 +362,7 @@ describe('updateProvisioningStatus', () => {
 		'X-Public-Key': 'provider-key',
 		'X-Signature': 'sig',
 		'X-Timestamp': '123',
+		'X-Nonce': 'test-nonce-uuid',
 		'Content-Type': 'application/json'
 	};
 
@@ -414,6 +424,7 @@ describe('cancelRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -446,6 +457,7 @@ describe('cancelRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -470,6 +482,7 @@ describe('cancelRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
+		'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 

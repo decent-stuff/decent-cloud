@@ -15,6 +15,20 @@ import {
 } from '../utils/seed-storage';
 import { API_BASE_URL } from '../services/api';
 
+export interface AccountInfo {
+	id: string; // Account ID (hex)
+	username: string; // Human-readable username
+	createdAt: number;
+	updatedAt: number;
+	publicKeys: Array<{
+		id: string;
+		publicKey: string;
+		isActive: boolean;
+		addedAt: number;
+		deviceName?: string; // Stored locally only
+	}>;
+}
+
 export interface IdentityInfo {
 	identity: Identity;
 	principal: Principal;
@@ -24,6 +38,7 @@ export interface IdentityInfo {
 	publicKeyBytes?: Uint8Array;
 	secretKeyRaw?: Uint8Array;
 	seedPhrase?: string;
+	account?: AccountInfo; // Associated account (if registered)
 }
 
 export interface AuthenticatedIdentityResult {
@@ -163,6 +178,63 @@ function createAuthStore() {
 		return null;
 	}
 
+	async function loadAccountForIdentity(identityInfo: IdentityInfo): Promise<void> {
+		if (!identityInfo.publicKeyBytes) return;
+
+		try {
+			const { getAccount } = await import('../services/account-api');
+			const publicKeyHex = Array.from(identityInfo.publicKeyBytes)
+				.map((b) => b.toString(16).padStart(2, '0'))
+				.join('');
+
+			// Try to find account by searching - for now we'll need username
+			// TODO: Add API endpoint to search by public key
+			// For now, accounts will be loaded after registration or manual username entry
+		} catch (error) {
+			console.error('Failed to load account:', error);
+		}
+	}
+
+	async function registerNewAccount(
+		identity: Ed25519KeyIdentity,
+		username: string
+	): Promise<AccountInfo> {
+		const { registerAccount } = await import('../services/account-api');
+		const account = await registerAccount(identity, username);
+
+		// Update current identity with account info
+		currentIdentity.update((current) => {
+			if (current) {
+				return { ...current, account };
+			}
+			return current;
+		});
+
+		return account;
+	}
+
+	async function loadAccountByUsername(username: string): Promise<AccountInfo | null> {
+		try {
+			const { getAccount } = await import('../services/account-api');
+			const account = await getAccount(username);
+
+			if (account) {
+				// Update current identity with account info
+				currentIdentity.update((current) => {
+					if (current) {
+						return { ...current, account };
+					}
+					return current;
+				});
+			}
+
+			return account;
+		} catch (error) {
+			console.error('Failed to load account:', error);
+			return null;
+		}
+	}
+
 	return {
 		identities: { subscribe: identities.subscribe },
 		currentIdentity: { subscribe: currentIdentity.subscribe },
@@ -180,6 +252,10 @@ function createAuthStore() {
 			subscribe: errorMessage.subscribe,
 			set: errorMessage.set
 		},
+
+		// Account management
+		registerNewAccount,
+		loadAccountByUsername,
 
 		async initialize() {
 			const oldSeedPhrase =

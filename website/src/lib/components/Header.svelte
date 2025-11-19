@@ -2,23 +2,36 @@
 	import { authStore } from '$lib/stores/auth';
 	import AuthDialog from './AuthDialog.svelte';
 	import { onMount, onDestroy } from 'svelte';
+	import { computePubkey } from '$lib/utils/contract-format';
+	import type { IdentityInfo } from '$lib/stores/auth';
 
 	let isAuthenticated = $state(false);
+	let currentIdentity = $state<IdentityInfo | null>(null);
 	let showAuthDialog = $state(false);
-	let unsubscribe: (() => void) | null = null;
+	let unsubscribeAuth: (() => void) | null = null;
+	let unsubscribeIdentity: (() => void) | null = null;
 
 	onMount(() => {
-		unsubscribe = authStore.isAuthenticated.subscribe((value) => {
+		unsubscribeAuth = authStore.isAuthenticated.subscribe((value) => {
 			isAuthenticated = value;
+		});
+		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
+			currentIdentity = value;
 		});
 	});
 
 	onDestroy(() => {
-		unsubscribe?.();
+		unsubscribeAuth?.();
+		unsubscribeIdentity?.();
 	});
 
 	function handleConnect() {
 		showAuthDialog = true;
+	}
+
+	function truncate(str: string): string {
+		if (str.length <= 12) return str;
+		return `${str.slice(0, 6)}...${str.slice(-4)}`;
 	}
 </script>
 
@@ -34,6 +47,19 @@
 		<!-- Actions -->
 		<div class="flex items-center gap-4">
 			{#if isAuthenticated}
+				{#if currentIdentity?.account}
+					<a
+						href="/dashboard/account"
+						class="text-white/70 hover:text-white transition-colors"
+						title="Account Settings"
+					>
+						<span class="font-medium">@{currentIdentity.account.username}</span>
+					</a>
+				{:else if currentIdentity?.publicKeyBytes}
+					<span class="text-white/70 text-sm font-mono">
+						{truncate(computePubkey(currentIdentity.publicKeyBytes))}
+					</span>
+				{/if}
 				<a
 					href="/dashboard"
 					class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full font-semibold hover:brightness-110 hover:scale-105 transition-all"
