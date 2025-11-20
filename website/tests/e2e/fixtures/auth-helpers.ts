@@ -50,7 +50,7 @@ export async function registerNewAccount(
 	await page.fill('input[placeholder="alice"]', username);
 
 	// Wait for validation (username should be available)
-	await expect(page.locator('text=Available').or(page.locator('text=Continue'))).toBeVisible({ timeout: 5000 });
+	await expect(page.locator('text=Available').or(page.locator('text=Continue')).first()).toBeVisible({ timeout: 5000 });
 
 	// Click Continue
 	await page.click('button:has-text("Continue")');
@@ -61,18 +61,12 @@ export async function registerNewAccount(
 	await page.click('button:has-text("Continue")');
 
 	// Wait for seed phrase to be generated
-	await expect(page.locator('.seed-phrase, [class*="seed"]').or(page.locator('text=Copy to Clipboard'))).toBeVisible();
+	await expect(page.locator('text=Copy to Clipboard')).toBeVisible();
 
-	// Extract seed phrase from the page
-	const seedPhraseElement = page.locator('.seed-phrase, [class*="seed"]').first();
-	const seedPhrase = (await seedPhraseElement.textContent()) || '';
-
-	// If seed phrase is empty, try to get it from individual word elements
-	let finalSeedPhrase = seedPhrase.trim();
-	if (!finalSeedPhrase) {
-		const words = await page.locator('[class*="word"], .word').allTextContents();
-		finalSeedPhrase = words.join(' ').trim();
-	}
+	// Extract seed phrase from the page - words are in span.font-mono elements
+	const wordElements = page.locator('span.font-mono');
+	const words = await wordElements.allTextContents();
+	const finalSeedPhrase = words.join(' ').trim();
 
 	expect(finalSeedPhrase.split(' ').length).toBeGreaterThanOrEqual(12);
 
@@ -86,7 +80,7 @@ export async function registerNewAccount(
 
 	// Wait for success
 	await expect(
-		page.locator('text=Welcome').or(page.locator('text=Success')),
+		page.locator('text=Welcome').or(page.locator('text=Success')).first(),
 	).toBeVisible({ timeout: 10000 });
 
 	// Go to dashboard
@@ -139,7 +133,7 @@ export async function signIn(
 
 	// Wait for success
 	await expect(
-		page.locator('text=Welcome').or(page.locator('text=Success')),
+		page.locator('text=Welcome').or(page.locator('text=Success')).first(),
 	).toBeVisible({ timeout: 10000 });
 
 	// Go to dashboard

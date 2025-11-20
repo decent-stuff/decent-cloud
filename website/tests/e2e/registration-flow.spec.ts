@@ -43,7 +43,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Should show "Available" or enable Continue button
 		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')),
+			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')).first(),
 		).toBeVisible({ timeout: 5000 });
 
 		// Step 4: Continue to auth method selection
@@ -135,7 +135,7 @@ test.describe('Account Registration Flow', () => {
 		await page.fill('input[placeholder="alice"]', 'invalid user!');
 		await page.waitForTimeout(500);
 		await expect(
-			page.locator('text=letters, numbers').or(page.locator('text=Invalid')),
+			page.locator('text=letters, numbers').or(page.locator('text=Invalid')).first(),
 		).toBeVisible();
 
 		// Test too short
@@ -171,7 +171,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Assuming username is available first time
 		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')),
+			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')).first(),
 		).toBeVisible({ timeout: 5000 });
 
 		// Cancel this flow
