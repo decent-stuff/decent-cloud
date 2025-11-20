@@ -4,6 +4,7 @@
 import os
 import subprocess
 import sys
+import shlex
 from pathlib import Path
 from typing import Optional
 import argparse
@@ -34,11 +35,10 @@ def stop_environment(environment: str) -> int:
     """Stop services for specified environment."""
     env_vars, compose_files = get_env_config(environment)
     project_name = f"decent-cloud-{environment[:4]}"
-    env_vars["COMPOSE_PROJECT_NAME"] = project_name
 
     print_header(f"Stopping {environment} services")
 
-    if not run_docker_compose(compose_files, ["down"], env_vars):
+    if not run_docker_compose(compose_files, ["down"], env_vars, project_name):
         print_error(f"Failed to stop {environment} services")
         return 1
 
@@ -50,7 +50,6 @@ def show_logs(environment: str, follow: bool = False, service: Optional[str] = N
     """Show logs for specified environment."""
     env_vars, compose_files = get_env_config(environment)
     project_name = f"decent-cloud-{environment[:4]}"
-    env_vars["COMPOSE_PROJECT_NAME"] = project_name
 
     print_header(f"{environment.title()} logs")
 
@@ -60,7 +59,7 @@ def show_logs(environment: str, follow: bool = False, service: Optional[str] = N
     if service:
         cmd.append(service)
 
-    if not run_docker_compose(compose_files, cmd, env_vars):
+    if not run_docker_compose(compose_files, cmd, env_vars, project_name):
         print_error(f"Failed to get logs for {environment}")
         return 1
 
@@ -71,11 +70,10 @@ def show_status(environment: str) -> int:
     """Show status for specified environment."""
     env_vars, compose_files = get_env_config(environment)
     project_name = f"decent-cloud-{environment[:4]}"
-    env_vars["COMPOSE_PROJECT_NAME"] = project_name
 
     print_header(f"{environment.title()} status")
 
-    if not run_docker_compose(compose_files, ["ps"], env_vars):
+    if not run_docker_compose(compose_files, ["ps"], env_vars, project_name):
         print_error(f"Failed to get status for {environment}")
         return 1
 
@@ -96,11 +94,10 @@ def restart_environment(environment: str) -> int:
     """Restart services for specified environment."""
     env_vars, compose_files = get_env_config(environment)
     project_name = f"decent-cloud-{environment[:4]}"
-    env_vars["COMPOSE_PROJECT_NAME"] = project_name
 
     print_header(f"Restarting {environment} services")
 
-    if not run_docker_compose(compose_files, ["restart"], env_vars):
+    if not run_docker_compose(compose_files, ["restart"], env_vars, project_name):
         print_error(f"Failed to restart {environment} services")
         return 1
 
@@ -184,14 +181,17 @@ def get_tunnel_token(env_file: Path) -> Optional[str]:
     return env_vars.get("TUNNEL_TOKEN")
 
 
-def run_docker_compose(compose_files: list[str], command: list[str], env_vars: dict[str, str]) -> bool:
+def run_docker_compose(compose_files: list[str], command: list[str], env_vars: dict[str, str], project_name: Optional[str] = None) -> bool:
     """Run docker compose with specified files and environment."""
     cmd = ["docker", "compose"]
+    if project_name:
+        cmd.extend(["-p", project_name])
     for file in compose_files:
         cmd.extend(["-f", file])
     cmd.extend(command)
 
     try:
+        print_info(f"$ {' '.join(shlex.quote(arg) for arg in cmd)}")
         subprocess.run(cmd, check=True, env={**os.environ, **env_vars})
         return True
     except subprocess.CalledProcessError:
@@ -202,13 +202,17 @@ def check_tunnel_status(compose_files: list[str], env_name: str) -> str:
     """Check tunnel connection status from logs."""
     try:
         project_name = f"decent-cloud-{env_name[:4]}"  # dev -> dev, prod -> prod
-        env_vars = {"COMPOSE_PROJECT_NAME": project_name}
+
+        cmd = ["docker", "compose", "-p", project_name]
+        for f in compose_files:
+            cmd.extend(["-f", f])
+        cmd.extend(["logs", "cloudflared"])
 
         result = subprocess.run(
-            ["docker", "compose"] + [arg for f in compose_files for arg in ["-f", f]] + ["logs", "cloudflared"],
+            cmd,
             capture_output=True,
             text=True,
-            env={**os.environ, **env_vars},
+            env=os.environ,
             check=False,
         )
         logs = result.stdout + result.stderr
@@ -397,9 +401,8 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
 
     # Use a specific project name to isolate dev and prod environments
     project_name = f"decent-cloud-{env_name[:4]}"  # dev -> dev, prod -> prod
-    env_vars_with_project = {**env_vars, "COMPOSE_PROJECT_NAME": project_name}
 
-    if not run_docker_compose(compose_files, ["up", "-d", "--build", "--remove-orphans"], env_vars_with_project):
+    if not run_docker_compose(compose_files, ["up", "-d", "--build", "--remove-orphans"], env_vars, project_name):
         print()
         print_error(f"{env_name.title()} deployment failed")
         print()
@@ -505,7 +508,7 @@ Examples:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Deploy command
-    deploy_parser = subparsers.add_parser("deploy", help="Deploy to environment")
+    deploy_parser = subparsers.add_parser("deploy", aliases=["start"], help="Deploy to environment")
     deploy_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
 
     # Stop command
