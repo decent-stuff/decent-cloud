@@ -67,7 +67,7 @@ If you need a completely fresh database:
 
 ```bash
 # Stop containers, remove database, restart
-docker compose -p decent-cloud-deve -f ../cf/docker-compose.yml -f ../cf/docker-compose.dev.yml down
+docker compose -p decent-cloud-dev -f ../cf/docker-compose.yml -f ../cf/docker-compose.dev.yml down
 rm -f /data/api-data-dev/ledger.db
 cd ../cf && ./deploy.py deploy dev
 ```
