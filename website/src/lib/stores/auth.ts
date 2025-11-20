@@ -1,3 +1,41 @@
+/**
+ * Authentication Store - Account & Key Management
+ *
+ * ARCHITECTURE (Tree Structure):
+ *
+ * Backend:
+ *   Account @alice
+ *     ├─ Key K1 (from laptop)
+ *     ├─ Key K2 (from phone)
+ *     └─ Key K3 (from desktop)
+ *   Account @bob
+ *     ├─ Key K4 (from work laptop)
+ *     └─ Key K5 (from tablet)
+ *
+ * Constraints:
+ *   - Each account has 1-10 keys (multi-device support)
+ *   - Each key belongs to EXACTLY ONE account (tree, not graph)
+ *   - Database enforces: UNIQUE(public_key) across all accounts
+ *   - Cannot remove last active key (prevents lockout)
+ *
+ * Local Storage:
+ *   - User stores multiple seed phrases in browser localStorage
+ *   - Each seed phrase generates one Ed25519 keypair
+ *   - Each keypair is registered to exactly one account
+ *   - User can access multiple accounts by managing multiple seed phrases
+ *
+ * Multi-Device Workflow:
+ *   1. Create account @alice on laptop (seed phrase 1 → K1)
+ *   2. On phone: generate new seed phrase 2 → K2
+ *   3. Add K2 to @alice account (requires signing with K1)
+ *   4. Both devices can now access @alice independently
+ *
+ * Key Hierarchy: ALL KEYS ARE EQUAL
+ *   - No "master key" concept
+ *   - Any active key can add/remove other keys
+ *   - Prevents "lost master key = lost account" scenario
+ */
+
 import { writable, derived, get } from 'svelte/store';
 import { AuthClient } from '@dfinity/auth-client';
 import type { Identity } from '@dfinity/agent';
@@ -15,6 +53,9 @@ import {
 } from '../utils/seed-storage';
 import { API_BASE_URL } from '../services/api';
 
+/**
+ * Account information from backend (1 account → 1-10 keys)
+ */
 export interface AccountInfo {
 	id: string; // Account ID (hex)
 	username: string; // Human-readable username
@@ -29,6 +70,10 @@ export interface AccountInfo {
 	}>;
 }
 
+/**
+ * Local identity (seed phrase) that generates one keypair for one account
+ * A user can have multiple IdentityInfo objects (multiple seed phrases) to access multiple accounts
+ */
 export interface IdentityInfo {
 	identity: Identity;
 	principal: Principal;
@@ -38,7 +83,7 @@ export interface IdentityInfo {
 	publicKeyBytes?: Uint8Array;
 	secretKeyRaw?: Uint8Array;
 	seedPhrase?: string;
-	account?: AccountInfo; // Associated account (if registered)
+	account?: AccountInfo; // Backend account this keypair is registered to (1:1 mapping)
 }
 
 export interface AuthenticatedIdentityResult {
