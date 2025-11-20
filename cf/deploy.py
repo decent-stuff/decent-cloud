@@ -40,8 +40,8 @@ def get_env_config(environment: str) -> tuple[dict[str, str], list[str]]:
     """Get environment-specific configuration."""
     cf_dir = Path(__file__).parent
 
-    if environment == "production":
-        env_vars = {"ENVIRONMENT": "production", "NETWORK_NAME": "decent-cloud-prod"}
+    if environment == "prod":
+        env_vars = {"ENVIRONMENT": "prod", "NETWORK_NAME": "decent-cloud-prod"}
         compose_files = [str(cf_dir / "docker-compose.yml"), str(cf_dir / "docker-compose.prod.yml")]
     else:  # dev
         env_vars = {"ENVIRONMENT": "dev", "NETWORK_NAME": "decent-cloud-dev"}
@@ -60,7 +60,7 @@ def deploy_environment(environment: str) -> int:
 def stop_environment(environment: str) -> int:
     """Stop services for specified environment."""
     env_vars, compose_files = get_env_config(environment)
-    project_name = f"decent-cloud-{environment[:4]}"
+    project_name = f"decent-cloud-{environment}"
 
     print_header(f"Stopping {environment} services")
 
@@ -75,7 +75,7 @@ def stop_environment(environment: str) -> int:
 def show_logs(environment: str, follow: bool = False, service: Optional[str] = None) -> int:
     """Show logs for specified environment."""
     env_vars, compose_files = get_env_config(environment)
-    project_name = f"decent-cloud-{environment[:4]}"
+    project_name = f"decent-cloud-{environment}"
 
     print_header(f"{environment.title()} logs")
 
@@ -95,7 +95,7 @@ def show_logs(environment: str, follow: bool = False, service: Optional[str] = N
 def show_status(environment: str) -> int:
     """Show status for specified environment."""
     env_vars, compose_files = get_env_config(environment)
-    project_name = f"decent-cloud-{environment[:4]}"
+    project_name = f"decent-cloud-{environment}"
 
     print_header(f"{environment.title()} status")
 
@@ -119,7 +119,7 @@ def show_status(environment: str) -> int:
 def restart_environment(environment: str) -> int:
     """Restart services for specified environment."""
     env_vars, compose_files = get_env_config(environment)
-    project_name = f"decent-cloud-{environment[:4]}"
+    project_name = f"decent-cloud-{environment}"
 
     print_header(f"Restarting {environment} services")
 
@@ -368,7 +368,7 @@ def build_website_natively() -> bool:
 
 def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) -> int:
     """Shared deployment logic for dev and prod environments."""
-    is_prod = env_name == "production"
+    is_prod = env_name == "prod"
 
     # Header
     print_header(f"Decent Cloud - {env_name.title()} Deployment")
@@ -432,7 +432,7 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     print()
 
     # Use a specific project name to isolate dev and prod environments
-    project_name = f"decent-cloud-{env_name[:4]}"  # dev -> dev, prod -> prod
+    project_name = f"decent-cloud-{env_name}"  # dev -> dev, prod -> prod
 
     if not run_docker_compose(compose_files, ["up", "-d", "--build", "--remove-orphans"], env_vars, project_name):
         print()
@@ -573,7 +573,7 @@ Examples:
         return 1
 
     # Normalize environment names
-    env_map = {"dev": "development", "development": "development", "prod": "production", "production": "production"}
+    env_map = {"dev": "dev", "development": "dev", "prod": "prod", "production": "prod"}
     environment = env_map[args.environment]
 
     # Execute command
