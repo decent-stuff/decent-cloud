@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
 	generateTestUsername,
 	waitForApiResponse,
+	setupConsoleLogging,
 } from './fixtures/auth-helpers';
 
 /**
@@ -15,6 +16,9 @@ import {
 
 test.describe('Account Registration Flow', () => {
 	test.beforeEach(async ({ page }) => {
+		// Set up console logging to capture browser console output
+		setupConsoleLogging(page);
+
 		// Start from home page
 		await page.goto('/');
 		await expect(page.locator('text=Connect Wallet')).toBeVisible();

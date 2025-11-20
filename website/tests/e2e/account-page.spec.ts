@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { registerNewAccount, signIn } from './fixtures/auth-helpers';
+import {
+	registerNewAccount,
+	signIn,
+	setupConsoleLogging,
+} from './fixtures/auth-helpers';
 import type { AuthCredentials } from './fixtures/auth-helpers';
 
 /**
@@ -17,11 +21,15 @@ test.describe('Account Settings Page', () => {
 	test.beforeAll(async ({ browser }) => {
 		// Create a test account once
 		const page = await browser.newPage();
+		setupConsoleLogging(page);
 		testCredentials = await registerNewAccount(page);
 		await page.close();
 	});
 
 	test.beforeEach(async ({ page }) => {
+		// Set up console logging to capture browser console output
+		setupConsoleLogging(page);
+
 		// Sign in before each test
 		await signIn(page, testCredentials);
 	});

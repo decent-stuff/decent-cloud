@@ -10,6 +10,31 @@ export interface AuthCredentials {
 }
 
 /**
+ * Set up console logging for a page
+ * Logs all browser console messages (including errors, warnings, etc.) to the test output
+ */
+export function setupConsoleLogging(page: Page): void {
+	page.on('console', (msg) => {
+		const type = msg.type();
+		const text = msg.text();
+		const location = msg.location();
+
+		// Format with color and location info
+		const prefix = `[Browser ${type.toUpperCase()}]`;
+		const locationStr = location.url ? ` at ${location.url}:${location.lineNumber}` : '';
+
+		// Log all console messages to test output
+		console.log(`${prefix}${locationStr}: ${text}`);
+	});
+
+	// Also listen for page errors (uncaught exceptions)
+	page.on('pageerror', (error) => {
+		console.error('[Browser UNCAUGHT ERROR]:', error.message);
+		console.error(error.stack);
+	});
+}
+
+/**
  * Generate a truly unique test username
  * Format: test<timestamp><random>
  * Example: test17320278909823, test17320278906547

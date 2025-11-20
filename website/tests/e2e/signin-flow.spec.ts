@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
 	registerNewAccount,
 	signOut,
+	setupConsoleLogging,
 	type AuthCredentials,
 } from './fixtures/auth-helpers';
 
@@ -20,12 +21,16 @@ test.describe('Sign-In Flow', () => {
 	test.beforeAll(async ({ browser }) => {
 		// Create a test account once for all sign-in tests
 		const page = await browser.newPage();
+		setupConsoleLogging(page);
 		testCredentials = await registerNewAccount(page);
 		await signOut(page);
 		await page.close();
 	});
 
 	test.beforeEach(async ({ page }) => {
+		// Set up console logging to capture browser console output
+		setupConsoleLogging(page);
+
 		// Start from home page
 		await page.goto('/');
 		await expect(page.locator('text=Connect Wallet')).toBeVisible();
