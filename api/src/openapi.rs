@@ -162,20 +162,22 @@ impl MainApi {
     async fn register_account(
         &self,
         db: Data<&Arc<Database>>,
-        req: poem_openapi::payload::PlainText<String>,
+        req: Json<RegisterAccountRequest>,
         #[oai(name = "X-Public-Key")] public_key_header: poem_openapi::param::Header<String>,
         #[oai(name = "X-Signature")] signature_header: poem_openapi::param::Header<String>,
         #[oai(name = "X-Timestamp")] timestamp_header: poem_openapi::param::Header<String>,
         #[oai(name = "X-Nonce")] nonce_header: poem_openapi::param::Header<String>,
     ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
-        // Parse request body
-        let body_data: RegisterAccountRequest = match serde_json::from_str(&req.0) {
-            Ok(data) => data,
+        let body_data = req.0;
+
+        // Serialize request body for signature verification and audit
+        let req_body_str = match serde_json::to_string(&body_data) {
+            Ok(s) => s,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid request body: {}", e)),
+                    error: Some(format!("Failed to serialize request: {}", e)),
                 })
             }
         };
@@ -253,7 +255,7 @@ impl MainApi {
             &nonce_header.0,
             "POST",
             "/api/v1/accounts",
-            req.0.as_bytes(),
+            req_body_str.as_bytes(),
         ) {
             return Json(ApiResponse {
                 success: false,
@@ -308,7 +310,7 @@ impl MainApi {
                     .insert_signature_audit(
                         Some(&account.id),
                         "register_account",
-                        &req.0,
+                        &req_body_str,
                         &hex::decode(&signature_header.0).unwrap(),
                         &public_key,
                         timestamp,
@@ -2976,7 +2978,7 @@ impl MainApi {
 }
 
 // Request/response types for account endpoints
-#[derive(Debug, Deserialize, Object)]
+#[derive(Debug, Serialize, Deserialize, Object)]
 pub struct RegisterAccountRequest {
     pub username: String,
     #[serde(rename = "publicKey")]
