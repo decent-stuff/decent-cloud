@@ -4,7 +4,7 @@ x-api-base: &api-base
     - ENVIRONMENT=prod
     - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
     - RUST_LOG=${RUST_LOG:-info}
-    - PORT=8080
+    - API_SERVER_PORT=59001
     - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30} # Used for the sync service only
     - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
     - LEDGER_DIR=/data/ledger
@@ -27,7 +27,7 @@ services:
     <<: *api-base
     container_name: decent-cloud-api-serve-prod
     ports:
-      - "59101:8080" # Prod: host 59101 -> container 8080
+      - "59101:59001" # Prod: host 59101 -> container 59001
 
   api-sync:
     <<: *api-base

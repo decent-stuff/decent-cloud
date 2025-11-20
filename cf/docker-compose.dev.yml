@@ -18,7 +18,7 @@ services:
     <<: *api-base
     container_name: decent-cloud-api-serve-dev
     ports:
-      - "59001:8080" # Dev: host 59001 -> container 8080
+      - "59001:59001" # Dev: host 59001 -> container 59001
 
   api-sync:
     <<: *api-base

@@ -14,7 +14,7 @@ x-api-base: &api-base
     - ENVIRONMENT=${ENVIRONMENT:-dev}
     - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
     - RUST_LOG=${RUST_LOG:-info}
-    - PORT=8080
+    - API_SERVER_PORT=59001
     - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
     - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30} # Used for the sync service only
     - LEDGER_DIR=/data/ledger
@@ -43,7 +43,7 @@ services:
     <<: *api-base
     command: ["api-server", "serve"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:59001/api/v1/health"]
       interval: 30s
       timeout: 3s
       start_period: 5s
