@@ -205,6 +205,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
                 "authorization",
                 "x-api-key",
                 "x-account-id",
+                "x-nonce",
+                "x-public-key",
+                "x-signature",
+                "x-timestamp",
             ])
             .allow_credentials(true)
     } else {
@@ -219,6 +223,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
                 "authorization",
                 "x-api-key",
                 "x-account-id",
+                "x-nonce",
+                "x-public-key",
+                "x-signature",
+                "x-timestamp",
             ])
             .allow_credentials(true)
     };
