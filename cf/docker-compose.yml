@@ -6,6 +6,7 @@ x-api-base: &api-base
     args:
       USER_ID: ${USER_ID:-1000}
       GROUP_ID: ${GROUP_ID:-1000}
+      BINARY_HASH: ${BINARY_HASH:-unknown}
       BUILDKIT_INLINE_CACHE: 1
   image: decent-cloud-api:${ENVIRONMENT:-dev}
   restart: unless-stopped

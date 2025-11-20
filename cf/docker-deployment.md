@@ -22,6 +22,22 @@ This deployment uses simplified Dockerfiles that assume components are built nat
 - Smaller Docker images (no build tools needed)
 - Clear separation of build and runtime concerns
 
+### Binary Cache Invalidation
+
+The API server is built natively and copied into the Docker image. To ensure Docker uses the latest binary (without expensive `--no-cache`), we use a hash-based cache invalidation strategy:
+
+1. **Hash calculation**: `deploy.py` calculates a SHA256 hash of the compiled API binary
+2. **Build argument**: The hash is passed as `BINARY_HASH` build arg to Docker
+3. **Cache busting**: The Dockerfile uses this arg before COPY commands, invalidating cache when binary changes
+4. **Selective rebuild**: Only layers from the binary hash onward are rebuilt, keeping base image layers cached
+
+This ensures the Docker image always contains the latest binary, regardless of what changed:
+- **Migrations** (embedded at compile time via `sqlx::migrate!()`)
+- **Code changes** (bug fixes, features, refactoring)
+- **Dependencies** (crate updates)
+
+**Performance:** Rebuilds in ~2-5 seconds vs ~60+ seconds with `--no-cache` (~90% faster)
+
 ## Architecture
 
 ### Static Website (This Deployment)

@@ -17,6 +17,14 @@ RUN apt-get update && apt-get install -y \
 RUN groupadd -g ${GROUP_ID} appuser && \
     useradd -r -u ${USER_ID} -g appuser -s /bin/false appuser
 
+# Cache invalidation: binary hash changes when binary changes for ANY reason
+# This ensures Docker rebuilds when the binary changes due to:
+# - Migration changes (embedded at compile time via sqlx::migrate!)
+# - Code changes (bug fixes, features, refactoring)
+# - Dependency updates
+ARG BINARY_HASH=unknown
+RUN echo "API binary hash: ${BINARY_HASH}"
+
 # Copy pre-built binaries from host (assumes cargo build --target x86_64-unknown-linux-gnu)
 COPY target/x86_64-unknown-linux-gnu/release/api-server /usr/local/bin/api-server
 COPY target/x86_64-unknown-linux-gnu/release/dc /usr/local/bin/dc

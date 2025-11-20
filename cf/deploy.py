@@ -5,9 +5,35 @@ import os
 import subprocess
 import sys
 import shlex
+import hashlib
 from pathlib import Path
 from typing import Optional
 import argparse
+
+
+def calculate_binary_hash() -> str:
+    """Calculate SHA256 hash of API binary for Docker cache invalidation.
+
+    This ensures Docker rebuilds when the binary changes for ANY reason:
+    - Migration changes (embedded via sqlx::migrate!)
+    - Code changes (bug fixes, features)
+    - Dependency updates
+    """
+    cf_dir = Path(__file__).parent
+    binary_path = cf_dir.parent / "target" / "x86_64-unknown-linux-gnu" / "release" / "api-server"
+
+    if not binary_path.exists():
+        return "no-binary"
+
+    hasher = hashlib.sha256()
+
+    # Hash the binary content
+    with open(binary_path, 'rb') as f:
+        # Read in chunks for memory efficiency (binary can be large)
+        for chunk in iter(lambda: f.read(4096), b''):
+            hasher.update(chunk)
+
+    return hasher.hexdigest()[:16]  # Short hash for readability
 
 
 def get_env_config(environment: str) -> tuple[dict[str, str], list[str]]:
@@ -392,6 +418,12 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     if not build_rust_binaries_natively():
         print_error("Failed to build API server")
         return 1
+    print()
+
+    # Calculate binary hash for Docker cache invalidation
+    binary_hash = calculate_binary_hash()
+    env_vars["BINARY_HASH"] = binary_hash
+    print_info(f"API binary hash: {binary_hash}")
     print()
 
     # Build and start services
