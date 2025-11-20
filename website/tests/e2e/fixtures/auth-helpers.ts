@@ -11,14 +11,14 @@ export interface AuthCredentials {
 
 /**
  * Generate a truly unique test username
- * Format: test_<timestamp><random>
- * Example: t17320278909823, t17320278906547
+ * Format: test<timestamp><random>
+ * Example: test17320278909823, test17320278906547
  */
 export function generateTestUsername(): string {
 	const timestamp = Date.now();
 	const random = Math.floor(Math.random() * 10000);
 	// Combine for uniqueness: even if timestamps collide, random won't
-	return `test_${timestamp}${random}`;
+	return `test${timestamp}${random}`;
 }
 
 /**

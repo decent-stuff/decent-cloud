@@ -94,6 +94,11 @@ export async function getAccount(username: string): Promise<AccountWithKeys | nu
 
 	const result: ApiResponse<AccountWithKeys> = await response.json();
 
+	// "Account not found" is a valid response, not an error
+	if (!result.success && result.error === 'Account not found') {
+		return null;
+	}
+
 	if (!result.success) {
 		throw new Error(result.error || 'Failed to fetch account');
 	}
@@ -201,16 +206,11 @@ export async function removeAccountKey(
 /**
  * Check if a username is available
  * Returns true if available, false if taken
+ * Throws error if there's a problem checking (FAIL FAST)
  */
 export async function checkUsernameAvailable(username: string): Promise<boolean> {
-	try {
-		const account = await getAccount(username);
-		return account === null;
-	} catch (error) {
-		// If there's an error fetching, assume unavailable for safety
-		console.error('Error checking username availability:', error);
-		return false;
-	}
+	const account = await getAccount(username);
+	return account === null;
 }
 
 /**

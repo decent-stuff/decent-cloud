@@ -17,8 +17,8 @@ if [ ! -f "$DB_PATH" ]; then
     exit 0
 fi
 
-# Delete test accounts (usernames starting with 't' followed by digits)
-DELETED=$(sqlite3 "$DB_PATH" "DELETE FROM accounts WHERE username GLOB 't[0-9]*'; SELECT changes();")
+# Delete test accounts (usernames starting with 'test')
+DELETED=$(sqlite3 "$DB_PATH" "DELETE FROM accounts WHERE username GLOB 'test*'; SELECT changes();")
 
 echo "✅ Deleted $DELETED test account(s)"
 echo "   Ready to run E2E tests!"
