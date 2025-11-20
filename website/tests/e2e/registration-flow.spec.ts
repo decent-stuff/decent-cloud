@@ -55,22 +55,12 @@ test.describe('Account Registration Flow', () => {
 		await page.click('button:has-text("Continue")');
 
 		// Step 6: Seed phrase backup
-		await expect(
-			page.locator('.seed-phrase, [class*="seed"]').or(page.locator('text=Copy to Clipboard')),
-		).toBeVisible();
+		await expect(page.locator('text=Copy to Clipboard')).toBeVisible();
 
-		// Extract and validate seed phrase
-		const seedPhraseElement = page.locator('.seed-phrase, [class*="seed"]').first();
-		const seedPhraseText = (await seedPhraseElement.textContent()) || '';
-		let seedPhrase = seedPhraseText.trim();
-
-		// If empty, try to get from individual word elements
-		if (!seedPhrase) {
-			const words = await page
-				.locator('[class*="word"], .word')
-				.allTextContents();
-			seedPhrase = words.join(' ').trim();
-		}
+		// Extract and validate seed phrase - words are in span.font-mono elements
+		const wordElements = page.locator('span.font-mono');
+		const words = await wordElements.allTextContents();
+		const seedPhrase = words.join(' ').trim();
 
 		expect(seedPhrase).toBeTruthy();
 		const wordCount = seedPhrase.split(/\s+/).length;

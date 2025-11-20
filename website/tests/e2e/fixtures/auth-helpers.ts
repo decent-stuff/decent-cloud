@@ -74,17 +74,17 @@ export async function registerNewAccount(
 	await page.check('input[type="checkbox"]');
 	await page.click('button:has-text("Continue")');
 
-	// Confirm account creation
-	await expect(page.locator('text=Create Account')).toBeVisible();
-	await page.click('button:has-text("Create Account")');
+	// Confirm account creation - click the button at the bottom of the form
+	await expect(page.locator('button:has-text("Create Account")').last()).toBeVisible();
+	await page.locator('button:has-text("Create Account")').last().click();
 
-	// Wait for success
+	// Wait for success message
 	await expect(
-		page.locator('text=Welcome').or(page.locator('text=Success')).first(),
+		page.locator('text=Welcome to Decent Cloud!'),
 	).toBeVisible({ timeout: 10000 });
 
-	// Go to dashboard
-	await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+	// Click the "Go to Dashboard" button in the success modal
+	await page.locator('button:has-text("Go to Dashboard")').click();
 
 	// Verify we're on dashboard
 	await expect(page).toHaveURL(/\/dashboard/);

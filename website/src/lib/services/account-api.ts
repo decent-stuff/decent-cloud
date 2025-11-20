@@ -63,8 +63,20 @@ export async function registerAccount(
 	});
 
 	if (!response.ok) {
-		const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-		throw new Error(errorData.error || `Registration failed: ${response.statusText}`);
+		let errorMessage = `Registration failed (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = await response.json();
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			// Failed to parse JSON - include response body if available
+			const text = await response.text().catch(() => '');
+			if (text) {
+				errorMessage = `Registration failed (HTTP ${response.status}): ${text.substring(0, 200)}`;
+			}
+		}
+		throw new Error(errorMessage);
 	}
 
 	const result: ApiResponse<AccountWithKeys> = await response.json();
@@ -128,12 +140,8 @@ export async function addAccountKey(
 	username: string,
 	newPublicKeyHex: string
 ): Promise<PublicKeyInfo> {
-	const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-	const signingPublicKeyHex = bytesToHex(publicKeyBytes);
-
 	const requestBody = {
-		newPublicKey: newPublicKeyHex,
-		signingPublicKey: signingPublicKeyHex
+		newPublicKey: newPublicKeyHex
 	};
 
 	const { headers, body } = await signRequest(
@@ -150,8 +158,19 @@ export async function addAccountKey(
 	});
 
 	if (!response.ok) {
-		const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-		throw new Error(errorData.error || `Failed to add key: ${response.statusText}`);
+		let errorMessage = `Failed to add key (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = await response.json();
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			const text = await response.text().catch(() => '');
+			if (text) {
+				errorMessage = `Failed to add key (HTTP ${response.status}): ${text.substring(0, 200)}`;
+			}
+		}
+		throw new Error(errorMessage);
 	}
 
 	const result: ApiResponse<PublicKeyInfo> = await response.json();
@@ -171,18 +190,10 @@ export async function removeAccountKey(
 	username: string,
 	keyId: string
 ): Promise<void> {
-	const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-	const signingPublicKeyHex = bytesToHex(publicKeyBytes);
-
-	const requestBody = {
-		signingPublicKey: signingPublicKeyHex
-	};
-
 	const { headers, body } = await signRequest(
 		identity,
 		'DELETE',
-		`/api/v1/accounts/${username}/keys/${keyId}`,
-		requestBody
+		`/api/v1/accounts/${username}/keys/${keyId}`
 	);
 
 	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/keys/${keyId}`, {
@@ -192,8 +203,19 @@ export async function removeAccountKey(
 	});
 
 	if (!response.ok) {
-		const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-		throw new Error(errorData.error || `Failed to remove key: ${response.statusText}`);
+		let errorMessage = `Failed to remove key (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = await response.json();
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			const text = await response.text().catch(() => '');
+			if (text) {
+				errorMessage = `Failed to remove key (HTTP ${response.status}): ${text.substring(0, 200)}`;
+			}
+		}
+		throw new Error(errorMessage);
 	}
 
 	const result: ApiResponse<PublicKeyInfo> = await response.json();
