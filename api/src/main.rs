@@ -182,7 +182,7 @@ async fn main() -> Result<(), std::io::Error> {
 }
 
 async fn serve_command() -> Result<(), std::io::Error> {
-    let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let port = env::var("API_SERVER_PORT").unwrap_or_else(|_| "59001".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
     let ctx = setup_app_context().await?;
@@ -193,6 +193,35 @@ async fn serve_command() -> Result<(), std::io::Error> {
     let api_service = OpenApiService::new(MainApi, "Decent Cloud API", "1.0.0").server("/api/v1");
     let swagger_ui = api_service.swagger_ui();
     let openapi_spec = api_service.spec_endpoint();
+
+    // Configure CORS based on environment
+    let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string());
+    let cors = if environment == "prod" {
+        Cors::new()
+            .allow_origin("https://decent-cloud.org")
+            .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+            .allow_headers(vec![
+                "content-type",
+                "authorization",
+                "x-api-key",
+                "x-account-id",
+            ])
+            .allow_credentials(true)
+    } else {
+        // Development: allow localhost and any origin for testing
+        Cors::new()
+            .allow_origin_regex("^https?://localhost(:[0-9]+)?$")
+            .allow_origin_regex("^https?://127\\.0\\.0\\.1(:[0-9]+)?$")
+            .allow_origin_regex("^https?://\\[::1\\](:[0-9]+)?$")
+            .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+            .allow_headers(vec![
+                "content-type",
+                "authorization",
+                "x-api-key",
+                "x-account-id",
+            ])
+            .allow_credentials(true)
+    };
 
     let app = Route::new()
         // Redirect root to Swagger UI
@@ -207,7 +236,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .data(ctx.database.clone())
         .data(ctx.metadata_cache.clone())
         .with(request_logging::RequestLogging)
-        .with(Cors::new());
+        .with(cors);
 
     // Start metadata cache service in background
     let cache_for_task = ctx.metadata_cache.clone();
