@@ -1,4 +1,6 @@
 # Development overrides - no tunnel, access via localhost only
+# Deploy with: python3 deploy.py deploy dev
+# Or export an environment variable: VITE_DECENT_CLOUD_API_URL=http://localhost:59001
 
 x-api-base: &api-base
   volumes:

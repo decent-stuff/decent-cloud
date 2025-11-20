@@ -329,19 +329,42 @@ def build_rust_binaries_natively() -> bool:
         return False
 
 
-def build_website_natively() -> bool:
-    """Build SvelteKit website natively before Docker build."""
+def build_website_natively(environment: str) -> bool:
+    """Build SvelteKit website natively before Docker build.
+
+    Args:
+        environment: 'dev' or 'prod' - determines API endpoint configuration
+    """
     cf_dir = Path(__file__).parent
     project_root = cf_dir.parent
     website_dir = project_root / "website"
 
-    print_header("Building SvelteKit website natively")
+    print_header(f"Building SvelteKit website for {environment}")
 
     if not website_dir.exists():
         print_error("Website directory not found")
         return False
 
     try:
+        # Configure API endpoint based on environment
+        env_local_file = website_dir / ".env.local"
+
+        if environment == "dev":
+            print_info("Configuring website for dev API endpoint (http://localhost:59001)")
+            with open(env_local_file, "w") as f:
+                f.write("# Development/staging API endpoint\n")
+                f.write("# Used when building the website for dev/staging Docker deployment\n")
+                f.write("# Browser will connect to API at this URL\n")
+                f.write("VITE_DECENT_CLOUD_API_URL=http://localhost:59001\n")
+            print_success("Created .env.local with dev API URL")
+        else:  # prod
+            print_info("Configuring website for production API endpoint (https://api.decent-cloud.org)")
+            if env_local_file.exists():
+                env_local_file.unlink()
+                print_success("Removed .env.local to use production defaults")
+            else:
+                print_info("No .env.local found (using production defaults)")
+
         # Change to website directory and run build
         os.chdir(website_dir)
         subprocess.run(["npm", "run", "build"], check=True)
@@ -408,8 +431,8 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
         # Add token to env_vars
         env_vars["TUNNEL_TOKEN"] = token
 
-    # Build website natively first
-    if not build_website_natively():
+    # Build website natively first with environment-specific API configuration
+    if not build_website_natively(env_name):
         print_error("Failed to build website")
         return 1
     print()

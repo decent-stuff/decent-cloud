@@ -212,11 +212,13 @@ async fn serve_command() -> Result<(), std::io::Error> {
             ])
             .allow_credentials(true)
     } else {
-        // Development: allow localhost and any origin for testing
+        // Development: allow all localhost origins for testing
+        tracing::info!("CORS: Development mode - allowing all localhost origins");
         Cors::new()
-            .allow_origin_regex("^https?://localhost(:[0-9]+)?$")
-            .allow_origin_regex("^https?://127\\.0\\.0\\.1(:[0-9]+)?$")
-            .allow_origin_regex("^https?://\\[::1\\](:[0-9]+)?$")
+            .allow_origin("http://localhost:59000")
+            .allow_origin("http://localhost:3000")
+            .allow_origin("http://127.0.0.1:59000")
+            .allow_origin("http://127.0.0.1:3000")
             .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
             .allow_headers(vec![
                 "content-type",
