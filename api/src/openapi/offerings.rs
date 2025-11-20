@@ -1,0 +1,207 @@
+use super::common::{default_false, default_limit, ApiResponse, ApiTags};
+use crate::database::Database;
+use poem::web::Data;
+use poem_openapi::{param::Path, payload::Json, OpenApi};
+use std::sync::Arc;
+
+pub struct OfferingsApi;
+
+#[OpenApi]
+impl OfferingsApi {
+    /// Search offerings
+    ///
+    /// Search for offerings with optional filters
+    #[oai(path = "/offerings", method = "get", tag = "ApiTags::Offerings")]
+    async fn search_offerings(
+        &self,
+        db: Data<&Arc<Database>>,
+        #[oai(default = "default_limit")] limit: poem_openapi::param::Query<i64>,
+        #[oai(default)] offset: poem_openapi::param::Query<i64>,
+        product_type: poem_openapi::param::Query<Option<String>>,
+        country: poem_openapi::param::Query<Option<String>>,
+        #[oai(default = "default_false")] in_stock_only: poem_openapi::param::Query<bool>,
+    ) -> Json<ApiResponse<Vec<crate::database::offerings::Offering>>> {
+        let search_params = crate::database::offerings::SearchOfferingsParams {
+            product_type: product_type.0.as_deref(),
+            country: country.0.as_deref(),
+            in_stock_only: in_stock_only.0,
+            limit: limit.0,
+            offset: offset.0,
+        };
+
+        match db.search_offerings(search_params).await {
+            Ok(offerings) => Json(ApiResponse {
+                success: true,
+                data: Some(offerings),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get offering by ID
+    ///
+    /// Returns details of a specific offering
+    #[oai(path = "/offerings/:id", method = "get", tag = "ApiTags::Offerings")]
+    async fn get_offering(
+        &self,
+        db: Data<&Arc<Database>>,
+        id: Path<i64>,
+    ) -> Json<ApiResponse<crate::database::offerings::Offering>> {
+        match db.get_offering(id.0).await {
+            Ok(Some(offering)) => Json(ApiResponse {
+                success: true,
+                data: Some(offering),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Offering not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get CSV template for offerings
+    ///
+    /// Returns a CSV template with example offerings
+    #[oai(
+        path = "/offerings/template",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn get_offerings_csv_template(
+        &self,
+        db: Data<&Arc<Database>>,
+    ) -> poem_openapi::payload::PlainText<String> {
+        let mut csv_writer = csv::Writer::from_writer(vec![]);
+
+        // Write header
+        let _ = csv_writer.write_record([
+            "offering_id",
+            "offer_name",
+            "description",
+            "product_page_url",
+            "currency",
+            "monthly_price",
+            "setup_fee",
+            "visibility",
+            "product_type",
+            "virtualization_type",
+            "billing_interval",
+            "stock_status",
+            "processor_brand",
+            "processor_amount",
+            "processor_cores",
+            "processor_speed",
+            "processor_name",
+            "memory_error_correction",
+            "memory_type",
+            "memory_amount",
+            "hdd_amount",
+            "total_hdd_capacity",
+            "ssd_amount",
+            "total_ssd_capacity",
+            "unmetered_bandwidth",
+            "uplink_speed",
+            "traffic",
+            "datacenter_country",
+            "datacenter_city",
+            "datacenter_latitude",
+            "datacenter_longitude",
+            "control_panel",
+            "gpu_name",
+            "min_contract_hours",
+            "max_contract_hours",
+            "payment_methods",
+            "features",
+            "operating_systems",
+        ]);
+
+        // Get example offerings
+        if let Ok(offerings) = db.get_example_offerings().await {
+            for offering in offerings {
+                let _ = csv_writer.write_record([
+                    &offering.offering_id,
+                    &offering.offer_name,
+                    &offering.description.unwrap_or_default(),
+                    &offering.product_page_url.unwrap_or_default(),
+                    &offering.currency,
+                    &offering.monthly_price.to_string(),
+                    &offering.setup_fee.to_string(),
+                    &offering.visibility,
+                    &offering.product_type,
+                    &offering.virtualization_type.unwrap_or_default(),
+                    &offering.billing_interval,
+                    &offering.stock_status,
+                    &offering.processor_brand.unwrap_or_default(),
+                    &offering
+                        .processor_amount
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering
+                        .processor_cores
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.processor_speed.unwrap_or_default(),
+                    &offering.processor_name.unwrap_or_default(),
+                    &offering.memory_error_correction.unwrap_or_default(),
+                    &offering.memory_type.unwrap_or_default(),
+                    &offering.memory_amount.unwrap_or_default(),
+                    &offering
+                        .hdd_amount
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.total_hdd_capacity.unwrap_or_default(),
+                    &offering
+                        .ssd_amount
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.total_ssd_capacity.unwrap_or_default(),
+                    &offering.unmetered_bandwidth.to_string(),
+                    &offering.uplink_speed.unwrap_or_default(),
+                    &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
+                    &offering.datacenter_country,
+                    &offering.datacenter_city,
+                    &offering
+                        .datacenter_latitude
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering
+                        .datacenter_longitude
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.control_panel.unwrap_or_default(),
+                    &offering.gpu_name.unwrap_or_default(),
+                    &offering
+                        .min_contract_hours
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering
+                        .max_contract_hours
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering.payment_methods.unwrap_or_default(),
+                    &offering.features.unwrap_or_default(),
+                    &offering.operating_systems.unwrap_or_default(),
+                ]);
+            }
+        }
+
+        match csv_writer.into_inner() {
+            Ok(csv_data) => {
+                poem_openapi::payload::PlainText(String::from_utf8_lossy(&csv_data).to_string())
+            }
+            Err(e) => poem_openapi::payload::PlainText(format!("CSV generation error: {}", e)),
+        }
+    }
+}

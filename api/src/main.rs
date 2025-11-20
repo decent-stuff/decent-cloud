@@ -17,7 +17,7 @@ use cleanup_service::CleanupService;
 use database::Database;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
-use openapi::MainApi;
+use openapi::create_combined_api;
 use poem::web::Redirect;
 use poem::{
     handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
@@ -190,7 +190,8 @@ async fn serve_command() -> Result<(), std::io::Error> {
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
     // Set up OpenAPI service with Swagger UI
-    let api_service = OpenApiService::new(MainApi, "Decent Cloud API", "1.0.0").server("/api/v1");
+    let api_service =
+        OpenApiService::new(create_combined_api(), "Decent Cloud API", "1.0.0").server("/api/v1");
     let swagger_ui = api_service.swagger_ui();
     let openapi_spec = api_service.spec_endpoint();
 
