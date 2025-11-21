@@ -1,5 +1,6 @@
 [env]
 RUST_BACKTRACE = "1"
+SQLX_OFFLINE = "true"
 
 [config]
 default_to_workspace = false
@@ -95,6 +96,20 @@ set -eExuo pipefail
 ( cd ./ic-canister && for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done; )
 '''
 
+[tasks.sqlx-prepare]
+dependencies = ["build"]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+unset SQLX_OFFLINE
+TMPDB=$(mktemp --suffix=.db)
+trap "rm -f $TMPDB" EXIT
+DATABASE_URL="sqlite:$TMPDB?mode=rwc" sqlx database create
+DATABASE_URL="sqlite:$TMPDB" sqlx migrate run --source api/migrations
+DATABASE_URL="sqlite:$TMPDB" cargo sqlx prepare --workspace
+'''
+
 [tasks.all]
 dependencies = [
     "format",
@@ -104,5 +119,6 @@ dependencies = [
     "clippy-canister",
     "build",
     "test",
+    "sqlx-prepare",
     "dfx-stop",
 ]
