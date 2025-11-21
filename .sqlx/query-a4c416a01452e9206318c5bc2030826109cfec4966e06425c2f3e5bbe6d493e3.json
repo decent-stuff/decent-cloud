@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!\", contact_type, contact_value, verified as \"verified!\" FROM user_contacts WHERE user_pubkey = ?",
+  "query": "SELECT id as \"id!\", platform, username, profile_url\n               FROM account_socials\n               WHERE account_id = ?",
   "describe": {
     "columns": [
       {
@@ -9,19 +9,19 @@
         "type_info": "Integer"
       },
       {
-        "name": "contact_type",
+        "name": "platform",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "contact_value",
+        "name": "username",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "verified!",
+        "name": "profile_url",
         "ordinal": 3,
-        "type_info": "Bool"
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -34,5 +34,5 @@
       true
     ]
   },
-  "hash": "415ba2f7e06189ade93e119d3e958257edf93ae67120548403fc7c188e1951a3"
+  "hash": "a4c416a01452e9206318c5bc2030826109cfec4966e06425c2f3e5bbe6d493e3"
 }

@@ -169,20 +169,20 @@ function createAuthStore() {
 		return null;
 	}
 
-	async function loadAccountForIdentity(identityInfo: IdentityInfo): Promise<void> {
-		if (!identityInfo.publicKeyBytes) return;
+	async function loadAccountForIdentity(identityInfo: IdentityInfo): Promise<AccountInfo | null> {
+		if (!identityInfo.publicKeyBytes) return null;
 
 		try {
-			const { getAccount } = await import('../services/account-api');
+			const { getAccountByPublicKey } = await import('../services/account-api');
 			const publicKeyHex = Array.from(identityInfo.publicKeyBytes)
 				.map((b) => b.toString(16).padStart(2, '0'))
 				.join('');
 
-			// Try to find account by searching - for now we'll need username
-			// TODO: Add API endpoint to search by public key
-			// For now, accounts will be loaded after registration or manual username entry
+			const account = await getAccountByPublicKey(publicKeyHex);
+			return account;
 		} catch (error) {
 			console.error('Failed to load account:', error);
+			return null;
 		}
 	}
 
@@ -193,13 +193,36 @@ function createAuthStore() {
 		const { registerAccount } = await import('../services/account-api');
 		const account = await registerAccount(identity, username);
 
-		// Update active identity with account info
-		activeIdentity.update((current) => {
-			if (current) {
-				return { ...current, account };
-			}
-			return current;
+		// Get public key bytes for this identity
+		const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+		const seedPhrase = ''; // Will be set by loginWithSeedPhrase
+
+		// Update or add identity with account info
+		const identitiesList = get(identities);
+		const publicKeyHex = Array.from(publicKeyBytes)
+			.map((b) => b.toString(16).padStart(2, '0'))
+			.join('');
+		const existing = identitiesList.find((id) => {
+			const idKeyHex = Array.from(id.publicKeyBytes)
+				.map((b) => b.toString(16).padStart(2, '0'))
+				.join('');
+			return idKeyHex === publicKeyHex;
 		});
+
+		if (existing) {
+			// Update existing identity with account
+			identities.update((prev) =>
+				prev.map((id) =>
+					id.principal.toString() === existing.principal.toString() ? { ...id, account } : id
+				)
+			);
+			activeIdentity.update((current) => {
+				if (current?.principal.toString() === existing.principal.toString()) {
+					return { ...current, account };
+				}
+				return current;
+			});
+		}
 
 		return account;
 	}
@@ -280,6 +303,27 @@ function createAuthStore() {
 			if (validPhrases.length !== storedSeedPhrases.length) {
 				setStoredSeedPhrases(validPhrases);
 			}
+
+			// Load account data for all identities
+			const identitiesList = get(identities);
+			for (const identityInfo of identitiesList) {
+				const account = await loadAccountForIdentity(identityInfo);
+				if (account) {
+					// Update the identity with account info
+					identities.update((prev) =>
+						prev.map((id) =>
+							id.principal.toString() === identityInfo.principal.toString()
+								? { ...id, account }
+								: id
+						)
+					);
+					// Update activeIdentity if this is the current one
+					const current = get(activeIdentity);
+					if (current?.principal.toString() === identityInfo.principal.toString()) {
+						activeIdentity.set({ ...identityInfo, account });
+					}
+				}
+			}
 		},
 
 		async loginWithSeedPhrase(existingSeedPhrase?: string, returnUrl = '/dashboard') {
@@ -290,12 +334,30 @@ function createAuthStore() {
 
 				const identity = identityFromSeed(seedPhrase);
 				const keyPair = identity.getKeyPair();
-				addIdentity(
+				const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+				const secretKeyRaw = new Uint8Array(keyPair.secretKey);
+
+				addIdentity(identity, publicKeyBytes, secretKeyRaw, seedPhrase);
+
+				// Load account data immediately after adding identity
+				const account = await loadAccountForIdentity({
 					identity,
-					new Uint8Array(identity.getPublicKey().rawKey),
-					new Uint8Array(keyPair.secretKey),
+					principal: identity.getPrincipal(),
+					type: 'seedPhrase',
+					publicKeyBytes,
+					secretKeyRaw,
 					seedPhrase
-				);
+				});
+
+				if (account) {
+					// Update activeIdentity with account data
+					activeIdentity.update((current) => {
+						if (current && current.seedPhrase === seedPhrase) {
+							return { ...current, account };
+						}
+						return current;
+					});
+				}
 
 				if (!existingSeedPhrase) {
 					showBackupInstructions.set(true);

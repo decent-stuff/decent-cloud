@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!\", key_type, key_data, key_fingerprint, label FROM user_public_keys WHERE user_pubkey = ?",
+  "query": "SELECT id as \"id!\", key_type, key_data, key_fingerprint, label\n               FROM account_external_keys\n               WHERE account_id = ?",
   "describe": {
     "columns": [
       {
@@ -40,5 +40,5 @@
       true
     ]
   },
-  "hash": "c8a2b174a77b8996b19ae3f2e001e535b2b472bb0db3b512fd6f0e6d4f616e31"
+  "hash": "0d034a361ca79d8614b95c5c3371ed06aebd448b5127b9749ac2c91b3ba9121d"
 }

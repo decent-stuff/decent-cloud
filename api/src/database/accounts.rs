@@ -10,6 +10,11 @@ pub struct Account {
     pub username: String,
     pub created_at: i64,
     pub updated_at: i64,
+    // Profile fields (nullable)
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
+    pub profile_updated_at: Option<i64>,
 }
 
 /// Account public key record
@@ -32,6 +37,15 @@ pub struct AccountWithKeys {
     pub username: String,
     pub created_at: i64,
     pub updated_at: i64,
+    // Profile fields (optional)
+    #[oai(skip_serializing_if_is_none)]
+    pub display_name: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub bio: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub avatar_url: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub profile_updated_at: Option<i64>,
     pub public_keys: Vec<PublicKeyInfo>,
 }
 
@@ -91,7 +105,8 @@ impl Database {
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at FROM accounts WHERE id = ?",
+            "SELECT id, username, created_at, updated_at, display_name, bio, avatar_url, profile_updated_at
+             FROM accounts WHERE id = ?",
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -103,7 +118,8 @@ impl Database {
     /// Get account by username
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at FROM accounts WHERE username = ?",
+            "SELECT id, username, created_at, updated_at, display_name, bio, avatar_url, profile_updated_at
+             FROM accounts WHERE username = ?",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -124,6 +140,10 @@ impl Database {
                 username: account.username,
                 created_at: account.created_at,
                 updated_at: account.updated_at,
+                display_name: account.display_name,
+                bio: account.bio,
+                avatar_url: account.avatar_url,
+                profile_updated_at: account.profile_updated_at,
                 public_keys: keys
                     .into_iter()
                     .map(|k| PublicKeyInfo {
@@ -358,6 +378,10 @@ impl Database {
             username: account.username,
             created_at: account.created_at,
             updated_at: account.updated_at,
+            display_name: account.display_name,
+            bio: account.bio,
+            avatar_url: account.avatar_url,
+            profile_updated_at: account.profile_updated_at,
             public_keys: keys
                 .into_iter()
                 .map(|k| PublicKeyInfo {
@@ -396,6 +420,34 @@ impl Database {
         .ok_or_else(|| anyhow::anyhow!("Key not found"))?;
 
         Ok(key)
+    }
+
+    /// Update account profile fields
+    pub async fn update_account_profile(
+        &self,
+        account_id: &[u8],
+        display_name: Option<&str>,
+        bio: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> Result<Account> {
+        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query(
+            "UPDATE accounts
+             SET display_name = ?, bio = ?, avatar_url = ?, profile_updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(display_name)
+        .bind(bio)
+        .bind(avatar_url)
+        .bind(now)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+
+        self.get_account(account_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Account not found after profile update"))
     }
 }
 
