@@ -27,13 +27,32 @@ pub fn default_false() -> bool {
     false
 }
 
+/// Decode a hex-encoded public key with detailed error messages
 pub fn decode_pubkey(pubkey_hex: &str) -> Result<Vec<u8>, String> {
-    hex::decode(pubkey_hex).map_err(|_| "Invalid pubkey format".to_string())
+    let bytes = hex::decode(pubkey_hex)
+        .map_err(|e| format!("Invalid pubkey hex: {} (value: {})", e, pubkey_hex))?;
+    if bytes.len() != 32 {
+        return Err(format!(
+            "Public key must be 32 bytes, got {} bytes (value: {})",
+            bytes.len(),
+            pubkey_hex
+        ));
+    }
+    Ok(bytes)
+}
+
+/// Decode a hex-encoded ID (contract, key, etc.) with detailed error messages
+pub fn decode_hex_id(id_hex: &str, id_type: &str) -> Result<Vec<u8>, String> {
+    hex::decode(id_hex).map_err(|e| format!("Invalid {} hex: {} (value: {})", id_type, e, id_hex))
 }
 
 pub fn check_authorization(pubkey: &[u8], user: &ApiAuthenticatedUser) -> Result<(), String> {
     if pubkey != user.pubkey {
-        Err("Unauthorized".to_string())
+        Err(format!(
+            "Unauthorized: request pubkey {} does not match authenticated user {}",
+            hex::encode(pubkey),
+            hex::encode(&user.pubkey)
+        ))
     } else {
         Ok(())
     }

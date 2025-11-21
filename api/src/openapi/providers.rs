@@ -79,11 +79,11 @@ impl ProvidersApi {
     ) -> Json<ApiResponse<crate::database::providers::ProviderProfile>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(format!("Invalid pubkey hex: {} (value: {})", e, &pubkey.0)),
                 })
             }
         };
@@ -122,11 +122,11 @@ impl ProvidersApi {
     ) -> Json<ApiResponse<Vec<crate::database::providers::ProviderContact>>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(format!("Invalid pubkey hex: {} (value: {})", e, &pubkey.0)),
                 })
             }
         };

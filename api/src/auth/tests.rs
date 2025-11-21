@@ -9,6 +9,46 @@ fn create_test_identity() -> (DccIdentity, Vec<u8>) {
     (identity, pubkey)
 }
 
+/// Test vector for cross-platform signature verification.
+/// TypeScript frontend must produce the same signature.
+#[test]
+fn test_cross_platform_signature_vector() {
+    // Fixed 32-byte seed (used directly, not via HMAC - matches Ed25519KeyIdentity.fromSecretKey)
+    let seed: [u8; 32] = [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+        25, 26, 27, 28, 29, 30, 31,
+    ];
+    // Create identity directly from seed bytes (not via HMAC derivation)
+    let identity = DccIdentity::new_signing_from_bytes(&seed).unwrap();
+    let pubkey = identity.to_bytes_verifying();
+
+    // Fixed message
+    let message = b"test message for cross-platform verification";
+
+    // Sign
+    let signature = identity.sign(message).unwrap();
+
+    // Print test vector
+    println!("=== Cross-platform test vector ===");
+    println!("Seed (hex): {}", hex::encode(seed));
+    println!("Public key (hex): {}", hex::encode(&pubkey));
+    println!("Message: {}", String::from_utf8_lossy(message));
+    println!("Signature (hex): {}", hex::encode(signature.to_bytes()));
+
+    // Verify signature works
+    identity.verify(message, &signature).unwrap();
+
+    // Expected values - update TypeScript test if these change
+    let expected_pubkey = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8";
+    let expected_signature = "a2aca8ef6760241fc2b254447b9320f03fffaaa11f60365b33455b5d664abc0172627ce2258cdbde7e2eddbe20bda46e008f8041ffb61515e7f4e5a8fdab3f0f";
+    assert_eq!(hex::encode(&pubkey), expected_pubkey, "Public key mismatch");
+    assert_eq!(
+        hex::encode(signature.to_bytes()),
+        expected_signature,
+        "Signature mismatch"
+    );
+}
+
 #[test]
 fn test_verify_valid_signature() {
     let (identity, pubkey) = create_test_identity();

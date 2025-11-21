@@ -402,7 +402,14 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
         // Check if public key is in admin list
         let admin_pubkeys = get_admin_pubkeys();
         if !admin_pubkeys.iter().any(|admin_key| admin_key == &pubkey) {
-            return Err(poem::Error::from_status(StatusCode::FORBIDDEN));
+            return Err(poem::Error::from_string(
+                format!(
+                    "Admin access required. Public key '{}' is not in the admin list ({} admins configured)",
+                    hex::encode(&pubkey),
+                    admin_pubkeys.len()
+                ),
+                StatusCode::FORBIDDEN,
+            ));
         }
 
         // Restore body for downstream handlers

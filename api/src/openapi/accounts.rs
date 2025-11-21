@@ -3,7 +3,7 @@ use super::common::{
 };
 use crate::{auth::ApiAuthenticatedUser, database::Database};
 use poem::web::Data;
-use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
+use poem_openapi::{param::Path, param::Query, payload::Binary, payload::Json, OpenApi};
 use std::sync::Arc;
 
 pub struct AccountsApi;
@@ -18,22 +18,23 @@ impl AccountsApi {
     async fn register_account(
         &self,
         db: Data<&Arc<Database>>,
-        req: Json<RegisterAccountRequest>,
+        req: Binary<Vec<u8>>,
         #[oai(name = "X-Public-Key")] public_key_header: poem_openapi::param::Header<String>,
         #[oai(name = "X-Signature")] signature_header: poem_openapi::param::Header<String>,
         #[oai(name = "X-Timestamp")] timestamp_header: poem_openapi::param::Header<String>,
         #[oai(name = "X-Nonce")] nonce_header: poem_openapi::param::Header<String>,
     ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
-        let body_data = req.0;
+        // Use the original request body bytes for signature verification (avoid re-serialization)
+        let req_body_bytes = req.0;
 
-        // Serialize request body for signature verification and audit
-        let req_body_str = match serde_json::to_string(&body_data) {
-            Ok(s) => s,
+        // Parse request body
+        let body_data: RegisterAccountRequest = match serde_json::from_slice(&req_body_bytes) {
+            Ok(data) => data,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Failed to serialize request: {}", e)),
+                    error: Some(format!("Invalid request body: {}", e)),
                 })
             }
         };
@@ -53,11 +54,14 @@ impl AccountsApi {
         // Decode public key
         let public_key = match hex::decode(&body_data.public_key) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid public key format".to_string()),
+                    error: Some(format!(
+                        "Invalid public key hex: {} (value: {})",
+                        e, &body_data.public_key
+                    )),
                 })
             }
         };
@@ -66,7 +70,10 @@ impl AccountsApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Public key must be 32 bytes".to_string()),
+                error: Some(format!(
+                    "Public key must be 32 bytes, got {} bytes",
+                    public_key.len()
+                )),
             });
         }
 
@@ -75,18 +82,36 @@ impl AccountsApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Public key mismatch between body and header".to_string()),
+                error: Some(format!(
+                    "Public key mismatch: body='{}' header='{}'",
+                    &body_data.public_key, &public_key_header.0
+                )),
             });
         }
+
+        // Decode signature for later audit use
+        let signature_bytes = match hex::decode(&signature_header.0) {
+            Ok(sig) => sig,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid signature hex: {}", e)),
+                })
+            }
+        };
 
         // Parse nonce
         let nonce = match uuid::Uuid::parse_str(&nonce_header.0) {
             Ok(n) => n,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid nonce format".to_string()),
+                    error: Some(format!(
+                        "Invalid nonce format (expected UUID): {} (value: {})",
+                        e, &nonce_header.0
+                    )),
                 })
             }
         };
@@ -94,11 +119,14 @@ impl AccountsApi {
         // Parse timestamp
         let timestamp = match timestamp_header.0.parse::<i64>() {
             Ok(ts) => ts,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid timestamp format".to_string()),
+                    error: Some(format!(
+                        "Invalid timestamp (expected nanoseconds): {} (value: {})",
+                        e, &timestamp_header.0
+                    )),
                 })
             }
         };
@@ -111,7 +139,7 @@ impl AccountsApi {
             &nonce_header.0,
             "POST",
             "/api/v1/accounts",
-            req_body_str.as_bytes(),
+            &req_body_bytes,
         ) {
             return Json(ApiResponse {
                 success: false,
@@ -162,12 +190,13 @@ impl AccountsApi {
         match db.create_account(&username, &public_key).await {
             Ok(account) => {
                 // Insert audit record
+                let req_body_str = String::from_utf8_lossy(&req_body_bytes);
                 if let Err(e) = db
                     .insert_signature_audit(
                         Some(&account.id),
                         "register_account",
                         &req_body_str,
-                        &hex::decode(&signature_header.0).unwrap(),
+                        &signature_bytes,
                         &public_key,
                         timestamp,
                         &nonce,
@@ -248,11 +277,14 @@ impl AccountsApi {
     ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
         let public_key_bytes = match hex::decode(&public_key.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid public key format".to_string()),
+                    error: Some(format!(
+                        "Invalid public key hex: {} (value: {})",
+                        e, &public_key.0
+                    )),
                 })
             }
         };
@@ -261,7 +293,10 @@ impl AccountsApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Public key must be 32 bytes".to_string()),
+                error: Some(format!(
+                    "Public key must be 32 bytes, got {} bytes",
+                    public_key_bytes.len()
+                )),
             });
         }
 
