@@ -96,13 +96,14 @@ export interface AuthenticatedIdentityResult {
 
 function createAuthStore() {
 	const identities = writable<IdentityInfo[]>([]);
-	const currentIdentity = writable<IdentityInfo | null>(null);
-	const signingIdentity = writable<IdentityInfo | null>(null);
+	// Single identity store - replaces dual currentIdentity/signingIdentity pattern
+	// Since II is removed, viewing and signing identities are always the same
+	const activeIdentity = writable<IdentityInfo | null>(null);
 	const showSeedPhrase = writable(false);
 	const showBackupInstructions = writable(false);
 	const errorMessage = writable<string | null>(null);
 
-	const isAuthenticated = derived(currentIdentity, ($current) => $current !== null);
+	const isAuthenticated = derived(activeIdentity, ($active) => $active !== null);
 
 	// Generate Ed25519 identity from seed phrase
 	function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
@@ -144,12 +145,10 @@ function createAuthStore() {
 
 		identities.update((prev) => [...prev, newIdentity]);
 
-		const current = get(currentIdentity);
+		const current = get(activeIdentity);
 		if (!current) {
-			currentIdentity.set(newIdentity);
+			activeIdentity.set(newIdentity);
 		}
-
-		signingIdentity.set(newIdentity);
 	}
 
 	async function fetchUserProfile(publicKeyBytes: Uint8Array): Promise<string | null> {
@@ -194,8 +193,8 @@ function createAuthStore() {
 		const { registerAccount } = await import('../services/account-api');
 		const account = await registerAccount(identity, username);
 
-		// Update current identity with account info
-		currentIdentity.update((current) => {
+		// Update active identity with account info
+		activeIdentity.update((current) => {
 			if (current) {
 				return { ...current, account };
 			}
@@ -211,8 +210,8 @@ function createAuthStore() {
 			const account = await getAccount(username);
 
 			if (account) {
-				// Update current identity with account info
-				currentIdentity.update((current) => {
+				// Update active identity with account info
+				activeIdentity.update((current) => {
 					if (current) {
 						return { ...current, account };
 					}
@@ -229,8 +228,11 @@ function createAuthStore() {
 
 	return {
 		identities: { subscribe: identities.subscribe },
-		currentIdentity: { subscribe: currentIdentity.subscribe },
-		signingIdentity: { subscribe: signingIdentity.subscribe },
+		// Primary API - single identity for viewing and signing
+		activeIdentity: { subscribe: activeIdentity.subscribe },
+		// Backwards compatibility aliases (both point to activeIdentity)
+		currentIdentity: { subscribe: activeIdentity.subscribe },
+		signingIdentity: { subscribe: activeIdentity.subscribe },
 		isAuthenticated: { subscribe: isAuthenticated.subscribe },
 		showSeedPhrase: {
 			subscribe: showSeedPhrase.subscribe,
@@ -311,8 +313,7 @@ function createAuthStore() {
 
 		async logout() {
 			identities.set([]);
-			currentIdentity.set(null);
-			signingIdentity.set(null);
+			activeIdentity.set(null);
 			showSeedPhrase.set(false);
 			showBackupInstructions.set(false);
 			errorMessage.set(null);
@@ -326,8 +327,7 @@ function createAuthStore() {
 			);
 			if (!targetIdentity) return;
 
-			currentIdentity.set(targetIdentity);
-			signingIdentity.set(targetIdentity);
+			activeIdentity.set(targetIdentity);
 		},
 
 		signOutIdentity(principal: Principal) {
@@ -337,19 +337,13 @@ function createAuthStore() {
 				);
 
 				if (remaining.length === 0) {
-					currentIdentity.set(null);
-					signingIdentity.set(null);
+					activeIdentity.set(null);
 					return remaining;
 				}
 
-				const current = get(currentIdentity);
+				const current = get(activeIdentity);
 				if (current?.principal.toString() === principal.toString()) {
-					currentIdentity.set(remaining[0]);
-				}
-
-				const signing = get(signingIdentity);
-				if (!signing || signing.principal.toString() === principal.toString()) {
-					signingIdentity.set(remaining[0]);
+					activeIdentity.set(remaining[0]);
 				}
 
 				return remaining;
@@ -376,7 +370,7 @@ function createAuthStore() {
 		},
 
 		async getAuthenticatedIdentity(): Promise<AuthenticatedIdentityResult | null> {
-			const current = get(currentIdentity);
+			const current = get(activeIdentity);
 			if (!current) {
 				return null;
 			}
@@ -389,29 +383,20 @@ function createAuthStore() {
 			};
 		},
 
+		// Alias for backwards compatibility - same as getAuthenticatedIdentity
 		async getSigningIdentity(): Promise<AuthenticatedIdentityResult | null> {
-			const signing = get(signingIdentity);
-			if (!signing) {
-				return null;
-			}
-
-			return {
-				success: true,
-				identity: signing.identity,
-				publicKeyBytes: signing.publicKeyBytes,
-				secretKeyRaw: signing.secretKeyRaw
-			};
+			return this.getAuthenticatedIdentity();
 		},
 
 		async updateDisplayName() {
-			const current = get(currentIdentity);
+			const current = get(activeIdentity);
 			if (!current) {
 				return;
 			}
 
 			const displayName = await fetchUserProfile(current.publicKeyBytes);
 			if (displayName) {
-				currentIdentity.update((identity) => {
+				activeIdentity.update((identity) => {
 					if (identity) {
 						return { ...identity, displayName };
 					}

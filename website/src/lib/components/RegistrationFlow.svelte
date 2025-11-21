@@ -249,11 +249,6 @@
 					<div class="text-sm text-white/60">Username</div>
 					<div class="text-white font-medium">@{normalizedUsername}</div>
 				</div>
-				<div class="border-t border-white/10"></div>
-				<div>
-					<div class="text-sm text-white/60">Authentication Method</div>
-					<div class="text-white font-medium">Seed Phrase</div>
-				</div>
 			</div>
 
 			{#if error}
