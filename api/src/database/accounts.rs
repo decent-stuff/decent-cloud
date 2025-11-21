@@ -22,6 +22,7 @@ pub struct AccountPublicKey {
     pub added_at: i64,
     pub disabled_at: Option<i64>,
     pub disabled_by_key_id: Option<Vec<u8>>,
+    pub device_name: Option<String>,
 }
 
 /// Full account response with keys
@@ -41,6 +42,8 @@ pub struct PublicKeyInfo {
     pub public_key: String,
     pub added_at: i64,
     pub is_active: bool,
+    #[oai(skip_serializing_if_is_none)]
+    pub device_name: Option<String>,
     #[oai(skip_serializing_if_is_none)]
     pub disabled_at: Option<i64>,
     #[oai(skip_serializing_if_is_none)]
@@ -128,6 +131,7 @@ impl Database {
                         public_key: hex::encode(&k.public_key),
                         added_at: k.added_at,
                         is_active: k.is_active != 0,
+                        device_name: k.device_name,
                         disabled_at: k.disabled_at,
                         disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
                     })
@@ -141,7 +145,7 @@ impl Database {
     /// Get all public keys for an account
     pub async fn get_account_keys(&self, account_id: &[u8]) -> Result<Vec<AccountPublicKey>> {
         let keys = sqlx::query_as::<_, AccountPublicKey>(
-            "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id
+            "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
              WHERE account_id = ?
              ORDER BY added_at ASC"
@@ -159,7 +163,7 @@ impl Database {
         account_id: &[u8],
     ) -> Result<Vec<AccountPublicKey>> {
         let keys = sqlx::query_as::<_, AccountPublicKey>(
-            "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id
+            "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
              WHERE account_id = ? AND is_active = 1
              ORDER BY added_at ASC"
@@ -212,7 +216,7 @@ impl Database {
 
         // Fetch and return the key
         let key = sqlx::query_as::<_, AccountPublicKey>(
-            "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id
+            "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
              WHERE id = ?"
         )
@@ -330,6 +334,68 @@ impl Database {
             .await?;
 
         Ok(result.rows_affected())
+    }
+
+    /// Get account with keys by public key (for login without username)
+    pub async fn get_account_with_keys_by_public_key(
+        &self,
+        public_key: &[u8],
+    ) -> Result<Option<AccountWithKeys>> {
+        let account_id = match self.get_account_id_by_public_key(public_key).await? {
+            Some(id) => id,
+            None => return Ok(None),
+        };
+
+        let account = match self.get_account(&account_id).await? {
+            Some(acc) => acc,
+            None => return Ok(None),
+        };
+
+        let keys = self.get_account_keys(&account_id).await?;
+
+        Ok(Some(AccountWithKeys {
+            id: hex::encode(&account.id),
+            username: account.username,
+            created_at: account.created_at,
+            updated_at: account.updated_at,
+            public_keys: keys
+                .into_iter()
+                .map(|k| PublicKeyInfo {
+                    id: hex::encode(&k.id),
+                    public_key: hex::encode(&k.public_key),
+                    added_at: k.added_at,
+                    is_active: k.is_active != 0,
+                    device_name: k.device_name,
+                    disabled_at: k.disabled_at,
+                    disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
+                })
+                .collect(),
+        }))
+    }
+
+    /// Update device name for a public key
+    pub async fn update_device_name(
+        &self,
+        key_id: &[u8],
+        device_name: Option<&str>,
+    ) -> Result<AccountPublicKey> {
+        sqlx::query("UPDATE account_public_keys SET device_name = ? WHERE id = ?")
+            .bind(device_name)
+            .bind(key_id)
+            .execute(&self.pool)
+            .await?;
+
+        let key = sqlx::query_as::<_, AccountPublicKey>(
+            "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
+             FROM account_public_keys
+             WHERE id = ?",
+        )
+        .bind(key_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Key not found"))?;
+
+        Ok(key)
     }
 }
 

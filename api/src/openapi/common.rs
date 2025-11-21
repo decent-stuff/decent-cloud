@@ -145,6 +145,12 @@ pub struct AddAccountKeyRequest {
     pub new_public_key: String,
 }
 
+#[derive(Debug, Deserialize, Object)]
+pub struct UpdateDeviceNameRequest {
+    #[serde(rename = "deviceName")]
+    pub device_name: Option<String>,
+}
+
 // Request types for admin
 #[derive(Debug, Serialize, Deserialize, Object)]
 pub struct AdminDisableKeyRequest {

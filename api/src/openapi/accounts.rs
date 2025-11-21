@@ -1,7 +1,9 @@
-use super::common::{AddAccountKeyRequest, ApiResponse, ApiTags, RegisterAccountRequest};
+use super::common::{
+    AddAccountKeyRequest, ApiResponse, ApiTags, RegisterAccountRequest, UpdateDeviceNameRequest,
+};
 use crate::{auth::ApiAuthenticatedUser, database::Database};
 use poem::web::Data;
-use poem_openapi::{param::Path, payload::Json, OpenApi};
+use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
 use std::sync::Arc;
 
 pub struct AccountsApi;
@@ -235,6 +237,56 @@ impl AccountsApi {
         }
     }
 
+    /// Search account by public key
+    ///
+    /// Returns account if public key is registered, null if not found
+    #[oai(path = "/accounts", method = "get", tag = "ApiTags::Accounts")]
+    async fn search_account_by_public_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        #[oai(name = "publicKey")] public_key: Query<String>,
+    ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
+        let public_key_bytes = match hex::decode(&public_key.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid public key format".to_string()),
+                })
+            }
+        };
+
+        if public_key_bytes.len() != 32 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Public key must be 32 bytes".to_string()),
+            });
+        }
+
+        match db
+            .get_account_with_keys_by_public_key(&public_key_bytes)
+            .await
+        {
+            Ok(Some(account)) => Json(ApiResponse {
+                success: true,
+                data: Some(account),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Account not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Add public key to account
     ///
     /// Adds a new public key to an existing account (requires authentication)
@@ -324,6 +376,7 @@ impl AccountsApi {
                     public_key: hex::encode(&key.public_key),
                     added_at: key.added_at,
                     is_active: key.is_active != 0,
+                    device_name: key.device_name,
                     disabled_at: key.disabled_at,
                     disabled_by_key_id: key.disabled_by_key_id.map(|id| hex::encode(&id)),
                 }),
@@ -454,6 +507,7 @@ impl AccountsApi {
                             public_key: hex::encode(&key.public_key),
                             added_at: key.added_at,
                             is_active: key.is_active != 0,
+                            device_name: key.device_name.clone(),
                             disabled_at: key.disabled_at,
                             disabled_by_key_id: key.disabled_by_key_id.as_ref().map(hex::encode),
                         }),
@@ -466,6 +520,125 @@ impl AccountsApi {
                     }),
                 }
             }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update device name for a public key
+    ///
+    /// Updates the device name for a public key (requires authentication)
+    #[oai(
+        path = "/accounts/:username/keys/:key_id",
+        method = "put",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn update_device_name(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        key_id: Path<String>,
+        req: Json<UpdateDeviceNameRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::PublicKeyInfo>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Decode key ID
+        let key_id_bytes = match hex::decode(&key_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid key ID format".to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated key belongs to account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key does not belong to this account".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Verify the key being updated belongs to this account
+        let keys = match db.get_account_keys(&account.id).await {
+            Ok(keys) => keys,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        if !keys.iter().any(|k| k.id == key_id_bytes) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Key does not belong to this account".to_string()),
+            });
+        }
+
+        // Update device name
+        match db
+            .update_device_name(&key_id_bytes, req.device_name.as_deref())
+            .await
+        {
+            Ok(key) => Json(ApiResponse {
+                success: true,
+                data: Some(crate::database::accounts::PublicKeyInfo {
+                    id: hex::encode(&key.id),
+                    public_key: hex::encode(&key.public_key),
+                    added_at: key.added_at,
+                    is_active: key.is_active != 0,
+                    device_name: key.device_name,
+                    disabled_at: key.disabled_at,
+                    disabled_by_key_id: key.disabled_by_key_id.map(|id| hex::encode(&id)),
+                }),
+                error: None,
+            }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

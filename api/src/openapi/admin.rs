@@ -99,6 +99,7 @@ impl AdminApi {
                         public_key: hex::encode(&k.public_key),
                         added_at: k.added_at,
                         is_active: k.is_active != 0,
+                        device_name: k.device_name.clone(),
                         disabled_at: k.disabled_at,
                         disabled_by_key_id: k.disabled_by_key_id.as_ref().map(hex::encode),
                     }
@@ -198,6 +199,7 @@ impl AdminApi {
                         public_key: hex::encode(&key.public_key),
                         added_at: key.added_at,
                         is_active: key.is_active != 0,
+                        device_name: key.device_name,
                         disabled_at: key.disabled_at,
                         disabled_by_key_id: key.disabled_by_key_id.map(hex::encode),
                     }),
