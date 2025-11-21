@@ -153,6 +153,7 @@ tests/e2e/
 - ✅ Public key verification
 - ✅ Session persistence after refresh
 - ✅ Sign out functionality
+- ✅ Auto-detect account from seed phrase
 
 ### Account Page (`account-page.spec.ts`)
 - ✅ Display account overview
@@ -163,6 +164,14 @@ tests/e2e/
 - ✅ Navigation between pages
 - ✅ Date formatting
 - ✅ Direct URL access
+- ✅ Edit device name
+- ✅ Cancel device name edit
+- ✅ Single key account (no Remove button)
+- ✅ Display device key info
+- ✅ Show Add Device button
+- ✅ Open Add Device modal
+- ✅ Add new device with seed phrase
+- ✅ Cancel Add Device modal
 
 ## Test Helpers
 
@@ -293,9 +302,8 @@ Tests are configured for GitHub Actions:
 ## Next Steps
 
 Future test additions:
-- Key management flows (Phase 4)
-- Multi-device scenarios
-- Recovery flows
+- Key removal with confirmation dialog (requires multiple keys)
+- Sign in with newly added device key
 - Error boundary testing
 - Accessibility testing (axe)
 - Performance testing (Lighthouse)

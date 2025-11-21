@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { AccountInfo, IdentityInfo } from "$lib/stores/auth";
 	import { authStore } from "$lib/stores/auth";
-	import { updateDeviceName } from "$lib/services/account-api";
+	import { updateDeviceName, removeAccountKey } from "$lib/services/account-api";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
+	import AddDeviceModal from "./AddDeviceModal.svelte";
 
 	let { account } = $props<{ account: AccountInfo }>();
 
@@ -12,6 +13,9 @@
 	let saveError = $state<string | null>(null);
 	let saving = $state(false);
 	let currentIdentity = $state<IdentityInfo | null>(null);
+	let removingKeyId = $state<string | null>(null);
+	let removeError = $state<string | null>(null);
+	let showAddDeviceModal = $state(false);
 
 	authStore.currentIdentity.subscribe((value) => {
 		currentIdentity = value;
@@ -92,6 +96,43 @@
 			saving = false;
 		}
 	}
+
+	async function handleRemoveKey(keyId: string, deviceName: string) {
+		if (!currentIdentity?.identity) {
+			removeError = "No signing identity";
+			return;
+		}
+
+		const confirmed = confirm(
+			`Remove "${deviceName}" from your account?\n\nThis device will no longer be able to access your account.`,
+		);
+		if (!confirmed) return;
+
+		removingKeyId = keyId;
+		removeError = null;
+
+		try {
+			await removeAccountKey(
+				currentIdentity.identity as Ed25519KeyIdentity,
+				account.username,
+				keyId,
+			);
+			await authStore.loadAccountByUsername(account.username);
+		} catch (err) {
+			removeError =
+				err instanceof Error ? err.message : "Failed to remove key";
+		} finally {
+			removingKeyId = null;
+		}
+	}
+
+	function canRemoveKey(key: { id: string; isActive: boolean }): boolean {
+		// Can't remove the last active key
+		if (activeKeysCount <= 1 && key.isActive) return false;
+		// Can't remove already disabled keys (they're already "removed")
+		if (!key.isActive) return false;
+		return true;
+	}
 </script>
 
 <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
@@ -162,7 +203,16 @@
 	<!-- Device Keys Section -->
 	{#if account.publicKeys.length > 0}
 		<div class="mt-6 pt-6 border-t border-white/10">
-			<h3 class="text-lg font-semibold text-white mb-4">Devices</h3>
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-lg font-semibold text-white">Devices</h3>
+				<button
+					type="button"
+					onclick={() => (showAddDeviceModal = true)}
+					class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
+				>
+					+ Add Device
+				</button>
+			</div>
 			<div class="space-y-3">
 				{#each account.publicKeys as key}
 					<div
@@ -232,10 +282,34 @@
 									>Disabled</span
 								>
 							{/if}
+							{#if canRemoveKey(key)}
+								<button
+									type="button"
+									onclick={() => handleRemoveKey(key.id, getDeviceName(key))}
+									disabled={removingKeyId === key.id}
+									class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs rounded transition-colors disabled:opacity-50"
+									title="Remove this device"
+								>
+									{removingKeyId === key.id ? "..." : "Remove"}
+								</button>
+							{/if}
 						</div>
 					</div>
 				{/each}
+				{#if removeError}
+					<div class="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+						{removeError}
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}
 </div>
+
+{#if currentIdentity}
+	<AddDeviceModal
+		bind:open={showAddDeviceModal}
+		{account}
+		{currentIdentity}
+	/>
+{/if}

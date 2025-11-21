@@ -122,9 +122,6 @@ export async function getAccount(username: string): Promise<AccountWithKeys | nu
 /**
  * Search for account by public key
  * Returns account if key is registered, null if not found
- *
- * NOTE: Requires backend endpoint: GET /api/v1/accounts?publicKey={hex}
- * TODO: Backend must implement this endpoint
  */
 export async function getAccountByPublicKey(publicKey: string): Promise<AccountWithKeys | null> {
 	const response = await fetch(`${API_BASE_URL}/api/v1/accounts?publicKey=${publicKey}`, {
@@ -244,9 +241,6 @@ export async function removeAccountKey(
 /**
  * Update device name for a public key
  * Requires signing with an active key from the same account
- *
- * NOTE: Requires backend endpoint: PUT /api/v1/accounts/:username/keys/:keyId
- * TODO: Backend must implement this endpoint
  */
 export async function updateDeviceName(
 	identity: Ed25519KeyIdentity,

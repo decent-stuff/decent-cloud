@@ -265,4 +265,36 @@ test.describe('Sign-In Flow', () => {
 			page.locator(`text=@${testCredentials.username}`),
 		).not.toBeVisible();
 	});
+
+	test('should auto-detect account from seed phrase', async ({ page }) => {
+		// Step 1: Click "Connect Wallet"
+		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
+
+		// Step 2: Select "Seed Phrase" method
+		await page.click('text=Seed Phrase');
+		await page.click('button:has-text("Continue")');
+
+		// Step 3: Enter seed phrase
+		const seedInput = page.locator(
+			'textarea[placeholder*="seed" i], input[placeholder*="seed" i]',
+		);
+		await seedInput.fill(testCredentials.seedPhrase);
+		await page.click('button:has-text("Continue")');
+
+		// Step 4: Should show "Detecting Account" briefly then auto-sign in
+		// The account detection step may be very fast, so we wait for success
+		await expect(
+			page.locator('text=Welcome').or(page.locator('text=Success')),
+		).toBeVisible({ timeout: 15000 });
+
+		// Should show the auto-detected username
+		await expect(
+			page.locator(`text=@${testCredentials.username}`),
+		).toBeVisible();
+
+		// Step 5: Go to dashboard
+		await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+		await expect(page).toHaveURL(/\/dashboard/);
+	});
 });
