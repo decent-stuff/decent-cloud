@@ -2,7 +2,6 @@
 	import { authStore } from '$lib/stores/auth';
 	import AuthDialog from './AuthDialog.svelte';
 	import { onMount, onDestroy } from 'svelte';
-	import { computePubkey } from '$lib/utils/contract-format';
 	import type { IdentityInfo } from '$lib/stores/auth';
 
 	let isAuthenticated = $state(false);
@@ -55,9 +54,13 @@
 					>
 						<span class="font-medium">@{currentIdentity.account.username}</span>
 					</a>
-				{:else if currentIdentity?.publicKeyBytes}
-					<span class="text-white/70 text-sm font-mono">
-						{truncate(computePubkey(currentIdentity.publicKeyBytes))}
+				{:else if currentIdentity?.displayName}
+					<span class="text-white/70 text-sm">
+						{currentIdentity.displayName}
+					</span>
+				{:else if currentIdentity?.principal}
+					<span class="text-white/70 text-sm font-mono" title={currentIdentity.principal.toString()}>
+						{truncate(currentIdentity.principal.toString())}
 					</span>
 				{/if}
 				<a
