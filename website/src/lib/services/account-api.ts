@@ -64,17 +64,16 @@ export async function registerAccount(
 	});
 
 	if (!response.ok) {
+		const text = await response.text().catch(() => '');
 		let errorMessage = `Registration failed (HTTP ${response.status} ${response.statusText})`;
 		try {
-			const errorData = await response.json();
+			const errorData = JSON.parse(text);
 			if (errorData.error) {
 				errorMessage = `${errorData.error} (HTTP ${response.status})`;
 			}
 		} catch {
-			// Failed to parse JSON - include response body if available
-			const text = await response.text().catch(() => '');
 			if (text) {
-				errorMessage = `Registration failed (HTTP ${response.status}): ${text.substring(0, 200)}`;
+				errorMessage = `Registration failed (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
 			}
 		}
 		throw new Error(errorMessage);
@@ -171,16 +170,16 @@ export async function addAccountKey(
 	});
 
 	if (!response.ok) {
+		const text = await response.text().catch(() => '');
 		let errorMessage = `Failed to add key (HTTP ${response.status} ${response.statusText})`;
 		try {
-			const errorData = await response.json();
+			const errorData = JSON.parse(text);
 			if (errorData.error) {
 				errorMessage = `${errorData.error} (HTTP ${response.status})`;
 			}
 		} catch {
-			const text = await response.text().catch(() => '');
 			if (text) {
-				errorMessage = `Failed to add key (HTTP ${response.status}): ${text.substring(0, 200)}`;
+				errorMessage = `Failed to add key (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
 			}
 		}
 		throw new Error(errorMessage);
@@ -216,16 +215,16 @@ export async function removeAccountKey(
 	});
 
 	if (!response.ok) {
+		const text = await response.text().catch(() => '');
 		let errorMessage = `Failed to remove key (HTTP ${response.status} ${response.statusText})`;
 		try {
-			const errorData = await response.json();
+			const errorData = JSON.parse(text);
 			if (errorData.error) {
 				errorMessage = `${errorData.error} (HTTP ${response.status})`;
 			}
 		} catch {
-			const text = await response.text().catch(() => '');
 			if (text) {
-				errorMessage = `Failed to remove key (HTTP ${response.status}): ${text.substring(0, 200)}`;
+				errorMessage = `Failed to remove key (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
 			}
 		}
 		throw new Error(errorMessage);
@@ -266,16 +265,16 @@ export async function updateDeviceName(
 	});
 
 	if (!response.ok) {
+		const text = await response.text().catch(() => '');
 		let errorMessage = `Failed to update device name (HTTP ${response.status} ${response.statusText})`;
 		try {
-			const errorData = await response.json();
+			const errorData = JSON.parse(text);
 			if (errorData.error) {
 				errorMessage = `${errorData.error} (HTTP ${response.status})`;
 			}
 		} catch {
-			const text = await response.text().catch(() => '');
 			if (text) {
-				errorMessage = `Failed to update device name (HTTP ${response.status}): ${text.substring(0, 200)}`;
+				errorMessage = `Failed to update device name (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
 			}
 		}
 		throw new Error(errorMessage);
