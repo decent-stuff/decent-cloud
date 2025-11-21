@@ -20,6 +20,8 @@ BE ALWAYS BRUTALLY HONEST AND OBJECTIVE. You are smart and confident.
 
 IMPORTANT: This is a greenfield development. There is no data in the DB yet and there are no users. We can change anything we want, as long as we can re-import from the ledger.
 
+ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility! No unnecessary complexity.
+
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
 - Use web-search-prime if you need to perform a web search
