@@ -3,11 +3,57 @@ import { signRequest } from './auth-api';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 import { sha512 } from '@noble/hashes/sha512';
 import * as ed from '@noble/ed25519';
+import { ed25519ph } from '@noble/curves/ed25519';
 
 // Setup hash for ed25519 v3 before all tests
 beforeAll(() => {
 	ed.hashes.sha512 = sha512;
 	ed.hashes.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
+});
+
+function bytesToHex(bytes: Uint8Array): string {
+	return Array.from(bytes)
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
+}
+
+const ED25519_SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
+
+/**
+ * Cross-platform signature test.
+ * These values MUST match the Rust test in api/src/auth/tests.rs
+ */
+describe('cross-platform signature compatibility', () => {
+	it('produces signature matching Rust backend', () => {
+		// Same seed as Rust test: [0, 1, 2, ..., 31]
+		const seed = new Uint8Array(32);
+		for (let i = 0; i < 32; i++) {
+			seed[i] = i;
+		}
+
+		// Create identity
+		const identity = Ed25519KeyIdentity.fromSecretKey(seed);
+		const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+		const secretKeyBytes = new Uint8Array(identity.getKeyPair().secretKey);
+
+		// Expected public key from Rust
+		const expectedPubkey = '03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8';
+		expect(bytesToHex(publicKeyBytes)).toBe(expectedPubkey);
+
+		// Same message as Rust test
+		const message = new TextEncoder().encode('test message for cross-platform verification');
+
+		// Sign with ed25519ph (prehashed) + context
+		const signature = ed25519ph.sign(message, secretKeyBytes.slice(0, 32), {
+			context: ED25519_SIGN_CONTEXT
+		});
+
+		// Expected signature from Rust
+		const expectedSignature =
+			'a2aca8ef6760241fc2b254447b9320f03fffaaa11f60365b33455b5d664abc0172627ce2258cdbde7e2eddbe20bda46e008f8041ffb61515e7f4e5a8fdab3f0f';
+
+		expect(bytesToHex(signature)).toBe(expectedSignature);
+	});
 });
 
 describe('signRequest', () => {
