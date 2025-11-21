@@ -9,6 +9,12 @@
 
 This document specifies the design for username-based account profiles in Decent Cloud. Each account is identified by a username and can have multiple public keys (for multi-device access). The system uses cryptographic signatures for authentication and will eventually sync critical data to the blockchain ledger.
 
+**Data Structure:** Tree (Account → Keys)
+- Each account has 1-10 Ed25519 public keys
+- Each key belongs to **exactly one** account (enforced by `UNIQUE(public_key)`)
+- No key sharing across accounts (tree structure, not graph)
+- Enables multi-device access: laptop, phone, desktop can each have their own key for the same account
+
 ## Core Principles
 
 1. **Cryptographic Authentication**: All operations must be cryptographically signed with Ed25519
@@ -124,6 +130,7 @@ CREATE TABLE account_public_keys (
     id BLOB PRIMARY KEY DEFAULT (randomblob(16)),
     account_id BLOB NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     public_key BLOB UNIQUE NOT NULL, -- 32-byte Ed25519 pubkey
+    device_name TEXT, -- Optional user-friendly name (e.g., "My iPhone", "Work Laptop")
     is_active INTEGER NOT NULL DEFAULT 1, -- SQLite boolean (0/1)
     added_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000000000),
     disabled_at INTEGER,
@@ -374,7 +381,57 @@ CREATE INDEX idx_audit_created ON signature_audit(created_at);
 - `404 Not Found`: Account or key not found
 - `401 Unauthorized`: Invalid signature, signing key not active, replay attack
 
-### 5. Admin: Disable Key
+### 5. Update Key Metadata (Device Name)
+
+**Endpoint**: `PUT /api/v1/accounts/:username/keys/:keyId`
+
+**Request**:
+```json
+{
+  "deviceName": "My iPhone 15",
+  "signingPublicKey": "0x1234abcd...",
+  "timestamp": 1700000700000000000,
+  "nonce": "550e8400-e29b-41d4-a716-446655440004",
+  "signature": "0x3456mnop..."
+}
+```
+
+**Signed Message**:
+```
+1700000700000000000550e8400-e29b-41d4-a716-446655440004PUT/api/v1/accounts/alice/keys/750e8400-e29b-41d4-a716-446655440002{"deviceName":"My iPhone 15","signingPublicKey":"0x1234abcd...","timestamp":1700000700000000000,"nonce":"550e8400-e29b-41d4-a716-446655440004"}
+```
+
+**Validation**:
+1. Account exists
+2. Key exists and belongs to account
+3. Signing public key belongs to account and is active
+4. Device name ≤ 64 characters (optional, can be null)
+5. Timestamp within 5 minutes
+6. Nonce not seen in last 10 minutes
+7. Signature valid
+
+**Response** (200 OK):
+```json
+{
+  "id": "750e8400-e29b-41d4-a716-446655440002",
+  "publicKey": "0x5678efgh...",
+  "deviceName": "My iPhone 15",
+  "addedAt": 1700000300000000000,
+  "isActive": true
+}
+```
+
+**Errors**:
+- `400 Bad Request`: Invalid device name (too long), invalid timestamp
+- `404 Not Found`: Account or key not found
+- `401 Unauthorized`: Invalid signature, signing key not active, replay attack
+
+**Use Cases**:
+- User renames device from "Unnamed Device" to "Work Laptop"
+- User corrects typo in device name
+- Device name syncs across all browsers (stored in backend, not localStorage)
+
+### 6. Admin: Disable Key
 
 **Endpoint**: `POST /api/v1/admin/accounts/:username/keys/:keyId/disable`
 
@@ -408,7 +465,7 @@ CREATE INDEX idx_audit_created ON signature_audit(created_at);
 - User loses all keys and needs account recovery
 - Security incident response
 
-### 6. Admin: Add Recovery Key
+### 7. Admin: Add Recovery Key
 
 **Endpoint**: `POST /api/v1/admin/accounts/:username/recovery-key`
 
