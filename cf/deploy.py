@@ -601,7 +601,7 @@ Examples:
 
     # Execute command
     try:
-        if args.command == "deploy":
+        if args.command in ("deploy", "start"):
             return deploy_environment(environment)
         elif args.command == "stop":
             return stop_environment(environment)
