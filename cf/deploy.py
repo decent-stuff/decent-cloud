@@ -563,7 +563,7 @@ Examples:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Deploy command
-    deploy_parser = subparsers.add_parser("deploy", aliases=["start"], help="Deploy to environment")
+    deploy_parser = subparsers.add_parser("deploy", aliases=["start", "up"], help="Deploy to environment")
     deploy_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
 
     # Stop command
@@ -601,7 +601,7 @@ Examples:
 
     # Execute command
     try:
-        if args.command in ("deploy", "start"):
+        if args.command in ("deploy", "start", "up"):
             return deploy_environment(environment)
         elif args.command == "stop":
             return stop_environment(environment)
