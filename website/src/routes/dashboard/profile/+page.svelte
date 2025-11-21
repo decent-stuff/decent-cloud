@@ -53,11 +53,7 @@
 			</h3>
 			<div class="space-y-2 text-sm">
 				<p class="text-white/70">
-					Type: <span class="text-white"
-						>{currentIdentity.type === "ii"
-							? "Internet Identity"
-							: "Seed Phrase"}</span
-					>
+					Type: <span class="text-white">Seed Phrase</span>
 				</p>
 				<p class="text-white/70 font-mono">
 					Principal: <span class="text-white text-xs"

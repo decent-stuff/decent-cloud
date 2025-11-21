@@ -11,11 +11,9 @@
 		onNeedRegistration?: (identity: Ed25519KeyIdentity, seedPhrase: string) => void;
 	}>();
 
-	type Step = 'method' | 'seed-entry' | 'username-entry' | 'processing' | 'success';
-	type AuthMethod = 'seedPhrase' | 'ii';
+	type Step = 'seed-entry' | 'username-entry' | 'processing' | 'success';
 
-	let currentStep = $state<Step>('method');
-	let authMethod = $state<AuthMethod>('seedPhrase');
+	let currentStep = $state<Step>('seed-entry');
 	let seedPhrase = $state('');
 	let username = $state('');
 	let error = $state<string | null>(null);
@@ -29,30 +27,6 @@
 		const keyMaterial = hmac(sha512, 'ed25519 seed', seedBytes);
 		const derivedSeed = keyMaterial.slice(0, 32);
 		return Ed25519KeyIdentity.fromSecretKey(derivedSeed);
-	}
-
-	function selectMethod(method: AuthMethod) {
-		authMethod = method;
-		if (method === 'seedPhrase') {
-			currentStep = 'seed-entry';
-		} else {
-			// Internet Identity
-			handleIILogin();
-		}
-	}
-
-	async function handleIILogin() {
-		currentStep = 'processing';
-		error = null;
-
-		try {
-			await authStore.loginWithII('/dashboard');
-			// After II login, we'd need to ask for username or detect account
-			// For now, redirect to dashboard
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Login failed';
-			currentStep = 'method';
-		}
 	}
 
 	function validateSeedPhrase() {
@@ -162,59 +136,7 @@
 </script>
 
 <div class="space-y-6">
-	<!-- Step 1: Select Method -->
-	{#if currentStep === 'method'}
-		<div class="space-y-4">
-			<h3 class="text-2xl font-bold text-white">Sign In</h3>
-			<p class="text-white/60">Choose how you'd like to sign in</p>
-
-			<div class="space-y-3">
-				<!-- Seed Phrase -->
-				<button
-					type="button"
-					onclick={() => selectMethod('seedPhrase')}
-					class="w-full p-4 bg-gradient-to-r from-purple-500/20 to-pink-600/20 border border-purple-500/30 rounded-xl hover:border-purple-400 transition-all group"
-				>
-					<div class="flex items-center gap-4">
-						<span class="text-4xl">🔑</span>
-						<div class="text-left flex-1">
-							<h3 class="text-white font-semibold group-hover:text-purple-400">Seed Phrase</h3>
-							<p class="text-white/60 text-sm">Sign in with your 12-word recovery phrase</p>
-						</div>
-						<span class="text-white/40">→</span>
-					</div>
-				</button>
-
-				<!-- Internet Identity -->
-				<button
-					type="button"
-					onclick={() => selectMethod('ii')}
-					class="w-full p-4 bg-gradient-to-r from-blue-500/20 to-purple-600/20 border border-blue-500/30 rounded-xl hover:border-blue-400 transition-all group"
-				>
-					<div class="flex items-center gap-4">
-						<span class="text-4xl">🆔</span>
-						<div class="text-left flex-1">
-							<h3 class="text-white font-semibold group-hover:text-blue-400">Internet Identity</h3>
-							<p class="text-white/60 text-sm">Secure ICP authentication</p>
-						</div>
-						<span class="text-white/40">→</span>
-					</div>
-				</button>
-			</div>
-
-			<div class="pt-4 text-center">
-				<button
-					type="button"
-					onclick={onCancel}
-					class="text-white/60 hover:text-white text-sm transition-colors"
-				>
-					Cancel
-				</button>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Step 2: Enter Seed Phrase -->
+	<!-- Step 1: Enter Seed Phrase -->
 	{#if currentStep === 'seed-entry'}
 		<div class="space-y-4">
 			<h3 class="text-2xl font-bold text-white">Enter Your Seed Phrase</h3>
@@ -259,10 +181,10 @@
 			<div class="flex gap-3">
 				<button
 					type="button"
-					onclick={() => (currentStep = 'method')}
+					onclick={onCancel}
 					class="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
 				>
-					Back
+					Cancel
 				</button>
 				<button
 					type="button"

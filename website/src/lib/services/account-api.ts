@@ -21,6 +21,7 @@ export interface PublicKeyInfo {
 	publicKey: string;
 	addedAt: number;
 	isActive: boolean;
+	deviceName?: string;
 	disabledAt?: number;
 	disabledByKeyId?: string;
 }
@@ -119,17 +120,32 @@ export async function getAccount(username: string): Promise<AccountWithKeys | nu
 }
 
 /**
- * Check if an account exists with the given public key
- * Returns the account if found, null otherwise
+ * Search for account by public key
+ * Returns account if key is registered, null if not found
+ *
+ * NOTE: Requires backend endpoint: GET /api/v1/accounts?publicKey={hex}
+ * TODO: Backend must implement this endpoint
  */
 export async function getAccountByPublicKey(publicKey: string): Promise<AccountWithKeys | null> {
-	// We need to search through accounts or use a dedicated endpoint
-	// For now, we'll need to add this endpoint to the API
-	// Temporary: return null (will implement when API endpoint is added)
+	const response = await fetch(`${API_BASE_URL}/api/v1/accounts?publicKey=${publicKey}`, {
+		method: 'GET'
+	});
 
-	// TODO: Implement GET /api/v1/accounts?publicKey={hex}
-	// For now, users need to know their username to sign in
-	return null;
+	if (response.status === 404) {
+		return null; // Key not found in any account
+	}
+
+	if (!response.ok) {
+		throw new Error(`Failed to search account by pubkey: ${response.statusText}`);
+	}
+
+	const result: ApiResponse<AccountWithKeys> = await response.json();
+
+	if (!result.success) {
+		return null; // Not found
+	}
+
+	return result.data || null;
 }
 
 /**
@@ -223,6 +239,61 @@ export async function removeAccountKey(
 	if (!result.success) {
 		throw new Error(result.error || 'Failed to remove key');
 	}
+}
+
+/**
+ * Update device name for a public key
+ * Requires signing with an active key from the same account
+ *
+ * NOTE: Requires backend endpoint: PUT /api/v1/accounts/:username/keys/:keyId
+ * TODO: Backend must implement this endpoint
+ */
+export async function updateDeviceName(
+	identity: Ed25519KeyIdentity,
+	username: string,
+	keyId: string,
+	deviceName: string
+): Promise<PublicKeyInfo> {
+	const requestBody = {
+		deviceName
+	};
+
+	const { headers, body } = await signRequest(
+		identity,
+		'PUT',
+		`/api/v1/accounts/${username}/keys/${keyId}`,
+		requestBody
+	);
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/keys/${keyId}`, {
+		method: 'PUT',
+		headers: headers as HeadersInit,
+		body
+	});
+
+	if (!response.ok) {
+		let errorMessage = `Failed to update device name (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = await response.json();
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			const text = await response.text().catch(() => '');
+			if (text) {
+				errorMessage = `Failed to update device name (HTTP ${response.status}): ${text.substring(0, 200)}`;
+			}
+		}
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<PublicKeyInfo> = await response.json();
+
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to update device name');
+	}
+
+	return result.data;
 }
 
 /**

@@ -52,11 +52,7 @@
 		>
 			<div class="flex items-center gap-4">
 				<div class="text-4xl">
-					{#if currentIdentity.type === "ii"}
-						🌐
-					{:else}
-						🔑
-					{/if}
+					🔑
 				</div>
 				<div class="flex-1">
 					<h2 class="text-2xl font-bold text-white mb-1">
@@ -67,9 +63,7 @@
 						{/if}
 					</h2>
 					<p class="text-white/70 text-sm">
-						Logged in via {currentIdentity.type === "ii"
-							? "Internet Identity"
-							: "Seed Phrase"}
+						Logged in via Seed Phrase
 					</p>
 					<p class="text-white/50 text-xs font-mono mt-1">
 						Principal: {currentIdentity.principal.toString()}

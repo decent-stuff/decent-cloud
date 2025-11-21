@@ -12,14 +12,12 @@
 		onCancel: () => void;
 	}>();
 
-	type Step = 'username' | 'auth-method' | 'seed-backup' | 'confirm' | 'processing' | 'success';
-	type AuthMethod = 'seedPhrase' | 'ii';
+	type Step = 'username' | 'seed-backup' | 'confirm' | 'processing' | 'success';
 
 	let currentStep = $state<Step>('username');
 	let username = $state('');
 	let usernameValid = $state(false);
 	let normalizedUsername = $state('');
-	let authMethod = $state<AuthMethod>('seedPhrase');
 	let generatedSeedPhrase = $state('');
 	let seedBackedUp = $state(false);
 	let error = $state<string | null>(null);
@@ -41,16 +39,9 @@
 
 	function nextStep() {
 		if (currentStep === 'username' && usernameValid) {
-			currentStep = 'auth-method';
-		} else if (currentStep === 'auth-method') {
-			if (authMethod === 'seedPhrase') {
-				// Generate seed phrase
-				generatedSeedPhrase = generateMnemonic();
-				currentStep = 'seed-backup';
-			} else {
-				// Internet Identity flow
-				currentStep = 'confirm';
-			}
+			// Generate seed phrase
+			generatedSeedPhrase = generateMnemonic();
+			currentStep = 'seed-backup';
 		} else if (currentStep === 'seed-backup' && seedBackedUp) {
 			currentStep = 'confirm';
 		} else if (currentStep === 'confirm') {
@@ -59,16 +50,10 @@
 	}
 
 	function prevStep() {
-		if (currentStep === 'auth-method') {
+		if (currentStep === 'seed-backup') {
 			currentStep = 'username';
-		} else if (currentStep === 'seed-backup') {
-			currentStep = 'auth-method';
 		} else if (currentStep === 'confirm') {
-			if (authMethod === 'seedPhrase') {
-				currentStep = 'seed-backup';
-			} else {
-				currentStep = 'auth-method';
-			}
+			currentStep = 'seed-backup';
 		}
 	}
 
@@ -77,24 +62,17 @@
 		error = null;
 
 		try {
-			if (authMethod === 'seedPhrase') {
-				// Create identity from seed phrase
-				const identity = identityFromSeed(generatedSeedPhrase);
+			// Create identity from seed phrase
+			const identity = identityFromSeed(generatedSeedPhrase);
 
-				// Register account
-				const account = await authStore.registerNewAccount(identity, normalizedUsername);
+			// Register account
+			const account = await authStore.registerNewAccount(identity, normalizedUsername);
 
-				// Store seed phrase and create session
-				await authStore.loginWithSeedPhrase(generatedSeedPhrase, '/dashboard');
+			// Store seed phrase and create session
+			await authStore.loginWithSeedPhrase(generatedSeedPhrase, '/dashboard');
 
-				createdAccount = account;
-				currentStep = 'success';
-			} else {
-				// Internet Identity flow
-				// TODO: Implement II registration
-				error = 'Internet Identity registration not yet implemented';
-				currentStep = 'confirm';
-			}
+			createdAccount = account;
+			currentStep = 'success';
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Registration failed';
 			currentStep = 'confirm';
@@ -124,11 +102,11 @@
 	}
 
 	// Progress indicator
-	const steps = ['username', 'auth-method', 'seed-backup', 'confirm'] as const;
+	const steps = ['username', 'seed-backup', 'confirm'] as const;
 	const currentStepIndex = $derived(
 		steps.indexOf(currentStep as (typeof steps)[number]) + 1 || 0
 	);
-	const totalSteps = $derived(authMethod === 'seedPhrase' ? 4 : 3);
+	const totalSteps = 3;
 </script>
 
 <div class="space-y-6">
@@ -176,85 +154,7 @@
 		</div>
 	{/if}
 
-	<!-- Step 2: Auth Method -->
-	{#if currentStep === 'auth-method'}
-		<div class="space-y-4">
-			<h3 class="text-2xl font-bold text-white">Choose Authentication Method</h3>
-			<p class="text-white/60">How would you like to secure your account?</p>
-
-			<div class="space-y-3">
-				<!-- Seed Phrase (Recommended) -->
-				<button
-					type="button"
-					onclick={() => (authMethod = 'seedPhrase')}
-					class="w-full p-4 border-2 rounded-xl transition-all text-left {authMethod ===
-					'seedPhrase'
-						? 'border-blue-500 bg-blue-500/20'
-						: 'border-white/20 bg-white/5 hover:border-white/30'}"
-				>
-					<div class="flex items-start gap-3">
-						<span class="text-3xl">🔑</span>
-						<div class="flex-1">
-							<div class="flex items-center gap-2">
-								<h4 class="text-white font-semibold">Seed Phrase</h4>
-								<span
-									class="px-2 py-0.5 bg-green-500/20 border border-green-500/30 rounded text-xs text-green-400"
-									>Recommended</span
-								>
-							</div>
-							<p class="text-sm text-white/60 mt-1">
-								12-word recovery phrase. You have full control of your keys.
-							</p>
-						</div>
-						{#if authMethod === 'seedPhrase'}
-							<span class="text-blue-400 text-xl">✓</span>
-						{/if}
-					</div>
-				</button>
-
-				<!-- Internet Identity -->
-				<button
-					type="button"
-					onclick={() => (authMethod = 'ii')}
-					class="w-full p-4 border-2 rounded-xl transition-all text-left {authMethod === 'ii'
-						? 'border-blue-500 bg-blue-500/20'
-						: 'border-white/20 bg-white/5 hover:border-white/30'}"
-				>
-					<div class="flex items-start gap-3">
-						<span class="text-3xl">🆔</span>
-						<div class="flex-1">
-							<h4 class="text-white font-semibold">Internet Identity</h4>
-							<p class="text-sm text-white/60 mt-1">
-								ICP's secure authentication. Managed by Internet Computer.
-							</p>
-						</div>
-						{#if authMethod === 'ii'}
-							<span class="text-blue-400 text-xl">✓</span>
-						{/if}
-					</div>
-				</button>
-			</div>
-
-			<div class="flex gap-3">
-				<button
-					type="button"
-					onclick={prevStep}
-					class="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
-				>
-					Back
-				</button>
-				<button
-					type="button"
-					onclick={nextStep}
-					class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-lg text-white font-medium transition-all"
-				>
-					Continue
-				</button>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Step 3: Seed Backup -->
+	<!-- Step 2: Seed Backup -->
 	{#if currentStep === 'seed-backup'}
 		<div class="space-y-4">
 			<h3 class="text-2xl font-bold text-white">Backup Your Seed Phrase</h3>
@@ -338,7 +238,7 @@
 		</div>
 	{/if}
 
-	<!-- Step 4: Confirm -->
+	<!-- Step 3: Confirm -->
 	{#if currentStep === 'confirm'}
 		<div class="space-y-4">
 			<h3 class="text-2xl font-bold text-white">Confirm Your Details</h3>
@@ -352,9 +252,7 @@
 				<div class="border-t border-white/10"></div>
 				<div>
 					<div class="text-sm text-white/60">Authentication Method</div>
-					<div class="text-white font-medium">
-						{authMethod === 'seedPhrase' ? 'Seed Phrase' : 'Internet Identity'}
-					</div>
+					<div class="text-white font-medium">Seed Phrase</div>
 				</div>
 			</div>
 
@@ -383,7 +281,7 @@
 		</div>
 	{/if}
 
-	<!-- Step 5: Processing -->
+	<!-- Step 4: Processing -->
 	{#if currentStep === 'processing'}
 		<div class="space-y-4 text-center py-8">
 			<div class="text-6xl animate-bounce">🚀</div>
@@ -395,7 +293,7 @@
 		</div>
 	{/if}
 
-	<!-- Step 6: Success -->
+	<!-- Step 5: Success -->
 	{#if currentStep === 'success' && createdAccount}
 		<div class="space-y-4 text-center py-8">
 			<div class="text-6xl">🎉</div>
