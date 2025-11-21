@@ -303,9 +303,12 @@ def build_rust_binaries_natively() -> bool:
         os.chdir(project_root)
 
         # Build for linux/amd64 target (required for Docker)
+        # SQLX_OFFLINE=true uses pre-prepared .sqlx queries instead of live DB
+        build_env = {**os.environ, "SQLX_OFFLINE": "true"}
         subprocess.run(
             ["cargo", "build", "--release", "--bin", "api-server", "--bin", "dc", "--target", "x86_64-unknown-linux-gnu"],
             check=True,
+            env=build_env,
         )
 
         # Verify binary was created
