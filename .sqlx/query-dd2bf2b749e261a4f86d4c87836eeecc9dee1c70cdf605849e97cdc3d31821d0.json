@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "dd2bf2b749e261a4f86d4c87836eeecc9dee1c70cdf605849e97cdc3d31821d0"
+}

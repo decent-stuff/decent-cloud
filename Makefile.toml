@@ -107,7 +107,7 @@ TMPDB=$(mktemp --suffix=.db)
 trap "rm -f $TMPDB" EXIT
 DATABASE_URL="sqlite:$TMPDB?mode=rwc" sqlx database create
 DATABASE_URL="sqlite:$TMPDB" sqlx migrate run --source api/migrations
-DATABASE_URL="sqlite:$TMPDB" cargo sqlx prepare --workspace
+DATABASE_URL="sqlite:$TMPDB" cargo sqlx prepare --workspace -- --tests
 '''
 
 [tasks.all]

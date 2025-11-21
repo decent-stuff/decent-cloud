@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT old_status as \"old_status!\", new_status as \"new_status!\", change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "old_status!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "new_status!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "change_memo",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "8da5e83181742263f30946d29edf847077c0edd368a42bcdc0f95cb5c3160aea"
+}
