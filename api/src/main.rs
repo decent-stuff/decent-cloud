@@ -218,8 +218,12 @@ async fn serve_command() -> Result<(), std::io::Error> {
         Cors::new()
             .allow_origin("http://localhost:59000")
             .allow_origin("http://localhost:3000")
+            .allow_origin("http://localhost:5173")
+            .allow_origin("http://localhost:5174")
             .allow_origin("http://127.0.0.1:59000")
             .allow_origin("http://127.0.0.1:3000")
+            .allow_origin("http://127.0.0.1:5173")
+            .allow_origin("http://127.0.0.1:5174")
             .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
             .allow_headers(vec![
                 "content-type",
