@@ -21,21 +21,32 @@ describe('contract formatting helpers', () => {
 	});
 
 	describe('computePubkey', () => {
-		it('computes SHA256 hash of public key bytes', () => {
+		it('converts public key bytes to hex string', () => {
 			const testPubkey = new Uint8Array([1, 2, 3, 4, 5]);
-			const hash = computePubkey(testPubkey);
+			const hex = computePubkey(testPubkey);
 
-			// SHA256 should produce 64 hex characters (32 bytes)
-			expect(hash).toHaveLength(64);
-			expect(hash).toMatch(/^[0-9a-f]+$/);
+			// Should produce 10 hex characters (5 bytes * 2 hex chars per byte)
+			expect(hex).toBe('0102030405');
+			expect(hex).toHaveLength(10);
+			expect(hex).toMatch(/^[0-9a-f]+$/);
 		});
 
-		it('produces consistent hash for same input', () => {
+		it('produces consistent result for same input', () => {
 			const testPubkey = new Uint8Array([10, 20, 30, 40]);
-			const hash1 = computePubkey(testPubkey);
-			const hash2 = computePubkey(testPubkey);
+			const hex1 = computePubkey(testPubkey);
+			const hex2 = computePubkey(testPubkey);
 
-			expect(hash1).toBe(hash2);
+			expect(hex1).toBe(hex2);
+			expect(hex1).toBe('0a141e28');
+		});
+
+		it('handles Ed25519 public key (32 bytes)', () => {
+			const ed25519Pubkey = new Uint8Array(32).fill(0xff);
+			const hex = computePubkey(ed25519Pubkey);
+
+			// Ed25519 public key is 32 bytes = 64 hex characters
+			expect(hex).toHaveLength(64);
+			expect(hex).toBe('f'.repeat(64));
 		});
 	});
 });

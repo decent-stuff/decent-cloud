@@ -52,10 +52,20 @@
 			computePubkey(currentIdentity.publicKeyBytes) === pubkey,
 	);
 
+	// Derive IC Principal from the public key hex string in the URL
 	const derivedPrincipal = $derived(
-		isOwnProfile && currentIdentity?.publicKeyBytes
-			? derivePrincipalFromPubkey(currentIdentity.publicKeyBytes).toText()
-			: null,
+		(() => {
+			if (!pubkey || pubkey.length !== 64) return null; // Ed25519 keys are 32 bytes = 64 hex chars
+			try {
+				// Convert hex string to bytes
+				const pubkeyBytes = new Uint8Array(
+					pubkey.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)),
+				);
+				return derivePrincipalFromPubkey(pubkeyBytes).toText();
+			} catch {
+				return null;
+			}
+		})(),
 	);
 
 	// Helper to format account addresses
@@ -109,7 +119,7 @@
 				transfersData,
 				profileData,
 				socialsData,
-			contactsData,
+				contactsData,
 			] = await Promise.all([
 				getUserActivity(pubkey).catch(() => null),
 				getReputation(pubkey).catch(() => null),
@@ -117,7 +127,7 @@
 				getAccountTransfers(pubkey, 100).catch(() => []),
 				getUserProfile(pubkey).catch(() => null),
 				getUserSocials(pubkey).catch(() => []),
-			getUserContacts(pubkey).catch(() => []),
+				getUserContacts(pubkey).catch(() => []),
 			]);
 
 			activity = activityData;
@@ -190,7 +200,7 @@
 		</div>
 		<div class="space-y-3">
 			<div>
-				<p class="text-white/80 text-sm">Public Key Hash:</p>
+				<p class="text-white/80 text-sm">Public Key:</p>
 				<p class="font-mono text-sm text-white/90 break-all">
 					{pubkey}
 				</p>
@@ -200,14 +210,6 @@
 					<p class="text-white/80 text-sm">IC Principal:</p>
 					<p class="font-mono text-sm text-white/90 break-all">
 						{derivedPrincipal}
-					</p>
-				</div>
-			{:else if !isOwnProfile}
-				<div>
-					<p class="text-white/60 text-xs italic">
-						IC Principal cannot be derived from hash - API needs to
-						return original public key bytes (see
-						website/PUBKEY_CLEANUP_TASK.md)
 					</p>
 				</div>
 			{/if}

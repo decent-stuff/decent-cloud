@@ -1,4 +1,3 @@
-import { sha256 } from '@noble/hashes/sha2';
 import { hexEncode } from '$lib/services/api';
 import { Principal } from '@dfinity/principal';
 
@@ -20,9 +19,12 @@ export function truncateContractHash(hash: string, visible: number = 6): string 
 	return `${hash.slice(0, visible)}...${hash.slice(-visible)}`;
 }
 
+/**
+ * Convert Ed25519 public key bytes to hex string.
+ * Returns the raw public key hex (not a hash) so IC Principal can be derived from it.
+ */
 export function computePubkey(publicKeyBytes: Uint8Array): string {
-	const hash = sha256(publicKeyBytes);
-	return hexEncode(hash);
+	return hexEncode(publicKeyBytes);
 }
 
 /**
