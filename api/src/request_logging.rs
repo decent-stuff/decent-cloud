@@ -23,6 +23,17 @@ impl<E: Endpoint> Endpoint for RequestLoggingEndpoint<E> {
         let start = Instant::now();
         let method = req.method().to_string();
         let path = req.uri().path().to_string();
+        let query_str = req.uri().query().unwrap_or("");
+        let query_display = if query_str.is_empty() {
+            String::new()
+        } else {
+            let truncated = if query_str.len() > 100 {
+                format!("{}...", &query_str[..100])
+            } else {
+                query_str.to_string()
+            };
+            format!("?{}", truncated)
+        };
         let client_ip = req
             .remote_addr()
             .as_socket_addr()
@@ -42,7 +53,7 @@ impl<E: Endpoint> Endpoint for RequestLoggingEndpoint<E> {
                 if status.is_success() {
                     tracing::info!(
                         method = %method,
-                        path = %path,
+                        path = %format!("{}{}", path, query_display),
                         status = %status.as_u16(),
                         duration_ms = %duration_ms,
                         client_ip = %client_ip,
@@ -51,7 +62,7 @@ impl<E: Endpoint> Endpoint for RequestLoggingEndpoint<E> {
                 } else if status.is_client_error() || status.is_server_error() {
                     tracing::warn!(
                         method = %method,
-                        path = %path,
+                        path = %format!("{}{}", path, query_display),
                         status = %status.as_u16(),
                         duration_ms = %duration_ms,
                         client_ip = %client_ip,
@@ -60,7 +71,7 @@ impl<E: Endpoint> Endpoint for RequestLoggingEndpoint<E> {
                 } else {
                     tracing::debug!(
                         method = %method,
-                        path = %path,
+                        path = %format!("{}{}", path, query_display),
                         status = %status.as_u16(),
                         duration_ms = %duration_ms,
                         client_ip = %client_ip,
@@ -74,7 +85,7 @@ impl<E: Endpoint> Endpoint for RequestLoggingEndpoint<E> {
                 let status = err.status();
                 tracing::error!(
                     method = %method,
-                    path = %path,
+                    path = %format!("{}{}", path, query_display),
                     status = %status.as_u16(),
                     duration_ms = %duration_ms,
                     client_ip = %client_ip,
