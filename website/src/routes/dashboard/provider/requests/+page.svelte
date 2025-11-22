@@ -68,10 +68,11 @@ let signingIdentityInfo = $state<SigningIdentity | null>(null);
 				"GET",
 				`/api/v1/providers/${providerHex}/contracts`,
 			);
-			managedContracts = (await getProviderContracts(
+			const contracts = await getProviderContracts(
 				contractsSigned.headers,
 				providerHex,
-			)).filter((contract) =>
+			);
+			managedContracts = (contracts || []).filter((contract) =>
 				["accepted", "provisioning", "provisioned", "active"].includes(
 					contract.status.toLowerCase(),
 				),

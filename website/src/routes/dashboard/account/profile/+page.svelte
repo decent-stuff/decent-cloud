@@ -28,7 +28,7 @@
 		try {
 			await authStore.loginWithSeedPhrase(
 				undefined,
-				"/dashboard/profile",
+				"/dashboard/account/profile",
 			);
 		} catch (err) {
 			console.error("Failed to create signing key:", err);

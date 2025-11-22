@@ -40,7 +40,7 @@ test.describe('Account Settings Page', () => {
 
 		// Verify page title
 		await expect(
-			page.locator('h1:has-text("Account & Security")'),
+			page.locator('h1:has-text("Account Settings")'),
 		).toBeVisible();
 
 		// Verify account overview section
@@ -144,27 +144,34 @@ test.describe('Account Settings Page', () => {
 		test.skip();
 	});
 
-	test('should handle navigation between account and profile pages', async ({
+	test('should handle navigation between account sections', async ({
 		page,
 	}) => {
 		// Start at account page
 		await page.goto('/dashboard/account');
 		await expect(
-			page.locator('h1:has-text("Account & Security")'),
+			page.locator('h1:has-text("Account Settings")'),
 		).toBeVisible();
 
-		// Navigate to profile page
-		await page.click('a:has-text("Profile")');
-		await expect(page).toHaveURL('/dashboard/profile');
+		// Navigate to security section
+		await page.click('a:has-text("Security")');
+		await expect(page).toHaveURL('/dashboard/account/security');
 		await expect(
-			page.locator('h1:has-text("Public Profile")'),
+			page.locator('h1:has-text("Security")'),
 		).toBeVisible();
 
-		// Navigate back to account page
+		// Navigate back to account overview
 		await page.click('a:has-text("Account")');
 		await expect(page).toHaveURL('/dashboard/account');
 		await expect(
-			page.locator('h1:has-text("Account & Security")'),
+			page.locator('h1:has-text("Account Settings")'),
+		).toBeVisible();
+
+		// Navigate to profile section
+		await page.click('a:has-text("Public Profile")');
+		await expect(page).toHaveURL('/dashboard/account/profile');
+		await expect(
+			page.locator('h1:has-text("Public Profile")'),
 		).toBeVisible();
 	});
 
@@ -189,7 +196,7 @@ test.describe('Account Settings Page', () => {
 
 		// Should load without errors
 		await expect(
-			page.locator('h1:has-text("Account & Security")'),
+			page.locator('h1:has-text("Account Settings")'),
 		).toBeVisible();
 		await expect(
 			page.locator(`text=@${testCredentials.username}`),
@@ -197,7 +204,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should edit device name', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Find the Devices section
 		await expect(page.locator('text=Devices')).toBeVisible();
@@ -225,7 +232,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should cancel device name edit', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Click on device name to start editing
 		const deviceNameBtn = page.locator('button').filter({ hasText: /Device|Unnamed/ }).first();
@@ -243,7 +250,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should not show Remove button for single key account', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Find the Devices section
 		await expect(page.locator('text=Devices')).toBeVisible();
@@ -256,7 +263,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should display device key info correctly', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Should show device with Active status
 		await expect(page.locator('text=Active').first()).toBeVisible();
@@ -270,7 +277,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should show Add Device button', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Should show Add Device button
 		const addDeviceBtn = page.locator('button:has-text("+ Add Device")');
@@ -278,7 +285,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should open Add Device modal', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Click Add Device button
 		await page.click('button:has-text("+ Add Device")');
@@ -293,7 +300,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should add new device with seed phrase', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Initial key count
 		await expect(page.locator('text=1 key')).toBeVisible();
@@ -324,7 +331,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should cancel Add Device modal', async ({ page }) => {
-		await page.goto('/dashboard/account');
+		await page.goto('/dashboard/account/security');
 
 		// Click Add Device button
 		await page.click('button:has-text("+ Add Device")');

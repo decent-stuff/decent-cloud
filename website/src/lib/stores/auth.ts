@@ -153,10 +153,10 @@ function createAuthStore() {
 
 	async function fetchUserProfile(publicKeyBytes: Uint8Array): Promise<string | null> {
 		try {
-			const pubkey = Array.from(publicKeyBytes)
-				.map((b) => b.toString(16).padStart(2, '0'))
-				.join('');
-			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/profile`);
+			const current = get(activeIdentity);
+
+			// If account exists, fetch from account profile endpoint
+			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${current?.account?.username}/profile`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data?.display_name) {
