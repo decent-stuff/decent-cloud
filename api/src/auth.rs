@@ -141,6 +141,13 @@ pub fn verify_request_signature(
         .map_err(|e| AuthError::InternalError(format!("Failed to create identity: {}", e)))?;
 
     identity.verify_bytes(&message, &signature).map_err(|e| {
+        tracing::warn!(
+            "Signature verification FAILED: {}, pubkey={}, sig={}, message_len={}",
+            e,
+            hex::encode(&pubkey),
+            hex::encode(&signature),
+            message.len()
+        );
         AuthError::InvalidSignature(format!("Signature verification failed: {}", e))
     })?;
 
@@ -180,13 +187,18 @@ impl FromRequest<'_> for AuthenticatedUser {
         // NOTE: Query strings are intentionally excluded from signature for robustness
         // Security trade-off: query params could be manipulated, but they're typically
         // non-critical (filters, pagination, options). Body and path integrity maintained.
+        // Get the full path including /api/v1 prefix for signature verification
+        // The req.uri().path() only returns the path within the nested service
+        // but the client signs the full path including the prefix
+        let full_path = format!("/api/v1{}", req.uri().path());
+
         let pubkey = verify_request_signature(
             pubkey_hex,
             signature_hex,
             timestamp,
             nonce,
             req.method().as_str(),
-            req.uri().path(), // Path only, no query string
+            &full_path,
             &body_bytes,
         )?;
 
@@ -292,6 +304,11 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
         // Read body
         let body_bytes = body.take()?.into_vec().await?;
 
+        // Get the full path including /api/v1 prefix for signature verification
+        // The request.uri().path() only returns the path within the nested service
+        // but the client signs the full path including the prefix
+        let full_path = format!("/api/v1{}", request.uri().path());
+
         // Verify signature
         let pubkey = verify_request_signature(
             pubkey_hex,
@@ -299,7 +316,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
             timestamp,
             nonce,
             request.method().as_str(),
-            request.uri().path(),
+            &full_path,
             &body_bytes,
         )?;
 

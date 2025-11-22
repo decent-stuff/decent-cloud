@@ -281,3 +281,91 @@ fn test_get_admin_pubkeys_invalid_hex() {
 
     std::env::remove_var("ADMIN_PUBLIC_KEYS");
 }
+
+#[test]
+fn test_actual_failing_signature_from_curl() {
+    // Exact values from the failing curl request the user reported
+    let pubkey_hex = "4f16b64a096a48252fc4d9a11393778d84e95fcf6868b72b9d2b344d4b103386";
+    let signature_hex = "e6cd8399dffffbf4971415fcb3e27600b1377b20d3fcfee6ac6a16cf47129ce63ebb38b7a8f9e73e231a1af1aa48261a34218461d533087a50ae927ebc88ce09";
+    let timestamp = "1763841226767000000";
+    let nonce = "613a7ce4-e8b7-45d2-9b6d-04f6208f6093";
+    let method = "GET";
+    let path = "/api/v1/provider/rental-requests/pending";
+    let body = b""; // Empty for GET request
+
+    println!("\n=== Verifying actual failing signature ===");
+    println!("Public key: {}", pubkey_hex);
+    println!("Timestamp: {}", timestamp);
+    println!("Nonce: {}", nonce);
+    println!("Method: {}", method);
+    println!("Path: {}", path);
+    println!("Body length: {}", body.len());
+
+    let message = format!("{}{}{}{}", timestamp, nonce, method, path);
+    println!("Message (no body): {}", message);
+    println!("Message length: {}", message.len());
+
+    let result = verify_request_signature(
+        pubkey_hex,
+        signature_hex,
+        timestamp,
+        nonce,
+        method,
+        path,
+        body,
+    );
+
+    match &result {
+        Ok(verified_pubkey) => {
+            println!("✓ Signature VALID");
+            println!("Verified pubkey: {}", hex::encode(verified_pubkey));
+        }
+        Err(e) => {
+            println!("✗ Signature INVALID: {}", e);
+        }
+    }
+
+    // Fail if signature doesn't verify - this documents the bug
+    result.expect("Signature should be valid but is failing");
+}
+
+#[test]
+fn test_signature_crypto_only() {
+    // This test verifies ONLY the cryptographic signature, not the timestamp
+    // Using values from user's request
+    let pubkey_hex = "4f16b64a096a48252fc4d9a11393778d84e95fcf6868b72b9d2b344d4b103386";
+    let signature_hex = "e6cd8399dffffbf4971415fcb3e27600b1377b20d3fcfee6ac6a16cf47129ce63ebb38b7a8f9e73e231a1af1aa48261a34218461d533087a50ae927ebc88ce09";
+    let timestamp_str = "1763841226767000000";
+    let nonce_str = "613a7ce4-e8b7-45d2-9b6d-04f6208f6093";
+    let method = "GET";
+    let path = "/api/v1/provider/rental-requests/pending";
+    let body = b"";
+
+    // Decode public key and signature
+    let pubkey = hex::decode(pubkey_hex).unwrap();
+    let signature = hex::decode(signature_hex).unwrap();
+
+    // Construct message: timestamp + nonce + method + path + body
+    let mut message = timestamp_str.as_bytes().to_vec();
+    message.extend_from_slice(nonce_str.as_bytes());
+    message.extend_from_slice(method.as_bytes());
+    message.extend_from_slice(path.as_bytes());
+    message.extend_from_slice(body);
+
+    println!("\n=== Testing cryptographic signature only ===");
+    println!("Message length: {}", message.len());
+    println!("Public key length: {}", pubkey.len());
+    println!("Signature length: {}", signature.len());
+
+    // Verify signature using DccIdentity
+    let identity = DccIdentity::new_verifying_from_bytes(&pubkey).expect("Failed to create identity");
+    
+    let verify_result = identity.verify_bytes(&message, &signature);
+    
+    match &verify_result {
+        Ok(()) => println!("✓ Signature cryptographically VALID"),
+        Err(e) => println!("✗ Signature cryptographically INVALID: {}", e),
+    }
+
+    verify_result.expect("Cryptographic signature should be valid");
+}

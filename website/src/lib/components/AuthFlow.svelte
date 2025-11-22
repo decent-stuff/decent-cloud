@@ -137,14 +137,16 @@
 		try {
 			const identity = identityFromSeed(seedPhrase);
 
-			// Register account (atomic operation)
-			const account = await authStore.registerNewAccount(identity, normalizedUsername);
-
-			// Login with the registered account
-			await authStore.loginWithSeedPhrase(seedPhrase, '/dashboard');
+			// Register account (this also sets up the identity with account data and persists seed phrase)
+			const account = await authStore.registerNewAccount(identity, normalizedUsername, seedPhrase);
 
 			createdAccount = account;
 			currentStep = 'success';
+
+			// Navigate to dashboard - account is already set and persisted in auth store
+			if (typeof window !== 'undefined') {
+				window.location.href = '/dashboard';
+			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Registration failed';
 			currentStep = 'enter-username';

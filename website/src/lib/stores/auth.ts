@@ -129,24 +129,42 @@ function createAuthStore() {
 	) {
 		const principal = identity.getPrincipal();
 
-		// Check if this seed phrase is already stored
+		// Check if this identity already exists (by public key)
 		const identitiesList = get(identities);
-		const hasExactPhrase = identitiesList.some((i) => i.seedPhrase === seedPhrase);
-		if (hasExactPhrase) return;
+		const publicKeyHex = Array.from(publicKeyBytes)
+			.map((b) => b.toString(16).padStart(2, '0'))
+			.join('');
+		const existing = identitiesList.find((i) => {
+			const existingKeyHex = Array.from(i.publicKeyBytes)
+				.map((b) => b.toString(16).padStart(2, '0'))
+				.join('');
+			return existingKeyHex === publicKeyHex;
+		});
 
+		// If identity exists, preserve its account data
 		const newIdentity: IdentityInfo = {
 			identity,
 			principal,
 			type: 'seedPhrase',
 			publicKeyBytes,
 			secretKeyRaw,
-			seedPhrase
+			seedPhrase,
+			...(existing?.account && { account: existing.account })
 		};
 
-		identities.update((prev) => [...prev, newIdentity]);
+		// Update existing or add new
+		if (existing) {
+			identities.update((prev) =>
+				prev.map((i) =>
+					i.principal.toString() === existing.principal.toString() ? newIdentity : i
+				)
+			);
+		} else {
+			identities.update((prev) => [...prev, newIdentity]);
+		}
 
 		const current = get(activeIdentity);
-		if (!current) {
+		if (!current || current.principal.toString() === principal.toString()) {
 			activeIdentity.set(newIdentity);
 		}
 	}
@@ -188,16 +206,31 @@ function createAuthStore() {
 
 	async function registerNewAccount(
 		identity: Ed25519KeyIdentity,
-		username: string
+		username: string,
+		seedPhrase: string
 	): Promise<AccountInfo> {
 		const { registerAccount } = await import('../services/account-api');
 		const account = await registerAccount(identity, username);
 
+		// Persist seed phrase to localStorage so it survives page reload
+		persistSeedPhrase(seedPhrase);
+
 		// Get public key bytes for this identity
 		const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-		const seedPhrase = ''; // Will be set by loginWithSeedPhrase
+		const secretKeyRaw = new Uint8Array(identity.getKeyPair().secretKey);
+		const principal = identity.getPrincipal();
 
-		// Update or add identity with account info
+		const identityWithAccount: IdentityInfo = {
+			identity,
+			principal,
+			type: 'seedPhrase',
+			publicKeyBytes,
+			secretKeyRaw,
+			seedPhrase,
+			account
+		};
+
+		// Check if identity already exists
 		const identitiesList = get(identities);
 		const publicKeyHex = Array.from(publicKeyBytes)
 			.map((b) => b.toString(16).padStart(2, '0'))
@@ -213,16 +246,24 @@ function createAuthStore() {
 			// Update existing identity with account
 			identities.update((prev) =>
 				prev.map((id) =>
-					id.principal.toString() === existing.principal.toString() ? { ...id, account } : id
+					id.principal.toString() === existing.principal.toString()
+						? identityWithAccount
+						: id
 				)
 			);
-			activeIdentity.update((current) => {
-				if (current?.principal.toString() === existing.principal.toString()) {
-					return { ...current, account };
-				}
-				return current;
-			});
+		} else {
+			// Add new identity with account
+			identities.update((prev) => [...prev, identityWithAccount]);
 		}
+
+		// Set as active identity
+		activeIdentity.set(identityWithAccount);
+
+		console.log('[registerNewAccount] Account registered and set:', {
+			username: account.username,
+			hasAccount: !!identityWithAccount.account,
+			seedPhrasePersisted: true
+		});
 
 		return account;
 	}
