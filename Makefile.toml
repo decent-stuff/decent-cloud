@@ -37,7 +37,7 @@ args = ["build", "--all"]
 cwd = "./ic-canister/"
 
 [tasks.clippy]
-dependencies = ["dfx-start"]
+dependencies = ["sqlx-prepare", "dfx-start"]
 command = "cargo"
 args = ["clippy", "--tests"]
 
@@ -48,7 +48,7 @@ args = ["clippy", "--tests", "--target=wasm32-unknown-unknown"]
 cwd = "./ic-canister/"
 
 [tasks.build]
-dependencies = ["dfx-start"]
+dependencies = ["sqlx-prepare", "dfx-start"]
 command = "cargo"
 args = ["build"]
 
