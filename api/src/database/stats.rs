@@ -143,14 +143,14 @@ impl Database {
         .await?;
 
         let pending_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'pending'", 
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'pending'",
             pubkey
         )
         .fetch_one(&self.pool)
         .await?;
 
         let total_revenue: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ?", 
+            "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ?",
             pubkey
         )
         .fetch_one(&self.pool)

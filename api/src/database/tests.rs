@@ -1,5 +1,5 @@
 use crate::database::{Database, LedgerEntryData};
-use sqlx::{Row, SqlitePool};
+use sqlx::Row;
 
 /// Test database setup - manual table creation for test isolation
 ///

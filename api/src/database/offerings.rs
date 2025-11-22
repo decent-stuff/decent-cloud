@@ -72,8 +72,6 @@ pub struct SearchOfferingsParams<'a> {
     pub offset: i64,
 }
 
-// CreateOfferingParams eliminated - use Offering with id: None for creation
-
 #[allow(dead_code)]
 impl Database {
     /// Search offerings with filters
