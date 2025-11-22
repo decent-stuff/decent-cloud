@@ -101,7 +101,7 @@
 			const path = `/api/v1/providers/${pubkeyHex}/offerings/import?upsert=true`;
 
 			// Sign the request - this returns the exact body that was signed
-			const signed = await signRequest(identity, 'POST', path, currentCsvContent, 'text/csv');
+			const signed = await signRequest(identity, 'POST', path, currentCsvContent, 'text/plain');
 
 			if (!signed.body) {
 				throw new Error('Failed to sign request: signed body is empty');

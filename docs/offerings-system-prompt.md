@@ -248,7 +248,7 @@ cargo make                    # ✅ ALL TESTS PASS
 **Import CSV (Create Only):**
 ```bash
 POST /api/v1/providers/{pubkey}/offerings/import
-Content-Type: text/csv
+Content-Type: text/plain
 
 offering_id,offer_name,...
 off-1,Server 1,...
@@ -258,7 +258,7 @@ off-2,Server 2,...
 **Import CSV with Upsert:**
 ```bash
 POST /api/v1/providers/{pubkey}/offerings/import?upsert=true
-Content-Type: text/csv
+Content-Type: text/plain
 
 offering_id,offer_name,...
 off-1,Updated Name,...  # Updates existing
