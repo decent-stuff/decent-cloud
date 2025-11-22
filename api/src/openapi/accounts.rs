@@ -1,5 +1,7 @@
 use super::common::{
-    AddAccountKeyRequest, ApiResponse, ApiTags, RegisterAccountRequest, UpdateDeviceNameRequest,
+    AddAccountContactRequest, AddAccountExternalKeyRequest, AddAccountKeyRequest,
+    AddAccountSocialRequest, ApiResponse, ApiTags, RegisterAccountRequest,
+    UpdateAccountProfileRequest, UpdateDeviceNameRequest,
 };
 use crate::{auth::ApiAuthenticatedUser, database::Database};
 use poem::web::Data;
@@ -672,6 +674,819 @@ impl AccountsApi {
                     disabled_at: key.disabled_at,
                     disabled_by_key_id: key.disabled_by_key_id.map(|id| hex::encode(&id)),
                 }),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get account profile
+    ///
+    /// Returns the public profile information for an account (public endpoint)
+    #[oai(
+        path = "/accounts/:username/profile",
+        method = "get",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_account_profile(
+        &self,
+        db: Data<&Arc<Database>>,
+        username: Path<String>,
+    ) -> Json<ApiResponse<crate::database::accounts::AccountProfile>> {
+        match db.get_account_by_username(&username.0).await {
+            Ok(Some(account)) => Json(ApiResponse {
+                success: true,
+                data: Some(account.into()),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Account not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update account profile
+    ///
+    /// Updates profile information (requires authentication)
+    #[oai(
+        path = "/accounts/:username/profile",
+        method = "put",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn update_account_profile(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        req: Json<UpdateAccountProfileRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::AccountProfile>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's profile".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Update profile
+        match db
+            .update_account_profile(
+                &account.id,
+                req.display_name.as_deref(),
+                req.bio.as_deref(),
+                req.avatar_url.as_deref(),
+            )
+            .await
+        {
+            Ok(updated_account) => Json(ApiResponse {
+                success: true,
+                data: Some(updated_account.into()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get account contacts
+    ///
+    /// Returns contact information for an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/contacts",
+        method = "get",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_account_contacts(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::users::AccountContact>>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot view another user's contacts".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Get contacts
+        match db.get_account_contacts(&account.id).await {
+            Ok(contacts) => Json(ApiResponse {
+                success: true,
+                data: Some(contacts),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Add account contact
+    ///
+    /// Adds a new contact to an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/contacts",
+        method = "post",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn add_account_contact(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        req: Json<AddAccountContactRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's contacts".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Validate contact type and value
+        if let Err(e) = crate::validation::validate_contact_type(&req.contact_type) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        if let Err(e) =
+            crate::validation::validate_contact_value(&req.contact_type, &req.contact_value)
+        {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        // Add contact
+        match db
+            .add_account_contact(
+                &account.id,
+                &req.contact_type,
+                &req.contact_value,
+                req.verified,
+            )
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Contact added successfully".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Delete account contact
+    ///
+    /// Deletes a contact from an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/contacts/:contact_id",
+        method = "delete",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn delete_account_contact(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        contact_id: Path<i64>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's contacts".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Delete contact
+        match db.delete_account_contact(&account.id, contact_id.0).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Contact deleted successfully".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get account socials
+    ///
+    /// Returns social media accounts for an account (public endpoint)
+    #[oai(
+        path = "/accounts/:username/socials",
+        method = "get",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_account_socials(
+        &self,
+        db: Data<&Arc<Database>>,
+        username: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::users::AccountSocial>>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Get socials (public, no auth required)
+        match db.get_account_socials(&account.id).await {
+            Ok(socials) => Json(ApiResponse {
+                success: true,
+                data: Some(socials),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Add account social
+    ///
+    /// Adds a social media account to an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/socials",
+        method = "post",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn add_account_social(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        req: Json<AddAccountSocialRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's socials".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Validate social platform and username
+        if let Err(e) = crate::validation::validate_social_platform(&req.platform) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        if let Err(e) = crate::validation::validate_social_username(&req.username) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        if let Some(ref url) = req.profile_url {
+            if let Err(e) = crate::validation::validate_url(url) {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                });
+            }
+        }
+
+        // Add social
+        match db
+            .add_account_social(
+                &account.id,
+                &req.platform,
+                &req.username,
+                req.profile_url.as_deref(),
+            )
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Social account added successfully".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Delete account social
+    ///
+    /// Deletes a social media account from an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/socials/:social_id",
+        method = "delete",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn delete_account_social(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        social_id: Path<i64>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's socials".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Delete social
+        match db.delete_account_social(&account.id, social_id.0).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Social account deleted successfully".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get account external keys
+    ///
+    /// Returns SSH/GPG keys for an account (public endpoint)
+    #[oai(
+        path = "/accounts/:username/external-keys",
+        method = "get",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_account_external_keys(
+        &self,
+        db: Data<&Arc<Database>>,
+        username: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::users::AccountExternalKey>>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Get external keys (public, no auth required)
+        match db.get_account_external_keys(&account.id).await {
+            Ok(keys) => Json(ApiResponse {
+                success: true,
+                data: Some(keys),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Add account external key
+    ///
+    /// Adds an SSH or GPG key to an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/external-keys",
+        method = "post",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn add_account_external_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        req: Json<AddAccountExternalKeyRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's keys".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Validate key
+        if let Err(e) = crate::validation::validate_public_key(&req.key_type, &req.key_data) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        // Add external key
+        match db
+            .add_account_external_key(
+                &account.id,
+                &req.key_type,
+                &req.key_data,
+                req.key_fingerprint.as_deref(),
+                req.label.as_deref(),
+            )
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("External key added successfully".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Delete account external key
+    ///
+    /// Deletes an SSH or GPG key from an account (requires authentication)
+    #[oai(
+        path = "/accounts/:username/external-keys/:key_id",
+        method = "delete",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn delete_account_external_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        username: Path<String>,
+        key_id: Path<i64>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's keys".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Delete external key
+        match db.delete_account_external_key(&account.id, key_id.0).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("External key deleted successfully".to_string()),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

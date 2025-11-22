@@ -785,23 +785,19 @@ impl Database {
                 Ok(record) => {
                     match Self::parse_csv_record(&record) {
                         Ok(params) => {
-                            let result = if upsert {
+                            let result: Result<()> = if upsert {
                                 // Try to find existing offering by offering_id
                                 let existing_offering_id = &params.offering_id;
-                                let existing = sqlx::query_scalar!(
+                                match sqlx::query_scalar!(
                                     r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ? AND (pubkey) = ?"#,
                                     existing_offering_id,
                                     pubkey
                                 )
                                 .fetch_optional(&self.pool)
-                                .await;
-
-                                match existing {
-                                    Ok(Some(id)) => self.update_offering(pubkey, id, params).await,
-                                    Ok(None) => {
-                                        self.create_offering(pubkey, params).await.map(|_| ())
-                                    }
-                                    Err(e) => Err(e.into()),
+                                .await {
+                                    Ok(Some(id)) => self.update_offering(pubkey, id, params).await.map(|_| ()),
+                                    Ok(None) => self.create_offering(pubkey, params).await.map(|_| ()),
+                                    Err(e) => Err(anyhow::Error::from(e)),
                                 }
                             } else {
                                 self.create_offering(pubkey, params).await.map(|_| ())

@@ -95,23 +95,8 @@ async fn assert_table_count(db: &Database, table: &str, expected: i64) {
 }
 
 // Core functionality tests
-// Test database setup - using in-memory for simplicity and fast, isolated tests.
-async fn setup_test_db() -> Database {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-
-    // Load and execute migrations SQL at runtime for production-like schema
-    let migration1_sql = include_str!("../../migrations/001_original_schema.sql");
-    sqlx::query(migration1_sql).execute(&pool).await.unwrap();
-    // Add more migrations below as needed
-
-    // Create sync_state table and initialize
-    sqlx::query("CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY, last_position INTEGER, last_sync_at TIMESTAMP)")
-        .execute(&pool).await.unwrap();
-    sqlx::query("INSERT OR IGNORE INTO sync_state (id, last_position, last_sync_at) VALUES (1, 0, CURRENT_TIMESTAMP)")
-        .execute(&pool).await.unwrap();
-
-    Database { pool }
-}
+// Test database setup - using shared helper that runs all migrations
+use crate::database::test_helpers::setup_test_db;
 
 // Core functionality tests
 #[tokio::test]

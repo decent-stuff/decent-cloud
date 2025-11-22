@@ -84,9 +84,10 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
 
-        let total_volume = sqlx::query_scalar!("SELECT SUM(amount_e9s) FROM token_transfers")
-            .fetch_one(&self.pool)
-            .await?;
+        let total_volume: Option<i64> =
+            sqlx::query_scalar!("SELECT SUM(amount_e9s) FROM token_transfers")
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(PlatformStats {
             total_providers,

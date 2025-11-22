@@ -1,13 +1,5 @@
 use super::*;
-use sqlx::SqlitePool;
-
-async fn setup_test_db() -> Database {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    let migration1_sql = include_str!("../../../migrations/001_original_schema.sql");
-    sqlx::query(migration1_sql).execute(&pool).await.unwrap();
-    // Add more migrations below as needed
-    Database { pool }
-}
+use crate::database::test_helpers::setup_test_db;
 
 async fn insert_test_offering(db: &Database, id: i64, pubkey: &[u8], country: &str, price: f64) {
     // Use IDs starting from 100 to avoid conflicts with example data from migration 002

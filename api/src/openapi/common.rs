@@ -139,6 +139,45 @@ pub struct UpdateDeviceNameRequest {
     pub device_name: Option<String>,
 }
 
+// Request types for account profile
+#[derive(Debug, Deserialize, Object)]
+pub struct UpdateAccountProfileRequest {
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    #[serde(rename = "avatarUrl")]
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Object)]
+pub struct AddAccountContactRequest {
+    #[serde(rename = "contactType")]
+    pub contact_type: String,
+    #[serde(rename = "contactValue")]
+    pub contact_value: String,
+    #[serde(default)]
+    pub verified: bool,
+}
+
+#[derive(Debug, Deserialize, Object)]
+pub struct AddAccountSocialRequest {
+    pub platform: String,
+    pub username: String,
+    #[serde(rename = "profileUrl")]
+    pub profile_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Object)]
+pub struct AddAccountExternalKeyRequest {
+    #[serde(rename = "keyType")]
+    pub key_type: String,
+    #[serde(rename = "keyData")]
+    pub key_data: String,
+    #[serde(rename = "keyFingerprint")]
+    pub key_fingerprint: Option<String>,
+    pub label: Option<String>,
+}
+
 // Request types for admin
 #[derive(Debug, Serialize, Deserialize, Object)]
 pub struct AdminDisableKeyRequest {

@@ -64,6 +64,38 @@ pub struct PublicKeyInfo {
     pub disabled_by_key_id: Option<String>,
 }
 
+/// Account profile for API responses
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
+pub struct AccountProfile {
+    pub id: String,
+    pub username: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    #[oai(skip_serializing_if_is_none)]
+    pub display_name: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub bio: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub avatar_url: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub profile_updated_at: Option<i64>,
+}
+
+impl From<Account> for AccountProfile {
+    fn from(account: Account) -> Self {
+        Self {
+            id: hex::encode(&account.id),
+            username: account.username,
+            created_at: account.created_at,
+            updated_at: account.updated_at,
+            display_name: account.display_name,
+            bio: account.bio,
+            avatar_url: account.avatar_url,
+            profile_updated_at: account.profile_updated_at,
+        }
+    }
+}
+
 impl Database {
     /// Create a new account with initial public key
     pub async fn create_account(&self, username: &str, public_key: &[u8]) -> Result<Account> {

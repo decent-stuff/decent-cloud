@@ -1,12 +1,5 @@
 use super::*;
-use sqlx::SqlitePool;
-
-async fn setup_test_db() -> Database {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    let migration_sql = include_str!("../../../migrations/001_original_schema.sql");
-    sqlx::query(migration_sql).execute(&pool).await.unwrap();
-    Database { pool }
-}
+use crate::database::test_helpers::setup_test_db;
 
 #[tokio::test]
 async fn test_get_platform_stats_empty() {
