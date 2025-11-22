@@ -518,7 +518,7 @@ impl Database {
         offering_id: &str,
     ) -> Result<Option<crate::database::offerings::Offering>> {
         let offering = sqlx::query_as::<_, crate::database::offerings::Offering>(
-            r#"SELECT id, hex(pubkey) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
+            r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,

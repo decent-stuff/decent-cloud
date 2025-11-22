@@ -176,7 +176,7 @@ impl Database {
         let validators = sqlx::query_as!(
             Validator,
             r#"SELECT
-                hex(r.pubkey) as "pubkey!: String",
+                lower(hex(r.pubkey)) as "pubkey!: String",
                 NULLIF(p.name, '') as "name?: String",
                 NULLIF(p.description, '') as "description?: String",
                 NULLIF(p.website_url, '') as "website_url?: String",

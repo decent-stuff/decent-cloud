@@ -79,6 +79,7 @@ impl ResponseError for AuthError {
 /// - X-Signature: hex-encoded signature (64 bytes)
 /// - X-Timestamp: unix timestamp in nanoseconds
 /// - X-Nonce: UUID v4 for replay prevention
+/// - now_ns: optional override for current time in nanoseconds (e.g. for testing)
 pub fn verify_request_signature(
     pubkey_hex: &str,
     signature_hex: &str,
@@ -87,6 +88,7 @@ pub fn verify_request_signature(
     method: &str,
     path: &str,
     body: &[u8],
+    now_ns: Option<i64>,
 ) -> Result<Vec<u8>, AuthError> {
     // Decode public key
     let pubkey = hex::decode(pubkey_hex)
@@ -116,7 +118,7 @@ pub fn verify_request_signature(
         .map_err(|e| AuthError::InvalidFormat(format!("Invalid timestamp: {}", e)))?;
 
     // Verify timestamp freshness (within 5 minutes)
-    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now = now_ns.unwrap_or_else(|| chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
     let max_age_ns = 5 * 60 * 1_000_000_000; // 5 minutes
     let age = now - timestamp;
 
@@ -200,6 +202,7 @@ impl FromRequest<'_> for AuthenticatedUser {
             req.method().as_str(),
             &full_path,
             &body_bytes,
+            None,
         )?;
 
         // Restore body for downstream handlers
@@ -240,6 +243,7 @@ impl ApiAuthenticatedUser {
             method,
             path,
             body,
+            None,
         )?;
         Ok(ApiAuthenticatedUser { pubkey })
     }
@@ -318,6 +322,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
             request.method().as_str(),
             &full_path,
             &body_bytes,
+            None,
         )?;
 
         // Restore body for downstream handlers
@@ -414,6 +419,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
             request.method().as_str(),
             request.uri().path(),
             &body_bytes,
+            None,
         )?;
 
         // Check if public key is in admin list

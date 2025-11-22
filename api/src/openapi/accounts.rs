@@ -142,6 +142,7 @@ impl AccountsApi {
             "POST",
             "/api/v1/accounts",
             &req_body_bytes,
+            None,
         ) {
             return Json(ApiResponse {
                 success: false,

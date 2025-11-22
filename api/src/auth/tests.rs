@@ -79,6 +79,7 @@ fn test_verify_valid_signature() {
         method,
         path,
         body,
+        None,
     );
 
     assert!(result.is_ok());
@@ -118,6 +119,7 @@ fn test_verify_invalid_signature() {
         method,
         path,
         tampered_body,
+        None,
     );
 
     assert!(result.is_err());
@@ -155,6 +157,7 @@ fn test_verify_expired_timestamp() {
         method,
         path,
         body,
+        None,
     );
 
     assert!(result.is_err());
@@ -171,6 +174,7 @@ fn test_verify_invalid_pubkey_length() {
         "POST",
         "/test",
         b"{}",
+        None,
     );
 
     assert!(result.is_err());
@@ -188,6 +192,7 @@ fn test_verify_invalid_signature_length() {
         "POST",
         "/test",
         b"{}",
+        None,
     );
 
     assert!(result.is_err());
@@ -206,6 +211,7 @@ fn test_verify_invalid_nonce_format() {
         "POST",
         "/test",
         b"{}",
+        None,
     );
 
     assert!(result.is_err());
@@ -292,6 +298,9 @@ fn test_actual_failing_signature_from_curl() {
     let method = "GET";
     let path = "/api/v1/provider/rental-requests/pending";
     let body = b""; // Empty for GET request
+    let now_ns = timestamp
+        .parse::<i64>()
+        .expect("Timestamp should be valid i64 nanoseconds");
 
     println!("\n=== Verifying actual failing signature ===");
     println!("Public key: {}", pubkey_hex);
@@ -313,6 +322,7 @@ fn test_actual_failing_signature_from_curl() {
         method,
         path,
         body,
+        Some(now_ns),
     );
 
     match &result {
