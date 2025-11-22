@@ -11,11 +11,11 @@
 	}
 
 	interface Props {
-		pubkey: string;
+		username: string;
 		apiClient: UserApiClient;
 	}
 
-	let { pubkey, apiClient }: Props = $props();
+	let { username, apiClient }: Props = $props();
 
 	let socials = $state<Social[]>([]);
 	let newSocial = $state({ platform: 'twitter', username: '', profile_url: '' });
@@ -29,7 +29,7 @@
 
 	async function loadSocials() {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/socials`);
+			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/socials`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -49,7 +49,7 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.upsertSocial(pubkey, {
+			const res = await apiClient.upsertSocial(username, {
 				platform: newSocial.platform,
 				username: newSocial.username,
 				profile_url: newSocial.profile_url || undefined
@@ -81,7 +81,7 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.deleteSocial(pubkey, id);
+			const res = await apiClient.deleteSocial(username, id);
 			await handleApiResponse(res);
 
 			const data = await res.json();

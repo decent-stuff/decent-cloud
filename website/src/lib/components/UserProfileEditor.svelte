@@ -4,7 +4,7 @@
 	import { UserApiClient, handleApiResponse } from '$lib/services/user-api';
 	import ContactsEditor from './ContactsEditor.svelte';
 	import SocialsEditor from './SocialsEditor.svelte';
-	import PublicKeysEditor from './PublicKeysEditor.svelte';
+	import ExternalKeysEditor from './ExternalKeysEditor.svelte';
 	import type { IdentityInfo } from '$lib/stores/auth';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
@@ -24,15 +24,18 @@
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
 
-	const pubkey = Array.from(signingIdentity.publicKeyBytes!)
-		.map((b) => b.toString(16).padStart(2, '0'))
-		.join('');
+	// Get username from the account
+	const username = identity.account?.username;
+	if (!username) {
+		throw new Error('No account username found');
+	}
+
 	const apiClient = new UserApiClient(signingIdentity.identity as Ed25519KeyIdentity);
 
 	// Fetch existing profile
 	onMount(async () => {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/profile`);
+			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/profile`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -54,7 +57,7 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.updateProfile(pubkey, profile);
+			const res = await apiClient.updateProfile(username, profile);
 			await handleApiResponse(res);
 
 			const data = await res.json();
@@ -138,7 +141,7 @@
 		</button>
 	</div>
 
-	<ContactsEditor {pubkey} {apiClient} />
-	<SocialsEditor {pubkey} {apiClient} />
-	<PublicKeysEditor {pubkey} {apiClient} />
+	<ContactsEditor {username} {apiClient} />
+	<SocialsEditor {username} {apiClient} />
+	<ExternalKeysEditor {username} {apiClient} />
 </div>

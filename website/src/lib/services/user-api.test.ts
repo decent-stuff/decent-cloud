@@ -45,24 +45,24 @@ describe('UserApiClient', () => {
 
 	describe('updateProfile', () => {
 		it('calls authenticated fetch with correct parameters', async () => {
-			const pubkey = 'test-pubkey';
+			const username = 'testuser';
 			const profile = {
 				display_name: 'Test User',
 				bio: 'Test bio',
 				avatar_url: 'https://example.com/avatar.png'
 			};
 
-			await client.updateProfile(pubkey, profile);
+			await client.updateProfile(username, profile);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'PUT',
-				`/api/v1/users/${pubkey}/profile`,
+				`/api/v1/accounts/${username}/profile`,
 				profile
 			);
 
 			expect(fetch).toHaveBeenCalledWith(
-				expect.stringContaining(`/api/v1/users/${pubkey}/profile`),
+				expect.stringContaining(`/api/v1/accounts/${username}/profile`),
 				expect.objectContaining({
 					method: 'PUT',
 					headers: expect.objectContaining({
@@ -76,35 +76,35 @@ describe('UserApiClient', () => {
 
 	describe('upsertContact', () => {
 		it('calls POST with contact data', async () => {
-			const pubkey = 'test-pubkey';
+			const username = 'testuser';
 			const contact = {
 				contact_type: 'email',
 				contact_value: 'test@example.com',
 				verified: false
 			};
 
-			await client.upsertContact(pubkey, contact);
+			await client.upsertContact(username, contact);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'POST',
-				`/api/v1/users/${pubkey}/contacts`,
+				`/api/v1/accounts/${username}/contacts`,
 				contact
 			);
 		});
 	});
 
 	describe('deleteContact', () => {
-		it('calls DELETE with contact type', async () => {
-			const pubkey = 'test-pubkey';
+		it('calls DELETE with contact ID', async () => {
+			const username = 'testuser';
 			const contactId = 123;
 
-			await client.deleteContact(pubkey, contactId);
+			await client.deleteContact(username, contactId);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'DELETE',
-				`/api/v1/users/${pubkey}/contacts/${contactId}`,
+				`/api/v1/accounts/${username}/contacts/${contactId}`,
 				undefined
 			);
 		});
@@ -112,43 +112,43 @@ describe('UserApiClient', () => {
 
 	describe('upsertSocial', () => {
 		it('calls POST with social data', async () => {
-			const pubkey = 'test-pubkey';
+			const username = 'testuser';
 			const social = {
 				platform: 'twitter',
 				username: 'testuser',
 				profile_url: 'https://twitter.com/testuser'
 			};
 
-			await client.upsertSocial(pubkey, social);
+			await client.upsertSocial(username, social);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'POST',
-				`/api/v1/users/${pubkey}/socials`,
+				`/api/v1/accounts/${username}/socials`,
 				social
 			);
 		});
 	});
 
 	describe('deleteSocial', () => {
-		it('calls DELETE with platform', async () => {
-			const pubkey = 'test-pubkey';
+		it('calls DELETE with social ID', async () => {
+			const username = 'testuser';
 			const socialId = 456;
 
-			await client.deleteSocial(pubkey, socialId);
+			await client.deleteSocial(username, socialId);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'DELETE',
-				`/api/v1/users/${pubkey}/socials/${socialId}`,
+				`/api/v1/accounts/${username}/socials/${socialId}`,
 				undefined
 			);
 		});
 	});
 
-	describe('addPublicKey', () => {
-		it('calls POST with key data', async () => {
-			const pubkey = 'test-pubkey';
+	describe('addExternalKey', () => {
+		it('calls POST with external key data', async () => {
+			const username = 'testuser';
 			const key = {
 				key_type: 'ssh-ed25519',
 				key_data: 'ssh-ed25519 AAAAC3...',
@@ -156,28 +156,28 @@ describe('UserApiClient', () => {
 				label: 'My laptop'
 			};
 
-			await client.addPublicKey(pubkey, key);
+			await client.addExternalKey(username, key);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'POST',
-				`/api/v1/users/${pubkey}/keys`,
+				`/api/v1/accounts/${username}/external-keys`,
 				key
 			);
 		});
 	});
 
-	describe('deletePublicKey', () => {
-		it('calls DELETE with fingerprint', async () => {
-			const pubkey = 'test-pubkey';
+	describe('deleteExternalKey', () => {
+		it('calls DELETE with key ID', async () => {
+			const username = 'testuser';
 			const keyId = 789;
 
-			await client.deletePublicKey(pubkey, keyId);
+			await client.deleteExternalKey(username, keyId);
 
 			expect(authApi.signRequest).toHaveBeenCalledWith(
 				mockIdentity,
 				'DELETE',
-				`/api/v1/users/${pubkey}/keys/${keyId}`,
+				`/api/v1/accounts/${username}/external-keys/${keyId}`,
 				undefined
 			);
 		});

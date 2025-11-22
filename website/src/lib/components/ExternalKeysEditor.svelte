@@ -3,7 +3,7 @@
 	import { API_BASE_URL } from '$lib/services/api';
 	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
 
-	interface PublicKey {
+	interface ExternalKey {
 		id: number;
 		key_type: string;
 		key_data: string;
@@ -12,13 +12,13 @@
 	}
 
 	interface Props {
-		pubkey: string;
+		username: string;
 		apiClient: UserApiClient;
 	}
 
-	let { pubkey, apiClient }: Props = $props();
+	let { username, apiClient }: Props = $props();
 
-	let keys = $state<PublicKey[]>([]);
+	let keys = $state<ExternalKey[]>([]);
 	let newKey = $state({
 		type: 'ssh-ed25519',
 		data: '',
@@ -35,7 +35,7 @@
 
 	async function loadKeys() {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/keys`);
+			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/external-keys`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -43,7 +43,7 @@
 				}
 			}
 		} catch (err) {
-			console.error('Failed to load keys:', err);
+			console.error('Failed to load external keys:', err);
 		}
 	}
 
@@ -55,7 +55,7 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.addPublicKey(pubkey, {
+			const res = await apiClient.addExternalKey(username, {
 				key_type: newKey.type,
 				key_data: newKey.data,
 				key_fingerprint: newKey.fingerprint || undefined,
@@ -65,7 +65,7 @@
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to add public key');
+				throw new Error(data.error || 'Failed to add external key');
 			}
 
 			newKey = {
@@ -75,49 +75,49 @@
 				label: ''
 			};
 			await loadKeys();
-			successMessage = 'Public key added successfully!';
+			successMessage = 'External key added successfully!';
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to add public key';
+			error = err instanceof Error ? err.message : 'Failed to add external key';
 		} finally {
 			loading = false;
 		}
 	}
 
 	async function handleDelete(keyId: number) {
-		if (!confirm('Delete this public key?')) return;
+		if (!confirm('Delete this external key?')) return;
 
 		error = null;
 		successMessage = null;
 
 		try {
-			const res = await apiClient.deletePublicKey(pubkey, keyId);
+			const res = await apiClient.deleteExternalKey(username, keyId);
 			await handleApiResponse(res);
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to delete public key');
+				throw new Error(data.error || 'Failed to delete external key');
 			}
 			await loadKeys();
-			successMessage = 'Public key deleted successfully!';
+			successMessage = 'External key deleted successfully!';
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to delete public key';
+			error = err instanceof Error ? err.message : 'Failed to delete external key';
 		}
 	}
 </script>
 
 <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-	<h2 class="text-2xl font-bold text-white mb-4">Public Keys</h2>
+	<h2 class="text-2xl font-bold text-white mb-4">External Keys (SSH/GPG)</h2>
 
 	<!-- Keys list -->
 	<div class="space-y-2 mb-4">
 		{#if keys.length === 0}
-			<p class="text-white/50 text-sm">No public keys added yet.</p>
+			<p class="text-white/50 text-sm">No external keys added yet.</p>
 		{/if}
 		{#each keys as key}
 			<div class="p-3 bg-white/5 rounded-lg border border-white/10">

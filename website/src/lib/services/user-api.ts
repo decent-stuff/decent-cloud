@@ -44,56 +44,56 @@ export class UserApiClient {
 
 	// Profile
 	async updateProfile(
-		pubkey: string,
+		username: string,
 		profile: {
 			display_name?: string;
 			bio?: string;
 			avatar_url?: string;
 		}
 	) {
-		const path = `/api/v1/users/${pubkey}/profile`;
+		const path = `/api/v1/accounts/${username}/profile`;
 		return this.authenticatedFetch('PUT', path, profile);
 	}
 
 	// Contacts
 	async upsertContact(
-		pubkey: string,
+		username: string,
 		contact: {
 			contact_type: string;
 			contact_value: string;
 			verified?: boolean;
 		}
 	) {
-		const path = `/api/v1/users/${pubkey}/contacts`;
+		const path = `/api/v1/accounts/${username}/contacts`;
 		return this.authenticatedFetch('POST', path, contact);
 	}
 
-	async deleteContact(pubkey: string, contactId: number) {
-		const path = `/api/v1/users/${pubkey}/contacts/${contactId}`;
+	async deleteContact(username: string, contactId: number) {
+		const path = `/api/v1/accounts/${username}/contacts/${contactId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
 
 	// Socials
 	async upsertSocial(
-		pubkey: string,
+		username: string,
 		social: {
 			platform: string;
 			username: string;
 			profile_url?: string;
 		}
 	) {
-		const path = `/api/v1/users/${pubkey}/socials`;
+		const path = `/api/v1/accounts/${username}/socials`;
 		return this.authenticatedFetch('POST', path, social);
 	}
 
-	async deleteSocial(pubkey: string, socialId: number) {
-		const path = `/api/v1/users/${pubkey}/socials/${socialId}`;
+	async deleteSocial(username: string, socialId: number) {
+		const path = `/api/v1/accounts/${username}/socials/${socialId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
 
-	// Public Keys
-	async addPublicKey(
-		pubkey: string,
+	// External Keys (SSH/GPG)
+	async addExternalKey(
+		username: string,
 		key: {
 			key_type: string;
 			key_data: string;
@@ -101,12 +101,12 @@ export class UserApiClient {
 			label?: string;
 		}
 	) {
-		const path = `/api/v1/users/${pubkey}/keys`;
+		const path = `/api/v1/accounts/${username}/external-keys`;
 		return this.authenticatedFetch('POST', path, key);
 	}
 
-	async deletePublicKey(pubkey: string, keyId: number) {
-		const path = `/api/v1/users/${pubkey}/keys/${keyId}`;
+	async deleteExternalKey(username: string, keyId: number) {
+		const path = `/api/v1/accounts/${username}/external-keys/${keyId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
 }

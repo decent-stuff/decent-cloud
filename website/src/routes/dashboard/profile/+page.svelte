@@ -38,9 +38,9 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Profile Settings</h1>
+		<h1 class="text-4xl font-bold text-white mb-2">Public Profile</h1>
 		<p class="text-white/60">
-			Manage your account information and preferences
+			Information visible to other users
 		</p>
 	</div>
 

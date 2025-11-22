@@ -20,9 +20,9 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Account Settings</h1>
+		<h1 class="text-4xl font-bold text-white mb-2">Account & Security</h1>
 		<p class="text-white/60">
-			Manage your account details and authentication keys
+			Manage your account credentials and device access
 		</p>
 	</div>
 

@@ -40,7 +40,7 @@ test.describe('Account Settings Page', () => {
 
 		// Verify page title
 		await expect(
-			page.locator('h1:has-text("Account Settings")'),
+			page.locator('h1:has-text("Account & Security")'),
 		).toBeVisible();
 
 		// Verify account overview section
@@ -150,21 +150,21 @@ test.describe('Account Settings Page', () => {
 		// Start at account page
 		await page.goto('/dashboard/account');
 		await expect(
-			page.locator('h1:has-text("Account Settings")'),
+			page.locator('h1:has-text("Account & Security")'),
 		).toBeVisible();
 
 		// Navigate to profile page
 		await page.click('a:has-text("Profile")');
 		await expect(page).toHaveURL('/dashboard/profile');
 		await expect(
-			page.locator('h1:has-text("Profile Settings")'),
+			page.locator('h1:has-text("Public Profile")'),
 		).toBeVisible();
 
 		// Navigate back to account page
 		await page.click('a:has-text("Account")');
 		await expect(page).toHaveURL('/dashboard/account');
 		await expect(
-			page.locator('h1:has-text("Account Settings")'),
+			page.locator('h1:has-text("Account & Security")'),
 		).toBeVisible();
 	});
 
@@ -189,7 +189,7 @@ test.describe('Account Settings Page', () => {
 
 		// Should load without errors
 		await expect(
-			page.locator('h1:has-text("Account Settings")'),
+			page.locator('h1:has-text("Account & Security")'),
 		).toBeVisible();
 		await expect(
 			page.locator(`text=@${testCredentials.username}`),

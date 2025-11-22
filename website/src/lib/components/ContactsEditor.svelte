@@ -11,11 +11,11 @@
 	}
 
 	interface Props {
-		pubkey: string;
+		username: string;
 		apiClient: UserApiClient;
 	}
 
-	let { pubkey, apiClient }: Props = $props();
+	let { username, apiClient }: Props = $props();
 
 	let contacts = $state<Contact[]>([]);
 	let newContact = $state({ type: 'email', value: '' });
@@ -29,7 +29,7 @@
 
 	async function loadContacts() {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/v1/users/${pubkey}/contacts`);
+			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/contacts`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -49,7 +49,7 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.upsertContact(pubkey, {
+			const res = await apiClient.upsertContact(username, {
 				contact_type: newContact.type,
 				contact_value: newContact.value
 			});
@@ -80,7 +80,7 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.deleteContact(pubkey, id);
+			const res = await apiClient.deleteContact(username, id);
 			await handleApiResponse(res);
 
 			const data = await res.json();
