@@ -49,11 +49,9 @@ pub struct ProviderContact {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 #[oai(skip_serializing_if_is_none)]
+#[oai(rename_all = "camelCase")]
 pub struct Validator {
-    #[ts(skip)]
-    #[serde(skip_deserializing)]
-    #[oai(skip)]
-    pub pubkey: Vec<u8>,
+    pub pubkey: String,
     #[oai(skip_serializing_if_is_none)]
     pub name: Option<String>,
     #[oai(skip_serializing_if_is_none)]
@@ -178,7 +176,7 @@ impl Database {
         let validators = sqlx::query_as!(
             Validator,
             r#"SELECT
-                r.pubkey,
+                hex(r.pubkey) as "pubkey!: String",
                 NULLIF(p.name, '') as "name?: String",
                 NULLIF(p.description, '') as "description?: String",
                 NULLIF(p.website_url, '') as "website_url?: String",
