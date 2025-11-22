@@ -40,9 +40,7 @@ import { writable, derived, get } from 'svelte/store';
 import type { Identity } from '@dfinity/agent';
 import type { Principal } from '@dfinity/principal';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
-import { hmac } from '@noble/hashes/hmac';
-import { sha512 } from '@noble/hashes/sha512';
-import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from 'bip39';
+import { generateMnemonic } from 'bip39';
 import {
 	addSeedPhrase as persistSeedPhrase,
 	clearStoredSeedPhrases,
@@ -50,6 +48,7 @@ import {
 	getStoredSeedPhrases,
 	setStoredSeedPhrases
 } from '../utils/seed-storage';
+import { identityFromSeed, bytesToHex } from '../utils/identity';
 import { API_BASE_URL } from '../services/api';
 
 /**
@@ -58,15 +57,15 @@ import { API_BASE_URL } from '../services/api';
 export interface AccountInfo {
 	id: string; // Account ID (hex)
 	username: string; // Human-readable username
-	createdAt: number;
-	updatedAt: number;
+	createdAt: number; // Timestamp in nanoseconds
+	updatedAt: number; // Timestamp in nanoseconds
 	publicKeys: Array<{
 		id: string;
 		publicKey: string;
 		isActive: boolean;
-		addedAt: number;
+		addedAt: number; // Timestamp in nanoseconds
 		deviceName?: string; // Stored in backend database
-		disabledAt?: number;
+		disabledAt?: number; // Timestamp in nanoseconds
 		disabledByKeyId?: string;
 	}>;
 }
@@ -105,18 +104,6 @@ function createAuthStore() {
 
 	const isAuthenticated = derived(activeIdentity, ($active) => $active !== null);
 
-	// Generate Ed25519 identity from seed phrase
-	function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
-		if (!validateMnemonic(seedPhrase)) {
-			throw new Error('Invalid seed phrase');
-		}
-		const seedBuffer = mnemonicToSeedSync(seedPhrase, '');
-		const seedBytes = new Uint8Array(seedBuffer);
-		const keyMaterial = hmac(sha512, 'ed25519 seed', seedBytes);
-		const derivedSeed = keyMaterial.slice(0, 32);
-		return Ed25519KeyIdentity.fromSecretKey(derivedSeed);
-	}
-
 	function generateNewSeedPhrase(): string {
 		return generateMnemonic();
 	}
@@ -131,13 +118,9 @@ function createAuthStore() {
 
 		// Check if this identity already exists (by public key)
 		const identitiesList = get(identities);
-		const publicKeyHex = Array.from(publicKeyBytes)
-			.map((b) => b.toString(16).padStart(2, '0'))
-			.join('');
+		const publicKeyHex = bytesToHex(publicKeyBytes);
 		const existing = identitiesList.find((i) => {
-			const existingKeyHex = Array.from(i.publicKeyBytes)
-				.map((b) => b.toString(16).padStart(2, '0'))
-				.join('');
+			const existingKeyHex = bytesToHex(i.publicKeyBytes);
 			return existingKeyHex === publicKeyHex;
 		});
 
@@ -192,9 +175,7 @@ function createAuthStore() {
 
 		try {
 			const { getAccountByPublicKey } = await import('../services/account-api');
-			const publicKeyHex = Array.from(identityInfo.publicKeyBytes)
-				.map((b) => b.toString(16).padStart(2, '0'))
-				.join('');
+			const publicKeyHex = bytesToHex(identityInfo.publicKeyBytes);
 
 			const account = await getAccountByPublicKey(publicKeyHex);
 			return account;
@@ -232,13 +213,9 @@ function createAuthStore() {
 
 		// Check if identity already exists
 		const identitiesList = get(identities);
-		const publicKeyHex = Array.from(publicKeyBytes)
-			.map((b) => b.toString(16).padStart(2, '0'))
-			.join('');
+		const publicKeyHex = bytesToHex(publicKeyBytes);
 		const existing = identitiesList.find((id) => {
-			const idKeyHex = Array.from(id.publicKeyBytes)
-				.map((b) => b.toString(16).padStart(2, '0'))
-				.join('');
+			const idKeyHex = bytesToHex(id.publicKeyBytes);
 			return idKeyHex === publicKeyHex;
 		});
 

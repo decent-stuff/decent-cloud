@@ -1,31 +1,24 @@
 <script lang="ts">
 	import { authStore, type AccountInfo } from '$lib/stores/auth';
-	import { Ed25519KeyIdentity } from '@dfinity/identity';
-	import { validateMnemonic, mnemonicToSeedSync, generateMnemonic } from 'bip39';
-	import { hmac } from '@noble/hashes/hmac';
-	import { sha512 } from '@noble/hashes/sha512';
 	import { getAccountByPublicKey } from '$lib/services/account-api';
+	import { identityFromSeed, bytesToHex } from '$lib/utils/identity';
 	import UsernameInput from './UsernameInput.svelte';
+	import SeedPhraseStep from './SeedPhraseStep.svelte';
 
 	let { onSuccess } = $props<{
 		onSuccess: (account: AccountInfo) => void;
 	}>();
 
-	type Mode = 'new' | 'existing';
 	type Step =
 		| 'choose-mode'
-		| 'enter-seed'
-		| 'backup-seed'
+		| 'seed'
 		| 'checking-account'
 		| 'enter-username'
 		| 'processing'
 		| 'success';
 
-	let mode = $state<Mode | null>(null);
 	let currentStep = $state<Step>('choose-mode');
 	let seedPhrase = $state('');
-	let showSeedEntry = $state(false);
-	let seedBackedUp = $state(false);
 	let username = $state('');
 	let usernameValid = $state(false);
 	let normalizedUsername = $state('');
@@ -33,78 +26,45 @@
 	let createdAccount = $state<AccountInfo | null>(null);
 	let isNewAccount = $state(false);
 
-	function identityFromSeed(seedPhrase: string): Ed25519KeyIdentity {
-		const seedBuffer = mnemonicToSeedSync(seedPhrase, '');
-		const seedBytes = new Uint8Array(seedBuffer);
-		const keyMaterial = hmac(sha512, 'ed25519 seed', seedBytes);
-		const derivedSeed = keyMaterial.slice(0, 32);
-		return Ed25519KeyIdentity.fromSecretKey(derivedSeed);
+	function chooseMode(isNew: boolean) {
+		isNewAccount = isNew;
+		currentStep = 'seed';
 	}
 
-	function chooseMode(selectedMode: Mode) {
-		mode = selectedMode;
-		if (selectedMode === 'new') {
-			// Generate new seed phrase
-			seedPhrase = generateMnemonic();
-			currentStep = 'backup-seed';
+	async function handleSeedComplete(seed: string, deviceName?: string) {
+		seedPhrase = seed;
+		// Note: deviceName is not used in account creation flow
+
+		if (isNewAccount) {
+			// New account - proceed to username entry
+			currentStep = 'enter-username';
 		} else {
-			// Existing user enters seed phrase
-			currentStep = 'enter-seed';
-		}
-	}
+			// Existing account - check if it exists
+			currentStep = 'checking-account';
+			error = null;
 
-	function confirmSeedBackup() {
-		if (!seedBackedUp) {
-			error = 'Please confirm you have backed up your seed phrase';
-			return;
-		}
-		// After backing up, proceed to username entry for new account
-		currentStep = 'enter-username';
-		isNewAccount = true;
-	}
+			try {
+				const identity = identityFromSeed(seedPhrase);
+				const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+				const publicKeyHex = bytesToHex(publicKeyBytes);
 
-	function validateSeedPhrase() {
-		const trimmed = seedPhrase.trim();
-		if (!trimmed) {
-			error = 'Please enter your seed phrase';
-			return false;
-		}
-		if (!validateMnemonic(trimmed)) {
-			error = 'Invalid seed phrase. Please check and try again.';
-			return false;
-		}
-		error = null;
-		return true;
-	}
+				// Check if account exists
+				const account = await getAccountByPublicKey(publicKeyHex);
 
-	async function continueWithExistingSeed() {
-		if (!validateSeedPhrase()) return;
-
-		currentStep = 'checking-account';
-		error = null;
-
-		try {
-			const identity = identityFromSeed(seedPhrase);
-			const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-			const publicKeyHex = Array.from(publicKeyBytes)
-				.map((b) => b.toString(16).padStart(2, '0'))
-				.join('');
-
-			// Check if account exists
-			const account = await getAccountByPublicKey(publicKeyHex);
-
-			if (account) {
-				// Existing account found - login directly
-				await loginWithExistingAccount(account);
-			} else {
-				// No account found - need to register
-				error = 'No account found with this seed phrase. Please check your seed phrase or create a new account.';
-				currentStep = 'enter-seed';
+				if (account) {
+					// Existing account found - login directly
+					await loginWithExistingAccount(account);
+				} else {
+					// No account found - need to register
+					error =
+						'No account found with this seed phrase. Please check your seed phrase or create a new account.';
+					currentStep = 'seed';
+				}
+			} catch (err) {
+				console.error('Account check error:', err);
+				error = err instanceof Error ? err.message : 'Failed to check account';
+				currentStep = 'seed';
 			}
-		} catch (err) {
-			console.error('Account check error:', err);
-			error = err instanceof Error ? err.message : 'Failed to check account';
-			currentStep = 'enter-seed';
 		}
 	}
 
@@ -116,7 +76,7 @@
 			currentStep = 'success';
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Login failed';
-			currentStep = 'enter-seed';
+			currentStep = 'seed';
 		}
 	}
 
@@ -138,7 +98,11 @@
 			const identity = identityFromSeed(seedPhrase);
 
 			// Register account (this also sets up the identity with account data and persists seed phrase)
-			const account = await authStore.registerNewAccount(identity, normalizedUsername, seedPhrase);
+			const account = await authStore.registerNewAccount(
+				identity,
+				normalizedUsername,
+				seedPhrase
+			);
 
 			createdAccount = account;
 			currentStep = 'success';
@@ -159,31 +123,12 @@
 		}
 	}
 
-	function copySeedPhrase() {
-		navigator.clipboard.writeText(seedPhrase);
-	}
-
-	function handlePaste(e: ClipboardEvent) {
-		e.preventDefault();
-		const pasted = e.clipboardData?.getData('text') || '';
-		seedPhrase = pasted.trim();
-	}
-
 	function goBack() {
-		if (currentStep === 'enter-seed') {
+		if (currentStep === 'seed') {
 			currentStep = 'choose-mode';
-			mode = null;
-			seedPhrase = '';
-		} else if (currentStep === 'backup-seed') {
-			currentStep = 'choose-mode';
-			mode = null;
 			seedPhrase = '';
 		} else if (currentStep === 'enter-username') {
-			if (isNewAccount) {
-				currentStep = 'backup-seed';
-			} else {
-				currentStep = 'enter-seed';
-			}
+			currentStep = 'seed';
 		}
 	}
 </script>
@@ -198,7 +143,7 @@
 			<div class="grid gap-4">
 				<button
 					type="button"
-					onclick={() => chooseMode('new')}
+					onclick={() => chooseMode(true)}
 					class="p-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-xl text-left transition-all group"
 				>
 					<div class="text-3xl mb-2">✨</div>
@@ -210,7 +155,7 @@
 
 				<button
 					type="button"
-					onclick={() => chooseMode('existing')}
+					onclick={() => chooseMode(false)}
 					class="p-6 bg-white/5 hover:bg-white/10 border border-white/20 rounded-xl text-left transition-all group"
 				>
 					<div class="text-3xl mb-2">🔑</div>
@@ -221,165 +166,14 @@
 		</div>
 	{/if}
 
-	<!-- Step 2: Backup Seed (New Users) -->
-	{#if currentStep === 'backup-seed'}
-		<div class="space-y-4">
-			<h3 class="text-2xl font-bold text-white">Backup Your Seed Phrase</h3>
-			<p class="text-white/60">
-				Save these 12 words in a secure location. You'll need them to recover your account.
-			</p>
-
-			<!-- Seed phrase display with 12 boxes -->
-			<div class="p-4 bg-black/40 border border-white/20 rounded-lg">
-				<div class="grid grid-cols-3 gap-2 text-sm">
-					{#each seedPhrase.split(' ') as word, i}
-						<div class="flex items-center gap-2 p-2 bg-white/5 rounded">
-							<span class="text-white/40 text-xs w-4">{i + 1}.</span>
-							<span class="text-white font-mono">{word}</span>
-						</div>
-					{/each}
-				</div>
-			</div>
-
-			<!-- Copy button -->
-			<button
-				type="button"
-				onclick={copySeedPhrase}
-				class="w-full px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white transition-colors flex items-center justify-center gap-2"
-			>
-				<span>📋</span>
-				<span>Copy to Clipboard</span>
-			</button>
-
-			<!-- Warning -->
-			<div class="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-				<div class="flex gap-3">
-					<span class="text-yellow-400 text-xl">⚠️</span>
-					<div class="flex-1 space-y-2">
-						<p class="text-sm text-yellow-400 font-medium">Never share your seed phrase!</p>
-						<ul class="text-xs text-yellow-400/80 space-y-1 list-disc list-inside">
-							<li>Anyone with these words can access your account</li>
-							<li>Decent Cloud will never ask for your seed phrase</li>
-							<li>Store it offline in a secure location</li>
-						</ul>
-					</div>
-				</div>
-			</div>
-
-			<!-- Confirmation checkbox -->
-			<label class="flex items-start gap-3 cursor-pointer">
-				<input
-					type="checkbox"
-					bind:checked={seedBackedUp}
-					class="mt-1 w-5 h-5 rounded border-white/20 bg-white/5 text-blue-600 focus:ring-2 focus:ring-blue-500/50"
-				/>
-				<span class="text-sm text-white/80">
-					I have saved my seed phrase in a secure location
-				</span>
-			</label>
-
-			{#if error}
-				<div
-					class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm"
-				>
-					{error}
-				</div>
-			{/if}
-
-			<div class="flex gap-3">
-				<button
-					type="button"
-					onclick={goBack}
-					class="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
-				>
-					Back
-				</button>
-				<button
-					type="button"
-					onclick={confirmSeedBackup}
-					class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-					disabled={!seedBackedUp}
-				>
-					Continue
-				</button>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Step 3: Enter Seed (Existing Users) -->
-	{#if currentStep === 'enter-seed'}
-		<div class="space-y-4">
-			<h3 class="text-2xl font-bold text-white">Enter Your Seed Phrase</h3>
-			<p class="text-white/60">Type or paste your 12-word recovery phrase</p>
-
-			<div class="space-y-2">
-				<label for="seedPhrase" class="block text-sm font-medium text-white/70">
-					Seed Phrase
-				</label>
-				<div class="relative">
-					<textarea
-						id="seedPhrase"
-						bind:value={seedPhrase}
-						onpaste={handlePaste}
-						placeholder="word1 word2 word3 ..."
-						rows="4"
-						class="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all font-mono text-sm {showSeedEntry
-							? ''
-							: 'blur-sm'}"
-					></textarea>
-					<button
-						type="button"
-						onclick={() => (showSeedEntry = !showSeedEntry)}
-						class="absolute top-3 right-3 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs text-white transition-colors"
-					>
-						{showSeedEntry ? '🙈 Hide' : '👁️ Show'}
-					</button>
-				</div>
-
-				<!-- Word counter -->
-				<div class="text-xs text-white/40">
-					{seedPhrase
-						.trim()
-						.split(/\s+/)
-						.filter((w) => w).length} / 12 words
-				</div>
-			</div>
-
-			{#if error}
-				<div
-					class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm"
-				>
-					{error}
-				</div>
-			{/if}
-
-			<div class="flex gap-3">
-				<button
-					type="button"
-					onclick={goBack}
-					class="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
-				>
-					Back
-				</button>
-				<button
-					type="button"
-					onclick={continueWithExistingSeed}
-					class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all"
-				>
-					Continue
-				</button>
-			</div>
-
-			<!-- Help text -->
-			<div class="pt-4 border-t border-white/10">
-				<button
-					type="button"
-					class="text-sm text-white/60 hover:text-white transition-colors"
-				>
-					Lost your seed phrase?
-				</button>
-			</div>
-		</div>
+	<!-- Step 2: Seed Phrase (Generate or Import) -->
+	{#if currentStep === 'seed'}
+		<SeedPhraseStep
+			initialMode={isNewAccount ? 'generate' : 'import'}
+			showModeChoice={false}
+			onComplete={handleSeedComplete}
+			onBack={goBack}
+		/>
 	{/if}
 
 	<!-- Step 4: Checking Account -->
