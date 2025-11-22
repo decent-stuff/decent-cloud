@@ -97,7 +97,6 @@ set -eExuo pipefail
 '''
 
 [tasks.sqlx-prepare]
-dependencies = ["build"]
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
