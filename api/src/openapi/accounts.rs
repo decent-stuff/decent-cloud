@@ -801,7 +801,7 @@ impl AccountsApi {
 
     /// Get account contacts
     ///
-    /// Returns contact information for an account (requires authentication)
+    /// Returns contact information for an account (public, no authentication required)
     #[oai(
         path = "/accounts/:username/contacts",
         method = "get",
@@ -810,7 +810,6 @@ impl AccountsApi {
     async fn get_account_contacts(
         &self,
         db: Data<&Arc<Database>>,
-        auth: ApiAuthenticatedUser,
         username: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::users::AccountContact>>> {
         // Get account
@@ -832,33 +831,7 @@ impl AccountsApi {
             }
         };
 
-        // Verify authenticated user owns this account
-        match db.get_account_id_by_public_key(&auth.pubkey).await {
-            Ok(Some(acc_id)) if acc_id == account.id => {}
-            Ok(Some(_)) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some("Unauthorized: Cannot view another user's contacts".to_string()),
-                })
-            }
-            Ok(None) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some("Authenticated key not found or not active".to_string()),
-                })
-            }
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(e.to_string()),
-                })
-            }
-        }
-
-        // Get contacts
+        // Get contacts (public - anyone can view)
         match db.get_account_contacts(&account.id).await {
             Ok(contacts) => Json(ApiResponse {
                 success: true,

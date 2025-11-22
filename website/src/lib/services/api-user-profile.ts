@@ -32,8 +32,7 @@ export async function getUserProfile(username: string): Promise<UserProfile | nu
 }
 
 /**
- * Get account contacts (requires authentication in backend)
- * Note: This function is deprecated - contacts are private
+ * Get account contacts (public, no authentication required)
  */
 export async function getUserContacts(username: string): Promise<UserContact[]> {
 	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/contacts`);

@@ -108,16 +108,16 @@
 				balanceData,
 				transfersData,
 				profileData,
-				contactsData,
 				socialsData,
+			contactsData,
 			] = await Promise.all([
 				getUserActivity(pubkey).catch(() => null),
 				getReputation(pubkey).catch(() => null),
 				getAccountBalance(pubkey).catch(() => 0),
 				getAccountTransfers(pubkey, 100).catch(() => []),
 				getUserProfile(pubkey).catch(() => null),
-				getUserContacts(pubkey).catch(() => []),
 				getUserSocials(pubkey).catch(() => []),
+			getUserContacts(pubkey).catch(() => []),
 			]);
 
 			activity = activityData;

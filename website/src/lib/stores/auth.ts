@@ -304,8 +304,10 @@ function createAuthStore() {
 				setStoredSeedPhrases(validPhrases);
 			}
 
-			// Load account data for all identities
+			// Load account data for all identities and remove those without accounts
 			const identitiesList = get(identities);
+			const phrasesWithAccounts: string[] = [];
+
 			for (const identityInfo of identitiesList) {
 				const account = await loadAccountForIdentity(identityInfo);
 				if (account) {
@@ -322,7 +324,23 @@ function createAuthStore() {
 					if (current?.principal.toString() === identityInfo.principal.toString()) {
 						activeIdentity.set({ ...identityInfo, account });
 					}
+					// Keep this seed phrase
+					phrasesWithAccounts.push(identityInfo.seedPhrase);
 				}
+			}
+
+			// Remove identities without accounts
+			identities.update((prev) => prev.filter((id) => id.account));
+
+			// Remove seed phrases without accounts from storage
+			if (phrasesWithAccounts.length !== validPhrases.length) {
+				setStoredSeedPhrases(phrasesWithAccounts);
+			}
+
+			// If active identity has no account, clear it
+			const current = get(activeIdentity);
+			if (current && !current.account) {
+				activeIdentity.set(null);
 			}
 		},
 

@@ -28,19 +28,6 @@
 
 	{#if currentIdentity?.account}
 		<AccountOverview account={currentIdentity.account} />
-	{:else if currentIdentity}
-		<div
-			class="bg-yellow-500/20 border border-yellow-500/30 rounded-xl p-6 backdrop-blur-lg"
-		>
-			<p class="text-yellow-300 mb-2 font-medium">No Account Found</p>
-			<p class="text-white/70 text-sm">
-				You are signed in but don't have a registered account yet.
-				<a href="/" class="text-blue-400 hover:text-blue-300 underline">
-					Register an account
-				</a>
-				to access account settings.
-			</p>
-		</div>
 	{:else}
 		<p class="text-white/60">Loading...</p>
 	{/if}

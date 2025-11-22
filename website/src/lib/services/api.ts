@@ -100,6 +100,25 @@ function normalizePubkey(pubkey: string | number[]): string {
 	return hexEncode(new Uint8Array(pubkey));
 }
 
+/**
+ * Helper to extract error message from response
+ * Tries to read as JSON first, falls back to text
+ */
+async function getErrorMessage(response: Response, defaultMessage: string): Promise<string> {
+	try {
+		const contentType = response.headers.get('content-type');
+		if (contentType?.includes('application/json')) {
+			const data = await response.json();
+			return data.error || defaultMessage;
+		} else {
+			const text = await response.text();
+			return text || defaultMessage;
+		}
+	} catch {
+		return defaultMessage;
+	}
+}
+
 export async function searchOfferings(params: OfferingSearchParams = {}): Promise<Offering[]> {
 	const searchParams = new URLSearchParams();
 	if (params.limit !== undefined) searchParams.set('limit', params.limit.toString());
@@ -595,7 +614,8 @@ export async function getPendingProviderRequests(headers: SignedRequestHeaders):
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to fetch pending rental requests: ${response.status} ${response.statusText}`);
+		const errorMsg = await getErrorMessage(response, `Failed to fetch pending rental requests: ${response.status} ${response.statusText}`);
+		throw new Error(errorMsg);
 	}
 
 	const payload = (await response.json()) as ApiResponse<Contract[]>;

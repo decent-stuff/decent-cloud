@@ -25,10 +25,10 @@
 	let successMessage = $state<string | null>(null);
 
 	// Get username from the account
-	const username = identity.account?.username;
-	if (!username) {
+	if (!identity.account?.username) {
 		throw new Error('No account username found');
 	}
+	const username = identity.account.username;
 
 	const apiClient = new UserApiClient(signingIdentity.identity as Ed25519KeyIdentity);
 
