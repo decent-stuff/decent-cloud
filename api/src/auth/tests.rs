@@ -358,10 +358,11 @@ fn test_signature_crypto_only() {
     println!("Signature length: {}", signature.len());
 
     // Verify signature using DccIdentity
-    let identity = DccIdentity::new_verifying_from_bytes(&pubkey).expect("Failed to create identity");
-    
+    let identity =
+        DccIdentity::new_verifying_from_bytes(&pubkey).expect("Failed to create identity");
+
     let verify_result = identity.verify_bytes(&message, &signature);
-    
+
     match &verify_result {
         Ok(()) => println!("✓ Signature cryptographically VALID"),
         Err(e) => println!("✗ Signature cryptographically INVALID: {}", e),
