@@ -469,6 +469,8 @@ async fn test_get_active_validators() {
     let validator1 = b"validator_1_active_now";
     let validator2 = b"validator_2_active_week";
     let validator3 = b"validator_3_inactive";
+    let validator1_hex = hex::encode(validator1);
+    let validator2_hex = hex::encode(validator2);
 
     // Register all validators
     let registrations = vec![
@@ -546,7 +548,7 @@ async fn test_get_active_validators() {
     // Find validator1 in results
     let v1 = validators_30d
         .iter()
-        .find(|v| v.pubkey == validator1)
+        .find(|v| v.pubkey == validator1_hex)
         .expect("Validator 1 should be in results");
 
     assert_eq!(
@@ -569,7 +571,7 @@ async fn test_get_active_validators() {
     // Find validator2 in results
     let v2 = validators_30d
         .iter()
-        .find(|v| v.pubkey == validator2)
+        .find(|v| v.pubkey == validator2_hex)
         .expect("Validator 2 should be in results");
 
     assert_eq!(
@@ -597,7 +599,7 @@ async fn test_get_active_validators() {
         "Should have 1 validator active in last 7 days"
     );
     assert_eq!(
-        validators_7d[0].pubkey, validator1,
+        validators_7d[0].pubkey, validator1_hex,
         "Only validator 1 should be active in last 7 days"
     );
 
