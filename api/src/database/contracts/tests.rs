@@ -325,17 +325,8 @@ async fn test_create_rental_request_with_defaults() {
     let user_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
 
-    // Create user registration first
-    let user_pk_reg = user_pk.clone();
-    let user_sig_reg = user_pk.clone();
-    sqlx::query!(
-        "INSERT INTO user_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, 0)",
-        user_pk_reg,
-        user_sig_reg
-    )
-    .execute(&db.pool)
-    .await
-    .unwrap();
+    // Create user account
+    let account = db.create_account("testuser", &user_pk).await.unwrap();
 
     // Create offering (no explicit id)
     let provider_pk_clone = provider_pk.clone();
@@ -347,25 +338,15 @@ async fn test_create_rental_request_with_defaults() {
     .await
     .unwrap();
 
-    // Create user SSH key
-    let user_pk_key = user_pk.clone();
-    sqlx::query!(
-        "INSERT INTO user_public_keys (user_pubkey, key_type, key_data, created_at_ns) VALUES (?, 'ssh-ed25519', 'AAAAC3...user-key', 0)",
-        user_pk_key
-    )
-    .execute(&db.pool)
-    .await
-    .unwrap();
+    // Add SSH key to account
+    db.add_account_external_key(&account.id, "ssh-ed25519", "AAAAC3...user-key", None, None)
+        .await
+        .unwrap();
 
-    // Create user contact
-    let user_pk_contact = user_pk.clone();
-    sqlx::query!(
-        "INSERT INTO user_contacts (user_pubkey, contact_type, contact_value, verified, created_at_ns) VALUES (?, 'email', 'user@example.com', 1, 0)",
-        user_pk_contact
-    )
-    .execute(&db.pool)
-    .await
-    .unwrap();
+    // Add contact to account
+    db.add_account_contact(&account.id, "email", "user@example.com", true)
+        .await
+        .unwrap();
 
     let params = RentalRequestParams {
         offering_db_id: offering_id,

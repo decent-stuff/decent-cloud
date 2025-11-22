@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn export_typescript_types() {
-    UserProfile::export().expect("Failed to export UserProfile type");
-    UserContact::export().expect("Failed to export UserContact type");
-    UserSocial::export().expect("Failed to export UserSocial type");
-    UserPublicKey::export().expect("Failed to export UserPublicKey type");
+    UserActivity::export().expect("Failed to export UserActivity type");
+    AccountContact::export().expect("Failed to export AccountContact type");
+    AccountSocial::export().expect("Failed to export AccountSocial type");
+    AccountExternalKey::export().expect("Failed to export AccountExternalKey type");
 }

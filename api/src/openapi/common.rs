@@ -119,37 +119,6 @@ pub struct CancelContractRequest {
     pub memo: Option<String>,
 }
 
-// Request types for users
-#[derive(Debug, Deserialize, Object)]
-pub struct UpdateUserProfileRequest {
-    pub display_name: Option<String>,
-    pub bio: Option<String>,
-    pub avatar_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Object)]
-pub struct UpsertContactRequest {
-    pub contact_type: String,
-    pub contact_value: String,
-    #[serde(default)]
-    pub verified: bool,
-}
-
-#[derive(Debug, Deserialize, Object)]
-pub struct UpsertSocialRequest {
-    pub platform: String,
-    pub username: String,
-    pub profile_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Object)]
-pub struct AddPublicKeyRequest {
-    pub key_type: String,
-    pub key_data: String,
-    pub key_fingerprint: Option<String>,
-    pub label: Option<String>,
-}
-
 // Request types for accounts
 #[derive(Debug, Serialize, Deserialize, Object)]
 pub struct RegisterAccountRequest {

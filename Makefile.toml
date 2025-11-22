@@ -84,7 +84,7 @@ python3 ./docs/whitepaper/build.py
 
 
 [tasks.test]
-dependencies = ["dfx-start", "build", "canister"]
+dependencies = ["sqlx-prepare", "dfx-start", "build", "canister"]
 command = "cargo"
 args = ["nextest", "run"]
 
@@ -119,6 +119,5 @@ dependencies = [
     "clippy-canister",
     "build",
     "test",
-    "sqlx-prepare",
     "dfx-stop",
 ]

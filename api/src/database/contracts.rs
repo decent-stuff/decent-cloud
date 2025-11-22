@@ -233,23 +233,33 @@ impl Database {
         let ssh_pubkey = if let Some(key) = params.ssh_pubkey {
             key
         } else {
-            // Try to get first SSH key from user's profile
-            let keys = self.get_user_public_keys(requester_pubkey).await?;
-            keys.iter()
-                .find(|k| k.key_type.to_lowercase().contains("ssh"))
-                .map(|k| k.key_data.clone())
-                .unwrap_or_else(|| "".to_string())
+            // Try to get first SSH key from user's account profile
+            match self.get_account_id_by_public_key(requester_pubkey).await? {
+                Some(account_id) => {
+                    let keys = self.get_account_external_keys(&account_id).await?;
+                    keys.iter()
+                        .find(|k| k.key_type.to_lowercase().contains("ssh"))
+                        .map(|k| k.key_data.clone())
+                        .unwrap_or_else(|| "".to_string())
+                }
+                None => "".to_string(),
+            }
         };
 
         let contact = if let Some(c) = params.contact_method {
             c
         } else {
-            // Try to get first contact from user's profile
-            let contacts = self.get_user_contacts(requester_pubkey).await?;
-            contacts
-                .first()
-                .map(|c| format!("{}:{}", c.contact_type, c.contact_value))
-                .unwrap_or_else(|| "".to_string())
+            // Try to get first contact from user's account profile
+            match self.get_account_id_by_public_key(requester_pubkey).await? {
+                Some(account_id) => {
+                    let contacts = self.get_account_contacts(&account_id).await?;
+                    contacts
+                        .first()
+                        .map(|c| format!("{}:{}", c.contact_type, c.contact_value))
+                        .unwrap_or_else(|| "".to_string())
+                }
+                None => "".to_string(),
+            }
         };
 
         let memo = params
