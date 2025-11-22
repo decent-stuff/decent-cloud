@@ -26,8 +26,8 @@
 		return `${str.slice(0, length / 2)}...${str.slice(-length / 2)}`;
 	}
 
-	function formatDate(timestamp: number): string {
-		const date = new Date(timestamp);
+	function formatDate(timestampNs: number): string {
+		const date = new Date(timestampNs / 1_000_000);
 		return date.toLocaleDateString("en-US", {
 			year: "numeric",
 			month: "long",

@@ -8,8 +8,8 @@ import { API_BASE_URL } from './api';
 export interface AccountWithKeys {
 	id: string;
 	username: string;
-	createdAt: number;
-	updatedAt: number;
+	createdAt: number; // Timestamp in nanoseconds
+	updatedAt: number; // Timestamp in nanoseconds
 	publicKeys: PublicKeyInfo[];
 }
 
@@ -19,10 +19,10 @@ export interface AccountWithKeys {
 export interface PublicKeyInfo {
 	id: string;
 	publicKey: string;
-	addedAt: number;
+	addedAt: number; // Timestamp in nanoseconds
 	isActive: boolean;
 	deviceName?: string;
-	disabledAt?: number;
+	disabledAt?: number; // Timestamp in nanoseconds
 	disabledByKeyId?: string;
 }
 
