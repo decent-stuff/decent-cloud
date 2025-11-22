@@ -14,9 +14,7 @@ pub struct Offering {
     #[ts(optional, type = "number")]
     #[oai(skip_serializing_if_is_none)]
     pub id: Option<i64>,
-    #[ts(skip)]
-    #[serde(skip_deserializing)]
-    #[oai(skip)]
+    #[ts(type = "string")]
     pub pubkey: Vec<u8>,
     pub offering_id: String,
     pub offer_name: String,
@@ -84,7 +82,7 @@ impl Database {
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
         let mut query =
-            String::from("SELECT * FROM provider_offerings WHERE LOWER(visibility) = 'public'");
+            String::from("SELECT id, hex(pubkey) as \"pubkey!: String\", offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public'");
 
         if params.product_type.is_some() {
             query.push_str(" AND product_type = ?");
@@ -121,18 +119,17 @@ impl Database {
 
     /// Get offerings by provider
     pub async fn get_provider_offerings(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
-        let offerings = sqlx::query_as!(
-            Offering,
-            r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
-               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
-               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
-               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
-               FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#,
-            pubkey
+        let offerings = sqlx::query_as::<_, Offering>(
+            r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
+               datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#
         )
+        .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -142,14 +139,15 @@ impl Database {
     /// Get single offering by id
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
         let offering =
-            sqlx::query_as!(Offering, r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
-               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
-               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
-               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
-               FROM provider_offerings WHERE id = ?"#, offering_id)
+            sqlx::query_as::<_, Offering>(r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
+               datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               FROM provider_offerings WHERE id = ?"#)
+                .bind(offering_id)
                 .fetch_optional(&self.pool)
                 .await?;
 
@@ -162,18 +160,17 @@ impl Database {
         let example_provider_pubkey =
             hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
                 .unwrap();
-        let offerings = sqlx::query_as!(
-            Offering,
-            r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
-               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
-               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
-               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
-               FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#,
-            example_provider_pubkey
+        let offerings = sqlx::query_as::<_, Offering>(
+            r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
+               datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#
         )
+        .bind(&example_provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
 

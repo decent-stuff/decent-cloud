@@ -107,10 +107,10 @@ impl Database {
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
-               provisioning_instance_details, provisioning_completed_at_ns 
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -124,10 +124,10 @@ impl Database {
     pub async fn get_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
-               provisioning_instance_details, provisioning_completed_at_ns 
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -141,10 +141,10 @@ impl Database {
     pub async fn get_pending_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
-               provisioning_instance_details, provisioning_completed_at_ns 
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -158,10 +158,10 @@ impl Database {
     pub async fn get_contract(&self, contract_id: &[u8]) -> Result<Option<Contract>> {
         let contract = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
-               provisioning_instance_details, provisioning_completed_at_ns 
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -203,10 +203,10 @@ impl Database {
     pub async fn list_contracts(&self, limit: i64, offset: i64) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey, 
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!", 
-               provisioning_instance_details, provisioning_completed_at_ns 
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -498,7 +498,7 @@ impl Database {
     ) -> Result<Vec<ContractExtension>> {
         let extensions = sqlx::query_as!(
             ContractExtension,
-            r#"SELECT id as "id!", contract_id, extended_by_pubkey, extension_hours as "extension_hours!", 
+            r#"SELECT id as "id!", contract_id, extended_by_pubkey, extension_hours as "extension_hours!",
                extension_payment_e9s as "extension_payment_e9s!", previous_end_timestamp_ns as "previous_end_timestamp_ns!",
                new_end_timestamp_ns as "new_end_timestamp_ns!", extension_memo, created_at_ns as "created_at_ns!"
                FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC"#,
@@ -515,18 +515,17 @@ impl Database {
         &self,
         offering_id: &str,
     ) -> Result<Option<crate::database::offerings::Offering>> {
-        let offering = sqlx::query_as!(
-            crate::database::offerings::Offering,
-            r#"SELECT id, pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, 
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, 
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name, 
-               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, 
-               ssd_amount, total_ssd_capacity, unmetered_bandwidth as "unmetered_bandwidth!", uplink_speed, traffic, 
-               datacenter_country as "datacenter_country!", datacenter_city as "datacenter_city!", datacenter_latitude, datacenter_longitude, 
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems 
-               FROM provider_offerings WHERE offering_id = ?"#,
-            offering_id
+        let offering = sqlx::query_as::<_, crate::database::offerings::Offering>(
+            r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
+               datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
+               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               FROM provider_offerings WHERE offering_id = ?"#
         )
+        .bind(offering_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -565,7 +564,7 @@ impl Database {
             let pending_status = "pending";
             let contract_id_param = contract_id.clone();
             sqlx::query!(
-                r#"INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp_ns, request_memo, created_at_ns, status) 
+                r#"INSERT OR REPLACE INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, region_name, instance_config, payment_amount_e9s, start_timestamp_ns, request_memo, created_at_ns, status)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
                 contract_id_param,
                 requester_pubkey,

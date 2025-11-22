@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!\", contract_id, extended_by_pubkey, extension_hours as \"extension_hours!\", \n               extension_payment_e9s as \"extension_payment_e9s!\", previous_end_timestamp_ns as \"previous_end_timestamp_ns!\",\n               new_end_timestamp_ns as \"new_end_timestamp_ns!\", extension_memo, created_at_ns as \"created_at_ns!\"\n               FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC",
+  "query": "SELECT id as \"id!\", contract_id, extended_by_pubkey, extension_hours as \"extension_hours!\",\n               extension_payment_e9s as \"extension_payment_e9s!\", previous_end_timestamp_ns as \"previous_end_timestamp_ns!\",\n               new_end_timestamp_ns as \"new_end_timestamp_ns!\", extension_memo, created_at_ns as \"created_at_ns!\"\n               FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -64,5 +64,5 @@
       false
     ]
   },
-  "hash": "d4755726d7e3e8f2b1063c8cbce604b4f7dbfc2e6fe3932876ab6253f74777dc"
+  "hash": "bb4a21f16559fca1b5f03c125af756c1ba55020b1148d540c14789375677693f"
 }

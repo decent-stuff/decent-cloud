@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey, \n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\", \n               provisioning_instance_details, provisioning_completed_at_ns \n               FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC",
+  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey,\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns\n               FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -118,5 +118,5 @@
       true
     ]
   },
-  "hash": "3be86ac62fa3241fab9ee243eb112769c0a0d86aae0fc21e5c8683898d06905b"
+  "hash": "7d0258a7a4280305abfcc2ede766cbe774e1c3aee93d3feeaefd71a79149729c"
 }
