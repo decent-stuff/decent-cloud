@@ -222,7 +222,7 @@ async fn test_create_offering_success() {
 
     let params = Offering {
         id: None,
-        pubkey: pubkey.clone(),
+        pubkey: hex::encode(&pubkey),
         offering_id: "test-offer-1".to_string(),
         offer_name: "Test Server".to_string(),
         description: Some("Test description".to_string()),
@@ -310,7 +310,7 @@ async fn test_create_offering_duplicate_id() {
 
     let params = Offering {
         id: None,
-        pubkey: pubkey.clone(),
+        pubkey: hex::encode(&pubkey),
         offering_id: "duplicate-offer".to_string(),
         offer_name: "First Offer".to_string(),
         description: None,
@@ -368,7 +368,7 @@ async fn test_create_offering_missing_required_fields() {
 
     let params = Offering {
         id: None,
-        pubkey: pubkey.clone(),
+        pubkey: hex::encode(&pubkey),
         offering_id: "".to_string(), // Empty offering_id
         offer_name: "Test".to_string(),
         description: None,
@@ -425,7 +425,7 @@ async fn test_update_offering_success() {
     let db_id = test_id_to_db_id(1);
     let update_params = Offering {
         id: Some(db_id),
-        pubkey: pubkey.clone(),
+        pubkey: hex::encode(&pubkey),
         offering_id: "off-1".to_string(),
         offer_name: "Updated Server".to_string(),
         description: Some("Updated description".to_string()),
@@ -491,7 +491,7 @@ async fn test_update_offering_unauthorized() {
     let db_id = test_id_to_db_id(1);
     let params = Offering {
         id: Some(db_id),
-        pubkey: pubkey2.clone(),
+        pubkey: hex::encode(&pubkey2),
         offering_id: "off-1".to_string(),
         offer_name: "Hacker".to_string(),
         description: None,

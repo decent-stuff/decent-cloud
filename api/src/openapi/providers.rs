@@ -295,7 +295,7 @@ impl ProvidersApi {
 
         let mut params = offering.0;
         params.id = None;
-        params.pubkey = pubkey_bytes.clone();
+        params.pubkey = hex::encode(&pubkey_bytes);
 
         match db.create_offering(&pubkey_bytes, params).await {
             Ok(id) => Json(ApiResponse {
@@ -347,7 +347,7 @@ impl ProvidersApi {
         }
 
         let mut params = offering.0;
-        params.pubkey = pubkey_bytes.clone();
+        params.pubkey = hex::encode(&pubkey_bytes);
 
         match db.update_offering(&pubkey_bytes, id.0, params).await {
             Ok(_) => Json(ApiResponse {

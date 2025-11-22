@@ -15,8 +15,8 @@ type ConvertNullToUndefined<T> = {
 	[K in keyof T]: NullToUndefined<T[K]>;
 };
 
-// Frontend types: add pubkey as string and convert null to undefined for convenience
-export type Offering = ConvertNullToUndefined<OfferingRaw> & { pubkey: string };
+// Frontend types: convert null to undefined for convenience
+export type Offering = ConvertNullToUndefined<OfferingRaw>;
 export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pubkey: string };
 export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey: string };
 export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey: string };
@@ -142,12 +142,7 @@ export async function searchOfferings(params: OfferingSearchParams = {}): Promis
 		throw new Error(payload.error ?? 'Decent Cloud API offerings response failed');
 	}
 
-	const offerings = payload.data ?? [];
-	// Normalize pubkey to hex string
-	return offerings.map((o) => ({
-		...o,
-		pubkey: normalizePubkey(o.pubkey)
-	}));
+	return payload.data ?? [];
 }
 
 export async function getActiveProviders(days: number = 1): Promise<ProviderProfile[]> {
@@ -209,12 +204,7 @@ export async function getProviderOfferings(pubkey: string | Uint8Array): Promise
 		throw new Error(payload.error ?? 'Decent Cloud API provider offerings response failed');
 	}
 
-	const offerings = payload.data ?? [];
-	// Normalize pubkey to hex string
-	return offerings.map((o) => ({
-		...o,
-		pubkey: normalizePubkey(o.pubkey)
-	}));
+	return payload.data ?? [];
 }
 
 export async function exportProviderOfferingsCSV(

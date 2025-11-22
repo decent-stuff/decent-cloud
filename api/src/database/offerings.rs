@@ -15,7 +15,7 @@ pub struct Offering {
     #[oai(skip_serializing_if_is_none)]
     pub id: Option<i64>,
     #[ts(type = "string")]
-    pub pubkey: Vec<u8>,
+    pub pubkey: String,
     pub offering_id: String,
     pub offer_name: String,
     pub description: Option<String>,
@@ -82,7 +82,7 @@ impl Database {
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
         let mut query =
-            String::from("SELECT id, hex(pubkey) as \"pubkey!: String\", offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public'");
+            String::from("SELECT id, hex(pubkey) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public'");
 
         if params.product_type.is_some() {
             query.push_str(" AND product_type = ?");
@@ -120,7 +120,7 @@ impl Database {
     /// Get offerings by provider
     pub async fn get_provider_offerings(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
         let offerings = sqlx::query_as::<_, Offering>(
-            r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+            r#"SELECT id, hex(pubkey) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
@@ -139,7 +139,7 @@ impl Database {
     /// Get single offering by id
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
         let offering =
-            sqlx::query_as::<_, Offering>(r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+            sqlx::query_as::<_, Offering>(r#"SELECT id, hex(pubkey) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
@@ -161,7 +161,7 @@ impl Database {
             hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
                 .unwrap();
         let offerings = sqlx::query_as::<_, Offering>(
-            r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+            r#"SELECT id, hex(pubkey) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
@@ -515,7 +515,9 @@ impl Database {
         let source = source.ok_or_else(|| anyhow::anyhow!("Source offering not found"))?;
 
         // Verify ownership
-        if source.pubkey != (pubkey) {
+        let source_pubkey_bytes = hex::decode(&source.pubkey)
+            .map_err(|_| anyhow::anyhow!("Invalid pubkey hex in source offering"))?;
+        if source_pubkey_bytes != pubkey {
             return Err(anyhow::anyhow!(
                 "Unauthorized: You do not own this offering"
             ));
@@ -526,7 +528,7 @@ impl Database {
         // Create new offering with duplicated data
         let params = Offering {
             id: None,
-            pubkey: (pubkey).to_vec(),
+            pubkey: hex::encode(pubkey),
             offering_id: new_offering_id,
             offer_name: format!("{} (Copy)", source.offer_name),
             description: source.description,
@@ -898,7 +900,7 @@ impl Database {
 
         Ok(Offering {
             id: None,
-            pubkey: vec![], // Will be set by caller
+            pubkey: String::new(), // Will be set by caller
             offering_id,
             offer_name,
             description: get_opt_str(2),

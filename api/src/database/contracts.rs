@@ -279,9 +279,11 @@ impl Database {
 
         // Generate deterministic contract ID from SHA256 hash of request data
         use sha2::{Digest, Sha256};
+        let offering_pubkey_bytes = hex::decode(&offering.pubkey)
+            .map_err(|_| anyhow::anyhow!("Invalid pubkey hex in offering"))?;
         let mut hasher = Sha256::new();
         hasher.update(requester_pubkey);
-        hasher.update(&offering.pubkey);
+        hasher.update(&offering_pubkey_bytes);
         hasher.update(offering.offering_id.as_bytes());
         hasher.update(ssh_pubkey.as_bytes());
         hasher.update(contact.as_bytes());
@@ -305,7 +307,7 @@ impl Database {
             requester_pubkey,
             ssh_pubkey,
             contact,
-            offering.pubkey,
+            offering_pubkey_bytes,
             offering.offering_id,
             payment_amount_e9s,
             start_timestamp_ns,
@@ -516,7 +518,7 @@ impl Database {
         offering_id: &str,
     ) -> Result<Option<crate::database::offerings::Offering>> {
         let offering = sqlx::query_as::<_, crate::database::offerings::Offering>(
-            r#"SELECT id, hex(pubkey) as "pubkey!: String", offering_id, offer_name, description, product_page_url, currency, monthly_price,
+            r#"SELECT id, hex(pubkey) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,

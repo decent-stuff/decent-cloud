@@ -262,7 +262,7 @@ pub async fn create_provider_offering(
 
     // Ensure id is None for creation and set (pubkey)
     params.id = None;
-    params.pubkey = pubkey.clone();
+    params.pubkey = hex::encode(&pubkey);
 
     let result = db.create_offering(&pubkey, params).await;
     Ok(Json(ApiResponse::from_result(result)))
@@ -285,7 +285,7 @@ pub async fn update_provider_offering(
     }
 
     // Set (pubkey) from authenticated user
-    params.pubkey = pubkey.clone();
+    params.pubkey = hex::encode(&pubkey);
 
     let result = db.update_offering(&pubkey, offering_id, params).await;
     Ok(Json(ApiResponse::from_result(result)))

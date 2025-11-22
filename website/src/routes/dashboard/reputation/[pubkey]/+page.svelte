@@ -139,8 +139,15 @@
 			socials = socialsData;
 
 			// If we have no data at all, mark as not found
+			// Note: activity is an object with arrays, so check if it has any content
+			const hasActivity = activity && (
+				activity.offerings_provided.length > 0 ||
+				activity.rentals_as_requester.length > 0 ||
+				activity.rentals_as_provider.length > 0
+			);
+
 			if (
-				!activity &&
+				!hasActivity &&
 				!reputation &&
 				balance === 0 &&
 				transfers.length === 0 &&
