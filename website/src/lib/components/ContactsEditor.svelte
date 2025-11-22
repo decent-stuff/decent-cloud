@@ -53,7 +53,11 @@
 				contact_type: newContact.type,
 				contact_value: newContact.value
 			});
-			await handleApiResponse(res);
+
+			if (!res.ok) {
+				await handleApiResponse(res);
+				return;
+			}
 
 			const data = await res.json();
 			if (!data.success) {
@@ -81,7 +85,11 @@
 
 		try {
 			const res = await apiClient.deleteContact(username, id);
-			await handleApiResponse(res);
+
+			if (!res.ok) {
+				await handleApiResponse(res);
+				return;
+			}
 
 			const data = await res.json();
 			if (!data.success) {

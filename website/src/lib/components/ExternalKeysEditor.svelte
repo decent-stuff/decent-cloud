@@ -61,7 +61,11 @@
 				key_fingerprint: newKey.fingerprint || undefined,
 				label: newKey.label || undefined
 			});
-			await handleApiResponse(res);
+
+			if (!res.ok) {
+				await handleApiResponse(res);
+				return;
+			}
 
 			const data = await res.json();
 			if (!data.success) {
@@ -94,7 +98,11 @@
 
 		try {
 			const res = await apiClient.deleteExternalKey(username, keyId);
-			await handleApiResponse(res);
+
+			if (!res.ok) {
+				await handleApiResponse(res);
+				return;
+			}
 
 			const data = await res.json();
 			if (!data.success) {

@@ -58,11 +58,24 @@
 
 		try {
 			const res = await apiClient.updateProfile(username, profile);
-			await handleApiResponse(res);
+
+			if (!res.ok) {
+				await handleApiResponse(res);
+				return; // handleApiResponse will throw
+			}
 
 			const data = await res.json();
 			if (!data.success) {
 				throw new Error(data.error || 'Failed to update profile');
+			}
+
+			// Update local profile state with saved data
+			if (data.data) {
+				profile = {
+					display_name: data.data.display_name || '',
+					bio: data.data.bio || '',
+					avatar_url: data.data.avatar_url || ''
+				};
 			}
 
 			successMessage = 'Profile updated successfully!';

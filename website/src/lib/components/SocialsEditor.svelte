@@ -54,7 +54,11 @@
 				username: newSocial.username,
 				profile_url: newSocial.profile_url || undefined
 			});
-			await handleApiResponse(res);
+
+			if (!res.ok) {
+				await handleApiResponse(res);
+				return;
+			}
 
 			const data = await res.json();
 			if (!data.success) {
@@ -82,7 +86,11 @@
 
 		try {
 			const res = await apiClient.deleteSocial(username, id);
-			await handleApiResponse(res);
+
+			if (!res.ok) {
+				await handleApiResponse(res);
+				return;
+			}
 
 			const data = await res.json();
 			if (!data.success) {
