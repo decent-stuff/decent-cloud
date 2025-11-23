@@ -43,13 +43,13 @@ export async function getUserActivity(pubkeyHex: string): Promise<UserActivity> 
 		})),
 		rentals_as_requester: payload.data.rentals_as_requester.map((c: any) => ({
 			...c,
-			contract_id: normalizePubkey(c.contract_id),
+			contractId: normalizePubkey(c.contractId),
 			requester_pubkey: normalizePubkey(c.requester_pubkey),
 			provider_pubkey: normalizePubkey(c.provider_pubkey)
 		})),
 		rentals_as_provider: payload.data.rentals_as_provider.map((c: any) => ({
 			...c,
-			contract_id: normalizePubkey(c.contract_id),
+			contractId: normalizePubkey(c.contractId),
 			requester_pubkey: normalizePubkey(c.requester_pubkey),
 			provider_pubkey: normalizePubkey(c.provider_pubkey)
 		}))

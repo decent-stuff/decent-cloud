@@ -457,7 +457,7 @@ export async function downloadOfferingsCSV(offerings: Offering[], filename: stri
 // ============ Rental Request Endpoints ============
 
 export interface Contract {
-	contract_id: string;
+	contractId: string;
 	requester_pubkey: string;
 	requester_ssh_pubkey: string;
 	requester_contact: string;
@@ -473,7 +473,7 @@ export interface Contract {
 	request_memo: string;
 	created_at_ns: number;
 	status: string;
-	provisioning_instance_details?: string;
+	provisioning_instanceDetails?: string;
 	provisioning_completed_at_ns?: number;
 }
 
@@ -486,7 +486,7 @@ export interface RentalRequestParams {
 }
 
 export interface RentalRequestResponse {
-	contract_id: string;
+	contractId: string;
 	message: string;
 }
 
@@ -497,7 +497,7 @@ export interface ProviderRentalResponseParams {
 
 export interface ProvisioningStatusUpdateParams {
 	status: string;
-	instance_details?: string;
+	instanceDetails?: string;
 }
 
 export async function createRentalRequest(
@@ -559,7 +559,7 @@ export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?
 	const contracts = payload.data ?? [];
 	return contracts.map((c) => ({
 		...c,
-		contract_id: normalizePubkey(c.contract_id),
+		contractId: normalizePubkey(c.contractId),
 		requester_pubkey: normalizePubkey(c.requester_pubkey),
 		provider_pubkey: normalizePubkey(c.provider_pubkey)
 	}));
@@ -589,7 +589,7 @@ export async function getProviderContracts(
 	const contracts = payload.data ?? [];
 	return contracts.map((c) => ({
 		...c,
-		contract_id: normalizePubkey(c.contract_id),
+		contractId: normalizePubkey(c.contractId),
 		requester_pubkey: normalizePubkey(c.requester_pubkey),
 		provider_pubkey: normalizePubkey(c.provider_pubkey)
 	}));
@@ -617,7 +617,7 @@ export async function getPendingProviderRequests(headers: SignedRequestHeaders):
 	const contracts = payload.data ?? [];
 	return contracts.map((c) => ({
 		...c,
-		contract_id: normalizePubkey(c.contract_id),
+		contractId: normalizePubkey(c.contractId),
 		requester_pubkey: normalizePubkey(c.requester_pubkey),
 		provider_pubkey: normalizePubkey(c.provider_pubkey)
 	}));

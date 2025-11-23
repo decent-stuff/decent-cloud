@@ -43,11 +43,6 @@ pub fn decode_pubkey(pubkey_hex: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-/// Decode a hex-encoded ID (contract, key, etc.) with detailed error messages
-pub fn decode_hex_id(id_hex: &str, id_type: &str) -> Result<Vec<u8>, String> {
-    hex::decode(id_hex).map_err(|e| format!("Invalid {} hex: {} (value: {})", id_type, e, id_hex))
-}
-
 pub fn check_authorization(pubkey: &[u8], user: &ApiAuthenticatedUser) -> Result<(), String> {
     if pubkey != user.pubkey {
         Err(format!(

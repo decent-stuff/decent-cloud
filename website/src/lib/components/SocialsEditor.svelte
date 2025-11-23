@@ -1,13 +1,16 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { API_BASE_URL } from '$lib/services/api';
-	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
+	import { onMount } from "svelte";
+	import { API_BASE_URL } from "$lib/services/api";
+	import {
+		handleApiResponse,
+		type UserApiClient,
+	} from "$lib/services/user-api";
 
 	interface Social {
 		id: number;
 		platform: string;
 		username: string;
-		profile_url: string | null;
+		profileUrl: string | null;
 	}
 
 	interface Props {
@@ -18,7 +21,11 @@
 	let { username, apiClient }: Props = $props();
 
 	let socials = $state<Social[]>([]);
-	let newSocial = $state({ platform: 'twitter', username: '', profile_url: '' });
+	let newSocial = $state({
+		platform: "twitter",
+		username: "",
+		profileUrl: "",
+	});
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
@@ -29,7 +36,9 @@
 
 	async function loadSocials() {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/socials`);
+			const res = await fetch(
+				`${API_BASE_URL}/api/v1/accounts/${username}/socials`,
+			);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -37,7 +46,7 @@
 				}
 			}
 		} catch (err) {
-			console.error('Failed to load socials:', err);
+			console.error("Failed to load socials:", err);
 		}
 	}
 
@@ -52,7 +61,7 @@
 			const res = await apiClient.upsertSocial(username, {
 				platform: newSocial.platform,
 				username: newSocial.username,
-				profile_url: newSocial.profile_url || undefined
+				profileUrl: newSocial.profileUrl || undefined,
 			});
 
 			if (!res.ok) {
@@ -62,17 +71,20 @@
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to add social account');
+				throw new Error(data.error || "Failed to add social account");
 			}
 
-			newSocial = { platform: 'twitter', username: '', profile_url: '' };
+			newSocial = { platform: "twitter", username: "", profileUrl: "" };
 			await loadSocials();
-			successMessage = 'Social account added successfully!';
+			successMessage = "Social account added successfully!";
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to add social account';
+			error =
+				err instanceof Error
+					? err.message
+					: "Failed to add social account";
 		} finally {
 			loading = false;
 		}
@@ -94,15 +106,20 @@
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to delete social account');
+				throw new Error(
+					data.error || "Failed to delete social account",
+				);
 			}
 			await loadSocials();
-			successMessage = 'Social account deleted successfully!';
+			successMessage = "Social account deleted successfully!";
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to delete social account';
+			error =
+				err instanceof Error
+					? err.message
+					: "Failed to delete social account";
 		}
 	}
 </script>
@@ -113,16 +130,22 @@
 	<!-- Socials list -->
 	<div class="space-y-2 mb-4">
 		{#if socials.length === 0}
-			<p class="text-white/50 text-sm">No social media accounts added yet.</p>
+			<p class="text-white/50 text-sm">
+				No social media accounts added yet.
+			</p>
 		{/if}
 		{#each socials as social}
-			<div class="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+			<div
+				class="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+			>
 				<div class="text-white">
-					<span class="font-medium text-white/70">{social.platform}:</span>
+					<span class="font-medium text-white/70"
+						>{social.platform}:</span
+					>
 					{social.username}
-					{#if social.profile_url}
+					{#if social.profileUrl}
 						<a
-							href={social.profile_url}
+							href={social.profileUrl}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="ml-2 text-blue-400 hover:text-blue-300 hover:underline text-sm"
@@ -164,7 +187,7 @@
 		<div class="flex gap-2">
 			<input
 				type="url"
-				bind:value={newSocial.profile_url}
+				bind:value={newSocial.profileUrl}
 				class="flex-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 				placeholder="Profile URL (optional)"
 			/>
@@ -179,13 +202,17 @@
 	</div>
 
 	{#if error}
-		<div class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400">
+		<div
+			class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400"
+		>
 			{error}
 		</div>
 	{/if}
 
 	{#if successMessage}
-		<div class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400">
+		<div
+			class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400"
+		>
 			{successMessage}
 		</div>
 	{/if}

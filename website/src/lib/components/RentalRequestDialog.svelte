@@ -1,6 +1,9 @@
 <script lang="ts">
 	import type { Offering } from "$lib/services/api";
-	import { createRentalRequest, type RentalRequestParams } from "$lib/services/api";
+	import {
+		createRentalRequest,
+		type RentalRequestParams,
+	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
@@ -51,13 +54,16 @@
 				signingIdentityInfo.identity as Ed25519KeyIdentity,
 				"POST",
 				"/api/v1/contracts",
-				params
+				params,
 			);
 
 			const response = await createRentalRequest(params, signed.headers);
-			onSuccess(response.contract_id);
+			onSuccess(response.contractId);
 		} catch (e) {
-			error = e instanceof Error ? e.message : "Failed to create rental request";
+			error =
+				e instanceof Error
+					? e.message
+					: "Failed to create rental request";
 			console.error("Rental request error:", e);
 		} finally {
 			loading = false;
@@ -83,9 +89,7 @@
 				class="flex items-center justify-between p-6 border-b border-white/10"
 			>
 				<div>
-					<h2 class="text-2xl font-bold text-white">
-						Rent Resource
-					</h2>
+					<h2 class="text-2xl font-bold text-white">Rent Resource</h2>
 					<p class="text-white/60 text-sm mt-1">
 						{offering.offer_name}
 					</p>
@@ -114,9 +118,7 @@
 			<!-- Content -->
 			<div class="p-6 space-y-6">
 				<!-- Resource Summary -->
-				<div
-					class="bg-white/5 rounded-lg p-4 border border-white/10"
-				>
+				<div class="bg-white/5 rounded-lg p-4 border border-white/10">
 					<h3 class="text-sm font-semibold text-white/70 mb-3">
 						Resource Details
 					</h3>
@@ -258,7 +260,7 @@
 							>
 							<p class="text-xs text-white/50 mt-1">
 								{durationHours} hours @ {offering.monthly_price.toFixed(
-									2
+									2,
 								)}
 								{offering.currency}/mo
 							</p>
@@ -284,9 +286,7 @@
 			</div>
 
 			<!-- Footer -->
-			<div
-				class="flex gap-3 p-6 border-t border-white/10 bg-white/5"
-			>
+			<div class="flex gap-3 p-6 border-t border-white/10 bg-white/5">
 				<button
 					onclick={onClose}
 					disabled={loading}

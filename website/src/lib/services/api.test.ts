@@ -271,7 +271,7 @@ describe('hexEncode', () => {
 describe('getUserContracts', () => {
 	const sampleContracts = [
 		{
-			contract_id: [1, 2, 3, 4],
+			contractId: [1, 2, 3, 4],
 			requester_pubkey: [5, 6, 7, 8],
 			provider_pubkey: [9, 10, 11, 12],
 			requester_ssh_pubkey: 'ssh-ed25519 AAAA...',
@@ -305,7 +305,7 @@ describe('getUserContracts', () => {
 		const contracts = await getUserContracts(mockHeaders);
 
 		expect(contracts).toHaveLength(1);
-		expect(contracts[0].contract_id).toBe('01020304');
+		expect(contracts[0].contractId).toBe('01020304');
 		expect(contracts[0].requester_pubkey).toBe('05060708');
 		expect(contracts[0].provider_pubkey).toBe('090a0b0c');
 		expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -321,7 +321,7 @@ describe('getUserContracts', () => {
 		const contractsWithStringHashes = [
 			{
 				...sampleContracts[0],
-				contract_id: 'abc123',
+				contractId: 'abc123',
 				requester_pubkey: 'def456',
 				provider_pubkey: 'ghi789'
 			}
@@ -334,7 +334,7 @@ describe('getUserContracts', () => {
 
 		const contracts = await getUserContracts(mockHeaders);
 
-		expect(contracts[0].contract_id).toBe('abc123');
+		expect(contracts[0].contractId).toBe('abc123');
 		expect(contracts[0].requester_pubkey).toBe('def456');
 		expect(contracts[0].provider_pubkey).toBe('ghi789');
 	});
@@ -389,7 +389,7 @@ describe('getProviderContracts', () => {
 	it('fetches provider contracts for the given pubkey', async () => {
 		const contracts = [
 			{
-				contract_id: [0xde, 0xad],
+				contractId: [0xde, 0xad],
 				requester_pubkey: [0xbe, 0xef],
 				provider_pubkey: [0xca, 0xfe],
 				requester_ssh_pubkey: 'ssh',
@@ -408,7 +408,7 @@ describe('getProviderContracts', () => {
 		} as Response);
 
 		const result = await getProviderContracts(providerHeaders, providerHex);
-		expect(result[0].contract_id).toBe('dead');
+		expect(result[0].contractId).toBe('dead');
 		expect(result[0].requester_pubkey).toBe('beef');
 
 		expect(fetch).toHaveBeenCalledWith(

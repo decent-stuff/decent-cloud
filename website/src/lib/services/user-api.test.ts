@@ -78,8 +78,8 @@ describe('UserApiClient', () => {
 		it('calls POST with contact data', async () => {
 			const username = 'testuser';
 			const contact = {
-				contact_type: 'email',
-				contact_value: 'test@example.com',
+				contactType: 'email',
+				contactValue: 'test@example.com',
 				verified: false
 			};
 
@@ -116,7 +116,7 @@ describe('UserApiClient', () => {
 			const social = {
 				platform: 'twitter',
 				username: 'testuser',
-				profile_url: 'https://twitter.com/testuser'
+				profileUrl: 'https://twitter.com/testuser'
 			};
 
 			await client.upsertSocial(username, social);
@@ -150,9 +150,9 @@ describe('UserApiClient', () => {
 		it('calls POST with external key data', async () => {
 			const username = 'testuser';
 			const key = {
-				key_type: 'ssh-ed25519',
-				key_data: 'ssh-ed25519 AAAAC3...',
-				key_fingerprint: 'SHA256:abc123',
+				keyType: 'ssh-ed25519',
+				keyData: 'ssh-ed25519 AAAAC3...',
+				keyFingerprint: 'SHA256:abc123',
 				label: 'My laptop'
 			};
 

@@ -240,22 +240,22 @@
 										class="flex items-center gap-2 text-sm"
 									>
 										<span class="text-white/60 capitalize"
-											>{contact.contact_type}:</span
+											>{contact.contactType}:</span
 										>
-										{#if contact.contact_type === "email"}
+										{#if contact.contactType === "email"}
 											<a
-												href="mailto:{contact.contact_value}"
+												href="mailto:{contact.contactValue}"
 												class="text-blue-400 hover:text-blue-300"
 											>
-												{contact.contact_value}
+												{contact.contactValue}
 											</a>
-										{:else if contact.contact_type === "discord"}
+										{:else if contact.contactType === "discord"}
 											<span class="text-white/90"
-												>{contact.contact_value}</span
+												>{contact.contactValue}</span
 											>
 										{:else}
 											<span class="text-white/90"
-												>{contact.contact_value}</span
+												>{contact.contactValue}</span
 											>
 										{/if}
 										{#if contact.verified}
@@ -285,9 +285,9 @@
 										<span class="text-white/60 capitalize"
 											>{social.platform}:</span
 										>
-										{#if social.profile_url}
+										{#if social.profileUrl}
 											<a
-												href={social.profile_url}
+												href={social.profileUrl}
 												target="_blank"
 												rel="noopener noreferrer"
 												class="text-blue-400 hover:text-blue-300"

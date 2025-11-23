@@ -1,12 +1,15 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { API_BASE_URL } from '$lib/services/api';
-	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
+	import { onMount } from "svelte";
+	import { API_BASE_URL } from "$lib/services/api";
+	import {
+		handleApiResponse,
+		type UserApiClient,
+	} from "$lib/services/user-api";
 
 	interface Contact {
 		id: number;
-		contact_type: string;
-		contact_value: string;
+		contactType: string;
+		contactValue: string;
 		verified: boolean;
 	}
 
@@ -18,7 +21,7 @@
 	let { username, apiClient }: Props = $props();
 
 	let contacts = $state<Contact[]>([]);
-	let newContact = $state({ type: 'email', value: '' });
+	let newContact = $state({ type: "email", value: "" });
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
@@ -29,7 +32,9 @@
 
 	async function loadContacts() {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/contacts`);
+			const res = await fetch(
+				`${API_BASE_URL}/api/v1/accounts/${username}/contacts`,
+			);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -37,7 +42,7 @@
 				}
 			}
 		} catch (err) {
-			console.error('Failed to load contacts:', err);
+			console.error("Failed to load contacts:", err);
 		}
 	}
 
@@ -50,8 +55,8 @@
 
 		try {
 			const res = await apiClient.upsertContact(username, {
-				contact_type: newContact.type,
-				contact_value: newContact.value
+				contactType: newContact.type,
+				contactValue: newContact.value,
 			});
 
 			if (!res.ok) {
@@ -61,17 +66,18 @@
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to add contact');
+				throw new Error(data.error || "Failed to add contact");
 			}
 
-			newContact = { type: 'email', value: '' };
+			newContact = { type: "email", value: "" };
 			await loadContacts();
-			successMessage = 'Contact added successfully!';
+			successMessage = "Contact added successfully!";
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to add contact';
+			error =
+				err instanceof Error ? err.message : "Failed to add contact";
 		} finally {
 			loading = false;
 		}
@@ -93,15 +99,16 @@
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to delete contact');
+				throw new Error(data.error || "Failed to delete contact");
 			}
 			await loadContacts();
-			successMessage = 'Contact deleted successfully!';
+			successMessage = "Contact deleted successfully!";
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to delete contact';
+			error =
+				err instanceof Error ? err.message : "Failed to delete contact";
 		}
 	}
 </script>
@@ -112,21 +119,30 @@
 	<!-- Contact list -->
 	<div class="space-y-2 mb-4">
 		{#if contacts.length === 0}
-			<p class="text-white/50 text-sm">No contact information added yet.</p>
+			<p class="text-white/50 text-sm">
+				No contact information added yet.
+			</p>
 		{/if}
 		{#each contacts as contact}
-			<div class="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+			<div
+				class="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+			>
 				<div class="text-white">
-					<span class="font-medium text-white/70">{contact.contact_type}:</span>
-					{contact.contact_value}
+					<span class="font-medium text-white/70"
+						>{contact.contactType}:</span
+					>
+					{contact.contactValue}
 					{#if contact.verified}
-						<span class="ml-2 text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded border border-green-500/30">
+						<span
+							class="ml-2 text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded border border-green-500/30"
+						>
 							Verified
 						</span>
 					{/if}
 				</div>
 				<button
-					onclick={() => handleDelete(contact.id, contact.contact_type)}
+					onclick={() =>
+						handleDelete(contact.id, contact.contactType)}
 					class="text-red-400 hover:text-red-300 transition-colors"
 				>
 					Delete
@@ -161,13 +177,17 @@
 	</div>
 
 	{#if error}
-		<div class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400">
+		<div
+			class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400"
+		>
 			{error}
 		</div>
 	{/if}
 
 	{#if successMessage}
-		<div class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400">
+		<div
+			class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400"
+		>
 			{successMessage}
 		</div>
 	{/if}

@@ -14,7 +14,7 @@
 
 	const statusBadge = getContractStatusBadge(contract.status);
 	let memoFieldId = "";
-	$: memoFieldId = `pending-response-${contract.contract_id}`;
+	$: memoFieldId = `pending-response-${contract.contractId}`;
 </script>
 
 <div class="bg-white/10 border border-white/15 rounded-xl p-6 space-y-4">

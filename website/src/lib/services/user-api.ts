@@ -59,8 +59,8 @@ export class UserApiClient {
 	async upsertContact(
 		username: string,
 		contact: {
-			contact_type: string;
-			contact_value: string;
+			contactType: string;
+			contactValue: string;
 			verified?: boolean;
 		}
 	) {
@@ -79,7 +79,7 @@ export class UserApiClient {
 		social: {
 			platform: string;
 			username: string;
-			profile_url?: string;
+			profileUrl?: string;
 		}
 	) {
 		const path = `/api/v1/accounts/${username}/socials`;
@@ -95,9 +95,9 @@ export class UserApiClient {
 	async addExternalKey(
 		username: string,
 		key: {
-			key_type: string;
-			key_data: string;
-			key_fingerprint?: string;
+			keyType: string;
+			keyData: string;
+			keyFingerprint?: string;
 			label?: string;
 		}
 	) {

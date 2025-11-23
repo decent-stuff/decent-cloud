@@ -1,13 +1,16 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { API_BASE_URL } from '$lib/services/api';
-	import { handleApiResponse, type UserApiClient } from '$lib/services/user-api';
+	import { onMount } from "svelte";
+	import { API_BASE_URL } from "$lib/services/api";
+	import {
+		handleApiResponse,
+		type UserApiClient,
+	} from "$lib/services/user-api";
 
 	interface ExternalKey {
 		id: number;
-		key_type: string;
-		key_data: string;
-		key_fingerprint: string | null;
+		keyType: string;
+		keyData: string;
+		keyFingerprint: string | null;
 		label: string | null;
 	}
 
@@ -20,10 +23,10 @@
 
 	let keys = $state<ExternalKey[]>([]);
 	let newKey = $state({
-		type: 'ssh-ed25519',
-		data: '',
-		fingerprint: '',
-		label: ''
+		type: "ssh-ed25519",
+		data: "",
+		fingerprint: "",
+		label: "",
 	});
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -35,7 +38,9 @@
 
 	async function loadKeys() {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/external-keys`);
+			const res = await fetch(
+				`${API_BASE_URL}/api/v1/accounts/${username}/external-keys`,
+			);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -43,7 +48,7 @@
 				}
 			}
 		} catch (err) {
-			console.error('Failed to load external keys:', err);
+			console.error("Failed to load external keys:", err);
 		}
 	}
 
@@ -56,10 +61,10 @@
 
 		try {
 			const res = await apiClient.addExternalKey(username, {
-				key_type: newKey.type,
-				key_data: newKey.data,
-				key_fingerprint: newKey.fingerprint || undefined,
-				label: newKey.label || undefined
+				keyType: newKey.type,
+				keyData: newKey.data,
+				keyFingerprint: newKey.fingerprint || undefined,
+				label: newKey.label || undefined,
 			});
 
 			if (!res.ok) {
@@ -69,29 +74,32 @@
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to add external key');
+				throw new Error(data.error || "Failed to add external key");
 			}
 
 			newKey = {
-				type: 'ssh-ed25519',
-				data: '',
-				fingerprint: '',
-				label: ''
+				type: "ssh-ed25519",
+				data: "",
+				fingerprint: "",
+				label: "",
 			};
 			await loadKeys();
-			successMessage = 'External key added successfully!';
+			successMessage = "External key added successfully!";
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to add external key';
+			error =
+				err instanceof Error
+					? err.message
+					: "Failed to add external key";
 		} finally {
 			loading = false;
 		}
 	}
 
 	async function handleDelete(keyId: number) {
-		if (!confirm('Delete this external key?')) return;
+		if (!confirm("Delete this external key?")) return;
 
 		error = null;
 		successMessage = null;
@@ -106,15 +114,18 @@
 
 			const data = await res.json();
 			if (!data.success) {
-				throw new Error(data.error || 'Failed to delete external key');
+				throw new Error(data.error || "Failed to delete external key");
 			}
 			await loadKeys();
-			successMessage = 'External key deleted successfully!';
+			successMessage = "External key deleted successfully!";
 			setTimeout(() => {
 				successMessage = null;
 			}, 3000);
 		} catch (err: unknown) {
-			error = err instanceof Error ? err.message : 'Failed to delete external key';
+			error =
+				err instanceof Error
+					? err.message
+					: "Failed to delete external key";
 		}
 	}
 </script>
@@ -131,9 +142,13 @@
 			<div class="p-3 bg-white/5 rounded-lg border border-white/10">
 				<div class="flex items-start justify-between mb-2">
 					<div>
-						<span class="font-medium text-sm text-white">{key.key_type}</span>
+						<span class="font-medium text-sm text-white"
+							>{key.keyType}</span
+						>
 						{#if key.label}
-							<span class="ml-2 text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded border border-blue-500/30">
+							<span
+								class="ml-2 text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded border border-blue-500/30"
+							>
 								{key.label}
 							</span>
 						{/if}
@@ -146,11 +161,13 @@
 					</button>
 				</div>
 				<div class="text-xs text-white/60 font-mono break-all">
-					{key.key_data.substring(0, 80)}{key.key_data.length > 80 ? '...' : ''}
+					{key.keyData.substring(0, 80)}{key.keyData.length > 80
+						? "..."
+						: ""}
 				</div>
-				{#if key.key_fingerprint}
+				{#if key.keyFingerprint}
 					<div class="text-xs text-white/50 mt-1">
-						Fingerprint: {key.key_fingerprint}
+						Fingerprint: {key.keyFingerprint}
 					</div>
 				{/if}
 			</div>
@@ -199,13 +216,17 @@
 	</div>
 
 	{#if error}
-		<div class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400">
+		<div
+			class="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded text-red-400"
+		>
 			{error}
 		</div>
 	{/if}
 
 	{#if successMessage}
-		<div class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400">
+		<div
+			class="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded text-green-400"
+		>
 			{successMessage}
 		</div>
 	{/if}

@@ -162,11 +162,11 @@
 									{statusBadge.text}
 								</span>
 								<!-- Cancel button for cancelable contracts -->
-								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
+								{#if isCancellable(contract.status) && cancellingContractId !== contract.contractId}
 									<button
 										onclick={() =>
 											handleCancelContract(
-												contract.contract_id,
+												contract.contractId,
 												contract.status,
 											)}
 										class="px-2 py-1 text-xs bg-red-600/80 text-white rounded hover:bg-red-700 transition-colors"
@@ -176,7 +176,7 @@
 									</button>
 								{/if}
 								<!-- Cancellation state -->
-								{#if cancellingContractId === contract.contract_id}
+								{#if cancellingContractId === contract.contractId}
 									<div
 										class="flex items-center gap-1 text-xs text-red-400"
 									>
@@ -188,9 +188,7 @@
 								{/if}
 							</div>
 							<p class="text-white/60 text-sm">
-								Contract ID: {truncateHash(
-									contract.contract_id,
-								)}
+								Contract ID: {truncateHash(contract.contractId)}
 							</p>
 						</div>
 						<div class="text-right">
@@ -270,7 +268,7 @@
 						</div>
 					{/if}
 
-					{#if contract.provisioning_instance_details}
+					{#if contract.provisioning_instanceDetails}
 						<div
 							class="bg-green-500/10 border border-green-500/30 rounded-lg p-4"
 						>
@@ -278,7 +276,7 @@
 								Instance Details
 							</div>
 							<div class="text-white text-sm whitespace-pre-wrap">
-								{contract.provisioning_instance_details}
+								{contract.provisioning_instanceDetails}
 							</div>
 							{#if contract.provisioning_completed_at_ns}
 								<div class="text-green-400/60 text-xs mt-2">

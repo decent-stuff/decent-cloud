@@ -31,12 +31,12 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
 		const mockResponse = {
-			contract_id: 'abc123def456',
+			contractId: 'abc123def456',
 			message: 'Rental request created successfully'
 		};
 
@@ -60,7 +60,7 @@ describe('createRentalRequest', () => {
 		);
 
 		expect(result).toEqual(mockResponse);
-		expect(result.contract_id).toBe('abc123def456');
+		expect(result.contractId).toBe('abc123def456');
 	});
 
 	it('handles minimal parameters (only offering_db_id required)', async () => {
@@ -72,7 +72,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -81,7 +81,7 @@ describe('createRentalRequest', () => {
 			json: async () => ({
 				success: true,
 				data: {
-					contract_id: 'xyz789',
+					contractId: 'xyz789',
 					message: 'Request created'
 				}
 			})
@@ -89,7 +89,7 @@ describe('createRentalRequest', () => {
 
 		const result = await createRentalRequest(params, mockHeaders);
 
-		expect(result.contract_id).toBe('xyz789');
+		expect(result.contractId).toBe('xyz789');
 		expect(fetch).toHaveBeenCalledWith(
 			expect.anything(),
 			expect.objectContaining({
@@ -107,7 +107,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -132,7 +132,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -158,7 +158,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -188,7 +188,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -197,7 +197,7 @@ describe('createRentalRequest', () => {
 			json: async () => ({
 				success: true,
 				data: {
-					contract_id: 'contract123',
+					contractId: 'contract123',
 					message: 'Success'
 				}
 			})
@@ -223,7 +223,7 @@ describe('createRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -232,7 +232,7 @@ describe('createRentalRequest', () => {
 			json: async () => ({
 				success: true,
 				data: {
-					contract_id: 'test',
+					contractId: 'test',
 					message: 'ok'
 				}
 			})
@@ -263,7 +263,7 @@ describe('getPendingProviderRequests', () => {
 				success: true,
 				data: [
 					{
-						contract_id: [1, 2],
+						contractId: [1, 2],
 						requester_pubkey: [10, 11],
 						provider_pubkey: [12, 13],
 						requester_ssh_pubkey: 'ssh-key',
@@ -281,7 +281,7 @@ describe('getPendingProviderRequests', () => {
 
 		const result = await getPendingProviderRequests(mockHeaders);
 		expect(result).toHaveLength(1);
-		expect(result[0].contract_id).toBe('0102');
+		expect(result[0].contractId).toBe('0102');
 		expect(result[0].requester_pubkey).toBe('0a0b');
 		expect(fetch).toHaveBeenCalledWith(
 			expect.stringContaining('/api/v1/provider/rental-requests/pending'),
@@ -369,7 +369,7 @@ describe('updateProvisioningStatus', () => {
 	it('updates provisioning status successfully', async () => {
 		const params: ProvisioningStatusUpdateParams = {
 			status: 'provisioning',
-			instance_details: 'Starting install'
+			instanceDetails: 'Starting install'
 		};
 
 		vi.mocked(fetch).mockResolvedValue({
@@ -406,7 +406,7 @@ describe('updateProvisioningStatus', () => {
 				'abcd',
 				{
 					status: 'provisioned',
-					instance_details: 'ip:1.2.3.4'
+					instanceDetails: 'ip:1.2.3.4'
 				},
 				mockHeaders
 			)
@@ -424,7 +424,7 @@ describe('cancelRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -457,7 +457,7 @@ describe('cancelRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
@@ -482,7 +482,7 @@ describe('cancelRentalRequest', () => {
 			'X-Public-Key': 'test-pubkey',
 			'X-Signature': 'test-signature',
 			'X-Timestamp': '1234567890000000000',
-		'X-Nonce': 'test-nonce-uuid',
+			'X-Nonce': 'test-nonce-uuid',
 			'Content-Type': 'application/json'
 		};
 
