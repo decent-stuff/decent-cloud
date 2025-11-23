@@ -160,8 +160,8 @@ function createAuthStore() {
 			const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${current?.account?.username}/profile`);
 			if (res.ok) {
 				const data = await res.json();
-				if (data.success && data.data?.display_name) {
-					return data.data.display_name;
+				if (data.success && data.data?.displayName) {
+					return data.data.displayName;
 				}
 			}
 		} catch (error) {

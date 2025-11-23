@@ -47,9 +47,9 @@ describe('UserApiClient', () => {
 		it('calls authenticated fetch with correct parameters', async () => {
 			const username = 'testuser';
 			const profile = {
-				display_name: 'Test User',
+				displayName: 'Test User',
 				bio: 'Test bio',
-				avatar_url: 'https://example.com/avatar.png'
+				avatarUrl: 'https://example.com/avatar.png'
 			};
 
 			await client.updateProfile(username, profile);

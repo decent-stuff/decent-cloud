@@ -67,7 +67,7 @@ describe('signRequest', () => {
 
 		const method = 'PUT';
 		const path = '/api/v1/users/test-pubkey/profile';
-		const bodyData = { display_name: 'Test User' };
+		const bodyData = { displayName: 'Test User' };
 
 		const result = await signRequest(identity, method, path, bodyData);
 

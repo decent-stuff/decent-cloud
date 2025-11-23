@@ -140,11 +140,11 @@
 
 			// If we have no data at all, mark as not found
 			// Note: activity is an object with arrays, so check if it has any content
-			const hasActivity = activity && (
-				activity.offerings_provided.length > 0 ||
-				activity.rentals_as_requester.length > 0 ||
-				activity.rentals_as_provider.length > 0
-			);
+			const hasActivity =
+				activity &&
+				(activity.offerings_provided.length > 0 ||
+					activity.rentals_as_requester.length > 0 ||
+					activity.rentals_as_provider.length > 0);
 
 			if (
 				!hasActivity &&
@@ -191,15 +191,15 @@
 		<div class="flex items-start justify-between gap-4 mb-4">
 			<div class="flex-1">
 				<h1 class="text-4xl font-bold text-white mb-2">
-					{profile?.display_name || "Account Reputation"}
+					{profile?.displayName || "Account Reputation"}
 				</h1>
 				{#if profile?.bio}
 					<p class="text-white/70 text-sm mb-3">{profile.bio}</p>
 				{/if}
 			</div>
-			{#if profile?.avatar_url}
+			{#if profile?.avatarUrl}
 				<img
-					src={profile.avatar_url}
+					src={profile.avatarUrl}
 					alt="Avatar"
 					class="w-20 h-20 rounded-full border-2 border-white/20"
 				/>

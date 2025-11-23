@@ -25,7 +25,7 @@ export async function handleApiResponse(res: Response): Promise<void> {
 }
 
 export class UserApiClient {
-	constructor(private signingIdentity: Ed25519KeyIdentity) {}
+	constructor(private signingIdentity: Ed25519KeyIdentity) { }
 
 	private async authenticatedFetch(method: string, path: string, body?: unknown): Promise<Response> {
 		const { headers, body: signedBody } = await signRequest(
@@ -46,9 +46,9 @@ export class UserApiClient {
 	async updateProfile(
 		username: string,
 		profile: {
-			display_name?: string;
+			displayName?: string;
 			bio?: string;
-			avatar_url?: string;
+			avatarUrl?: string;
 		}
 	) {
 		const path = `/api/v1/accounts/${username}/profile`;

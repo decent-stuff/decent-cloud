@@ -68,7 +68,7 @@ describe('authStore', () => {
 			ok: true,
 			json: async () => ({
 				success: true,
-				data: { display_name: mockDisplayName }
+				data: { displayName: mockDisplayName }
 			})
 		});
 		vi.stubGlobal('fetch', mockFetch);
@@ -85,7 +85,7 @@ describe('authStore', () => {
 		expect(mockFetch).toHaveBeenCalled();
 	});
 
-	it('should not update display name when API returns no display_name', async () => {
+	it('should not update display name when API returns no displayName', async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({
