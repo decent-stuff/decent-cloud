@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct HealthResponse {
     pub success: bool,
     pub message: String,
@@ -12,6 +13,7 @@ pub struct HealthResponse {
 
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 #[oai(skip_serializing_if_is_none)]
 pub struct ApiResponse<T: poem_openapi::types::ParseFromJSON + poem_openapi::types::ToJSON> {
     pub success: bool,
@@ -58,12 +60,14 @@ pub fn check_authorization(pubkey: &[u8], user: &ApiAuthenticatedUser) -> Result
 // Request types for offerings
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct DuplicateOfferingRequest {
     pub new_offering_id: String,
 }
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct BulkUpdateStatusRequest {
     pub offering_ids: Vec<i64>,
     pub stock_status: String,
@@ -71,6 +75,7 @@ pub struct BulkUpdateStatusRequest {
 
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CsvImportResult {
     pub success_count: usize,
     pub errors: Vec<CsvImportError>,
@@ -78,6 +83,7 @@ pub struct CsvImportResult {
 
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CsvImportError {
     pub row: usize,
     pub message: String,
@@ -86,6 +92,7 @@ pub struct CsvImportError {
 // Request types for contracts
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct RentalRequestResponse {
     pub contract_id: String,
     pub message: String,
@@ -93,6 +100,7 @@ pub struct RentalRequestResponse {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct RentalResponseRequest {
     pub accept: bool,
     pub memo: Option<String>,
@@ -100,6 +108,7 @@ pub struct RentalResponseRequest {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ProvisioningStatusRequest {
     pub status: String,
     pub instance_details: Option<String>,
@@ -107,6 +116,7 @@ pub struct ProvisioningStatusRequest {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ExtendContractRequest {
     pub extension_hours: i64,
     pub memo: Option<String>,
@@ -114,6 +124,7 @@ pub struct ExtendContractRequest {
 
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ExtendContractResponse {
     pub extension_payment_e9s: i64,
     pub new_end_timestamp_ns: i64,
@@ -122,6 +133,7 @@ pub struct ExtendContractResponse {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CancelContractRequest {
     pub memo: Option<String>,
 }
@@ -129,6 +141,7 @@ pub struct CancelContractRequest {
 // Request types for accounts
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterAccountRequest {
     pub username: String,
     pub public_key: String,
@@ -136,12 +149,14 @@ pub struct RegisterAccountRequest {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AddAccountKeyRequest {
     pub new_public_key: String,
 }
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateDeviceNameRequest {
     pub device_name: Option<String>,
 }
@@ -149,6 +164,7 @@ pub struct UpdateDeviceNameRequest {
 // Request types for account profile
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateAccountProfileRequest {
     pub display_name: Option<String>,
     pub bio: Option<String>,
@@ -157,6 +173,7 @@ pub struct UpdateAccountProfileRequest {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AddAccountContactRequest {
     pub contact_type: String,
     pub contact_value: String,
@@ -166,6 +183,7 @@ pub struct AddAccountContactRequest {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AddAccountSocialRequest {
     pub platform: String,
     pub username: String,
@@ -174,6 +192,7 @@ pub struct AddAccountSocialRequest {
 
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AddAccountExternalKeyRequest {
     pub key_type: String,
     pub key_data: String,
@@ -184,12 +203,14 @@ pub struct AddAccountExternalKeyRequest {
 // Request types for admin
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AdminDisableKeyRequest {
     pub reason: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AdminAddRecoveryKeyRequest {
     pub public_key: String,
     pub reason: String,

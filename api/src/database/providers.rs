@@ -50,6 +50,7 @@ pub struct ProviderContact {
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 #[oai(skip_serializing_if_is_none)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Validator {
     pub pubkey: String,
     #[oai(skip_serializing_if_is_none)]

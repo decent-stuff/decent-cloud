@@ -33,6 +33,7 @@ pub struct AccountPublicKey {
 /// Full account response with keys
 #[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AccountWithKeys {
     pub id: String,
     pub username: String,
@@ -53,6 +54,7 @@ pub struct AccountWithKeys {
 /// Public key information for API responses
 #[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct PublicKeyInfo {
     pub id: String,
     pub public_key: String,
@@ -69,6 +71,7 @@ pub struct PublicKeyInfo {
 /// Account profile for API responses
 #[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
 #[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AccountProfile {
     pub id: String,
     pub username: String,
