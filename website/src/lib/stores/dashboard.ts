@@ -2,12 +2,11 @@ import { writable } from 'svelte/store';
 import { fetchDashboardData, type DashboardData } from '../services/dashboard-data';
 
 const defaultData: DashboardData = {
-	dctPrice: 0,
-	providerCount: 0,
-	totalBlocks: 0,
-	blocksUntilHalving: 0,
-	rewardPerBlock: 0,
-	accumulatedRewards: 0
+	totalProviders: 0,
+	activeProviders: 0,
+	totalOfferings: 0,
+	totalContracts: 0,
+	activeValidators: 0
 };
 
 function createDashboardStore() {

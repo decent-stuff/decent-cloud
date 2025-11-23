@@ -8,12 +8,11 @@
 	import { computePubkey } from "$lib/utils/contract-format";
 
 	let dashboardData = $state<DashboardData>({
-		dctPrice: 0,
-		providerCount: 0,
-		totalBlocks: 0,
-		blocksUntilHalving: 0,
-		rewardPerBlock: 0,
-		accumulatedRewards: 0,
+		totalProviders: 0,
+		activeProviders: 0,
+		totalOfferings: 0,
+		totalContracts: 0,
+		activeValidators: 0,
 	});
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -82,7 +81,7 @@
 
 	<div>
 		<h1 class="text-4xl font-bold text-white mb-2">Dashboard Overview</h1>
-		<p class="text-white/60">Network statistics and quick actions</p>
+		<p class="text-white/60">Marketplace statistics and quick actions</p>
 	</div>
 
 	{#if error}
@@ -96,92 +95,76 @@
 
 	<!-- Stats Grid -->
 	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-		<!-- DCT Price -->
-		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
-		>
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">DCT Price</h3>
-				<span class="text-2xl">💰</span>
-			</div>
-			<p class="text-3xl font-bold text-white">
-				${dashboardData.dctPrice.toFixed(4)}
-			</p>
-			<p class="text-white/50 text-sm mt-1">USD per token</p>
-		</div>
-
 		<!-- Total Providers -->
 		<div
 			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
 		>
 			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">Providers</h3>
+				<h3 class="text-white/70 text-sm font-medium">Total Providers</h3>
 				<span class="text-2xl">🖥️</span>
 			</div>
 			<p class="text-3xl font-bold text-white">
-				{dashboardData.providerCount}
+				{dashboardData.totalProviders.toLocaleString()}
 			</p>
-			<p class="text-white/50 text-sm mt-1">Active providers</p>
+			<p class="text-white/50 text-sm mt-1">Registered providers</p>
 		</div>
 
-		<!-- Total Blocks -->
+		<!-- Active Providers -->
 		<div
 			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
 		>
 			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">Blocks</h3>
-				<span class="text-2xl">🔗</span>
+				<h3 class="text-white/70 text-sm font-medium">Active Providers</h3>
+				<span class="text-2xl">✅</span>
 			</div>
 			<p class="text-3xl font-bold text-white">
-				{dashboardData.totalBlocks.toLocaleString()}
+				{dashboardData.activeProviders.toLocaleString()}
 			</p>
-			<p class="text-white/50 text-sm mt-1">Total blocks</p>
+			<p class="text-white/50 text-sm mt-1">Currently active</p>
 		</div>
 
-		<!-- Reward Per Block -->
+		<!-- Total Offerings -->
+		<div
+			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+		>
+			<div class="flex items-center justify-between mb-2">
+				<h3 class="text-white/70 text-sm font-medium">Available Offerings</h3>
+				<span class="text-2xl">📦</span>
+			</div>
+			<p class="text-3xl font-bold text-white">
+				{dashboardData.totalOfferings.toLocaleString()}
+			</p>
+			<p class="text-white/50 text-sm mt-1">Services listed</p>
+		</div>
+
+		<!-- Total Contracts -->
 		<div
 			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
 		>
 			<div class="flex items-center justify-between mb-2">
 				<h3 class="text-white/70 text-sm font-medium">
-					Reward Per Block
+					Total Contracts
 				</h3>
-				<span class="text-2xl">🎁</span>
+				<span class="text-2xl">📝</span>
 			</div>
 			<p class="text-3xl font-bold text-white">
-				{dashboardData.rewardPerBlock.toFixed(2)}
+				{dashboardData.totalContracts.toLocaleString()}
 			</p>
-			<p class="text-white/50 text-sm mt-1">DCT per block</p>
+			<p class="text-white/50 text-sm mt-1">Marketplace agreements</p>
 		</div>
 
-		<!-- Accumulated Rewards -->
+		<!-- Active Validators -->
 		<div
 			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
 		>
 			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">
-					Accumulated Rewards
-				</h3>
-				<span class="text-2xl">💰</span>
+				<h3 class="text-white/70 text-sm font-medium">Active Validators</h3>
+				<span class="text-2xl">🛡️</span>
 			</div>
 			<p class="text-3xl font-bold text-white">
-				{dashboardData.accumulatedRewards.toFixed(2)}
+				{dashboardData.activeValidators.toLocaleString()}
 			</p>
-			<p class="text-white/50 text-sm mt-1">Pending DCT rewards</p>
-		</div>
-
-		<!-- Halving -->
-		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
-		>
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">Until Halving</h3>
-				<span class="text-2xl">⏰</span>
-			</div>
-			<p class="text-3xl font-bold text-white">
-				{dashboardData.blocksUntilHalving.toLocaleString()}
-			</p>
-			<p class="text-white/50 text-sm mt-1">Blocks remaining</p>
+			<p class="text-white/50 text-sm mt-1">Network security</p>
 		</div>
 	</div>
 

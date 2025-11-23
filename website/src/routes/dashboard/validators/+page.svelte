@@ -45,10 +45,10 @@
 
 	// Calculate active validators by different time periods
 	const activeIn24h = $derived(
-		validators.filter((v) => v.check_ins_24h > 0).length,
+		validators.filter((v) => v.checkIns24h > 0).length,
 	);
 	const activeIn7d = $derived(
-		validators.filter((v) => v.check_ins_7d > 0).length,
+		validators.filter((v) => v.checkIns7d > 0).length,
 	);
 </script>
 
@@ -202,19 +202,19 @@
 									<td class="px-6 py-4">
 										<div class="text-sm">
 											<div class="text-white font-medium">
-												{validator.total_check_ins} total
+												{validator.totalCheckIns} total
 											</div>
 											<div
 												class="text-white/50 space-x-2 mt-1"
 											>
 												<span
-													>24h: {validator.check_ins_24h}</span
+													>24h: {validator.checkIns24h}</span
 												>
 												<span
-													>7d: {validator.check_ins_7d}</span
+													>7d: {validator.checkIns7d}</span
 												>
 												<span
-													>30d: {validator.check_ins_30d}</span
+													>30d: {validator.checkIns30d}</span
 												>
 											</div>
 										</div>
@@ -222,31 +222,31 @@
 									<td class="px-6 py-4">
 										<div class="text-sm text-white">
 											{formatTimestamp(
-												validator.last_check_in_ns,
+												validator.lastCheckInNs,
 											)}
 										</div>
 									</td>
 									<td class="px-6 py-4">
 										<span
-											class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium {validator.check_ins_24h >
+											class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium {validator.checkIns24h >
 											0
 												? 'bg-green-500/20 text-green-400 border-green-500/30'
-												: validator.check_ins_7d > 0
+												: validator.checkIns7d > 0
 													? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
 													: 'bg-gray-500/20 text-gray-400 border-gray-500/30'} border"
 										>
 											<span
 												class="w-2 h-2 rounded-full bg-current"
 											></span>
-											{validator.check_ins_24h > 0
+											{validator.checkIns24h > 0
 												? "active"
-												: validator.check_ins_7d > 0
+												: validator.checkIns7d > 0
 													? "recent"
 													: "idle"}
 										</span>
-										{#if validator.website_url}
+										{#if validator.websiteUrl}
 											<a
-												href={validator.website_url}
+												href={validator.websiteUrl}
 												target="_blank"
 												rel="noopener noreferrer"
 												class="text-blue-400 hover:text-blue-300 text-xs ml-2"

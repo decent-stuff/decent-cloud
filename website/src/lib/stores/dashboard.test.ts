@@ -10,12 +10,11 @@ vi.mock('../services/dashboard-data', () => ({
 const mockedFetchDashboardData = vi.mocked(fetchDashboardData);
 
 const mockDashboardData = {
-	dctPrice: 1.23,
-	providerCount: 12,
-	totalBlocks: 256,
-	blocksUntilHalving: 10_000,
-	rewardPerBlock: 50,
-	accumulatedRewards: 9
+	totalProviders: 12,
+	activeProviders: 10,
+	totalOfferings: 7,
+	totalContracts: 5,
+	activeValidators: 6
 };
 
 describe('dashboardStore', () => {
@@ -25,8 +24,9 @@ describe('dashboardStore', () => {
 
 	it('initializes with default data', () => {
 		const data = get(dashboardStore.data);
-		expect(data.dctPrice).toBe(0);
-		expect(data.providerCount).toBe(0);
+		expect(data.totalProviders).toBe(0);
+		expect(data.activeProviders).toBe(0);
+		expect(data.totalOfferings).toBe(0);
 		expect(get(dashboardStore.error)).toBeNull();
 		expect(get(dashboardStore.isLoading)).toBe(false);
 	});

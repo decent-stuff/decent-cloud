@@ -16,7 +16,7 @@ type ConvertNullToUndefined<T> = {
 };
 
 // Frontend types: convert null to undefined for convenience
-export type Offering = ConvertNullToUndefined<OfferingRaw>;
+export type Offering = ConvertNullToUndefined<OfferingRaw> & { pubkey: string };
 export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pubkey: string };
 export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey: string };
 export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey: string };
@@ -142,7 +142,12 @@ export async function searchOfferings(params: OfferingSearchParams = {}): Promis
 		throw new Error(payload.error ?? 'Decent Cloud API offerings response failed');
 	}
 
-	return payload.data ?? [];
+	const offerings = payload.data ?? [];
+	// Normalize pubkey to hex string
+	return offerings.map((o) => ({
+		...o,
+		pubkey: normalizePubkey(o.pubkey)
+	}));
 }
 
 export async function getActiveProviders(days: number = 1): Promise<ProviderProfile[]> {
@@ -204,7 +209,12 @@ export async function getProviderOfferings(pubkey: string | Uint8Array): Promise
 		throw new Error(payload.error ?? 'Decent Cloud API provider offerings response failed');
 	}
 
-	return payload.data ?? [];
+	const offerings = payload.data ?? [];
+	// Normalize pubkey to hex string
+	return offerings.map((o) => ({
+		...o,
+		pubkey: normalizePubkey(o.pubkey)
+	}));
 }
 
 export async function exportProviderOfferingsCSV(

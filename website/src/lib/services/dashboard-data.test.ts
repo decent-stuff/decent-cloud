@@ -1,18 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fetchDashboardData } from './dashboard-data';
 import { fetchPlatformStats } from './api';
-import { fetchDctPrice } from './icp';
 
 vi.mock('./api', () => ({
 	fetchPlatformStats: vi.fn()
 }));
 
-vi.mock('./icp', () => ({
-	fetchDctPrice: vi.fn()
-}));
-
 const mockedFetchPlatformStats = vi.mocked(fetchPlatformStats);
-const mockedFetchDctPrice = vi.mocked(fetchDctPrice);
 
 const mockStats = {
 	total_providers: 12,
@@ -38,31 +32,21 @@ describe('fetchDashboardData', () => {
 		vi.resetAllMocks();
 	});
 
-	it('combines stats with DCT price', async () => {
+	it('returns marketplace statistics from platform stats', async () => {
 		mockedFetchPlatformStats.mockResolvedValue(mockStats);
-		mockedFetchDctPrice.mockResolvedValue(1.23);
 
 		const dashboard = await fetchDashboardData();
 
-		expect(dashboard.dctPrice).toBe(1.23);
-		expect(dashboard.providerCount).toBe(mockStats.total_providers);
-		expect(dashboard.totalBlocks).toBe(256);
-		expect(dashboard.blocksUntilHalving).toBe(10_000);
-		expect(dashboard.rewardPerBlock).toBeCloseTo(50);
-		expect(dashboard.accumulatedRewards).toBeCloseTo(12_800);
+		expect(dashboard.totalProviders).toBe(mockStats.total_providers);
+		expect(dashboard.activeProviders).toBe(mockStats.active_providers);
+		expect(dashboard.totalOfferings).toBe(mockStats.total_offerings);
+		expect(dashboard.totalContracts).toBe(mockStats.total_contracts);
+		expect(dashboard.activeValidators).toBe(mockStats.validator_count_24h);
 	});
 
 	it('propagates failures from the stats API', async () => {
 		mockedFetchPlatformStats.mockRejectedValue(new Error('stats failed'));
-		mockedFetchDctPrice.mockResolvedValue(0);
 
 		await expect(fetchDashboardData()).rejects.toThrow('stats failed');
-	});
-
-	it('propagates failures from the DCT price API', async () => {
-		mockedFetchPlatformStats.mockResolvedValue(mockStats);
-		mockedFetchDctPrice.mockRejectedValue(new Error('price failed'));
-
-		await expect(fetchDashboardData()).rejects.toThrow('price failed');
 	});
 });

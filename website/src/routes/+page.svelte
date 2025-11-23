@@ -12,12 +12,11 @@
 	import type { DashboardData } from '$lib/services/dashboard-data';
 
 	let dashboardData = $state<DashboardData>({
-		dctPrice: 0,
-		providerCount: 0,
-		totalBlocks: 0,
-		blocksUntilHalving: 0,
-		rewardPerBlock: 0,
-		accumulatedRewards: 0
+		totalProviders: 0,
+		activeProviders: 0,
+		totalOfferings: 0,
+		totalContracts: 0,
+		activeValidators: 0
 	});
 	let error = $state<string | null>(null);
 

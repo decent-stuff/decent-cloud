@@ -2,15 +2,15 @@
 	<div class="max-w-7xl mx-auto">
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
 			<div>
-				<h2 class="text-4xl md:text-5xl font-bold mb-6">Join the Decentralized Cloud Revolution</h2>
+				<h2 class="text-4xl md:text-5xl font-bold mb-6">Join the Cloud Marketplace</h2>
 				<p class="text-xl text-white/70 mb-6">
-					Whether you're a provider with spare capacity or a user looking for reliable, decentralized
-					infrastructure, Decent Cloud connects you with a global network of trusted peers.
+					Whether you're a provider with spare capacity or a user looking for reliable
+					infrastructure, Decent Cloud connects you with a global network of trusted providers.
 				</p>
 				<ul class="space-y-4 mb-8">
 					<li class="flex items-start">
 						<span class="text-green-400 mr-3 text-xl">✓</span>
-						<span class="text-white/80">No middlemen - direct peer-to-peer transactions</span>
+						<span class="text-white/80">Direct connections - choose your provider</span>
 					</li>
 					<li class="flex items-start">
 						<span class="text-green-400 mr-3 text-xl">✓</span>
@@ -18,7 +18,7 @@
 					</li>
 					<li class="flex items-start">
 						<span class="text-green-400 mr-3 text-xl">✓</span>
-						<span class="text-white/80">Community-governed and fully decentralized</span>
+						<span class="text-white/80">Community-driven marketplace</span>
 					</li>
 				</ul>
 				<a

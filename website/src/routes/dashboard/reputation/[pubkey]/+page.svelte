@@ -151,7 +151,8 @@
 						profile = {
 							displayName: account.username,
 							bio: null,
-							avatarUrl: null
+							avatarUrl: null,
+							updated_at_ns: Date.now() * 1_000_000
 						};
 					}
 				}
