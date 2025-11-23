@@ -6,34 +6,17 @@
 	import { computePubkey } from "$lib/utils/contract-format";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
-	let signingIdentity = $state<IdentityInfo | null>(null);
-	let unsubscribeCurrent: (() => void) | null = null;
-	let unsubscribeSigning: (() => void) | null = null;
+	let unsubscribe: (() => void) | null = null;
 
 	onMount(() => {
-		unsubscribeCurrent = authStore.currentIdentity.subscribe((value) => {
+		unsubscribe = authStore.activeIdentity.subscribe((value) => {
 			currentIdentity = value;
-		});
-		unsubscribeSigning = authStore.signingIdentity.subscribe((value) => {
-			signingIdentity = value;
 		});
 	});
 
 	onDestroy(() => {
-		unsubscribeCurrent?.();
-		unsubscribeSigning?.();
+		unsubscribe?.();
 	});
-
-	async function createSigningKey() {
-		try {
-			await authStore.loginWithSeedPhrase(
-				undefined,
-				"/dashboard/account/profile",
-			);
-		} catch (err) {
-			console.error("Failed to create signing key:", err);
-		}
-	}
 </script>
 
 <div class="space-y-8">
@@ -73,23 +56,8 @@
 		</div>
 	{/if}
 
-	{#if !signingIdentity}
-		<div
-			class="bg-yellow-500/20 border border-yellow-500/30 rounded-xl p-6 backdrop-blur-lg"
-		>
-			<p class="text-yellow-300 mb-4">
-				You need a signing key (seed phrase identity) to edit your
-				profile.
-			</p>
-			<button
-				onclick={createSigningKey}
-				class="px-6 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
-			>
-				Create Signing Key
-			</button>
-		</div>
-	{:else if currentIdentity}
-		<UserProfileEditor identity={currentIdentity} {signingIdentity} />
+	{#if currentIdentity}
+		<UserProfileEditor identity={currentIdentity} signingIdentity={currentIdentity} />
 	{:else}
 		<p class="text-white/60">Loading...</p>
 	{/if}

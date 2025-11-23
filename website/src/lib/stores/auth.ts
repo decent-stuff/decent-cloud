@@ -98,15 +98,9 @@ function createAuthStore() {
 	// Single identity store - replaces dual currentIdentity/signingIdentity pattern
 	// Since II is removed, viewing and signing identities are always the same
 	const activeIdentity = writable<IdentityInfo | null>(null);
-	const showSeedPhrase = writable(false);
-	const showBackupInstructions = writable(false);
 	const errorMessage = writable<string | null>(null);
 
 	const isAuthenticated = derived(activeIdentity, ($active) => $active !== null);
-
-	function generateNewSeedPhrase(): string {
-		return generateMnemonic();
-	}
 
 	function addIdentity(
 		identity: Ed25519KeyIdentity,
@@ -275,14 +269,6 @@ function createAuthStore() {
 		currentIdentity: { subscribe: activeIdentity.subscribe },
 		signingIdentity: { subscribe: activeIdentity.subscribe },
 		isAuthenticated: { subscribe: isAuthenticated.subscribe },
-		showSeedPhrase: {
-			subscribe: showSeedPhrase.subscribe,
-			set: showSeedPhrase.set
-		},
-		showBackupInstructions: {
-			subscribe: showBackupInstructions.subscribe,
-			set: showBackupInstructions.set
-		},
 		errorMessage: {
 			subscribe: errorMessage.subscribe,
 			set: errorMessage.set
@@ -362,18 +348,16 @@ function createAuthStore() {
 			}
 		},
 
-		async loginWithSeedPhrase(existingSeedPhrase?: string, returnUrl = '/dashboard') {
+		async loginWithSeedPhrase(existingSeedPhrase: string, returnUrl = '/dashboard') {
 			try {
-				const seedPhrase = existingSeedPhrase || generateNewSeedPhrase();
-				persistSeedPhrase(seedPhrase);
-				showSeedPhrase.set(true);
+				persistSeedPhrase(existingSeedPhrase);
 
-				const identity = identityFromSeed(seedPhrase);
+				const identity = identityFromSeed(existingSeedPhrase);
 				const keyPair = identity.getKeyPair();
 				const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
 				const secretKeyRaw = new Uint8Array(keyPair.secretKey);
 
-				addIdentity(identity, publicKeyBytes, secretKeyRaw, seedPhrase);
+				addIdentity(identity, publicKeyBytes, secretKeyRaw, existingSeedPhrase);
 
 				// Load account data immediately after adding identity
 				const account = await loadAccountForIdentity({
@@ -382,22 +366,17 @@ function createAuthStore() {
 					type: 'seedPhrase',
 					publicKeyBytes,
 					secretKeyRaw,
-					seedPhrase
+					seedPhrase: existingSeedPhrase
 				});
 
 				if (account) {
 					// Update activeIdentity with account data
 					activeIdentity.update((current) => {
-						if (current && current.seedPhrase === seedPhrase) {
+						if (current && current.seedPhrase === existingSeedPhrase) {
 							return { ...current, account };
 						}
 						return current;
 					});
-				}
-
-				if (!existingSeedPhrase) {
-					showBackupInstructions.set(true);
-					showSeedPhrase.set(true);
 				}
 
 				if (typeof window !== 'undefined') {
@@ -412,8 +391,6 @@ function createAuthStore() {
 		async logout() {
 			identities.set([]);
 			activeIdentity.set(null);
-			showSeedPhrase.set(false);
-			showBackupInstructions.set(false);
 			errorMessage.set(null);
 			clearStoredSeedPhrases();
 		},

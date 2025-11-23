@@ -138,8 +138,28 @@
 			contacts = contactsData;
 			socials = socialsData;
 
-			// If we have no data at all, mark as not found
-			// Note: activity is an object with arrays, so check if it has any content
+			// Check if account exists in the new account system
+			// Try to fetch account by public key
+			let accountExists = false;
+			try {
+				const { getAccountByPublicKey } = await import('$lib/services/account-api');
+				const account = await getAccountByPublicKey(pubkey);
+				if (account) {
+					accountExists = true;
+					// Use account username as display name if no profile
+					if (!profile) {
+						profile = {
+							displayName: account.username,
+							bio: null,
+							avatarUrl: null
+						};
+					}
+				}
+			} catch {
+				// Account lookup failed, continue with old logic
+			}
+
+			// If we have no data at all AND account doesn't exist, mark as not found
 			const hasActivity =
 				activity &&
 				(activity.offerings_provided.length > 0 ||
@@ -147,6 +167,7 @@
 					activity.rentals_as_provider.length > 0);
 
 			if (
+				!accountExists &&
 				!hasActivity &&
 				!reputation &&
 				balance === 0 &&
@@ -317,22 +338,21 @@
 		</div>
 	{:else if error && isNotFound}
 		<div
-			class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-400"
+			class="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-6 text-yellow-300"
 		>
 			<div class="text-center">
 				<div class="text-6xl mb-4">🔍</div>
-				<h2 class="text-2xl font-bold mb-2">Account Not Found</h2>
+				<h2 class="text-2xl font-bold mb-2">No Account Data</h2>
 				<p class="mb-4">
-					The account with public key <span class="font-mono text-sm"
+					The public key <span class="font-mono text-sm"
 						>{shortPubkey(pubkey)}</span
 					>
-					was not found in the system.
+					is not registered in the system.
 				</p>
-				<p class="text-sm text-red-300/70">This could mean:</p>
-				<ul class="text-sm text-red-300/70 list-disc list-inside mt-2">
-					<li>The account hasn't performed any activities yet</li>
-					<li>The public key address is incorrect</li>
-					<li>The account is new to the platform</li>
+				<p class="text-sm text-yellow-300/70">Please verify:</p>
+				<ul class="text-sm text-yellow-300/70 list-disc list-inside mt-2">
+					<li>The public key address is correct</li>
+					<li>The account has been registered with a username</li>
 				</ul>
 				<div class="mt-6">
 					<a

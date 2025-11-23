@@ -10,61 +10,47 @@
 	}>();
 
 	type Step =
-		| 'choose-mode'
 		| 'seed'
 		| 'checking-account'
 		| 'enter-username'
 		| 'processing'
 		| 'success';
 
-	let currentStep = $state<Step>('choose-mode');
+	let currentStep = $state<Step>('seed');
 	let seedPhrase = $state('');
 	let username = $state('');
 	let usernameValid = $state(false);
 	let normalizedUsername = $state('');
 	let error = $state<string | null>(null);
 	let createdAccount = $state<AccountInfo | null>(null);
-	let isNewAccount = $state(false);
-
-	function chooseMode(isNew: boolean) {
-		isNewAccount = isNew;
-		currentStep = 'seed';
-	}
 
 	async function handleSeedComplete(seed: string, deviceName?: string) {
 		seedPhrase = seed;
 		// Note: deviceName is not used in account creation flow
 
-		if (isNewAccount) {
-			// New account - proceed to username entry
-			currentStep = 'enter-username';
-		} else {
-			// Existing account - check if it exists
-			currentStep = 'checking-account';
-			error = null;
+		// Check if account exists for this seed
+		currentStep = 'checking-account';
+		error = null;
 
-			try {
-				const identity = identityFromSeed(seedPhrase);
-				const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
-				const publicKeyHex = bytesToHex(publicKeyBytes);
+		try {
+			const identity = identityFromSeed(seedPhrase);
+			const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+			const publicKeyHex = bytesToHex(publicKeyBytes);
 
-				// Check if account exists
-				const account = await getAccountByPublicKey(publicKeyHex);
+			// Check if account exists
+			const account = await getAccountByPublicKey(publicKeyHex);
 
-				if (account) {
-					// Existing account found - login directly
-					await loginWithExistingAccount(account);
-				} else {
-					// No account found - need to register
-					error =
-						'No account found with this seed phrase. Please check your seed phrase or create a new account.';
-					currentStep = 'seed';
-				}
-			} catch (err) {
-				console.error('Account check error:', err);
-				error = err instanceof Error ? err.message : 'Failed to check account';
-				currentStep = 'seed';
+			if (account) {
+				// Existing account found - login directly
+				await loginWithExistingAccount(account);
+			} else {
+				// No account found - proceed to username entry for new account
+				currentStep = 'enter-username';
 			}
+		} catch (err) {
+			console.error('Account check error:', err);
+			error = err instanceof Error ? err.message : 'Failed to check account';
+			currentStep = 'seed';
 		}
 	}
 
@@ -124,55 +110,20 @@
 	}
 
 	function goBack() {
-		if (currentStep === 'seed') {
-			currentStep = 'choose-mode';
-			seedPhrase = '';
-		} else if (currentStep === 'enter-username') {
+		if (currentStep === 'enter-username') {
 			currentStep = 'seed';
+			seedPhrase = '';
 		}
 	}
 </script>
 
 <div class="space-y-6">
-	<!-- Step 1: Choose Mode -->
-	{#if currentStep === 'choose-mode'}
-		<div class="space-y-4">
-			<h3 class="text-2xl font-bold text-white">Welcome to Decent Cloud</h3>
-			<p class="text-white/60">Sign in or create a new account</p>
-
-			<div class="grid gap-4">
-				<button
-					type="button"
-					onclick={() => chooseMode(true)}
-					class="p-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-xl text-left transition-all group"
-				>
-					<div class="text-3xl mb-2">✨</div>
-					<h4 class="text-xl font-bold text-white mb-1">Create New Account</h4>
-					<p class="text-white/80 text-sm">
-						Generate a new seed phrase and choose your username
-					</p>
-				</button>
-
-				<button
-					type="button"
-					onclick={() => chooseMode(false)}
-					class="p-6 bg-white/5 hover:bg-white/10 border border-white/20 rounded-xl text-left transition-all group"
-				>
-					<div class="text-3xl mb-2">🔑</div>
-					<h4 class="text-xl font-bold text-white mb-1">Sign In</h4>
-					<p class="text-white/60 text-sm">Use your existing seed phrase to sign in</p>
-				</button>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Step 2: Seed Phrase (Generate or Import) -->
+	<!-- Step 1: Seed Phrase (Generate or Import) -->
 	{#if currentStep === 'seed'}
 		<SeedPhraseStep
-			initialMode={isNewAccount ? 'choose' : 'import'}
-			showModeChoice={isNewAccount}
+			initialMode="choose"
+			showModeChoice={true}
 			onComplete={handleSeedComplete}
-			onBack={goBack}
 		/>
 	{/if}
 
@@ -195,11 +146,7 @@
 		<div class="space-y-4">
 			<h3 class="text-2xl font-bold text-white">Choose Your Username</h3>
 			<p class="text-white/60">
-				{#if isNewAccount}
-					This will be your unique identifier on Decent Cloud
-				{:else}
-					Enter your username to complete registration
-				{/if}
+				This will be your unique identifier on Decent Cloud
 			</p>
 
 			<UsernameInput
@@ -229,7 +176,7 @@
 					class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!usernameValid}
 				>
-					{isNewAccount ? 'Create Account' : 'Register & Sign In'}
+					Create Account
 				</button>
 			</div>
 		</div>
@@ -240,7 +187,7 @@
 		<div class="space-y-4 text-center py-8">
 			<div class="text-6xl animate-bounce">🔐</div>
 			<h3 class="text-2xl font-bold text-white">
-				{isNewAccount ? 'Creating Your Account' : 'Signing You In'}
+				{createdAccount ? 'Signing You In' : 'Creating Your Account'}
 			</h3>
 			<p class="text-white/60">Please wait...</p>
 			<div class="flex justify-center">
@@ -254,16 +201,12 @@
 	<!-- Step 7: Success -->
 	{#if currentStep === 'success' && createdAccount}
 		<div class="space-y-4 text-center py-8">
-			<div class="text-6xl">{isNewAccount ? '🎉' : '👋'}</div>
+			<div class="text-6xl">👋</div>
 			<h3 class="text-2xl font-bold text-white">
-				{isNewAccount ? 'Account Created!' : 'Welcome Back!'}
+				Welcome to Decent Cloud!
 			</h3>
 			<p class="text-white/60">
-				{#if isNewAccount}
-					Welcome to Decent Cloud,
-				{:else}
-					Signed in as
-				{/if}
+				Signed in as
 				<span class="text-white font-medium">@{createdAccount.username}</span>
 			</p>
 
