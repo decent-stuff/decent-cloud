@@ -3,4 +3,4 @@
 /**
  * Contact information for an account (account_contacts table)
  */
-export type AccountContact = { id: number, contactType: string, contactValue: string, verified: boolean, };
+export type AccountContact = { id: number, contact_type: string, contact_value: string, verified: boolean, };

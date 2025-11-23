@@ -3,4 +3,4 @@
 /**
  * External public key (SSH/GPG) for an account (account_external_keys table)
  */
-export type AccountExternalKey = { id: number, keyType: string, keyData: string, keyFingerprint: string | null, label: string | null, };
+export type AccountExternalKey = { id: number, key_type: string, key_data: string, key_fingerprint: string | null, label: string | null, };

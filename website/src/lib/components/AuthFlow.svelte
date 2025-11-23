@@ -169,8 +169,8 @@
 	<!-- Step 2: Seed Phrase (Generate or Import) -->
 	{#if currentStep === 'seed'}
 		<SeedPhraseStep
-			initialMode={isNewAccount ? 'generate' : 'import'}
-			showModeChoice={false}
+			initialMode={isNewAccount ? 'choose' : 'import'}
+			showModeChoice={isNewAccount}
 			onComplete={handleSeedComplete}
 			onBack={goBack}
 		/>
