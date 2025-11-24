@@ -113,18 +113,20 @@ test.describe('Anonymous Browsing', () => {
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Fmarketplace');
 	});
 
-	test('should show sidebar for anonymous users with login button', async ({ page }) => {
+	test('should show sidebar for anonymous users with all navigation items', async ({ page }) => {
 		await page.goto('/dashboard');
 
 		// Wait for page to load
 		await page.waitForLoadState('networkidle');
 
-		// Should show sidebar with public navigation items
+		// Should show sidebar with all navigation items (now visible to anonymous users too)
 		await expect(page.locator('a[href="/dashboard"]')).toBeVisible();
 		await expect(page.locator('a[href="/dashboard/marketplace"]')).toBeVisible();
+		await expect(page.locator('a[href="/dashboard/rentals"]')).toBeVisible();
+		await expect(page.locator('a[href="/dashboard/provider/requests"]')).toBeVisible();
 
-		// Should NOT show Account link (auth required)
-		const accountLinks = page.locator('a[href="/dashboard/account"]');
+		// Should NOT show Account link in sidebar (it's in the bottom section for authenticated users only)
+		const accountLinks = page.locator('aside a[href="/dashboard/account"]');
 		await expect(accountLinks).not.toBeVisible();
 
 		// Should show Login / Create Account button instead of Logout

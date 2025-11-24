@@ -13,17 +13,16 @@
 		currentIdentity = value;
 	});
 
-	const allNavItems = $derived([
-		{ href: "/dashboard", icon: "📊", label: "Overview", requiresAuth: false },
-		{ href: "/dashboard/validators", icon: "✓", label: "Validators", requiresAuth: false },
-		{ href: "/dashboard/offerings", icon: "📦", label: "Offerings", requiresAuth: false },
-		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace", requiresAuth: false },
-		{ href: "/dashboard/rentals", icon: "🔑", label: "My Rentals", requiresAuth: true },
+	const navItems = $derived([
+		{ href: "/dashboard", icon: "📊", label: "Overview" },
+		{ href: "/dashboard/validators", icon: "✓", label: "Validators" },
+		{ href: "/dashboard/offerings", icon: "📦", label: "Offerings" },
+		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
+		{ href: "/dashboard/rentals", icon: "🔑", label: "My Rentals" },
 		{
 			href: "/dashboard/provider/requests",
 			icon: "🤝",
 			label: "Provider Requests",
-			requiresAuth: true,
 		},
 		{
 			href: currentIdentity?.publicKeyBytes
@@ -31,13 +30,8 @@
 				: "/dashboard/reputation",
 			icon: "⭐",
 			label: "My Reputation",
-			requiresAuth: true,
 		},
 	]);
-
-	const navItems = $derived(
-		allNavItems.filter(item => !item.requiresAuth || isAuthenticated)
-	);
 
 	let currentPath = $state("");
 	page.subscribe((p) => {
