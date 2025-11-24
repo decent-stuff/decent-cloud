@@ -4,13 +4,62 @@ This guide covers everything you need to know about using the Decent Cloud platf
 
 ## Getting Started
 
+### Choose Your Interface
+
+Decent Cloud offers two interfaces:
+
+**Web Interface** (Recommended for most users)
+- Browse marketplace without an account
+- Visual resource management
+- Easy account creation
+- Visit [app.decent-cloud.org/dashboard](https://app.decent-cloud.org/dashboard)
+
+**CLI** (For advanced users and automation)
+- Complete [installation](installation.md)
+- Generate identity and register account
+- Initial DC tokens for operations
+
+## Using the Web Interface
+
+### Browsing Without an Account
+
+You can explore the platform without creating an account:
+
+1. Visit the [Dashboard](https://app.decent-cloud.org/dashboard)
+2. Browse available offerings in the marketplace
+3. View provider reputation and validator information
+4. Explore public user profiles
+
+When you're ready to rent resources, you'll be prompted to create an account or login.
+
+### Creating an Account (Web)
+
+When you find a resource to rent:
+
+1. Click "Rent Resource" on any offering
+2. Choose "Create Account" from the authentication prompt
+3. Select authentication method:
+   - **Seed Phrase** (recommended): Auto-generated, secure
+   - **Existing Seed Phrase**: Import from CLI or another device
+4. Follow the setup wizard
+5. You'll return to complete your rental request
+
+### Managing Your Account (Web)
+
+Access account settings from the sidebar after login:
+- **Security** - Manage devices and authentication keys
+- **Public Profile** - Edit your public profile information
+- **Rentals** - View and manage your rental contracts
+
+## Using the CLI
+
 ### Prerequisites
 
 - Completed [installation](installation.md)
 - Generated identity and registered account
 - Initial DC tokens for operations
 
-### Registration
+### Registration (CLI)
 
 ```bash
 dc user register --identity my-user

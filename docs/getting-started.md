@@ -2,12 +2,58 @@
 
 This guide will help you get up and running with Decent Cloud quickly.
 
-## Prerequisites
+## Choose Your Interface
+
+Decent Cloud offers two ways to interact with the platform:
+
+### Web Interface (Easiest)
+
+**Best for:**
+- First-time users exploring the platform
+- Quick marketplace browsing
+- Visual resource management
+- Non-technical users
+
+**Get started:**
+1. Visit [app.decent-cloud.org/dashboard](https://app.decent-cloud.org/dashboard)
+2. Browse available offerings without creating an account
+3. Create an account when ready to rent resources
+4. See the [Web Interface Guide](web-interface-guide.md) for details
+
+### Command Line Interface (Advanced)
+
+**Best for:**
+- Automation and scripting
+- Advanced provider management
+- Integration with existing tools
+- Power users and developers
+
+**Get started:**
+- Follow the [CLI installation guide](installation.md) below
+
+## Quick Start (Web Interface)
+
+1. **Browse the Marketplace**
+   - Visit [app.decent-cloud.org/dashboard/marketplace](https://app.decent-cloud.org/dashboard/marketplace)
+   - No account required to browse
+
+2. **Find a Resource**
+   - Use search and filters
+   - Check provider reputation
+   - Compare pricing
+
+3. **Create Account & Rent**
+   - Click "Rent Resource"
+   - Choose "Create Account"
+   - Complete the 2-minute setup
+   - Finish your rental request
+
+## Quick Start (CLI)
+
+### Prerequisites
 
 - Decent Cloud CLI installed (see [Installation Guide](installation.md))
 - Basic understanding of cloud resources and command-line interfaces
-
-## Quick Start Steps
 
 ### 1. Generate Your Identity
 

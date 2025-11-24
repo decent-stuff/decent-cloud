@@ -232,4 +232,56 @@ test.describe('Account Registration Flow', () => {
 			page.locator('text=error, text=failed').or(page.locator('text=Something went wrong')),
 		).toBeVisible({ timeout: 10000 });
 	});
+
+	test('should redirect to returnUrl after successful registration', async ({ page }) => {
+		const username = generateTestUsername();
+
+		// Navigate to home with returnUrl parameter
+		await page.goto('/?action=signup&returnUrl=%2Fdashboard%2Fmarketplace');
+
+		// Should auto-open auth dialog
+		await expect(page.locator('text=Create Account')).toBeVisible({ timeout: 5000 });
+
+		// Complete registration flow
+		await page.click('text=Create Account');
+		await page.fill('input[placeholder="alice"]', username);
+		await page.waitForTimeout(500);
+
+		await expect(
+			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')).first(),
+		).toBeVisible({ timeout: 5000 });
+
+		await page.click('button:has-text("Continue")');
+		await page.click('text=Seed Phrase');
+		await page.click('button:has-text("Continue")');
+		await page.check('input[type="checkbox"]');
+		await page.click('button:has-text("Continue")');
+
+		const apiResponsePromise = waitForApiResponse(
+			page,
+			/\/api\/v1\/accounts$/,
+		);
+
+		await page.click('button:has-text("Create Account"), button:has-text("Confirm")');
+		await apiResponsePromise;
+
+		// Should show success screen
+		await expect(
+			page.locator('text=Welcome, text=Success'),
+		).toBeVisible({ timeout: 10000 });
+
+		// Click "Go to Dashboard"
+		await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+
+		// Should redirect to the returnUrl (marketplace)
+		await expect(page).toHaveURL(/\/dashboard\/marketplace/, { timeout: 10000 });
+	});
+
+	test('should open signup dialog when action=signup parameter is present', async ({ page }) => {
+		// Navigate with action=signup parameter
+		await page.goto('/?action=signup');
+
+		// Auth dialog should auto-open to create account screen
+		await expect(page.locator('text=Create Account')).toBeVisible({ timeout: 5000 });
+	});
 });

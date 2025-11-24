@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 	import { dashboardStore } from '$lib/stores/dashboard';
 	import Header from '$lib/components/Header.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
@@ -19,21 +20,30 @@
 		activeValidators: 0
 	});
 	let error = $state<string | null>(null);
+	let returnUrl = $state<string | null>(null);
+	let action = $state<string | null>(null);
 
 	onMount(() => {
 		if (!browser) return;
-		
+
+		// Check for returnUrl and action query parameters
+		const unsubscribePage = page.subscribe(($page) => {
+			returnUrl = $page.url.searchParams.get('returnUrl');
+			action = $page.url.searchParams.get('action');
+		});
+
 		const unsubscribeData = dashboardStore.data.subscribe((value) => {
 			dashboardData = value;
 		});
 		const unsubscribeError = dashboardStore.error.subscribe((value) => {
 			error = value;
 		});
-		
+
 		dashboardStore.load();
 		const interval = setInterval(() => dashboardStore.load(), 10000);
-		
+
 		return () => {
+			unsubscribePage();
 			unsubscribeData();
 			unsubscribeError();
 			clearInterval(interval);

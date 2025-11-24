@@ -198,6 +198,49 @@ The WASM package (`/wasm`) contains:
 - **Build script**: `build.js` that compiles Rust to WASM and TypeScript to JavaScript
 - **Distribution**: `dist/` directory containing the built package ready for consumption
 
+#### Authentication Architecture
+
+The website uses a tiered authentication approach that allows anonymous browsing while protecting sensitive operations.
+
+**Public Routes** (No authentication required)
+- Home page (`/`)
+- Dashboard layout (`/dashboard/*` - layout only)
+- Public pages: marketplace, offerings, validators, reputation, user profiles
+
+**Protected Routes** (Authentication required)
+- Account pages (`/dashboard/account/*`)
+- Rental management (`/dashboard/rentals`)
+- Provider dashboard (`/dashboard/provider/*`)
+
+**Auth Guard Pattern**
+
+Protected pages use the `requireAuth` utility from `lib/utils/auth-guard.ts`:
+
+```typescript
+import { requireAuth } from '$lib/utils/auth-guard';
+import { page } from '$app/stores';
+
+onMount(() => {
+    const unsubAuth = authStore.isAuthenticated.subscribe((isAuth) => {
+        requireAuth(isAuth, $page.url.pathname);
+    });
+});
+```
+
+**Anonymous UX Components**
+
+- `AuthPromptBanner.svelte` - Top banner encouraging account creation for anonymous users
+- `AuthPromptModal.svelte` - Modal shown when users attempt auth-required actions
+- Both components support `returnUrl` parameter for seamless post-auth navigation
+
+**Return URL Flow**
+
+1. Anonymous user attempts protected action
+2. `requireAuth` redirects to `/?returnUrl=/protected/page`
+3. User completes authentication
+4. `Header.svelte` detects auth change and navigates to `returnUrl`
+5. User continues their original task
+
 #### Troubleshooting Website Development
 
 **Issue: Import errors for `@decent-stuff/dc-client`**

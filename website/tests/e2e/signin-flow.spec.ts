@@ -297,4 +297,90 @@ test.describe('Sign-In Flow', () => {
 		await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
 		await expect(page).toHaveURL(/\/dashboard/);
 	});
+
+	test('should redirect to returnUrl after successful sign-in', async ({ page }) => {
+		// Navigate to home with returnUrl parameter
+		await page.goto('/?action=login&returnUrl=%2Fdashboard%2Frentals');
+
+		// Should auto-open auth dialog to sign in
+		await expect(page.locator('text=Sign In')).toBeVisible({ timeout: 5000 });
+
+		// Complete sign-in flow
+		await page.click('text=Sign In');
+		await page.click('text=Seed Phrase');
+		await page.click('button:has-text("Continue")');
+
+		// Enter seed phrase
+		const seedInput = page.locator(
+			'textarea[placeholder*="seed" i], input[placeholder*="seed" i]',
+		);
+		await seedInput.fill(testCredentials.seedPhrase);
+		await page.click('button:has-text("Continue")');
+
+		// Enter username
+		await page.fill(
+			'input[placeholder="alice"]',
+			testCredentials.username,
+		);
+		await page.waitForTimeout(500);
+
+		// Complete sign-in
+		await page.click('button:has-text("Continue"), button:has-text("Sign In")');
+
+		// Should show success screen
+		await expect(
+			page.locator('text=Welcome').or(page.locator('text=Success')),
+		).toBeVisible({ timeout: 10000 });
+
+		// Click "Go to Dashboard"
+		await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+
+		// Should redirect to the returnUrl (rentals)
+		await expect(page).toHaveURL(/\/dashboard\/rentals/, { timeout: 10000 });
+	});
+
+	test('should redirect to returnUrl when accessing protected page directly', async ({ page }) => {
+		// Try to access protected page directly while logged out
+		await page.goto('/dashboard/account');
+
+		// Should redirect to home with returnUrl
+		await expect(page).toHaveURL('/?returnUrl=%2Fdashboard%2Faccount');
+
+		// Complete sign-in from the redirected page
+		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
+		await page.click('text=Seed Phrase');
+		await page.click('button:has-text("Continue")');
+
+		const seedInput = page.locator(
+			'textarea[placeholder*="seed" i], input[placeholder*="seed" i]',
+		);
+		await seedInput.fill(testCredentials.seedPhrase);
+		await page.click('button:has-text("Continue")');
+
+		await page.fill(
+			'input[placeholder="alice"]',
+			testCredentials.username,
+		);
+		await page.waitForTimeout(500);
+
+		await page.click('button:has-text("Continue"), button:has-text("Sign In")');
+
+		await expect(
+			page.locator('text=Welcome').or(page.locator('text=Success')),
+		).toBeVisible({ timeout: 10000 });
+
+		await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+
+		// Should redirect back to the originally requested page (account)
+		await expect(page).toHaveURL(/\/dashboard\/account/, { timeout: 10000 });
+	});
+
+	test('should open signin dialog when action=login parameter is present', async ({ page }) => {
+		// Navigate with action=login parameter
+		await page.goto('/?action=login');
+
+		// Auth dialog should auto-open to sign in screen
+		await expect(page.locator('text=Sign In')).toBeVisible({ timeout: 5000 });
+	});
 });

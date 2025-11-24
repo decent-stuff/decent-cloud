@@ -1,14 +1,21 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import { authStore } from "$lib/stores/auth";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
+	let isAuthenticated = $state(false);
 	let unsubscribe: (() => void) | null = null;
+	let unsubscribeAuth: (() => void) | null = null;
 	let currentPath = $state("");
 
 	onMount(() => {
+		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
+			isAuthenticated = isAuth;
+		});
+
 		unsubscribe = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
 		});
@@ -16,7 +23,12 @@
 
 	onDestroy(() => {
 		unsubscribe?.();
+		unsubscribeAuth?.();
 	});
+
+	function handleLogin() {
+		goto(`/login?returnUrl=${$page.url.pathname}`);
+	}
 
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
@@ -40,7 +52,24 @@
 		</p>
 	</div>
 
-	{#if currentIdentity?.account}
+	{#if !isAuthenticated}
+		<!-- Anonymous user view - login prompt -->
+		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+			<div class="max-w-md mx-auto space-y-6">
+				<span class="text-6xl">🔐</span>
+				<h2 class="text-2xl font-bold text-white">Login Required</h2>
+				<p class="text-white/70">
+					Create an account or login to access your account settings, manage security, and edit your public profile.
+				</p>
+				<button
+					onclick={handleLogin}
+					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+				>
+					Login / Create Account
+				</button>
+			</div>
+		</div>
+	{:else if currentIdentity?.account}
 		<!-- Account Overview Card -->
 		<div
 			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"

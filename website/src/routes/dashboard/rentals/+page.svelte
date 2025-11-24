@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
+	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import {
 		getUserContracts,
 		cancelRentalRequest,
@@ -19,8 +21,15 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let cancellingContractId = $state<string | null>(null);
+	let isAuthenticated = $state(false);
+	let unsubscribeAuth: (() => void) | null = null;
 
-	onMount(async () => {
+	async function loadContracts() {
+		if (!isAuthenticated) {
+			loading = false;
+			return;
+		}
+
 		try {
 			loading = true;
 			error = null;
@@ -47,6 +56,13 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(async () => {
+		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
+			isAuthenticated = isAuth;
+			loadContracts();
+		});
 	});
 
 	function isCancellable(status: string): boolean {
@@ -103,6 +119,14 @@
 			cancellingContractId = null;
 		}
 	}
+
+	function handleLogin() {
+		goto(`/login?returnUrl=${$page.url.pathname}`);
+	}
+
+	onDestroy(() => {
+		unsubscribeAuth?.();
+	});
 </script>
 
 <div class="space-y-8">
@@ -113,7 +137,32 @@
 		</p>
 	</div>
 
-	{#if error}
+	{#if !isAuthenticated}
+		<!-- Anonymous user view - login prompt -->
+		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+			<div class="max-w-md mx-auto space-y-6">
+				<span class="text-6xl">🔑</span>
+				<h2 class="text-2xl font-bold text-white">Login Required</h2>
+				<p class="text-white/70">
+					Create an account or login to view and manage your rental contracts. See the marketplace to browse available resources.
+				</p>
+				<div class="flex flex-col gap-3">
+					<button
+						onclick={handleLogin}
+						class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					>
+						Login / Create Account
+					</button>
+					<a
+						href="/dashboard/marketplace"
+						class="px-8 py-3 bg-white/10 rounded-lg font-semibold text-white hover:bg-white/20 transition-all"
+					>
+						Browse Marketplace
+					</a>
+				</div>
+			</div>
+		</div>
+	{:else if error}
 		<div
 			class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400"
 		>

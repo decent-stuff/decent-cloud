@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
+	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import PendingRequestCard from "$lib/components/provider/PendingRequestCard.svelte";
 	import ManagedContractCard from "$lib/components/provider/ManagedContractCard.svelte";
 	import {
@@ -26,6 +28,8 @@
 		provisioningNotes = $state<Record<string, string>>({});
 	let responding = $state<Record<string, boolean>>({}),
 		updating = $state<Record<string, boolean>>({});
+	let isAuthenticated = $state(false);
+	let unsubscribeAuth: (() => void) | null = null;
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -34,9 +38,23 @@
 
 	let signingIdentityInfo = $state<SigningIdentity | null>(null);
 
-	onMount(loadData);
+	onMount(() => {
+		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
+			isAuthenticated = isAuth;
+			if (isAuth) {
+				loadData();
+			} else {
+				loading = false;
+			}
+		});
+	});
 
 	async function loadData() {
+		if (!isAuthenticated) {
+			loading = false;
+			return;
+		}
+
 		try {
 			loading = true;
 			error = null;
@@ -93,6 +111,10 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	function handleLogin() {
+		goto(`/login?returnUrl=${$page.url.pathname}`);
 	}
 
 	const memoValue = (contractId: string) => memoInputs[contractId] ?? "";
@@ -178,6 +200,10 @@
 			updating = { ...updating, [contract.contractId]: false };
 		}
 	}
+
+	onDestroy(() => {
+		unsubscribeAuth?.();
+	});
 </script>
 
 <div class="space-y-8">
@@ -189,7 +215,25 @@
 		</p>
 	</header>
 
-	{#if error}<div
+	{#if !isAuthenticated}
+		<!-- Anonymous user view - login prompt -->
+		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+			<div class="max-w-md mx-auto space-y-6">
+				<span class="text-6xl">🤝</span>
+				<h2 class="text-2xl font-bold text-white">Login Required</h2>
+				<p class="text-white/70">
+					Create an account or login to manage provider rental requests, respond to pending requests, and update provisioning status.
+				</p>
+				<button
+					onclick={handleLogin}
+					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+				>
+					Login / Create Account
+				</button>
+			</div>
+		</div>
+	{:else}
+		{#if error}<div
 			class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-300"
 		>
 			{error}
@@ -278,5 +322,6 @@
 				</div>
 			{/if}
 		</section>
+	{/if}
 	{/if}
 </div>

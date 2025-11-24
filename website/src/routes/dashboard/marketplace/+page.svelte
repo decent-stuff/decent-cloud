@@ -2,6 +2,7 @@
 	import { onMount } from "svelte";
 	import { searchOfferings, type Offering } from "$lib/services/api";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
+	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
 	import { authStore } from "$lib/stores/auth";
 
 	let offerings = $state<Offering[]>([]);
@@ -12,6 +13,7 @@
 	let selectedOffering = $state<Offering | null>(null);
 	let successMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
+	let showAuthModal = $state(false);
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -35,7 +37,7 @@
 
 	function handleRentClick(offering: Offering) {
 		if (!isAuthenticated) {
-			error = "Please log in to rent resources";
+			showAuthModal = true;
 			return;
 		}
 		selectedOffering = offering;
@@ -309,4 +311,11 @@
 	offering={selectedOffering}
 	onClose={handleDialogClose}
 	onSuccess={handleRentalSuccess}
+/>
+
+<!-- Auth Prompt Modal -->
+<AuthPromptModal
+	isOpen={showAuthModal}
+	onClose={() => showAuthModal = false}
+	message="Create an account or login to rent cloud resources"
 />

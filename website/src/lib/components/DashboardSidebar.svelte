@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import { authStore } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
-	let { isOpen = $bindable(false) } = $props();
+	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
 
@@ -12,16 +13,17 @@
 		currentIdentity = value;
 	});
 
-	const navItems = $derived([
-		{ href: "/dashboard", icon: "📊", label: "Overview" },
-		{ href: "/dashboard/validators", icon: "✓", label: "Validators" },
-		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
-		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
-		{ href: "/dashboard/rentals", icon: "🔑", label: "My Rentals" },
+	const allNavItems = $derived([
+		{ href: "/dashboard", icon: "📊", label: "Overview", requiresAuth: false },
+		{ href: "/dashboard/validators", icon: "✓", label: "Validators", requiresAuth: false },
+		{ href: "/dashboard/offerings", icon: "📦", label: "Offerings", requiresAuth: false },
+		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace", requiresAuth: false },
+		{ href: "/dashboard/rentals", icon: "🔑", label: "My Rentals", requiresAuth: true },
 		{
 			href: "/dashboard/provider/requests",
 			icon: "🤝",
 			label: "Provider Requests",
+			requiresAuth: true,
 		},
 		{
 			href: currentIdentity?.publicKeyBytes
@@ -29,8 +31,13 @@
 				: "/dashboard/reputation",
 			icon: "⭐",
 			label: "My Reputation",
+			requiresAuth: true,
 		},
 	]);
+
+	const navItems = $derived(
+		allNavItems.filter(item => !item.requiresAuth || isAuthenticated)
+	);
 
 	let currentPath = $state("");
 	page.subscribe((p) => {
@@ -40,6 +47,11 @@
 	async function handleLogout() {
 		await authStore.logout();
 		window.location.href = "/";
+	}
+
+	function handleLogin() {
+		closeSidebar();
+		goto("/login?returnUrl=" + encodeURIComponent(currentPath));
 	}
 
 	function closeSidebar() {
@@ -94,23 +106,34 @@
 
 	<!-- User Section -->
 	<div class="p-4 border-t border-white/10 space-y-2">
-		<a
-			href="/dashboard/account"
-			onclick={closeSidebar}
-			class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath.startsWith('/dashboard/account')
-				? 'bg-blue-600 text-white'
-				: 'text-white/70 hover:bg-white/10 hover:text-white'}"
-		>
-			<span class="text-xl">⚙️</span>
-			<span class="font-medium">Account</span>
-		</a>
-		<button
-			type="button"
-			onclick={handleLogout}
-			class="w-full px-4 py-3 text-left rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-3"
-		>
-			<span class="text-xl">🚪</span>
-			<span class="font-medium">Logout</span>
-		</button>
+		{#if isAuthenticated}
+			<a
+				href="/dashboard/account"
+				onclick={closeSidebar}
+				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath.startsWith('/dashboard/account')
+					? 'bg-blue-600 text-white'
+					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+			>
+				<span class="text-xl">⚙️</span>
+				<span class="font-medium">Account</span>
+			</a>
+			<button
+				type="button"
+				onclick={handleLogout}
+				class="w-full px-4 py-3 text-left rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-3"
+			>
+				<span class="text-xl">🚪</span>
+				<span class="font-medium">Logout</span>
+			</button>
+		{:else}
+			<button
+				type="button"
+				onclick={handleLogin}
+				class="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold hover:brightness-110 transition-all flex items-center gap-3 justify-center"
+			>
+				<span class="text-xl">🔐</span>
+				<span class="font-medium">Login / Create Account</span>
+			</button>
+		{/if}
 	</div>
 </aside>

@@ -63,10 +63,10 @@
 
 			<div class="mt-8 justify-center md:justify-start">
 				<a
-					href="https://github.com/orgs/decent-stuff/discussions"
+					href="/dashboard/marketplace"
 					class="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full font-extrabold text-lg md:text-xl hover:brightness-110 hover:shadow-2xl hover:scale-105 transition-all"
 				>
-					<span>🚀 Join the Development</span>
+					<span>🚀 Open Marketplace</span>
 				</a>
 			</div>
 		</div>

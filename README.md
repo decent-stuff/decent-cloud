@@ -25,7 +25,8 @@ Our unique reputation system ties credibility to transaction fees. Paying these 
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) – A quick introduction for new users, outlining basic setup.
-- [Installation](docs/installation.md) – Detailed installation instructions with OS specifics.
+- [Web Interface Guide](docs/web-interface-guide.md) – Complete guide to using the web interface.
+- [Installation](docs/installation.md) – Detailed installation instructions with OS specifics (CLI).
 - [User Guide](docs/user-guide.md) – Comprehensive usage guide for consumers.
 - [Provider Guide](docs/provider-guide.md) – Detailed information for resource providers.
 - [Reputation Guide](docs/reputation.md) – Explanation of our decentralized trust mechanism.
@@ -35,26 +36,29 @@ Our unique reputation system ties credibility to transaction fees. Paying these 
 
 ## Quick Start
 
+### Web Interface (Easiest)
+
+Browse and rent resources without installing anything:
+
+1. **Visit** [app.decent-cloud.org/dashboard](https://app.decent-cloud.org/dashboard)
+2. **Browse** the marketplace - no account required
+3. **Create account** when ready to rent resources
+
+See [Web Interface Guide](docs/web-interface-guide.md) for details.
+
+### CLI (Advanced Users)
+
+For automation, scripting, and advanced features:
+
 1. **Install** - See [Installation Guide](docs/installation.md) for detailed setup instructions
 2. **Generate identity** - `dc keygen --generate --identity my-id`
 3. **Register** - `dc user register --identity my-user` or `dc provider register --identity my-provider`
 
 Continue with [Getting Started](docs/getting-started.md) for complete setup.
 
-## Related Projects
-
-- **LedgerMap:** Backing ledger implementation  
-  - GitHub: [github.com/decent-stuff/ledger-map](https://github.com/decent-stuff/ledger-map/)  
-  - NPM: [@decent-stuff/ledger-map](https://www.npmjs.com/package/@decent-stuff/ledger-map)
-- **Frontend Website:** Official Decent Cloud web interface  
-  - GitHub: [github.com/decent-stuff/website](https://github.com/decent-stuff/website/)
-- **Decent-Cloud:** Internet Computer canister and client code  
-  - CLI Client in `/cli`, and published as binaries.  
-  - Browser Client: [@decent-stuff/dc-client](https://www.npmjs.com/package/@decent-stuff/dc-client)
-
 ## Project Status
 
-Active development is underway. Primary development occurs on Linux (Ubuntu 24.04), with support for MacOS and Windows.
+The project is in active development. Primary development occurs on Linux (Ubuntu 24.04), with best-effort support for MacOS and Windows.
 
 If you encounter issues:
 - [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
