@@ -7,6 +7,7 @@
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeaturesSection from '$lib/components/FeaturesSection.svelte';
 	import BenefitsSection from '$lib/components/BenefitsSection.svelte';
+	import AIFeaturesSection from '$lib/components/AIFeaturesSection.svelte';
 	import DashboardSection from '$lib/components/DashboardSection.svelte';
 	import InfoSection from '$lib/components/InfoSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -56,6 +57,7 @@
 	<HeroSection />
 	<FeaturesSection />
 	<BenefitsSection />
+	<AIFeaturesSection />
 	<DashboardSection {dashboardData} {error} />
 	<InfoSection />
 	<Footer />

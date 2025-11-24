@@ -4,8 +4,8 @@
 			<div>
 				<h2 class="text-4xl md:text-5xl font-bold mb-6">Join the Cloud Marketplace</h2>
 				<p class="text-xl text-white/70 mb-6">
-					Whether you're a provider with spare capacity or a user looking for reliable
-					infrastructure, Decent Cloud connects you with a global network of trusted providers.
+					Whether you're a provider with spare capacity or services to offer, or a user looking for reliable
+					infrastructure and cloud services, Decent Cloud connects you with a global network of trusted providers.
 				</p>
 				<ul class="space-y-4 mb-8">
 					<li class="flex items-start">

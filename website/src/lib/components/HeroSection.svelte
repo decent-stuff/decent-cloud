@@ -55,7 +55,9 @@
 				</span>
 			</h1>
 
-			<p class="text-base md:text-lg xl:text-xl mt-4 text-white/80">Airbnb of cloud services</p>
+			<p class="text-base md:text-lg xl:text-xl mt-4 text-white/80">
+				Decentralized marketplace for cloud infrastructure and services
+			</p>
 
 			<h2 class="text-lg md:text-2xl mt-2 text-white/80 font-bold min-h-[3rem]">
 				{currentText}<span class="animate-pulse">|</span>
