@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from "$app/stores";
-	import { goto } from "$app/navigation";
 	import { authStore } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
+	import { navigateToLogin } from "$lib/utils/navigation";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
@@ -45,7 +45,7 @@
 
 	function handleLogin() {
 		closeSidebar();
-		goto("/login?returnUrl=" + encodeURIComponent(currentPath));
+		navigateToLogin(currentPath);
 	}
 
 	function closeSidebar() {

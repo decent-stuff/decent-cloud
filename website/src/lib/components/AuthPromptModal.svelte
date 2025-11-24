@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { navigateToLogin } from '$lib/utils/navigation';
 
 	interface Props {
 		isOpen: boolean;
@@ -11,7 +11,7 @@
 	let { isOpen = false, onClose, message = "You need an account to perform this action" }: Props = $props();
 
 	function handleAuth() {
-		goto(`/login?returnUrl=${$page.url.pathname}`);
+		navigateToLogin($page.url.pathname);
 	}
 
 	function handleBackdropClick(event: MouseEvent) {

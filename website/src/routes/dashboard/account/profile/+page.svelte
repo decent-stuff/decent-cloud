@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
 	import { page } from "$app/stores";
-	import { goto } from "$app/navigation";
 	import { authStore } from "$lib/stores/auth";
+	import { navigateToLogin } from "$lib/utils/navigation";
 	import UserProfileEditor from "$lib/components/UserProfileEditor.svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
@@ -23,7 +23,7 @@
 	});
 
 	function handleLogin() {
-		goto(`/login?returnUrl=${$page.url.pathname}`);
+		navigateToLogin($page.url.pathname);
 	}
 
 	onDestroy(() => {

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { navigateToLogin } from '$lib/utils/navigation';
 
 	function handleAuth() {
-		goto(`/login?returnUrl=${$page.url.pathname}`);
+		navigateToLogin($page.url.pathname);
 	}
 </script>
 

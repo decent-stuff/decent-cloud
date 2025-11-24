@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
 	import { page } from "$app/stores";
-	import { goto } from "$app/navigation";
+	import { navigateToLogin } from "$lib/utils/navigation";
 	import {
 		getUserContracts,
 		cancelRentalRequest,
@@ -121,7 +121,7 @@
 	}
 
 	function handleLogin() {
-		goto(`/login?returnUrl=${$page.url.pathname}`);
+		navigateToLogin($page.url.pathname);
 	}
 
 	onDestroy(() => {

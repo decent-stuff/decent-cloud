@@ -1,56 +1,30 @@
 <script lang="ts">
 	import { authStore } from '$lib/stores/auth';
-	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
-	import AuthDialog from './AuthDialog.svelte';
 	import { onMount, onDestroy } from 'svelte';
+	import { navigateToLogin } from '$lib/utils/navigation';
 	import type { IdentityInfo } from '$lib/stores/auth';
 
 	let isAuthenticated = $state(false);
 	let currentIdentity = $state<IdentityInfo | null>(null);
-	let showAuthDialog = $state(false);
-	let returnUrl = $state<string | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
 	let unsubscribeIdentity: (() => void) | null = null;
-	let unsubscribePage: (() => void) | null = null;
 
 	onMount(() => {
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((value) => {
 			isAuthenticated = value;
-			// If user just authenticated and there's a returnUrl, navigate to it
-			if (value && returnUrl) {
-				const url = returnUrl;
-				returnUrl = null;
-				goto(url);
-			}
 		});
 		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
-		});
-		unsubscribePage = page.subscribe(($page) => {
-			const action = $page.url.searchParams.get('action');
-			const urlReturnUrl = $page.url.searchParams.get('returnUrl');
-
-			// Store returnUrl for post-auth navigation
-			if (urlReturnUrl) {
-				returnUrl = urlReturnUrl;
-			}
-
-			// Auto-open auth dialog if action parameter is present
-			if ((action === 'signup' || action === 'login') && !isAuthenticated) {
-				showAuthDialog = true;
-			}
 		});
 	});
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
 		unsubscribeIdentity?.();
-		unsubscribePage?.();
 	});
 
 	function handleConnect() {
-		showAuthDialog = true;
+		navigateToLogin('/dashboard');
 	}
 
 	function truncate(str: string): string {
@@ -112,5 +86,3 @@
 		</div>
 	</div>
 </header>
-
-<AuthDialog bind:open={showAuthDialog} />

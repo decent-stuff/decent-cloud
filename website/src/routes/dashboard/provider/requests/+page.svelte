@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
 	import { page } from "$app/stores";
-	import { goto } from "$app/navigation";
+	import { navigateToLogin } from "$lib/utils/navigation";
 	import PendingRequestCard from "$lib/components/provider/PendingRequestCard.svelte";
 	import ManagedContractCard from "$lib/components/provider/ManagedContractCard.svelte";
 	import {
@@ -114,7 +114,7 @@
 	}
 
 	function handleLogin() {
-		goto(`/login?returnUrl=${$page.url.pathname}`);
+		navigateToLogin($page.url.pathname);
 	}
 
 	const memoValue = (contractId: string) => memoInputs[contractId] ?? "";
