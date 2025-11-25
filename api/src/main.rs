@@ -262,6 +262,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/oauth/session/keypair",
             get(oauth_simple::get_session_keypair),
         )
+        .at("/api/v1/oauth/info", get(oauth_simple::get_oauth_info))
         .at("/api/v1/oauth/register", post(oauth_simple::oauth_register))
         .at("/api/v1/oauth/logout", post(oauth_simple::oauth_logout))
         // Legacy endpoints (canister proxy - ICP integration pending)

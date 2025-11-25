@@ -284,42 +284,46 @@ pub async fn google_callback(
         (None, None)
     };
 
-    // Store keypair and account info in cookie as JSON
-    let cookie_data = SessionKeypairData {
-        private_key: hex::encode(&private_key),
-        public_key: hex::encode(&public_key),
-        account_id,
-        username: username.clone(),
-    };
+    if username.is_some() {
+        // User has account - set persistent oauth_keypair cookie
+        let cookie_data = SessionKeypairData {
+            private_key: hex::encode(&private_key),
+            public_key: hex::encode(&public_key),
+            account_id,
+            username: username.clone(),
+        };
 
-    let cookie_value = serde_json::to_string(&cookie_data).map_err(|e| {
-        poem::Error::from_string(
-            format!("Failed to serialize cookie: {}", e),
-            StatusCode::INTERNAL_SERVER_ERROR,
-        )
-    })?;
+        let cookie_value = serde_json::to_string(&cookie_data).map_err(|e| {
+            poem::Error::from_string(
+                format!("Failed to serialize cookie: {}", e),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
 
-    let mut cookie = Cookie::new_with_str("oauth_keypair", cookie_value);
-    cookie.set_path("/");
-    cookie.set_http_only(true);
-    cookie.set_secure(should_use_secure_cookies());
-    cookie.set_max_age(std::time::Duration::from_secs(7 * 24 * 60 * 60)); // 7 days
-    cookie_jar.add(cookie);
+        let mut cookie = Cookie::new_with_str("oauth_keypair", cookie_value);
+        cookie.set_path("/");
+        cookie.set_http_only(true);
+        cookie.set_secure(should_use_secure_cookies());
+        cookie.set_max_age(std::time::Duration::from_secs(7 * 24 * 60 * 60)); // 7 days
+        cookie_jar.add(cookie);
+    } else {
+        // New user - only set temporary oauth_info cookie with keypair data
+        let oauth_info = serde_json::json!({
+            "provider": "google_oauth",
+            "external_id": user_info.id,
+            "email": user_info.email,
+            "private_key": hex::encode(&private_key),
+            "public_key": hex::encode(&public_key),
+        })
+        .to_string();
 
-    // Also store OAuth provider info for account linking
-    let oauth_info = serde_json::json!({
-        "provider": "google_oauth",
-        "external_id": user_info.id,
-        "email": user_info.email,
-    })
-    .to_string();
-
-    let mut oauth_info_cookie = Cookie::new_with_str("oauth_info", oauth_info);
-    oauth_info_cookie.set_path("/");
-    oauth_info_cookie.set_http_only(true);
-    oauth_info_cookie.set_secure(should_use_secure_cookies());
-    oauth_info_cookie.set_max_age(std::time::Duration::from_secs(15 * 60)); // 15 minutes
-    cookie_jar.add(oauth_info_cookie);
+        let mut oauth_info_cookie = Cookie::new_with_str("oauth_info", oauth_info);
+        oauth_info_cookie.set_path("/");
+        oauth_info_cookie.set_http_only(true);
+        oauth_info_cookie.set_secure(should_use_secure_cookies());
+        oauth_info_cookie.set_max_age(std::time::Duration::from_secs(15 * 60)); // 15 minutes
+        cookie_jar.add(oauth_info_cookie);
+    }
 
     let frontend_url =
         std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59000".to_string());
@@ -327,7 +331,7 @@ pub async fn google_callback(
     let redirect_path = if username.is_some() {
         "/dashboard/marketplace"
     } else {
-        "/auth?oauth=google&step=username"
+        "/login?oauth=google&step=username"
     };
 
     Ok(Response::builder()
@@ -360,6 +364,55 @@ pub async fn get_session_keypair(
             success: false,
             data: None,
             error: Some("No OAuth session found".to_string()),
+        }))
+    }
+}
+
+/// Response for OAuth info endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthInfoResponse {
+    pub success: bool,
+    pub data: Option<OAuthInfoData>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthInfoData {
+    pub email: Option<String>,
+    pub provider: String,
+}
+
+/// GET /api/v1/oauth/info
+/// Get OAuth info (email, provider) for username prefill during registration
+#[handler]
+pub async fn get_oauth_info(
+    cookie_jar: &CookieJar,
+) -> PoemResult<poem::web::Json<OAuthInfoResponse>> {
+    if let Some(cookie) = cookie_jar.get("oauth_info") {
+        let cookie_value: &str = cookie.value_str();
+        let oauth_info: serde_json::Value = serde_json::from_str(cookie_value).map_err(|e| {
+            poem::Error::from_string(
+                format!("Failed to parse OAuth info: {}", e),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
+
+        let email = oauth_info["email"].as_str().map(|s| s.to_string());
+        let provider = oauth_info["provider"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
+
+        Ok(poem::web::Json(OAuthInfoResponse {
+            success: true,
+            data: Some(OAuthInfoData { email, provider }),
+            error: None,
+        }))
+    } else {
+        Ok(poem::web::Json(OAuthInfoResponse {
+            success: false,
+            data: None,
+            error: Some("No OAuth info found".to_string()),
         }))
     }
 }
@@ -430,23 +483,7 @@ pub async fn oauth_register(
             )
         })?;
 
-    // Get keypair from cookie
-    let keypair_cookie = cookie_jar.get("oauth_keypair").ok_or_else(|| {
-        poem::Error::from_string(
-            "OAuth keypair not found".to_string(),
-            StatusCode::UNAUTHORIZED,
-        )
-    })?;
-
-    let keypair_data: SessionKeypairData = serde_json::from_str(keypair_cookie.value_str())
-        .map_err(|e| {
-            poem::Error::from_string(
-                format!("Failed to parse keypair: {}", e),
-                StatusCode::INTERNAL_SERVER_ERROR,
-            )
-        })?;
-
-    // Extract OAuth provider info
+    // Extract OAuth provider info and keypair from oauth_info cookie
     let provider = oauth_info["provider"].as_str().ok_or_else(|| {
         poem::Error::from_string(
             "Missing provider in OAuth info".to_string(),
@@ -463,8 +500,22 @@ pub async fn oauth_register(
 
     let email = oauth_info["email"].as_str();
 
+    let private_key_hex = oauth_info["private_key"].as_str().ok_or_else(|| {
+        poem::Error::from_string(
+            "Missing private_key in OAuth info".to_string(),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let public_key_hex = oauth_info["public_key"].as_str().ok_or_else(|| {
+        poem::Error::from_string(
+            "Missing public_key in OAuth info".to_string(),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
     // Decode public key
-    let public_key = hex::decode(&keypair_data.public_key).map_err(|e| {
+    let public_key = hex::decode(public_key_hex).map_err(|e| {
         poem::Error::from_string(
             format!("Failed to decode public key: {}", e),
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -481,7 +532,7 @@ pub async fn oauth_register(
         .create_oauth_linked_account(
             &username,
             &public_key,
-            email.unwrap_or(""),
+            email.unwrap_or_default(), // Use empty string if no email
             provider,
             external_id,
         )
@@ -493,15 +544,15 @@ pub async fn oauth_register(
             )
         })?;
 
-    // Update keypair cookie with account info
-    let updated_keypair_data = SessionKeypairData {
-        private_key: keypair_data.private_key,
-        public_key: keypair_data.public_key,
+    // Set oauth_keypair cookie with account info (first time for new users)
+    let keypair_data = SessionKeypairData {
+        private_key: private_key_hex.to_string(),
+        public_key: public_key_hex.to_string(),
         account_id: Some(hex::encode(&account.id)),
         username: Some(account.username.clone()),
     };
 
-    let cookie_value = serde_json::to_string(&updated_keypair_data).map_err(|e| {
+    let cookie_value = serde_json::to_string(&keypair_data).map_err(|e| {
         poem::Error::from_string(
             format!("Failed to serialize cookie: {}", e),
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -516,7 +567,10 @@ pub async fn oauth_register(
     cookie_jar.add(cookie);
 
     // Remove oauth_info cookie as it's no longer needed
-    cookie_jar.remove("oauth_info");
+    let mut clear_oauth_info = Cookie::new_with_str("oauth_info", "");
+    clear_oauth_info.set_path("/");
+    clear_oauth_info.set_max_age(std::time::Duration::from_secs(0));
+    cookie_jar.add(clear_oauth_info);
 
     tracing::info!(
         "Created new account {} via OAuth provider {}",
