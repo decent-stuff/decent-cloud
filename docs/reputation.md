@@ -259,6 +259,34 @@ dc reputation --export --format json --identity my-id > my_reputation.json
 <strong>Pro Tip:</strong> Regularly export your reputation data to track your growth and identify patterns in your interactions.
 </div>
 
+### Searching for Accounts
+
+The Decent Cloud website provides a searchable reputation directory where you can find users and providers by username, display name, or public key:
+
+1. **Via Dashboard**: Navigate to the "Reputation" page in the dashboard
+2. **Search Interface**: Enter a username, display name, or partial public key to find accounts
+3. **View Details**: Click on any search result to view full reputation details, contract history, and offerings
+
+> 🔍 **Public by Design**: All reputation data, transaction histories, contract details, and offerings are publicly visible to encourage transparency and trust. This design philosophy ensures accountability across the entire network.
+
+**What's Public:**
+- Account usernames and display names
+- Reputation scores and change history
+- All completed and active contracts
+- Provider offerings and pricing
+- Token transfer history
+- Contact information (if provided)
+
+**Privacy Considerations:**
+- Personal information (email, contact details) is optional
+- Only provide information you're comfortable making public
+- Public keys are shown but can be truncated for readability
+- The platform does not support opt-out from reputation visibility
+
+<div class="info-box" style="background-color: #fff3cd; padding: 10px; border-left: 5px solid #ffc107; margin: 10px 0;">
+<strong>Important:</strong> This platform operates on the principle of radical transparency. Only participate if you're comfortable with your activity being publicly visible.
+</div>
+
 ---
 
 ## Best Practices

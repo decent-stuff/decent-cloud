@@ -24,7 +24,7 @@
 	});
 
 	function handleConnect() {
-		navigateToLogin('/dashboard');
+		navigateToLogin('/dashboard/marketplace');
 	}
 
 	function truncate(str: string): string {
@@ -63,14 +63,14 @@
 					</span>
 				{/if}
 				<a
-					href="/dashboard"
+					href="/dashboard/marketplace"
 					class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full font-semibold hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Dashboard →
 				</a>
 			{:else}
 				<a
-					href="/dashboard"
+					href="/dashboard/marketplace"
 					class="px-6 py-2 text-white/70 hover:text-white transition-colors font-medium"
 				>
 					Dashboard

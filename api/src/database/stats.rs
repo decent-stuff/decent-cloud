@@ -170,6 +170,85 @@ impl Database {
             offerings_count,
         })
     }
+
+    /// Search accounts by username, display name, or public key
+    pub async fn search_accounts(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<AccountSearchResult>> {
+        // Prepare search pattern for LIKE queries
+        let search_pattern = format!("%{}%", query.to_lowercase());
+        let hex_search_pattern = format!("{}%", query.to_uppercase());
+
+        #[derive(sqlx::FromRow)]
+        struct SearchRow {
+            username: String,
+            display_name: Option<String>,
+            pubkey: String,
+            reputation_score: i64,
+            contract_count: i64,
+            offering_count: i64,
+        }
+
+        let results = sqlx::query_as::<_, SearchRow>(
+            r#"SELECT DISTINCT
+                a.username,
+                a.display_name,
+                hex(apk.public_key) as pubkey,
+                COALESCE(rep.total_reputation, 0) as reputation_score,
+                COALESCE(contracts.contract_count, 0) as contract_count,
+                COALESCE(offerings.offering_count, 0) as offering_count
+            FROM accounts a
+            INNER JOIN account_public_keys apk ON a.id = apk.account_id
+            LEFT JOIN (
+                SELECT pubkey, SUM(change_amount) as total_reputation
+                FROM reputation_changes
+                GROUP BY pubkey
+            ) rep ON apk.public_key = rep.pubkey
+            LEFT JOIN (
+                SELECT provider_pubkey as pubkey, COUNT(*) as contract_count
+                FROM contract_sign_requests
+                GROUP BY provider_pubkey
+                UNION ALL
+                SELECT requester_pubkey as pubkey, COUNT(*) as contract_count
+                FROM contract_sign_requests
+                GROUP BY requester_pubkey
+            ) contracts ON apk.public_key = contracts.pubkey
+            LEFT JOIN (
+                SELECT pubkey, COUNT(*) as offering_count
+                FROM provider_offerings
+                GROUP BY pubkey
+            ) offerings ON apk.public_key = offerings.pubkey
+            WHERE apk.is_active = 1
+              AND (
+                lower(a.username) LIKE ?
+                OR lower(a.display_name) LIKE ?
+                OR hex(apk.public_key) LIKE ?
+              )
+            GROUP BY a.username, a.display_name, apk.public_key
+            ORDER BY reputation_score DESC, contract_count DESC, offering_count DESC
+            LIMIT ?"#,
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(&hex_search_pattern)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results
+            .into_iter()
+            .map(|row| AccountSearchResult {
+                username: row.username,
+                display_name: row.display_name,
+                pubkey: row.pubkey,
+                reputation_score: row.reputation_score,
+                contract_count: row.contract_count,
+                offering_count: row.offering_count,
+            })
+            .collect())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, poem_openapi::Object)]
@@ -178,6 +257,22 @@ pub struct ProviderStats {
     pub pending_contracts: i64,
     pub total_revenue_e9s: i64,
     pub offerings_count: i64,
+}
+
+/// Account search result with reputation and activity stats
+#[derive(Debug, Serialize, Deserialize, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct AccountSearchResult {
+    pub username: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub display_name: Option<String>,
+    pub pubkey: String,
+    #[ts(type = "number")]
+    pub reputation_score: i64,
+    #[ts(type = "number")]
+    pub contract_count: i64,
+    #[ts(type = "number")]
+    pub offering_count: i64,
 }
 
 #[cfg(test)]

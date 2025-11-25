@@ -348,7 +348,7 @@ function createAuthStore() {
 			}
 		},
 
-		async loginWithSeedPhrase(existingSeedPhrase: string, returnUrl = '/dashboard') {
+		async loginWithSeedPhrase(existingSeedPhrase: string, returnUrl = '/dashboard/marketplace') {
 			try {
 				persistSeedPhrase(existingSeedPhrase);
 

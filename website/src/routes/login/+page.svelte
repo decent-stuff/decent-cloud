@@ -6,7 +6,7 @@
 	import AuthFlow from '$lib/components/AuthFlow.svelte';
 	import type { AccountInfo } from '$lib/stores/auth';
 
-	let returnUrl = $state<string>('/dashboard');
+	let returnUrl = $state<string>('/dashboard/marketplace');
 	let isAuthenticated = $state(false);
 
 	onMount(() => {

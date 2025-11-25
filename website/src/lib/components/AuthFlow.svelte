@@ -57,7 +57,7 @@
 	async function loginWithExistingAccount(account: AccountInfo) {
 		currentStep = 'processing';
 		try {
-			await authStore.loginWithSeedPhrase(seedPhrase, '/dashboard');
+			await authStore.loginWithSeedPhrase(seedPhrase, '/dashboard/marketplace');
 			createdAccount = account;
 			currentStep = 'success';
 		} catch (err) {
@@ -95,7 +95,7 @@
 
 			// Navigate to dashboard - account is already set and persisted in auth store
 			if (typeof window !== 'undefined') {
-				window.location.href = '/dashboard';
+				window.location.href = '/dashboard/marketplace';
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Registration failed';

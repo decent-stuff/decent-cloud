@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import { computePubkey } from "$lib/utils/contract-format";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -10,6 +11,12 @@
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 	let currentPath = $state("");
+
+	const myPubkey = $derived(
+		currentIdentity?.publicKeyBytes
+			? computePubkey(currentIdentity.publicKeyBytes)
+			: null,
+	);
 
 	onMount(() => {
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
@@ -42,6 +49,27 @@
 			icon: "👤",
 		},
 	];
+
+	const quickAccessLinks = $derived([
+		{
+			href: myPubkey ? `/dashboard/reputation/${myPubkey}` : "/dashboard/reputation",
+			label: "My Reputation",
+			icon: "⭐",
+			description: "View your reputation score and activity history",
+		},
+		{
+			href: "/dashboard/rentals",
+			label: "My Rentals",
+			icon: "🔑",
+			description: "Manage your active and past rental contracts",
+		},
+		{
+			href: "/dashboard/provider/requests",
+			label: "Provider Requests",
+			icon: "🤝",
+			description: "View and respond to rental requests",
+		},
+	]);
 </script>
 
 <div class="space-y-8">
@@ -116,7 +144,34 @@
 			</div>
 		</div>
 
-		<!-- Navigation Tabs -->
+		<!-- Quick Access Links -->
+		<div
+			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+		>
+			<h2 class="text-xl font-semibold text-white mb-4">Quick Access</h2>
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				{#each quickAccessLinks as link}
+					<a
+						href={link.href}
+						class="flex flex-col gap-3 p-6 bg-white/5 rounded-lg border border-white/20 hover:bg-white/10 hover:border-blue-500/50 transition-all group"
+					>
+						<span class="text-4xl">{link.icon}</span>
+						<div>
+							<h3
+								class="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors mb-1"
+							>
+								{link.label}
+							</h3>
+							<p class="text-white/60 text-sm">
+								{link.description}
+							</p>
+						</div>
+					</a>
+				{/each}
+			</div>
+		</div>
+
+		<!-- Settings -->
 		<div
 			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
 		>

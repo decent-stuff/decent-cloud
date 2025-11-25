@@ -71,7 +71,7 @@
 
 		<div class="mt-12 text-center">
 			<a
-				href="/dashboard"
+				href="/dashboard/marketplace"
 				class="inline-block px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all"
 			>
 				View Full Dashboard

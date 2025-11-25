@@ -8,7 +8,6 @@
 			<div>
 				<h4 class="font-semibold mb-4">Product</h4>
 				<ul class="space-y-2 text-white/60">
-					<li><a href="/dashboard" class="hover:text-white">Dashboard</a></li>
 					<li><a href="/dashboard/marketplace" class="hover:text-white">Marketplace</a></li>
 					<li><a href="/dashboard/offerings" class="hover:text-white">Offerings</a></li>
 				</ul>

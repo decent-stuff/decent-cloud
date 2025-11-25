@@ -27,6 +27,15 @@ export interface AccountRegistration {
 	account_type: 'user' | 'provider' | 'both';
 }
 
+export interface AccountSearchResult {
+	username: string;
+	display_name?: string;
+	pubkey: string;
+	reputation_score: number;
+	contract_count: number;
+	offering_count: number;
+}
+
 // ============ Helper Functions ============
 
 function normalizePubkey(pubkey: string | number[]): string {
@@ -129,6 +138,31 @@ export async function getRecentTransfers(limit: number = 50): Promise<TokenTrans
 	}
 
 	const payload = (await response.json()) as ApiResponse<TokenTransfer[]>;
+
+	if (!payload.success || !payload.data) {
+		return [];
+	}
+
+	return payload.data;
+}
+
+/**
+ * Search accounts by username, display name, or public key
+ */
+export async function searchReputation(query: string, limit: number = 50): Promise<AccountSearchResult[]> {
+	if (!query || query.trim().length === 0) {
+		return [];
+	}
+
+	const url = `${API_BASE_URL}/api/v1/reputation/search?q=${encodeURIComponent(query)}&limit=${limit}`;
+
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to search accounts: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AccountSearchResult[]>;
 
 	if (!payload.success || !payload.data) {
 		return [];

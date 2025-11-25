@@ -1,7 +1,7 @@
 use super::common::{ApiResponse, ApiTags};
 use crate::{database::Database, metadata_cache::MetadataCache};
 use poem::web::Data;
-use poem_openapi::{param::Path, payload::Json, OpenApi};
+use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
 use std::sync::Arc;
 
 pub struct StatsApi;
@@ -111,6 +111,41 @@ impl StatsApi {
                 success: false,
                 data: None,
                 error: Some("Reputation not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Search accounts
+    ///
+    /// Search for accounts by username, display name, or public key.
+    /// Returns accounts with reputation and activity stats.
+    #[oai(path = "/reputation/search", method = "get", tag = "ApiTags::Stats")]
+    async fn search_reputation(
+        &self,
+        db: Data<&Arc<Database>>,
+        #[oai(name = "q")] query: Query<String>,
+        #[oai(name = "limit")] limit: Query<Option<i64>>,
+    ) -> Json<ApiResponse<Vec<crate::database::stats::AccountSearchResult>>> {
+        let search_limit = limit.0.unwrap_or(50).min(100);
+
+        if query.0.is_empty() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Search query cannot be empty".to_string()),
+            });
+        }
+
+        match db.search_accounts(&query.0, search_limit).await {
+            Ok(results) => Json(ApiResponse {
+                success: true,
+                data: Some(results),
+                error: None,
             }),
             Err(e) => Json(ApiResponse {
                 success: false,

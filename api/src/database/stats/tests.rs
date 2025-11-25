@@ -269,7 +269,161 @@ async fn test_get_latest_block_timestamp_ns_with_data() {
     assert_eq!(result, Some(timestamp2));
 }
 
+#[tokio::test]
+async fn test_search_accounts_empty() {
+    let db = setup_test_db().await;
+    let results = db.search_accounts("test", 50).await.unwrap();
+    assert_eq!(results.len(), 0);
+}
+
+#[tokio::test]
+async fn test_search_accounts_by_username() {
+    let db = setup_test_db().await;
+
+    // Create account
+    db.create_account("alice", &[1u8; 32]).await.unwrap();
+
+    // Search for username
+    let results = db.search_accounts("alice", 50).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].username, "alice");
+    assert_eq!(results[0].display_name, None);
+    assert_eq!(results[0].reputation_score, 0);
+    assert_eq!(results[0].contract_count, 0);
+    assert_eq!(results[0].offering_count, 0);
+}
+
+#[tokio::test]
+async fn test_search_accounts_by_display_name() {
+    let db = setup_test_db().await;
+
+    // Create account
+    let account = db.create_account("alice", &[1u8; 32]).await.unwrap();
+
+    // Update display name
+    sqlx::query!(
+        "UPDATE accounts SET display_name = ? WHERE id = ?",
+        "Alice Wonderland",
+        account.id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Search by display name
+    let results = db.search_accounts("wonderland", 50).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].username, "alice");
+    assert_eq!(
+        results[0].display_name,
+        Some("Alice Wonderland".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_search_accounts_by_pubkey() {
+    let db = setup_test_db().await;
+
+    // Create account with specific pubkey
+    let pubkey = vec![0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89];
+    let pubkey_full = [pubkey.clone(), vec![0u8; 24]].concat();
+    db.create_account("bob", &pubkey_full).await.unwrap();
+
+    // Search by pubkey prefix (uppercase hex)
+    let results = db.search_accounts("ABCD", 50).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].username, "bob");
+
+    // Search by lowercase hex should also work
+    let results = db.search_accounts("abcd", 50).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].username, "bob");
+}
+
+#[tokio::test]
+async fn test_search_accounts_with_reputation_and_activity() {
+    let db = setup_test_db().await;
+
+    // Create two accounts
+    let pubkey1 = vec![1u8; 32];
+    let pubkey2 = vec![2u8; 32];
+    db.create_account("alice", &pubkey1).await.unwrap();
+    db.create_account("alicia", &pubkey2).await.unwrap();
+
+    // Add reputation for alice
+    sqlx::query!(
+        "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, 100, 'test', 0)",
+        pubkey1
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Add contract for alice
+    let contract_id = vec![3u8; 32];
+    sqlx::query!(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000, 'memo', 0, 'active')",
+        contract_id,
+        pubkey2,
+        pubkey1
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Add offering for alice
+    sqlx::query!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        pubkey1
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Search for "ali" - should return both, alice first (higher reputation)
+    let results = db.search_accounts("ali", 50).await.unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].username, "alice");
+    assert_eq!(results[0].reputation_score, 100);
+    assert_eq!(results[0].contract_count, 1);
+    assert_eq!(results[0].offering_count, 1);
+    assert_eq!(results[1].username, "alicia");
+    assert_eq!(results[1].reputation_score, 0);
+    assert_eq!(results[1].contract_count, 1); // alicia is requester
+}
+
+#[tokio::test]
+async fn test_search_accounts_limit() {
+    let db = setup_test_db().await;
+
+    // Create 3 accounts
+    db.create_account("alice", &[1u8; 32]).await.unwrap();
+    db.create_account("alicia", &[2u8; 32]).await.unwrap();
+    db.create_account("alex", &[3u8; 32]).await.unwrap();
+
+    // Search with limit of 2
+    let results = db.search_accounts("al", 2).await.unwrap();
+    assert_eq!(results.len(), 2);
+}
+
+#[tokio::test]
+async fn test_search_accounts_case_insensitive() {
+    let db = setup_test_db().await;
+
+    db.create_account("alice", &[1u8; 32]).await.unwrap();
+
+    // Search with different cases - should all match
+    let results1 = db.search_accounts("alice", 50).await.unwrap();
+    let results2 = db.search_accounts("ALICE", 50).await.unwrap();
+    let results3 = db.search_accounts("AlIcE", 50).await.unwrap();
+
+    assert_eq!(results1.len(), 1);
+    assert_eq!(results2.len(), 1);
+    assert_eq!(results3.len(), 1);
+}
+
 #[test]
 fn export_typescript_types() {
     PlatformStats::export().expect("Failed to export PlatformStats type");
+    AccountSearchResult::export().expect("Failed to export AccountSearchResult type");
 }
