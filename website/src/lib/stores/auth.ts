@@ -396,10 +396,8 @@ function createAuthStore() {
 					}
 				}
 
-				// OAuth session exists but no account registered - redirect to registration
-				if (typeof window !== 'undefined') {
-					window.location.href = '/auth?oauth=google&step=username';
-				}
+				// OAuth session exists but account not found - this shouldn't happen
+				// but if it does, just return false without redirect
 				return false;
 			} catch (error) {
 				console.error('Failed to load OAuth session:', error);

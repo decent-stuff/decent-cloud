@@ -29,11 +29,30 @@
 	let createdAccount = $state<AccountInfo | null>(null);
 
 	// Check for OAuth callback on mount
-	onMount(() => {
+	onMount(async () => {
 		if (typeof window === 'undefined') return;
 		const urlParams = new URLSearchParams(window.location.search);
 		if (urlParams.get('oauth') === 'google' && urlParams.get('step') === 'username') {
 			currentStep = 'oauth-username';
+
+			// Fetch OAuth info to pre-fill username
+			try {
+				const response = await fetch(`${API_BASE_URL}/api/v1/oauth/info`, {
+					credentials: 'include'
+				});
+				if (response.ok) {
+					const result = await response.json();
+					if (result.success && result.data?.email) {
+						// Extract username from email (part before @)
+						const emailPrefix = result.data.email.split('@')[0];
+						// Replace dots and special chars with underscores, keep alphanumeric
+						const suggestedUsername = emailPrefix.replace(/[^a-z0-9_]/gi, '_');
+						username = suggestedUsername;
+					}
+				}
+			} catch (err) {
+				console.error('Failed to fetch OAuth info:', err);
+			}
 		}
 	});
 
