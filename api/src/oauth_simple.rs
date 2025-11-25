@@ -364,6 +364,33 @@ pub async fn get_session_keypair(
     }
 }
 
+/// POST /api/v1/oauth/logout
+/// Clear OAuth session cookies
+#[handler]
+pub async fn oauth_logout(
+    cookie_jar: &CookieJar,
+) -> PoemResult<poem::web::Json<serde_json::Value>> {
+    // Clear oauth_keypair cookie
+    let mut clear_keypair = Cookie::new_with_str("oauth_keypair", "");
+    clear_keypair.set_path("/");
+    clear_keypair.set_http_only(true);
+    clear_keypair.set_secure(should_use_secure_cookies());
+    clear_keypair.set_max_age(std::time::Duration::from_secs(0));
+    cookie_jar.add(clear_keypair);
+
+    // Clear oauth_info cookie
+    let mut clear_info = Cookie::new_with_str("oauth_info", "");
+    clear_info.set_path("/");
+    clear_info.set_http_only(true);
+    clear_info.set_secure(should_use_secure_cookies());
+    clear_info.set_max_age(std::time::Duration::from_secs(0));
+    cookie_jar.add(clear_info);
+
+    Ok(poem::web::Json(serde_json::json!({
+        "success": true
+    })))
+}
+
 /// Response for OAuth registration endpoint
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OAuthRegisterResponse {

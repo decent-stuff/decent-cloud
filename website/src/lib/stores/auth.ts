@@ -389,14 +389,18 @@ function createAuthStore() {
 					const account = await loadAccountByUsername(data.username);
 					if (account) {
 						oauthIdentity.account = account;
+						// Add to identities and set as active
+						identities.update((prev) => [...prev, oauthIdentity]);
+						activeIdentity.set(oauthIdentity);
+						return true;
 					}
 				}
 
-				// Add to identities and set as active
-				identities.update((prev) => [...prev, oauthIdentity]);
-				activeIdentity.set(oauthIdentity);
-
-				return true;
+				// OAuth session exists but no account registered - redirect to registration
+				if (typeof window !== 'undefined') {
+					window.location.href = '/auth?oauth=google&step=username';
+				}
+				return false;
 			} catch (error) {
 				console.error('Failed to load OAuth session:', error);
 				return false;
@@ -444,6 +448,20 @@ function createAuthStore() {
 		},
 
 		async logout() {
+			// Clear OAuth cookies if this is an OAuth session
+			const currentIdentity = get(activeIdentity);
+			if (currentIdentity?.type === 'oauth') {
+				try {
+					await fetch(`${API_BASE_URL}/api/v1/oauth/logout`, {
+						method: 'POST',
+						credentials: 'include'
+					});
+				} catch (error) {
+					console.error('Failed to clear OAuth session:', error);
+				}
+			}
+
+			// Clear frontend state
 			identities.set([]);
 			activeIdentity.set(null);
 			errorMessage.set(null);
