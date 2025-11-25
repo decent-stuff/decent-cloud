@@ -55,7 +55,7 @@
 	{/if}
 
 	<!-- Main content area -->
-	<main class="md:ml-64 p-4 md:p-8 pt-20 {!isAuthenticated ? 'md:pt-24' : 'md:pt-8'}">
+	<main class="md:ml-64 p-4 md:p-8 pt-20 md:pt-8 {!isAuthenticated ? 'md:pt-24' : ''}">
 		<div class="max-w-7xl mx-auto">
 			{@render children()}
 		</div>
