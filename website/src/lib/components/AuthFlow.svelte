@@ -2,8 +2,11 @@
 	import { authStore, type AccountInfo } from '$lib/stores/auth';
 	import { getAccountByPublicKey } from '$lib/services/account-api';
 	import { identityFromSeed, bytesToHex } from '$lib/utils/identity';
+	import { API_BASE_URL } from '$lib/services/api';
 	import UsernameInput from './UsernameInput.svelte';
 	import SeedPhraseStep from './SeedPhraseStep.svelte';
+	import GoogleSignInButton from './GoogleSignInButton.svelte';
+	import { onMount } from 'svelte';
 
 	let { onSuccess } = $props<{
 		onSuccess: (account: AccountInfo) => void;
@@ -13,6 +16,7 @@
 		| 'seed'
 		| 'checking-account'
 		| 'enter-username'
+		| 'oauth-username'
 		| 'processing'
 		| 'success';
 
@@ -23,6 +27,15 @@
 	let normalizedUsername = $state('');
 	let error = $state<string | null>(null);
 	let createdAccount = $state<AccountInfo | null>(null);
+
+	// Check for OAuth callback on mount
+	onMount(() => {
+		if (typeof window === 'undefined') return;
+		const urlParams = new URLSearchParams(window.location.search);
+		if (urlParams.get('oauth') === 'google' && urlParams.get('step') === 'username') {
+			currentStep = 'oauth-username';
+		}
+	});
 
 	async function handleSeedComplete(seed: string, deviceName?: string) {
 		seedPhrase = seed;
@@ -115,16 +128,66 @@
 			seedPhrase = '';
 		}
 	}
+
+	async function submitOAuthUsername() {
+		if (!usernameValid) {
+			error = 'Please enter a valid username';
+			return;
+		}
+
+		currentStep = 'processing';
+		error = null;
+
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/v1/oauth/register`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ username: normalizedUsername })
+			});
+
+			const result = await response.json();
+
+			if (result.success && result.data) {
+				// Reload OAuth session with new account
+				await authStore.loadOAuthSession();
+				// Navigate to dashboard
+				if (typeof window !== 'undefined') {
+					window.location.href = '/dashboard/marketplace';
+				}
+			} else {
+				error = result.error || 'Registration failed';
+				currentStep = 'oauth-username';
+			}
+		} catch (err) {
+			console.error('OAuth registration error:', err);
+			error = err instanceof Error ? err.message : 'Network error';
+			currentStep = 'oauth-username';
+		}
+	}
 </script>
 
 <div class="space-y-6">
 	<!-- Step 1: Seed Phrase (Generate or Import) -->
 	{#if currentStep === 'seed'}
-		<SeedPhraseStep
-			initialMode="choose"
-			showModeChoice={true}
-			onComplete={handleSeedComplete}
-		/>
+		<div class="space-y-4">
+			<GoogleSignInButton />
+
+			<div class="relative">
+				<div class="absolute inset-0 flex items-center">
+					<div class="w-full border-t border-white/20"></div>
+				</div>
+				<div class="relative flex justify-center text-sm">
+					<span class="px-2 bg-gray-900 text-white/60">OR</span>
+				</div>
+			</div>
+
+			<SeedPhraseStep
+				initialMode="choose"
+				showModeChoice={true}
+				onComplete={handleSeedComplete}
+			/>
+		</div>
 	{/if}
 
 	<!-- Step 4: Checking Account -->
@@ -179,6 +242,38 @@
 					Create Account
 				</button>
 			</div>
+		</div>
+	{/if}
+
+	<!-- OAuth Username Step -->
+	{#if currentStep === 'oauth-username'}
+		<div class="space-y-4">
+			<h3 class="text-2xl font-bold text-white">Welcome to Decent Cloud!</h3>
+			<p class="text-white/60">
+				Choose a username to complete your Google sign-in
+			</p>
+
+			<UsernameInput
+				bind:value={username}
+				onValidChange={handleUsernameValidChange}
+			/>
+
+			{#if error}
+				<div
+					class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm"
+				>
+					{error}
+				</div>
+			{/if}
+
+			<button
+				type="button"
+				onclick={submitOAuthUsername}
+				class="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+				disabled={!usernameValid}
+			>
+				Create Account
+			</button>
 		</div>
 	{/if}
 

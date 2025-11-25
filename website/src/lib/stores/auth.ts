@@ -48,7 +48,7 @@ import {
 	getStoredSeedPhrases,
 	setStoredSeedPhrases
 } from '../utils/seed-storage';
-import { identityFromSeed, bytesToHex } from '../utils/identity';
+import { identityFromSeed, bytesToHex, hexToBytes } from '../utils/identity';
 import { API_BASE_URL } from '../services/api';
 
 /**
@@ -71,18 +71,18 @@ export interface AccountInfo {
 }
 
 /**
- * Local identity (seed phrase) that generates one keypair for one account
+ * Local identity (seed phrase or OAuth) that generates one keypair for one account
  * A user can have multiple IdentityInfo objects (multiple seed phrases) to access multiple accounts
  */
 export interface IdentityInfo {
 	identity: Ed25519KeyIdentity;
 	principal: Principal;
-	type: 'seedPhrase';
+	type: 'seedPhrase' | 'oauth';
 	name?: string;
 	displayName?: string;
 	publicKeyBytes: Uint8Array;
 	secretKeyRaw: Uint8Array;
-	seedPhrase: string;
+	seedPhrase?: string; // Only for seedPhrase type, not for oauth
 	account?: AccountInfo; // Backend account this keypair is registered to (1:1 mapping)
 }
 
@@ -328,8 +328,10 @@ function createAuthStore() {
 					if (current?.principal.toString() === identityInfo.principal.toString()) {
 						activeIdentity.set({ ...identityInfo, account });
 					}
-					// Keep this seed phrase
-					phrasesWithAccounts.push(identityInfo.seedPhrase);
+					// Keep this seed phrase (only for seedPhrase-type identities)
+					if (identityInfo.type === 'seedPhrase' && identityInfo.seedPhrase) {
+						phrasesWithAccounts.push(identityInfo.seedPhrase);
+					}
 				}
 			}
 
@@ -345,6 +347,59 @@ function createAuthStore() {
 			const current = get(activeIdentity);
 			if (current && !current.account) {
 				activeIdentity.set(null);
+			}
+
+			// Try to load OAuth session if no seed phrases found
+			if (validPhrases.length === 0 && !get(activeIdentity)) {
+				await this.loadOAuthSession();
+			}
+		},
+
+		async loadOAuthSession(): Promise<boolean> {
+			try {
+				const response = await fetch(`${API_BASE_URL}/api/v1/oauth/session/keypair`, {
+					credentials: 'include'
+				});
+
+				if (!response.ok) return false;
+
+				const { success, data } = await response.json();
+				if (!success || !data) return false;
+
+				// Convert hex strings to Uint8Array
+				const privateKey = hexToBytes(data.private_key);
+				const publicKey = hexToBytes(data.public_key);
+
+				// Create Ed25519 identity from private key
+				const identity = Ed25519KeyIdentity.fromSecretKey(privateKey);
+				const principal = identity.getPrincipal();
+
+				// Create OAuth identity info
+				const oauthIdentity: IdentityInfo = {
+					identity,
+					principal,
+					type: 'oauth',
+					publicKeyBytes: publicKey,
+					secretKeyRaw: privateKey,
+					seedPhrase: undefined
+				};
+
+				// Load account if linked
+				if (data.username) {
+					const account = await loadAccountByUsername(data.username);
+					if (account) {
+						oauthIdentity.account = account;
+					}
+				}
+
+				// Add to identities and set as active
+				identities.update((prev) => [...prev, oauthIdentity]);
+				activeIdentity.set(oauthIdentity);
+
+				return true;
+			} catch (error) {
+				console.error('Failed to load OAuth session:', error);
+				return false;
 			}
 		},
 
@@ -424,10 +479,15 @@ function createAuthStore() {
 				return remaining;
 			});
 
-			filterStoredSeedPhrases((seedPhrase) => {
-				const identity = identityFromSeed(seedPhrase);
-				return identity.getPrincipal().toString() !== principal.toString();
-			});
+			// Only filter seed phrases for seedPhrase-type identities
+			const identitiesList = get(identities);
+			const identity = identitiesList.find((i) => i.principal.toString() === principal.toString());
+			if (identity?.type === 'seedPhrase') {
+				filterStoredSeedPhrases((seedPhrase) => {
+					const id = identityFromSeed(seedPhrase);
+					return id.getPrincipal().toString() !== principal.toString();
+				});
+			}
 		},
 
 		backupSeedPhrase(principal: Principal): string | null {
@@ -438,6 +498,11 @@ function createAuthStore() {
 
 			if (!identity) {
 				errorMessage.set('Identity not found');
+				return null;
+			}
+
+			if (identity.type !== 'seedPhrase' || !identity.seedPhrase) {
+				errorMessage.set('This identity does not have a seed phrase (OAuth login)');
 				return null;
 			}
 
