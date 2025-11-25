@@ -404,35 +404,52 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
         return 1
     print()
 
-    # Check for .env file
+    # Check for environment-specific .env file
     cf_dir = Path(__file__).parent
-    env_file = cf_dir / ".env"
+    env_file = cf_dir / f".env.{env_name}"
 
     if not env_file.exists():
-        print_warning(f".env file not found at {env_file}")
+        print_warning(f"Environment config not found: {env_file}")
         print()
-        print(f"Run setup first: {BLUE}python3 setup_tunnel.py{NC}")
+        print(f"Create {env_file} with required configuration")
+        print(f"See {cf_dir}/.env.dev or {cf_dir}/.env.prod for examples")
         print()
         return 1
 
-    print_success("Found .env file")
+    print_success(f"Found {env_file.name}")
     print()
 
+    # Load all environment variables from file
+    file_env_vars = load_env_file(env_file)
+    if not file_env_vars:
+        print_error(f"Failed to load environment variables from {env_file}")
+        return 1
+
+    # Merge file env vars into env_vars (file vars take precedence)
+    env_vars.update(file_env_vars)
+
     if is_prod:
-        # Load tunnel token
-        token = get_tunnel_token(env_file)
-        if not token:
-            print_error("TUNNEL_TOKEN not found in .env file")
+        # Verify tunnel token exists for production
+        if not env_vars.get("TUNNEL_TOKEN"):
+            print_error("TUNNEL_TOKEN not found in production config")
             print()
-            print(f"Run setup again: {BLUE}python3 setup_tunnel.py{NC}")
+            print(f"Add TUNNEL_TOKEN to {env_file}")
+            print(f"Get token from: https://one.dash.cloudflare.com/")
             print()
             return 1
 
         print_success("Tunnel token loaded")
         print()
 
-        # Add token to env_vars
-        env_vars["TUNNEL_TOKEN"] = token
+    # Log loaded OAuth config (without showing secrets)
+    if env_vars.get("GOOGLE_OAUTH_CLIENT_ID"):
+        print_success("Google OAuth credentials loaded")
+        print_info(f"  Redirect URL: {env_vars.get('GOOGLE_OAUTH_REDIRECT_URL', 'not set')}")
+        print_info(f"  Frontend URL: {env_vars.get('FRONTEND_URL', 'not set')}")
+        print()
+    else:
+        print_warning("Google OAuth not configured (optional)")
+        print()
 
     # Build website natively first with environment-specific API configuration
     if not build_website_natively(env_name):

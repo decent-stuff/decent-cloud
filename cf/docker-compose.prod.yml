@@ -8,6 +8,10 @@ x-api-base: &api-base
     - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30} # Used for the sync service only
     - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
     - LEDGER_DIR=/data/ledger
+    - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+    - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+    - GOOGLE_OAUTH_REDIRECT_URL=${GOOGLE_OAUTH_REDIRECT_URL}
+    - FRONTEND_URL=${FRONTEND_URL}
   volumes:
     - ../data/api-data-prod:/data
   networks:
