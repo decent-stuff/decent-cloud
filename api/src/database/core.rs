@@ -28,6 +28,7 @@ impl Database {
     }
 
     /// Access the underlying pool (needed for session store and testing)
+    #[allow(dead_code)]
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }

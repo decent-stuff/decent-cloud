@@ -846,19 +846,17 @@ impl ProvidersApi {
             }
         };
 
-        let sanitized_details = match normalize_provisioning_details(
-            &req.status,
-            req.instance_details.clone(),
-        ) {
-            Ok(details) => details,
-            Err(msg) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(msg),
-                })
-            }
-        };
+        let sanitized_details =
+            match normalize_provisioning_details(&req.status, req.instance_details.clone()) {
+                Ok(details) => details,
+                Err(msg) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(msg),
+                    })
+                }
+            };
 
         match db
             .update_contract_status(&contract_id, &req.status, &auth.pubkey, None)

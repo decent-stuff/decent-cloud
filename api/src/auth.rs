@@ -1,18 +1,13 @@
 use anyhow::Result;
 use dcc_common::DccIdentity;
-use poem::{error::ResponseError, http::StatusCode, FromRequest, Request, RequestBody};
+use poem::{error::ResponseError, http::StatusCode};
 use poem_openapi::registry::MetaSecurityScheme;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use ts_rs::TS;
 
-/// Authenticated user with verified public key
-#[derive(Debug, Clone)]
-pub struct AuthenticatedUser {
-    pub pubkey: Vec<u8>,
-}
-
 /// Headers for signed API requests
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct SignedRequestHeaders {
@@ -154,62 +149,6 @@ pub fn verify_request_signature(
     })?;
 
     Ok(pubkey)
-}
-
-/// Poem extractor for authenticated requests
-impl FromRequest<'_> for AuthenticatedUser {
-    async fn from_request(req: &Request, body: &mut RequestBody) -> poem::Result<Self> {
-        // Extract headers
-        let headers = req.headers();
-
-        let pubkey_hex = headers
-            .get("X-Public-Key")
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AuthError::MissingHeader("X-Public-Key".to_string()))?;
-
-        let signature_hex = headers
-            .get("X-Signature")
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
-
-        let timestamp = headers
-            .get("X-Timestamp")
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
-
-        let nonce = headers
-            .get("X-Nonce")
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
-
-        // Read body
-        let body_bytes = body.take()?.into_vec().await?;
-
-        // Verify signature
-        // NOTE: Query strings are intentionally excluded from signature for robustness
-        // Security trade-off: query params could be manipulated, but they're typically
-        // non-critical (filters, pagination, options). Body and path integrity maintained.
-        // Get the full path including /api/v1 prefix for signature verification
-        // The req.uri().path() only returns the path within the nested service
-        // but the client signs the full path including the prefix
-        let full_path = format!("/api/v1{}", req.uri().path());
-
-        let pubkey = verify_request_signature(
-            pubkey_hex,
-            signature_hex,
-            timestamp,
-            nonce,
-            req.method().as_str(),
-            &full_path,
-            &body_bytes,
-            None,
-        )?;
-
-        // Restore body for downstream handlers
-        *body = RequestBody::new(poem::Body::from(body_bytes));
-
-        Ok(AuthenticatedUser { pubkey })
-    }
 }
 
 /// poem-openapi compatible authenticated user

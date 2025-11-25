@@ -298,6 +298,46 @@ async fn test_create_oauth_account_duplicate_external_id() {
 }
 
 #[tokio::test]
+async fn test_get_oauth_account() {
+    let db = create_test_db().await;
+
+    let account = db.create_account("testuser", &[0u8; 32]).await.unwrap();
+
+    // Create OAuth link
+    let created = db
+        .create_oauth_account(
+            &account.id,
+            "google_oauth",
+            "google_user_456",
+            Some("test@example.com"),
+        )
+        .await
+        .unwrap();
+
+    // Fetch by OAuth ID
+    let fetched = db.get_oauth_account(&created.id).await.unwrap();
+
+    assert!(fetched.is_some());
+    let fetched = fetched.unwrap();
+    assert_eq!(fetched.id, created.id);
+    assert_eq!(fetched.account_id, account.id);
+    assert_eq!(fetched.provider, "google_oauth");
+    assert_eq!(fetched.external_id, "google_user_456");
+}
+
+#[tokio::test]
+async fn test_get_oauth_account_not_found() {
+    let db = create_test_db().await;
+
+    let result = db.get_oauth_account(&[1u8; 16]).await.unwrap();
+
+    assert!(
+        result.is_none(),
+        "Should return None for nonexistent OAuth account ID"
+    );
+}
+
+#[tokio::test]
 async fn test_get_oauth_account_by_provider_and_external_id() {
     let db = create_test_db().await;
 
