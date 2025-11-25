@@ -101,6 +101,14 @@ fn generate_ed25519_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
     Ok((private_key, public_key))
 }
 
+/// Determine if cookies should use Secure flag based on environment
+/// Returns true if FRONTEND_URL starts with https:// (production)
+fn should_use_secure_cookies() -> bool {
+    std::env::var("FRONTEND_URL")
+        .map(|url| url.starts_with("https://"))
+        .unwrap_or(false)
+}
+
 /// GET /api/v1/oauth/google/authorize
 #[handler]
 pub async fn google_authorize() -> PoemResult<Response> {
@@ -294,6 +302,7 @@ pub async fn google_callback(
     let mut cookie = Cookie::new_with_str("oauth_keypair", cookie_value);
     cookie.set_path("/");
     cookie.set_http_only(true);
+    cookie.set_secure(should_use_secure_cookies());
     cookie.set_max_age(std::time::Duration::from_secs(7 * 24 * 60 * 60)); // 7 days
     cookie_jar.add(cookie);
 
@@ -308,6 +317,7 @@ pub async fn google_callback(
     let mut oauth_info_cookie = Cookie::new_with_str("oauth_info", oauth_info);
     oauth_info_cookie.set_path("/");
     oauth_info_cookie.set_http_only(true);
+    oauth_info_cookie.set_secure(should_use_secure_cookies());
     oauth_info_cookie.set_max_age(std::time::Duration::from_secs(15 * 60)); // 15 minutes
     cookie_jar.add(oauth_info_cookie);
 
@@ -474,6 +484,7 @@ pub async fn oauth_register(
     let mut cookie = Cookie::new_with_str("oauth_keypair", cookie_value);
     cookie.set_path("/");
     cookie.set_http_only(true);
+    cookie.set_secure(should_use_secure_cookies());
     cookie.set_max_age(std::time::Duration::from_secs(7 * 24 * 60 * 60)); // 7 days
     cookie_jar.add(cookie);
 
@@ -604,5 +615,34 @@ mod tests {
         // Cleanup
         std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
         std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+    }
+
+    #[test]
+    fn test_should_use_secure_cookies_with_https() {
+        std::env::set_var("FRONTEND_URL", "https://decent-cloud.org");
+        assert!(
+            should_use_secure_cookies(),
+            "Should return true for HTTPS frontend URL"
+        );
+        std::env::remove_var("FRONTEND_URL");
+    }
+
+    #[test]
+    fn test_should_use_secure_cookies_with_http() {
+        std::env::set_var("FRONTEND_URL", "http://localhost:59000");
+        assert!(
+            !should_use_secure_cookies(),
+            "Should return false for HTTP frontend URL"
+        );
+        std::env::remove_var("FRONTEND_URL");
+    }
+
+    #[test]
+    fn test_should_use_secure_cookies_not_set() {
+        std::env::remove_var("FRONTEND_URL");
+        assert!(
+            !should_use_secure_cookies(),
+            "Should return false when FRONTEND_URL not set"
+        );
     }
 }
