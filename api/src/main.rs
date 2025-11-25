@@ -20,8 +20,12 @@ use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
 use poem::web::Redirect;
 use poem::{
-    get, handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
-    Route, Server,
+    get, handler,
+    listener::TcpListener,
+    middleware::{CookieJarManager, Cors},
+    post,
+    web::Json,
+    EndpointExt, Response, Route, Server,
 };
 use poem_openapi::OpenApiService;
 use serde::Deserialize;
@@ -264,6 +268,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .at("/api/v1/canister/:method", post(canister_proxy))
         .data(ctx.database.clone())
         .data(ctx.metadata_cache.clone())
+        .with(CookieJarManager::new())
         .with(request_logging::RequestLogging)
         .with(cors);
 
