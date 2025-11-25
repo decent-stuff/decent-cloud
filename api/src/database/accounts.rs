@@ -10,6 +10,10 @@ pub struct Account {
     pub username: String,
     pub created_at: i64,
     pub updated_at: i64,
+    // Auth provider ('seed_phrase' or 'google_oauth')
+    pub auth_provider: String,
+    // Email for account linking (nullable for backward compatibility)
+    pub email: Option<String>,
     // Profile fields (nullable)
     pub display_name: Option<String>,
     pub bio: Option<String>,
@@ -143,7 +147,7 @@ impl Database {
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, display_name, bio, avatar_url, profile_updated_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at
              FROM accounts WHERE id = ?",
         )
         .bind(account_id)
@@ -156,7 +160,7 @@ impl Database {
     /// Get account by username
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, display_name, bio, avatar_url, profile_updated_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at
              FROM accounts WHERE username = ?",
         )
         .bind(username)
@@ -548,6 +552,88 @@ impl Database {
     /// Get account by ID
     pub async fn get_account_by_id(&self, account_id: &[u8]) -> Result<Option<Account>> {
         self.get_account(account_id).await
+    }
+
+    /// Get account by email
+    pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
+        let account = sqlx::query_as::<_, Account>(
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at
+             FROM accounts WHERE email = ?",
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(account)
+    }
+
+    /// Create account with email and link to OAuth provider
+    pub async fn create_oauth_linked_account(
+        &self,
+        username: &str,
+        public_key: &[u8],
+        email: &str,
+        provider: &str,
+        external_id: &str,
+    ) -> Result<(Account, OAuthAccount)> {
+        if public_key.len() != 32 {
+            bail!("Public key must be 32 bytes");
+        }
+
+        // Start transaction
+        let mut tx = self.pool.begin().await?;
+
+        // Insert account with email
+        let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO accounts (id, username, email, auth_provider) VALUES (?, ?, ?, ?)",
+        )
+        .bind(&account_id)
+        .bind(username)
+        .bind(email)
+        .bind(provider)
+        .execute(&mut *tx)
+        .await?;
+
+        // Insert initial public key
+        let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+        )
+        .bind(&key_id)
+        .bind(&account_id)
+        .bind(public_key)
+        .execute(&mut *tx)
+        .await?;
+
+        // Create OAuth account link
+        let oauth_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO oauth_accounts (id, account_id, provider, external_id, email) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(&oauth_id)
+        .bind(&account_id)
+        .bind(provider)
+        .bind(external_id)
+        .bind(email)
+        .execute(&mut *tx)
+        .await?;
+
+        // Commit transaction
+        tx.commit().await?;
+
+        // Fetch and return both records
+        let account = self
+            .get_account(&account_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Account not found after creation"))?;
+
+        let oauth_account = self
+            .get_oauth_account(&oauth_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("OAuth account not found after creation"))?;
+
+        Ok((account, oauth_account))
     }
 }
 

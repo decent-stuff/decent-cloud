@@ -9,6 +9,29 @@ use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
 
+/// Validate and normalize provisioning details
+pub fn normalize_provisioning_details(
+    status: &str,
+    details: Option<String>,
+) -> Result<Option<String>, String> {
+    let sanitized = details.and_then(|raw| {
+        let trimmed = raw.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+
+    if status == "provisioned" && sanitized.is_none() {
+        return Err(
+            "Instance details are required when marking a contract as provisioned".to_string(),
+        );
+    }
+
+    Ok(sanitized)
+}
+
 pub struct ProvidersApi;
 
 #[OpenApi]
@@ -823,7 +846,7 @@ impl ProvidersApi {
             }
         };
 
-        let sanitized_details = match crate::api_handlers::normalize_provisioning_details(
+        let sanitized_details = match normalize_provisioning_details(
             &req.status,
             req.instance_details.clone(),
         ) {

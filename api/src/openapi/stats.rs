@@ -2,7 +2,37 @@ use super::common::{ApiResponse, ApiTags};
 use crate::{database::Database, metadata_cache::MetadataCache};
 use poem::web::Data;
 use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
+use serde::Serialize;
+use serde_json::Value as JsonValue;
+use std::collections::BTreeMap;
 use std::sync::Arc;
+
+#[derive(Debug, Serialize, ts_rs::TS, poem_openapi::Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
+pub struct PlatformOverview {
+    // Database-derived statistics (always available, reliable)
+    #[ts(type = "number")]
+    pub total_providers: i64,
+    #[ts(type = "number")]
+    pub active_providers: i64,
+    #[ts(type = "number")]
+    pub total_offerings: i64,
+    #[ts(type = "number")]
+    pub total_contracts: i64,
+    #[ts(type = "number")]
+    pub total_transfers: i64,
+    #[ts(type = "number")]
+    pub total_volume_e9s: i64,
+    #[ts(type = "number")]
+    pub validator_count_24h: i64,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub latest_block_timestamp_ns: Option<u64>,
+    // All canister metadata (flexible, future-proof)
+    #[ts(type = "Record<string, any>")]
+    pub metadata: BTreeMap<String, JsonValue>,
+}
 
 pub struct StatsApi;
 
@@ -16,7 +46,7 @@ impl StatsApi {
         &self,
         db: Data<&Arc<Database>>,
         metadata_cache: Data<&Arc<MetadataCache>>,
-    ) -> Json<ApiResponse<crate::api_handlers::PlatformOverview>> {
+    ) -> Json<ApiResponse<PlatformOverview>> {
         use std::collections::BTreeMap;
 
         let base_stats = match db.get_platform_stats().await {
@@ -62,7 +92,7 @@ impl StatsApi {
             Err(_) => BTreeMap::new(),
         };
 
-        let response = crate::api_handlers::PlatformOverview {
+        let response = PlatformOverview {
             total_providers: base_stats.total_providers,
             active_providers: base_stats.active_providers,
             total_offerings: base_stats.total_offerings,

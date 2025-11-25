@@ -13,6 +13,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/002_account_profiles.sql"),
         include_str!("../../migrations/003_device_names.sql"),
         include_str!("../../migrations/004_account_profiles_fix.sql"),
+        include_str!("../../migrations/005_oauth_support.sql"),
     ];
 
     for migration in &migrations {

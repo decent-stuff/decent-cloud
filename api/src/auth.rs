@@ -225,30 +225,6 @@ pub struct AdminAuthenticatedUser {
     pub pubkey: Vec<u8>,
 }
 
-impl ApiAuthenticatedUser {
-    fn from_headers(
-        pubkey_hex: &str,
-        signature_hex: &str,
-        timestamp: &str,
-        nonce: &str,
-        method: &str,
-        path: &str,
-        body: &[u8],
-    ) -> Result<Self, AuthError> {
-        let pubkey = verify_request_signature(
-            pubkey_hex,
-            signature_hex,
-            timestamp,
-            nonce,
-            method,
-            path,
-            body,
-            None,
-        )?;
-        Ok(ApiAuthenticatedUser { pubkey })
-    }
-}
-
 impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
     const TYPES: &'static [poem_openapi::ApiExtractorType] =
         &[poem_openapi::ApiExtractorType::RequestObject];

@@ -5,6 +5,12 @@
 ALTER TABLE accounts ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'seed_phrase';
 CREATE INDEX idx_accounts_auth_provider ON accounts(auth_provider);
 
+-- Add email field to accounts table for account linking
+-- Note: Cannot add UNIQUE constraint directly in SQLite, so we add it as nullable
+-- and create a unique index on non-null values only
+ALTER TABLE accounts ADD COLUMN email TEXT;
+CREATE UNIQUE INDEX idx_accounts_email_unique ON accounts(email) WHERE email IS NOT NULL;
+
 -- OAuth accounts table - links external OAuth provider IDs to Decent Cloud accounts
 CREATE TABLE oauth_accounts (
     id BLOB PRIMARY KEY DEFAULT (randomblob(16)),
@@ -20,13 +26,3 @@ CREATE TABLE oauth_accounts (
 CREATE INDEX idx_oauth_accounts_account ON oauth_accounts(account_id);
 CREATE INDEX idx_oauth_accounts_provider_external ON oauth_accounts(provider, external_id);
 CREATE INDEX idx_oauth_accounts_email ON oauth_accounts(email);
-
--- Tower-sessions table for session management
--- Session data is stored as JSON blob containing Ed25519 keypair for OAuth users
-CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY NOT NULL,
-    data BLOB NOT NULL,
-    expiry_date INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expiry_date);

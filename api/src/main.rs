@@ -1,4 +1,3 @@
-mod api_handlers;
 mod auth;
 mod cleanup_service;
 mod database;
@@ -259,6 +258,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/oauth/session/keypair",
             get(oauth_simple::get_session_keypair),
         )
+        .at("/api/v1/oauth/register", post(oauth_simple::oauth_register))
         // Legacy endpoints (canister proxy - ICP integration pending)
         // NOTE: CSV operations are now included in OpenAPI schema above
         .at("/api/v1/canister/:method", post(canister_proxy))

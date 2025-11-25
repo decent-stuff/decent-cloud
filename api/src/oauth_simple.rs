@@ -29,6 +29,7 @@ lazy_static::lazy_static! {
 
 #[derive(Debug, Clone)]
 struct OAuthState {
+    #[allow(dead_code)]
     csrf_token: String,
     pkce_verifier_secret: String,
     created_at: std::time::Instant,
@@ -39,6 +40,12 @@ struct OAuthState {
 pub struct OAuthCallbackQuery {
     code: String,
     state: String,
+}
+
+/// Request body for OAuth account registration
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OAuthRegisterRequest {
+    pub username: String,
 }
 
 /// Response for session keypair endpoint
@@ -212,6 +219,7 @@ pub async fn google_callback(
         })?;
 
     let (account_id, username) = if let Some(oauth_acc) = existing_oauth_account {
+        // OAuth account already linked - fetch account
         let account = db
             .get_account_by_id(&oauth_acc.account_id)
             .await
@@ -226,7 +234,45 @@ pub async fn google_callback(
             Some(hex::encode(&oauth_acc.account_id)),
             Some(account.username),
         )
+    } else if let Some(email) = &user_info.email {
+        // Check if an account exists with this email - if so, link OAuth to it
+        if let Some(existing_account) = db.get_account_by_email(email).await.map_err(|e| {
+            poem::Error::from_string(
+                format!("Database error: {}", e),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })? {
+            // Link this OAuth account to the existing account
+            db.create_oauth_account(
+                &existing_account.id,
+                "google_oauth",
+                &user_info.id,
+                Some(email),
+            )
+            .await
+            .map_err(|e| {
+                poem::Error::from_string(
+                    format!("Failed to link OAuth account: {}", e),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?;
+
+            tracing::info!(
+                "Linked Google OAuth account {} to existing account {} by email",
+                user_info.id,
+                existing_account.username
+            );
+
+            (
+                Some(hex::encode(&existing_account.id)),
+                Some(existing_account.username),
+            )
+        } else {
+            // No existing account - user needs to complete registration
+            (None, None)
+        }
     } else {
+        // No email from OAuth - user needs to complete registration
         (None, None)
     };
 
@@ -305,5 +351,258 @@ pub async fn get_session_keypair(
             data: None,
             error: Some("No OAuth session found".to_string()),
         }))
+    }
+}
+
+/// Response for OAuth registration endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthRegisterResponse {
+    pub success: bool,
+    pub data: Option<OAuthRegisterData>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthRegisterData {
+    pub account_id: String,
+    pub username: String,
+    pub email: Option<String>,
+}
+
+/// POST /api/v1/oauth/register
+/// Complete OAuth account registration by setting username
+#[handler]
+pub async fn oauth_register(
+    poem::web::Json(req): poem::web::Json<OAuthRegisterRequest>,
+    cookie_jar: &CookieJar,
+    db: Data<&Arc<Database>>,
+) -> PoemResult<poem::web::Json<OAuthRegisterResponse>> {
+    // Get OAuth info from cookie
+    let oauth_info_cookie = cookie_jar.get("oauth_info").ok_or_else(|| {
+        poem::Error::from_string(
+            "OAuth session expired or not found".to_string(),
+            StatusCode::UNAUTHORIZED,
+        )
+    })?;
+
+    let oauth_info: serde_json::Value = serde_json::from_str(oauth_info_cookie.value_str())
+        .map_err(|e| {
+            poem::Error::from_string(
+                format!("Failed to parse OAuth info: {}", e),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
+
+    // Get keypair from cookie
+    let keypair_cookie = cookie_jar.get("oauth_keypair").ok_or_else(|| {
+        poem::Error::from_string(
+            "OAuth keypair not found".to_string(),
+            StatusCode::UNAUTHORIZED,
+        )
+    })?;
+
+    let keypair_data: SessionKeypairData = serde_json::from_str(keypair_cookie.value_str())
+        .map_err(|e| {
+            poem::Error::from_string(
+                format!("Failed to parse keypair: {}", e),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
+
+    // Extract OAuth provider info
+    let provider = oauth_info["provider"].as_str().ok_or_else(|| {
+        poem::Error::from_string(
+            "Missing provider in OAuth info".to_string(),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let external_id = oauth_info["external_id"].as_str().ok_or_else(|| {
+        poem::Error::from_string(
+            "Missing external_id in OAuth info".to_string(),
+            StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let email = oauth_info["email"].as_str();
+
+    // Decode public key
+    let public_key = hex::decode(&keypair_data.public_key).map_err(|e| {
+        poem::Error::from_string(
+            format!("Failed to decode public key: {}", e),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+    })?;
+
+    // Validate username
+    let username = crate::validation::validate_account_username(&req.username).map_err(|e| {
+        poem::Error::from_string(format!("Invalid username: {}", e), StatusCode::BAD_REQUEST)
+    })?;
+
+    // Create account with OAuth link
+    let (account, _oauth_account) = db
+        .create_oauth_linked_account(
+            &username,
+            &public_key,
+            email.unwrap_or(""),
+            provider,
+            external_id,
+        )
+        .await
+        .map_err(|e| {
+            poem::Error::from_string(
+                format!("Failed to create account: {}", e),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
+
+    // Update keypair cookie with account info
+    let updated_keypair_data = SessionKeypairData {
+        private_key: keypair_data.private_key,
+        public_key: keypair_data.public_key,
+        account_id: Some(hex::encode(&account.id)),
+        username: Some(account.username.clone()),
+    };
+
+    let cookie_value = serde_json::to_string(&updated_keypair_data).map_err(|e| {
+        poem::Error::from_string(
+            format!("Failed to serialize cookie: {}", e),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+    })?;
+
+    let mut cookie = Cookie::new_with_str("oauth_keypair", cookie_value);
+    cookie.set_path("/");
+    cookie.set_http_only(true);
+    cookie.set_max_age(std::time::Duration::from_secs(7 * 24 * 60 * 60)); // 7 days
+    cookie_jar.add(cookie);
+
+    // Remove oauth_info cookie as it's no longer needed
+    cookie_jar.remove("oauth_info");
+
+    tracing::info!(
+        "Created new account {} via OAuth provider {}",
+        account.username,
+        provider
+    );
+
+    Ok(poem::web::Json(OAuthRegisterResponse {
+        success: true,
+        data: Some(OAuthRegisterData {
+            account_id: hex::encode(&account.id),
+            username: account.username,
+            email: account.email,
+        }),
+        error: None,
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dcc_common::DccIdentity;
+
+    #[test]
+    fn test_generate_ed25519_keypair() {
+        let (private_key, public_key) = generate_ed25519_keypair().unwrap();
+
+        // Verify correct lengths
+        assert_eq!(private_key.len(), 32, "Private key should be 32 bytes");
+        assert_eq!(public_key.len(), 32, "Public key should be 32 bytes");
+
+        // Verify keypair is valid by signing and verifying
+        let identity = DccIdentity::new_signing_from_bytes(&private_key).unwrap();
+        assert_eq!(
+            identity.verifying_key().to_bytes(),
+            public_key.as_slice(),
+            "Public key should match verifying key from private key"
+        );
+    }
+
+    #[test]
+    fn test_generate_ed25519_keypair_uniqueness() {
+        // Generate two keypairs and verify they're different
+        let (priv1, pub1) = generate_ed25519_keypair().unwrap();
+        let (priv2, pub2) = generate_ed25519_keypair().unwrap();
+
+        assert_ne!(priv1, priv2, "Private keys should be unique");
+        assert_ne!(pub1, pub2, "Public keys should be unique");
+    }
+
+    #[test]
+    fn test_create_google_oauth_client_missing_client_id() {
+        // Clear environment variables
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+
+        let result = create_google_oauth_client();
+        assert!(
+            result.is_err(),
+            "Should fail without GOOGLE_OAUTH_CLIENT_ID"
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("GOOGLE_OAUTH_CLIENT_ID"),
+            "Error should mention missing CLIENT_ID"
+        );
+    }
+
+    #[test]
+    fn test_create_google_oauth_client_missing_client_secret() {
+        std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "test_id");
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+
+        let result = create_google_oauth_client();
+        assert!(
+            result.is_err(),
+            "Should fail without GOOGLE_OAUTH_CLIENT_SECRET"
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("GOOGLE_OAUTH_CLIENT_SECRET"),
+            "Error should mention missing CLIENT_SECRET"
+        );
+
+        // Cleanup
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
+    }
+
+    #[test]
+    fn test_create_google_oauth_client_success() {
+        std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "test_client_id");
+        std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "test_client_secret");
+        std::env::set_var(
+            "GOOGLE_OAUTH_REDIRECT_URL",
+            "http://localhost:59001/api/v1/oauth/google/callback",
+        );
+
+        let result = create_google_oauth_client();
+        assert!(result.is_ok(), "Should succeed with all required env vars");
+
+        // Cleanup
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+        std::env::remove_var("GOOGLE_OAUTH_REDIRECT_URL");
+    }
+
+    #[test]
+    fn test_create_google_oauth_client_default_redirect_url() {
+        std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "test_id");
+        std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "test_secret");
+        std::env::remove_var("GOOGLE_OAUTH_REDIRECT_URL");
+
+        let result = create_google_oauth_client();
+        assert!(
+            result.is_ok(),
+            "Should use default redirect URL if not provided"
+        );
+
+        // Cleanup
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
+        std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
     }
 }
