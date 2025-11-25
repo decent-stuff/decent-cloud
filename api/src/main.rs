@@ -6,6 +6,7 @@ mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
 mod network_metrics;
+mod oauth_simple;
 mod openapi;
 mod request_logging;
 mod sync_service;
@@ -20,7 +21,7 @@ use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
 use poem::web::Redirect;
 use poem::{
-    handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
+    get, handler, listener::TcpListener, middleware::Cors, post, web::Json, EndpointExt, Response,
     Route, Server,
 };
 use poem_openapi::OpenApiService;
@@ -245,6 +246,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .nest("/api/v1/swagger", swagger_ui)
         .nest("/api/v1/openapi", openapi_spec)
         .nest("/api/v1", api_service)
+        // OAuth endpoints
+        .at(
+            "/api/v1/oauth/google/authorize",
+            get(oauth_simple::google_authorize),
+        )
+        .at(
+            "/api/v1/oauth/google/callback",
+            get(oauth_simple::google_callback),
+        )
+        .at(
+            "/api/v1/oauth/session/keypair",
+            get(oauth_simple::get_session_keypair),
+        )
         // Legacy endpoints (canister proxy - ICP integration pending)
         // NOTE: CSV operations are now included in OpenAPI schema above
         .at("/api/v1/canister/:method", post(canister_proxy))

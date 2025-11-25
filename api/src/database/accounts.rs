@@ -487,6 +487,79 @@ impl Database {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Account not found after profile update"))
     }
+
+    /// Create OAuth account link
+    pub async fn create_oauth_account(
+        &self,
+        account_id: &[u8],
+        provider: &str,
+        external_id: &str,
+        email: Option<&str>,
+    ) -> Result<OAuthAccount> {
+        let oauth_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+
+        sqlx::query(
+            "INSERT INTO oauth_accounts (id, account_id, provider, external_id, email) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(&oauth_id)
+        .bind(account_id)
+        .bind(provider)
+        .bind(external_id)
+        .bind(email)
+        .execute(&self.pool)
+        .await?;
+
+        self.get_oauth_account(&oauth_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("OAuth account not found after creation"))
+    }
+
+    /// Get OAuth account by ID
+    pub async fn get_oauth_account(&self, oauth_id: &[u8]) -> Result<Option<OAuthAccount>> {
+        let oauth_account = sqlx::query_as::<_, OAuthAccount>(
+            "SELECT id, account_id, provider, external_id, email, created_at
+             FROM oauth_accounts WHERE id = ?",
+        )
+        .bind(oauth_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(oauth_account)
+    }
+
+    /// Get OAuth account by provider and external ID
+    pub async fn get_oauth_account_by_provider_and_external_id(
+        &self,
+        provider: &str,
+        external_id: &str,
+    ) -> Result<Option<OAuthAccount>> {
+        let oauth_account = sqlx::query_as::<_, OAuthAccount>(
+            "SELECT id, account_id, provider, external_id, email, created_at
+             FROM oauth_accounts WHERE provider = ? AND external_id = ?",
+        )
+        .bind(provider)
+        .bind(external_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(oauth_account)
+    }
+
+    /// Get account by ID
+    pub async fn get_account_by_id(&self, account_id: &[u8]) -> Result<Option<Account>> {
+        self.get_account(account_id).await
+    }
+}
+
+/// OAuth account record from database
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct OAuthAccount {
+    pub id: Vec<u8>,
+    pub account_id: Vec<u8>,
+    pub provider: String,
+    pub external_id: String,
+    pub email: Option<String>,
+    pub created_at: i64,
 }
 
 #[cfg(test)]

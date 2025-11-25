@@ -18,14 +18,19 @@ clap.workspace = true
 csv.workspace = true
 dcc-common = { path = "../common" }
 dotenv.workspace = true
+ed25519-dalek.workspace = true
 hex.workspace = true
 ic-agent.workspace = true
 icrc-ledger-types.workspace = true
+lazy_static = "1.5"
 ledger-map = { path = "../ledger-map" }
 num-bigint.workspace = true
-poem.workspace = true
+oauth2 = "4.4"
+poem = { workspace = true, features = ["cookie"] }
 poem-openapi = { version = "5", features = ["swagger-ui", "chrono"] }
 provider-offering = { path = "../provider-offering" }
+rand = "0.8"
+time = { version = "0.3", features = ["serde", "macros"] }
 provider-profile = { path = "../provider-profile" }
 regex.workspace = true
 reqwest.workspace = true

@@ -27,8 +27,7 @@ impl Database {
         Ok(())
     }
 
-    /// Test helper method to access the underlying pool
-    #[cfg(test)]
+    /// Access the underlying pool (needed for session store and testing)
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
