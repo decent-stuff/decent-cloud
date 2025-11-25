@@ -33,14 +33,14 @@ test.describe('Sign-In Flow', () => {
 
 		// Start from home page
 		await page.goto('/');
-		await expect(page.locator('text=Connect Wallet')).toBeVisible();
+		await expect(page.locator('text=Sign In')).toBeVisible();
 	});
 
 	test('should sign in successfully with valid credentials', async ({
 		page,
 	}) => {
-		// Step 1: Click "Connect Wallet"
-		await page.click('text=Connect Wallet');
+		// Step 1: Click "Sign In"
+		await page.click('text=Sign In');
 		await expect(page.locator('text=Sign In')).toBeVisible();
 
 		// Step 2: Click "Sign In"
@@ -101,7 +101,7 @@ test.describe('Sign-In Flow', () => {
 	});
 
 	test('should reject invalid seed phrase', async ({ page }) => {
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Sign In');
 		await page.click('text=Seed Phrase');
 		await page.click('button:has-text("Continue")');
@@ -129,7 +129,7 @@ test.describe('Sign-In Flow', () => {
 	test('should reject sign-in with non-existent username', async ({
 		page,
 	}) => {
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Sign In');
 		await page.click('text=Seed Phrase');
 		await page.click('button:has-text("Continue")');
@@ -167,7 +167,7 @@ test.describe('Sign-In Flow', () => {
 		await newPage.close();
 
 		// Try to sign in with old seed phrase but new username
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Sign In');
 		await page.click('text=Seed Phrase');
 		await page.click('button:has-text("Continue")');
@@ -193,7 +193,7 @@ test.describe('Sign-In Flow', () => {
 
 	test('should maintain session after page refresh', async ({ page }) => {
 		// Sign in
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Sign In');
 		await page.click('text=Seed Phrase');
 		await page.click('button:has-text("Continue")');
@@ -232,7 +232,7 @@ test.describe('Sign-In Flow', () => {
 
 	test('should sign out successfully', async ({ page }) => {
 		// Sign in first
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Sign In');
 		await page.click('text=Seed Phrase');
 		await page.click('button:has-text("Continue")');
@@ -258,7 +258,7 @@ test.describe('Sign-In Flow', () => {
 
 		// Should redirect to home page
 		await expect(page).toHaveURL('/');
-		await expect(page.locator('text=Connect Wallet')).toBeVisible();
+		await expect(page.locator('text=Sign In')).toBeVisible();
 
 		// Username should not be visible
 		await expect(
@@ -267,8 +267,8 @@ test.describe('Sign-In Flow', () => {
 	});
 
 	test('should auto-detect account from seed phrase', async ({ page }) => {
-		// Step 1: Click "Connect Wallet"
-		await page.click('text=Connect Wallet');
+		// Step 1: Click "Sign In"
+		await page.click('text=Sign In');
 		await page.click('text=Sign In');
 
 		// Step 2: Select "Seed Phrase" method
@@ -347,7 +347,7 @@ test.describe('Sign-In Flow', () => {
 		await expect(page).toHaveURL('/?returnUrl=%2Fdashboard%2Faccount');
 
 		// Complete sign-in from the redirected page
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Sign In');
 		await page.click('text=Seed Phrase');
 		await page.click('button:has-text("Continue")');

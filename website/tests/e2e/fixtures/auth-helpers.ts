@@ -57,8 +57,8 @@ export async function registerNewAccount(
 	// Navigate to home page
 	await page.goto('/');
 
-	// Click "Connect Wallet" button
-	await page.click('text=Connect Wallet');
+	// Click "Sign In" button
+	await page.click('text=Sign In');
 
 	// Wait for auth dialog to appear
 	await expect(page.locator('text=Create Account')).toBeVisible();
@@ -127,8 +127,8 @@ export async function signIn(
 	// Navigate to home page
 	await page.goto('/');
 
-	// Click "Connect Wallet" button
-	await page.click('text=Connect Wallet');
+	// Click "Sign In" button
+	await page.click('text=Sign In');
 
 	// Wait for auth dialog
 	await expect(page.locator('text=Sign In')).toBeVisible();
@@ -177,7 +177,7 @@ export async function signOut(page: Page): Promise<void> {
 
 	// Verify we're back on home page
 	await expect(page).toHaveURL('/');
-	await expect(page.locator('text=Connect Wallet')).toBeVisible();
+	await expect(page.locator('text=Sign In')).toBeVisible();
 }
 
 /**

@@ -21,7 +21,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Start from home page
 		await page.goto('/');
-		await expect(page.locator('text=Connect Wallet')).toBeVisible();
+		await expect(page.locator('text=Sign In')).toBeVisible();
 	});
 
 	test('should complete full registration flow with seed phrase', async ({
@@ -29,8 +29,8 @@ test.describe('Account Registration Flow', () => {
 	}) => {
 		const username = generateTestUsername();
 
-		// Step 1: Click "Connect Wallet"
-		await page.click('text=Connect Wallet');
+		// Step 1: Click "Sign In"
+		await page.click('text=Sign In');
 		await expect(page.locator('text=Create Account')).toBeVisible();
 
 		// Step 2: Click "Create Account"
@@ -118,7 +118,7 @@ test.describe('Account Registration Flow', () => {
 	});
 
 	test('should reject invalid username format', async ({ page }) => {
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Create Account');
 
 		await expect(
@@ -158,7 +158,7 @@ test.describe('Account Registration Flow', () => {
 		const username = generateTestUsername();
 
 		// First registration
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Create Account');
 		await page.fill('input[placeholder="alice"]', username);
 		await page.waitForTimeout(500);
@@ -180,7 +180,7 @@ test.describe('Account Registration Flow', () => {
 	}) => {
 		const username = generateTestUsername();
 
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Create Account');
 		await page.fill('input[placeholder="alice"]', username);
 		await page.waitForTimeout(500);
@@ -216,7 +216,7 @@ test.describe('Account Registration Flow', () => {
 
 		const username = generateTestUsername();
 
-		await page.click('text=Connect Wallet');
+		await page.click('text=Sign In');
 		await page.click('text=Create Account');
 		await page.fill('input[placeholder="alice"]', username);
 		await page.waitForTimeout(500);

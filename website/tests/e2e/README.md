@@ -247,7 +247,7 @@ test('my test', async ({ page }) => {
 
 ## Common Issues
 
-### Tests Fail: "Connect Wallet button not found"
+### Tests Fail: "Sign In button not found"
 - **Cause**: Dev server not running
 - **Fix**: Start dev server with `npm run dev`
 
