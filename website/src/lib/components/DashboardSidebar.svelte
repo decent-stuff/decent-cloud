@@ -2,6 +2,8 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import { onMount, onDestroy } from "svelte";
+	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
@@ -17,8 +19,21 @@
 	]);
 
 	let currentPath = $state("");
+	let currentIdentity = $state<IdentityInfo | null>(null);
+	let unsubscribeIdentity: (() => void) | null = null;
+
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
+	});
+
+	onMount(() => {
+		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
+			currentIdentity = value;
+		});
+	});
+
+	onDestroy(() => {
+		unsubscribeIdentity?.();
 	});
 
 	async function handleLogout() {
@@ -84,6 +99,16 @@
 	<!-- User Section -->
 	<div class="p-4 border-t border-white/10 space-y-2">
 		{#if isAuthenticated}
+			{#if currentIdentity?.account}
+				<a
+					href="/dashboard/account"
+					onclick={closeSidebar}
+					class="block px-4 py-2 text-white/90 hover:text-white transition-colors text-center border-b border-white/10 mb-2"
+					title="View account settings"
+				>
+					<span class="font-medium">@{currentIdentity.account.username}</span>
+				</a>
+			{/if}
 			<a
 				href="/dashboard/account"
 				onclick={closeSidebar}

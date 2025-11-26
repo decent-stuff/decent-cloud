@@ -14,8 +14,8 @@ test.describe('Anonymous Browsing', () => {
 		// Should show auth prompt banner
 		await expect(page.locator('text=Create an account to rent resources')).toBeVisible();
 
-		// Should show single login/create account button in banner
-		await expect(page.locator('button:has-text("Login / Create Account")')).toBeVisible();
+		// Should show login/create account button (either in banner or sidebar)
+		await expect(page.locator('button:has-text("Login / Create Account")').first()).toBeVisible();
 
 		// Page should load without redirect
 		await expect(page).toHaveURL('/dashboard');
@@ -41,8 +41,8 @@ test.describe('Anonymous Browsing', () => {
 		// Page should load (even if empty)
 		await expect(page).toHaveURL('/dashboard/offerings');
 
-		// Should show auth prompt banner
-		await expect(page.locator('button:has-text("Login / Create Account")')).toBeVisible();
+		// Should show login button (either in banner or sidebar)
+		await expect(page.locator('button:has-text("Login / Create Account")').first()).toBeVisible();
 	});
 
 	test('should allow anonymous user to view validators', async ({ page }) => {
@@ -51,8 +51,8 @@ test.describe('Anonymous Browsing', () => {
 		// Page should load
 		await expect(page).toHaveURL('/dashboard/validators');
 
-		// Should show auth prompt banner
-		await expect(page.locator('button:has-text("Login / Create Account")')).toBeVisible();
+		// Should show login button (either in banner or sidebar)
+		await expect(page.locator('button:has-text("Login / Create Account")').first()).toBeVisible();
 	});
 
 	test('should show auth modal when anonymous user tries to rent resource', async ({ page }) => {
@@ -119,18 +119,18 @@ test.describe('Anonymous Browsing', () => {
 		// Wait for page to load
 		await page.waitForLoadState('networkidle');
 
-		// Should show sidebar with all navigation items (now visible to anonymous users too)
-		await expect(page.locator('a[href="/dashboard"]')).toBeVisible();
-		await expect(page.locator('a[href="/dashboard/marketplace"]')).toBeVisible();
-		await expect(page.locator('a[href="/dashboard/rentals"]')).toBeVisible();
-		await expect(page.locator('a[href="/dashboard/provider/requests"]')).toBeVisible();
+		// Should show sidebar with all navigation items (visible to anonymous users too)
+		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
+		await expect(page.locator('aside a[href="/dashboard/reputation"]')).toBeVisible();
+		await expect(page.locator('aside a[href="/dashboard/offerings"]')).toBeVisible();
+		await expect(page.locator('aside a[href="/dashboard/validators"]')).toBeVisible();
 
 		// Should NOT show Account link in sidebar (it's in the bottom section for authenticated users only)
 		const accountLinks = page.locator('aside a[href="/dashboard/account"]');
 		await expect(accountLinks).not.toBeVisible();
 
-		// Should show Login / Create Account button instead of Logout
-		await expect(page.locator('button:has-text("Login / Create Account")')).toBeVisible();
+		// Should show Login / Create Account button in sidebar instead of Logout
+		await expect(page.locator('aside button:has-text("Login / Create Account")')).toBeVisible();
 		await expect(page.locator('button:has-text("Logout")')).not.toBeVisible();
 	});
 

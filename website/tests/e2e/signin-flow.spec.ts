@@ -199,7 +199,14 @@ test.describe('Sign-In Flow', () => {
 		// Try to access protected page directly while logged out
 		await page.goto('/dashboard/account');
 
-		// Should redirect to login with returnUrl
+		// Should stay on page with login prompt (not redirect)
+		await expect(page).toHaveURL('/dashboard/account');
+		await expect(page.getByText('Login Required')).toBeVisible();
+
+		// Click the login button in main content
+		await page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i }).click();
+
+		// Should navigate to login with returnUrl
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Faccount');
 
 		// Complete sign-in
