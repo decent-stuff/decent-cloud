@@ -18,10 +18,6 @@ test.describe('Account Registration Flow', () => {
 	test.beforeEach(async ({ page }) => {
 		// Set up console logging to capture browser console output
 		setupConsoleLogging(page);
-
-		// Start from home page
-		await page.goto('/');
-		await expect(page.locator('text=Sign In')).toBeVisible();
 	});
 
 	test('should complete full registration flow with seed phrase', async ({
@@ -29,47 +25,24 @@ test.describe('Account Registration Flow', () => {
 	}) => {
 		const username = generateTestUsername();
 
-		// Step 1: Click "Sign In"
-		await page.click('text=Sign In');
-		await expect(page.locator('text=Create Account')).toBeVisible();
+		// Step 1: Navigate to login page
+		await page.goto('/login');
+		await expect(page.locator('text=Generate New')).toBeVisible();
 
-		// Step 2: Click "Create Account"
-		await page.click('text=Create Account');
+		// Step 2: Click "Generate New" to generate seed phrase
+		await page.click('text=Generate New');
 
-		// Step 3: Enter username
-		await expect(
-			page.locator('input[placeholder="alice"]'),
-		).toBeVisible();
-		await page.fill('input[placeholder="alice"]', username);
-
-		// Wait for username validation
-		await page.waitForTimeout(500); // Debounce delay
-
-		// Should show "Available" or enable Continue button
-		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')).first(),
-		).toBeVisible({ timeout: 5000 });
-
-		// Step 4: Continue to auth method selection
-		await page.click('button:has-text("Continue")');
-
-		// Step 5: Select "Seed Phrase" method
-		await expect(page.locator('text=Seed Phrase')).toBeVisible();
-		await page.click('text=Seed Phrase');
-		await page.click('button:has-text("Continue")');
-
-		// Step 6: Seed phrase backup
+		// Step 3: Seed phrase backup screen
 		await expect(page.locator('text=Copy to Clipboard')).toBeVisible();
 
-		// Extract and validate seed phrase - words are in span.font-mono elements
-		const wordElements = page.locator('span.font-mono');
+		// Extract and validate seed phrase - words are in .font-mono elements
+		const wordElements = page.locator('.font-mono').filter({ hasText: /^[a-z]+$/ });
 		const words = await wordElements.allTextContents();
 		const seedPhrase = words.join(' ').trim();
 
 		expect(seedPhrase).toBeTruthy();
 		const wordCount = seedPhrase.split(/\s+/).length;
-		expect(wordCount).toBeGreaterThanOrEqual(12);
-		expect(wordCount).toBeLessThanOrEqual(24);
+		expect(wordCount).toBe(12);
 
 		// Test copy to clipboard button
 		await page.click('button:has-text("Copy to Clipboard")');
@@ -80,13 +53,19 @@ test.describe('Account Registration Flow', () => {
 
 		await page.click('button:has-text("Continue")');
 
-		// Step 7: Confirm account creation
+		// Step 4: Enter username
 		await expect(
-			page.locator('text=Create Account, text=Confirm'),
+			page.locator('input[placeholder="alice"]'),
 		).toBeVisible();
+		await page.fill('input[placeholder="alice"]', username);
 
-		// Should show username in confirmation
-		await expect(page.locator(`text=${username}`)).toBeVisible();
+		// Wait for username validation
+		await page.waitForTimeout(500); // Debounce delay
+
+		// Should show "Available" or enable Create Account button
+		await expect(
+			page.locator('text=Available').or(page.locator('button:has-text("Create Account"):not([disabled])')).first(),
+		).toBeVisible({ timeout: 5000 });
 
 		// Wait for account creation API call
 		const apiResponsePromise = waitForApiResponse(
@@ -94,23 +73,24 @@ test.describe('Account Registration Flow', () => {
 			/\/api\/v1\/accounts$/,
 		);
 
-		await page.click('button:has-text("Create Account"), button:has-text("Confirm")');
+		// Step 5: Create account
+		await page.click('button:has-text("Create Account")');
 
 		// Wait for API to respond
 		await apiResponsePromise;
 
-		// Step 8: Success screen
+		// Step 6: Success screen
 		await expect(
-			page.locator('text=Welcome, text=Success'),
+			page.locator('text=Welcome to Decent Cloud!'),
 		).toBeVisible({ timeout: 10000 });
 
 		// Should show username
 		await expect(page.locator(`text=@${username}`)).toBeVisible();
 
-		// Step 9: Go to dashboard
-		await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+		// Step 7: Go to dashboard
+		await page.click('button:has-text("Go to Dashboard")');
 
-		// Step 10: Verify dashboard access
+		// Step 8: Verify dashboard access
 		await expect(page).toHaveURL(/\/dashboard/);
 
 		// Should show username in header
@@ -118,8 +98,11 @@ test.describe('Account Registration Flow', () => {
 	});
 
 	test('should reject invalid username format', async ({ page }) => {
-		await page.click('text=Sign In');
-		await page.click('text=Create Account');
+		// Navigate to registration flow and generate seed phrase
+		await page.goto('/login');
+		await page.click('text=Generate New');
+		await page.check('input[type="checkbox"]');
+		await page.click('button:has-text("Continue")');
 
 		await expect(
 			page.locator('input[placeholder="alice"]'),
@@ -149,60 +132,32 @@ test.describe('Account Registration Flow', () => {
 			page.locator('text=3-20 characters').or(page.locator('text=too long')),
 		).toBeVisible();
 
-		// Continue button should be disabled
-		const continueBtn = page.locator('button:has-text("Continue")');
-		await expect(continueBtn).toBeDisabled();
+		// Create Account button should be disabled
+		const createBtn = page.locator('button:has-text("Create Account")');
+		await expect(createBtn).toBeDisabled();
 	});
 
 	test('should handle username already taken', async ({ page }) => {
 		const username = generateTestUsername();
 
 		// First registration
-		await page.click('text=Sign In');
-		await page.click('text=Create Account');
+		await page.goto('/login');
+		await page.click('text=Generate New');
+		await page.check('input[type="checkbox"]');
+		await page.click('button:has-text("Continue")');
 		await page.fill('input[placeholder="alice"]', username);
 		await page.waitForTimeout(500);
 
 		// Assuming username is available first time
 		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')).first(),
+			page.locator('text=Available').or(page.locator('button:has-text("Create Account"):not([disabled])')).first(),
 		).toBeVisible({ timeout: 5000 });
 
-		// Cancel this flow
-		await page.click('button:has-text("Cancel"), button[aria-label*="close" i]');
+		// Go back to cancel this flow
+		await page.click('button:has-text("Back")');
 
 		// Try to register with same username (if API enforces uniqueness)
 		// This test may need adjustment based on actual API behavior
-	});
-
-	test('should allow skipping seed phrase backup with warning', async ({
-		page,
-	}) => {
-		const username = generateTestUsername();
-
-		await page.click('text=Sign In');
-		await page.click('text=Create Account');
-		await page.fill('input[placeholder="alice"]', username);
-		await page.waitForTimeout(500);
-		await page.click('button:has-text("Continue")');
-		await page.click('text=Seed Phrase');
-		await page.click('button:has-text("Continue")');
-
-		// Wait for seed phrase screen
-		await expect(
-			page.locator('text=Copy to Clipboard'),
-		).toBeVisible();
-
-		// Look for "Skip" button or similar
-		const skipButton = page.locator('button:has-text("Skip")');
-		if (await skipButton.isVisible()) {
-			await skipButton.click();
-
-			// Should show warning
-			await expect(
-				page.locator('text=warning, text=lose access').or(page.locator('text=Are you sure')),
-			).toBeVisible();
-		}
 	});
 
 	test('should handle network errors gracefully', async ({ page }) => {
@@ -216,72 +171,63 @@ test.describe('Account Registration Flow', () => {
 
 		const username = generateTestUsername();
 
-		await page.click('text=Sign In');
-		await page.click('text=Create Account');
-		await page.fill('input[placeholder="alice"]', username);
-		await page.waitForTimeout(500);
-		await page.click('button:has-text("Continue")');
-		await page.click('text=Seed Phrase');
-		await page.click('button:has-text("Continue")');
+		await page.goto('/login');
+		await page.click('text=Generate New');
 		await page.check('input[type="checkbox"]');
 		await page.click('button:has-text("Continue")');
-		await page.click('button:has-text("Create Account"), button:has-text("Confirm")');
+		await page.fill('input[placeholder="alice"]', username);
+		await page.waitForTimeout(500);
+		await page.click('button:has-text("Create Account")');
 
 		// Should show error message
 		await expect(
-			page.locator('text=error, text=failed').or(page.locator('text=Something went wrong')),
+			page.locator('text=error, text=failed, text=Registration failed').or(page.locator('text=Something went wrong')),
 		).toBeVisible({ timeout: 10000 });
 	});
 
 	test('should redirect to returnUrl after successful registration', async ({ page }) => {
 		const username = generateTestUsername();
 
-		// Navigate to home with returnUrl parameter
-		await page.goto('/?action=signup&returnUrl=%2Fdashboard%2Fmarketplace');
-
-		// Should auto-open auth dialog
-		await expect(page.locator('text=Create Account')).toBeVisible({ timeout: 5000 });
+		// Navigate to login with returnUrl parameter
+		await page.goto('/login?returnUrl=%2Fdashboard%2Fmarketplace');
 
 		// Complete registration flow
-		await page.click('text=Create Account');
+		await page.click('text=Generate New');
+		await page.check('input[type="checkbox"]');
+		await page.click('button:has-text("Continue")');
 		await page.fill('input[placeholder="alice"]', username);
 		await page.waitForTimeout(500);
 
 		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Continue"):not([disabled])')).first(),
+			page.locator('text=Available').or(page.locator('button:has-text("Create Account"):not([disabled])')).first(),
 		).toBeVisible({ timeout: 5000 });
-
-		await page.click('button:has-text("Continue")');
-		await page.click('text=Seed Phrase');
-		await page.click('button:has-text("Continue")');
-		await page.check('input[type="checkbox"]');
-		await page.click('button:has-text("Continue")');
 
 		const apiResponsePromise = waitForApiResponse(
 			page,
 			/\/api\/v1\/accounts$/,
 		);
 
-		await page.click('button:has-text("Create Account"), button:has-text("Confirm")');
+		await page.click('button:has-text("Create Account")');
 		await apiResponsePromise;
 
 		// Should show success screen
 		await expect(
-			page.locator('text=Welcome, text=Success'),
+			page.locator('text=Welcome to Decent Cloud!'),
 		).toBeVisible({ timeout: 10000 });
 
 		// Click "Go to Dashboard"
-		await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+		await page.click('button:has-text("Go to Dashboard")');
 
 		// Should redirect to the returnUrl (marketplace)
 		await expect(page).toHaveURL(/\/dashboard\/marketplace/, { timeout: 10000 });
 	});
 
-	test('should open signup dialog when action=signup parameter is present', async ({ page }) => {
+	test('should redirect to login page when action=signup parameter is present', async ({ page }) => {
 		// Navigate with action=signup parameter
 		await page.goto('/?action=signup');
 
-		// Auth dialog should auto-open to create account screen
-		await expect(page.locator('text=Create Account')).toBeVisible({ timeout: 5000 });
+		// Should redirect to /login page
+		await expect(page).toHaveURL('/login', { timeout: 5000 });
+		await expect(page.locator('text=Generate New')).toBeVisible();
 	});
 });

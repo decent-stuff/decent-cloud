@@ -435,10 +435,6 @@ function createAuthStore() {
 						return current;
 					});
 				}
-
-				if (typeof window !== 'undefined') {
-					window.location.href = returnUrl;
-				}
 			} catch (error) {
 				console.error('Failed to login with seed phrase:', error);
 				throw error;

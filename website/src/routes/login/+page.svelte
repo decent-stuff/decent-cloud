@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
@@ -7,7 +8,6 @@
 	import type { AccountInfo } from '$lib/stores/auth';
 
 	let returnUrl = $state<string>('/dashboard/marketplace');
-	let isAuthenticated = $state(false);
 
 	onMount(() => {
 		// Get returnUrl from query params
@@ -16,18 +16,13 @@
 			returnUrl = urlReturnUrl;
 		}
 
-		// Check if already authenticated
-		const unsubscribe = authStore.isAuthenticated.subscribe((value) => {
-			isAuthenticated = value;
-			if (value) {
-				// Already logged in, redirect to returnUrl
-				goto(returnUrl);
-			}
-		});
-
-		return () => {
-			unsubscribe();
-		};
+		// Check if already authenticated on page load only
+		// Don't subscribe to changes, as we want the auth flow to show the success screen
+		const currentlyAuthenticated = get(authStore.isAuthenticated);
+		if (currentlyAuthenticated) {
+			// Already logged in when arriving at page, redirect immediately
+			goto(returnUrl);
+		}
 	});
 
 	function handleSuccess(account: AccountInfo) {
@@ -58,14 +53,7 @@
 
 		<!-- Auth Flow Card -->
 		<div class="bg-gray-900/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/20 shadow-2xl">
-			{#if !isAuthenticated}
-				<AuthFlow onSuccess={handleSuccess} />
-			{:else}
-				<div class="text-center py-8">
-					<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400 mx-auto mb-4"></div>
-					<p class="text-white/70">Redirecting...</p>
-				</div>
-			{/if}
+			<AuthFlow onSuccess={handleSuccess} />
 		</div>
 
 		<!-- Back link -->

@@ -18,10 +18,13 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
 	testDir: './tests/e2e',
-	fullyParallel: false, // Run tests sequentially to avoid DB conflicts
+	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	workers: 1, // Single worker to avoid race conditions
+	// Parallel workers: balance between speed and resource usage
+	// 4 workers = 4 concurrent test accounts, good for most systems
+	// Increase if your API server can handle more concurrent requests
+	workers: process.env.CI ? 2 : 16,
 	reporter: process.env.CI ? 'github' : 'list',
 
 	use: {
@@ -30,12 +33,16 @@ export default defineConfig({
 		trace: 'on-first-retry',
 		screenshot: 'only-on-failure',
 		video: 'retain-on-failure',
+		permissions: ['clipboard-read', 'clipboard-write'],
 	},
 
 	projects: [
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'] },
+			use: {
+				...devices['Desktop Chrome'],
+				permissions: ['clipboard-read', 'clipboard-write'],
+			},
 		},
 	],
 

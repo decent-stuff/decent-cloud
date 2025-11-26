@@ -54,65 +54,56 @@ export async function registerNewAccount(
 ): Promise<AuthCredentials> {
 	const username = generateTestUsername();
 
-	// Navigate to home page
-	await page.goto('/');
+	// Navigate to login page
+	await page.goto('/login');
 
-	// Click "Sign In" button
-	await page.click('text=Sign In');
+	// Wait for seed phrase choice to appear
+	await expect(page.locator('text=Generate New')).toBeVisible({ timeout: 10000 });
 
-	// Wait for auth dialog to appear
-	await expect(page.locator('text=Create Account')).toBeVisible();
+	// Click "Generate New" to generate seed phrase
+	await page.click('text=Generate New');
 
-	// Click "Create Account"
-	await page.click('text=Create Account');
+	// Wait for seed phrase to be generated and "Copy to Clipboard" button to appear
+	await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 
-	// Wait for username input (placeholder is "alice")
+	// Extract seed phrase from the grid - words are in divs with class containing "font-mono"
+	const wordElements = page.locator('.font-mono');
+	const words = await wordElements.allTextContents();
+	const finalSeedPhrase = words.join(' ').trim();
+
+	expect(finalSeedPhrase.split(' ').length).toBe(12);
+
+	// Check the confirmation checkbox ("I have saved my seed phrase in a secure location")
+	await page.check('input[type="checkbox"]');
+
+	// Click Continue button (not "Create Account" - that comes later)
+	await page.click('button:has-text("Continue")');
+
+	// Wait for username input to appear (in the "Choose Your Username" step)
 	await expect(
 		page.locator('input[placeholder="alice"]'),
-	).toBeVisible();
+	).toBeVisible({ timeout: 10000 });
 
 	// Enter username
 	await page.fill('input[placeholder="alice"]', username);
 
 	// Wait for validation (username should be available)
-	await expect(page.locator('text=Available').or(page.locator('text=Continue')).first()).toBeVisible({ timeout: 5000 });
+	// The UsernameInput component shows "Available" when valid
+	await expect(page.locator('text=Available').or(page.locator('button:has-text("Create Account")')).first()).toBeVisible({ timeout: 10000 });
 
-	// Click Continue
-	await page.click('button:has-text("Continue")');
-
-	// Select "Seed Phrase" auth method
-	await expect(page.locator('text=Seed Phrase')).toBeVisible();
-	await page.click('text=Seed Phrase');
-	await page.click('button:has-text("Continue")');
-
-	// Wait for seed phrase to be generated
-	await expect(page.locator('text=Copy to Clipboard')).toBeVisible();
-
-	// Extract seed phrase from the page - words are in span.font-mono elements
-	const wordElements = page.locator('span.font-mono');
-	const words = await wordElements.allTextContents();
-	const finalSeedPhrase = words.join(' ').trim();
-
-	expect(finalSeedPhrase.split(' ').length).toBeGreaterThanOrEqual(12);
-
-	// Confirm backup
-	await page.check('input[type="checkbox"]');
-	await page.click('button:has-text("Continue")');
-
-	// Confirm account creation - click the button at the bottom of the form
-	await expect(page.locator('button:has-text("Create Account")').last()).toBeVisible();
-	await page.locator('button:has-text("Create Account")').last().click();
+	// Click "Create Account" button
+	await page.click('button:has-text("Create Account")');
 
 	// Wait for success message
 	await expect(
 		page.locator('text=Welcome to Decent Cloud!'),
-	).toBeVisible({ timeout: 10000 });
+	).toBeVisible({ timeout: 15000 });
 
-	// Click the "Go to Dashboard" button in the success modal
-	await page.locator('button:has-text("Go to Dashboard")').click();
+	// Click the "Go to Dashboard" button
+	await page.click('button:has-text("Go to Dashboard")');
 
 	// Verify we're on dashboard
-	await expect(page).toHaveURL(/\/dashboard/);
+	await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
 
 	return { username, seedPhrase: finalSeedPhrase };
 }
@@ -124,45 +115,32 @@ export async function signIn(
 	page: Page,
 	credentials: AuthCredentials,
 ): Promise<void> {
-	// Navigate to home page
-	await page.goto('/');
+	// Navigate to login page
+	await page.goto('/login');
 
-	// Click "Sign In" button
-	await page.click('text=Sign In');
+	// Wait for seed phrase choice to appear
+	await expect(page.locator('text=Import Existing')).toBeVisible();
 
-	// Wait for auth dialog
-	await expect(page.locator('text=Sign In')).toBeVisible();
+	// Click "Import Existing"
+	await page.click('text=Import Existing');
 
-	// Click "Sign In"
-	await page.click('text=Sign In');
-
-	// Select "Seed Phrase" method
-	await expect(page.locator('text=Seed Phrase')).toBeVisible();
-	await page.click('text=Seed Phrase');
-	await page.click('button:has-text("Continue")');
+	// Wait for seed phrase textarea
+	const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
+	await expect(seedInput).toBeVisible();
 
 	// Enter seed phrase
-	const seedInput = page.locator(
-		'textarea[placeholder*="seed" i], input[placeholder*="seed" i]',
-	);
-	await expect(seedInput).toBeVisible();
 	await seedInput.fill(credentials.seedPhrase);
+
+	// Click Continue
 	await page.click('button:has-text("Continue")');
 
-	// Enter username
+	// Wait for success message (should auto-login if account exists)
 	await expect(
-		page.locator('input[placeholder="alice"]'),
-	).toBeVisible();
-	await page.fill('input[placeholder="alice"]', credentials.username);
-	await page.click('button:has-text("Continue"), button:has-text("Sign In")');
-
-	// Wait for success
-	await expect(
-		page.locator('text=Welcome').or(page.locator('text=Success')).first(),
+		page.locator('text=Welcome to Decent Cloud!'),
 	).toBeVisible({ timeout: 10000 });
 
-	// Go to dashboard
-	await page.click('button:has-text("Go to Dashboard"), a:has-text("Dashboard")');
+	// Click "Go to Dashboard"
+	await page.click('button:has-text("Go to Dashboard")');
 
 	// Verify we're on dashboard
 	await expect(page).toHaveURL(/\/dashboard/);

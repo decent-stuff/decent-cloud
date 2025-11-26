@@ -124,11 +124,6 @@
 
 			createdAccount = account;
 			currentStep = 'success';
-
-			// Navigate to dashboard - account is already set and persisted in auth store
-			if (typeof window !== 'undefined') {
-				window.location.href = '/dashboard/marketplace';
-			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Registration failed';
 			currentStep = 'enter-username';
@@ -170,10 +165,8 @@
 			if (result.success && result.data) {
 				// Reload OAuth session with new account
 				await authStore.loadOAuthSession();
-				// Navigate to dashboard
-				if (typeof window !== 'undefined') {
-					window.location.href = '/dashboard/marketplace';
-				}
+				createdAccount = result.data;
+				currentStep = 'success';
 			} else {
 				error = result.error || 'Registration failed';
 				currentStep = 'oauth-username';
