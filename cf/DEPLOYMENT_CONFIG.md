@@ -241,6 +241,6 @@ If you have an existing `cf/.env` file:
 
 ## See Also
 
-- [OAuth Implementation Status](./OAUTH_IMPLEMENTATION_STATUS.md) - OAuth setup details
+- [OAuth Authentication Guide](../docs/OAUTH_AUTHENTICATION.md) - OAuth setup and configuration
 - [Development Guide](./development.md) - Local development setup
 - Main `cf/deploy.py` script - Deployment automation
