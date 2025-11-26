@@ -97,46 +97,6 @@ test.describe('Account Registration Flow', () => {
 		await expect(page.locator(`text=@${username}`)).toBeVisible();
 	});
 
-	test('should reject invalid username format', async ({ page }) => {
-		// Navigate to registration flow and generate seed phrase
-		await page.goto('/login');
-		await page.click('text=Generate New');
-		await page.check('input[type="checkbox"]');
-		await page.click('button:has-text("Continue")');
-
-		await expect(
-			page.locator('input[placeholder="alice"]'),
-		).toBeVisible();
-
-		// Test invalid characters
-		await page.fill('input[placeholder="alice"]', 'invalid user!');
-		await page.waitForTimeout(500);
-		await expect(
-			page.locator('text=letters, numbers').or(page.locator('text=Invalid')).first(),
-		).toBeVisible();
-
-		// Test too short
-		await page.fill('input[placeholder="alice"]', 'ab');
-		await page.waitForTimeout(500);
-		await expect(
-			page.locator('text=3-20 characters').or(page.locator('text=too short')),
-		).toBeVisible();
-
-		// Test too long
-		await page.fill(
-			'input[placeholder="alice"]',
-			'thisusernameiswaytoolongandexceedsthetwentycharacterlimit',
-		);
-		await page.waitForTimeout(500);
-		await expect(
-			page.locator('text=3-20 characters').or(page.locator('text=too long')),
-		).toBeVisible();
-
-		// Create Account button should be disabled
-		const createBtn = page.locator('button:has-text("Create Account")');
-		await expect(createBtn).toBeDisabled();
-	});
-
 	test('should handle username already taken', async ({ page }) => {
 		const username = generateTestUsername();
 

@@ -39,6 +39,9 @@ export const test = baseFixtures.extend<{}>({
 		// Sign in with test account credentials
 		await signIn(page, testAccount);
 
+		// Verify auth state is ready by checking username is visible
+		await page.locator(`text=@${testAccount.username}`).waitFor({ state: 'visible', timeout: 5000 });
+
 		// Use the authenticated page
 		await use(page);
 	},

@@ -17,59 +17,25 @@ test.describe('Auth Protection', () => {
 		});
 	});
 
-	test('should show login prompt on /dashboard/account for anonymous user', async ({ page }) => {
-		await page.goto('/dashboard/account');
+	test('should show login prompt on protected pages for anonymous users', async ({ page }) => {
+		const protectedPages = [
+			'/dashboard/account',
+			'/dashboard/account/security',
+			'/dashboard/account/profile',
+			'/dashboard/rentals',
+			'/dashboard/provider/requests'
+		];
 
-		// Should stay on the page (view-only)
-		await expect(page).toHaveURL('/dashboard/account');
+		for (const pagePath of protectedPages) {
+			await page.goto(pagePath);
 
-		// Should show login prompt in main content
-		await expect(page.getByText('Login Required')).toBeVisible();
-		await expect(page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i })).toBeVisible();
-	});
+			// Should stay on the page (view-only)
+			await expect(page).toHaveURL(pagePath);
 
-	test('should show login prompt on /dashboard/account/security for anonymous user', async ({ page }) => {
-		await page.goto('/dashboard/account/security');
-
-		// Should stay on the page (view-only)
-		await expect(page).toHaveURL('/dashboard/account/security');
-
-		// Should show login prompt in main content
-		await expect(page.getByText('Login Required')).toBeVisible();
-		await expect(page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i })).toBeVisible();
-	});
-
-	test('should show login prompt on /dashboard/account/profile for anonymous user', async ({ page }) => {
-		await page.goto('/dashboard/account/profile');
-
-		// Should stay on the page (view-only)
-		await expect(page).toHaveURL('/dashboard/account/profile');
-
-		// Should show login prompt in main content
-		await expect(page.getByText('Login Required')).toBeVisible();
-		await expect(page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i })).toBeVisible();
-	});
-
-	test('should show login prompt on /dashboard/rentals for anonymous user', async ({ page }) => {
-		await page.goto('/dashboard/rentals');
-
-		// Should stay on the page (view-only)
-		await expect(page).toHaveURL('/dashboard/rentals');
-
-		// Should show login prompt in main content
-		await expect(page.getByText('Login Required')).toBeVisible();
-		await expect(page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i })).toBeVisible();
-	});
-
-	test('should show login prompt on /dashboard/provider/requests for anonymous user', async ({ page }) => {
-		await page.goto('/dashboard/provider/requests');
-
-		// Should stay on the page (view-only)
-		await expect(page).toHaveURL('/dashboard/provider/requests');
-
-		// Should show login prompt in main content
-		await expect(page.getByText('Login Required')).toBeVisible();
-		await expect(page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i })).toBeVisible();
+			// Should show login prompt in main content
+			await expect(page.getByText('Login Required')).toBeVisible();
+			await expect(page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i })).toBeVisible();
+		}
 	});
 
 	test('should redirect to /login with returnUrl when clicking login button', async ({ page }) => {
