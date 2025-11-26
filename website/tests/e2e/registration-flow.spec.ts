@@ -179,10 +179,15 @@ test.describe('Account Registration Flow', () => {
 		await page.waitForTimeout(500);
 		await page.click('button:has-text("Create Account")');
 
-		// Should show error message
-		await expect(
-			page.locator('text=error, text=failed, text=Registration failed').or(page.locator('text=Something went wrong')),
-		).toBeVisible({ timeout: 10000 });
+		// Should show error message (any of these error indicators)
+		const errorLocator = page.locator('text=error').or(
+			page.locator('text=failed')
+		).or(
+			page.locator('text=Registration failed')
+		).or(
+			page.locator('text=Something went wrong')
+		);
+		await expect(errorLocator.first()).toBeVisible({ timeout: 10000 });
 	});
 
 	test('should redirect to returnUrl after successful registration', async ({ page }) => {

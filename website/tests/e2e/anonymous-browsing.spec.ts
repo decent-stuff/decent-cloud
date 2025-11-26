@@ -14,8 +14,9 @@ test.describe('Anonymous Browsing', () => {
 		// Should show auth prompt banner
 		await expect(page.locator('text=Create an account to rent resources')).toBeVisible();
 
-		// Should show login/create account button (either in banner or sidebar)
-		await expect(page.locator('button:has-text("Login / Create Account")').first()).toBeVisible();
+		// Should show login/create account button (multiple on page - banner and sidebar)
+		const loginButtons = page.locator('button:has-text("Login / Create Account")');
+		await expect(loginButtons.first()).toBeVisible();
 
 		// Page should load without redirect
 		await expect(page).toHaveURL('/dashboard');
@@ -41,8 +42,9 @@ test.describe('Anonymous Browsing', () => {
 		// Page should load (even if empty)
 		await expect(page).toHaveURL('/dashboard/offerings');
 
-		// Should show login button (either in banner or sidebar)
-		await expect(page.locator('button:has-text("Login / Create Account")').first()).toBeVisible();
+		// Should show login button (multiple on page - banner and sidebar)
+		const loginButtons = page.locator('button:has-text("Login / Create Account")');
+		await expect(loginButtons.first()).toBeVisible();
 	});
 
 	test('should allow anonymous user to view validators', async ({ page }) => {
@@ -51,8 +53,9 @@ test.describe('Anonymous Browsing', () => {
 		// Page should load
 		await expect(page).toHaveURL('/dashboard/validators');
 
-		// Should show login button (either in banner or sidebar)
-		await expect(page.locator('button:has-text("Login / Create Account")').first()).toBeVisible();
+		// Should show login button (multiple on page - banner and sidebar)
+		const loginButtons = page.locator('button:has-text("Login / Create Account")');
+		await expect(loginButtons.first()).toBeVisible();
 	});
 
 	test('should show auth modal when anonymous user tries to rent resource', async ({ page }) => {
@@ -105,9 +108,9 @@ test.describe('Anonymous Browsing', () => {
 	test('should navigate to /login with returnUrl when clicking button from banner', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
 
-		// Click "Login / Create Account" button in banner
-		const bannerButton = page.locator('button:has-text("Login / Create Account")').first();
-		await bannerButton.click();
+		// Click first "Login / Create Account" button (in banner)
+		const loginButtons = page.locator('button:has-text("Login / Create Account")');
+		await loginButtons.first().click();
 
 		// Should navigate to /login with returnUrl parameter
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Fmarketplace');

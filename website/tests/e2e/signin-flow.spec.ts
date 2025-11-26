@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test-account';
+import { testLoggedOut as test, expect } from './fixtures/test-account';
 import {
 	registerNewAccount,
 	signOut,

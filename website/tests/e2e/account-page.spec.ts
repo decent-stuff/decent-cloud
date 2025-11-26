@@ -14,13 +14,7 @@ import {
  */
 
 test.describe('Account Settings Page', () => {
-	test.beforeEach(async ({ page, testAccount }) => {
-		// Set up console logging to capture browser console output
-		setupConsoleLogging(page);
-
-		// Sign in before each test
-		await signIn(page, testAccount);
-	});
+	// No beforeEach needed - the test fixture handles authentication automatically
 
 	test('should display account overview correctly', async ({ page, testAccount }) => {
 		// Navigate to account page
@@ -50,18 +44,6 @@ test.describe('Account Settings Page', () => {
 		await expect(page.locator('text=1 key')).toBeVisible(); // New account has 1 key
 	});
 
-	// Copy button tests removed - functionality not implemented in current UI
-	// If copy buttons are needed, they should be added as a separate feature
-	test.skip('should copy username to clipboard', async ({ page, testAccount }) => {
-		// TODO: Implement copy button for username in Account Overview
-		await page.goto('/dashboard/account');
-	});
-
-	test.skip('should copy account ID to clipboard', async ({ page }) => {
-		// TODO: Implement copy button for account ID in Account Overview
-		await page.goto('/dashboard/account');
-	});
-
 	test('should show account link in sidebar', async ({ page }) => {
 		await page.goto('/dashboard');
 
@@ -87,16 +69,6 @@ test.describe('Account Settings Page', () => {
 		await usernameLink.click();
 
 		await expect(page).toHaveURL('/dashboard/account');
-	});
-
-	test('should show warning for users without accounts', async ({
-		page,
-	}) => {
-		// For this test, we'd need to sign in with an identity that has no account
-		// This would require mocking or using Internet Identity without account registration
-		// Skip for now - this is an edge case for legacy users
-
-		test.skip();
 	});
 
 	test('should handle navigation between account sections', async ({
