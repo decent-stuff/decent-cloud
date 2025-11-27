@@ -358,20 +358,6 @@ password: <generated token>
 - CI workflow runs on all PRs
 - Release workflow triggers on tags
 - Container image workflow can be manually triggered
-- Cloudflare Pages deployment workflow runs on pushes to main branch (after successful tests)
-
-### Cloudflare Pages Deployment
-
-The website is automatically deployed to Cloudflare Pages on successful pushes to the main branch.
-The deployment workflow:
-
-1. Runs all tests (website tests and Rust tests)
-2. Builds the WASM package
-3. Builds the Next.js website using `@cloudflare/next-on-pages`
-4. Deploys to Cloudflare Pages
-
-See [Cloudflare Deployment Setup](cloudflare-deployment.md) for detailed instructions on setting up
-the required secrets and Cloudflare Pages project.
 
 ## Contributing
 

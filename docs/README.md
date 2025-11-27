@@ -52,7 +52,6 @@ The documentation is organized by user type and functionality:
 
 ### Development Resources
 - **[Development Guide](development.md)**: Contributing to the project
-- **[Cloudflare Deployment](cloudflare-deployment.md)**: Deployment instructions
 
 ## For Quick Reference
 
