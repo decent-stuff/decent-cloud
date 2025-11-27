@@ -76,6 +76,7 @@
 
 	function getTypeIcon(productType: string) {
 		const type = productType.toLowerCase();
+		if (type.includes("gpu")) return "🎮";
 		if (type.includes("compute") || type.includes("vm")) return "💻";
 		if (type.includes("storage")) return "💾";
 		if (type.includes("network") || type.includes("cdn")) return "🌐";
@@ -91,17 +92,28 @@
 
 	function formatSpecs(offering: Offering): string {
 		const specs: string[] = [];
-		if (offering.processor_cores) {
-			specs.push(`${offering.processor_cores} vCPU`);
+		const type = offering.product_type.toLowerCase();
+
+		// GPU-specific specs
+		if (type.includes("gpu")) {
+			if (offering.gpu_name) specs.push(offering.gpu_name);
+			if (offering.gpu_count) specs.push(`${offering.gpu_count}x GPU`);
+			if (offering.gpu_memory_gb) specs.push(`${offering.gpu_memory_gb}GB VRAM`);
+		} else {
+			// Default compute specs
+			if (offering.processor_cores) {
+				specs.push(`${offering.processor_cores} vCPU`);
+			}
+			if (offering.memory_amount) {
+				specs.push(`${offering.memory_amount} RAM`);
+			}
+			if (offering.total_ssd_capacity) {
+				specs.push(`${offering.total_ssd_capacity} SSD`);
+			} else if (offering.total_hdd_capacity) {
+				specs.push(`${offering.total_hdd_capacity} HDD`);
+			}
 		}
-		if (offering.memory_amount) {
-			specs.push(`${offering.memory_amount} RAM`);
-		}
-		if (offering.total_ssd_capacity) {
-			specs.push(`${offering.total_ssd_capacity} SSD`);
-		} else if (offering.total_hdd_capacity) {
-			specs.push(`${offering.total_hdd_capacity} HDD`);
-		}
+
 		if (offering.datacenter_country) {
 			specs.push(
 				`${offering.datacenter_city}, ${offering.datacenter_country}`,
@@ -179,6 +191,15 @@
 						: 'bg-white/10 text-white/70 hover:bg-white/20'}"
 				>
 					💻 Compute
+				</button>
+				<button
+					onclick={() => (selectedType = "gpu")}
+					class="px-4 py-3 rounded-lg font-medium transition-all {selectedType ===
+					'gpu'
+						? 'bg-blue-600 text-white'
+						: 'bg-white/10 text-white/70 hover:bg-white/20'}"
+				>
+					🎮 GPU
 				</button>
 				<button
 					onclick={() => (selectedType = "storage")}

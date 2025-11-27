@@ -256,6 +256,8 @@ async fn test_create_offering_success() {
         datacenter_longitude: Some(-74.0060),
         control_panel: None,
         gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
         min_contract_hours: Some(1),
         max_contract_hours: None,
         payment_methods: Some("BTC,ETH".to_string()),
@@ -344,6 +346,8 @@ async fn test_create_offering_duplicate_id() {
         datacenter_longitude: None,
         control_panel: None,
         gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
         min_contract_hours: Some(1),
         max_contract_hours: None,
         payment_methods: None,
@@ -402,6 +406,8 @@ async fn test_create_offering_missing_required_fields() {
         datacenter_longitude: None,
         control_panel: None,
         gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
         min_contract_hours: None,
         max_contract_hours: None,
         payment_methods: None,
@@ -459,6 +465,8 @@ async fn test_update_offering_success() {
         datacenter_longitude: None,
         control_panel: None,
         gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
         min_contract_hours: None,
         max_contract_hours: None,
         payment_methods: Some("ETH".to_string()),
@@ -525,6 +533,8 @@ async fn test_update_offering_unauthorized() {
         datacenter_longitude: None,
         control_panel: None,
         gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
         min_contract_hours: None,
         max_contract_hours: None,
         payment_methods: None,
@@ -845,4 +855,67 @@ off-1,Hacked,Unauthorized update,,USD,1.0,0.0,public,dedicated,,monthly,in_stock
     let original = db.get_offering(db_id).await.unwrap().unwrap();
     assert_eq!(original.offer_name, "Test Offer");
     assert_eq!(original.monthly_price, 100.0);
+}
+
+#[tokio::test]
+async fn test_csv_import_column_order_independence() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // CSV with columns in different order (offer_name before offering_id, price columns swapped)
+    let csv_data = "offer_name,offering_id,currency,setup_fee,monthly_price,visibility,product_type,billing_interval,stock_status,datacenter_country,datacenter_city,unmetered_bandwidth
+Reordered Server,reorder-1,USD,10.0,99.0,public,compute,monthly,in_stock,US,NYC,false";
+
+    let (success_count, errors) = db
+        .import_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .unwrap();
+
+    assert_eq!(success_count, 1, "errors: {:?}", errors);
+    assert_eq!(errors.len(), 0);
+
+    // Verify fields parsed correctly despite different order
+    let off = sqlx::query_scalar!(
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        "reorder-1"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    let offering = db.get_offering(off).await.unwrap().unwrap();
+    assert_eq!(offering.offer_name, "Reordered Server");
+    assert_eq!(offering.monthly_price, 99.0);
+    assert_eq!(offering.setup_fee, 10.0);
+    assert_eq!(offering.datacenter_country, "US");
+}
+
+#[tokio::test]
+async fn test_csv_import_gpu_fields() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // CSV with GPU fields
+    let csv_data = "offering_id,offer_name,currency,monthly_price,setup_fee,visibility,product_type,billing_interval,stock_status,datacenter_country,datacenter_city,unmetered_bandwidth,gpu_name,gpu_count,gpu_memory_gb
+gpu-1,GPU Server,USD,500.0,0.0,public,gpu,monthly,in_stock,US,NYC,false,NVIDIA A100,4,80";
+
+    let (success_count, errors) = db
+        .import_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .unwrap();
+
+    assert_eq!(success_count, 1, "errors: {:?}", errors);
+    assert_eq!(errors.len(), 0);
+
+    let off = sqlx::query_scalar!(
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        "gpu-1"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    let offering = db.get_offering(off).await.unwrap().unwrap();
+    assert_eq!(offering.product_type, "gpu");
+    assert_eq!(offering.gpu_name, Some("NVIDIA A100".to_string()));
+    assert_eq!(offering.gpu_count, Some(4));
+    assert_eq!(offering.gpu_memory_gb, Some(80));
 }

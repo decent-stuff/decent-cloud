@@ -120,6 +120,8 @@ impl OfferingsApi {
             "datacenter_longitude",
             "control_panel",
             "gpu_name",
+            "gpu_count",
+            "gpu_memory_gb",
             "min_contract_hours",
             "max_contract_hours",
             "payment_methods",
@@ -182,6 +184,14 @@ impl OfferingsApi {
                         .unwrap_or_default(),
                     &offering.control_panel.unwrap_or_default(),
                     &offering.gpu_name.unwrap_or_default(),
+                    &offering
+                        .gpu_count
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    &offering
+                        .gpu_memory_gb
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
                     &offering
                         .min_contract_hours
                         .map(|v| v.to_string())

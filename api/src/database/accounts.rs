@@ -351,6 +351,7 @@ impl Database {
     }
 
     /// Insert signature audit record
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_signature_audit(
         &self,
         account_id: Option<&[u8]>,

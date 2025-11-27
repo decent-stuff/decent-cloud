@@ -95,6 +95,8 @@
 				datacenter_longitude: offering.datacenter_longitude || undefined,
 				control_panel: offering.control_panel || undefined,
 				gpu_name: offering.gpu_name || undefined,
+				gpu_count: offering.gpu_count || undefined,
+				gpu_memory_gb: offering.gpu_memory_gb || undefined,
 				min_contract_hours: undefined,
 				max_contract_hours: undefined,
 				payment_methods: offering.payment_methods || undefined,

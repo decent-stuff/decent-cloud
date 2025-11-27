@@ -75,6 +75,7 @@ impl ResponseError for AuthError {
 /// - X-Timestamp: unix timestamp in nanoseconds
 /// - X-Nonce: UUID v4 for replay prevention
 /// - now_ns: optional override for current time in nanoseconds (e.g. for testing)
+#[allow(clippy::too_many_arguments)]
 pub fn verify_request_signature(
     pubkey_hex: &str,
     signature_hex: &str,

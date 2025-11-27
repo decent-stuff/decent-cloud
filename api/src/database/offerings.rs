@@ -2,6 +2,7 @@ use super::types::Database;
 use anyhow::Result;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
@@ -53,6 +54,10 @@ pub struct Offering {
     pub control_panel: Option<String>,
     pub gpu_name: Option<String>,
     #[ts(type = "number | undefined")]
+    pub gpu_count: Option<i64>,
+    #[ts(type = "number | undefined")]
+    pub gpu_memory_gb: Option<i64>,
+    #[ts(type = "number | undefined")]
     pub min_contract_hours: Option<i64>,
     #[ts(type = "number | undefined")]
     pub max_contract_hours: Option<i64>,
@@ -77,7 +82,7 @@ impl Database {
         &self,
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
-        let mut query = String::from("SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public'");
+        let mut query = String::from("SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public'");
 
         if params.product_type.is_some() {
             query.push_str(" AND product_type = ?");
@@ -121,7 +126,7 @@ impl Database {
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
                FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#
         )
         .bind(pubkey)
@@ -140,7 +145,7 @@ impl Database {
                 memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
                FROM provider_offerings WHERE id = ?"#)
                 .bind(offering_id)
                 .fetch_optional(&self.pool)
@@ -162,7 +167,7 @@ impl Database {
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
                FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey)
@@ -234,6 +239,8 @@ impl Database {
             datacenter_longitude,
             control_panel,
             gpu_name,
+            gpu_count,
+            gpu_memory_gb,
             min_contract_hours,
             max_contract_hours,
             payment_methods,
@@ -272,8 +279,8 @@ impl Database {
                 total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth,
                 uplink_speed, traffic, datacenter_country, datacenter_city,
                 datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
-                min_contract_hours, max_contract_hours, payment_methods, features,
-                operating_systems, created_at_ns
+                gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours,
+                payment_methods, features, operating_systems, created_at_ns
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
@@ -283,7 +290,8 @@ impl Database {
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?,
+                ?, ?, ?, ?
             )
             RETURNING id"#,
             pubkey,
@@ -320,6 +328,8 @@ impl Database {
             datacenter_longitude,
             control_panel,
             gpu_name,
+            gpu_count,
+            gpu_memory_gb,
             min_contract_hours,
             max_contract_hours,
             payment_methods,
@@ -397,6 +407,8 @@ impl Database {
             datacenter_longitude,
             control_panel,
             gpu_name,
+            gpu_count,
+            gpu_memory_gb,
             min_contract_hours,
             max_contract_hours,
             payment_methods,
@@ -414,7 +426,8 @@ impl Database {
                 hdd_amount = ?, total_hdd_capacity = ?, ssd_amount = ?, total_ssd_capacity = ?,
                 unmetered_bandwidth = ?, uplink_speed = ?, traffic = ?, datacenter_country = ?,
                 datacenter_city = ?, datacenter_latitude = ?, datacenter_longitude = ?,
-                control_panel = ?, gpu_name = ?, min_contract_hours = ?, max_contract_hours = ?,
+                control_panel = ?, gpu_name = ?, gpu_count = ?, gpu_memory_gb = ?,
+                min_contract_hours = ?, max_contract_hours = ?,
                 payment_methods = ?, features = ?, operating_systems = ?
             WHERE id = ?"#,
             offering_id,
@@ -450,6 +463,8 @@ impl Database {
             datacenter_longitude,
             control_panel,
             gpu_name,
+            gpu_count,
+            gpu_memory_gb,
             min_contract_hours,
             max_contract_hours,
             payment_methods,
@@ -557,6 +572,8 @@ impl Database {
             datacenter_longitude: source.datacenter_longitude,
             control_panel: source.control_panel,
             gpu_name: source.gpu_name,
+            gpu_count: source.gpu_count,
+            gpu_memory_gb: source.gpu_memory_gb,
             min_contract_hours: source.min_contract_hours,
             max_contract_hours: source.max_contract_hours,
             payment_methods: source.payment_methods,
@@ -638,12 +655,20 @@ impl Database {
         let mut success_count = 0;
         let mut errors = Vec::new();
 
+        // Build header->index map for column-order-agnostic parsing
+        let headers = reader.headers()?.clone();
+        let col_map: HashMap<&str, usize> = headers
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (h.trim(), i))
+            .collect();
+
         for (row_idx, result) in reader.records().enumerate() {
             let row_number = row_idx + 2; // +2 because row 1 is header, 0-indexed
 
             match result {
                 Ok(record) => {
-                    match Self::parse_csv_record(&record) {
+                    match Self::parse_csv_record(&record, &col_map) {
                         Ok(params) => {
                             let result: Result<()> = if upsert {
                                 // Try to find existing offering by offering_id
@@ -678,26 +703,26 @@ impl Database {
         Ok((success_count, errors))
     }
 
-    /// Parse a single CSV record into Offering
-    fn parse_csv_record(record: &csv::StringRecord) -> Result<Offering, String> {
-        if record.len() < 38 {
-            return Err(format!(
-                "Expected at least 38 columns, found {}",
-                record.len()
-            ));
-        }
+    /// Parse a single CSV record into Offering using header-based column lookup
+    fn parse_csv_record(
+        record: &csv::StringRecord,
+        col_map: &HashMap<&str, usize>,
+    ) -> Result<Offering, String> {
+        let get = |name: &str| col_map.get(name).and_then(|&i| record.get(i));
 
-        let get_str = |idx: usize| record.get(idx).unwrap_or("").to_string();
-        let get_opt_str = |idx: usize| {
-            let val = record.get(idx).unwrap_or("").trim();
-            if val.is_empty() {
-                None
-            } else {
-                Some(val.to_string())
-            }
+        let get_str = |name: &str| get(name).unwrap_or("").to_string();
+        let get_opt_str = |name: &str| {
+            get(name).and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            })
         };
-        let get_opt_i64 = |idx: usize| {
-            record.get(idx).and_then(|s| {
+        let get_opt_i64 = |name: &str| {
+            get(name).and_then(|s| {
                 let trimmed = s.trim();
                 if trimmed.is_empty() {
                     None
@@ -706,8 +731,8 @@ impl Database {
                 }
             })
         };
-        let get_opt_f64 = |idx: usize| {
-            record.get(idx).and_then(|s| {
+        let get_opt_f64 = |name: &str| {
+            get(name).and_then(|s| {
                 let trimmed = s.trim();
                 if trimmed.is_empty() {
                     None
@@ -716,25 +741,23 @@ impl Database {
                 }
             })
         };
-        let get_f64 = |idx: usize| -> Result<f64, String> {
-            record
-                .get(idx)
-                .ok_or_else(|| format!("Missing column {}", idx))?
+        let get_f64 = |name: &str| -> Result<f64, String> {
+            get(name)
+                .ok_or_else(|| format!("Missing column '{}'", name))?
                 .trim()
                 .parse::<f64>()
-                .map_err(|_| format!("Invalid number at column {}", idx))
+                .map_err(|_| format!("Invalid number in column '{}'", name))
         };
-        let get_bool = |idx: usize| {
-            record
-                .get(idx)
+        let get_bool = |name: &str| {
+            get(name)
                 .map(|s| {
                     let lower = s.trim().to_lowercase();
                     lower == "true" || lower == "1" || lower == "yes"
                 })
                 .unwrap_or(false)
         };
-        let get_opt_csv = |idx: usize| -> Option<String> {
-            record.get(idx).and_then(|s| {
+        let get_opt_csv = |name: &str| -> Option<String> {
+            get(name).and_then(|s| {
                 let items: Vec<&str> = s
                     .split(',')
                     .map(|v| v.trim())
@@ -749,8 +772,8 @@ impl Database {
         };
 
         // Required fields validation
-        let offering_id = get_str(0);
-        let offer_name = get_str(1);
+        let offering_id = get_str("offering_id");
+        let offer_name = get_str("offer_name");
 
         if offering_id.trim().is_empty() {
             return Err("offering_id is required".to_string());
@@ -764,42 +787,44 @@ impl Database {
             pubkey: String::new(), // Will be set by caller
             offering_id,
             offer_name,
-            description: get_opt_str(2),
-            product_page_url: get_opt_str(3),
-            currency: get_str(4),
-            monthly_price: get_f64(5)?,
-            setup_fee: get_f64(6)?,
-            visibility: get_str(7),
-            product_type: get_str(8),
-            virtualization_type: get_opt_str(9),
-            billing_interval: get_str(10),
-            stock_status: get_str(11),
-            processor_brand: get_opt_str(12),
-            processor_amount: get_opt_i64(13),
-            processor_cores: get_opt_i64(14),
-            processor_speed: get_opt_str(15),
-            processor_name: get_opt_str(16),
-            memory_error_correction: get_opt_str(17),
-            memory_type: get_opt_str(18),
-            memory_amount: get_opt_str(19),
-            hdd_amount: get_opt_i64(20),
-            total_hdd_capacity: get_opt_str(21),
-            ssd_amount: get_opt_i64(22),
-            total_ssd_capacity: get_opt_str(23),
-            unmetered_bandwidth: get_bool(24),
-            uplink_speed: get_opt_str(25),
-            traffic: get_opt_i64(26),
-            datacenter_country: get_str(27),
-            datacenter_city: get_str(28),
-            datacenter_latitude: get_opt_f64(29),
-            datacenter_longitude: get_opt_f64(30),
-            control_panel: get_opt_str(31),
-            gpu_name: get_opt_str(32),
-            min_contract_hours: get_opt_i64(33),
-            max_contract_hours: get_opt_i64(34),
-            payment_methods: get_opt_csv(35),
-            features: get_opt_csv(36),
-            operating_systems: get_opt_csv(37),
+            description: get_opt_str("description"),
+            product_page_url: get_opt_str("product_page_url"),
+            currency: get_str("currency"),
+            monthly_price: get_f64("monthly_price")?,
+            setup_fee: get_f64("setup_fee")?,
+            visibility: get_str("visibility"),
+            product_type: get_str("product_type"),
+            virtualization_type: get_opt_str("virtualization_type"),
+            billing_interval: get_str("billing_interval"),
+            stock_status: get_str("stock_status"),
+            processor_brand: get_opt_str("processor_brand"),
+            processor_amount: get_opt_i64("processor_amount"),
+            processor_cores: get_opt_i64("processor_cores"),
+            processor_speed: get_opt_str("processor_speed"),
+            processor_name: get_opt_str("processor_name"),
+            memory_error_correction: get_opt_str("memory_error_correction"),
+            memory_type: get_opt_str("memory_type"),
+            memory_amount: get_opt_str("memory_amount"),
+            hdd_amount: get_opt_i64("hdd_amount"),
+            total_hdd_capacity: get_opt_str("total_hdd_capacity"),
+            ssd_amount: get_opt_i64("ssd_amount"),
+            total_ssd_capacity: get_opt_str("total_ssd_capacity"),
+            unmetered_bandwidth: get_bool("unmetered_bandwidth"),
+            uplink_speed: get_opt_str("uplink_speed"),
+            traffic: get_opt_i64("traffic"),
+            datacenter_country: get_str("datacenter_country"),
+            datacenter_city: get_str("datacenter_city"),
+            datacenter_latitude: get_opt_f64("datacenter_latitude"),
+            datacenter_longitude: get_opt_f64("datacenter_longitude"),
+            control_panel: get_opt_str("control_panel"),
+            gpu_name: get_opt_str("gpu_name"),
+            gpu_count: get_opt_i64("gpu_count"),
+            gpu_memory_gb: get_opt_i64("gpu_memory_gb"),
+            min_contract_hours: get_opt_i64("min_contract_hours"),
+            max_contract_hours: get_opt_i64("max_contract_hours"),
+            payment_methods: get_opt_csv("payment_methods"),
+            features: get_opt_csv("features"),
+            operating_systems: get_opt_csv("operating_systems"),
         })
     }
 }
