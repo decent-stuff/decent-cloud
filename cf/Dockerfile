@@ -39,6 +39,13 @@ server {
         try_files \$uri =404;
     }
 
+    # Docs directory - serve files directly with proper mime types
+    location /docs/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
     # Favicon - return 404 if missing
     location /favicon.svg {
         expires 1y;
