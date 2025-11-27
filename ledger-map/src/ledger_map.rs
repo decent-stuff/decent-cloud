@@ -580,10 +580,21 @@ impl LedgerMap {
             .map_err(|e| LedgerError::BlockCorrupted(e.to_string()))?;
 
         let block_header = LedgerBlockHeader::deserialize(&buf)?;
-        let block_len_bytes = block_header.jump_bytes_next_block();
+        let block_len_bytes = block_header.jump_bytes_next_block() as usize;
+
+        // block_len_bytes includes header, but we read starting after header
+        let data_size = block_len_bytes
+            .checked_sub(LedgerBlockHeader::sizeof())
+            .ok_or_else(|| {
+                LedgerError::BlockCorrupted(format!(
+                    "Block size {} smaller than header {}",
+                    block_len_bytes,
+                    LedgerBlockHeader::sizeof()
+                ))
+            })?;
 
         // Read the block as raw bytes
-        let mut buf = vec![0u8; block_len_bytes as usize];
+        let mut buf = vec![0u8; data_size];
         persistent_storage_read(offset + LedgerBlockHeader::sizeof() as u64, &mut buf)
             .map_err(|e| LedgerError::Other(e.to_string()))?;
 
