@@ -1,5 +1,4 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use provider_json_search::value_matches;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_yaml_ng::{self, Value as YamlValue};
@@ -22,7 +21,7 @@ pub struct ProfileV0_1_0 {
     // Add a field to hold the raw JsonValue representation, for use in matches_search
     #[serde(skip)]
     #[borsh(skip)]
-    json_value: JsonValue,
+    _json_value: JsonValue,
 }
 
 impl ProfileV0_1_0 {
@@ -33,8 +32,8 @@ impl ProfileV0_1_0 {
         Ok(())
     }
 
-    pub fn matches_search(&self, search_str: &str) -> bool {
-        value_matches(&self.json_value, search_str)
+    pub fn matches_search(&self, _search_str: &str) -> bool {
+        false
     }
 }
 
@@ -110,7 +109,7 @@ impl Profile {
     pub fn compute_json_value(self) -> Self {
         match self {
             Profile::V0_1_0(profile) => Profile::V0_1_0(ProfileV0_1_0 {
-                json_value: serde_json::to_value(&profile).unwrap(),
+                _json_value: serde_json::to_value(&profile).unwrap(),
                 ..profile
             }),
         }

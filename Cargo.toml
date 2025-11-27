@@ -6,7 +6,6 @@ members = [
     "common",
     "ic-canister",
     "ledger-map",
-    "provider-json-search",
     "provider-offering",
     "provider-profile",
 ]
