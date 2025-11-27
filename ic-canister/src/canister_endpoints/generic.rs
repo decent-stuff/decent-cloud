@@ -1,8 +1,5 @@
 use crate::canister_backend::generic::*;
-use candid::Principal;
-use dcc_common::{
-    ContractId, ContractReqSerialized, NextBlockSyncRequest, NextBlockSyncResponse, TokenAmountE9s,
-};
+use dcc_common::{NextBlockSyncRequest, NextBlockSyncResponse, TokenAmountE9s};
 #[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;

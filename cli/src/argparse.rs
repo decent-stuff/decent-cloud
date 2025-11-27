@@ -1,5 +1,4 @@
 use clap::{Args, Parser, Subcommand};
-use dcc_common::PaymentEntries;
 
 #[derive(Parser)]
 #[command(
@@ -265,19 +264,9 @@ pub struct SignRequestArgs {
     #[arg(long, required_unless_present_any(["interactive"]))]
     pub memo: Option<String>,
 
-    /// Payment entries (JSON array), e.g.:
-    ///   '[["on_demand","hour",1], ["reserved","year",10]]'
-    #[arg(long, required_unless_present_any(["interactive"]), value_parser = parse_payment_entries)]
-    pub payment_entries_json: Option<PaymentEntries>,
-
     /// Interactive mode
     #[arg(long, short = 'i', default_value_t = false)]
     pub interactive: bool,
-}
-
-fn parse_payment_entries(s: &str) -> Result<PaymentEntries, String> {
-    serde_json::from_str(s)
-        .map_err(|e| format!("Failed to parse JSON for --payment-entries-json: {}", e))
 }
 
 #[derive(Args)]

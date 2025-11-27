@@ -1,9 +1,5 @@
 use candid::{encode_one, Encode, Nat, Principal};
-use dcc_common::{
-    ContractId, ContractReqSerialized, ContractSignReply, ContractSignRequest, DccIdentity,
-    PaymentEntry, PaymentEntryWithAmount, TokenAmountE9s, BLOCK_INTERVAL_SECS,
-    FIRST_BLOCK_TIMESTAMP_NS,
-};
+use dcc_common::{DccIdentity, TokenAmountE9s, BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use once_cell::sync::Lazy;

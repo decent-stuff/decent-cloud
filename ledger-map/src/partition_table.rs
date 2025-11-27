@@ -9,6 +9,7 @@ use crate::platform_specific::{
     persistent_storage_grow, persistent_storage_read, persistent_storage_size_bytes,
     persistent_storage_write, PERSISTENT_STORAGE_PAGE_SIZE,
 };
+#[allow(unused_imports)]
 use crate::{debug, info};
 
 pub const PARTITION_TABLE_START_OFFSET: u64 = 0;

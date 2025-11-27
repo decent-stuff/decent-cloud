@@ -1,12 +1,8 @@
 use crate::identity::dcc_to_ic_auth;
-use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::Engine;
-use borsh::BorshDeserialize;
 use candid::{Decode, Encode};
-use dcc_common::{ContractId, DccIdentity};
+use dcc_common::DccIdentity;
 use ic_agent::{export::Principal, identity::BasicIdentity, Agent};
 use log::Level;
-use serde::Serialize;
 
 type ResultString = Result<String, String>;
 
@@ -191,10 +187,4 @@ impl LedgerCanister {
     pub async fn get_logs_error(&self) -> Result<String, String> {
         self.get_logs(Level::Error).await
     }
-}
-
-#[derive(Serialize)]
-pub struct OpenContractTuple {
-    pub contract_id_base64: String,
-    pub contract_req: ContractSignRequest,
 }

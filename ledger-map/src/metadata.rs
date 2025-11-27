@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use crate::debug;
 use crate::partition_table;
 use borsh::{BorshDeserialize, BorshSerialize};

@@ -2,11 +2,11 @@ use super::pre_icrc3::ledger_construct_hash_tree;
 use candid::{CandidType, Principal};
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
-    get_account_from_pubkey, get_num_providers, get_pubkey_from_principal,
-    recent_transactions_cleanup, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
+    get_account_from_pubkey, get_num_providers, recent_transactions_cleanup,
+    refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
-    rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
-    NextBlockSyncRequest, NextBlockSyncResponse, RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS,
+    rewards_pending_e9s, set_test_config, LedgerCursor, NextBlockSyncRequest,
+    NextBlockSyncResponse, RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS,
     DATA_PULL_BYTES_BEFORE_LEN, LABEL_PROV_CHECK_IN, LABEL_PROV_REGISTER,
     LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
 };

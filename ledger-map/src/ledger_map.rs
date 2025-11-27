@@ -7,6 +7,7 @@ use crate::partition_table;
 use crate::platform_specific::{
     persistent_storage_read, persistent_storage_size_bytes, persistent_storage_write,
 };
+#[allow(unused_imports)]
 use crate::{debug, info, warn};
 use crate::{platform_specific, AHashSet};
 use anyhow::Result;

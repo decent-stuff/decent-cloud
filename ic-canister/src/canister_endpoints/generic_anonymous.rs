@@ -35,40 +35,6 @@ fn provider_check_in_anonymous(
     _provider_check_in(pubkey_bytes, memo, nonce_crypto_signature)
 }
 
-/// Anonymous version of contract_sign_request
-#[ic_cdk::update]
-fn contract_sign_request_anonymous(
-    pubkey_bytes: Vec<u8>,
-    request_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-    caller_principal: Option<String>,
-) -> Result<String, String> {
-    if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse::<Principal>() {
-            ic_cdk::println!("Setting caller principal: {}", principal);
-        }
-    }
-
-    _contract_sign_request(pubkey_bytes, request_serialized, crypto_signature)
-}
-
-/// Anonymous version of contract_sign_reply
-#[ic_cdk::update]
-fn contract_sign_reply_anonymous(
-    pubkey_bytes: Vec<u8>,
-    reply_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-    caller_principal: Option<String>,
-) -> Result<String, String> {
-    if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse::<Principal>() {
-            ic_cdk::println!("Setting caller principal: {}", principal);
-        }
-    }
-
-    _contract_sign_reply(pubkey_bytes, reply_serialized, crypto_signature)
-}
-
 /// Anonymous version of user_register
 #[ic_cdk::update]
 fn user_register_anonymous(
