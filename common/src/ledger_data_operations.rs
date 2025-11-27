@@ -44,11 +44,13 @@ fn select_fetch_start(local_next_block_start: u64, requested_position: u64) -> u
 /// This function handles the core logic of fetching data from the canister
 /// and writing it to the local ledger file, ensuring proper cursor handling
 /// and file management.
+///
+/// Returns (raw_data, data_start_position, data_end_position)
 pub async fn fetch_and_write_ledger_data<F, Fut>(
     ledger_map: &mut LedgerMap,
     data_fetch_fn: F,
     last_position: u64,
-) -> Result<(Vec<u8>, u64)>
+) -> Result<(Vec<u8>, u64, u64)>
 where
     F: FnOnce(Option<String>, Option<Vec<u8>>) -> Fut,
     Fut: std::future::Future<Output = Result<(String, Vec<u8>)>>,
@@ -96,29 +98,27 @@ where
 
     // Parse the returned cursor to get the actual position (same as CLI)
     let cursor_remote = LedgerCursor::new_from_string(new_cursor_str);
-    let new_position = cursor_remote.position + cursor_remote.response_bytes;
+    let data_start = cursor_remote.position;
+    let data_end = cursor_remote.position + cursor_remote.response_bytes;
 
     // Write the fetched data to the ledger file if we have a file path (same as CLI)
     if !raw_data.is_empty() {
         #[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
         if let Some(ref path) = ledger_file_path {
-            write_data_to_ledger_file(&raw_data, cursor_remote.position, path)?;
+            write_data_to_ledger_file(&raw_data, data_start, path)?;
         }
 
         #[cfg(all(target_arch = "wasm32", feature = "ic"))]
         if ledger_file_path.is_none() {
             // For wasm/browser environments, write directly to persistent storage
-            ledger_map::platform_specific::persistent_storage_write(
-                cursor_remote.position,
-                &raw_data,
-            );
+            ledger_map::platform_specific::persistent_storage_write(data_start, &raw_data);
         }
 
         // Refresh the ledger parser after writing data (same as CLI)
         ledger_map.refresh_ledger()?;
     }
 
-    Ok((raw_data, new_position))
+    Ok((raw_data, data_start, data_end))
 }
 
 /// Write data to the ledger file at the specified offset

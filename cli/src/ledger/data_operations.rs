@@ -16,7 +16,7 @@ pub async fn ledger_data_fetch(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let last_position = ledger_local.get_next_block_start_pos();
 
-    let (data, _new_position) = fetch_and_write_ledger_data(
+    let (data, _data_start, _data_end) = fetch_and_write_ledger_data(
         ledger_local,
         |cursor_str, bytes_before| async move {
             ledger_canister

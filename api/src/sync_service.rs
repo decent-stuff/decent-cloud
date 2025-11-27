@@ -51,24 +51,24 @@ impl SyncService {
 
     async fn sync_once(&self) -> Result<()> {
         let last_position = self.database.get_last_sync_position().await?;
-        let (raw_data, new_position) = self.fetch_data(last_position).await?;
+        let (raw_data, data_start, data_end) = self.fetch_data(last_position).await?;
 
         if raw_data.is_empty() {
             return Ok(());
         }
 
-        let entries = self.parse_ledger_data(last_position)?;
+        let entries = self.parse_ledger_data(data_start)?;
         self.store_entries(entries).await?;
-        self.update_sync_position(new_position).await?;
+        self.update_sync_position(data_end).await?;
 
         Ok(())
     }
 
     #[allow(clippy::await_holding_lock)]
-    async fn fetch_data(&self, last_position: u64) -> Result<(Vec<u8>, u64)> {
+    async fn fetch_data(&self, last_position: u64) -> Result<(Vec<u8>, u64, u64)> {
         tracing::debug!("Starting sync from position {}", last_position);
 
-        let (raw_data, new_position) = {
+        let (raw_data, data_start, data_end) = {
             let mut ledger_parser = self.ledger_parser.lock().map_err(|_| {
                 anyhow::anyhow!("Failed to acquire ledger parser lock - possible poisoning")
             })?;
@@ -85,7 +85,7 @@ impl SyncService {
             .await?
         };
 
-        Ok((raw_data, new_position))
+        Ok((raw_data, data_start, data_end))
     }
 
     async fn store_entries(&self, entries: Vec<crate::database::LedgerEntryData>) -> Result<()> {
