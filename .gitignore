@@ -108,3 +108,4 @@ crash-*
 
 ### WebAssembly ###
 .just-tmp/
+.venv/
