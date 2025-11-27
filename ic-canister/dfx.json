@@ -15,13 +15,13 @@
   "networks": {
     "mainnet-01": {
       "providers": [
-        "https://ic0.app"
+        "https://icp0.io"
       ],
       "type": "persistent"
     },
     "mainnet-eu": {
       "providers": [
-        "https://ic0.app"
+        "https://icp0.io"
       ],
       "type": "persistent"
     },
