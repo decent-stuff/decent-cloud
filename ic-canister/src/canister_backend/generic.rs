@@ -2,19 +2,19 @@ use super::pre_icrc3::ledger_construct_hash_tree;
 use candid::{CandidType, Principal};
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
-    get_account_from_pubkey, get_num_offerings, get_num_providers, get_pubkey_from_principal,
+    get_account_from_pubkey, get_num_providers, get_pubkey_from_principal,
     recent_transactions_cleanup, refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
     rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
     NextBlockSyncRequest, NextBlockSyncResponse, RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS,
     DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS,
     LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER,
-    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, MAX_RESPONSE_BYTES_NON_REPLICATED,
+    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
 };
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use ledger_map::platform_specific::{persistent_storage_read, persistent_storage_write};
-use ledger_map::{error, info, warn, LedgerMap};
+use ledger_map::{error, info, LedgerMap};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::time::Duration;
@@ -232,22 +232,6 @@ pub(crate) fn _provider_update_profile(
     })
 }
 
-pub(crate) fn _provider_update_offering(
-    pubkey_bytes: Vec<u8>,
-    update_offering_payload: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    // To prevent DOS attacks, a fee is charged for executing this operation
-    LEDGER_MAP.with(|ledger| {
-        dcc_common::do_provider_update_offering(
-            &mut ledger.borrow_mut(),
-            pubkey_bytes,
-            update_offering_payload,
-            crypto_signature,
-        )
-    })
-}
-
 pub(crate) fn _provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
     let prov_profile = LEDGER_MAP
         .with(|ledger| dcc_common::do_provider_get_profile(&ledger.borrow(), pubkey_bytes));
@@ -262,31 +246,6 @@ pub(crate) fn _provider_get_profile_by_principal(principal: Principal) -> Option
 
 pub(crate) fn _get_check_in_nonce() -> Vec<u8> {
     LEDGER_MAP.with(|ledger| ledger.borrow().get_latest_block_hash())
-}
-
-pub(crate) fn _offering_search(query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
-    let mut response_bytes = 0;
-    let mut response = Vec::new();
-    let max_offering_response_bytes = MAX_RESPONSE_BYTES_NON_REPLICATED * 7 / 10; // 70% of max response bytes
-    LEDGER_MAP.with(|ledger| {
-        for offering in dcc_common::do_get_matching_offerings(&ledger.borrow(), &query) {
-            // Serialize using the PEM (public key) + CSV (offerings) format, in a JSON wrapper
-            let offering_json = match offering.serialize_as_json() {
-                Ok(json) => json.into_bytes(),
-                Err(e) => {
-                    warn!("Failed to serialize offering: {}", e);
-                    continue;
-                }
-            };
-            response_bytes += offering_json.len();
-            if response_bytes > max_offering_response_bytes {
-                break;
-            }
-            // Return (provider_pubkey, serialized_offering) pairs
-            response.push((offering.provider_pubkey.clone(), offering_json));
-        }
-    });
-    response
 }
 
 pub(crate) fn _contract_sign_request(
@@ -503,7 +462,6 @@ pub(crate) fn _metadata() -> Vec<(String, MetadataValue)> {
                 get_last_token_value_usd_e6(),
             ),
             MetadataValue::entry("ledger:total_providers", get_num_providers()),
-            MetadataValue::entry("ledger:total_offerings", get_num_offerings()),
             MetadataValue::entry(
                 "ledger:blocks_until_next_halving",
                 blocks_until_next_halving(),

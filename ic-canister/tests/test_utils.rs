@@ -335,47 +335,6 @@ pub fn test_provider_check_in(
     )
 }
 
-// ---- Offering Management Functions ----
-
-#[allow(dead_code)]
-pub fn test_offering_add(
-    ctx: &TestContext,
-    dcc_id: &DccIdentity,
-    offering: &ServerOffering,
-) -> Result<String, String> {
-    let payload_bytes = offering.serialize().unwrap();
-    let payload_signature_bytes = dcc_id.sign(&payload_bytes).unwrap().to_bytes();
-    update_check_and_decode!(
-        ctx.pic,
-        ctx.canister_id,
-        dcc_id.to_ic_principal(),
-        "provider_update_offering",
-        Encode!(&dcc_id.to_bytes_verifying(), &payload_bytes, &payload_signature_bytes).unwrap(),
-        Result<String, String>
-    )
-}
-
-#[allow(dead_code)]
-pub fn test_offering_search<T: AsRef<str> + candid::CandidType + ?Sized>(
-    ctx: &TestContext,
-    search_query: &T,
-) -> Vec<ProviderOfferings> {
-    query_check_and_decode!(
-        ctx.pic,
-        ctx.canister_id,
-        "offering_search",
-        Encode!(&search_query).unwrap(),
-        Vec<(Vec<u8>, Vec<u8>)>
-    )
-    .into_iter()
-    .map(|(_provider_pubkey_bytes, payload_bytes)| {
-        // Parse the CSV data to extract the offerings
-        let json_str = String::from_utf8_lossy(&payload_bytes);
-        ProviderOfferings::deserialize_from_json(&json_str).unwrap()
-    })
-    .collect()
-}
-
 // ---- Ledger Entries Functions ----
 
 #[allow(dead_code)]

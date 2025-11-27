@@ -56,20 +56,6 @@ fn provider_update_profile(
 }
 
 #[ic_cdk::update]
-fn provider_update_offering(
-    pubkey_bytes: Vec<u8>,
-    offering_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    _provider_update_offering(pubkey_bytes, offering_serialized, crypto_signature)
-}
-
-#[ic_cdk::query]
-fn offering_search(search_query: String) -> Vec<(Vec<u8>, Vec<u8>)> {
-    _offering_search(search_query)
-}
-
-#[ic_cdk::update]
 fn contract_sign_request(
     pubkey_bytes: Vec<u8>,
     request_serialized: Vec<u8>,

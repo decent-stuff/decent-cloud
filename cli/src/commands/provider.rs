@@ -4,7 +4,6 @@ use dcc_common::DccIdentity;
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use ledger_map::LedgerMap;
 use log::info;
-use provider_offering::ProviderOfferings;
 use std::{path::PathBuf, time::SystemTime};
 
 use crate::ledger::ledger_data_fetch;
@@ -111,54 +110,20 @@ pub async fn handle_provider_command(
                 info!("Check-in success: {}", result);
             }
         }
-        ProviderCommands::UpdateProfile(update_profile_args) => {
+        ProviderCommands::UpdateProfile(_update_profile_args) => {
             let identity =
                 identity.expect("Identity must be specified for this command, use --identity");
 
-            let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+            let _dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
-            let prov_profile =
-                provider_profile::Profile::new_from_file(&update_profile_args.profile_file)?;
-            let prov_profile_bytes = borsh::to_vec(&prov_profile)?;
-            let crypto_signature = dcc_id.sign(&prov_profile_bytes)?;
-
-            let canister =
-                LedgerCanister::new_with_dcc_id(network_url, ledger_canister_id, &dcc_id).await?;
-            let result = canister
-                .provider_update_profile(
-                    &dcc_id.to_bytes_verifying(),
-                    &prov_profile_bytes,
-                    &crypto_signature.to_bytes(),
-                )
-                .await
-                .map_err(|e| format!("Update profile failed: {}", e))?;
-            info!("Profile update response: {}", result);
+            todo!("Update the profile in the decent-cloud api server, and sign it with the local identity");
         }
-        ProviderCommands::UpdateOffering(update_offering_args) => {
+        ProviderCommands::UpdateOffering(_update_offering_args) => {
             let identity =
                 identity.expect("Identity must be specified for this command, use --identity");
-            let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+            let _dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
-            // ProviderOfferings::new_from_file returns an error if the validation fails
-            let prov_offering = ProviderOfferings::new_from_file(
-                &dcc_id.to_bytes_verifying(),
-                &update_offering_args.offering_file,
-            )?;
-            let prov_offering_json = prov_offering.serialize_as_json()?;
-            let prov_offering_bytes = prov_offering_json.as_bytes();
-            let crypto_signature = dcc_id.sign(prov_offering_bytes)?;
-
-            let canister =
-                LedgerCanister::new_with_dcc_id(network_url, ledger_canister_id, &dcc_id).await?;
-            let result = canister
-                .provider_update_offering(
-                    &dcc_id.to_bytes_verifying(),
-                    prov_offering_bytes,
-                    &crypto_signature.to_bytes(),
-                )
-                .await
-                .map_err(|e| format!("Update offering failed: {}", e))?;
-            info!("Offering update response: {}", result);
+            todo!("Update the offering in the decent-cloud api server, and sign it with the local identity");
         }
     }
     Ok(())

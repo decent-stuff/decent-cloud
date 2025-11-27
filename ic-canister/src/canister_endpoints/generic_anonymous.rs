@@ -35,23 +35,6 @@ fn provider_update_profile_anonymous(
     _provider_update_profile(pubkey_bytes, profile_serialized, crypto_signature)
 }
 
-/// Anonymous version of provider_update_offering
-#[ic_cdk::update]
-fn provider_update_offering_anonymous(
-    pubkey_bytes: Vec<u8>,
-    offering_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-    caller_principal: Option<String>,
-) -> Result<String, String> {
-    if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse::<Principal>() {
-            ic_cdk::println!("Setting caller principal: {}", principal);
-        }
-    }
-
-    _provider_update_offering(pubkey_bytes, offering_serialized, crypto_signature)
-}
-
 /// Anonymous version of provider_check_in
 #[ic_cdk::update]
 fn provider_check_in_anonymous(
@@ -130,11 +113,6 @@ fn bulk_update_from_cf(operations: Vec<BulkOperation>) -> Vec<BulkResult> {
             "provider_update_profile" => _provider_update_profile(
                 op.pubkey_bytes,
                 op.profile_serialized.unwrap_or_default(),
-                op.crypto_signature,
-            ),
-            "provider_update_offering" => _provider_update_offering(
-                op.pubkey_bytes,
-                op.offering_serialized.unwrap_or_default(),
                 op.crypto_signature,
             ),
             "provider_check_in" => _provider_check_in(

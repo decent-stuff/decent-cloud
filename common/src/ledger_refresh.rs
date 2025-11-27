@@ -5,10 +5,9 @@ use crate::{
     account_balance_add, account_balance_sub, account_balances_clear,
     cache_update_from_ledger_record, contracts_cache_open_add, contracts_cache_open_remove,
     dcc_identity, error, reputations_apply_aging, reputations_apply_changes, reputations_clear,
-    set_num_providers, set_num_users, set_offering_num_per_provider, AHashMap, CheckInPayload,
-    ContractSignReplyPayload, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
-    LinkedIcIdsRecord, ReputationAge, ReputationChange, UpdateOfferingsPayload,
-    UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
+    set_num_providers, set_num_users, AHashMap, CheckInPayload, ContractSignReplyPayload,
+    ContractSignRequest, ContractSignRequestPayload, DccIdentity, LinkedIcIdsRecord, ReputationAge,
+    ReputationChange, UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
     LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN,
     LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN,
     LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE,
@@ -105,30 +104,7 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                         principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
                     }
                 }
-                LABEL_PROV_OFFERING => {
-                    if let Ok(dcc_identity) =
-                        dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
-                    {
-                        match UpdateOfferingsPayload::deserialize(entry.value()) {
-                            Ok(payload) => {
-                                set_offering_num_per_provider(
-                                    entry.key().to_vec(),
-                                    payload
-                                        .deserialize_offerings(
-                                            dcc_identity.to_bytes_verifying().as_slice(),
-                                        )
-                                        .map(|o| o.get_all_instance_ids().len() as u64)
-                                        .unwrap_or_default(),
-                                );
-                            }
-                            Err(e) => {
-                                debug!("Failed to deserialize offering payload: {}", e);
-                                continue;
-                            }
-                        }
-                        principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
-                    }
-                }
+                LABEL_PROV_OFFERING | LABEL_NP_OFFERING => {}
                 LABEL_CONTRACT_SIGN_REQUEST => {
                     let contract_id = entry.key();
                     let payload = match ContractSignRequestPayload::try_from_slice(entry.value()) {
@@ -231,34 +207,6 @@ impl WasmLedgerEntry {
                 }
             },
             description: "Provider CheckIn".to_string(),
-        }
-    }
-
-    fn from_provider_offering(entry: &LedgerEntry) -> Self {
-        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
-        WasmLedgerEntry {
-            label: LABEL_PROV_OFFERING.to_string(),
-            key: Value::String(dcc_id.to_string()),
-            value: match UpdateOfferingsPayload::try_from_slice(entry.value()) {
-                Ok(payload) => match payload.deserialize_offerings(entry.key()) {
-                    Ok(offering) => serde_json::to_value(&offering).unwrap(),
-                    Err(e) => {
-                        serde_json::json!(format!(
-                            "Failed to deserialize update offering payload: {} ({})",
-                            BASE64.encode(entry.value()),
-                            e
-                        ))
-                    }
-                },
-                Err(e) => {
-                    serde_json::json!(format!(
-                        "Failed to deserialize update offering payload: {} ({})",
-                        BASE64.encode(entry.value()),
-                        e
-                    ))
-                }
-            },
-            description: "Provider Offering Update".to_string(),
         }
     }
 
@@ -441,9 +389,6 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
             LABEL_DC_TOKEN_TRANSFER => WasmLedgerEntry::from_dc_token_transfer(entry),
             LABEL_PROV_CHECK_IN | LABEL_NP_CHECK_IN => {
                 WasmLedgerEntry::from_provider_check_in(entry, block.parent_hash())
-            }
-            LABEL_PROV_OFFERING | LABEL_NP_OFFERING => {
-                WasmLedgerEntry::from_provider_offering(entry)
             }
             LABEL_PROV_PROFILE | LABEL_NP_PROFILE => WasmLedgerEntry::from_provider_profile(entry),
             LABEL_PROV_REGISTER | LABEL_NP_REGISTER => {
