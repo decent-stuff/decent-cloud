@@ -13,9 +13,8 @@
 !/website/build/
 **/.next/
 **/out/
-# Allow website/out and wasm/dist for Docker builds
+# Allow website/out
 !website/out/
-!wasm/dist/
 
 # Development and documentation
 docs/
@@ -55,7 +54,6 @@ data/
 !Cargo.lock
 !**/package.json
 !**/package-lock.json
-!wasm/build.js
 !**/tsconfig*.json
 !**/*.rs
 !**/*.ts

@@ -12,7 +12,6 @@ A secure, persistent key-value storage system with blockchain-like properties, i
 - 🔒 **Secure Storage**: Data integrity protected with SHA-256 checksums
 - 📝 **Append-Only Ledger**: Blockchain-like data structure
 - 🔄 **Cross-Platform**: Native support for `wasm32`, `x86_64`, and `aarch64`
-- 🌐 **Browser Ready**: WebAssembly builds for browser environments
 - 🏷️ **Label Support**: Organize data with multiple labels
 - 📦 **TypeScript Support**: First-class TypeScript definitions
 
@@ -81,9 +80,6 @@ ledger-map = "0.4.3"
 For specific features:
 
 ```toml
-# For browser/WebAssembly support
-ledger-map = { version = "0.4.3", features = ["browser"] }
-
 # For Internet Computer support
 ledger-map = { version = "0.4.3", features = ["ic"] }
 ```
@@ -202,7 +198,6 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 ```bash
 cargo test
-cargo test --features browser
 cargo test --features ic
 ```
 
@@ -211,9 +206,6 @@ cargo test --features ic
 ```bash
 # Node.js tests
 npm run test
-
-# Browser tests
-RUSTFLAGS='--cfg getrandom_backend="wasm_js"' wasm-pack test --chrome --features browser
 ```
 
 ## License

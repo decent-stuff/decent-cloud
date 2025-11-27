@@ -28,7 +28,6 @@ cargo test
 
 See [Development Guide](docs/development.md#building-the-website) for:
 - Standard development (`npm run dev`)
-- WASM auto-rebuild (`npm run dev:watch`)
 - Production build (`npm run build`)
 
 ### Documentation

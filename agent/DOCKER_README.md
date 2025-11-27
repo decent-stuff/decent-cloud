@@ -64,7 +64,7 @@ docker-compose up decent-cloud-claude
 ### Project-Specific Tools
 - **Internet Computer SDK** - dfx for ICP development
 - **Pocket IC** - Local ICP testing
-- **Cargo tools** - make, nextest, wasm-pack
+- **Cargo tools** - make, nextest
 - **Project dependencies** - Pre-built and cached
 
 ### Safety Features
@@ -75,13 +75,13 @@ docker-compose up decent-cloud-claude
 
 ## Benefits vs Host `--dangerously-skip-permissions`
 
-| Feature | Host Dangerous Mode | Docker Container |
-|---------|-------------------|------------------|
-| **Safety** | ❌ Full host access | ✅ Container isolation |
-| **Cleanup** | ❌ Manual cleanup | ✅ Delete container |
-| **Reproducibility** | ❌ Host-dependent | ✅ Consistent environment |
-| **Resource Limits** | ❌ Unlimited | ✅ Configurable |
-| **Networking** | ❌ Full access | ✅ Bridge network |
+| Feature             | Host Dangerous Mode | Docker Container         |
+|---------------------|---------------------|--------------------------|
+| **Safety**          | ❌ Full host access  | ✅ Container isolation    |
+| **Cleanup**         | ❌ Manual cleanup    | ✅ Delete container       |
+| **Reproducibility** | ❌ Host-dependent    | ✅ Consistent environment |
+| **Resource Limits** | ❌ Unlimited         | ✅ Configurable           |
+| **Networking**      | ❌ Full access       | ✅ Bridge network         |
 
 ## Volumes
 

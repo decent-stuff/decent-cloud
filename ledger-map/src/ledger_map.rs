@@ -60,7 +60,7 @@ impl LedgerMap {
         Self::new(labels_to_index)
     }
 
-    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    #[cfg(target_arch = "wasm32")]
     pub fn new_with_path(
         labels_to_index: Option<Vec<String>>,
         _path: Option<std::path::PathBuf>,
@@ -73,7 +73,7 @@ impl LedgerMap {
         platform_specific::get_backing_file_path()
     }
 
-    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    #[cfg(target_arch = "wasm32")]
     pub fn get_file_path(&self) -> Option<std::path::PathBuf> {
         None
     }

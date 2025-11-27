@@ -66,16 +66,6 @@ pub mod platform_specific_wasm32_ic;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 pub use platform_specific_wasm32_ic as platform_specific;
 
-#[cfg(all(target_arch = "wasm32", feature = "browser"))]
-#[macro_use]
-pub mod platform_specific_wasm32_browser;
-
-#[cfg(all(target_arch = "wasm32", feature = "browser"))]
-pub use platform_specific_wasm32_browser as platform_specific;
-
-#[cfg(all(target_arch = "wasm32", feature = "browser"))]
-pub mod wasm;
-
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[macro_use]
 pub mod platform_specific_x86_64;

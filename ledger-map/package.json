@@ -10,11 +10,9 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build:wasm": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack build --target web --out-dir dist/wasm --features browser",
     "build:ts": "tsc",
-    "build": "npm run clean && npm run build:wasm && npm run build:ts",
-    "test": "npm run test:wasm && npm run test:ts",
-    "test:wasm": "RUSTFLAGS='--cfg getrandom_backend=\"wasm_js\"' wasm-pack test --node --features browser",
+    "build": "npm run clean && npm run build:ts",
+    "test": "npm run test:ts",
     "test:ts": "jest",
     "prepare": "npm run build"
   },

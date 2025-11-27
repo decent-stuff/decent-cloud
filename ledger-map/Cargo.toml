@@ -16,13 +16,6 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-browser = [
-    "getrandom",
-    "js-sys",
-    "wasm-bindgen",
-    "wasm-bindgen-test",
-    "web-sys",
-]
 ic = ["ic-cdk", "ic-cdk-timers", "ic-canister-log"]
 
 [dependencies]
@@ -55,14 +48,6 @@ getrandom = { version = "0.3.4", default-features = false, features = [
 ic-canister-log = { version = "0.2.0", optional = true }
 ic-cdk = { version = "0.18.7", optional = true }
 ic-cdk-timers = { version = "0.12.2", optional = true }
-js-sys = { version = "0.3.82", optional = true }
-wasm-bindgen = { version = "0.2.105", optional = true }
-wasm-bindgen-test = { version = "0.3.55", optional = true }
-web-sys = { version = "0.3.82", features = [
-    "Storage",
-    "Window",
-    "console",
-], optional = true }
 
 [dev-dependencies]
 tempfile = "3.23.0"

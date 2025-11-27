@@ -94,7 +94,7 @@ Python scripts facilitate the automated deployment with the simplified Docker ap
 - Python 3.10 or higher
 - Docker and Docker Compose
 - Rust toolchain (for native API builds)
-- Node.js and npm (for native WASM builds)
+- Node.js and npm
 - A Cloudflare account with access to your domain
 
 ### Quick Start
@@ -115,7 +115,6 @@ python3 deploy.py deploy prod
 The scripts will:
 - Validate Docker and build tool installation
 - Check for tunnel token (stored in `.env`, not on command line)
-- Build WASM modules natively (faster than in-container builds)
 - Build API server binary natively (optimized for target platform)
 - Build and start containers using simplified Dockerfiles
 - Verify tunnel connection
