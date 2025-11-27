@@ -40,7 +40,6 @@ ledger-map = { path = "../ledger-map" }
 log.workspace = true
 memmap2.workspace = true
 pretty_env_logger.workspace = true
-provider-offering = { path = "../provider-offering" }
 provider-profile = { path = "../provider-profile" }
 serde.workspace = true
 serde_json.workspace = true

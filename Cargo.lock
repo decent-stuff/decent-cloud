@@ -160,7 +160,6 @@ dependencies = [
  "oauth2",
  "poem",
  "poem-openapi",
- "provider-offering",
  "provider-profile",
  "rand 0.8.5",
  "regex",
@@ -897,7 +896,6 @@ dependencies = [
  "num-traits",
  "pem 3.0.6",
  "pkcs8",
- "provider-offering",
  "provider-profile",
  "serde",
  "serde_json",
@@ -939,7 +937,6 @@ dependencies = [
  "log",
  "memmap2",
  "pretty_env_logger",
- "provider-offering",
  "provider-profile",
  "serde",
  "serde_json",
@@ -982,7 +979,6 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pocket-ic",
- "provider-offering",
  "reqwest 0.12.24",
  "serde",
  "serde_bytes",
@@ -3349,25 +3345,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ee95bc4ef87b8d5ba32e8b7714ccc834865276eab0aed5c9958d00ec45f49e8"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "provider-offering"
-version = "0.3.0"
-dependencies = [
- "borsh",
- "candid",
- "csv",
- "ed25519-dalek",
- "fs-err",
- "hex",
- "indexmap",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "strsim",
- "tempfile",
 ]
 
 [[package]]

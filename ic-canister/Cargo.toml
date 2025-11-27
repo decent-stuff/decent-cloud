@@ -28,7 +28,6 @@ icrc-ledger-types.workspace = true
 ledger-map = { path = "../ledger-map", features = ["ic"] }
 num-bigint.workspace = true
 num-traits.workspace = true
-provider-offering.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
 serde_json.workspace = true
