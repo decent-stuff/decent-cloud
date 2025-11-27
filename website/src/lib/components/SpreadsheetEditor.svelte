@@ -10,6 +10,7 @@
 	let rows = $state<string[][]>([]);
 	let selectedCell = $state<{ row: number; col: number } | null>(null);
 	let lastExternalValue = '';
+	let updateTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Parse CSV to 2D array (handles quoted values)
 	function parseCSV(csv: string): string[][] {
@@ -60,17 +61,27 @@
 		}
 	});
 
-	// Update value when rows change
+	// Update value when rows change (flush immediately)
 	function updateValue() {
+		if (updateTimeout) {
+			clearTimeout(updateTimeout);
+			updateTimeout = null;
+		}
 		const csv = toCSV(rows);
 		value = csv;
 		lastExternalValue = csv;
 		onchange?.(csv);
 	}
 
+	// Debounced update for typing performance
+	function scheduleUpdate() {
+		if (updateTimeout) clearTimeout(updateTimeout);
+		updateTimeout = setTimeout(updateValue, 150);
+	}
+
 	function updateCell(rowIndex: number, colIndex: number, newValue: string) {
 		rows[rowIndex][colIndex] = newValue;
-		updateValue();
+		scheduleUpdate();
 	}
 
 	function addRow() {
@@ -94,6 +105,8 @@
 	}
 
 	function handleCellBlur() {
+		// Flush any pending debounced update
+		if (updateTimeout) updateValue();
 		selectedCell = null;
 	}
 
@@ -144,7 +157,7 @@
 	</div>
 
 	<!-- Spreadsheet -->
-	<div class="overflow-x-auto max-h-96">
+	<div class="overflow-x-auto max-h-[60vh]">
 		<table class="w-full border-collapse">
 			<!-- Headers (first row, non-editable) -->
 			<thead>

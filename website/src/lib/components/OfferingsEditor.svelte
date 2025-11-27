@@ -25,6 +25,33 @@
 	let importing = $state(false);
 	let error = $state<string | null>(null);
 	let result = $state<CsvImportResult | null>(null);
+	let selectedResourceType = $state<string>('');
+
+	// Resource type definitions with key columns
+	const RESOURCE_TYPES = {
+		compute: {
+			label: '💻 Compute / VPS',
+			columns: ['processor_brand', 'processor_cores', 'processor_speed', 'memory_amount', 'total_ssd_capacity']
+		},
+		gpu: {
+			label: '🎮 GPU / AI',
+			columns: ['gpu_name', 'gpu_count', 'gpu_memory_gb', 'processor_cores', 'memory_amount']
+		},
+		storage: {
+			label: '💾 Storage',
+			columns: ['total_hdd_capacity', 'total_ssd_capacity', 'uplink_speed', 'traffic']
+		},
+		network: {
+			label: '🌐 Network / CDN',
+			columns: ['uplink_speed', 'traffic', 'unmetered_bandwidth', 'datacenter_country']
+		},
+		dedicated: {
+			label: '🖥️ Dedicated Server',
+			columns: ['processor_brand', 'processor_name', 'processor_cores', 'memory_amount', 'total_hdd_capacity', 'total_ssd_capacity']
+		}
+	} as const;
+
+	type ResourceTypeKey = keyof typeof RESOURCE_TYPES;
 
 	// Load CSV content when dialog opens
 	$effect(() => {
@@ -149,6 +176,7 @@
 		error = null;
 		result = null;
 		isDragging = false;
+		selectedResourceType = '';
 		dispatch('close');
 	}
 
@@ -179,7 +207,7 @@
 		tabindex="-1"
 	>
 		<div
-			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-white/20 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-white/20 w-full max-w-6xl max-h-[90vh] overflow-y-auto"
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between p-6 border-b border-white/10">
@@ -251,6 +279,29 @@
 						<div class="flex items-center gap-2 text-sm text-white/70">
 							<span class="text-lg">📄</span>
 							<span>{selectedFile.name}</span>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Resource Type Selector -->
+				<div class="flex flex-wrap items-center gap-4">
+					<div class="flex items-center gap-2">
+						<label for="resource-type" class="text-white/70 text-sm font-medium">Resource Type:</label>
+						<select
+							id="resource-type"
+							bind:value={selectedResourceType}
+							disabled={importing}
+							class="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+						>
+							<option value="">All types</option>
+							{#each Object.entries(RESOURCE_TYPES) as [key, { label }]}
+								<option value={key}>{label}</option>
+							{/each}
+						</select>
+					</div>
+					{#if selectedResourceType && RESOURCE_TYPES[selectedResourceType as ResourceTypeKey]}
+						<div class="text-white/60 text-sm">
+							Key columns: <span class="text-blue-400">{RESOURCE_TYPES[selectedResourceType as ResourceTypeKey].columns.join(', ')}</span>
 						</div>
 					{/if}
 				</div>
