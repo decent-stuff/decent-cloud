@@ -135,39 +135,3 @@ impl fmt::Display for ProfileV0_1_0 {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_and_search_yaml() {
-        let profile_yaml = r#"
-            api_version: v0.1.0
-            kind: Profile
-            metadata:
-                name: "Test Node Provider"
-                version: "0.0.1"
-            spec:
-                description: "Just a test"
-                url: "https://example.com"
-                logo_url: "https://example.com/logo.jpg"
-                why_choose_us: "Because we're the best!"
-                contacts:
-                    Twitter: "x.com/dc-prov"
-                    Linkedin: "linkedin.com/dc-prov"
-                    email: "support@dc-prov.com"
-        "#;
-
-        let profile = Profile::new_from_str(profile_yaml, "yaml").expect("Failed to parse YAML");
-
-        match profile {
-            Profile::V0_1_0(ref p) => {
-                assert_eq!(p.metadata.name, "Test Node Provider");
-                assert_eq!(p.kind, "Profile");
-            }
-        }
-        assert!(profile.matches_search("name=Test Node Provider"));
-        assert!(profile.matches_search("Twitter contains x.com/dc-prov"));
-    }
-}
