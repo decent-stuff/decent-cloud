@@ -67,7 +67,8 @@ Cargo.lock
 *.bcf
 *.run.xml
 *.fdb_latexmk
-whitepaper.pdf
+# Ignore LaTeX build output but NOT the static website copy
+docs/whitepaper/whitepaper.pdf
 
 ### Operating System ###
 # macOS
