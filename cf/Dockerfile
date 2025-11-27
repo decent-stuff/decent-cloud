@@ -41,6 +41,13 @@ server {
 
     # Docs directory - serve files directly with proper mime types
     location /docs/ {
+        # Explicit MIME type for PDFs
+        location ~ \.pdf$ {
+            add_header Content-Type application/pdf;
+            add_header Content-Disposition inline;
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
         expires 1y;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;

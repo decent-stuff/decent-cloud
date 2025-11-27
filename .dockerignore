@@ -22,6 +22,8 @@ docs/
 **/.vscode
 **/*.md
 **/*.pdf
+# Allow website PDFs to be included
+!website/build/**/*.pdf
 
 # Configuration and temporary files
 **/.env*
