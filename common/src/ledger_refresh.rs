@@ -2,16 +2,12 @@ use crate::account_transfer_approvals::{approval_update, FundsTransferApproval};
 use crate::account_transfers::FundsTransfer;
 use crate::cache_transactions::RecentCache;
 use crate::{
-    account_balance_add, account_balance_sub, account_balances_clear,
-    cache_update_from_ledger_record, contracts_cache_open_add, contracts_cache_open_remove,
-    dcc_identity, error, reputations_apply_aging, reputations_apply_changes, reputations_clear,
-    set_num_providers, set_num_users, AHashMap, CheckInPayload, ContractSignReplyPayload,
-    ContractSignRequest, ContractSignRequestPayload, DccIdentity, LinkedIcIdsRecord, ReputationAge,
-    ReputationChange, UpdateProfilePayload, LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
-    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN,
-    LABEL_NP_OFFERING, LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN,
-    LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE,
-    LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, PRINCIPAL_MAP,
+    account_balance_add, account_balance_sub, account_balances_clear, dcc_identity, error,
+    reputations_apply_aging, reputations_apply_changes, reputations_clear, set_num_providers,
+    set_num_users, AHashMap, CheckInPayload, DccIdentity, ReputationAge, ReputationChange,
+    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
+    LABEL_PROV_CHECK_IN, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
+    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -20,7 +16,7 @@ use candid::Principal;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
-use ledger_map::{debug, warn, LedgerBlock, LedgerEntry, LedgerMap};
+use ledger_map::{debug, LedgerBlock, LedgerEntry, LedgerMap};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -104,36 +100,6 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                         principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
                     }
                 }
-                LABEL_PROV_OFFERING | LABEL_NP_OFFERING => {}
-                LABEL_CONTRACT_SIGN_REQUEST => {
-                    let contract_id = entry.key();
-                    let payload = match ContractSignRequestPayload::try_from_slice(entry.value()) {
-                        Ok(payload) => payload,
-                        Err(e) => {
-                            warn!("Failed to deserialize contract sign request payload: {}", e);
-                            continue;
-                        }
-                    };
-
-                    let contract_req =
-                        match ContractSignRequest::try_from_slice(payload.payload_serialized()) {
-                            Ok(contract_req) => contract_req,
-                            Err(e) => {
-                                warn!("Failed to deserialize contract sign request: {}", e);
-                                continue;
-                            }
-                        };
-                    contracts_cache_open_add(contract_id.to_vec(), contract_req);
-                }
-                LABEL_CONTRACT_SIGN_REPLY => {
-                    let contract_id = entry.key();
-                    contracts_cache_open_remove(contract_id);
-                }
-                LABEL_LINKED_IC_IDS => {
-                    cache_update_from_ledger_record(
-                        &LinkedIcIdsRecord::deserialize(entry.value()).unwrap(),
-                    );
-                }
                 _ => {}
             }
         }
@@ -210,34 +176,6 @@ impl WasmLedgerEntry {
         }
     }
 
-    fn from_provider_profile(entry: &LedgerEntry) -> Self {
-        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
-        WasmLedgerEntry {
-            label: LABEL_PROV_PROFILE.to_string(),
-            key: Value::String(dcc_id.to_string()),
-            value: match UpdateProfilePayload::try_from_slice(entry.value()) {
-                Ok(payload) => match payload.deserialize_update_profile() {
-                    Ok(profile) => serde_json::to_value(&profile).unwrap(),
-                    Err(e) => {
-                        serde_json::json!(format!(
-                            "Failed to deserialize update profile payload: {} ({})",
-                            BASE64.encode(entry.value()),
-                            e
-                        ))
-                    }
-                },
-                Err(e) => {
-                    serde_json::json!(format!(
-                        "Failed to deserialize update profile payload: {} ({})",
-                        BASE64.encode(entry.value()),
-                        e
-                    ))
-                }
-            },
-            description: "Provider Profile Update".to_string(),
-        }
-    }
-
     fn from_account_register(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
         let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
         WasmLedgerEntry {
@@ -308,77 +246,6 @@ impl WasmLedgerEntry {
             description: "Generic".to_string(),
         }
     }
-
-    fn from_contract_sign_request(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: LABEL_CONTRACT_SIGN_REQUEST.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
-            value: match ContractSignRequestPayload::try_from_slice(entry.value()) {
-                Ok(payload) => match payload.deserialize_contract_sign_request() {
-                    Ok(contract_req) => serde_json::to_value(&contract_req).unwrap(),
-                    Err(e) => {
-                        serde_json::json!(format!(
-                            "Failed to deserialize contract sign request: {} ({})",
-                            BASE64.encode(entry.value()),
-                            e
-                        ))
-                    }
-                },
-                Err(e) => {
-                    serde_json::json!(format!(
-                        "Failed to deserialize contract sign request payload: {} ({})",
-                        BASE64.encode(entry.value()),
-                        e
-                    ))
-                }
-            },
-            description: "Contract Sign Request".to_string(),
-        }
-    }
-
-    fn from_contract_sign_reply(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: LABEL_CONTRACT_SIGN_REPLY.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
-            value: match ContractSignReplyPayload::try_from_slice(entry.value()) {
-                Ok(payload) => match payload.deserialize_contract_sign_reply() {
-                    Ok(contract_reply) => serde_json::to_value(&contract_reply).unwrap(),
-                    Err(e) => {
-                        serde_json::json!(format!(
-                            "Failed to deserialize contract sign reply: {} ({})",
-                            BASE64.encode(entry.value()),
-                            e
-                        ))
-                    }
-                },
-                Err(e) => {
-                    serde_json::json!(format!(
-                        "Failed to deserialize contract sign reply payload: {} ({})",
-                        BASE64.encode(entry.value()),
-                        e
-                    ))
-                }
-            },
-            description: "Contract Sign Reply".to_string(),
-        }
-    }
-
-    fn from_linked_ic_ids(entry: &LedgerEntry) -> Self {
-        let key = if entry.key().len() == 8 {
-            let mut key = [0u8; 8];
-            key.copy_from_slice(entry.key());
-            Value::Number(u64::from_le_bytes(key).into())
-        } else {
-            Value::String(BASE64.encode(entry.key()))
-        };
-        WasmLedgerEntry {
-            label: LABEL_LINKED_IC_IDS.to_string(),
-            key,
-            value: serde_json::to_value(LinkedIcIdsRecord::deserialize(entry.value()).unwrap())
-                .unwrap(),
-            description: "Linked IC Principals".to_string(),
-        }
-    }
 }
 
 pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
@@ -390,7 +257,6 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
             LABEL_PROV_CHECK_IN | LABEL_NP_CHECK_IN => {
                 WasmLedgerEntry::from_provider_check_in(entry, block.parent_hash())
             }
-            LABEL_PROV_PROFILE | LABEL_NP_PROFILE => WasmLedgerEntry::from_provider_profile(entry),
             LABEL_PROV_REGISTER | LABEL_NP_REGISTER => {
                 WasmLedgerEntry::from_account_register(entry, block.parent_hash())
             }
@@ -400,9 +266,6 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
             LABEL_USER_REGISTER => {
                 WasmLedgerEntry::from_account_register(entry, block.parent_hash())
             }
-            LABEL_CONTRACT_SIGN_REQUEST => WasmLedgerEntry::from_contract_sign_request(entry),
-            LABEL_CONTRACT_SIGN_REPLY => WasmLedgerEntry::from_contract_sign_reply(entry),
-            LABEL_LINKED_IC_IDS => WasmLedgerEntry::from_linked_ic_ids(entry),
             _ => WasmLedgerEntry::from_generic(entry),
         })
     }

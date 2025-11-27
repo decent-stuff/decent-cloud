@@ -1,11 +1,11 @@
 use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use dcc_common::{
-    LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST, LABEL_DC_TOKEN_APPROVAL,
-    LABEL_DC_TOKEN_TRANSFER, LABEL_LINKED_IC_IDS, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING,
-    LABEL_NP_PROFILE, LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING,
-    LABEL_PROV_PROFILE, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
-    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
+    LABEL_CONTRACT_SIGN_REPLY_LEGACY, LABEL_CONTRACT_SIGN_REQUEST_LEGACY, LABEL_DC_TOKEN_APPROVAL,
+    LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_OFFERING_LEGACY, LABEL_NP_PROFILE_LEGACY,
+    LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING_LEGACY, LABEL_PROV_PROFILE_LEGACY,
+    LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE, LABEL_REWARD_DISTRIBUTION,
+    LABEL_USER_REGISTER,
 };
 use std::collections::HashMap;
 
@@ -36,15 +36,14 @@ impl Database {
             LABEL_NP_REGISTER,
             LABEL_PROV_CHECK_IN,
             LABEL_NP_CHECK_IN,
-            LABEL_PROV_PROFILE,
-            LABEL_NP_PROFILE,
+            LABEL_PROV_PROFILE_LEGACY,
+            LABEL_NP_PROFILE_LEGACY,
             LABEL_USER_REGISTER,
-            LABEL_PROV_OFFERING,
-            LABEL_NP_OFFERING,
+            LABEL_PROV_OFFERING_LEGACY,
+            LABEL_NP_OFFERING_LEGACY,
             LABEL_REWARD_DISTRIBUTION,
-            LABEL_CONTRACT_SIGN_REQUEST,
-            LABEL_CONTRACT_SIGN_REPLY,
-            LABEL_LINKED_IC_IDS,
+            LABEL_CONTRACT_SIGN_REQUEST_LEGACY,
+            LABEL_CONTRACT_SIGN_REPLY_LEGACY,
         ];
 
         for label in known_labels {
@@ -92,13 +91,6 @@ impl Database {
                                 anyhow::anyhow!("Failed to insert provider check-ins: {}", e)
                             })?;
                     }
-                    LABEL_PROV_PROFILE | LABEL_NP_PROFILE => {
-                        self.insert_provider_profiles(&mut tx, &entries)
-                            .await
-                            .map_err(|e| {
-                                anyhow::anyhow!("Failed to insert provider profiles: {}", e)
-                            })?;
-                    }
                     LABEL_USER_REGISTER => {
                         self.insert_user_registrations(&mut tx, &entries)
                             .await
@@ -106,10 +98,15 @@ impl Database {
                                 anyhow::anyhow!("Failed to insert user registrations: {}", e)
                             })?;
                     }
-                    LABEL_PROV_OFFERING | LABEL_NP_OFFERING => {
-                        // Skip offering entries - will be handled directly in DB
+                    LABEL_PROV_OFFERING_LEGACY
+                    | LABEL_NP_OFFERING_LEGACY
+                    | LABEL_PROV_PROFILE_LEGACY
+                    | LABEL_NP_PROFILE_LEGACY
+                    | LABEL_CONTRACT_SIGN_REQUEST_LEGACY
+                    | LABEL_CONTRACT_SIGN_REPLY_LEGACY => {
                         tracing::debug!(
-                            "Skipping ProvOffering entries - will be handled directly in DB"
+                            "Skipping ledger {} entries - now handled directly in DB",
+                            label
                         );
                     }
                     LABEL_REWARD_DISTRIBUTION => {
@@ -117,27 +114,6 @@ impl Database {
                             .await
                             .map_err(|e| {
                                 anyhow::anyhow!("Failed to insert reward distributions: {}", e)
-                            })?;
-                    }
-                    LABEL_CONTRACT_SIGN_REQUEST => {
-                        self.insert_contract_sign_requests(&mut tx, &entries)
-                            .await
-                            .map_err(|e| {
-                                anyhow::anyhow!("Failed to insert contract sign requests: {}", e)
-                            })?;
-                    }
-                    LABEL_CONTRACT_SIGN_REPLY => {
-                        self.insert_contract_sign_replies(&mut tx, &entries)
-                            .await
-                            .map_err(|e| {
-                                anyhow::anyhow!("Failed to insert contract sign replies: {}", e)
-                            })?;
-                    }
-                    LABEL_LINKED_IC_IDS => {
-                        self.insert_linked_ic_ids(&mut tx, &entries)
-                            .await
-                            .map_err(|e| {
-                                anyhow::anyhow!("Failed to insert linked IC IDs: {}", e)
                             })?;
                     }
                     _ => unreachable!(), // All labels in known_labels are handled above

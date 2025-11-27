@@ -18,23 +18,6 @@ fn provider_register_anonymous(
     _provider_register(pubkey_bytes, crypto_signature)
 }
 
-/// Anonymous version of provider_update_profile
-#[ic_cdk::update]
-fn provider_update_profile_anonymous(
-    pubkey_bytes: Vec<u8>,
-    profile_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-    caller_principal: Option<String>,
-) -> Result<String, String> {
-    if let Some(principal_str) = caller_principal {
-        if let Ok(principal) = principal_str.parse::<Principal>() {
-            ic_cdk::println!("Setting caller principal: {}", principal);
-        }
-    }
-
-    _provider_update_profile(pubkey_bytes, profile_serialized, crypto_signature)
-}
-
 /// Anonymous version of provider_check_in
 #[ic_cdk::update]
 fn provider_check_in_anonymous(
@@ -110,24 +93,9 @@ fn bulk_update_from_cf(operations: Vec<BulkOperation>) -> Vec<BulkResult> {
     for (index, op) in operations.into_iter().enumerate() {
         let result = match op.operation_type.as_str() {
             "provider_register" => _provider_register(op.pubkey_bytes, op.crypto_signature),
-            "provider_update_profile" => _provider_update_profile(
-                op.pubkey_bytes,
-                op.profile_serialized.unwrap_or_default(),
-                op.crypto_signature,
-            ),
             "provider_check_in" => _provider_check_in(
                 op.pubkey_bytes,
                 op.memo.unwrap_or_default(),
-                op.crypto_signature,
-            ),
-            "contract_sign_request" => _contract_sign_request(
-                op.pubkey_bytes,
-                op.contract_serialized.unwrap_or_default(),
-                op.crypto_signature,
-            ),
-            "contract_sign_reply" => _contract_sign_reply(
-                op.pubkey_bytes,
-                op.reply_serialized.unwrap_or_default(),
                 op.crypto_signature,
             ),
             "user_register" => _user_register(op.pubkey_bytes, op.crypto_signature),

@@ -411,29 +411,10 @@ service : {
     // Provider management operations
     // crypto_sig can be used to cryptographically verify the authenticity of the message
     provider_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    provider_update_profile: (pubkey_bytes: vec nat8, profile_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    provider_update_offering: (pubkey_bytes: vec nat8, offering_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
     provider_list_checked_in: () -> (ResultString) query;
-    provider_get_profile_by_pubkey_bytes: (vec nat8) -> (opt text) query;
-    provider_get_profile_by_principal: (principal) -> (opt text) query;
-    offering_search: (search_query: text) -> (vec record { vec nat8; vec nat8 }) query;
-
-    // Contract signing and replying
-    contract_sign_request: (pubkey_bytes: vec nat8, contract_info_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    contracts_list_pending: (pubkey_bytes: opt vec nat8) -> (vec record { vec nat8; vec nat8 }) query;
-    contract_sign_reply: (pubkey_bytes: vec nat8, contract_reply_serialized: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-    // FIXME
-    // contract_extend
-    // contract_cancel
 
     // User management operations
     user_register: (pubkey_bytes: vec nat8, crypto_sig: vec nat8) -> (ResultString);
-
-    // Linked identity operations
-    link_principals: (main_principal: principal, alt_principals: vec principal) -> (ResultString);
-    unlink_principals: (main_principal: principal, alt_principals: vec principal) -> (ResultString);
-    list_alt_principals: (main_principal: principal) -> (variant { Ok: vec principal; Err: text }) query;
-    get_main_principal: (alt_principal: principal) -> (variant { Ok: principal; Err: text }) query;
 
     // Check-in nonce that needs to be signed and sent for the check in
     // Provided here as a reference only, since client will instead use the nonce of the local ledger
@@ -492,7 +473,7 @@ service : {
         has_more: bool;
         next_cursor: opt record { block_position: nat64; entry_index: nat32; };
     }) query;
-    
+
     next_block_sync: (start_position: opt nat64, include_data: opt bool, max_entries: opt nat32) -> (record {
         has_block: bool;
         block_header: opt vec nat8;

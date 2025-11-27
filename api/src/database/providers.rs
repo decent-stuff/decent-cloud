@@ -3,9 +3,8 @@ use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::BorshDeserialize;
-use dcc_common::{CheckInPayload, UpdateProfilePayload};
+use dcc_common::CheckInPayload;
 use poem_openapi::Object;
-use provider_profile::Profile;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -263,56 +262,6 @@ impl Database {
             )
             .execute(&mut **tx)
             .await?;
-        }
-        Ok(())
-    }
-
-    // Provider profiles
-    pub(crate) async fn insert_provider_profiles(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        entries: &[LedgerEntryData],
-    ) -> Result<()> {
-        for entry in entries {
-            let profile_payload = UpdateProfilePayload::try_from_slice(&entry.value)
-                .map_err(|e| anyhow::anyhow!("Failed to parse profile payload: {}", e))?;
-            let profile = profile_payload
-                .deserialize_update_profile()
-                .map_err(|e| anyhow::anyhow!("Failed to deserialize profile: {}", e))?;
-
-            // Extract structured fields from profile based on ProfileV0_1_0 structure
-            match profile {
-                Profile::V0_1_0(profile_v0_1_0) => {
-                    // Insert main profile record
-                    let timestamp_i64 = entry.block_timestamp_ns as i64;
-                    sqlx::query!(
-                        "INSERT OR REPLACE INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        entry.key,
-                        profile_v0_1_0.metadata.name,
-                        profile_v0_1_0.spec.description,
-                        profile_v0_1_0.spec.url,
-                        profile_v0_1_0.spec.logo_url,
-                        profile_v0_1_0.spec.why_choose_us,
-                        profile_v0_1_0.api_version,
-                        profile_v0_1_0.metadata.version,
-                        timestamp_i64
-                    )
-                    .execute(&mut **tx)
-                    .await?;
-
-                    // Insert contact information in normalized table
-                    for (contact_type, contact_value) in &profile_v0_1_0.spec.contacts {
-                        sqlx::query!(
-                            "INSERT OR REPLACE INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, ?, ?)",
-                            entry.key,
-                            contact_type,
-                            contact_value
-                        )
-                        .execute(&mut **tx)
-                        .await?;
-                    }
-                }
-            }
         }
         Ok(())
     }

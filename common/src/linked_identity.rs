@@ -1,22 +1,14 @@
-use crate::{
-    amount_as_string, charge_fees_to_account_no_bump_reputation, fn_info, reward_e9s_per_block,
-    AHashMap, IcrcCompatibleAccount, TokenAmountE9s, LABEL_LINKED_IC_IDS,
-};
+use crate::AHashMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use candid::Principal;
-use function_name::named;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 use ic_cdk::println;
-use ledger_map::{warn, AHashSet, LedgerMap};
+use ledger_map::AHashSet;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap};
 
 // Maximum allowed number of linked identities allowed per main principal
 pub const MAX_LINKED_PRINCIPALS: usize = 32;
-
-fn principal_linking_fee_e9s() -> TokenAmountE9s {
-    reward_e9s_per_block() / 10000
-}
 
 thread_local! {
     pub static LINKED_ALT_TO_MAIN: RefCell<AHashMap<Principal, Principal>> = RefCell::new(HashMap::default());
@@ -203,144 +195,5 @@ impl LinkedIcIdsRecord {
 
     pub fn deserialize(bytes: &[u8]) -> Result<Self, borsh::io::Error> {
         LinkedIcIdsRecord::try_from_slice(bytes)
-    }
-}
-
-#[named]
-/// Links principals by adding alternate principals to a main principal's record
-pub fn do_link_principals(
-    ledger: &mut LedgerMap,
-    main_principal: Principal,
-    alt_principals_add: Vec<Principal>,
-) -> Result<String, String> {
-    fn_info!(
-        "ADD main {} <-> alt {:?}",
-        main_principal,
-        alt_principals_add
-            .iter()
-            .map(|p| p.to_string().split_once('-').unwrap().0.to_owned())
-            .collect::<Vec<_>>()
-    );
-    let mut alt_principals_add_valid = Vec::new();
-    for p in alt_principals_add {
-        if let Some(prev_main) = cache_get_main_from_alt_principal(&p) {
-            // If equal to the previous main principal, skip
-            if prev_main != main_principal {
-                return Err(format!(
-                    "Principal {} is already linked to main principal {}",
-                    p, prev_main
-                ));
-            }
-        } else {
-            alt_principals_add_valid.push(p);
-        }
-    }
-
-    let payload = LinkedIcIdsRecord::new(main_principal, alt_principals_add_valid.clone(), vec![])
-        .serialize()
-        .unwrap();
-
-    let key = ledger
-        .count_entries_for_label(LABEL_LINKED_IC_IDS)
-        .to_le_bytes();
-    ledger
-        .upsert(LABEL_LINKED_IC_IDS, key, payload)
-        .map_err(|e| e.to_string())
-        .and_then(|_| cache_link_alt_to_main_principal(main_principal, &alt_principals_add_valid))
-        .and_then(|_| {
-            let fee = principal_linking_fee_e9s();
-            let icrc1_account = IcrcCompatibleAccount::new(main_principal, None);
-            match charge_fees_to_account_no_bump_reputation(ledger, &icrc1_account, fee, "") {
-                Ok(_) => Ok(format!(
-                    "Successfully linked {} to {}. You have been charged {} tokens.",
-                    alt_principals_add_valid
-                        .iter()
-                        .map(|p| p.to_string().split_once('-').unwrap().0.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    main_principal,
-                    amount_as_string(fee)
-                )),
-                Err(e) => Err(format!("Failed to charge the fees: {}", e)),
-            }
-        })
-}
-
-#[named]
-/// Unlinks principals by removing alt principals from the main principal's record
-pub fn do_unlink_principals(
-    ledger: &mut LedgerMap,
-    main_principal: Principal,
-    alt_principals_rm: Vec<Principal>,
-) -> Result<String, String> {
-    fn_info!(
-        "RM {} rm alt {:?}",
-        main_principal,
-        alt_principals_rm
-            .iter()
-            .map(|p| p.to_string().split_once('-').unwrap().0.to_owned())
-            .collect::<Vec<_>>()
-    );
-    let mut alt_principals_rm_valid = Vec::new();
-    for p in alt_principals_rm {
-        if let Some(prev_main) = cache_get_main_from_alt_principal(&p) {
-            // If equal to the previous main principal, skip
-            if prev_main == main_principal {
-                alt_principals_rm_valid.push(p);
-            } else {
-                return Err(format!(
-                    "Principal {} is linked to another principal {}",
-                    p, prev_main
-                ));
-            }
-        } else {
-            warn!(
-                "Principal {} is not linked to any main principal, ignoring",
-                p
-            );
-        }
-    }
-
-    // Create an updated record with the remaining alternate principals
-    let payload = LinkedIcIdsRecord::new(main_principal, vec![], alt_principals_rm_valid.clone())
-        .serialize()
-        .unwrap();
-
-    // Update the ledger and the cache
-    let key = ledger
-        .count_entries_for_label(LABEL_LINKED_IC_IDS)
-        .to_le_bytes();
-    ledger
-        .upsert(LABEL_LINKED_IC_IDS, key, payload)
-        .map_err(|e| e.to_string())
-        .map(|_| cache_unlink_alt_from_main_principal(&main_principal, &alt_principals_rm_valid))
-        .and_then(|_| {
-            let fee = principal_linking_fee_e9s();
-            let icrc1_account = IcrcCompatibleAccount::new(main_principal, None);
-            match charge_fees_to_account_no_bump_reputation(ledger, &icrc1_account, fee, "") {
-                Ok(_) => Ok(format!(
-                    "Successfully unlinked {} from {}. You have been charged {} tokens.",
-                    alt_principals_rm_valid
-                        .iter()
-                        .map(|p| p.to_string().split_once('-').unwrap().0.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    main_principal,
-                    amount_as_string(fee)
-                )),
-                Err(e) => Err(format!("Failed to charge the fees: {}", e)),
-            }
-        })
-}
-
-/// Lists all principals linked to the given main principal
-pub fn do_list_alt_principals(main_principal: Principal) -> Result<Vec<Principal>, String> {
-    Ok(cache_get_alt_principals_from_main(&main_principal).unwrap_or_default())
-}
-
-pub fn do_get_main_principal(alt_principal: Principal) -> Result<Principal, String> {
-    match cache_get_main_from_alt_principal(&alt_principal) {
-        Some(main_principal) => Ok(main_principal),
-        None => Ok(alt_principal), // There is no main identity, return the alternate principal
     }
 }

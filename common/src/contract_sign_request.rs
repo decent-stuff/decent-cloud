@@ -3,18 +3,12 @@ use ic_cdk::println;
 use std::{cell::RefCell, collections::HashMap, io::Error};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use function_name::named;
-use ledger_map::{warn, LedgerMap};
 use serde::{Deserialize, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
-use crate::{
-    account_balance_get, amount_as_string, charge_fees_to_account_and_bump_reputation, fn_info,
-    AHashMap, DccIdentity, TokenAmountE9s, LABEL_CONTRACT_SIGN_REQUEST,
-};
+use crate::{AHashMap, DccIdentity, TokenAmountE9s};
 
 pub type ContractId = Vec<u8>;
-pub type ContractReqSerialized = Vec<u8>;
 
 thread_local! {
     /// Key is a 32-byte contract id
@@ -263,96 +257,4 @@ impl ContractSignRequestPayload {
         hasher.update(self.payload_serialized());
         hasher.finalize().into()
     }
-}
-
-#[named]
-pub fn do_contract_sign_request(
-    ledger: &mut LedgerMap,
-    pubkey_bytes: Vec<u8>,
-    request_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
-    dcc_id.verify_bytes(&request_serialized, &crypto_signature)?;
-
-    fn_info!("{}", dcc_id);
-
-    let contract_req = ContractSignRequest::try_from_slice(&request_serialized).unwrap();
-
-    let fees_e9s = contract_sign_fee_e9s(contract_req.payment_amount_e9s());
-
-    let requester_dcc_id =
-        DccIdentity::new_verifying_from_bytes(contract_req.requester_pubkey_bytes()).unwrap();
-    let requester_icrc1 = requester_dcc_id.as_icrc_compatible_account();
-    let requester_balance = account_balance_get(&requester_icrc1);
-    let expected_min_balance = contract_req.payment_amount_e9s() + fees_e9s;
-
-    if requester_balance < expected_min_balance {
-        return Err(format!(
-            "Signing of this contract requires at least {} tokens. Requester {} has only {} tokens",
-            amount_as_string(expected_min_balance),
-            requester_icrc1,
-            amount_as_string(requester_balance)
-        ));
-    }
-
-    let payload = ContractSignRequestPayload::new(&request_serialized, &crypto_signature).unwrap();
-    let payload_bytes = borsh::to_vec(&payload).unwrap();
-
-    charge_fees_to_account_and_bump_reputation(
-        ledger,
-        &dcc_id,
-        fees_e9s,
-        contract_req.request_memo(),
-    )?;
-
-    let contract_id = payload.calc_contract_id();
-    ledger.upsert(
-        LABEL_CONTRACT_SIGN_REQUEST,
-        contract_id,
-        payload_bytes,
-    ).map(|_| {
-        contracts_cache_open_add(contract_id.to_vec(), contract_req.clone());
-        format!(
-            "Contract signing req 0x{} submitted! Thank you. You have been charged {} tokens as a fee, and your reputation has been bumped accordingly. Please check back for a response from the provider.",
-            hex::encode(contract_id),
-            amount_as_string(fees_e9s)
-        )
-    }).map_err(|e| e.to_string())
-}
-
-#[named]
-pub fn do_contracts_list_pending(
-    ledger: &mut LedgerMap,
-    pubkey_bytes: Option<Vec<u8>>,
-) -> Vec<(ContractId, ContractReqSerialized)> {
-    match &pubkey_bytes {
-        None => {
-            fn_info!("without a pubkey filter");
-        }
-        Some(pubkey_bytes) => {
-            fn_info!(
-                "{}",
-                DccIdentity::new_verifying_from_bytes(pubkey_bytes).unwrap()
-            );
-        }
-    }
-
-    contracts_cache_get_open_for_provider(pubkey_bytes)
-        .into_iter()
-        .filter_map(|(key, _)| {
-            ledger
-                .get(LABEL_CONTRACT_SIGN_REQUEST, &key)
-                .map(|req_bytes| (key.to_vec(), req_bytes.to_vec()))
-                .map_err(|e| {
-                    warn!(
-                        "Contract signing req 0x{} not found in ledger: {}",
-                        hex::encode(key),
-                        e
-                    );
-                    e
-                })
-                .ok()
-        })
-        .collect()
 }

@@ -46,50 +46,6 @@ fn provider_check_in(
     _provider_check_in(pubkey_bytes, memo, nonce_crypto_signature)
 }
 
-#[ic_cdk::update]
-fn provider_update_profile(
-    pubkey_bytes: Vec<u8>,
-    profile_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    _provider_update_profile(pubkey_bytes, profile_serialized, crypto_signature)
-}
-
-#[ic_cdk::update]
-fn contract_sign_request(
-    pubkey_bytes: Vec<u8>,
-    request_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    _contract_sign_request(pubkey_bytes, request_serialized, crypto_signature)
-}
-
-#[ic_cdk::query]
-fn contracts_list_pending(
-    pubkey_bytes: Option<Vec<u8>>,
-) -> Vec<(ContractId, ContractReqSerialized)> {
-    _contracts_list_pending(pubkey_bytes)
-}
-
-#[ic_cdk::update]
-fn contract_sign_reply(
-    pubkey_bytes: Vec<u8>,
-    reply_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    _contract_sign_reply(pubkey_bytes, reply_serialized, crypto_signature)
-}
-
-#[ic_cdk::query]
-fn provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
-    _provider_get_profile_by_pubkey_bytes(pubkey_bytes)
-}
-
-#[ic_cdk::query]
-fn provider_get_profile_by_principal(principal: Principal) -> Option<String> {
-    _provider_get_profile_by_principal(principal)
-}
-
 #[ic_cdk::query]
 fn get_check_in_nonce() -> Vec<u8> {
     _get_check_in_nonce()

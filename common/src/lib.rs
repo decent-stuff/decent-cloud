@@ -16,7 +16,6 @@ pub mod ledger_data_operations;
 pub mod ledger_refresh;
 pub mod linked_identity;
 pub mod next_block_sync;
-pub mod profiles;
 pub mod registration;
 pub mod rewards;
 
@@ -38,7 +37,6 @@ pub use ledger_refresh::*;
 pub use linked_identity::*;
 pub use next_block_sync::*;
 use num_traits::cast::ToPrimitive;
-pub use profiles::*;
 pub use registration::*;
 pub use rewards::*;
 
@@ -93,22 +91,21 @@ pub const KEY_LAST_REWARD_DISTRIBUTION_TS: &[u8] = b"LastRewardNs";
 pub const LABEL_DC_TOKEN_APPROVAL: &str = "DCTokenApproval";
 pub const LABEL_DC_TOKEN_TRANSFER: &str = "DCTokenTransfer";
 pub const LABEL_PROV_CHECK_IN: &str = "ProvCheckIn";
-pub const LABEL_PROV_OFFERING: &str = "ProvOffering";
-pub const LABEL_PROV_PROFILE: &str = "ProvProfile";
+pub const LABEL_PROV_OFFERING_LEGACY: &str = "ProvOffering";
+pub const LABEL_PROV_PROFILE_LEGACY: &str = "ProvProfile";
 pub const LABEL_PROV_REGISTER: &str = "ProvRegister";
 pub const LABEL_NP_REGISTER: &str = "NPRegister";
 pub const LABEL_NP_CHECK_IN: &str = "NPCheckIn";
-pub const LABEL_NP_OFFERING: &str = "NPOffering";
-pub const LABEL_NP_PROFILE: &str = "NPProfile";
+pub const LABEL_NP_OFFERING_LEGACY: &str = "NPOffering";
+pub const LABEL_NP_PROFILE_LEGACY: &str = "NPProfile";
 pub const LABEL_REPUTATION_AGE: &str = "RepAge";
 pub const LABEL_REPUTATION_CHANGE: &str = "RepChange";
 pub const LABEL_REWARD_DISTRIBUTION: &str = "RewardDistr";
 pub const LABEL_USER_REGISTER: &str = "UserRegister";
-pub const LABEL_CONTRACT_SIGN_REQUEST: &str = "ContractSignReq";
-pub const LABEL_CONTRACT_SIGN_REPLY: &str = "ContractSignReply";
+pub const LABEL_CONTRACT_SIGN_REQUEST_LEGACY: &str = "ContractSignReq";
+pub const LABEL_CONTRACT_SIGN_REPLY_LEGACY: &str = "ContractSignReply";
 pub const LABEL_LINKED_IC_IDS: &str = "LinkedIcIds";
 pub const MAX_PROV_PROFILE_BYTES: usize = 4 * 1024;
-pub const MAX_PROV_OFFERING_BYTES: usize = 32 * 1024;
 // Maximum response size (replicated execution)	in bytes is 2 MiB
 pub const MAX_RESPONSE_BYTES_REPLICATED: usize = 2 * 1024 * 1024;
 // Maximum response size (non-replicated execution, i.e. in query calls) in bytes is 3 MiB

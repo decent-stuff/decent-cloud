@@ -1,16 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use function_name::named;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 use ic_cdk::println;
-use ledger_map::LedgerMap;
 use serde::{Deserialize, Serialize};
-
-use crate::{
-    account_balance_get, amount_as_string, charge_fees_to_account_no_bump_reputation,
-    contract_sign_fee_e9s, contracts_cache_open_remove, do_funds_transfer, fn_info,
-    ledger_add_reputation_change, ContractSignRequestPayload, DccIdentity,
-    LABEL_CONTRACT_SIGN_REPLY, LABEL_CONTRACT_SIGN_REQUEST,
-};
 
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct ContractSignReplyV1 {
@@ -113,87 +104,4 @@ impl ContractSignReplyPayload {
     pub fn deserialize_contract_sign_reply(&self) -> Result<ContractSignReply, String> {
         ContractSignReply::try_from_slice(self.payload_serialized()).map_err(|e| e.to_string())
     }
-}
-
-#[named]
-pub fn do_contract_sign_reply(
-    ledger: &mut LedgerMap,
-    pubkey_bytes: Vec<u8>,
-    reply_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    let provider_dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
-    provider_dcc_id.verify_bytes(&reply_serialized, &crypto_signature)?;
-
-    fn_info!("{}", provider_dcc_id);
-
-    let cs_reply = ContractSignReply::try_from_slice(&reply_serialized).unwrap();
-    let contract_id = cs_reply.contract_id();
-    let cs_req = ledger
-        .get(LABEL_CONTRACT_SIGN_REQUEST, contract_id)
-        .unwrap();
-    let cs_req = ContractSignRequestPayload::try_from_slice(&cs_req).unwrap();
-    let cs_req = cs_req
-        .deserialize_contract_sign_request()
-        .expect("Error deserializing original contract sign request");
-    if pubkey_bytes != cs_req.provider_pubkey_bytes() {
-        return Err(format!(
-            "Contract signing reply signed and submitted by {} does not match the provider public key {} from contract req 0x{}",
-            provider_dcc_id, DccIdentity::new_verifying_from_bytes(cs_req.provider_pubkey_bytes()).unwrap(), hex::encode(contract_id)
-        ));
-    }
-    let fees_e9s = contract_sign_fee_e9s(cs_req.payment_amount_e9s());
-
-    let requester_dcc_id =
-        DccIdentity::new_verifying_from_bytes(cs_req.requester_pubkey_bytes()).unwrap();
-    let requester_icrc1 = requester_dcc_id.as_icrc_compatible_account();
-    let requester_balance = account_balance_get(&requester_icrc1);
-
-    let payload = ContractSignReplyPayload::new(reply_serialized, crypto_signature);
-    let payload_serialized = borsh::to_vec(&payload).unwrap();
-
-    if cs_reply.sign_accepted() {
-        // Accepted: charge the requester the full amount
-        let charge_amount_e9s = cs_req.payment_amount_e9s() + fees_e9s;
-        if requester_balance < charge_amount_e9s {
-            return Err(format!(
-                "Requester {} does not have enough funds. At least {} tokens are required, and {} are available",
-                requester_icrc1,
-                amount_as_string(charge_amount_e9s),
-                amount_as_string(requester_balance)
-            ));
-        }
-        do_funds_transfer(
-            ledger,
-            &requester_dcc_id,
-            &provider_dcc_id,
-            cs_req.payment_amount_e9s(),
-            fees_e9s,
-            cs_req.request_memo().as_bytes(),
-            crate::IncreaseReputation::Recipient,
-        )?;
-    } else {
-        // Else, charge the provider the response fee, and revert the requester's reputation
-        charge_fees_to_account_no_bump_reputation(
-            ledger,
-            &provider_dcc_id.as_icrc_compatible_account(),
-            fees_e9s,
-            cs_req.request_memo(),
-        )?;
-        ledger_add_reputation_change(ledger, &requester_dcc_id, -(fees_e9s as i64))?;
-    }
-
-    ledger.upsert(
-        LABEL_CONTRACT_SIGN_REPLY,
-        contract_id,
-        payload_serialized,
-    )
-    .map(|_| {
-        contracts_cache_open_remove(contract_id);
-        format!(
-            "Contract signing reply submitted! Thank you. You have been charged {} tokens as a fee, and your reputation has been bumped accordingly",
-            amount_as_string(fees_e9s)
-        )
-    })
-    .map_err(|e| e.to_string())
 }

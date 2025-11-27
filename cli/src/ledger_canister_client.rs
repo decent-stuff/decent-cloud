@@ -3,9 +3,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use borsh::BorshDeserialize;
 use candid::{Decode, Encode};
-use dcc_common::{
-    ContractId, ContractReqSerialized, ContractSignRequest, ContractSignRequestPayload, DccIdentity,
-};
+use dcc_common::{ContractId, DccIdentity};
 use ic_agent::{export::Principal, identity::BasicIdentity, Agent};
 use log::Level;
 use serde::Serialize;
@@ -133,84 +131,6 @@ impl LedgerCanister {
         let response = self.call_update("provider_check_in", &args).await?;
         #[allow(clippy::double_parens)]
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
-    }
-
-    pub async fn provider_update_profile(
-        &self,
-        prov_pubkey_bytes: &[u8],
-        prov_profile_bytes: &[u8],
-        crypto_signature: &[u8],
-    ) -> Result<String, String> {
-        let args = Encode!(&prov_pubkey_bytes, &prov_profile_bytes, &crypto_signature)
-            .map_err(|e| e.to_string())?;
-        let response = self.call_update("provider_update_profile", &args).await?;
-        #[allow(clippy::double_parens)]
-        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
-    }
-
-    pub async fn provider_update_offering(
-        &self,
-        prov_pubkey_bytes: &[u8],
-        prov_offering_bytes: &[u8],
-        crypto_signature: &[u8],
-    ) -> Result<String, String> {
-        let args = Encode!(&prov_pubkey_bytes, &prov_offering_bytes, &crypto_signature)
-            .map_err(|e| e.to_string())?;
-        let response = self.call_update("provider_update_offering", &args).await?;
-        #[allow(clippy::double_parens)]
-        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
-    }
-
-    pub async fn contract_sign_request(
-        &self,
-        requester_pubkey_bytes: &[u8],
-        payload_bytes: &[u8],
-        payload_sig_bytes: &[u8],
-    ) -> Result<String, String> {
-        let args = Encode!(&requester_pubkey_bytes, &payload_bytes, &payload_sig_bytes)
-            .map_err(|e| e.to_string())?;
-        let response = self.call_update("contract_sign_request", &args).await?;
-        #[allow(clippy::double_parens)]
-        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
-    }
-
-    pub async fn contract_sign_reply(
-        &self,
-        provider_pubkey_bytes: &[u8],
-        payload_bytes: &[u8],
-        payload_sig_bytes: &[u8],
-    ) -> Result<String, String> {
-        let args = Encode!(&provider_pubkey_bytes, &payload_bytes, &payload_sig_bytes)
-            .map_err(|e| e.to_string())?;
-        let response = self.call_update("contract_sign_reply", &args).await?;
-        #[allow(clippy::double_parens)]
-        Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
-    }
-
-    pub async fn contracts_list_pending(
-        &self,
-        pubkey_bytes: &Option<Vec<u8>>,
-    ) -> Vec<OpenContractTuple> {
-        let args = Encode!(&pubkey_bytes).map_err(|e| e.to_string()).unwrap();
-        let response = self
-            .call_query("contracts_list_pending", &args)
-            .await
-            .unwrap();
-        #[allow(clippy::double_parens)]
-        Decode!(
-            response.as_slice(),
-            Vec<(ContractId, ContractReqSerialized)>
-        )
-        .unwrap()
-        .into_iter()
-        .map(|(contract_id, payload)| OpenContractTuple {
-            contract_id_base64: BASE64.encode(&contract_id),
-            contract_req: ContractSignRequestPayload::try_from_slice(&payload)
-                .unwrap()
-                .deserialize_contract_sign_request()
-                .unwrap(),
-        })
-        .collect()
     }
 
     pub async fn get_check_in_nonce(&self) -> Vec<u8> {

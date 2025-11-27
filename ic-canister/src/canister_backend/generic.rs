@@ -7,8 +7,7 @@ use dcc_common::{
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
     rewards_pending_e9s, set_test_config, ContractId, ContractReqSerialized, LedgerCursor,
     NextBlockSyncRequest, NextBlockSyncResponse, RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS,
-    DATA_PULL_BYTES_BEFORE_LEN, LABEL_CONTRACT_SIGN_REQUEST, LABEL_LINKED_IC_IDS,
-    LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING, LABEL_PROV_PROFILE, LABEL_PROV_REGISTER,
+    DATA_PULL_BYTES_BEFORE_LEN, LABEL_PROV_CHECK_IN, LABEL_PROV_REGISTER,
     LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER,
 };
 use ic_cdk::println;
@@ -49,10 +48,6 @@ thread_local! {
         LABEL_PROV_CHECK_IN.to_string(),
         LABEL_USER_REGISTER.to_string(),
         LABEL_REWARD_DISTRIBUTION.to_string(),
-        LABEL_PROV_PROFILE.to_string(),
-        LABEL_PROV_OFFERING.to_string(),
-        LABEL_CONTRACT_SIGN_REQUEST.to_string(),
-        LABEL_LINKED_IC_IDS.to_string(),
     ])).expect("Failed to create LedgerMap"));
     pub(crate) static AUTHORIZED_PUSHER: RefCell<Option<Principal>> = const { RefCell::new(None) };
     #[cfg(target_arch = "wasm32")]
@@ -216,74 +211,8 @@ pub(crate) fn _provider_check_in(
     })
 }
 
-pub(crate) fn _provider_update_profile(
-    pubkey_bytes: Vec<u8>,
-    profile_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    // To prevent DOS attacks, a fee is charged for executing this operation
-    LEDGER_MAP.with(|ledger| {
-        dcc_common::do_provider_update_profile(
-            &mut ledger.borrow_mut(),
-            pubkey_bytes,
-            profile_serialized,
-            crypto_signature,
-        )
-    })
-}
-
-pub(crate) fn _provider_get_profile_by_pubkey_bytes(pubkey_bytes: Vec<u8>) -> Option<String> {
-    let prov_profile = LEDGER_MAP
-        .with(|ledger| dcc_common::do_provider_get_profile(&ledger.borrow(), pubkey_bytes));
-    prov_profile
-        .map(|prov_profile| serde_json::to_string_pretty(&prov_profile).expect("Failed to encode"))
-}
-
-pub(crate) fn _provider_get_profile_by_principal(principal: Principal) -> Option<String> {
-    let pubkey_bytes = get_pubkey_from_principal(principal);
-    _provider_get_profile_by_pubkey_bytes(pubkey_bytes)
-}
-
 pub(crate) fn _get_check_in_nonce() -> Vec<u8> {
     LEDGER_MAP.with(|ledger| ledger.borrow().get_latest_block_hash())
-}
-
-pub(crate) fn _contract_sign_request(
-    pubkey_bytes: Vec<u8>,
-    request_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    LEDGER_MAP.with(|ledger| {
-        dcc_common::do_contract_sign_request(
-            &mut ledger.borrow_mut(),
-            pubkey_bytes,
-            request_serialized,
-            crypto_signature,
-        )
-    })
-}
-
-pub(crate) fn _contracts_list_pending(
-    pubkey_bytes: Option<Vec<u8>>,
-) -> Vec<(ContractId, ContractReqSerialized)> {
-    LEDGER_MAP.with(|ledger| {
-        dcc_common::do_contracts_list_pending(&mut ledger.borrow_mut(), pubkey_bytes)
-    })
-}
-
-pub(crate) fn _contract_sign_reply(
-    pubkey_bytes: Vec<u8>,
-    reply_serialized: Vec<u8>,
-    crypto_signature: Vec<u8>,
-) -> Result<String, String> {
-    LEDGER_MAP.with(|ledger| {
-        dcc_common::do_contract_sign_reply(
-            &mut ledger.borrow_mut(),
-            pubkey_bytes,
-            reply_serialized,
-            crypto_signature,
-        )
-    })
 }
 
 pub(crate) fn _get_identity_reputation(identity: Vec<u8>) -> u64 {
