@@ -526,7 +526,10 @@ async fn test_usernames_preserve_case_but_unique_case_insensitive() {
     let db = create_test_db().await;
 
     // Create account with specific case
-    let account = db.create_account("AliceWonderland", &[1u8; 32]).await.unwrap();
+    let account = db
+        .create_account("AliceWonderland", &[1u8; 32])
+        .await
+        .unwrap();
 
     // Verify username is stored with original case
     assert_eq!(account.username, "AliceWonderland");
@@ -537,9 +540,18 @@ async fn test_usernames_preserve_case_but_unique_case_insensitive() {
     let result_mixed = db.create_account("aLiCeWoNdErLaNd", &[4u8; 32]).await;
 
     // All should fail due to case-insensitive unique constraint
-    assert!(result_lower.is_err(), "Should not allow duplicate username with different case");
-    assert!(result_upper.is_err(), "Should not allow duplicate username with different case");
-    assert!(result_mixed.is_err(), "Should not allow duplicate username with different case");
+    assert!(
+        result_lower.is_err(),
+        "Should not allow duplicate username with different case"
+    );
+    assert!(
+        result_upper.is_err(),
+        "Should not allow duplicate username with different case"
+    );
+    assert!(
+        result_mixed.is_err(),
+        "Should not allow duplicate username with different case"
+    );
 }
 
 #[tokio::test]
@@ -547,7 +559,10 @@ async fn test_username_search_is_case_insensitive() {
     let db = create_test_db().await;
 
     // Create account with mixed case
-    let _account = db.create_account("AliceWonderland", &[1u8; 32]).await.unwrap();
+    let _account = db
+        .create_account("AliceWonderland", &[1u8; 32])
+        .await
+        .unwrap();
 
     // Search with different cases should all find the same account
     let found_lower = db.get_account_by_username("alicewonderland").await.unwrap();

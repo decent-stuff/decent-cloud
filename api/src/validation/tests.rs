@@ -132,4 +132,3 @@ fn test_validate_account_username_reserved() {
     assert!(validate_account_username("ADMIN").is_err());
     assert!(validate_account_username("Admin").is_err());
 }
-

@@ -161,12 +161,20 @@ pub fn write_data_to_ledger_file(
     Ok(())
 }
 
-/// Parse raw ledger data into a vector of ledger entries
-pub fn parse_ledger_entries(ledger_map: &LedgerMap, data: &[u8]) -> Result<Vec<LedgerEntryData>> {
+/// Parse ledger entries from the file starting at the given position
+pub fn parse_ledger_entries(
+    ledger_map: &LedgerMap,
+    start_pos: u64,
+) -> Result<Vec<LedgerEntryData>> {
     let mut entries = Vec::new();
 
-    for block_result in ledger_map.iter_raw_from_slice(data) {
-        let (_block_header, block, block_hash) = block_result?;
+    for block_result in ledger_map.iter_raw(start_pos) {
+        let (_block_header, block) = block_result?;
+        let block_hash = LedgerMap::_compute_block_chain_hash(
+            block.parent_hash(),
+            block.entries(),
+            block.timestamp(),
+        )?;
         let block_timestamp = block.timestamp();
         let block_offset = block.get_offset();
 

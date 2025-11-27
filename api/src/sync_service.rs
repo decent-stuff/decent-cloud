@@ -57,7 +57,7 @@ impl SyncService {
             return Ok(());
         }
 
-        let entries = self.parse_ledger_data(&raw_data)?;
+        let entries = self.parse_ledger_data(last_position)?;
         self.store_entries(entries).await?;
         self.update_sync_position(new_position).await?;
 
@@ -102,12 +102,12 @@ impl SyncService {
         Ok(())
     }
 
-    fn parse_ledger_data(&self, data: &[u8]) -> Result<Vec<crate::database::LedgerEntryData>> {
+    fn parse_ledger_data(&self, start_pos: u64) -> Result<Vec<crate::database::LedgerEntryData>> {
         let parser = self.ledger_parser.lock().map_err(|_| {
             anyhow::anyhow!("Failed to acquire ledger parser lock - possible poisoning")
         })?;
 
-        let common_entries = parse_ledger_entries(&parser, data)?;
+        let common_entries = parse_ledger_entries(&parser, start_pos)?;
 
         // Convert common entries to API database entries
         let entries = common_entries
