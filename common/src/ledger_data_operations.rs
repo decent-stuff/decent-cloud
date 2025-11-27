@@ -1,10 +1,10 @@
 use crate::{cursor_from_data, LedgerCursor, DATA_PULL_BYTES_BEFORE_LEN};
 use anyhow::Result;
-use ledger_map::{platform_specific::persistent_storage_read, LedgerMap};
-#[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
-use std::io::{Seek, Write};
-#[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
-use std::mem::size_of;
+use ledger_map::{
+    ledger_entry::LedgerBlockHeader,
+    platform_specific::{persistent_storage_read, persistent_storage_write},
+    LedgerMap,
+};
 
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 macro_rules! tracing_info {
@@ -36,10 +36,6 @@ fn read_bytes_before(position: u64) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
-fn select_fetch_start(local_next_block_start: u64, requested_position: u64) -> u64 {
-    requested_position.min(local_next_block_start)
-}
-
 /// Fetch ledger data and write it to the ledger file
 /// This function handles the core logic of fetching data from the canister
 /// and writing it to the local ledger file, ensuring proper cursor handling
@@ -55,28 +51,13 @@ where
     F: FnOnce(Option<String>, Option<Vec<u8>>) -> Fut,
     Fut: std::future::Future<Output = Result<(String, Vec<u8>)>>,
 {
-    // Get the ledger file path if available - reborrow to get immutable access
-    #[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
-    let ledger_file_path = (ledger_map as &LedgerMap).get_file_path();
-    #[cfg(all(target_arch = "wasm32", feature = "ic"))]
-    let ledger_file_path: Option<std::path::PathBuf> = None;
-
-    let local_next_block = ledger_map.get_next_block_start_pos();
-    let fetch_start = select_fetch_start(local_next_block, last_position);
-    if fetch_start != last_position {
-        tracing_info!(
-            "Requested position {} is ahead of local ledger {}; using local cursor instead",
-            last_position,
-            local_next_block
-        );
-    }
-
-    // Create proper cursor using the same approach as CLI
+    // Use last_position directly - the remote will tell us where data actually starts
+    // Don't clamp to local ledger state since we may be fetching new data
     let cursor_local = cursor_from_data(
         ledger_map::partition_table::get_data_partition().start_lba,
         ledger_map::platform_specific::persistent_storage_size_bytes(),
-        local_next_block,
-        fetch_start,
+        last_position, // Use requested position, not ledger state
+        last_position,
     );
 
     let bytes_before = if cursor_local.position > DATA_PULL_BYTES_BEFORE_LEN as u64 {
@@ -101,64 +82,30 @@ where
     let data_start = cursor_remote.position;
     let data_end = cursor_remote.position + cursor_remote.response_bytes;
 
-    // Write the fetched data to the ledger file if we have a file path (same as CLI)
+    // Write the fetched data using the same BackingFile handle as LedgerMap
     if !raw_data.is_empty() {
-        #[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
-        if let Some(ref path) = ledger_file_path {
-            write_data_to_ledger_file(&raw_data, data_start, path)?;
-        }
+        // Write data to persistent storage (uses same file handle as LedgerMap)
+        persistent_storage_write(data_start, &raw_data);
 
-        #[cfg(all(target_arch = "wasm32", feature = "ic"))]
-        if ledger_file_path.is_none() {
-            // For wasm/browser environments, write directly to persistent storage
-            ledger_map::platform_specific::persistent_storage_write(data_start, &raw_data);
-        }
+        // Write a zero block header as terminator
+        let terminator = [0u8; LedgerBlockHeader::sizeof()];
+        persistent_storage_write(data_start + raw_data.len() as u64, &terminator);
 
-        // Refresh the ledger parser after writing data (same as CLI)
-        ledger_map.refresh_ledger()?;
+        tracing_info!(
+            "Wrote {} bytes at offset 0x{:0x} to persistent storage (more={})",
+            raw_data.len(),
+            data_start,
+            cursor_remote.more
+        );
+
+        // Only refresh when we have all data (no more chunks to fetch)
+        // Refreshing with partial data fails because blocks may be truncated
+        if !cursor_remote.more {
+            ledger_map.refresh_ledger()?;
+        }
     }
 
     Ok((raw_data, data_start, data_end))
-}
-
-/// Write data to the ledger file at the specified offset
-/// This function handles the low-level file operations for writing ledger data
-#[cfg(not(all(target_arch = "wasm32", feature = "ic")))]
-pub fn write_data_to_ledger_file(
-    data: &[u8],
-    offset: u64,
-    ledger_file_path: &std::path::Path,
-) -> Result<()> {
-    use std::fs::OpenOptions;
-
-    let mut ledger_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(ledger_file_path)?;
-
-    let file_size_bytes = ledger_file.metadata()?.len();
-    let file_size_bytes_target = offset + data.len() as u64 + 1024 * 1024;
-
-    if file_size_bytes < file_size_bytes_target {
-        ledger_file.set_len(file_size_bytes_target)?;
-    }
-
-    ledger_file.seek(std::io::SeekFrom::Start(offset))?;
-    ledger_file.write_all(data)?;
-
-    // Write a zero block header as terminator (same as CLI)
-    ledger_file.write_all(&[0u8; size_of::<ledger_map::ledger_entry::LedgerBlockHeader>()])?;
-
-    tracing_info!(
-        "Wrote {} bytes at offset 0x{:0x} to file {}",
-        data.len(),
-        offset,
-        ledger_file_path.display()
-    );
-
-    Ok(())
 }
 
 /// Parse ledger entries from the file starting at the given position
@@ -202,19 +149,4 @@ pub struct LedgerEntryData {
     pub block_timestamp_ns: u64,
     pub block_hash: Vec<u8>,
     pub block_offset: u64,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fetch_start_prefers_requested_when_not_ahead() {
-        assert_eq!(select_fetch_start(512, 256), 256);
-    }
-
-    #[test]
-    fn fetch_start_clamps_to_local_when_request_ahead() {
-        assert_eq!(select_fetch_start(128, 256), 128);
-    }
 }

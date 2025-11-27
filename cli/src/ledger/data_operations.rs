@@ -14,21 +14,33 @@ pub async fn ledger_data_fetch(
     ledger_canister: &LedgerCanister,
     ledger_local: &mut LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let last_position = ledger_local.get_next_block_start_pos();
+    let mut last_position = ledger_local.get_next_block_start_pos();
+    let mut total_bytes = 0u64;
 
-    let (data, _data_start, _data_end) = fetch_and_write_ledger_data(
-        ledger_local,
-        |cursor_str, bytes_before| async move {
-            ledger_canister
-                .data_fetch(cursor_str, bytes_before)
-                .await
-                .map_err(|e| anyhow::anyhow!(e))
-        },
-        last_position,
-    )
-    .await?;
+    // Keep fetching until we have all data
+    loop {
+        let (_data, _data_start, data_end) = fetch_and_write_ledger_data(
+            ledger_local,
+            |cursor_str, bytes_before| async move {
+                ledger_canister
+                    .data_fetch(cursor_str, bytes_before)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))
+            },
+            last_position,
+        )
+        .await?;
 
-    if !data.is_empty() {
+        if _data.is_empty() {
+            break;
+        }
+
+        total_bytes += _data.len() as u64;
+        last_position = data_end;
+    }
+
+    if total_bytes > 0 {
+        info!("Fetched {} total bytes", total_bytes);
         // Set the modified time to the current time, to mark that the data is up-to-date
         if let Some(ledger_file_path) = ledger_local.get_file_path() {
             filetime::set_file_mtime(ledger_file_path, std::time::SystemTime::now().into())?;

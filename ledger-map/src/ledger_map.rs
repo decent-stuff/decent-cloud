@@ -574,6 +574,13 @@ impl LedgerMap {
         &self,
         offset: u64,
     ) -> Result<(LedgerBlockHeader, LedgerBlock), LedgerError> {
+        let storage_size = persistent_storage_size_bytes();
+
+        // Check if we can read the header
+        if offset + LedgerBlockHeader::sizeof() as u64 > storage_size {
+            return Err(LedgerError::BlockEmpty);
+        }
+
         // Find out how many bytes we need to read ==> block len in bytes
         let mut buf = vec![0u8; size_of::<LedgerBlockHeader>()];
         persistent_storage_read(offset, &mut buf)
@@ -592,6 +599,11 @@ impl LedgerMap {
                     LedgerBlockHeader::sizeof()
                 ))
             })?;
+
+        // Check if the full block fits in storage (truncated file = end of chain)
+        if offset + block_len_bytes as u64 > storage_size {
+            return Err(LedgerError::BlockEmpty);
+        }
 
         // Read the block as raw bytes
         let mut buf = vec![0u8; data_size];
