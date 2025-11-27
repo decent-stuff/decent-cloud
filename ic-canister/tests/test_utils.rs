@@ -8,7 +8,6 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
-use provider_offering::{ProviderOfferings, ServerOffering};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
