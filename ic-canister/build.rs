@@ -155,27 +155,25 @@ fn ensure_in_path(path: PathBuf) {
 }
 
 pub fn main() {
+    prepare_token_logo_env_var();
+
+    // Skip canister building (and dfx/pocket-ic installation) in release mode
+    // or on non-Linux/x86_64 platforms
+    if Ok("linux") != env::var("CARGO_CFG_TARGET_OS").as_deref()
+        || Ok("x86_64") != env::var("CARGO_CFG_TARGET_ARCH").as_deref()
+        || matches!(env::var("PROFILE").as_deref(), Ok("release"))
+    {
+        return;
+    }
+
     // Add ~/bin to PATH so that installed tools can be found
     if let Some(home_dir) = dirs::home_dir() {
         ensure_in_path(home_dir.join("bin")); // default pocket-ic path
         ensure_in_path(home_dir.join(".local/share/dfx/bin")); // default dfx path
     }
 
-    prepare_token_logo_env_var();
     install_dfx_if_needed();
     install_pocket_ic_if_needed();
-    // Only build the canister on x86_64 Linux
-    if Ok("linux") != env::var("CARGO_CFG_TARGET_OS").as_deref() {
-        return;
-    }
-
-    if Ok("x86_64") != env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
-        return;
-    }
-
-    if matches!(env::var("PROFILE").as_deref(), Ok("release")) {
-        return;
-    }
 
     let workspace_dir_path = workspace_dir();
     let canister_dir_path = workspace_dir_path.join("ic-canister");
