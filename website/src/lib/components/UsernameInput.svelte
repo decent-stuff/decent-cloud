@@ -31,8 +31,8 @@
 	);
 
 	async function validateUsername(username: string) {
-		// Normalize
-		normalized = username.trim().toLowerCase();
+		// Trim whitespace
+		normalized = username.trim();
 
 		// Clear previous state
 		errorMessage = null;
@@ -158,7 +158,7 @@
 	<!-- Character counter -->
 	<div class="flex justify-between items-center text-xs">
 		<div class="text-white/40">
-			3-64 characters, lowercase letters, numbers, ._@-
+			3-64 characters, letters, numbers, ._@- (case sensitive)
 		</div>
 		<div class="{charCountColor}">
 			{charCount}/64

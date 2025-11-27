@@ -157,11 +157,11 @@ impl Database {
         Ok(account)
     }
 
-    /// Get account by username
+    /// Get account by username (case-insensitive search)
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at
-             FROM accounts WHERE username = ?",
+             FROM accounts WHERE LOWER(username) = LOWER(?)",
         )
         .bind(username)
         .fetch_optional(&self.pool)

@@ -304,24 +304,34 @@ export async function checkUsernameAvailable(username: string): Promise<boolean>
  * Returns error message or null if valid
  */
 export function validateUsernameFormat(username: string): string | null {
-	// Normalize
-	const normalized = username.trim().toLowerCase();
+	const trimmed = username.trim();
 
 	// Length check
-	if (normalized.length < 3) {
-		return 'Username must be at least 3 characters';
+	if (trimmed.length < 3) {
+		return 'Username too short (minimum 3 characters)';
 	}
-	if (normalized.length > 64) {
-		return 'Username must be at most 64 characters';
-	}
-
-	// Format check: [a-z0-9][a-z0-9._@-]*[a-z0-9]
-	const regex = /^[a-z0-9][a-z0-9._@-]*[a-z0-9]$/;
-	if (!regex.test(normalized)) {
-		return 'Username must start and end with a letter or number, and contain only lowercase letters, numbers, dots, underscores, hyphens, or @';
+	if (trimmed.length > 64) {
+		return 'Username too long (maximum 64 characters)';
 	}
 
-	// Reserved usernames
+	// Check first character
+	if (!/^[a-zA-Z0-9]/.test(trimmed)) {
+		return 'Username must start with a letter or number';
+	}
+
+	// Check last character
+	if (!/[a-zA-Z0-9]$/.test(trimmed)) {
+		return 'Username must end with a letter or number';
+	}
+
+	// Check for invalid characters
+	const invalidChars = trimmed.match(/[^a-zA-Z0-9._@-]/g);
+	if (invalidChars) {
+		const uniqueInvalid = [...new Set(invalidChars)].join(', ');
+		return `Invalid character(s): ${uniqueInvalid}. Only letters, numbers, and ._@- allowed`;
+	}
+
+	// Reserved usernames (case-insensitive check for safety)
 	const reserved = [
 		'admin',
 		'api',
@@ -337,7 +347,7 @@ export function validateUsernameFormat(username: string): string | null {
 		'cloud'
 	];
 
-	if (reserved.includes(normalized)) {
+	if (reserved.includes(trimmed.toLowerCase())) {
 		return 'This username is reserved';
 	}
 
@@ -348,21 +358,21 @@ export function validateUsernameFormat(username: string): string | null {
  * Generate username suggestions based on a taken username
  */
 export function generateUsernameSuggestions(username: string): string[] {
-	const normalized = username.trim().toLowerCase();
+	const trimmed = username.trim();
 	const suggestions: string[] = [];
 
 	// Add numbers
 	for (let i = 1; i <= 3; i++) {
-		suggestions.push(`${normalized}${i}`);
+		suggestions.push(`${trimmed}${i}`);
 	}
 
 	// Add underscore + numbers
-	suggestions.push(`${normalized}_99`);
-	suggestions.push(`${normalized}_01`);
+	suggestions.push(`${trimmed}_99`);
+	suggestions.push(`${trimmed}_01`);
 
 	// Add random numbers
 	const random = Math.floor(Math.random() * 1000);
-	suggestions.push(`${normalized}${random}`);
+	suggestions.push(`${trimmed}${random}`);
 
 	return suggestions;
 }

@@ -31,7 +31,7 @@ fn url_regex() -> &'static Regex {
 }
 
 fn username_regex() -> &'static Regex {
-    USERNAME_REGEX.get_or_init(|| Regex::new(r"^[a-z0-9][a-z0-9._@-]{1,62}[a-z0-9]$").unwrap())
+    USERNAME_REGEX.get_or_init(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9._@-]{1,62}[a-zA-Z0-9]$").unwrap())
 }
 
 pub fn validate_email(email: &str) -> Result<()> {
@@ -152,37 +152,34 @@ pub fn validate_social_username(username: &str) -> Result<()> {
     Ok(())
 }
 
-/// Normalize username to lowercase and trim whitespace
-pub fn normalize_username(username: &str) -> String {
-    username.trim().to_lowercase()
-}
-
 /// Validate account username
 /// Rules:
 /// - Length: 3-64 characters
-/// - Characters: [a-z0-9._@-] (lowercase alphanumeric, period, underscore, hyphen, at-sign)
+/// - Characters: [a-zA-Z0-9._@-] (alphanumeric, period, underscore, hyphen, at-sign)
 /// - Format: Must start and end with alphanumeric character
-/// - Not in reserved list
+/// - Not in reserved list (case-insensitive check for safety)
+/// - Returns trimmed username preserving case
 pub fn validate_account_username(username: &str) -> Result<String> {
-    let normalized = normalize_username(username);
+    let trimmed = username.trim().to_string();
 
-    if normalized.len() < 3 {
+    if trimmed.len() < 3 {
         bail!("Username must be at least 3 characters");
     }
 
-    if normalized.len() > 64 {
+    if trimmed.len() > 64 {
         bail!("Username must be at most 64 characters");
     }
 
-    if !username_regex().is_match(&normalized) {
-        bail!("Username must start and end with alphanumeric character and contain only lowercase letters, numbers, period, underscore, hyphen, or at-sign");
+    if !username_regex().is_match(&trimmed) {
+        bail!("Username must start and end with alphanumeric character and contain only letters, numbers, period, underscore, hyphen, or at-sign");
     }
 
-    if RESERVED_USERNAMES.contains(&normalized.as_str()) {
+    // Check reserved usernames case-insensitively for safety
+    if RESERVED_USERNAMES.contains(&trimmed.to_lowercase().as_str()) {
         bail!("Username is reserved");
     }
 
-    Ok(normalized)
+    Ok(trimmed)
 }
 
 #[cfg(test)]

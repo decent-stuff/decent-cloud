@@ -520,3 +520,49 @@ async fn test_create_oauth_linked_account_transaction_rollback() {
         "Account 'second' should not exist after transaction rollback"
     );
 }
+
+#[tokio::test]
+async fn test_usernames_preserve_case_but_unique_case_insensitive() {
+    let db = create_test_db().await;
+
+    // Create account with specific case
+    let account = db.create_account("AliceWonderland", &[1u8; 32]).await.unwrap();
+
+    // Verify username is stored with original case
+    assert_eq!(account.username, "AliceWonderland");
+
+    // Try to create account with same name but different case - should fail
+    let result_lower = db.create_account("alicewonderland", &[2u8; 32]).await;
+    let result_upper = db.create_account("ALICEWONDERLAND", &[3u8; 32]).await;
+    let result_mixed = db.create_account("aLiCeWoNdErLaNd", &[4u8; 32]).await;
+
+    // All should fail due to case-insensitive unique constraint
+    assert!(result_lower.is_err(), "Should not allow duplicate username with different case");
+    assert!(result_upper.is_err(), "Should not allow duplicate username with different case");
+    assert!(result_mixed.is_err(), "Should not allow duplicate username with different case");
+}
+
+#[tokio::test]
+async fn test_username_search_is_case_insensitive() {
+    let db = create_test_db().await;
+
+    // Create account with mixed case
+    let _account = db.create_account("AliceWonderland", &[1u8; 32]).await.unwrap();
+
+    // Search with different cases should all find the same account
+    let found_lower = db.get_account_by_username("alicewonderland").await.unwrap();
+    let found_upper = db.get_account_by_username("ALICEWONDERLAND").await.unwrap();
+    let found_mixed = db.get_account_by_username("AliceWonderland").await.unwrap();
+    let found_other = db.get_account_by_username("aLiCeWoNdErLaNd").await.unwrap();
+
+    assert!(found_lower.is_some());
+    assert!(found_upper.is_some());
+    assert!(found_mixed.is_some());
+    assert!(found_other.is_some());
+
+    // All should return the same account with original case
+    assert_eq!(found_lower.unwrap().username, "AliceWonderland");
+    assert_eq!(found_upper.unwrap().username, "AliceWonderland");
+    assert_eq!(found_mixed.unwrap().username, "AliceWonderland");
+    assert_eq!(found_other.unwrap().username, "AliceWonderland");
+}

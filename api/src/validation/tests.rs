@@ -65,12 +65,14 @@ fn test_validate_account_username_valid() {
     );
     assert_eq!(validate_account_username("dev@org").unwrap(), "dev@org");
 
-    // Uppercase should normalize to lowercase
-    assert_eq!(validate_account_username("ALICE").unwrap(), "alice");
-    assert_eq!(validate_account_username("Bob123").unwrap(), "bob123");
+    // Uppercase should be preserved
+    assert_eq!(validate_account_username("ALICE").unwrap(), "ALICE");
+    assert_eq!(validate_account_username("Bob123").unwrap(), "Bob123");
+    assert_eq!(validate_account_username("MixedCase").unwrap(), "MixedCase");
 
     // Whitespace should be trimmed
     assert_eq!(validate_account_username("  alice  ").unwrap(), "alice");
+    assert_eq!(validate_account_username("  Alice  ").unwrap(), "Alice");
 }
 
 #[test]
@@ -105,8 +107,9 @@ fn test_validate_account_username_invalid_format() {
     assert!(validate_account_username("alice bob").is_err());
     assert!(validate_account_username("alice#bob").is_err());
 
-    // Uppercase (should work after normalization)
+    // Uppercase should be allowed
     assert!(validate_account_username("Alice").is_ok());
+    assert!(validate_account_username("BobSmith").is_ok());
 }
 
 #[test]
@@ -130,10 +133,3 @@ fn test_validate_account_username_reserved() {
     assert!(validate_account_username("Admin").is_err());
 }
 
-#[test]
-fn test_normalize_username() {
-    assert_eq!(normalize_username("Alice"), "alice");
-    assert_eq!(normalize_username("BOB123"), "bob123");
-    assert_eq!(normalize_username("  alice  "), "alice");
-    assert_eq!(normalize_username("USER@EXAMPLE.COM"), "user@example.com");
-}
