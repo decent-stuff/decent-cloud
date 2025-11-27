@@ -30,7 +30,6 @@ poem = { workspace = true, features = ["cookie"] }
 poem-openapi = { version = "5", features = ["swagger-ui", "chrono"] }
 rand = "0.8"
 time = { version = "0.3", features = ["serde", "macros"] }
-provider-profile = { path = "../provider-profile" }
 regex.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true

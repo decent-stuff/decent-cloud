@@ -439,7 +439,6 @@ decent-cloud/
 │   ├── lib/        # Utility libraries
 │   └── public/     # Static assets
 ├── docs/           # Documentation
-└── examples/       # Example configurations
 ```
 
 ## Support

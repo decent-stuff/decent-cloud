@@ -19,7 +19,6 @@
 
 # Development and documentation
 docs/
-examples/
 **/.idea
 **/.vscode
 **/*.md

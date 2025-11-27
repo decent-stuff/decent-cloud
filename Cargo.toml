@@ -1,13 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "api",
-    "cli",
-    "common",
-    "ic-canister",
-    "ledger-map",
-    "provider-profile",
-]
+members = ["api", "cli", "common", "ic-canister", "ledger-map"]
 
 [workspace.package]
 version = "0.3.0"
@@ -63,7 +56,6 @@ pkcs8 = "0.10"
 pocket-ic = "10"
 poem = "3.0"
 pretty_env_logger = "0.5"
-provider-profile = { path = "provider-profile" }
 regex = "1.12.2"
 reqwest = { version = "0.12", features = [
     "json",
