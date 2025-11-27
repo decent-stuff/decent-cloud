@@ -63,6 +63,23 @@
 		}
 	});
 
+	// Generate template CSV when resource type is selected
+	$effect(() => {
+		if (selectedResourceType && RESOURCE_TYPES[selectedResourceType as ResourceTypeKey]) {
+			const resourceType = RESOURCE_TYPES[selectedResourceType as ResourceTypeKey];
+			const hasContent = currentCsvContent.trim().length > 0;
+
+			// Only generate template if CSV is empty or only has headers (no data rows)
+			if (!hasContent) {
+				// Create header row with key columns
+				const headers = resourceType.columns.join(',');
+				// Add one empty data row
+				const emptyRow = resourceType.columns.map(() => '').join(',');
+				currentCsvContent = `${headers}\n${emptyRow}`;
+			}
+		}
+	});
+
 	function handleDragEnter(e: DragEvent) {
 		e.preventDefault();
 		isDragging = true;
@@ -291,11 +308,12 @@
 							id="resource-type"
 							bind:value={selectedResourceType}
 							disabled={importing}
-							class="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+							class="px-3 py-2 bg-slate-800 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+							style="color-scheme: dark;"
 						>
-							<option value="">All types</option>
+							<option value="" style="background-color: #1e293b; color: white;">All types</option>
 							{#each Object.entries(RESOURCE_TYPES) as [key, { label }]}
-								<option value={key}>{label}</option>
+								<option value={key} style="background-color: #1e293b; color: white;">{label}</option>
 							{/each}
 						</select>
 					</div>
