@@ -1,6 +1,6 @@
 [package]
 name = "ledger-map"
-version = "0.4.3"
+version = "0.4.1"
 edition = "2021"
 description = "A Rust-based key-value map, for append-only data storage. Data integrity is protected with SHA-256 checksums, and cross-compiles to wasm32 for smart contract applications."
 license = "MIT OR Apache-2.0"
