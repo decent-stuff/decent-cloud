@@ -50,16 +50,34 @@ impl SyncService {
     }
 
     async fn sync_once(&self) -> Result<()> {
-        let last_position = self.database.get_last_sync_position().await?;
-        let (raw_data, data_start, data_end) = self.fetch_data(last_position).await?;
+        let mut last_position = self.database.get_last_sync_position().await?;
+        let mut total_bytes = 0u64;
+        let mut final_data_start = last_position;
 
-        if raw_data.is_empty() {
+        // Keep fetching until we have all data (same as CLI)
+        loop {
+            let (raw_data, data_start, data_end) = self.fetch_data(last_position).await?;
+
+            if raw_data.is_empty() {
+                break;
+            }
+
+            if total_bytes == 0 {
+                final_data_start = data_start;
+            }
+            total_bytes += raw_data.len() as u64;
+            last_position = data_end;
+        }
+
+        if total_bytes == 0 {
             return Ok(());
         }
 
-        let entries = self.parse_ledger_data(data_start)?;
+        tracing::info!("Fetched {} total bytes", total_bytes);
+
+        let entries = self.parse_ledger_data(final_data_start)?;
         self.store_entries(entries).await?;
-        self.update_sync_position(data_end).await?;
+        self.update_sync_position(last_position).await?;
 
         Ok(())
     }
