@@ -1,6 +1,5 @@
 mod argparse;
 mod commands;
-mod contracts;
 mod identity;
 mod ledger;
 mod utils;
