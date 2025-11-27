@@ -47,4 +47,5 @@ jobs:
           docker run --rm $IMAGE cargo --version
           docker run --rm $IMAGE cargo make --version
           docker run --rm $IMAGE cargo nextest --version
+          docker run --rm $IMAGE sqlx --version
           docker run --rm $IMAGE $HOME/.cargo/bin/uv --version
