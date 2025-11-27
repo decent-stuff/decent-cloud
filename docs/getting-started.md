@@ -120,8 +120,6 @@ After completing the basic setup, you can:
 
 ### For Providers
 
-- [Set up your provider profile](provider-guide.md)
-- [Create and manage offerings](provider-guide.md#offerings)
 - [Participate in token distribution](token-distribution.md)
 
 ## Common Operations

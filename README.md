@@ -28,7 +28,6 @@ Our unique reputation system ties credibility to transaction fees. Paying these 
 - [Web Interface Guide](docs/web-interface-guide.md) – Complete guide to using the web interface.
 - [Installation](docs/installation.md) – Detailed installation instructions with OS specifics (CLI).
 - [User Guide](docs/user-guide.md) – Comprehensive usage guide for consumers.
-- [Provider Guide](docs/provider-guide.md) – Detailed information for resource providers.
 - [Reputation Guide](docs/reputation.md) – Explanation of our decentralized trust mechanism.
 - [Mining & Validation](docs/mining-and-validation.md) – Steps to participate in network validation.
 - [Token Distribution](docs/token-distribution.md) – Overview of token creation and rewards.

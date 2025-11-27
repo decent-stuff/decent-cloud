@@ -4,25 +4,22 @@ Welcome to the official Decent Cloud documentation. This resource is designed to
 
 ## Documentation Overview
 
-| Document                                                        | Description                                         | Audience   |
-|-----------------------------------------------------------------|-----------------------------------------------------|------------|
-| [Getting Started](getting-started.md)                           | Quick setup for new users                           | Everyone   |
-| [Installation](installation.md)                                 | Step-by-step installation guide                     | Everyone   |
-| [User Guide](user-guide.md)                                     | Detailed instructions for platform users            | Users      |
-| [Provider Guide](provider-guide.md)                             | Comprehensive guide for resource providers          | Providers  |
-| [Mining and Validation](mining-and-validation.md)               | Instructions for validators to participate          | Validators |
-| [Reputation System](reputation.md)                              | Overview of the decentralized reputation system     | Everyone   |
-| [Token Distribution](token-distribution.md)                     | Explanation of token creation and reward mechanisms | Everyone   |
-| [Development](development.md)                                   | Guide for contributors and developers               | Developers |
+| Document                                          | Description                                         | Audience   |
+|---------------------------------------------------|-----------------------------------------------------|------------|
+| [Getting Started](getting-started.md)             | Quick setup for new users                           | Everyone   |
+| [Installation](installation.md)                   | Step-by-step installation guide                     | Everyone   |
+| [User Guide](user-guide.md)                       | Detailed instructions for platform users            | Users      |
+| [Mining and Validation](mining-and-validation.md) | Instructions for validators to participate          | Validators |
+| [Reputation System](reputation.md)                | Overview of the decentralized reputation system     | Everyone   |
+| [Token Distribution](token-distribution.md)       | Explanation of token creation and reward mechanisms | Everyone   |
+| [Development](development.md)                     | Guide for contributors and developers               | Developers |
 
 ## Navigation
 
 ### For New Users
 - Start with [Installation](installation.md) to set up the CLI.
 - Follow [Getting Started](getting-started.md) for initial configuration.
-- Depending on your role:
-  - Use the [User Guide](user-guide.md) for resource consumption.
-  - Refer to the [Provider Guide](provider-guide.md) for offering services.
+- Use the [User Guide](user-guide.md) for resource consumption.
 
 ### For Existing Users
 - Check the [User Guide](user-guide.md) for resource management.
@@ -43,7 +40,6 @@ The documentation is organized by user type and functionality:
 - **[Getting Started](getting-started.md)**: First-time setup and basic configuration
 - **[Installation](installation.md)**: Platform-specific installation instructions
 - **[User Guide](user-guide.md)**: Resource consumption and management
-- **[Provider Guide](provider-guide.md)**: Offering resources and managing services
 
 ### Platform Mechanics
 - **[Reputation System](reputation.md)**: Trust and reputation mechanisms
