@@ -30,6 +30,18 @@
 					: 'text-white/40'
 	);
 
+	// Validate when value changes (handles pre-filled values from OAuth)
+	$effect(() => {
+		if (value) {
+			// Set normalized immediately so character count updates
+			normalized = value.trim();
+			// Trigger full validation if not already validating
+			if (validationState === 'idle') {
+				validateUsername(value);
+			}
+		}
+	});
+
 	async function validateUsername(username: string) {
 		// Trim whitespace
 		normalized = username.trim();
