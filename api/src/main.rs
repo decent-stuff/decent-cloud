@@ -1,6 +1,7 @@
 mod auth;
 mod cleanup_service;
 mod database;
+mod email_processor;
 mod email_service;
 mod ledger_client;
 mod ledger_path;
@@ -16,6 +17,7 @@ use candid::Principal;
 use clap::{Parser, Subcommand};
 use cleanup_service::CleanupService;
 use database::Database;
+use email_processor::EmailProcessor;
 use email_service::EmailService;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
@@ -329,10 +331,44 @@ async fn serve_command() -> Result<(), std::io::Error> {
         cleanup_service.run().await;
     });
 
+    // Start email processor in background if email service is configured
+    let email_processor_task = if let Some(email_svc) = ctx.email_service.clone() {
+        let email_interval_secs = env::var("EMAIL_PROCESSOR_INTERVAL_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30);
+        let email_batch_size = env::var("EMAIL_BATCH_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10);
+
+        let db_for_email = ctx.database.clone();
+        Some(tokio::spawn(async move {
+            let email_processor = EmailProcessor::new(
+                db_for_email,
+                email_svc,
+                email_interval_secs,
+                email_batch_size,
+            );
+            tracing::info!(
+                "Starting email processor (interval: {}s, batch: {})",
+                email_interval_secs,
+                email_batch_size
+            );
+            email_processor.run().await;
+        }))
+    } else {
+        tracing::info!("Email processor not started (no email service configured)");
+        None
+    };
+
     let server_result = Server::new(TcpListener::bind(&addr)).run(app).await;
 
     metadata_cache_task.abort();
     cleanup_task.abort();
+    if let Some(task) = email_processor_task {
+        task.abort();
+    }
     server_result
 }
 

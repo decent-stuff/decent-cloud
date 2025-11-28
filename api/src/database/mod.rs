@@ -18,7 +18,7 @@ pub use types::{Database, LedgerEntryData};
 // Import all handler implementations
 
 #[cfg(test)]
-mod test_helpers;
+pub mod test_helpers;
 
 #[cfg(test)]
 mod tests;

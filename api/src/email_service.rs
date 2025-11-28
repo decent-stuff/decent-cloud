@@ -146,10 +146,10 @@ impl EmailService {
     }
 
     pub async fn send_queued_email(&self, email: &EmailQueueEntry) -> Result<()> {
-        let (to_email, to_name) = parse_email_address(&email.to_addr)
-            .context("Failed to parse recipient address")?;
-        let (from_email, from_name) = parse_email_address(&email.from_addr)
-            .context("Failed to parse sender address")?;
+        let (to_email, to_name) =
+            parse_email_address(&email.to_addr).context("Failed to parse recipient address")?;
+        let (from_email, from_name) =
+            parse_email_address(&email.from_addr).context("Failed to parse sender address")?;
 
         let is_html = email.is_html != 0;
         self.send_email_api(
