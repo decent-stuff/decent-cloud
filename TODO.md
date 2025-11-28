@@ -1,2 +1,12 @@
 - add support for sending emails by the API backend, using mailchannels.com (I already have an API key for them)
-- add support for payments
+- add support for payments with Stripe, I have a Stripe account and API keys already
+- improve search support, if possible add a minimal search DSL for filtering results, e.g. like on ServerHunter https://www.serverhunter.com/#query=stock:(in_stock+OR+unknown)
+- improve reputation display on profiles:
+    - how quickly they respond to requests
+    - percentage of contracts that get canceled by users within 1h/24h/7d
+    - how many successful transactions they have completed
+    - how many disputes they have had
+    - how many positive/negative reviews they have received
+    - do they have verified identity, email, phone number, payment methods, etc
+    - warn if account is new and has little history
+- Password/account recovery through emails: send account recovery links via email and allow users to recovery access to  their accounts that way
