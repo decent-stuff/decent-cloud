@@ -71,17 +71,18 @@ impl OfferingsApi {
         }
     }
 
-    /// Get CSV template for offerings
+    /// Get CSV template for a specific product type
     ///
-    /// Returns a CSV template with example offerings
+    /// Returns a CSV template with realistic example offerings for the specified product type
     #[oai(
-        path = "/offerings/template",
+        path = "/offerings/template/:product_type",
         method = "get",
         tag = "ApiTags::Offerings"
     )]
-    async fn get_offerings_csv_template(
+    async fn get_offerings_csv_template_by_type(
         &self,
         db: Data<&Arc<Database>>,
+        product_type: Path<String>,
     ) -> poem_openapi::payload::PlainText<String> {
         let mut csv_writer = csv::Writer::from_writer(vec![]);
 
@@ -129,82 +130,90 @@ impl OfferingsApi {
             "operating_systems",
         ]);
 
-        // Get example offerings
-        if let Ok(offerings) = db.get_example_offerings().await {
-            for offering in offerings {
-                let _ = csv_writer.write_record([
-                    &offering.offering_id,
-                    &offering.offer_name,
-                    &offering.description.unwrap_or_default(),
-                    &offering.product_page_url.unwrap_or_default(),
-                    &offering.currency,
-                    &offering.monthly_price.to_string(),
-                    &offering.setup_fee.to_string(),
-                    &offering.visibility,
-                    &offering.product_type,
-                    &offering.virtualization_type.unwrap_or_default(),
-                    &offering.billing_interval,
-                    &offering.stock_status,
-                    &offering.processor_brand.unwrap_or_default(),
-                    &offering
-                        .processor_amount
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering
-                        .processor_cores
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering.processor_speed.unwrap_or_default(),
-                    &offering.processor_name.unwrap_or_default(),
-                    &offering.memory_error_correction.unwrap_or_default(),
-                    &offering.memory_type.unwrap_or_default(),
-                    &offering.memory_amount.unwrap_or_default(),
-                    &offering
-                        .hdd_amount
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering.total_hdd_capacity.unwrap_or_default(),
-                    &offering
-                        .ssd_amount
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering.total_ssd_capacity.unwrap_or_default(),
-                    &offering.unmetered_bandwidth.to_string(),
-                    &offering.uplink_speed.unwrap_or_default(),
-                    &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
-                    &offering.datacenter_country,
-                    &offering.datacenter_city,
-                    &offering
-                        .datacenter_latitude
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering
-                        .datacenter_longitude
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering.control_panel.unwrap_or_default(),
-                    &offering.gpu_name.unwrap_or_default(),
-                    &offering
-                        .gpu_count
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering
-                        .gpu_memory_gb
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering
-                        .min_contract_hours
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering
-                        .max_contract_hours
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    &offering.payment_methods.unwrap_or_default(),
-                    &offering.features.unwrap_or_default(),
-                    &offering.operating_systems.unwrap_or_default(),
-                ]);
+        // Get example offerings for the specified product type from database
+        let offerings = match db.get_example_offerings_by_type(&product_type.0).await {
+            Ok(offerings) => offerings,
+            Err(e) => {
+                return poem_openapi::payload::PlainText(format!(
+                    "Failed to fetch example offerings: {}",
+                    e
+                ));
             }
+        };
+
+        for offering in offerings {
+            let _ = csv_writer.write_record([
+                &offering.offering_id,
+                &offering.offer_name,
+                &offering.description.unwrap_or_default(),
+                &offering.product_page_url.unwrap_or_default(),
+                &offering.currency,
+                &offering.monthly_price.to_string(),
+                &offering.setup_fee.to_string(),
+                &offering.visibility,
+                &offering.product_type,
+                &offering.virtualization_type.unwrap_or_default(),
+                &offering.billing_interval,
+                &offering.stock_status,
+                &offering.processor_brand.unwrap_or_default(),
+                &offering
+                    .processor_amount
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .processor_cores
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.processor_speed.unwrap_or_default(),
+                &offering.processor_name.unwrap_or_default(),
+                &offering.memory_error_correction.unwrap_or_default(),
+                &offering.memory_type.unwrap_or_default(),
+                &offering.memory_amount.unwrap_or_default(),
+                &offering
+                    .hdd_amount
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.total_hdd_capacity.unwrap_or_default(),
+                &offering
+                    .ssd_amount
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.total_ssd_capacity.unwrap_or_default(),
+                &offering.unmetered_bandwidth.to_string(),
+                &offering.uplink_speed.unwrap_or_default(),
+                &offering.traffic.map(|v| v.to_string()).unwrap_or_default(),
+                &offering.datacenter_country,
+                &offering.datacenter_city,
+                &offering
+                    .datacenter_latitude
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .datacenter_longitude
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.control_panel.unwrap_or_default(),
+                &offering.gpu_name.unwrap_or_default(),
+                &offering
+                    .gpu_count
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .gpu_memory_gb
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .min_contract_hours
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering
+                    .max_contract_hours
+                    .map(|v| v.to_string())
+                    .unwrap_or_default(),
+                &offering.payment_methods.unwrap_or_default(),
+                &offering.features.unwrap_or_default(),
+                &offering.operating_systems.unwrap_or_default(),
+            ]);
         }
 
         match csv_writer.into_inner() {
@@ -213,5 +222,53 @@ impl OfferingsApi {
             }
             Err(e) => poem_openapi::payload::PlainText(format!("CSV generation error: {}", e)),
         }
+    }
+
+    /// Get available product types
+    ///
+    /// Returns a list of available product types with their labels (derived from example offerings in database)
+    #[oai(
+        path = "/offerings/product-types",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn get_product_types(
+        &self,
+        db: Data<&Arc<Database>>,
+    ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+        // Query available product types from example offerings
+        let product_type_keys = match db.get_available_product_types().await {
+            Ok(types) => types,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to fetch product types: {}", e)),
+                });
+            }
+        };
+
+        // Map product type keys to labels with icons
+        let product_types: Vec<serde_json::Value> = product_type_keys
+            .iter()
+            .map(|key| {
+                let label = match key.as_str() {
+                    "compute" => "💻 Compute / VPS",
+                    "dedicated" => "🖥️ Dedicated Server",
+                    "gpu" => "🎮 GPU / AI",
+                    "network" => "🌐 Network / CDN",
+                    "storage" => "💾 Storage",
+                    // If new types are added to DB, show them with generic label
+                    _ => key.as_str(),
+                };
+                serde_json::json!({"key": key, "label": label})
+            })
+            .collect();
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(product_types),
+            error: None,
+        })
     }
 }

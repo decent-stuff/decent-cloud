@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import { importProviderOfferingsCSV, type CsvImportResult, hexEncode, downloadOfferingsCSV } from '$lib/services/api';
+	import { importProviderOfferingsCSV, type CsvImportResult, hexEncode, downloadOfferingsCSV, getExampleOfferingsCSV, getProductTypes, type ProductType } from '$lib/services/api';
 	import { signRequest } from '$lib/services/auth-api';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 	import SpreadsheetEditor from './SpreadsheetEditor.svelte';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		open?: boolean;
@@ -22,12 +23,15 @@
 	let isDragging = $state(false);
 	let selectedFile = $state<File | null>(null);
 	let currentCsvContent = $state('');
+	let fullCsvContent = $state(''); // Store the complete CSV with all product types
 	let importing = $state(false);
 	let error = $state<string | null>(null);
 	let result = $state<CsvImportResult | null>(null);
 	let selectedResourceType = $state<string>('');
+	let productTypes = $state<ProductType[]>([]);
+	let loadingExample = $state(false);
 
-	// Resource type definitions with key columns
+	// Resource type definitions with key columns (keeping for reference, but will fetch from backend)
 	const RESOURCE_TYPES = {
 		compute: {
 			label: '💻 Compute / VPS',
@@ -53,9 +57,27 @@
 
 	type ResourceTypeKey = keyof typeof RESOURCE_TYPES;
 
+	// Fetch product types on mount
+	onMount(async () => {
+		try {
+			productTypes = await getProductTypes();
+		} catch (e) {
+			console.error('Failed to fetch product types:', e);
+			// Fallback to hardcoded types
+			productTypes = [
+				{ key: 'compute', label: '💻 Compute / VPS' },
+				{ key: 'gpu', label: '🎮 GPU / AI' },
+				{ key: 'storage', label: '💾 Storage' },
+				{ key: 'network', label: '🌐 Network / CDN' },
+				{ key: 'dedicated', label: '🖥️ Dedicated Server' }
+			];
+		}
+	});
+
 	// Load CSV content when dialog opens
 	$effect(() => {
 		if (open && csvContent) {
+			fullCsvContent = csvContent; // Store the full CSV
 			currentCsvContent = csvContent;
 			selectedFile = null;
 			error = null;
@@ -63,22 +85,104 @@
 		}
 	});
 
-	// Generate template CSV when resource type is selected
-	$effect(() => {
-		if (selectedResourceType && RESOURCE_TYPES[selectedResourceType as ResourceTypeKey]) {
-			const resourceType = RESOURCE_TYPES[selectedResourceType as ResourceTypeKey];
-			const hasContent = currentCsvContent.trim().length > 0;
+	// Parse CSV and filter by product type
+	function filterCsvByProductType(csv: string, productType: string): string {
+		if (!csv || !productType) return csv;
 
-			// Only generate template if CSV is empty or only has headers (no data rows)
-			if (!hasContent) {
-				// Create header row with key columns
-				const headers = resourceType.columns.join(',');
-				// Add one empty data row
-				const emptyRow = resourceType.columns.map(() => '').join(',');
-				currentCsvContent = `${headers}\n${emptyRow}`;
+		const lines = csv.split('\n');
+		if (lines.length === 0) return '';
+
+		const header = lines[0];
+		const headers = header.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+		const productTypeIndex = headers.indexOf('product_type');
+
+		if (productTypeIndex === -1) {
+			// No product_type column, return as is
+			return csv;
+		}
+
+		// Filter data rows by product_type
+		const dataLines = lines.slice(1);
+		const filteredLines = dataLines.filter(line => {
+			if (!line.trim()) return false;
+
+			// Simple CSV parsing (handles quoted values)
+			const values: string[] = [];
+			let current = '';
+			let inQuotes = false;
+
+			for (let i = 0; i < line.length; i++) {
+				const char = line[i];
+				if (char === '"') {
+					inQuotes = !inQuotes;
+				} else if (char === ',' && !inQuotes) {
+					values.push(current.trim());
+					current = '';
+				} else {
+					current += char;
+				}
+			}
+			values.push(current.trim());
+
+			const rowProductType = values[productTypeIndex]?.replace(/^"|"$/g, '').trim();
+			return rowProductType === productType;
+		});
+
+		return [header, ...filteredLines].join('\n');
+	}
+
+	// Check if spreadsheet is empty (only headers or completely empty)
+	function isSpreadsheetEmpty(): boolean {
+		const content = currentCsvContent.trim();
+		if (!content) return true;
+
+		const lines = content.split('\n').filter(line => line.trim());
+		// Empty if no lines or only one line (header)
+		return lines.length <= 1;
+	}
+
+	// Load example data for the selected product type (internal, no warning)
+	async function loadExampleDataInternal() {
+		if (!selectedResourceType) {
+			error = 'Please select a product type first';
+			return;
+		}
+
+		loadingExample = true;
+		error = null;
+
+		try {
+			const exampleCSV = await getExampleOfferingsCSV(selectedResourceType);
+			currentCsvContent = exampleCSV;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load example data';
+			console.error('Error loading example data:', e);
+		} finally {
+			loadingExample = false;
+		}
+	}
+
+	// Load example data with confirmation if data exists
+	async function loadExampleData() {
+		// Check if there's existing data
+		if (!isSpreadsheetEmpty()) {
+			const confirmed = confirm(
+				'Warning: This will replace your existing data with example data. This action cannot be undone. Do you want to continue?'
+			);
+			if (!confirmed) {
+				return;
 			}
 		}
-	});
+
+		await loadExampleDataInternal();
+	}
+
+	// Handle product type button click - filter user's offerings by product type
+	function handleProductTypeClick(productType: string) {
+		selectedResourceType = productType;
+		// Filter the user's existing offerings by the selected product type
+		currentCsvContent = filterCsvByProductType(fullCsvContent, productType);
+	}
 
 	function handleDragEnter(e: DragEvent) {
 		e.preventDefault();
@@ -122,7 +226,15 @@
 		result = null;
 
 		try {
-			currentCsvContent = await file.text();
+			const fileContent = await file.text();
+			fullCsvContent = fileContent;
+
+			// If a product type is selected, filter the loaded content
+			if (selectedResourceType) {
+				currentCsvContent = filterCsvByProductType(fileContent, selectedResourceType);
+			} else {
+				currentCsvContent = fileContent;
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to read file';
 			selectedFile = null;
@@ -300,26 +412,70 @@
 					{/if}
 				</div>
 
-				<!-- Resource Type Selector -->
-				<div class="flex flex-wrap items-center gap-4">
-					<div class="flex items-center gap-2">
-						<label for="resource-type" class="text-white/70 text-sm font-medium">Resource Type:</label>
-						<select
-							id="resource-type"
-							bind:value={selectedResourceType}
-							disabled={importing}
-							class="px-3 py-2 bg-slate-800 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-							style="color-scheme: dark;"
-						>
-							<option value="" style="background-color: #1e293b; color: white;">All types</option>
-							{#each Object.entries(RESOURCE_TYPES) as [key, { label }]}
-								<option value={key} style="background-color: #1e293b; color: white;">{label}</option>
+				<!-- Product Type Selector -->
+				<div class="space-y-4">
+					<div>
+						<div class="text-white/70 text-sm font-medium block mb-3">Product Type:</div>
+						<div class="flex flex-wrap gap-2">
+							{#each productTypes as { key, label }}
+								<button
+									onclick={() => handleProductTypeClick(key)}
+									class="px-4 py-3 rounded-lg font-medium transition-all {selectedResourceType === key
+										? 'bg-blue-600 text-white'
+										: 'bg-white/10 text-white/70 hover:bg-white/20'}"
+									disabled={importing || loadingExample}
+								>
+									{label}
+								</button>
 							{/each}
-						</select>
+						</div>
 					</div>
-					{#if selectedResourceType && RESOURCE_TYPES[selectedResourceType as ResourceTypeKey]}
-						<div class="text-white/60 text-sm">
-							Key columns: <span class="text-blue-400">{RESOURCE_TYPES[selectedResourceType as ResourceTypeKey].columns.join(', ')}</span>
+
+					<!-- Load Example Data Button -->
+					{#if selectedResourceType}
+						<div class="flex items-center gap-3">
+							<button
+								onclick={loadExampleData}
+								class="px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 {isSpreadsheetEmpty()
+									? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse hover:scale-105'
+									: 'bg-white/10 text-white/70 hover:bg-white/20'}"
+								disabled={importing || loadingExample}
+							>
+								{#if loadingExample}
+									<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+										<circle
+											class="opacity-25"
+											cx="12"
+											cy="12"
+											r="10"
+											stroke="currentColor"
+											stroke-width="4"
+											fill="none"
+										/>
+										<path
+											class="opacity-75"
+											fill="currentColor"
+											d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+										/>
+									</svg>
+									Loading...
+								{:else}
+									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+										/>
+									</svg>
+									Load Example Data
+								{/if}
+							</button>
+							{#if isSpreadsheetEmpty()}
+								<span class="text-emerald-400 text-sm">
+									← Click to load example data for {productTypes.find(t => t.key === selectedResourceType)?.label}
+								</span>
+							{/if}
 						</div>
 					{/if}
 				</div>

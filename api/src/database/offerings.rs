@@ -156,10 +156,7 @@ impl Database {
 
     /// Get example offerings for CSV template generation
     pub async fn get_example_offerings(&self) -> Result<Vec<Offering>> {
-        // Use the same distinctive hash as in migration 002
-        let example_provider_pubkey =
-            hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
-                .unwrap();
+        let example_provider_pubkey = Self::example_provider_pubkey();
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
@@ -177,6 +174,49 @@ impl Database {
         Ok(offerings)
     }
 
+    /// Get example offerings filtered by product type
+    pub async fn get_example_offerings_by_type(&self, product_type: &str) -> Result<Vec<Offering>> {
+        let example_provider_pubkey = Self::example_provider_pubkey();
+        let offerings = sqlx::query_as::<_, Offering>(
+            r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
+               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
+               datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               FROM provider_offerings WHERE pubkey = ? AND product_type = ? ORDER BY offering_id ASC"#
+        )
+        .bind(&example_provider_pubkey)
+        .bind(product_type)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(offerings)
+    }
+
+    /// Get available product types from example offerings
+    pub async fn get_available_product_types(&self) -> Result<Vec<String>> {
+        let example_provider_pubkey = Self::example_provider_pubkey();
+        let product_types = sqlx::query_scalar::<_, String>(
+            "SELECT DISTINCT product_type FROM provider_offerings WHERE pubkey = ? ORDER BY product_type"
+        )
+        .bind(&example_provider_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(product_types)
+    }
+
+    /// Returns the example provider pubkey for identifying example offerings
+    fn example_provider_pubkey() -> Vec<u8> {
+        hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
+            .expect("Example provider pubkey hex should always decode successfully")
+    }
+}
+
+#[allow(dead_code)]
+impl Database {
     /// Count offerings
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {
         let query = if let Some(f) = filters {

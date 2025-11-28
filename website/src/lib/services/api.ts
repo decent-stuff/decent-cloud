@@ -464,6 +464,55 @@ export async function downloadOfferingsCSV(offerings: Offering[], filename: stri
 	URL.revokeObjectURL(url);
 }
 
+// Product type information
+export interface ProductType {
+	key: string;
+	label: string;
+}
+
+/**
+ * Get available product types with their labels
+ * @returns Array of product types
+ */
+export async function getProductTypes(): Promise<ProductType[]> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/offerings/product-types`, {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+	});
+
+	if (!response.ok) {
+		const error = await response.text();
+		throw new Error(`Failed to fetch product types: ${error}`);
+	}
+
+	const result: ApiResponse<ProductType[]> = await response.json();
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to fetch product types');
+	}
+
+	return result.data;
+}
+
+/**
+ * Get example offerings template CSV for a specific product type
+ * @param productType - The product type key (e.g., 'compute', 'gpu', 'storage', 'network', 'dedicated')
+ * @returns CSV string with example offerings
+ */
+export async function getExampleOfferingsCSV(productType: string): Promise<string> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/offerings/template/${productType}`, {
+		method: 'GET',
+	});
+
+	if (!response.ok) {
+		const error = await response.text();
+		throw new Error(`Failed to fetch example offerings: ${error}`);
+	}
+
+	return await response.text();
+}
+
 // ============ Rental Request Endpoints ============
 
 export interface Contract {
