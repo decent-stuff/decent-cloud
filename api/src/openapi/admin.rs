@@ -1,7 +1,7 @@
 use super::common::{AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, ApiResponse, ApiTags};
-use crate::{auth::AdminAuthenticatedUser, database::Database};
+use crate::{auth::AdminAuthenticatedUser, database::Database, database::email::EmailQueueEntry};
 use poem::web::Data;
-use poem_openapi::{param::Path, payload::Json, OpenApi};
+use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
 use std::sync::Arc;
 
 pub struct AdminApi;
@@ -206,6 +206,78 @@ impl AdminApi {
                     error: None,
                 })
             }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Get failed emails
+    ///
+    /// Returns a list of emails that failed permanently after all retry attempts.
+    /// Useful for monitoring and manual intervention.
+    #[oai(
+        path = "/admin/emails/failed",
+        method = "get",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_get_failed_emails(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        limit: Query<Option<i64>>,
+    ) -> Json<ApiResponse<Vec<EmailQueueEntry>>> {
+        let limit = limit.0.unwrap_or(50);
+
+        match db.get_failed_emails(limit).await {
+            Ok(emails) => Json(ApiResponse {
+                success: true,
+                data: Some(emails),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Retry a failed email
+    ///
+    /// Resets a failed email back to pending status with 0 attempts, allowing it to be retried.
+    /// Use this for emails that failed due to temporary issues.
+    #[oai(
+        path = "/admin/emails/:email_id/retry",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_retry_failed_email(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        email_id: Path<String>,
+    ) -> Json<ApiResponse<String>> {
+        // Decode email ID
+        let email_id_bytes = match hex::decode(&email_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid email ID format".to_string()),
+                })
+            }
+        };
+
+        match db.retry_failed_email(&email_id_bytes).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Email queued for retry".to_string()),
+                error: None,
+            }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

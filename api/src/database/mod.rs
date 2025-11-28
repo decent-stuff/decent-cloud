@@ -5,6 +5,7 @@ pub mod email;
 pub mod handlers;
 pub mod offerings;
 pub mod providers;
+pub mod recovery;
 pub mod reputation;
 pub mod rewards;
 pub mod stats;

@@ -200,6 +200,22 @@ pub struct AddAccountExternalKeyRequest {
     pub label: Option<String>,
 }
 
+// Request types for account recovery
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct RequestRecoveryRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteRecoveryRequest {
+    pub token: String,
+    pub public_key: String,
+}
+
 // Request types for admin
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

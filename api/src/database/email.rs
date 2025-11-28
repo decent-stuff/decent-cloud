@@ -2,14 +2,48 @@ use super::types::Database;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+/// Email type for retry policy configuration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmailType {
+    /// Critical: Account recovery emails - 24 attempts over ~8 hours
+    Recovery,
+    /// Important: Welcome emails - 12 attempts over ~4 hours
+    Welcome,
+    /// General: Other notifications - 6 attempts over ~2 hours
+    General,
+}
+
+impl EmailType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EmailType::Recovery => "recovery",
+            EmailType::Welcome => "welcome",
+            EmailType::General => "general",
+        }
+    }
+
+    pub fn max_attempts(&self) -> i64 {
+        match self {
+            EmailType::Recovery => 24,  // Critical: many retries
+            EmailType::Welcome => 12,   // Important: moderate retries
+            EmailType::General => 6,    // Normal: fewer retries
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct EmailQueueEntry {
+    #[oai(skip)]
+    #[serde(skip)]
     pub id: Vec<u8>,
     pub to_addr: String,
     pub from_addr: String,
     pub subject: String,
     pub body: String,
     pub is_html: i64,
+    pub email_type: String,
     pub status: String,
     pub attempts: i64,
     pub max_attempts: i64,
@@ -27,21 +61,26 @@ impl Database {
         subject: &str,
         body: &str,
         is_html: bool,
+        email_type: EmailType,
     ) -> Result<Vec<u8>> {
         let id = uuid::Uuid::new_v4().as_bytes().to_vec();
         let is_html_int = if is_html { 1 } else { 0 };
         let created_at = chrono::Utc::now().timestamp();
+        let email_type_str = email_type.as_str();
+        let max_attempts = email_type.max_attempts();
 
         sqlx::query!(
             r#"INSERT INTO email_queue
-               (id, to_addr, from_addr, subject, body, is_html, status, attempts, max_attempts, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, 3, ?)"#,
+               (id, to_addr, from_addr, subject, body, is_html, email_type, status, attempts, max_attempts, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)"#,
             id,
             to_addr,
             from_addr,
             subject,
             body,
             is_html_int,
+            email_type_str,
+            max_attempts,
             created_at
         )
         .execute(&self.pool)
@@ -53,7 +92,7 @@ impl Database {
     pub async fn get_pending_emails(&self, limit: i64) -> Result<Vec<EmailQueueEntry>> {
         let emails = sqlx::query_as!(
             EmailQueueEntry,
-            r#"SELECT id, to_addr, from_addr, subject, body, is_html,
+            r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
                       status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at
                FROM email_queue
                WHERE status = 'pending' AND attempts < max_attempts
@@ -65,6 +104,36 @@ impl Database {
         .await?;
 
         Ok(emails)
+    }
+
+    /// Get failed emails for admin review
+    pub async fn get_failed_emails(&self, limit: i64) -> Result<Vec<EmailQueueEntry>> {
+        let emails = sqlx::query_as!(
+            EmailQueueEntry,
+            r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
+                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at
+               FROM email_queue
+               WHERE status = 'failed'
+               ORDER BY created_at DESC
+               LIMIT ?"#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(emails)
+    }
+
+    /// Retry a failed email by resetting its status and attempts
+    pub async fn retry_failed_email(&self, id: &[u8]) -> Result<()> {
+        sqlx::query!(
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL WHERE id = ? AND status = 'failed'",
+            id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     pub async fn mark_email_sent(&self, id: &[u8]) -> Result<()> {
@@ -104,21 +173,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_email_by_id(&self, id: &[u8]) -> Result<Option<EmailQueueEntry>> {
-        let email = sqlx::query_as!(
-            EmailQueueEntry,
-            r#"SELECT id, to_addr, from_addr, subject, body, is_html,
-                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at
-               FROM email_queue
-               WHERE id = ?"#,
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(email)
-    }
-
     /// Queue an email safely - never fails, only logs errors
     /// Returns true if email was queued, false if skipped or failed
     pub async fn queue_email_safe(
@@ -128,6 +182,7 @@ impl Database {
         subject: &str,
         body: &str,
         is_html: bool,
+        email_type: EmailType,
     ) -> bool {
         let Some(to) = to_addr else {
             tracing::debug!("Email not queued: no recipient address provided");
@@ -135,15 +190,16 @@ impl Database {
         };
 
         match self
-            .queue_email(to, from_addr, subject, body, is_html)
+            .queue_email(to, from_addr, subject, body, is_html, email_type)
             .await
         {
             Ok(id) => {
                 tracing::info!(
-                    "Email queued: id={} to={} subject={}",
+                    "Email queued: id={} to={} subject={} type={}",
                     hex::encode(&id),
                     to,
-                    subject
+                    subject,
+                    email_type.as_str()
                 );
                 true
             }

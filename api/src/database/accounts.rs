@@ -638,6 +638,7 @@ impl Database {
                 username
             ),
             false,
+            super::email::EmailType::Welcome,  // Welcome emails: 12 attempts
         )
         .await;
 

@@ -1,4 +1,5 @@
 use crate::database::test_helpers::setup_test_db;
+use crate::database::email::EmailType;
 
 #[tokio::test]
 async fn test_queue_email() {
@@ -11,17 +12,22 @@ async fn test_queue_email() {
             "Test Subject",
             "Test body",
             false,
+            EmailType::General,
         )
         .await
         .unwrap();
 
     assert_eq!(id.len(), 16);
 
-    let email = db.get_email_by_id(&id).await.unwrap().unwrap();
+    let emails = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(emails.len(), 1);
+    let email = &emails[0];
     assert_eq!(email.to_addr, "Test User <test@example.com>");
     assert_eq!(email.subject, "Test Subject");
+    assert_eq!(email.email_type, "general");
     assert_eq!(email.status, "pending");
     assert_eq!(email.attempts, 0);
+    assert_eq!(email.max_attempts, 6);
     assert!(email.last_attempted_at.is_none());
 }
 
@@ -29,19 +35,23 @@ async fn test_queue_email() {
 async fn test_queue_html_email() {
     let db = setup_test_db().await;
 
-    let id = db
-        .queue_email(
-            "test@example.com",
-            "sender@example.com",
-            "HTML Test",
-            "<h1>HTML Body</h1>",
-            true,
-        )
-        .await
-        .unwrap();
+    db.queue_email(
+        "test@example.com",
+        "sender@example.com",
+        "HTML Test",
+        "<h1>HTML Body</h1>",
+        true,
+        EmailType::Welcome,
+    )
+    .await
+    .unwrap();
 
-    let email = db.get_email_by_id(&id).await.unwrap().unwrap();
+    let emails = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(emails.len(), 1);
+    let email = &emails[0];
     assert_eq!(email.is_html, 1);
+    assert_eq!(email.email_type, "welcome");
+    assert_eq!(email.max_attempts, 12);
     assert_eq!(email.body, "<h1>HTML Body</h1>");
 }
 
@@ -62,6 +72,7 @@ async fn test_get_pending_emails() {
         "Subject 1",
         "Body 1",
         false,
+        EmailType::General,
     )
     .await
     .unwrap();
@@ -72,6 +83,7 @@ async fn test_get_pending_emails() {
         "Subject 2",
         "Body 2",
         false,
+        EmailType::General,
     )
     .await
     .unwrap();
@@ -93,6 +105,7 @@ async fn test_get_pending_emails_limit() {
             "Subject",
             "Body",
             false,
+            EmailType::General,
         )
         .await
         .unwrap();
@@ -113,15 +126,16 @@ async fn test_mark_email_sent() {
             "Subject",
             "Body",
             false,
+            EmailType::General,
         )
         .await
         .unwrap();
 
     db.mark_email_sent(&id).await.unwrap();
 
-    let email = db.get_email_by_id(&id).await.unwrap().unwrap();
-    assert_eq!(email.status, "sent");
-    assert!(email.sent_at.is_some());
+    // Verify email is no longer in pending queue
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 0);
 }
 
 #[tokio::test]
@@ -135,6 +149,7 @@ async fn test_mark_email_failed() {
             "Subject",
             "Body",
             false,
+            EmailType::General,
         )
         .await
         .unwrap();
@@ -143,9 +158,11 @@ async fn test_mark_email_failed() {
         .await
         .unwrap();
 
-    let email = db.get_email_by_id(&id).await.unwrap().unwrap();
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 1);
+    let email = &pending[0];
     assert_eq!(email.attempts, 1);
-    assert_eq!(email.last_error.unwrap(), "Connection timeout");
+    assert_eq!(email.last_error.as_ref().unwrap(), "Connection timeout");
     assert_eq!(email.status, "pending");
     assert!(email.last_attempted_at.is_some());
 }
@@ -161,17 +178,18 @@ async fn test_mark_email_failed_max_attempts() {
             "Subject",
             "Body",
             false,
+            EmailType::General,
         )
         .await
         .unwrap();
 
-    for _ in 0..3 {
+    for _ in 0..6 {  // General emails have 6 max attempts
         db.mark_email_failed(&id, "Failed").await.unwrap();
     }
 
-    let email = db.get_email_by_id(&id).await.unwrap().unwrap();
-    assert_eq!(email.attempts, 3);
-    assert_eq!(email.status, "failed");
+    // Should not be in pending queue anymore (marked as failed)
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 0);
 }
 
 #[tokio::test]
@@ -185,6 +203,7 @@ async fn test_get_pending_emails_excludes_failed() {
             "Pending",
             "Body",
             false,
+            EmailType::General,
         )
         .await
         .unwrap();
@@ -196,25 +215,18 @@ async fn test_get_pending_emails_excludes_failed() {
             "Failed",
             "Body",
             false,
+            EmailType::General,
         )
         .await
         .unwrap();
 
-    for _ in 0..3 {
+    for _ in 0..6 {  // General emails have 6 max attempts
         db.mark_email_failed(&id2, "Error").await.unwrap();
     }
 
     let emails = db.get_pending_emails(10).await.unwrap();
     assert_eq!(emails.len(), 1);
     assert_eq!(emails[0].id, id1);
-}
-
-#[tokio::test]
-async fn test_get_email_by_id_not_found() {
-    let db = setup_test_db().await;
-    let id = uuid::Uuid::new_v4().as_bytes().to_vec();
-    let email = db.get_email_by_id(&id).await.unwrap();
-    assert!(email.is_none());
 }
 
 #[tokio::test]
@@ -228,6 +240,7 @@ async fn test_queue_email_safe_with_valid_address() {
             "Test Subject",
             "Test Body",
             false,
+            EmailType::General,
         )
         .await;
 
@@ -249,6 +262,7 @@ async fn test_queue_email_safe_with_none_address() {
             "Test Subject",
             "Test Body",
             false,
+            EmailType::General,
         )
         .await;
 

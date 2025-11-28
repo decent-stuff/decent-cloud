@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, to_addr, from_addr, subject, body, is_html,\n                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at\n               FROM email_queue\n               WHERE id = ?",
+  "query": "SELECT id, to_addr, from_addr, subject, body, is_html, email_type,\n                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at\n               FROM email_queue\n               WHERE status = 'failed'\n               ORDER BY created_at DESC\n               LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -34,38 +34,43 @@
         "type_info": "Integer"
       },
       {
-        "name": "status",
+        "name": "email_type",
         "ordinal": 6,
         "type_info": "Text"
       },
       {
-        "name": "attempts",
+        "name": "status",
         "ordinal": 7,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "max_attempts",
+        "name": "attempts",
         "ordinal": 8,
         "type_info": "Integer"
       },
       {
-        "name": "last_error",
+        "name": "max_attempts",
         "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_error",
+        "ordinal": 10,
         "type_info": "Text"
       },
       {
         "name": "created_at",
-        "ordinal": 10,
-        "type_info": "Integer"
-      },
-      {
-        "name": "last_attempted_at",
         "ordinal": 11,
         "type_info": "Integer"
       },
       {
-        "name": "sent_at",
+        "name": "last_attempted_at",
         "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "sent_at",
+        "ordinal": 13,
         "type_info": "Integer"
       }
     ],
@@ -82,11 +87,12 @@
       false,
       false,
       false,
+      false,
       true,
       false,
       true,
       true
     ]
   },
-  "hash": "b1bce33d012fe7f6ca4f2bc052e7ec4b6ec85a244dcf33fd4d0383811f83a684"
+  "hash": "59650727fbb7f84c77a1fb85328ec3f902ab58f20e588ac746a54d9795c1aec5"
 }

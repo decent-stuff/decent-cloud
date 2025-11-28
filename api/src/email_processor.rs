@@ -58,11 +58,12 @@ impl EmailProcessor {
 
         for email in pending {
             // Calculate exponential backoff delay: 2^attempts minutes
-            let backoff_seconds = if email.attempts > 0 {
+            let backoff_seconds = (if email.attempts > 0 {
                 2_i64.pow(email.attempts as u32) * 60
             } else {
                 0
-            };
+            })
+            .min(20 * 60); // Max 20 minutes
 
             // Check if enough time has passed since last attempt
             if let Some(last_attempt) = email.last_attempted_at {
@@ -83,9 +84,10 @@ impl EmailProcessor {
                 Ok(()) => {
                     self.database.mark_email_sent(&email.id).await?;
                     tracing::info!(
-                        "Sent email to {} (subject: {})",
+                        "Sent email to {} (subject: {}, type: {})",
                         email.to_addr,
-                        email.subject
+                        email.subject,
+                        email.email_type
                     );
                     sent_count += 1;
                 }
@@ -97,17 +99,19 @@ impl EmailProcessor {
 
                     if email.attempts + 1 >= email.max_attempts {
                         tracing::error!(
-                            "Email {} permanently failed after {} attempts: {}",
+                            "Email {} PERMANENTLY FAILED after {} attempts (type: {}): {}",
                             hex::encode(&email.id),
                             email.attempts + 1,
+                            email.email_type,
                             error_msg
                         );
                     } else {
                         tracing::warn!(
-                            "Email {} failed (attempt {}/{}): {}",
+                            "Email {} failed (attempt {}/{}, type: {}): {}",
                             hex::encode(&email.id),
                             email.attempts + 1,
                             email.max_attempts,
+                            email.email_type,
                             error_msg
                         );
                         retry_count += 1;
