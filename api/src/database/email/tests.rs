@@ -216,3 +216,44 @@ async fn test_get_email_by_id_not_found() {
     let email = db.get_email_by_id(&id).await.unwrap();
     assert!(email.is_none());
 }
+
+#[tokio::test]
+async fn test_queue_email_safe_with_valid_address() {
+    let db = setup_test_db().await;
+
+    let result = db
+        .queue_email_safe(
+            Some("test@example.com"),
+            "sender@example.com",
+            "Test Subject",
+            "Test Body",
+            false,
+        )
+        .await;
+
+    assert!(result);
+
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].to_addr, "test@example.com");
+}
+
+#[tokio::test]
+async fn test_queue_email_safe_with_none_address() {
+    let db = setup_test_db().await;
+
+    let result = db
+        .queue_email_safe(
+            None,
+            "sender@example.com",
+            "Test Subject",
+            "Test Body",
+            false,
+        )
+        .await;
+
+    assert!(!result);
+
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 0);
+}

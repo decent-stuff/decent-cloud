@@ -255,6 +255,50 @@ onMount(() => {
 
 - Solution: Run `npm install` in both `/wasm` and `/website` directories
 
+## Email Configuration
+
+The API backend includes optional email support using [MailChannels](https://www.mailchannels.com/). When configured, the system will send transactional emails such as welcome messages to new users.
+
+### Getting a MailChannels API Key
+
+1. Sign up for a MailChannels account at [app.mailchannels.com](https://app.mailchannels.com/)
+2. Obtain your API key from the dashboard
+3. Configure the environment variables (see below)
+
+### Email Environment Variables
+
+Add these to your `api/.env` file (see `api/.env.example` for reference).
+
+### How Email Works
+
+- **Queue-based**: Emails are queued in the database and processed asynchronously
+- **Retry logic**: Failed emails are retried with exponential backoff (2^attempts minutes)
+- **Non-blocking**: Email failures never block business logic (account creation, etc.)
+- **Optional**: If `MAILCHANNELS_API_KEY` is not set, emails are queued but not sent
+
+### DKIM Configuration (Optional)
+
+DKIM (DomainKeys Identified Mail) improves email deliverability by signing emails with your domain. To configure:
+
+1. Generate a DKIM key pair (MailChannels dashboard or `openssl`)
+2. Add the public key as a TXT record in your DNS
+3. Add the private key (base64 encoded) to your `.env` file
+
+Without DKIM, emails will still be sent but may have lower deliverability rates.
+
+### Testing Email Locally
+
+During development, emails are queued in the database but won't be sent unless you have a valid API key. To test:
+
+1. **Check logs**: Email queueing is logged even without an API key
+2. **Query database**: Check the `email_queue` table to see queued emails
+3. **Use test API key**: Set up a test MailChannels account for development
+
+```bash
+# Check queued emails in the database
+sqlite3 data/api-data-dev/ledger.db "SELECT * FROM email_queue;"
+```
+
 ## Testing
 
 ### Running Tests

@@ -623,6 +623,24 @@ impl Database {
         // Commit transaction
         tx.commit().await?;
 
+        // Queue welcome email (non-blocking, errors are logged)
+        self.queue_email_safe(
+            Some(email),
+            "noreply@decentcloud.org",
+            "Welcome to Decent Cloud",
+            &format!(
+                "Welcome to Decent Cloud, {}!\n\n\
+                Your account has been created successfully.\n\n\
+                You can now start adding your offerings or renting offerings from existing providers on the platform.\n\n\
+                If you have any questions, please visit our documentation or contact support.\n\n\
+                Best regards,\n\
+                The Decent Cloud Team",
+                username
+            ),
+            false,
+        )
+        .await;
+
         // Fetch and return both records
         let account = self
             .get_account(&account_id)

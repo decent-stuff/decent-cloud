@@ -581,3 +581,33 @@ async fn test_username_search_is_case_insensitive() {
     assert_eq!(found_mixed.unwrap().username, "AliceWonderland");
     assert_eq!(found_other.unwrap().username, "AliceWonderland");
 }
+
+#[tokio::test]
+async fn test_create_oauth_linked_account_queues_welcome_email() {
+    let db = create_test_db().await;
+
+    let pubkey = [5u8; 32];
+    let (_account, _oauth_acc) = db
+        .create_oauth_linked_account(
+            "emailtest",
+            &pubkey,
+            "emailtest@example.com",
+            "google_oauth",
+            "google_email_123",
+        )
+        .await
+        .unwrap();
+
+    // Verify welcome email was queued
+    let pending_emails = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending_emails.len(), 1);
+
+    let email = &pending_emails[0];
+    assert_eq!(email.to_addr, "emailtest@example.com");
+    assert_eq!(email.from_addr, "noreply@decentcloud.org");
+    assert_eq!(email.subject, "Welcome to Decent Cloud");
+    assert!(email.body.contains("emailtest"));
+    assert!(email.body.contains("Welcome to Decent Cloud"));
+    assert_eq!(email.is_html, 0);
+    assert_eq!(email.status, "pending");
+}

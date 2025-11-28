@@ -118,6 +118,41 @@ impl Database {
 
         Ok(email)
     }
+
+    /// Queue an email safely - never fails, only logs errors
+    /// Returns true if email was queued, false if skipped or failed
+    pub async fn queue_email_safe(
+        &self,
+        to_addr: Option<&str>,
+        from_addr: &str,
+        subject: &str,
+        body: &str,
+        is_html: bool,
+    ) -> bool {
+        let Some(to) = to_addr else {
+            tracing::debug!("Email not queued: no recipient address provided");
+            return false;
+        };
+
+        match self
+            .queue_email(to, from_addr, subject, body, is_html)
+            .await
+        {
+            Ok(id) => {
+                tracing::info!(
+                    "Email queued: id={} to={} subject={}",
+                    hex::encode(&id),
+                    to,
+                    subject
+                );
+                true
+            }
+            Err(e) => {
+                tracing::warn!("Failed to queue email to {}: {:#}", to, e);
+                false
+            }
+        }
+    }
 }
 
 #[cfg(test)]
