@@ -29,7 +29,7 @@ MAILCHANNELS_API_KEY=your_actual_api_key_here
 FRONTEND_URL=http://localhost:59000  # or your staging URL
 
 # Optional but recommended for production
-DKIM_DOMAIN=decentcloud.org
+DKIM_DOMAIN=decent-cloud.org
 DKIM_SELECTOR=mailchannels
 DKIM_PRIVATE_KEY=your_base64_encoded_private_key_here
 ```
@@ -39,7 +39,7 @@ DKIM_PRIVATE_KEY=your_base64_encoded_private_key_here
 If using DKIM, add these TXT records to your domain DNS:
 
 ```
-mailchannels._domainkey.decentcloud.org TXT "v=DKIM1; k=rsa; p=<your_public_key>"
+mailchannels._domainkey.decent-cloud.org TXT "v=DKIM1; k=rsa; p=<your_public_key>"
 ```
 
 *Note: The public key format depends on your key generation method.*
@@ -50,8 +50,10 @@ Test that MailChannels API key is working:
 
 ```bash
 cd /home/sat/projects/decent-cloud
-cargo run --bin api-server -- test-email --to your@email.com
+SQLX_OFFLINE=true cargo run --bin api-server -- test-email --to your@email.com
 ```
+
+**Note:** `SQLX_OFFLINE=true` is required because the test command doesn't need database connectivity, but the codebase uses compile-time SQL verification.
 
 **Expected output:**
 ```
@@ -63,7 +65,7 @@ cargo run --bin api-server -- test-email --to your@email.com
 ✓ DKIM signing: disabled (use --with-dkim to enable)
 
 Sending test email...
-  From: noreply@decentcloud.org
+  From: noreply@decent-cloud.org
   To: your@email.com
   Subject: Decent Cloud Email Test
 
@@ -82,13 +84,13 @@ Please check your inbox at: your@email.com
 Test that DKIM signing works:
 
 ```bash
-cargo run --bin api-server -- test-email --to your@email.com --with-dkim
+SQLX_OFFLINE=true cargo run --bin api-server -- test-email --to your@email.com --with-dkim
 ```
 
 **Expected output:**
 ```
 ✓ DKIM configuration found:
-  - Domain: decentcloud.org
+  - Domain: decent-cloud.org
   - Selector: mailchannels
   - Private key: MIIEvgIBA...BAQEF (XXX bytes)
 
@@ -236,12 +238,12 @@ Before going to production:
 export ENVIRONMENT=prod
 export FRONTEND_URL=https://decent-cloud.org
 export MAILCHANNELS_API_KEY=<prod_key>
-export DKIM_DOMAIN=decentcloud.org
+export DKIM_DOMAIN=decent-cloud.org
 export DKIM_SELECTOR=mailchannels
 export DKIM_PRIVATE_KEY=<prod_key>
 
 # Test email send
-cargo run --bin api-server -- test-email --to admin@decentcloud.org --with-dkim
+SQLX_OFFLINE=true cargo run --bin api-server -- test-email --to admin@decent-cloud.org --with-dkim
 ```
 
 **Verify:**
@@ -274,7 +276,7 @@ cargo run --bin api-server -- test-email --to admin@decentcloud.org --with-dkim
 
 1. Verify DNS records are published:
    ```bash
-   dig TXT mailchannels._domainkey.decentcloud.org
+   dig TXT mailchannels._domainkey.decent-cloud.org
    ```
 
 2. Check private key format (must be base64 encoded)

@@ -1533,7 +1533,7 @@ impl AccountsApi {
 
         db.queue_email_safe(
             Some(&req.email),
-            "noreply@decentcloud.org",
+            "noreply@decent-cloud.org",
             subject,
             &body,
             false,

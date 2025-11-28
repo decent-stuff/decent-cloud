@@ -91,7 +91,7 @@ Create a client for authenticated requests:
 import { signRequest } from './auth-api';
 import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.decentcloud.org';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.decent-cloud.org';
 
 export class UserApiClient {
   constructor(private signingIdentity: Ed25519KeyIdentity) {}

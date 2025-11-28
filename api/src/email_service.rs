@@ -55,8 +55,7 @@ struct EmailRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct EmailResponse {
-    success: bool,
+struct EmailErrorResponse {
     #[serde(default)]
     errors: Vec<String>,
 }
@@ -129,20 +128,27 @@ impl EmailService {
             .context("Failed to send email request")?;
 
         let status = response.status();
-        let response_body: EmailResponse = response
-            .json()
-            .await
-            .context("Failed to parse email response")?;
 
-        if !response_body.success || !status.is_success() {
-            anyhow::bail!(
-                "Email send failed (status: {}): {:?}",
-                status,
-                response_body.errors
-            );
+        // MailChannels returns 202 Accepted with empty/minimal body on success
+        if status.is_success() {
+            return Ok(());
         }
 
-        Ok(())
+        // On error, try to parse response body for error details
+        let response_text = response
+            .text()
+            .await
+            .context("Failed to read error response body")?;
+
+        // Try to parse as JSON error response
+        let error_msg =
+            if let Ok(err_response) = serde_json::from_str::<EmailErrorResponse>(&response_text) {
+                format!("{:?}", err_response.errors)
+            } else {
+                response_text
+            };
+
+        anyhow::bail!("Email send failed (status: {}): {}", status, error_msg)
     }
 
     pub async fn send_queued_email(&self, email: &EmailQueueEntry) -> Result<()> {

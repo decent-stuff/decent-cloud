@@ -473,7 +473,7 @@ async fn test_email_command(to: &str, with_dkim: bool) -> Result<(), std::io::Er
     let email_service = EmailService::new(api_key, dkim_domain, dkim_selector, dkim_private_key);
 
     // Create test email
-    let from_addr = "noreply@decentcloud.org";
+    let from_addr = "noreply@decent-cloud.org";
     let subject = "Decent Cloud Email Test";
     let body = format!(
         "This is a test email from the Decent Cloud API server.\n\n\

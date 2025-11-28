@@ -626,7 +626,7 @@ impl Database {
         // Queue welcome email (non-blocking, errors are logged)
         self.queue_email_safe(
             Some(email),
-            "noreply@decentcloud.org",
+            "noreply@decent-cloud.org",
             "Welcome to Decent Cloud",
             &format!(
                 "Welcome to Decent Cloud, {}!\n\n\

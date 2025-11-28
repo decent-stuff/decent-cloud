@@ -604,7 +604,7 @@ async fn test_create_oauth_linked_account_queues_welcome_email() {
 
     let email = &pending_emails[0];
     assert_eq!(email.to_addr, "emailtest@example.com");
-    assert_eq!(email.from_addr, "noreply@decentcloud.org");
+    assert_eq!(email.from_addr, "noreply@decent-cloud.org");
     assert_eq!(email.subject, "Welcome to Decent Cloud");
     assert!(email.body.contains("emailtest"));
     assert!(email.body.contains("Welcome to Decent Cloud"));
