@@ -10,3 +10,6 @@
     - do they have verified identity, email, phone number, payment methods, etc
     - warn if account is new and has little history
 - Password/account recovery through emails: send account recovery links via email and allow users to recovery access to  their accounts that way
+- Admin UI with support for:
+    - sending test and other emails
+    - performing actions in the name of other users (impersonating)
