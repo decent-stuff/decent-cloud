@@ -56,7 +56,7 @@
 			</h1>
 
 			<p class="text-base md:text-lg xl:text-xl mt-4 text-white/80">
-				Decentralized marketplace for cloud infrastructure and services
+				Shop, compare, and order cloud resources through one unified platform. Peer-to-peer marketplace with verified providers - transparent track records, regular health checks, and security deposits ensure accountability.
 			</p>
 
 			<h2 class="text-lg md:text-2xl mt-2 text-white/80 font-bold min-h-[3rem]">

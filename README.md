@@ -9,9 +9,9 @@ Decent Cloud is a peer-to-peer platform for decentralized cloud resource sharing
 
 ## Overview
 
-Decent Cloud transforms cloud resource sharing by enabling anyone to rent or lease computing assets—from GPUs to web services—through a single, unified interface. With no vendor lock-in and streamlined cloud management, our decentralized approach empowers both providers and users.
+Decent Cloud is a peer-to-peer marketplace where you can shop, compare, and order cloud resources—from GPUs to web services—through one unified platform. With no vendor lock-in and streamlined cloud management, our decentralized approach empowers both providers and users.
 
-Our unique reputation system ties credibility to transaction fees. Paying these fees is essential for building a trustworthy history, while poor service quickly impacts reputation. This tamper-proof ledger ensures transparency and accountability across the platform.
+Trust verified through transparent track records, regular health checks, and provider security deposits. Our unique reputation system ties credibility to on-chain transaction history. Poor service quickly impacts reputation, while security deposits ensure providers have real financial accountability. This tamper-proof ledger guarantees transparency across the platform.
 
 ### Key Features
 
