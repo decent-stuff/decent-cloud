@@ -1,0 +1,2 @@
+- add support for sending emails by the API backend, using mailchannels.com (I already have an API key for them)
+- add support for payments
