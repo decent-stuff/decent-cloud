@@ -6,8 +6,9 @@
 		updateProviderOffering,
 		type Offering,
 		type CsvImportResult,
-		downloadCSVTemplate,
-		fetchCSVTemplate
+		getExampleOfferingsCSV,
+		getProductTypes,
+		type ProductType
 	} from '$lib/services/api';
 	import { authStore } from '$lib/stores/auth';
 	import { hexEncode } from '$lib/services/api';
@@ -22,9 +23,11 @@
 	let currentIdentity = $state<any>(null);
 	let showEditorDialog = $state(false);
 	let showEditDialog = $state(false);
+	let showTemplateDialog = $state(false);
 	let editingOffering = $state<Offering | null>(null);
 	let importSuccess = $state<string | null>(null);
 	let editorCsvContent = $state('');
+	let productTypes = $state<ProductType[]>([]);
 
 	async function loadOfferings() {
 		try {
@@ -127,14 +130,52 @@
 					currentIdentity.publicKeyBytes,
 					signed.headers
 				);
+				showEditorDialog = true;
 			} else {
-				editorCsvContent = await fetchCSVTemplate();
+				showTemplateDialog = true;
 			}
-
-			showEditorDialog = true;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load CSV';
 			console.error('Error loading CSV:', e);
+		}
+	}
+
+	async function downloadTemplate(productType: string) {
+		try {
+			const csv = await getExampleOfferingsCSV(productType);
+			const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+			const link = document.createElement('a');
+			const url = URL.createObjectURL(blob);
+
+			link.setAttribute('href', url);
+			link.setAttribute('download', `offerings-template-${productType}.csv`);
+			link.style.visibility = 'hidden';
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to download template';
+			console.error('Error downloading template:', e);
+		}
+	}
+
+	async function openEditorWithTemplate(productType: string) {
+		try {
+			editorCsvContent = await getExampleOfferingsCSV(productType);
+			showTemplateDialog = false;
+			showEditorDialog = true;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load template';
+			console.error('Error loading template:', e);
+		}
+	}
+
+	async function loadProductTypes() {
+		try {
+			productTypes = await getProductTypes();
+		} catch (e) {
+			console.error('Error loading product types:', e);
 		}
 	}
 
@@ -143,6 +184,7 @@
 			currentIdentity = identity;
 		});
 
+		loadProductTypes();
 		loadOfferings();
 		return unsubscribe;
 	});
@@ -184,7 +226,7 @@
 		</div>
 		<div class="flex gap-3">
 			<button
-				onclick={downloadCSVTemplate}
+				onclick={() => (showTemplateDialog = true)}
 				class="px-6 py-3 bg-white/10 backdrop-blur rounded-lg font-semibold hover:bg-white/20 transition-all flex items-center gap-2"
 				title="Download CSV template with example offerings"
 			>
@@ -374,3 +416,60 @@
 	pubkeyBytes={currentIdentity?.publicKeyBytes}
 	on:success={handleEditSuccess}
 />
+
+<!-- Product Type Selection Dialog -->
+{#if showTemplateDialog}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+		onclick={() => (showTemplateDialog = false)}
+	>
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<div
+			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 max-w-2xl w-full mx-4 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<h2 class="text-2xl font-bold text-white mb-4">Select Product Type</h2>
+			<p class="text-white/60 mb-6">Choose a product type to download an example template</p>
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+				{#each productTypes as productType}
+					<button
+						onclick={() => downloadTemplate(productType.key)}
+						class="p-4 bg-white/10 backdrop-blur rounded-lg border border-white/20 hover:border-white/40 hover:bg-white/20 transition-all text-left group"
+					>
+						<div class="text-2xl mb-2">{productType.label.split(' ')[0]}</div>
+						<div class="text-white font-medium group-hover:text-blue-400 transition-colors">
+							{productType.label.substring(productType.label.indexOf(' ') + 1)}
+						</div>
+						<div class="text-white/50 text-sm mt-1">Download template</div>
+					</button>
+				{/each}
+			</div>
+			{#if offerings.length === 0}
+				<div class="border-t border-white/10 pt-6">
+					<p class="text-white/60 mb-4 text-sm">Or start editing with a template:</p>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+						{#each productTypes as productType}
+							<button
+								onclick={() => openEditorWithTemplate(productType.key)}
+								class="p-3 bg-blue-500/20 backdrop-blur rounded-lg border border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/30 transition-all text-left"
+							>
+								<div class="text-sm text-blue-400 font-medium">
+									Edit {productType.label.substring(productType.label.indexOf(' ') + 1)}
+								</div>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+			<div class="flex justify-end mt-6">
+				<button
+					onclick={() => (showTemplateDialog = false)}
+					class="px-6 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

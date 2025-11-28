@@ -333,32 +333,6 @@ export async function updateProviderOffering(
 	}
 }
 
-export async function fetchCSVTemplate(): Promise<string> {
-	const url = `${API_BASE_URL}/api/v1/offerings/template`;
-	const response = await fetch(url);
-
-	if (!response.ok) {
-		throw new Error(`Failed to fetch CSV template: ${response.status} ${response.statusText}`);
-	}
-
-	return await response.text();
-}
-
-export async function downloadCSVTemplate(): Promise<void> {
-	const csv = await fetchCSVTemplate();
-	const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-	const link = document.createElement('a');
-	const url = URL.createObjectURL(blob);
-
-	link.setAttribute('href', url);
-	link.setAttribute('download', 'offerings-template.csv');
-	link.style.visibility = 'hidden';
-	document.body.appendChild(link);
-	link.click();
-	document.body.removeChild(link);
-	URL.revokeObjectURL(url);
-}
-
 export function offeringToCSVRow(offering: Offering): string[] {
 	return [
 		offering.offering_id,
