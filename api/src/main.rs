@@ -1,6 +1,7 @@
 mod auth;
 mod cleanup_service;
 mod database;
+mod email_service;
 mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
@@ -15,6 +16,7 @@ use candid::Principal;
 use clap::{Parser, Subcommand};
 use cleanup_service::CleanupService;
 use database::Database;
+use email_service::EmailService;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
@@ -60,6 +62,7 @@ struct AppContext {
     ledger_client: Arc<LedgerClient>,
     sync_interval_secs: u64,
     metadata_cache: Arc<MetadataCache>,
+    email_service: Option<Arc<EmailService>>,
 }
 
 async fn setup_app_context() -> Result<AppContext, std::io::Error> {
@@ -109,11 +112,32 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
         metadata_refresh_interval,
     ));
 
+    // Email service setup (optional)
+    let email_service = env::var("MAILCHANNELS_API_KEY").ok().map(|api_key| {
+        let dkim_domain = env::var("DKIM_DOMAIN").ok();
+        let dkim_selector = env::var("DKIM_SELECTOR").ok();
+        let dkim_private_key = env::var("DKIM_PRIVATE_KEY").ok();
+
+        if dkim_selector.is_some() {
+            tracing::info!("Email service initialized with DKIM signing");
+        } else {
+            tracing::info!("Email service initialized without DKIM signing");
+        }
+
+        Arc::new(EmailService::new(
+            api_key,
+            dkim_domain,
+            dkim_selector,
+            dkim_private_key,
+        ))
+    });
+
     Ok(AppContext {
         database,
         ledger_client,
         sync_interval_secs,
         metadata_cache,
+        email_service,
     })
 }
 

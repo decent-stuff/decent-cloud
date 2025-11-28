@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod contracts;
 pub mod core;
+pub mod email;
 pub mod handlers;
 pub mod offerings;
 pub mod providers;
