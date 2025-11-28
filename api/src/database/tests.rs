@@ -269,98 +269,44 @@ async fn test_get_example_offerings() {
     // Test retrieving example offerings
     let example_offerings = db.get_example_offerings().await.unwrap();
 
-    // Should have exactly 2 example offerings from migration
-    assert_eq!(example_offerings.len(), 2);
+    // Should have exactly 10 example offerings from migration (2 per product type)
+    assert_eq!(example_offerings.len(), 10);
 
-    // Verify first example offering (ds-premium-002, comes first alphabetically)
-    let ds_offering = &example_offerings[0];
-    assert_eq!(ds_offering.offering_id, "ds-premium-002");
-    assert_eq!(ds_offering.offer_name, "Premium Dedicated Server");
-    assert_eq!(ds_offering.monthly_price, 299.99);
-    assert_eq!(ds_offering.currency, "USD");
-    assert_eq!(ds_offering.product_type, "dedicated");
-
-    // Verify second example offering (vm-basic-001)
-    let vm_offering = &example_offerings[1];
-    assert_eq!(vm_offering.offering_id, "vm-basic-001");
-    assert_eq!(vm_offering.offer_name, "Basic Virtual Machine");
-    assert_eq!(vm_offering.monthly_price, 29.99);
-    assert_eq!(vm_offering.currency, "USD");
-    assert_eq!(vm_offering.product_type, "compute");
-
-    // Test that related data exists for each offering
-    let vm_payment_methods: Vec<&str> = vm_offering
-        .payment_methods
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter(|s| !s.is_empty())
+    // Verify we have offerings for all product types
+    let product_types: Vec<_> = example_offerings
+        .iter()
+        .map(|o| o.product_type.as_str())
         .collect();
-    assert_eq!(vm_payment_methods.len(), 2);
-    assert!(vm_payment_methods.contains(&"Credit Card"));
-    assert!(vm_payment_methods.contains(&"PayPal"));
+    assert!(product_types.contains(&"compute"));
+    assert!(product_types.contains(&"gpu"));
+    assert!(product_types.contains(&"storage"));
+    assert!(product_types.contains(&"network"));
+    assert!(product_types.contains(&"dedicated"));
 
-    let vm_features: Vec<&str> = vm_offering
-        .features
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .collect();
-    assert_eq!(vm_features.len(), 3);
-    assert!(vm_features.contains(&"Auto Backup"));
-    assert!(vm_features.contains(&"SSH Access"));
-    assert!(vm_features.contains(&"Root Access"));
+    // Find and verify a compute offering
+    let compute_offering = example_offerings
+        .iter()
+        .find(|o| o.offering_id == "compute-001")
+        .expect("Should have compute-001");
+    assert_eq!(compute_offering.offer_name, "Basic VPS");
+    assert_eq!(compute_offering.currency, "ICP");
+    assert_eq!(compute_offering.product_type, "compute");
 
-    let vm_os: Vec<&str> = vm_offering
-        .operating_systems
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .collect();
-    assert_eq!(vm_os.len(), 3);
-    assert!(vm_os.contains(&"Ubuntu 22.04"));
-    assert!(vm_os.contains(&"Debian 11"));
-    assert!(vm_os.contains(&"CentOS 8"));
+    // Verify it has required data
+    assert!(compute_offering.payment_methods.is_some());
+    assert!(compute_offering.features.is_some());
+    assert!(compute_offering.operating_systems.is_some());
 
-    let ds_payment_methods: Vec<&str> = ds_offering
-        .payment_methods
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .collect();
-    assert_eq!(ds_payment_methods.len(), 3);
-    assert!(ds_payment_methods.contains(&"BTC"));
-    assert!(ds_payment_methods.contains(&"Bank Transfer"));
-    assert!(ds_payment_methods.contains(&"Credit Card"));
-
-    let ds_features: Vec<&str> = ds_offering
-        .features
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .collect();
-    assert_eq!(ds_features.len(), 4);
-    assert!(ds_features.contains(&"RAID 1"));
-    assert!(ds_features.contains(&"IPMI Access"));
-    assert!(ds_features.contains(&"DDoS Protection"));
-    assert!(ds_features.contains(&"24/7 Support"));
-
-    let ds_os: Vec<&str> = ds_offering
-        .operating_systems
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .collect();
-    assert_eq!(ds_os.len(), 4);
-    assert!(ds_os.contains(&"Ubuntu 22.04"));
-    assert!(ds_os.contains(&"CentOS 8"));
-    assert!(ds_os.contains(&"Windows Server 2022"));
-    assert!(ds_os.contains(&"Debian 11"));
+    // Find and verify a GPU offering
+    let gpu_offering = example_offerings
+        .iter()
+        .find(|o| o.offering_id == "gpu-001")
+        .expect("Should have gpu-001");
+    assert_eq!(gpu_offering.offer_name, "AI Training - RTX 4090");
+    assert_eq!(gpu_offering.currency, "ICP");
+    assert_eq!(gpu_offering.product_type, "gpu");
+    assert!(gpu_offering.gpu_name.is_some());
+    assert!(gpu_offering.gpu_count.is_some());
 }
 
 #[tokio::test]
@@ -369,7 +315,7 @@ async fn test_csv_template_data_retrieval() {
 
     // Verify we can retrieve all data needed for CSV template generation
     let example_offerings = db.get_example_offerings().await.unwrap();
-    assert_eq!(example_offerings.len(), 2);
+    assert_eq!(example_offerings.len(), 10);
 
     // For each example offering, verify we can fetch all related data without errors
     for offering in &example_offerings {
@@ -387,19 +333,25 @@ async fn test_csv_template_data_retrieval() {
             offering.offering_id
         );
 
-        let operating_systems = offering.operating_systems.as_deref().unwrap_or("");
-        assert!(
-            !operating_systems.is_empty(),
-            "Operating systems should not be empty for {}",
-            offering.offering_id
-        );
+        // Operating systems are only required for compute, GPU, and dedicated offerings
+        if matches!(
+            offering.product_type.as_str(),
+            "compute" | "gpu" | "dedicated"
+        ) {
+            let operating_systems = offering.operating_systems.as_deref().unwrap_or("");
+            assert!(
+                !operating_systems.is_empty(),
+                "Operating systems should not be empty for {} offerings",
+                offering.product_type
+            );
+        }
     }
 
     // Verify example offerings have correct visibility
     for offering in &example_offerings {
         assert_eq!(
-            offering.visibility, "example",
-            "Example offerings should have visibility='example'"
+            offering.visibility, "public",
+            "Example offerings should have visibility='public'"
         );
     }
 }

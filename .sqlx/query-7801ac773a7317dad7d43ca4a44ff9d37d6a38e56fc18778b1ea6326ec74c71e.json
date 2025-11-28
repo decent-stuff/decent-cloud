@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public'",
+  "query": "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ?",
   "describe": {
     "columns": [
       {
@@ -10,11 +10,11 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       false
     ]
   },
-  "hash": "92dc5ae07f2061ff0be0a74cdc6dffbd13fddb669803e5d04ea95ecc61fbc865"
+  "hash": "7801ac773a7317dad7d43ca4a44ff9d37d6a38e56fc18778b1ea6326ec74c71e"
 }

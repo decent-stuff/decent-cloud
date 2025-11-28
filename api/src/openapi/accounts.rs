@@ -3,7 +3,7 @@ use super::common::{
     AddAccountSocialRequest, ApiResponse, ApiTags, CompleteRecoveryRequest, RegisterAccountRequest,
     RequestRecoveryRequest, UpdateAccountProfileRequest, UpdateDeviceNameRequest,
 };
-use crate::{auth::ApiAuthenticatedUser, database::Database, database::email::EmailType};
+use crate::{auth::ApiAuthenticatedUser, database::email::EmailType, database::Database};
 use poem::web::Data;
 use poem_openapi::{param::Path, param::Query, payload::Binary, payload::Json, OpenApi};
 use std::sync::Arc;
@@ -1537,7 +1537,7 @@ impl AccountsApi {
             subject,
             &body,
             false,
-            EmailType::Recovery,  // Critical: account recovery with 24 attempts
+            EmailType::Recovery, // Critical: account recovery with 24 attempts
         )
         .await;
 

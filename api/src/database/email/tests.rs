@@ -1,5 +1,5 @@
-use crate::database::test_helpers::setup_test_db;
 use crate::database::email::EmailType;
+use crate::database::test_helpers::setup_test_db;
 
 #[tokio::test]
 async fn test_queue_email() {
@@ -183,7 +183,8 @@ async fn test_mark_email_failed_max_attempts() {
         .await
         .unwrap();
 
-    for _ in 0..6 {  // General emails have 6 max attempts
+    for _ in 0..6 {
+        // General emails have 6 max attempts
         db.mark_email_failed(&id, "Failed").await.unwrap();
     }
 
@@ -220,7 +221,8 @@ async fn test_get_pending_emails_excludes_failed() {
         .await
         .unwrap();
 
-    for _ in 0..6 {  // General emails have 6 max attempts
+    for _ in 0..6 {
+        // General emails have 6 max attempts
         db.mark_email_failed(&id2, "Error").await.unwrap();
     }
 

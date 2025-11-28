@@ -24,9 +24,9 @@ impl EmailType {
 
     pub fn max_attempts(&self) -> i64 {
         match self {
-            EmailType::Recovery => 24,  // Critical: many retries
-            EmailType::Welcome => 12,   // Important: moderate retries
-            EmailType::General => 6,    // Normal: fewer retries
+            EmailType::Recovery => 24, // Critical: many retries
+            EmailType::Welcome => 12,  // Important: moderate retries
+            EmailType::General => 6,   // Normal: fewer retries
         }
     }
 }

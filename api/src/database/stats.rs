@@ -70,8 +70,10 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
+        let example_provider_hash_offerings = example_provider_hash.clone();
         let total_offerings = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public'",
+            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ?",
+            example_provider_hash_offerings
         )
         .fetch_one(&self.pool)
         .await?;

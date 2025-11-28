@@ -1,5 +1,5 @@
 use super::common::{AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, ApiResponse, ApiTags};
-use crate::{auth::AdminAuthenticatedUser, database::Database, database::email::EmailQueueEntry};
+use crate::{auth::AdminAuthenticatedUser, database::email::EmailQueueEntry, database::Database};
 use poem::web::Data;
 use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
 use std::sync::Arc;
@@ -218,11 +218,7 @@ impl AdminApi {
     ///
     /// Returns a list of emails that failed permanently after all retry attempts.
     /// Useful for monitoring and manual intervention.
-    #[oai(
-        path = "/admin/emails/failed",
-        method = "get",
-        tag = "ApiTags::Admin"
-    )]
+    #[oai(path = "/admin/emails/failed", method = "get", tag = "ApiTags::Admin")]
     async fn admin_get_failed_emails(
         &self,
         db: Data<&Arc<Database>>,

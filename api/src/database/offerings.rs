@@ -82,7 +82,8 @@ impl Database {
         &self,
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
-        let mut query = String::from("SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public'");
+        let example_provider_pubkey = Self::example_provider_pubkey();
+        let mut query = String::from("SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ?");
 
         if params.product_type.is_some() {
             query.push_str(" AND product_type = ?");
@@ -96,7 +97,7 @@ impl Database {
 
         query.push_str(" ORDER BY monthly_price ASC LIMIT ? OFFSET ?");
 
-        let mut query_builder = sqlx::query_as::<_, Offering>(&query);
+        let mut query_builder = sqlx::query_as::<_, Offering>(&query).bind(example_provider_pubkey);
 
         if let Some(pt) = params.product_type {
             query_builder = query_builder.bind(pt);
@@ -219,16 +220,20 @@ impl Database {
 impl Database {
     /// Count offerings
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {
+        let example_provider_pubkey = Self::example_provider_pubkey();
         let query = if let Some(f) = filters {
             format!(
-                "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND ({})",
+                "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ? AND ({})",
                 f
             )
         } else {
-            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public'".to_string()
+            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ?".to_string()
         };
 
-        let count: (i64,) = sqlx::query_as(&query).fetch_one(&self.pool).await?;
+        let count: (i64,) = sqlx::query_as(&query)
+            .bind(example_provider_pubkey)
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(count.0)
     }
