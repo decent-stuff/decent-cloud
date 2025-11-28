@@ -1,4 +1,3 @@
-- add support for sending emails by the API backend, using mailchannels.com (I already have an API key for them)
 - add support for payments with Stripe, I have a Stripe account and API keys already
 - improve search support, if possible add a minimal search DSL for filtering results, e.g. like on ServerHunter https://www.serverhunter.com/#query=stock:(in_stock+OR+unknown)
 - improve reputation display on profiles:
