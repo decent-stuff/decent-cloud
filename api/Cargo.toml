@@ -7,6 +7,10 @@ edition = "2021"
 name = "api-server"
 path = "src/main.rs"
 
+[[bin]]
+name = "test-email"
+path = "src/bin/test-email.rs"
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
@@ -18,6 +22,7 @@ clap.workspace = true
 csv.workspace = true
 dcc-common = { path = "../common" }
 dotenv.workspace = true
+email-utils = { path = "./email-utils" }
 ed25519-dalek.workspace = true
 hex.workspace = true
 ic-agent.workspace = true

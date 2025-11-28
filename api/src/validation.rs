@@ -2,7 +2,9 @@ use anyhow::{bail, Result};
 use regex::Regex;
 use std::sync::OnceLock;
 
-static EMAIL_REGEX: OnceLock<Regex> = OnceLock::new();
+// Import email validation from email-utils
+pub use email_utils::validate_email;
+
 static URL_REGEX: OnceLock<Regex> = OnceLock::new();
 static USERNAME_REGEX: OnceLock<Regex> = OnceLock::new();
 
@@ -21,11 +23,6 @@ const RESERVED_USERNAMES: &[&str] = &[
     "cloud",
 ];
 
-fn email_regex() -> &'static Regex {
-    EMAIL_REGEX
-        .get_or_init(|| Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap())
-}
-
 fn url_regex() -> &'static Regex {
     URL_REGEX.get_or_init(|| Regex::new(r"^https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/.*)?$").unwrap())
 }
@@ -33,19 +30,6 @@ fn url_regex() -> &'static Regex {
 fn username_regex() -> &'static Regex {
     USERNAME_REGEX
         .get_or_init(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9._@-]{1,62}[a-zA-Z0-9]$").unwrap())
-}
-
-pub fn validate_email(email: &str) -> Result<()> {
-    if email.trim().is_empty() {
-        bail!("Email cannot be empty");
-    }
-    if email.len() > 255 {
-        bail!("Email is too long (max 255 characters)");
-    }
-    if !email_regex().is_match(email) {
-        bail!("Invalid email format");
-    }
-    Ok(())
 }
 
 pub fn validate_url(url: &str) -> Result<()> {

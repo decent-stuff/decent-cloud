@@ -50,10 +50,8 @@ Test that MailChannels API key is working:
 
 ```bash
 cd /home/sat/projects/decent-cloud
-SQLX_OFFLINE=true cargo run --bin api-server -- test-email --to your@email.com
+cargo run --bin test-email -- --to your@email.com
 ```
-
-**Note:** `SQLX_OFFLINE=true` is required because the test command doesn't need database connectivity, but the codebase uses compile-time SQL verification.
 
 **Expected output:**
 ```
@@ -84,7 +82,7 @@ Please check your inbox at: your@email.com
 Test that DKIM signing works:
 
 ```bash
-SQLX_OFFLINE=true cargo run --bin api-server -- test-email --to your@email.com --with-dkim
+cargo run --bin test-email -- --to your@email.com --with-dkim
 ```
 
 **Expected output:**
@@ -243,7 +241,7 @@ export DKIM_SELECTOR=mailchannels
 export DKIM_PRIVATE_KEY=<prod_key>
 
 # Test email send
-SQLX_OFFLINE=true cargo run --bin api-server -- test-email --to admin@decent-cloud.org --with-dkim
+cargo run --bin test-email -- --to admin@decent-cloud.org --with-dkim
 ```
 
 **Verify:**

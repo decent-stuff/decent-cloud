@@ -151,6 +151,7 @@ dependencies = [
  "dcc-common",
  "dotenv",
  "ed25519-dalek",
+ "email-utils",
  "hex",
  "ic-agent",
  "icrc-ledger-types",
@@ -1201,6 +1202,18 @@ dependencies = [
  "sec1",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "email-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "regex",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

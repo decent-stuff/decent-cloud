@@ -1,5 +1,5 @@
 use crate::database::Database;
-use crate::email_service::EmailService;
+use crate::email_service::{EmailService, EmailServiceExt};
 use std::sync::Arc;
 use std::time::Duration;
 
