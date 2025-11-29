@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # Hook: Limit tool calls for orchestrator child agents
-# Prevents infinite loops by enforcing max 50 tool calls per agent
+# Prevents infinite loops by enforcing max 50 tool calls per session
 
 set -euo pipefail
 
 # Read hook context from stdin
 CONTEXT=$(cat)
 
-# Extract tool name and check if this is a child agent context
-TOOL_NAME=$(echo "$CONTEXT" | jq -r '.tool')
-CONVERSATION_ID=$(echo "$CONTEXT" | jq -r '.conversationId // "unknown"')
+# Extract session ID
+SESSION_ID=$(echo "$CONTEXT" | jq -r '.session_id // "unknown"')
 
-# State file to track tool calls per conversation
+# State file to track tool calls per session
 STATE_DIR="${CLAUDE_PROJECT_DIR}/.claude/hook-state"
 mkdir -p "$STATE_DIR"
-STATE_FILE="${STATE_DIR}/tool-calls-${CONVERSATION_ID}.count"
+STATE_FILE="${STATE_DIR}/tool-calls-${SESSION_ID}.count"
+
+# Clean up old state files (older than 10 minutes)
+find "$STATE_DIR" -name "tool-calls-*.count" -type f -mmin +10 -delete 2>/dev/null || true
 
 # Initialize counter if file doesn't exist
 if [[ ! -f "$STATE_FILE" ]]; then
