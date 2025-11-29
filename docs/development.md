@@ -299,6 +299,50 @@ During development, emails are queued in the database but won't be sent unless y
 sqlite3 data/api-data-dev/ledger.db "SELECT * FROM email_queue;"
 ```
 
+## Stripe Configuration
+
+Optional payment processing for marketplace rentals. Without Stripe, only DCT token payments are available.
+
+### Setup
+
+1. **Create Account**: [dashboard.stripe.com/register](https://dashboard.stripe.com/register) (free)
+2. **Get API Keys**: Dashboard → Developers → API keys
+   - Copy `pk_test_...` (publishable) and `sk_test_...` (secret)
+   - Use test keys for development, live keys (`pk_live_...`, `sk_live_...`) for production
+
+3. **Set Environment Variables** in `api/.env`:
+```bash
+STRIPE_SECRET_KEY=sk_test_your_key
+STRIPE_PUBLISHABLE_KEY=pk_test_your_key
+STRIPE_WEBHOOK_SECRET=whsec_test_secret  # Placeholder for local dev
+```
+
+And in `website/.env`:
+```bash
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_key
+```
+
+4. **Test Locally**: Use test cards (no real charges)
+   - Success: `4242 4242 4242 4242`
+   - Decline: `4000 0000 0000 0002`
+   - Any future expiry, any CVC
+
+### Webhook Configuration (Production Only)
+
+Dashboard → Developers → Webhooks → Add endpoint:
+- URL: `https://your-domain.com/api/v1/webhooks/stripe`
+- API version: `2025-11-17` (or latest)
+- Events: **`payment_intent.succeeded`** and **`payment_intent.payment_failed`** only
+- Replace `STRIPE_WEBHOOK_SECRET` in production `.env` with signing secret (`whsec_...`)
+
+**Local Webhook Testing** (optional - for realistic testing):
+```bash
+stripe listen --forward-to localhost:59001/api/v1/webhooks/stripe
+# Use webhook secret from CLI output in api/.env
+```
+
+For E2E test setup, see [website/tests/e2e/STRIPE_TESTING_SETUP.md](../website/tests/e2e/STRIPE_TESTING_SETUP.md).
+
 ## Testing
 
 ### Running Tests
