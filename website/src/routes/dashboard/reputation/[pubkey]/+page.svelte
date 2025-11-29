@@ -107,6 +107,56 @@
 		return { totalSent, totalReceived };
 	}
 
+	// Calculate early cancellation metrics
+	function calculateCancellationMetrics(contracts: any[]) {
+		if (contracts.length === 0) return null;
+
+		const cancelled = contracts.filter((c) => c.status === 'cancelled');
+		if (cancelled.length === 0) return {
+			total: 0,
+			within1h: 0,
+			within24h: 0,
+			within7d: 0,
+			within180d: 0,
+			pct1h: 0,
+			pct24h: 0,
+			pct7d: 0,
+			pct180d: 0,
+		};
+
+		const ONE_HOUR_NS = 60 * 60 * 1_000_000_000;
+		const ONE_DAY_NS = 24 * ONE_HOUR_NS;
+		const ONE_WEEK_NS = 7 * ONE_DAY_NS;
+		const SIX_MONTHS_NS = 180 * ONE_DAY_NS;
+
+		let within1h = 0;
+		let within24h = 0;
+		let within7d = 0;
+		let within180d = 0;
+
+		for (const contract of cancelled) {
+			if (!contract.status_updated_at_ns) continue;
+			const duration = contract.status_updated_at_ns - contract.created_at_ns;
+
+			if (duration <= ONE_HOUR_NS) within1h++;
+			if (duration <= ONE_DAY_NS) within24h++;
+			if (duration <= ONE_WEEK_NS) within7d++;
+			if (duration <= SIX_MONTHS_NS) within180d++;
+		}
+
+		return {
+			total: cancelled.length,
+			within1h,
+			within24h,
+			within7d,
+			within180d,
+			pct1h: (within1h / cancelled.length) * 100,
+			pct24h: (within24h / cancelled.length) * 100,
+			pct7d: (within7d / cancelled.length) * 100,
+			pct180d: (within180d / cancelled.length) * 100,
+		};
+	}
+
 	onMount(async () => {
 		try {
 			loading = true;
@@ -204,6 +254,16 @@
 	const totalContracts = $derived(
 		(activity?.rentals_as_requester.length ?? 0) +
 			(activity?.rentals_as_provider.length ?? 0),
+	);
+	const requesterCancellations = $derived(
+		activity?.rentals_as_requester
+			? calculateCancellationMetrics(activity.rentals_as_requester)
+			: null,
+	);
+	const providerCancellations = $derived(
+		activity?.rentals_as_provider
+			? calculateCancellationMetrics(activity.rentals_as_provider)
+			: null,
 	);
 </script>
 
@@ -420,6 +480,151 @@
 				</div>
 			</div>
 		</div>
+
+		<!-- Cancellation Metrics -->
+		{#if (requesterCancellations && requesterCancellations.total > 0) || (providerCancellations && providerCancellations.total > 0)}
+			<div
+				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			>
+				<h2 class="text-2xl font-bold text-white mb-4">
+					Cancellation Patterns
+				</h2>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+					{#if requesterCancellations && requesterCancellations.total > 0}
+						<div>
+							<h3 class="text-lg font-semibold text-white/80 mb-3">
+								As Requester
+							</h3>
+							<div class="space-y-2">
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Total cancelled:</span
+									>
+									<span
+										class="text-lg font-bold text-white"
+										>{requesterCancellations.total}</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 1 hour:</span
+									>
+									<span
+										class="text-lg font-bold {requesterCancellations.pct1h >
+										50
+											? 'text-red-400'
+											: 'text-white'}"
+										>{requesterCancellations.within1h} ({requesterCancellations.pct1h.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 24 hours:</span
+									>
+									<span
+										class="text-lg font-bold {requesterCancellations.pct24h >
+										80
+											? 'text-yellow-400'
+											: 'text-white'}"
+										>{requesterCancellations.within24h} ({requesterCancellations.pct24h.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 7 days:</span
+									>
+									<span class="text-lg font-bold text-white"
+										>{requesterCancellations.within7d} ({requesterCancellations.pct7d.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 180 days:</span
+									>
+									<span class="text-lg font-bold text-white"
+										>{requesterCancellations.within180d} ({requesterCancellations.pct180d.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+							</div>
+						</div>
+					{/if}
+					{#if providerCancellations && providerCancellations.total > 0}
+						<div>
+							<h3 class="text-lg font-semibold text-white/80 mb-3">
+								As Provider
+							</h3>
+							<div class="space-y-2">
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Total cancelled:</span
+									>
+									<span
+										class="text-lg font-bold text-white"
+										>{providerCancellations.total}</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 1 hour:</span
+									>
+									<span
+										class="text-lg font-bold {providerCancellations.pct1h >
+										50
+											? 'text-red-400'
+											: 'text-white'}"
+										>{providerCancellations.within1h} ({providerCancellations.pct1h.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 24 hours:</span
+									>
+									<span
+										class="text-lg font-bold {providerCancellations.pct24h >
+										80
+											? 'text-yellow-400'
+											: 'text-white'}"
+										>{providerCancellations.within24h} ({providerCancellations.pct24h.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 7 days:</span
+									>
+									<span class="text-lg font-bold text-white"
+										>{providerCancellations.within7d} ({providerCancellations.pct7d.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-sm text-white/60"
+										>Within 180 days:</span
+									>
+									<span class="text-lg font-bold text-white"
+										>{providerCancellations.within180d} ({providerCancellations.pct180d.toFixed(
+											0,
+										)}%)</span
+									>
+								</div>
+							</div>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
 
 		<!-- Transaction Statistics -->
 		{#if txStats}

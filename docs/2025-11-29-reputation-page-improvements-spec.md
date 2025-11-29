@@ -108,9 +108,25 @@ The reputation page doesn't clearly show critical rental behavior patterns that 
 
 ### Step 2
 - **Implementation:**
+  - Added calculateActualDuration() in /code/website/src/lib/utils/contract-format.ts
+    * For cancelled/completed: status_updated_at_ns - created_at_ns
+    * For active: Date.now() * 1_000_000 - created_at_ns
+    * Returns duration in nanoseconds
+  - Added formatDuration() to convert nanoseconds to human-readable format (m/h/d)
+  - Updated rental cards in reputation page (both requester and provider sections)
+  - Changed "Duration: 720 hours" to "Planned: 720h" + "Actual runtime: X"
+  - Added status_updated_at_ns to Contract interface in api.ts
 - **Review:**
+  - Helpers are minimal and focused (DRY - single responsibility)
+  - Reused existing formatContractDate pattern
+  - No duplication between requester/provider sections (used replace_all)
 - **Verification:**
-- **Outcome:**
+  - npm run check: 0 errors, 0 warnings ✓
+  - TypeScript types properly updated
+- **Outcome:** SUCCESS
+  - Commit: be48e59 "feat: show actual rental duration on reputation page (orchestrator step 2/5)"
+  - Files: contract-format.ts (+24 lines), api.ts (+1 line), reputation page (+12 lines)
+  - Now shows actual vs planned duration prominently
 
 ### Step 3
 - **Implementation:**
