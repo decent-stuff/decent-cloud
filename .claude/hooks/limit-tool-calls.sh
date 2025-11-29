@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # Hook: Limit tool calls for orchestrator child agents
-# Prevents infinite loops by enforcing max 50 tool calls per session
+# Prevents infinite loops by enforcing max 100 tool calls per session
 
 set -euo pipefail
 
 # Read hook context from stdin
 CONTEXT=$(cat)
+
+# Ensure jq is available
+if ! command -v jq &>/dev/null; then
+    # If jq missing, allow all calls (fail open)
+    echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"jq not found"}}'
+    exit 0
+fi
 
 # Extract session ID and project directory
 SESSION_ID=$(echo "$CONTEXT" | jq -r '.session_id // "unknown"')
@@ -13,11 +20,13 @@ PROJECT_DIR=$(echo "$CONTEXT" | jq -r '.cwd // "."')
 
 # State file to track tool calls per session
 STATE_DIR="${PROJECT_DIR}/.claude/hook-state"
-mkdir -p "$STATE_DIR"
+mkdir -p "$STATE_DIR" 2>/dev/null || true
 STATE_FILE="${STATE_DIR}/tool-calls-${SESSION_ID}.count"
 
 # Clean up old state files (older than 10 minutes)
-find "$STATE_DIR" -name "tool-calls-*.count" -type f -mmin +10 -delete 2>/dev/null || true
+if [[ -d "$STATE_DIR" ]]; then
+    find "$STATE_DIR" -name "tool-calls-*.count" -type f -mmin +10 -delete 2>/dev/null || true
+fi
 
 # Initialize counter if file doesn't exist
 if [[ ! -f "$STATE_FILE" ]]; then
@@ -31,8 +40,8 @@ CURRENT_COUNT=$(cat "$STATE_FILE")
 NEW_COUNT=$((CURRENT_COUNT + 1))
 echo "$NEW_COUNT" > "$STATE_FILE"
 
-# Check if limit exceeded (50 tool calls)
-MAX_CALLS=50
+# Check if limit exceeded (100 tool calls)
+MAX_CALLS=100
 if [[ $NEW_COUNT -gt $MAX_CALLS ]]; then
     # Deny the tool call and provide feedback
     cat <<EOF
@@ -52,9 +61,9 @@ cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
-    "permissionDecision": "allow",
-    "permissionDecisionReason": "Tool call $NEW_COUNT/$MAX_CALLS allowed"
-  }
+    "permissionDecision": "allow"
+  },
+  "suppressOutput": true
 }
 EOF
 exit 0
