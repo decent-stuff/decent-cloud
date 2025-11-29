@@ -28,7 +28,7 @@
 				</span>
 			</div>
 			<p class="text-white/60 text-sm">
-				Contract: {truncateContractHash(contract.contractId)}
+				Contract: {truncateContractHash(contract.contract_id)}
 			</p>
 		</div>
 		<div class="text-right text-white/80 text-sm">
@@ -36,11 +36,11 @@
 		</div>
 	</div>
 
-	{#if contract.provisioning_instanceDetails}
+	{#if contract.provisioning_instance_details}
 		<div
 			class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-white whitespace-pre-wrap"
 		>
-			{contract.provisioning_instanceDetails}
+			{contract.provisioning_instance_details}
 		</div>
 	{/if}
 

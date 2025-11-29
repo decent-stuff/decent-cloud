@@ -139,12 +139,16 @@
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div
+			class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center"
+		>
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🔑</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
 				<p class="text-white/70">
-					Create an account or login to view and manage your rental contracts. See the marketplace to browse available resources.
+					Create an account or login to view and manage your rental
+					contracts. See the marketplace to browse available
+					resources.
 				</p>
 				<div class="flex flex-col gap-3">
 					<button
@@ -211,11 +215,11 @@
 									{statusBadge.text}
 								</span>
 								<!-- Cancel button for cancelable contracts -->
-								{#if isCancellable(contract.status) && cancellingContractId !== contract.contractId}
+								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
 									<button
 										onclick={() =>
 											handleCancelContract(
-												contract.contractId,
+												contract.contract_id,
 												contract.status,
 											)}
 										class="px-2 py-1 text-xs bg-red-600/80 text-white rounded hover:bg-red-700 transition-colors"
@@ -225,7 +229,7 @@
 									</button>
 								{/if}
 								<!-- Cancellation state -->
-								{#if cancellingContractId === contract.contractId}
+								{#if cancellingContractId === contract.contract_id}
 									<div
 										class="flex items-center gap-1 text-xs text-red-400"
 									>
@@ -237,12 +241,17 @@
 								{/if}
 							</div>
 							<p class="text-white/60 text-sm">
-								Contract ID: {truncateHash(contract.contractId)}
+								Contract ID: {truncateHash(
+									contract.contract_id,
+								)}
 							</p>
 						</div>
 						<div class="text-right">
 							<div class="text-2xl font-bold text-white">
-								{formatPrice(contract.payment_amount_e9s, contract.currency)}
+								{formatPrice(
+									contract.payment_amount_e9s,
+									contract.currency,
+								)}
 							</div>
 							{#if contract.duration_hours}
 								<div class="text-white/60 text-sm">
@@ -317,7 +326,7 @@
 						</div>
 					{/if}
 
-					{#if contract.provisioning_instanceDetails}
+					{#if contract.provisioning_instance_details}
 						<div
 							class="bg-green-500/10 border border-green-500/30 rounded-lg p-4"
 						>
@@ -325,7 +334,7 @@
 								Instance Details
 							</div>
 							<div class="text-white text-sm whitespace-pre-wrap">
-								{contract.provisioning_instanceDetails}
+								{contract.provisioning_instance_details}
 							</div>
 							{#if contract.provisioning_completed_at_ns}
 								<div class="text-green-400/60 text-xs mt-2">

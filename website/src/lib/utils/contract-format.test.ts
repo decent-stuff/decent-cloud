@@ -12,7 +12,7 @@ describe('contract formatting helpers', () => {
 	});
 
 	it('formats e9s amounts to ICP string', () => {
-		expect(formatContractPrice(123_000_000_000)).toBe('123.00 ICP');
+		expect(formatContractPrice(123_000_000_000, "ICP")).toBe('123.00 ICP');
 	});
 
 	it('truncates hashes preserving start and end', () => {

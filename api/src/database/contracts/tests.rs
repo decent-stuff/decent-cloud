@@ -132,7 +132,7 @@ async fn test_get_user_contracts() {
 
     let contracts = db.get_user_contracts(&user_pk).await.unwrap();
     assert_eq!(contracts.len(), 1);
-    assert_eq!(contracts[0].contract_id, contract_id);
+    assert_eq!(contracts[0].contract_id, hex::encode(contract_id));
 }
 
 #[tokio::test]
@@ -155,7 +155,7 @@ async fn test_get_provider_contracts() {
 
     let contracts = db.get_provider_contracts(&provider_pk).await.unwrap();
     assert_eq!(contracts.len(), 1);
-    assert_eq!(contracts[0].provider_pubkey, provider_pk);
+    assert_eq!(contracts[0].provider_pubkey, hex::encode(provider_pk));
 }
 
 #[tokio::test]
@@ -229,7 +229,7 @@ async fn test_get_contract_by_id() {
 
     let contract = db.get_contract(&contract_id).await.unwrap();
     assert!(contract.is_some());
-    assert_eq!(contract.unwrap().contract_id, contract_id);
+    assert_eq!(contract.unwrap().contract_id, hex::encode(contract_id));
 }
 
 #[tokio::test]
@@ -507,8 +507,8 @@ async fn test_create_rental_request_success() {
     let contract = db.get_contract(&contract_id).await.unwrap();
     assert!(contract.is_some());
     let contract = contract.unwrap();
-    assert_eq!(contract.requester_pubkey, user_pk);
-    assert_eq!(contract.provider_pubkey, provider_pk);
+    assert_eq!(contract.requester_pubkey, hex::encode(user_pk));
+    assert_eq!(contract.provider_pubkey, hex::encode(provider_pk));
     assert_eq!(contract.offering_id, "off-rental-1");
     assert_eq!(contract.status, "requested");
     assert_eq!(contract.requester_ssh_pubkey, "ssh-rsa AAAAB3...");
@@ -1225,7 +1225,7 @@ async fn test_get_contract_by_payment_intent() {
 
     assert!(contract.is_some());
     let contract = contract.unwrap();
-    assert_eq!(contract.contract_id, contract_id);
+    assert_eq!(contract.contract_id, hex::encode(contract_id));
     assert_eq!(
         contract.stripe_payment_intent_id,
         Some(payment_intent_id.to_string())

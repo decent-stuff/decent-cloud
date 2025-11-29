@@ -1,17 +1,17 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey,\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns\n               FROM contract_sign_requests WHERE contract_id = ?",
+  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns\n               FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC",
   "describe": {
     "columns": [
       {
-        "name": "contract_id",
+        "name": "contract_id!: String",
         "ordinal": 0,
-        "type_info": "Blob"
+        "type_info": "Null"
       },
       {
-        "name": "requester_pubkey",
+        "name": "requester_pubkey!: String",
         "ordinal": 1,
-        "type_info": "Blob"
+        "type_info": "Null"
       },
       {
         "name": "requester_ssh_pubkey!",
@@ -24,9 +24,9 @@
         "type_info": "Text"
       },
       {
-        "name": "provider_pubkey",
+        "name": "provider_pubkey!: String",
         "ordinal": 4,
-        "type_info": "Blob"
+        "type_info": "Null"
       },
       {
         "name": "offering_id!",
@@ -138,11 +138,11 @@
       "Right": 1
     },
     "nullable": [
+      null,
+      null,
       false,
       false,
-      false,
-      false,
-      false,
+      null,
       false,
       true,
       true,
@@ -166,5 +166,5 @@
       true
     ]
   },
-  "hash": "97fd5b006607f787aea53ca937415d849576cf5e8f73a26c95bdbd259bb21c2c"
+  "hash": "80902932812da192686ba9dac346d06aeca5ecfc8090f0c69de91db4b63ddfbe"
 }

@@ -7,7 +7,12 @@
 	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
-	import { loadStripe, type Stripe, type StripeElements, type StripeCardElement } from "@stripe/stripe-js";
+	import {
+		loadStripe,
+		type Stripe,
+		type StripeElements,
+		type StripeCardElement,
+	} from "@stripe/stripe-js";
 	import { onMount } from "svelte";
 	import { isStripeSupportedCurrency } from "$lib/utils/stripe-currencies";
 
@@ -34,7 +39,7 @@
 
 	// Check if Stripe is supported for this offering's currency
 	let isStripeAvailable = $derived(
-		offering ? isStripeSupportedCurrency(offering.currency) : false
+		offering ? isStripeSupportedCurrency(offering.currency) : false,
 	);
 
 	onMount(async () => {
@@ -48,7 +53,12 @@
 		// Track cardMountPoint changes to ensure element mounts when DOM is ready
 		const mountPoint = cardMountPoint;
 
-		if (paymentMethod === "stripe" && stripe && mountPoint && !cardElement) {
+		if (
+			paymentMethod === "stripe" &&
+			stripe &&
+			mountPoint &&
+			!cardElement
+		) {
 			elements = stripe.elements();
 			cardElement = elements.create("card", {
 				style: {
@@ -97,7 +107,10 @@
 			case "incorrect_number":
 				return "Invalid card number. Please check and try again.";
 			default:
-				return message || "Payment failed. Please check your card details and try again.";
+				return (
+					message ||
+					"Payment failed. Please check your card details and try again."
+				);
 		}
 	}
 
@@ -139,12 +152,17 @@
 			const response = await createRentalRequest(params, signed.headers);
 
 			// If Stripe payment, confirm with card element
-			if (paymentMethod === "stripe" && response.clientSecret && cardElement && stripe) {
+			if (
+				paymentMethod === "stripe" &&
+				response.clientSecret &&
+				cardElement &&
+				stripe
+			) {
 				processingPayment = true;
 
 				const { error: stripeError } = await stripe.confirmCardPayment(
 					response.clientSecret,
-					{ payment_method: { card: cardElement } }
+					{ payment_method: { card: cardElement } },
 				);
 
 				processingPayment = false;
@@ -294,8 +312,9 @@
 					<div class="grid grid-cols-2 gap-3">
 						<button
 							type="button"
-							onclick={() => paymentMethod = "dct"}
-							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod === 'dct'
+							onclick={() => (paymentMethod = "dct")}
+							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod ===
+							'dct'
 								? 'bg-blue-500/20 border-blue-500 text-white'
 								: 'bg-white/10 border-white/20 text-white/60 hover:border-white/40'}"
 						>
@@ -303,21 +322,26 @@
 						</button>
 						<button
 							type="button"
-							onclick={() => isStripeAvailable && (paymentMethod = "stripe")}
+							onclick={() =>
+								isStripeAvailable && (paymentMethod = "stripe")}
 							disabled={!isStripeAvailable}
-							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod === 'stripe'
+							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod ===
+							'stripe'
 								? 'bg-blue-500/20 border-blue-500 text-white'
 								: isStripeAvailable
 									? 'bg-white/10 border-white/20 text-white/60 hover:border-white/40'
 									: 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'}"
-							title={!isStripeAvailable ? `Stripe does not support ${offering?.currency} currency` : ''}
+							title={!isStripeAvailable
+								? `Stripe does not support ${offering?.currency} currency`
+								: ""}
 						>
 							Credit Card
 						</button>
 					</div>
 					{#if !isStripeAvailable}
 						<p class="text-xs text-yellow-400/80 mt-2">
-							Stripe payment is not available for {offering?.currency} currency
+							Stripe payment is not available for {offering?.currency}
+							currency
 						</p>
 					{/if}
 				</fieldset>
@@ -325,7 +349,9 @@
 				<!-- Stripe Card Element -->
 				{#if paymentMethod === "stripe"}
 					<fieldset>
-						<legend class="block text-sm font-medium text-white mb-2">
+						<legend
+							class="block text-sm font-medium text-white mb-2"
+						>
 							Card Information
 						</legend>
 						<div
@@ -333,7 +359,8 @@
 							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg focus-within:border-blue-400 transition-colors"
 						></div>
 						<p class="text-xs text-white/50 mt-1">
-							Your card will be charged after the provider accepts your request
+							Your card will be charged after the provider accepts
+							your request
 						</p>
 					</fieldset>
 				{/if}

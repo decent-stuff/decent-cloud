@@ -36,7 +36,7 @@ describe('createRentalRequest', () => {
 		};
 
 		const mockResponse = {
-			contractId: 'abc123def456',
+			contract_id: 'abc123def456',
 			message: 'Rental request created successfully'
 		};
 
@@ -81,7 +81,7 @@ describe('createRentalRequest', () => {
 			json: async () => ({
 				success: true,
 				data: {
-					contractId: 'xyz789',
+					contract_id: 'xyz789',
 					message: 'Request created'
 				}
 			})
@@ -197,7 +197,7 @@ describe('createRentalRequest', () => {
 			json: async () => ({
 				success: true,
 				data: {
-					contractId: 'contract123',
+					contract_id: 'contract123',
 					message: 'Success'
 				}
 			})
@@ -232,7 +232,7 @@ describe('createRentalRequest', () => {
 			json: async () => ({
 				success: true,
 				data: {
-					contractId: 'test',
+					contract_id: 'test',
 					message: 'ok'
 				}
 			})
@@ -263,7 +263,7 @@ describe('getPendingProviderRequests', () => {
 				success: true,
 				data: [
 					{
-						contractId: [1, 2],
+						contract_id: [1, 2],
 						requester_pubkey: [10, 11],
 						provider_pubkey: [12, 13],
 						requester_ssh_pubkey: 'ssh-key',
@@ -281,7 +281,7 @@ describe('getPendingProviderRequests', () => {
 
 		const result = await getPendingProviderRequests(mockHeaders);
 		expect(result).toHaveLength(1);
-		expect(result[0].contractId).toBe('0102');
+		expect(result[0].contract_id).toBe('0102');
 		expect(result[0].requester_pubkey).toBe('0a0b');
 		expect(fetch).toHaveBeenCalledWith(
 			expect.stringContaining('/api/v1/provider/rental-requests/pending'),

@@ -144,20 +144,22 @@ pub async fn stripe_webhook(
             // Get contract by payment_intent_id to find contract_id
             if let Ok(Some(contract)) = db.get_contract_by_payment_intent(payment_intent_id).await {
                 if contract.payment_method == "stripe" {
-                    match db.accept_contract(&contract.contract_id).await {
-                        Ok(_) => {
-                            tracing::info!(
-                                "Auto-accepted contract {} after successful Stripe payment",
-                                hex::encode(&contract.contract_id)
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to auto-accept contract {}: {}",
-                                hex::encode(&contract.contract_id),
-                                e
-                            );
-                            // Don't fail the webhook - payment status is already updated
+                    if let Ok(contract_id_bytes) = hex::decode(&contract.contract_id) {
+                        match db.accept_contract(&contract_id_bytes).await {
+                            Ok(_) => {
+                                tracing::info!(
+                                    "Auto-accepted contract {} after successful Stripe payment",
+                                    &contract.contract_id
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to auto-accept contract {}: {}",
+                                    &contract.contract_id,
+                                    e
+                                );
+                                // Don't fail the webhook - payment status is already updated
+                            }
                         }
                     }
                 }

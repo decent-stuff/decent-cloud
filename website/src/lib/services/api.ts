@@ -490,7 +490,7 @@ export async function getExampleOfferingsCSV(productType: string): Promise<strin
 // ============ Rental Request Endpoints ============
 
 export interface Contract {
-	contractId: string;
+	contract_id: string;
 	requester_pubkey: string;
 	requester_ssh_pubkey: string;
 	requester_contact: string;
@@ -506,8 +506,16 @@ export interface Contract {
 	request_memo: string;
 	created_at_ns: number;
 	status: string;
-	provisioning_instanceDetails?: string;
+	provisioning_instance_details?: string;
 	provisioning_completed_at_ns?: number;
+	payment_method: string;
+	stripe_payment_intent_id?: string;
+	stripe_customer_id?: string;
+	payment_status: string;
+	currency: string;
+	refund_amount_e9s?: number;
+	stripe_refund_id?: string;
+	refund_created_at_ns?: number;
 }
 
 export interface RentalRequestParams {
@@ -591,13 +599,7 @@ export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?
 		throw new Error(payload.error ?? 'Failed to fetch user contracts');
 	}
 
-	const contracts = payload.data ?? [];
-	return contracts.map((c) => ({
-		...c,
-		contractId: normalizePubkey(c.contractId),
-		requester_pubkey: normalizePubkey(c.requester_pubkey),
-		provider_pubkey: normalizePubkey(c.provider_pubkey)
-	}));
+	return payload.data ?? [];
 }
 
 export async function getProviderContracts(
@@ -621,13 +623,7 @@ export async function getProviderContracts(
 		throw new Error(payload.error ?? 'Failed to fetch provider contracts');
 	}
 
-	const contracts = payload.data ?? [];
-	return contracts.map((c) => ({
-		...c,
-		contractId: normalizePubkey(c.contractId),
-		requester_pubkey: normalizePubkey(c.requester_pubkey),
-		provider_pubkey: normalizePubkey(c.provider_pubkey)
-	}));
+	return payload.data ?? [];
 }
 
 export async function getPendingProviderRequests(headers: SignedRequestHeaders): Promise<Contract[]> {
@@ -649,13 +645,7 @@ export async function getPendingProviderRequests(headers: SignedRequestHeaders):
 		throw new Error(payload.error ?? 'Failed to fetch pending rental requests');
 	}
 
-	const contracts = payload.data ?? [];
-	return contracts.map((c) => ({
-		...c,
-		contractId: normalizePubkey(c.contractId),
-		requester_pubkey: normalizePubkey(c.requester_pubkey),
-		provider_pubkey: normalizePubkey(c.provider_pubkey)
-	}));
+	return payload.data ?? [];
 }
 
 export async function respondToRentalRequest(

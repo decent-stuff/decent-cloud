@@ -129,14 +129,14 @@
 		}
 		error = null;
 		actionMessage = null;
-		responding = { ...responding, [contract.contractId]: true };
+		responding = { ...responding, [contract.contract_id]: true };
 		try {
-			const memo = memoValue(contract.contractId).trim();
+			const memo = memoValue(contract.contract_id).trim();
 			const payload: ProviderRentalResponseParams = {
 				accept,
 				memo: memo || undefined,
 			};
-			const path = `/api/v1/provider/rental-requests/${contract.contractId}/respond`;
+			const path = `/api/v1/provider/rental-requests/${contract.contract_id}/respond`;
 			const signed = await signRequest(
 				activeIdentity.identity,
 				"POST",
@@ -144,7 +144,7 @@
 				payload,
 			);
 			await respondToRentalRequest(
-				contract.contractId,
+				contract.contract_id,
 				payload,
 				signed.headers,
 			);
@@ -153,7 +153,7 @@
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to update request";
 		} finally {
-			responding = { ...responding, [contract.contractId]: false };
+			responding = { ...responding, [contract.contract_id]: false };
 		}
 	}
 
@@ -163,7 +163,7 @@
 			error = "Missing signing identity";
 			return;
 		}
-		const details = provisioningValue(contract.contractId).trim();
+		const details = provisioningValue(contract.contract_id).trim();
 		if (nextStatus === "provisioned" && !details) {
 			error =
 				"Instance details are required to mark a contract as provisioned";
@@ -171,7 +171,7 @@
 		}
 		error = null;
 		actionMessage = null;
-		updating = { ...updating, [contract.contractId]: true };
+		updating = { ...updating, [contract.contract_id]: true };
 		try {
 			const payload: ProvisioningStatusUpdateParams = {
 				status: nextStatus,
@@ -181,11 +181,11 @@
 			const signed = await signRequest(
 				activeIdentity.identity,
 				"PUT",
-				`/api/v1/provider/rental-requests/${contract.contractId}/provisioning`,
+				`/api/v1/provider/rental-requests/${contract.contract_id}/provisioning`,
 				payload,
 			);
 			await updateProvisioningStatus(
-				contract.contractId,
+				contract.contract_id,
 				payload,
 				signed.headers,
 			);
@@ -197,7 +197,7 @@
 					? e.message
 					: "Failed to update provisioning status";
 		} finally {
-			updating = { ...updating, [contract.contractId]: false };
+			updating = { ...updating, [contract.contract_id]: false };
 		}
 	}
 
@@ -272,12 +272,12 @@
 					{#each pendingRequests as contract}
 						<PendingRequestCard
 							{contract}
-							memo={memoValue(contract.contractId)}
-							busy={responding[contract.contractId]}
+							memo={memoValue(contract.contract_id)}
+							busy={responding[contract.contract_id]}
 							onMemoChange={(value) =>
 								(memoInputs = {
 									...memoInputs,
-									[contract.contractId]: value,
+									[contract.contract_id]: value,
 								})}
 							onRespond={(accept) =>
 								handleResponse(contract, accept)}
@@ -308,12 +308,12 @@
 					{#each managedContracts as contract}
 						<ManagedContractCard
 							{contract}
-							note={provisioningValue(contract.contractId)}
-							busy={updating[contract.contractId]}
+							note={provisioningValue(contract.contract_id)}
+							busy={updating[contract.contract_id]}
 							onNoteChange={(value) =>
 								(provisioningNotes = {
 									...provisioningNotes,
-									[contract.contractId]: value,
+									[contract.contract_id]: value,
 								})}
 							onUpdateStatus={(status) =>
 								handleStatusUpdate(contract, status)}

@@ -8,17 +8,14 @@ use ts_rs::TS;
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 #[oai(skip_serializing_if_is_none)]
 pub struct Contract {
-    #[serde(skip_deserializing)]
-    #[oai(skip)]
-    pub contract_id: Vec<u8>,
-    #[serde(skip_deserializing)]
-    #[oai(skip)]
-    pub requester_pubkey: Vec<u8>,
+    #[ts(type = "string")]
+    pub contract_id: String,
+    #[ts(type = "string")]
+    pub requester_pubkey: String,
     pub requester_ssh_pubkey: String,
     pub requester_contact: String,
-    #[serde(skip_deserializing)]
-    #[oai(skip)]
-    pub provider_pubkey: Vec<u8>,
+    #[ts(type = "string")]
+    pub provider_pubkey: String,
     pub offering_id: String,
     #[oai(skip_serializing_if_is_none)]
     pub region_name: Option<String>,
@@ -122,7 +119,7 @@ impl Database {
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
@@ -140,7 +137,7 @@ impl Database {
     pub async fn get_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
@@ -158,7 +155,7 @@ impl Database {
     pub async fn get_pending_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
@@ -176,7 +173,7 @@ impl Database {
     pub async fn get_contract(&self, contract_id: &[u8]) -> Result<Option<Contract>> {
         let contract = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
@@ -197,7 +194,7 @@ impl Database {
     ) -> Result<Option<Contract>> {
         let contract = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
@@ -243,7 +240,7 @@ impl Database {
     pub async fn list_contracts(&self, limit: i64, offset: i64) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
@@ -274,13 +271,16 @@ impl Database {
         if offering.currency.is_empty() || offering.currency == "???" {
             return Err(anyhow::anyhow!(
                 "Offering {} has invalid currency '{}'. Cannot create contract.",
-                offering.offering_id, offering.currency
+                offering.offering_id,
+                offering.currency
             ));
         }
 
         // DEBUG: Log offering currency to diagnose currency mismatch issue
-        eprintln!("DEBUG create_rental_request: offering_id={}, currency={}, monthly_price={}",
-                  offering.offering_id, offering.currency, offering.monthly_price);
+        eprintln!(
+            "DEBUG create_rental_request: offering_id={}, currency={}, monthly_price={}",
+            offering.offering_id, offering.currency, offering.monthly_price
+        );
 
         // Get user's SSH key and contact if not provided
         let ssh_pubkey = if let Some(key) = params.ssh_pubkey {
@@ -415,7 +415,7 @@ impl Database {
             .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
 
         // Only provider can update status
-        if contract.provider_pubkey != updated_by_pubkey {
+        if contract.provider_pubkey != hex::encode(updated_by_pubkey) {
             return Err(anyhow::anyhow!(
                 "Unauthorized: only provider can update contract status"
             ));
@@ -504,8 +504,9 @@ impl Database {
             .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
 
         // Verify authorization: only requester or provider can extend
-        if contract.requester_pubkey != extended_by_pubkey
-            && contract.provider_pubkey != extended_by_pubkey
+        let extended_by_hex = hex::encode(extended_by_pubkey);
+        if contract.requester_pubkey != extended_by_hex
+            && contract.provider_pubkey != extended_by_hex
         {
             return Err(anyhow::anyhow!(
                 "Unauthorized: only requester or provider can extend contract"
@@ -779,7 +780,7 @@ impl Database {
         })?;
 
         // Verify authorization: only requester can cancel their own request
-        if contract.requester_pubkey != cancelled_by_pubkey {
+        if contract.requester_pubkey != hex::encode(cancelled_by_pubkey) {
             return Err(anyhow::anyhow!(
                 "Unauthorized: only the requester can cancel their rental request"
             ));
