@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns) VALUES ('alice', 'bob', 500, 10, '', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "a4760f0b7e5fca3671ee2f5617e5d71d9a7d0131137a14f69caa0cbb9afb45bf"
+}

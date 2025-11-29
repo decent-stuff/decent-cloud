@@ -289,7 +289,7 @@ async fn test_get_example_offerings() {
         .find(|o| o.offering_id == "compute-001")
         .expect("Should have compute-001");
     assert_eq!(compute_offering.offer_name, "Basic VPS");
-    assert_eq!(compute_offering.currency, "ICP");
+    assert_eq!(compute_offering.currency, "USD");
     assert_eq!(compute_offering.product_type, "compute");
 
     // Verify it has required data
