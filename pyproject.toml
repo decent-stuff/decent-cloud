@@ -6,6 +6,9 @@ authors = [{ name = "Yan Liu", email = "yanliu8@proton.me" }]
 license = "APACHE"
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+    "python-dotenv>=1.0.0",
+]
 
 [tool.pytest.ini_options]
 log_cli = true

@@ -9,6 +9,7 @@ import hashlib
 from pathlib import Path
 from typing import Optional
 import argparse
+from dotenv import dotenv_values
 
 
 def calculate_binary_hash() -> str:
@@ -180,23 +181,15 @@ def check_docker() -> bool:
 
 
 def load_env_file(env_file: Path) -> Optional[dict[str, str]]:
-    """Load environment variables from a file."""
+    """Load environment variables from a file using python-dotenv."""
     if not env_file.exists():
         return None
 
-    env_vars = {}
-    with open(env_file) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith("export "):
-                line = line[7:]  # Remove 'export ' prefix
-            if "=" in line:
-                key, value = line.split("=", 1)
-                env_vars[key.strip()] = value.strip()
+    # dotenv_values handles various formats: KEY=value, export KEY=value, quoted values, etc.
+    env_vars = dotenv_values(env_file)
 
-    return env_vars
+    # Convert to regular dict[str, str] (dotenv_values returns dict[str, str | None])
+    return {k: v for k, v in env_vars.items() if v is not None}
 
 
 def get_tunnel_token(env_file: Path) -> Optional[str]:

@@ -6,6 +6,17 @@
  * before building the website. It helps catch configuration errors early.
  */
 
+import { config } from 'dotenv';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Load .env.local file (created by deploy.py)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const envPath = resolve(__dirname, '..', '.env.local');
+config({ path: envPath });
+
 // ANSI color codes
 const RED = '\x1b[31m';
 const YELLOW = '\x1b[33m';
