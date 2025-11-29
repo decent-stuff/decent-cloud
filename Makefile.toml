@@ -109,6 +109,35 @@ DATABASE_URL="sqlite:$TMPDB" sqlx migrate run --source api/migrations
 DATABASE_URL="sqlite:$TMPDB" cargo sqlx prepare --workspace -- --tests
 '''
 
+[tasks.website-check]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+cd website
+OUTPUT=$(npm run check 2>&1)
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+    echo "$OUTPUT"
+    exit $RESULT
+fi
+'''
+
+[tasks.website-build]
+dependencies = ["website-check"]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+cd website
+OUTPUT=$(npm run build 2>&1)
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+    echo "$OUTPUT"
+    exit $RESULT
+fi
+'''
+
 [tasks.all]
 dependencies = [
     "format",
@@ -118,5 +147,7 @@ dependencies = [
     "clippy-canister",
     "build",
     "test",
+    "website-check",
+    "website-build",
     "dfx-stop",
 ]

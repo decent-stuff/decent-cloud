@@ -354,11 +354,17 @@ cargo test
 ```
 
 2. **Complete Test Suite**
-   Includes unit tests and canister tests using PocketIC:
+   Includes unit tests, canister tests using PocketIC, and website checks:
 
 ```bash
 cargo make
 ```
+
+   This runs:
+   - Rust formatting, linting (clippy), and unit tests
+   - Canister builds and integration tests
+   - Website TypeScript checks (`npm run check`)
+   - Website build (`npm run build`)
 
 ### Writing Tests
 
