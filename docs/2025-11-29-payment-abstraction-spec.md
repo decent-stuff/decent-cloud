@@ -263,7 +263,33 @@ curl -X POST /api/contracts -d '{"payment_method": "paypal", ...}'  # 400 error
 - Total implementation: 119 lines (within budget)
 
 ### Step 2: Create database migration
-**Status**: Pending
+**Status**: Completed
+
+**Implementation**:
+- Created `api/migrations/010_payment_methods.sql`
+- Added `payment_method TEXT NOT NULL DEFAULT 'dct'` column to contract_sign_requests
+- Added `stripe_payment_intent_id TEXT` nullable column for Stripe tracking
+- Added `stripe_customer_id TEXT` nullable column for Stripe customer tracking
+- Created index on payment_method for efficient filtering
+- Created partial index on stripe_payment_intent_id (WHERE NOT NULL) for payment verification
+- Followed existing migration patterns (no DOWN section, additive only)
+
+**Files Changed**:
+- api/migrations/010_payment_methods.sql (NEW - 15 lines)
+
+**Testing**:
+- Migration runs successfully: `DATABASE_URL="sqlite:/tmp/verify_migration.db" sqlx migrate run`
+- Verified columns added correctly via sqlite3 schema inspection
+- Default value 'dct' works for existing contracts
+- Tested insertion with default values - payment_method correctly defaults to 'dct'
+- Migration #10 applies in 3.8ms
+
+**Outcome**: Success
+- Migration is clean, minimal, and follows DRY principles
+- All existing contracts will automatically have payment_method='dct'
+- No data loss - migration is purely additive
+- Indexes created for query performance
+- Total implementation: 15 lines (well under budget)
 
 ### Step 3: Update Contract struct
 **Status**: Pending
