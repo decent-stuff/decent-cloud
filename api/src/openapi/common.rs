@@ -93,9 +93,12 @@ pub struct CsvImportError {
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+#[oai(skip_serializing_if_is_none)]
 pub struct RentalRequestResponse {
     pub contract_id: String,
     pub message: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub client_secret: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Object)]

@@ -104,6 +104,22 @@
 			);
 
 			const response = await createRentalRequest(params, signed.headers);
+
+			// If Stripe payment, confirm with card element
+			if (paymentMethod === "stripe" && response.clientSecret && cardElement && stripe) {
+				const { error: stripeError } = await stripe.confirmCardPayment(
+					response.clientSecret,
+					{ payment_method: { card: cardElement } }
+				);
+
+				if (stripeError) {
+					error = `Payment failed: ${stripeError.message}`;
+					console.error("Stripe payment error:", stripeError);
+					loading = false;
+					return;
+				}
+			}
+
 			onSuccess(response.contractId);
 		} catch (e) {
 			error =

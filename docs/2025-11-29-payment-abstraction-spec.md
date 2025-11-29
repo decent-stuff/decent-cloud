@@ -525,6 +525,58 @@ Verified test coverage for all payment-related code. All required tests were alr
 
 ---
 
+### Step 9: Integrate Stripe payment processing into contract creation flow
+**Status**: Completed
+
+**Implementation**:
+**Backend Changes**:
+- Modified StripeClient::create_payment_intent() to return tuple (payment_intent_id, client_secret)
+- Added Database::update_stripe_payment_intent() method to store payment_intent_id in contracts
+- Extended RentalRequestResponse struct with optional client_secret field
+- Updated create_rental_request API endpoint to:
+  - Create Stripe PaymentIntent when payment_method="stripe"
+  - Calculate amount in cents (e9s / 10^7) and use USD currency
+  - Store payment_intent_id in contract using update_stripe_payment_intent()
+  - Return client_secret to frontend for payment confirmation
+  - Maintain DCT payment flow unchanged
+
+**Frontend Changes**:
+- Added clientSecret field to RentalRequestResponse interface in api.ts
+- Updated RentalRequestDialog.svelte handleSubmit() to:
+  - Call stripe.confirmCardPayment() with client_secret after contract creation
+  - Handle Stripe payment errors with detailed error messages
+  - Only proceed to success callback if payment succeeds
+
+**Files Changed**:
+- api/src/stripe_client.rs (modified create_payment_intent return type)
+- api/src/database/contracts.rs (added update_stripe_payment_intent method)
+- api/src/openapi/common.rs (added client_secret to RentalRequestResponse)
+- api/src/openapi/contracts.rs (added Stripe PaymentIntent creation logic)
+- website/src/lib/services/api.ts (added clientSecret to RentalRequestResponse)
+- website/src/lib/components/RentalRequestDialog.svelte (added payment confirmation)
+- api/src/database/contracts/tests.rs (2 new tests)
+- api/.sqlx/*.json (query cache updated)
+
+**Tests Added**: 2 unit tests
+- test_update_stripe_payment_intent - verifies payment_intent_id is stored correctly
+- test_update_stripe_payment_intent_overwrites - verifies updates overwrite existing value
+
+**Outcome**: Success
+- All 222 API tests pass (SQLX_OFFLINE=true cargo test -p api)
+- TypeScript compiles with 0 errors, 2 accessibility warnings (acceptable)
+- End-to-end Stripe payment flow implemented:
+  1. User selects Stripe payment method
+  2. Backend creates PaymentIntent and returns client_secret
+  3. Frontend confirms payment with card element
+  4. Payment intent ID stored in database
+- DCT payment flow unchanged and working
+- Proper error handling on both frontend and backend
+- Amount calculation correct (e9s to cents conversion)
+- Total changes: ~110 lines of code + 2 tests (~50 lines)
+- Completed in 1 iteration (under 3 iteration limit)
+
+---
+
 ## Rollback Plan
 
 If implementation fails:

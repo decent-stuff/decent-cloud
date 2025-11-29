@@ -123,15 +123,79 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         params: Json<crate::database::contracts::RentalRequestParams>,
     ) -> Json<ApiResponse<RentalRequestResponse>> {
+        let payment_method = params.0.payment_method.clone().unwrap_or_else(|| "dct".to_string());
+
         match db.create_rental_request(&auth.pubkey, params.0).await {
-            Ok(contract_id) => Json(ApiResponse {
-                success: true,
-                data: Some(RentalRequestResponse {
-                    contract_id: hex::encode(&contract_id),
-                    message: "Rental request created successfully".to_string(),
-                }),
-                error: None,
-            }),
+            Ok(contract_id) => {
+                let mut client_secret: Option<String> = None;
+
+                // If payment method is Stripe, create PaymentIntent
+                if payment_method.to_lowercase() == "stripe" {
+                    // Get contract to calculate payment amount
+                    match db.get_contract(&contract_id).await {
+                        Ok(Some(contract)) => {
+                            // Create Stripe PaymentIntent
+                            match crate::stripe_client::StripeClient::new() {
+                                Ok(stripe_client) => {
+                                    // Convert e9s to cents (divide by 10^7)
+                                    let amount_cents = contract.payment_amount_e9s / 10_000_000;
+                                    match stripe_client.create_payment_intent(amount_cents, "usd").await {
+                                        Ok((payment_intent_id, secret)) => {
+                                            // Store payment_intent_id in contract
+                                            if let Err(e) = db.update_stripe_payment_intent(&contract_id, &payment_intent_id).await {
+                                                return Json(ApiResponse {
+                                                    success: false,
+                                                    data: None,
+                                                    error: Some(format!("Failed to store Stripe payment intent: {}", e)),
+                                                });
+                                            }
+                                            client_secret = Some(secret);
+                                        }
+                                        Err(e) => {
+                                            return Json(ApiResponse {
+                                                success: false,
+                                                data: None,
+                                                error: Some(format!("Failed to create Stripe payment intent: {}", e)),
+                                            });
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    return Json(ApiResponse {
+                                        success: false,
+                                        data: None,
+                                        error: Some(format!("Failed to initialize Stripe client: {}", e)),
+                                    });
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            return Json(ApiResponse {
+                                success: false,
+                                data: None,
+                                error: Some("Contract created but not found".to_string()),
+                            });
+                        }
+                        Err(e) => {
+                            return Json(ApiResponse {
+                                success: false,
+                                data: None,
+                                error: Some(format!("Failed to retrieve contract: {}", e)),
+                            });
+                        }
+                    }
+                }
+
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(RentalRequestResponse {
+                        contract_id: hex::encode(&contract_id),
+                        message: "Rental request created successfully".to_string(),
+                        client_secret,
+                    }),
+                    error: None,
+                })
+            }
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

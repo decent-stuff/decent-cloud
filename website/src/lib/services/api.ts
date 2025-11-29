@@ -522,6 +522,7 @@ export interface RentalRequestParams {
 export interface RentalRequestResponse {
 	contractId: string;
 	message: string;
+	clientSecret?: string;
 }
 
 export interface ProviderRentalResponseParams {

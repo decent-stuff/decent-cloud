@@ -558,6 +558,23 @@ impl Database {
         )
     }
 
+    /// Update Stripe payment intent ID for a contract
+    pub async fn update_stripe_payment_intent(
+        &self,
+        contract_id: &[u8],
+        payment_intent_id: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ? WHERE contract_id = ?",
+            payment_intent_id,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Cancel a rental request (only by the original requester)
     ///
     /// Cancellable statuses:
