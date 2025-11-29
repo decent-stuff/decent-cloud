@@ -201,6 +201,19 @@
 			</a>
 
 			<a
+				href="/dashboard/rentals"
+				class="p-4 bg-gradient-to-r from-amber-500/20 to-orange-600/20 rounded-lg border border-amber-500/30 hover:border-amber-400 transition-all group"
+			>
+				<span class="text-3xl mb-2 block">📋</span>
+				<h3
+					class="text-white font-semibold mb-1 group-hover:text-amber-400"
+				>
+					My Rentals
+				</h3>
+				<p class="text-white/60 text-sm">Rented services</p>
+			</a>
+
+			<a
 				href="/dashboard/validators"
 				class="p-4 bg-gradient-to-r from-green-500/20 to-teal-600/20 rounded-lg border border-green-500/30 hover:border-green-400 transition-all group"
 			>

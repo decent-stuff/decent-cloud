@@ -9,6 +9,7 @@
 
 	const navItems = $derived([
 		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
+		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
 		{
 			href: "/dashboard/reputation",
 			icon: "⭐",
