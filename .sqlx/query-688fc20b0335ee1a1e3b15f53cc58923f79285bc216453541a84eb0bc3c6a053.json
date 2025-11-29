@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns FROM provider_profiles WHERE pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "pubkey",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "website_url",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "logo_url",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "why_choose_us",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_version",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "profile_version",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at_ns",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "688fc20b0335ee1a1e3b15f53cc58923f79285bc216453541a84eb0bc3c6a053"
+}

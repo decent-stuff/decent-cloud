@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT pubkey, COALESCE(SUM(change_amount), 0) as \"total_reputation!: i64\", COUNT(*) as \"change_count!: i64\"\n             FROM reputation_changes\n             WHERE pubkey = ?\n             GROUP BY pubkey",
+  "describe": {
+    "columns": [
+      {
+        "name": "pubkey",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "total_reputation!: i64",
+        "ordinal": 1,
+        "type_info": "Null"
+      },
+      {
+        "name": "change_count!: i64",
+        "ordinal": 2,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "bb31fb1ce0af65ac3724a8a634dda064de55ef77312d4892d17146733c46a114"
+}
