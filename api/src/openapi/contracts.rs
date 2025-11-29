@@ -160,11 +160,16 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         params: Json<crate::database::contracts::RentalRequestParams>,
     ) -> Json<ApiResponse<RentalRequestResponse>> {
-        let payment_method = params
-            .0
-            .payment_method
-            .clone()
-            .unwrap_or_else(|| "dct".to_string());
+        let payment_method = match params.0.payment_method.clone() {
+            Some(pm) => pm,
+            None => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("payment_method is required".to_string()),
+                })
+            }
+        };
 
         // Get offering to retrieve currency
         let offering = match db.get_offering(params.0.offering_db_id).await {

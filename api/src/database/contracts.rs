@@ -322,8 +322,11 @@ impl Database {
             .request_memo
             .unwrap_or_else(|| format!("Rental request for {}", offering.offer_name));
 
-        // Validate and default payment method
-        let payment_method_str = params.payment_method.as_deref().unwrap_or("dct");
+        // Validate payment method (fail-fast if not provided)
+        let payment_method_str = params
+            .payment_method
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("payment_method is required"))?;
         use std::str::FromStr;
         dcc_common::PaymentMethod::from_str(payment_method_str)
             .map_err(|e| anyhow::anyhow!("Invalid payment method: {}", e))?;
