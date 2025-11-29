@@ -208,12 +208,14 @@ test.describe('Payment Flows', () => {
 		// Wait for rental dialog to appear
 		await expect(page.locator('text=Rental Request')).toBeVisible();
 
-		// Select Stripe payment method
-		await page.click('input[value="stripe"]');
-		await expect(page.locator('input[value="stripe"]:checked')).toBeVisible();
+		// Select Stripe payment method (click the "Credit Card" button)
+		await page.click('button:has-text("Credit Card")');
+		await page.waitForTimeout(500); // Wait for Stripe Elements to initialize
+		// Wait for Stripe Elements to load and verify card input appears
+		await expect(page.locator('legend:has-text("Card Information")')).toBeVisible({ timeout: 5000 });
 
-		// Wait for Stripe Elements to load
-		await page.waitForTimeout(1000);
+		// Wait for Stripe Elements to load and card input to appear
+		await page.waitForTimeout(2000); // Increased timeout for Stripe to fully load
 
 		// Fill in rental details
 		await page.fill('input[placeholder*="ssh-rsa"]', 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC test@example.com');
@@ -289,12 +291,12 @@ test.describe('Payment Flows', () => {
 		// Wait for rental dialog to appear
 		await expect(page.locator('text=Rental Request')).toBeVisible();
 
-		// Select Stripe payment method
-		await page.click('input[value="stripe"]');
-		await expect(page.locator('input[value="stripe"]:checked')).toBeVisible();
+		// Select Stripe payment method (click the "Credit Card" button)
+		await page.click('button:has-text("Credit Card")');
+		await page.waitForTimeout(500); // Wait for Stripe Elements to initialize
 
-		// Wait for Stripe Elements to load
-		await page.waitForTimeout(1000);
+		// Wait for Stripe Elements to load and card input to appear
+		await page.waitForTimeout(2000); // Increased timeout for Stripe to fully load
 
 		// Fill in rental details
 		await page.fill('input[placeholder*="ssh-rsa"]', 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC test@example.com');
