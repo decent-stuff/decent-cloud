@@ -23,6 +23,7 @@
 	let durationHours = $state(720); // Default: 30 days
 	let memo = $state("");
 	let loading = $state(false);
+	let processingPayment = $state(false);
 	let error = $state<string | null>(null);
 	let paymentMethod = $state<"dct" | "stripe">("dct");
 	let stripe: Stripe | null = null;
@@ -69,6 +70,28 @@
 		return price.toFixed(2);
 	}
 
+	function formatPaymentError(stripeError: any): string {
+		const code = stripeError.code;
+		const message = stripeError.message;
+
+		switch (code) {
+			case "card_declined":
+				return "Your card was declined. Please check your card details or try a different card.";
+			case "insufficient_funds":
+				return "Insufficient funds. Please use a different payment method.";
+			case "expired_card":
+				return "Your card has expired. Please use a different card.";
+			case "incorrect_cvc":
+				return "Incorrect security code (CVC). Please check and try again.";
+			case "processing_error":
+				return "A processing error occurred. Please try again in a moment.";
+			case "incorrect_number":
+				return "Invalid card number. Please check and try again.";
+			default:
+				return message || "Payment failed. Please check your card details and try again.";
+		}
+	}
+
 	async function handleSubmit() {
 		if (!offering) return;
 
@@ -84,6 +107,7 @@
 		}
 
 		loading = true;
+		processingPayment = false;
 		error = null;
 
 		try {
@@ -107,13 +131,17 @@
 
 			// If Stripe payment, confirm with card element
 			if (paymentMethod === "stripe" && response.clientSecret && cardElement && stripe) {
+				processingPayment = true;
+
 				const { error: stripeError } = await stripe.confirmCardPayment(
 					response.clientSecret,
 					{ payment_method: { card: cardElement } }
 				);
 
+				processingPayment = false;
+
 				if (stripeError) {
-					error = `Payment failed: ${stripeError.message}`;
+					error = formatPaymentError(stripeError);
 					console.error("Stripe payment error:", stripeError);
 					loading = false;
 					return;
@@ -129,6 +157,7 @@
 			console.error("Rental request error:", e);
 		} finally {
 			loading = false;
+			processingPayment = false;
 		}
 	}
 </script>
@@ -249,10 +278,10 @@
 				</div>
 
 				<!-- Payment Method -->
-				<div>
-					<label class="block text-sm font-medium text-white mb-2">
+				<fieldset>
+					<legend class="block text-sm font-medium text-white mb-2">
 						Payment Method
-					</label>
+					</legend>
 					<div class="grid grid-cols-2 gap-3">
 						<button
 							type="button"
@@ -273,14 +302,14 @@
 							Credit Card
 						</button>
 					</div>
-				</div>
+				</fieldset>
 
 				<!-- Stripe Card Element -->
 				{#if paymentMethod === "stripe"}
-					<div>
-						<label class="block text-sm font-medium text-white mb-2">
+					<fieldset>
+						<legend class="block text-sm font-medium text-white mb-2">
 							Card Information
-						</label>
+						</legend>
 						<div
 							bind:this={cardMountPoint}
 							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg focus-within:border-blue-400 transition-colors"
@@ -288,7 +317,7 @@
 						<p class="text-xs text-white/50 mt-1">
 							Your card will be charged after the provider accepts your request
 						</p>
-					</div>
+					</fieldset>
 				{/if}
 
 				<!-- SSH Key -->
@@ -404,7 +433,14 @@
 					disabled={loading}
 					class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 				>
-					{#if loading}
+					{#if processingPayment}
+						<span class="flex items-center justify-center gap-2">
+							<span
+								class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+							></span>
+							Processing payment...
+						</span>
+					{:else if loading}
 						<span class="flex items-center justify-center gap-2">
 							<span
 								class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"

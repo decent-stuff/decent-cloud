@@ -191,8 +191,34 @@ Run full test suite and verify production readiness.
 
 ### Step 5
 - **Implementation**:
+  - Added `processingPayment` state variable to track payment confirmation phase
+  - Created `formatPaymentError()` function with user-friendly messages for common Stripe error codes:
+    - `card_declined`: "Your card was declined. Please check your card details or try a different card."
+    - `insufficient_funds`: "Insufficient funds. Please use a different payment method."
+    - `expired_card`: "Your card has expired. Please use a different card."
+    - `incorrect_cvc`: "Incorrect security code (CVC). Please check and try again."
+    - `processing_error`: "A processing error occurred. Please try again in a moment."
+    - `incorrect_number`: "Invalid card number. Please check and try again."
+    - Default: Original Stripe error message with fallback
+  - Fixed 2 accessibility warnings by replacing `<div><label>` with `<fieldset><legend>` for:
+    - Payment Method selection (line 281)
+    - Card Information section (line 309)
+  - Added separate loading state for payment confirmation phase
+  - Submit button now shows "Processing payment..." during Stripe confirmCardPayment
+  - Submit button shows "Submitting..." during initial request creation
+  - Updated error handling to use `formatPaymentError()` instead of raw Stripe error messages
+  - Ensured `processingPayment` is reset in finally block for proper cleanup
 - **Review**:
-- **Outcome**:
+  - npm run check: 0 errors, 0 warnings (both accessibility warnings fixed)
+  - npm run build: Successful build (completed in 3.97s client, 8.83s server)
+  - TypeScript compilation clean
+  - Loading states are clear and distinct:
+    - Initial submission: "Submitting..." with spinner
+    - Payment processing: "Processing payment..." with spinner
+  - Error messages are user-friendly and actionable
+  - Submit button properly disabled during both loading phases
+  - Changes are minimal and focused on UX improvements
+- **Outcome**: Success - Payment UX improved with clear loading states, user-friendly error messages, and accessibility warnings fixed
 
 ### Step 6
 - **Implementation**:
