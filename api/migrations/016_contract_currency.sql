@@ -1,8 +1,20 @@
--- Add currency field to contract_sign_requests
--- This migration adds the currency field to track what currency the payment_amount_e9s is denominated in
+-- Change currency default from 'usd' to '???' for fail-fast behavior
+-- SQLite doesn't support ALTER COLUMN, so we recreate the column with the new default
 
--- Add currency field (default to '???' to make missing currency obvious - fail fast principle)
-ALTER TABLE contract_sign_requests ADD COLUMN currency TEXT NOT NULL DEFAULT '???';
+-- Step 1: Drop existing index (will be recreated at the end)
+DROP INDEX IF EXISTS idx_contract_currency;
 
--- Create index on currency for efficient filtering
-CREATE INDEX IF NOT EXISTS idx_contract_currency ON contract_sign_requests(currency);
+-- Step 2: Add new column with correct default
+ALTER TABLE contract_sign_requests ADD COLUMN currency_new TEXT NOT NULL DEFAULT '???';
+
+-- Step 3: Copy existing data from old column to new column
+UPDATE contract_sign_requests SET currency_new = currency;
+
+-- Step 4: Drop old column
+ALTER TABLE contract_sign_requests DROP COLUMN currency;
+
+-- Step 5: Rename new column to currency
+ALTER TABLE contract_sign_requests RENAME COLUMN currency_new TO currency;
+
+-- Step 6: Recreate index on currency for efficient filtering
+CREATE INDEX idx_contract_currency ON contract_sign_requests(currency);
