@@ -39,7 +39,10 @@
 	});
 
 	$effect(() => {
-		if (paymentMethod === "stripe" && stripe && cardMountPoint && !cardElement) {
+		// Track cardMountPoint changes to ensure element mounts when DOM is ready
+		const mountPoint = cardMountPoint;
+
+		if (paymentMethod === "stripe" && stripe && mountPoint && !cardElement) {
 			elements = stripe.elements();
 			cardElement = elements.create("card", {
 				style: {
@@ -56,7 +59,7 @@
 					},
 				},
 			});
-			cardElement.mount(cardMountPoint);
+			cardElement.mount(mountPoint);
 		} else if (paymentMethod === "dct" && cardElement) {
 			cardElement.unmount();
 			cardElement = null;
