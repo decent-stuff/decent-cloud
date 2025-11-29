@@ -146,8 +146,21 @@ Run full test suite and verify production readiness.
 
 ### Step 3
 - **Implementation**:
+  - Created helper function `create_stripe_payment_intent` in `/code/api/src/openapi/contracts.rs`
+  - Function extracts all Stripe payment intent creation logic (26 lines)
+  - Uses idiomatic Rust error handling with `?` operator and `map_err` for clean error propagation
+  - Refactored `create_rental_request` function from 76 lines (4 levels of nesting) to 32 lines (2 levels max)
+  - Eliminated DRY violations - all error message formatting now in one place
+  - Regenerated SQLX query cache with `cargo make sqlx-prepare`
 - **Review**:
-- **Outcome**:
+  - Code reduction: 44 lines removed from `create_rental_request` function
+  - Nesting reduced from 4 levels to maximum 2 levels
+  - All tests pass: 367 tests run, 367 passed (38 leaky)
+  - cargo clippy clean - no new warnings introduced
+  - cargo make passes in 179.79 seconds
+  - Follows KISS/DRY/YAGNI principles - helper function is focused and reusable
+  - Error handling is clean and follows Rust best practices (uses Result<T, E> with descriptive error messages)
+- **Outcome**: Success - Contract creation error handling refactored, nested structures eliminated, code is cleaner and more maintainable
 
 ### Step 4
 - **Implementation**:

@@ -1135,7 +1135,9 @@ async fn test_update_payment_status_nonexistent_intent() {
     let db = setup_test_db().await;
 
     // Attempt to update a non-existent payment intent
-    let result = db.update_payment_status("pi_nonexistent", "succeeded").await;
+    let result = db
+        .update_payment_status("pi_nonexistent", "succeeded")
+        .await;
 
     // Should not fail even if no rows affected
     assert!(result.is_ok());

@@ -10,6 +10,31 @@ use std::sync::Arc;
 
 pub struct ContractsApi;
 
+/// Helper function to create Stripe payment intent and update contract
+async fn create_stripe_payment_intent(db: &Database, contract_id: &[u8]) -> Result<String, String> {
+    let contract = db
+        .get_contract(contract_id)
+        .await
+        .map_err(|e| format!("Failed to retrieve contract: {}", e))?
+        .ok_or_else(|| "Contract created but not found".to_string())?;
+
+    let stripe_client = crate::stripe_client::StripeClient::new()
+        .map_err(|e| format!("Failed to initialize Stripe client: {}", e))?;
+
+    // Convert e9s to cents (divide by 10^7)
+    let amount_cents = contract.payment_amount_e9s / 10_000_000;
+    let (payment_intent_id, client_secret) = stripe_client
+        .create_payment_intent(amount_cents, "usd")
+        .await
+        .map_err(|e| format!("Failed to create Stripe payment intent: {}", e))?;
+
+    db.update_stripe_payment_intent(contract_id, &payment_intent_id)
+        .await
+        .map_err(|e| format!("Failed to store Stripe payment intent: {}", e))?;
+
+    Ok(client_secret)
+}
+
 #[OpenApi]
 impl ContractsApi {
     /// List contracts
@@ -131,82 +156,20 @@ impl ContractsApi {
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
-                let mut client_secret: Option<String> = None;
-
-                // If payment method is Stripe, create PaymentIntent
-                if payment_method.to_lowercase() == "stripe" {
-                    // Get contract to calculate payment amount
-                    match db.get_contract(&contract_id).await {
-                        Ok(Some(contract)) => {
-                            // Create Stripe PaymentIntent
-                            match crate::stripe_client::StripeClient::new() {
-                                Ok(stripe_client) => {
-                                    // Convert e9s to cents (divide by 10^7)
-                                    let amount_cents = contract.payment_amount_e9s / 10_000_000;
-                                    match stripe_client
-                                        .create_payment_intent(amount_cents, "usd")
-                                        .await
-                                    {
-                                        Ok((payment_intent_id, secret)) => {
-                                            // Store payment_intent_id in contract
-                                            if let Err(e) = db
-                                                .update_stripe_payment_intent(
-                                                    &contract_id,
-                                                    &payment_intent_id,
-                                                )
-                                                .await
-                                            {
-                                                return Json(ApiResponse {
-                                                    success: false,
-                                                    data: None,
-                                                    error: Some(format!(
-                                                        "Failed to store Stripe payment intent: {}",
-                                                        e
-                                                    )),
-                                                });
-                                            }
-                                            client_secret = Some(secret);
-                                        }
-                                        Err(e) => {
-                                            return Json(ApiResponse {
-                                                success: false,
-                                                data: None,
-                                                error: Some(format!(
-                                                    "Failed to create Stripe payment intent: {}",
-                                                    e
-                                                )),
-                                            });
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    return Json(ApiResponse {
-                                        success: false,
-                                        data: None,
-                                        error: Some(format!(
-                                            "Failed to initialize Stripe client: {}",
-                                            e
-                                        )),
-                                    });
-                                }
-                            }
-                        }
-                        Ok(None) => {
-                            return Json(ApiResponse {
-                                success: false,
-                                data: None,
-                                error: Some("Contract created but not found".to_string()),
-                            });
-                        }
+                let client_secret = if payment_method.to_lowercase() == "stripe" {
+                    match create_stripe_payment_intent(&db, &contract_id).await {
+                        Ok(secret) => Some(secret),
                         Err(e) => {
                             return Json(ApiResponse {
                                 success: false,
                                 data: None,
-                                error: Some(format!("Failed to retrieve contract: {}", e)),
-                            });
+                                error: Some(e),
+                            })
                         }
                     }
-                }
+                } else {
+                    None
+                };
 
                 Json(ApiResponse {
                     success: true,

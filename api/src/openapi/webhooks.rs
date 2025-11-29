@@ -51,8 +51,8 @@ fn verify_signature(payload: &str, signature: &str, secret: &str) -> Result<()> 
     let signed_payload = format!("{}.{}", timestamp, payload);
 
     // Compute HMAC
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .context("Invalid webhook secret")?;
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).context("Invalid webhook secret")?;
     mac.update(signed_payload.as_bytes());
     let result = mac.finalize();
     let computed_hash = hex::encode(result.into_bytes());
@@ -73,35 +73,53 @@ pub async fn stripe_webhook(
     req: &poem::Request,
 ) -> Result<Response, PoemError> {
     // Get raw body for signature verification
-    let body_bytes = body
-        .into_vec()
-        .await
-        .map_err(|e| PoemError::from_string(format!("Failed to read body: {}", e), poem::http::StatusCode::BAD_REQUEST))?;
+    let body_bytes = body.into_vec().await.map_err(|e| {
+        PoemError::from_string(
+            format!("Failed to read body: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })?;
 
-    let payload = String::from_utf8(body_bytes.clone())
-        .map_err(|e| PoemError::from_string(format!("Invalid UTF-8 in payload: {}", e), poem::http::StatusCode::BAD_REQUEST))?;
+    let payload = String::from_utf8(body_bytes.clone()).map_err(|e| {
+        PoemError::from_string(
+            format!("Invalid UTF-8 in payload: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })?;
 
     // Get signature from header
     let signature = req
         .headers()
         .get("stripe-signature")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| PoemError::from_string("Missing stripe-signature header", poem::http::StatusCode::BAD_REQUEST))?;
-
-    // Get webhook secret from environment
-    let webhook_secret = std::env::var("STRIPE_WEBHOOK_SECRET")
-        .map_err(|_| PoemError::from_string("STRIPE_WEBHOOK_SECRET not configured", poem::http::StatusCode::INTERNAL_SERVER_ERROR))?;
-
-    // Verify signature
-    verify_signature(&payload, signature, &webhook_secret)
-        .map_err(|e| {
-            tracing::error!("Webhook signature verification failed: {}", e);
-            PoemError::from_string("Invalid signature", poem::http::StatusCode::UNAUTHORIZED)
+        .ok_or_else(|| {
+            PoemError::from_string(
+                "Missing stripe-signature header",
+                poem::http::StatusCode::BAD_REQUEST,
+            )
         })?;
 
+    // Get webhook secret from environment
+    let webhook_secret = std::env::var("STRIPE_WEBHOOK_SECRET").map_err(|_| {
+        PoemError::from_string(
+            "STRIPE_WEBHOOK_SECRET not configured",
+            poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+        )
+    })?;
+
+    // Verify signature
+    verify_signature(&payload, signature, &webhook_secret).map_err(|e| {
+        tracing::error!("Webhook signature verification failed: {}", e);
+        PoemError::from_string("Invalid signature", poem::http::StatusCode::UNAUTHORIZED)
+    })?;
+
     // Parse event
-    let event: StripeEvent = serde_json::from_slice(&body_bytes)
-        .map_err(|e| PoemError::from_string(format!("Invalid JSON: {}", e), poem::http::StatusCode::BAD_REQUEST))?;
+    let event: StripeEvent = serde_json::from_slice(&body_bytes).map_err(|e| {
+        PoemError::from_string(
+            format!("Invalid JSON: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })?;
 
     tracing::info!("Received Stripe webhook: {}", event.event_type);
 
@@ -115,7 +133,10 @@ pub async fn stripe_webhook(
                 .await
                 .map_err(|e| {
                     tracing::error!("Failed to update payment status to succeeded: {}", e);
-                    PoemError::from_string(format!("Database error: {}", e), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                    PoemError::from_string(
+                        format!("Database error: {}", e),
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    )
                 })?;
         }
         "payment_intent.payment_failed" => {
@@ -126,7 +147,10 @@ pub async fn stripe_webhook(
                 .await
                 .map_err(|e| {
                     tracing::error!("Failed to update payment status to failed: {}", e);
-                    PoemError::from_string(format!("Database error: {}", e), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+                    PoemError::from_string(
+                        format!("Database error: {}", e),
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    )
                 })?;
         }
         _ => {
@@ -173,7 +197,10 @@ mod tests {
 
         let result = verify_signature(payload, signature, secret);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid signature"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid signature"));
     }
 
     #[test]
