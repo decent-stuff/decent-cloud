@@ -15,7 +15,7 @@ async fn insert_contract_request(
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?, ?, ?, ?, ?, 'usd')",
         contract_id,
         requester_pubkey,
         provider_pubkey,
@@ -45,7 +45,7 @@ async fn insert_stripe_contract_request(
     let stripe_customer_id: Option<&str> = None;
     let payment_method = "stripe";
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', 0, 'requested', ?, ?, ?, ?)",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', 0, 'requested', ?, ?, ?, ?, 'usd')",
         contract_id,
         requester_pubkey,
         provider_pubkey,
@@ -82,7 +82,7 @@ async fn insert_stripe_contract_with_timestamps(
     let created_at_ns: i64 = 0;
 
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'usd')",
         contract_id,
         requester_pubkey,
         ssh_pubkey,

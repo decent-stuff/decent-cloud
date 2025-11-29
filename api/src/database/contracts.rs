@@ -53,6 +53,7 @@ pub struct Contract {
     #[oai(skip_serializing_if_is_none)]
     pub stripe_customer_id: Option<String>,
     pub payment_status: String,
+    pub currency: String,
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
     pub refund_amount_e9s: Option<i64>,
@@ -125,7 +126,7 @@ impl Database {
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
-               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -143,7 +144,7 @@ impl Database {
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
-               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -161,7 +162,7 @@ impl Database {
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
-               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -179,7 +180,7 @@ impl Database {
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
-               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -200,7 +201,7 @@ impl Database {
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
-               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE stripe_payment_intent_id = ?"#,
             payment_intent_id
         )
@@ -246,7 +247,7 @@ impl Database {
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
-               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -359,8 +360,8 @@ impl Database {
                 requester_contact, provider_pubkey, offering_id,
                 payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                 duration_hours, original_duration_hours, request_memo,
-                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             contract_id,
             requester_pubkey,
             ssh_pubkey,
@@ -378,7 +379,8 @@ impl Database {
             payment_method_str,
             stripe_payment_intent_id,
             stripe_customer_id,
-            payment_status
+            payment_status,
+            offering.currency
         )
         .execute(&self.pool)
         .await?;

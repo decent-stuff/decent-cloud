@@ -75,7 +75,7 @@
 	}
 
 	// Format balance from e9s to tokens
-	function formatBalance(balanceE9s: number): string {
+	function formatBalance(balanceE9s: number, currency: string = 'dct'): string {
 		return (balanceE9s / 1_000_000_000).toFixed(4);
 	}
 
@@ -589,7 +589,8 @@
 									<p class="text-sm text-white/60">
 										Amount: {formatBalance(
 											contract.payment_amount_e9s,
-										)} DC
+											contract.currency,
+										)} {contract.currency.toUpperCase()}
 									</p>
 								</div>
 								<span
@@ -646,7 +647,8 @@
 									<p class="text-sm text-white/60">
 										Amount: {formatBalance(
 											contract.payment_amount_e9s,
-										)} DC
+											contract.currency,
+										)} {contract.currency.toUpperCase()}
 									</p>
 								</div>
 								<span

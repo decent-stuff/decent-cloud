@@ -42,7 +42,7 @@
 		</div>
 		<div class="text-right">
 			<div class="text-2xl font-bold text-white">
-				{formatContractPrice(contract.payment_amount_e9s)}
+				{formatContractPrice(contract.payment_amount_e9s, contract.currency)}
 			</div>
 		</div>
 	</div>

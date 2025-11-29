@@ -7,8 +7,8 @@ export function formatContractDate(timestamp_ns?: number): string {
 	return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
 }
 
-export function formatContractPrice(amount_e9s: number): string {
-	return `${(amount_e9s / 1_000_000_000).toFixed(2)} ICP`;
+export function formatContractPrice(amount_e9s: number, currency: string): string {
+	return `${(amount_e9s / 1_000_000_000).toFixed(2)} ${currency.toUpperCase()}`;
 }
 
 export function truncateContractHash(hash: string, visible: number = 6): string {

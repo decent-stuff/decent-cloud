@@ -242,7 +242,7 @@
 						</div>
 						<div class="text-right">
 							<div class="text-2xl font-bold text-white">
-								{formatPrice(contract.payment_amount_e9s)}
+								{formatPrice(contract.payment_amount_e9s, contract.currency)}
 							</div>
 							{#if contract.duration_hours}
 								<div class="text-white/60 text-sm">
