@@ -7,6 +7,8 @@
 	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
+	import { loadStripe, type Stripe, type StripeElements, type StripeCardElement } from "@stripe/stripe-js";
+	import { onMount } from "svelte";
 
 	interface Props {
 		offering: Offering | null;
@@ -22,6 +24,44 @@
 	let memo = $state("");
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+	let paymentMethod = $state<"dct" | "stripe">("dct");
+	let stripe: Stripe | null = null;
+	let elements: StripeElements | null = null;
+	let cardElement: StripeCardElement | null = null;
+	let cardMountPoint = $state<HTMLDivElement | undefined>();
+
+	onMount(async () => {
+		const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+		if (publishableKey) {
+			stripe = await loadStripe(publishableKey);
+		}
+	});
+
+	$effect(() => {
+		if (paymentMethod === "stripe" && stripe && cardMountPoint && !cardElement) {
+			elements = stripe.elements();
+			cardElement = elements.create("card", {
+				style: {
+					base: {
+						color: "#fff",
+						fontFamily: "system-ui, sans-serif",
+						fontSize: "16px",
+						"::placeholder": {
+							color: "rgba(255, 255, 255, 0.5)",
+						},
+					},
+					invalid: {
+						color: "#ef4444",
+					},
+				},
+			});
+			cardElement.mount(cardMountPoint);
+		} else if (paymentMethod === "dct" && cardElement) {
+			cardElement.unmount();
+			cardElement = null;
+			elements = null;
+		}
+	});
 
 	function calculatePrice(): string {
 		if (!offering) return "0.00";
@@ -38,6 +78,11 @@
 			return;
 		}
 
+		if (paymentMethod === "stripe" && !cardElement) {
+			error = "Card information is required for Stripe payment";
+			return;
+		}
+
 		loading = true;
 		error = null;
 
@@ -48,6 +93,7 @@
 				contact_method: contactMethod || undefined,
 				request_memo: memo || undefined,
 				duration_hours: durationHours,
+				payment_method: paymentMethod,
 			};
 
 			const signed = await signRequest(
@@ -185,6 +231,49 @@
 						<option value={8760}>1 Year (365 days)</option>
 					</select>
 				</div>
+
+				<!-- Payment Method -->
+				<div>
+					<label class="block text-sm font-medium text-white mb-2">
+						Payment Method
+					</label>
+					<div class="grid grid-cols-2 gap-3">
+						<button
+							type="button"
+							onclick={() => paymentMethod = "dct"}
+							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod === 'dct'
+								? 'bg-blue-500/20 border-blue-500 text-white'
+								: 'bg-white/10 border-white/20 text-white/60 hover:border-white/40'}"
+						>
+							DCT Tokens
+						</button>
+						<button
+							type="button"
+							onclick={() => paymentMethod = "stripe"}
+							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod === 'stripe'
+								? 'bg-blue-500/20 border-blue-500 text-white'
+								: 'bg-white/10 border-white/20 text-white/60 hover:border-white/40'}"
+						>
+							Credit Card
+						</button>
+					</div>
+				</div>
+
+				<!-- Stripe Card Element -->
+				{#if paymentMethod === "stripe"}
+					<div>
+						<label class="block text-sm font-medium text-white mb-2">
+							Card Information
+						</label>
+						<div
+							bind:this={cardMountPoint}
+							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg focus-within:border-blue-400 transition-colors"
+						></div>
+						<p class="text-xs text-white/50 mt-1">
+							Your card will be charged after the provider accepts your request
+						</p>
+					</div>
+				{/if}
 
 				<!-- SSH Key -->
 				<div>

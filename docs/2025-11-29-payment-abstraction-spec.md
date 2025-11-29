@@ -477,8 +477,51 @@ Verified test coverage for all payment-related code. All required tests were alr
 - Total changes: ~15 lines of fixes + 11 lines .env.example = 26 lines (well under budget)
 - Bug fixes completed in 1 iteration (under 3 iteration limit)
 
-### Step 8: Frontend type updates
-**Status**: Pending
+### Step 8: Add frontend payment UI with Stripe Elements
+**Status**: Completed
+
+**Implementation**:
+- Added @stripe/stripe-js dependency to website/package.json (version ^5.5.0)
+- Added payment_method optional field to RentalRequestParams interface in api.ts
+- Added VITE_STRIPE_PUBLISHABLE_KEY to .env.development with test key
+- Extended RentalRequestDialog.svelte component with:
+  - Payment method selection UI (toggle between DCT and Stripe)
+  - Stripe Elements integration with card input component
+  - Stripe client initialization on component mount
+  - $effect hook to mount/unmount card element based on payment method selection
+  - Validation to ensure card element exists when submitting Stripe payment
+  - Payment method sent to backend in RentalRequestParams
+- Used Svelte 5 reactivity ($state, $effect) for clean state management
+- Styled card input to match existing UI (dark theme with white text)
+
+**Files Changed**:
+- website/package.json (1 dependency added)
+- website/package-lock.json (auto-generated)
+- website/src/lib/services/api.ts (1 field added to RentalRequestParams)
+- website/.env.development (3 lines added for Stripe publishable key)
+- website/src/lib/components/RentalRequestDialog.svelte (65 lines added: imports, state, logic, UI)
+
+**Components Added/Modified**:
+- RentalRequestDialog.svelte:
+  - Added Stripe imports (loadStripe, types)
+  - Added state variables: paymentMethod, stripe, elements, cardElement, cardMountPoint
+  - Added onMount hook to initialize Stripe client
+  - Added $effect hook for card element lifecycle management
+  - Added validation in handleSubmit for Stripe card requirement
+  - Added payment method selection UI (2 toggle buttons)
+  - Added conditional Stripe card input section
+  - Payment method defaults to "dct" for backward compatibility
+
+**Outcome**: Success
+- TypeScript compiles with 0 errors, 2 accessibility warnings (acceptable)
+- User can select between DCT and Credit Card payment methods
+- Stripe card input component renders correctly when Credit Card selected
+- Card element unmounts cleanly when switching back to DCT
+- Payment method sent to backend API in rental request
+- UI matches existing dark theme and styling patterns
+- Minimal implementation - no full payment processing (deferred to Step 9)
+- Total changes: ~70 lines of code (within budget)
+- Completed in 1 iteration (under 3 iteration limit)
 
 ---
 

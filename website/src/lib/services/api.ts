@@ -516,6 +516,7 @@ export interface RentalRequestParams {
 	contact_method?: string;
 	request_memo?: string;
 	duration_hours?: number;
+	payment_method?: string;
 }
 
 export interface RentalRequestResponse {
