@@ -32,6 +32,34 @@ async fn insert_contract_request(
     .unwrap();
 }
 
+async fn insert_stripe_contract_request(
+    db: &Database,
+    contract_id: &[u8],
+    requester_pubkey: &[u8],
+    provider_pubkey: &[u8],
+    offering_id: &str,
+    payment_intent_id: &str,
+    payment_status: &str,
+) {
+    let stripe_payment_intent_id: Option<&str> = Some(payment_intent_id);
+    let stripe_customer_id: Option<&str> = None;
+    let payment_method = "stripe";
+    sqlx::query!(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', 0, 'requested', ?, ?, ?, ?)",
+        contract_id,
+        requester_pubkey,
+        provider_pubkey,
+        offering_id,
+        payment_method,
+        stripe_payment_intent_id,
+        stripe_customer_id,
+        payment_status
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
 async fn test_get_user_contracts_empty() {
     let db = setup_test_db().await;
@@ -1032,4 +1060,83 @@ async fn test_payment_status_stripe_payment_starts_pending() {
     // Stripe payments require webhook confirmation, so payment_status should start as 'pending'
     assert_eq!(contract.payment_method, "stripe");
     assert_eq!(contract.payment_status, "pending");
+}
+
+#[tokio::test]
+async fn test_update_payment_status_to_succeeded() {
+    let db = setup_test_db().await;
+    let contract_id = vec![102u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Insert contract with Stripe payment
+    let payment_intent_id = "pi_test_update_succeeded";
+    insert_stripe_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        payment_intent_id,
+        "pending",
+    )
+    .await;
+
+    // Verify initial status is pending
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "pending");
+
+    // Update payment status to succeeded
+    db.update_payment_status(payment_intent_id, "succeeded")
+        .await
+        .unwrap();
+
+    // Verify status was updated
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "succeeded");
+}
+
+#[tokio::test]
+async fn test_update_payment_status_to_failed() {
+    let db = setup_test_db().await;
+    let contract_id = vec![103u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Insert contract with Stripe payment
+    let payment_intent_id = "pi_test_update_failed";
+    insert_stripe_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        payment_intent_id,
+        "pending",
+    )
+    .await;
+
+    // Verify initial status is pending
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "pending");
+
+    // Update payment status to failed
+    db.update_payment_status(payment_intent_id, "failed")
+        .await
+        .unwrap();
+
+    // Verify status was updated
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "failed");
+}
+
+#[tokio::test]
+async fn test_update_payment_status_nonexistent_intent() {
+    let db = setup_test_db().await;
+
+    // Attempt to update a non-existent payment intent
+    let result = db.update_payment_status("pi_nonexistent", "succeeded").await;
+
+    // Should not fail even if no rows affected
+    assert!(result.is_ok());
 }

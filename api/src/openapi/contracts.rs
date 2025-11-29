@@ -123,7 +123,11 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         params: Json<crate::database::contracts::RentalRequestParams>,
     ) -> Json<ApiResponse<RentalRequestResponse>> {
-        let payment_method = params.0.payment_method.clone().unwrap_or_else(|| "dct".to_string());
+        let payment_method = params
+            .0
+            .payment_method
+            .clone()
+            .unwrap_or_else(|| "dct".to_string());
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
@@ -139,14 +143,26 @@ impl ContractsApi {
                                 Ok(stripe_client) => {
                                     // Convert e9s to cents (divide by 10^7)
                                     let amount_cents = contract.payment_amount_e9s / 10_000_000;
-                                    match stripe_client.create_payment_intent(amount_cents, "usd").await {
+                                    match stripe_client
+                                        .create_payment_intent(amount_cents, "usd")
+                                        .await
+                                    {
                                         Ok((payment_intent_id, secret)) => {
                                             // Store payment_intent_id in contract
-                                            if let Err(e) = db.update_stripe_payment_intent(&contract_id, &payment_intent_id).await {
+                                            if let Err(e) = db
+                                                .update_stripe_payment_intent(
+                                                    &contract_id,
+                                                    &payment_intent_id,
+                                                )
+                                                .await
+                                            {
                                                 return Json(ApiResponse {
                                                     success: false,
                                                     data: None,
-                                                    error: Some(format!("Failed to store Stripe payment intent: {}", e)),
+                                                    error: Some(format!(
+                                                        "Failed to store Stripe payment intent: {}",
+                                                        e
+                                                    )),
                                                 });
                                             }
                                             client_secret = Some(secret);
@@ -155,7 +171,10 @@ impl ContractsApi {
                                             return Json(ApiResponse {
                                                 success: false,
                                                 data: None,
-                                                error: Some(format!("Failed to create Stripe payment intent: {}", e)),
+                                                error: Some(format!(
+                                                    "Failed to create Stripe payment intent: {}",
+                                                    e
+                                                )),
                                             });
                                         }
                                     }
@@ -164,7 +183,10 @@ impl ContractsApi {
                                     return Json(ApiResponse {
                                         success: false,
                                         data: None,
-                                        error: Some(format!("Failed to initialize Stripe client: {}", e)),
+                                        error: Some(format!(
+                                            "Failed to initialize Stripe client: {}",
+                                            e
+                                        )),
                                     });
                                 }
                             }

@@ -32,7 +32,11 @@ impl StripeClient {
     ///
     /// # Returns
     /// Tuple of (PaymentIntent ID, client_secret) on success
-    pub async fn create_payment_intent(&self, amount: i64, currency: &str) -> Result<(String, String)> {
+    pub async fn create_payment_intent(
+        &self,
+        amount: i64,
+        currency: &str,
+    ) -> Result<(String, String)> {
         let currency = currency
             .parse::<Currency>()
             .context("Invalid currency code")?;
@@ -50,7 +54,8 @@ impl StripeClient {
             .await
             .context("Failed to create Stripe PaymentIntent")?;
 
-        let client_secret = payment_intent.client_secret
+        let client_secret = payment_intent
+            .client_secret
             .ok_or_else(|| anyhow::anyhow!("PaymentIntent missing client_secret"))?;
 
         Ok((payment_intent.id.to_string(), client_secret))

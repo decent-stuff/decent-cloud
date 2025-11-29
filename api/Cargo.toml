@@ -26,6 +26,7 @@ dotenv.workspace = true
 email-utils = { path = "./email-utils" }
 ed25519-dalek.workspace = true
 hex.workspace = true
+hmac = "0.12"
 ic-agent.workspace = true
 icrc-ledger-types.workspace = true
 lazy_static = "1.5"

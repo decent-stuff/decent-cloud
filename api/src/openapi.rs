@@ -9,6 +9,7 @@ pub mod system;
 pub mod transfers;
 pub mod users;
 pub mod validators;
+pub mod webhooks;
 
 pub use accounts::AccountsApi;
 pub use admin::AdminApi;

@@ -292,6 +292,11 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .at("/api/v1/oauth/info", get(oauth_simple::get_oauth_info))
         .at("/api/v1/oauth/register", post(oauth_simple::oauth_register))
         .at("/api/v1/oauth/logout", post(oauth_simple::oauth_logout))
+        // Webhook endpoints
+        .at(
+            "/api/v1/webhooks/stripe",
+            post(openapi::webhooks::stripe_webhook),
+        )
         // Legacy endpoints (canister proxy - ICP integration pending)
         // NOTE: CSV operations are now included in OpenAPI schema above
         .at("/api/v1/canister/:method", post(canister_proxy))

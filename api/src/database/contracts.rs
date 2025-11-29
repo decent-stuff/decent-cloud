@@ -540,6 +540,23 @@ impl Database {
         Ok(extensions)
     }
 
+    /// Update payment status for a contract by Stripe payment_intent_id
+    pub async fn update_payment_status(
+        &self,
+        stripe_payment_intent_id: &str,
+        new_status: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET payment_status = ? WHERE stripe_payment_intent_id = ?",
+            new_status,
+            stripe_payment_intent_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Get offering by offering_id string
     async fn get_offering_by_id(
         &self,

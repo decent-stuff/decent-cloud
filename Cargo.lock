@@ -154,6 +154,7 @@ dependencies = [
  "ed25519-dalek",
  "email-utils",
  "hex",
+ "hmac",
  "ic-agent",
  "icrc-ledger-types",
  "lazy_static",

@@ -123,8 +123,26 @@ Run full test suite and verify production readiness.
 
 ### Step 2
 - **Implementation**:
+  - Created `/code/api/src/openapi/webhooks.rs` module for Stripe webhook handling
+  - Added `update_payment_status(stripe_payment_intent_id, status)` method in `/code/api/src/database/contracts.rs`
+  - Implemented webhook signature verification using HMAC-SHA256 with `STRIPE_WEBHOOK_SECRET`
+  - Added event handlers for `payment_intent.succeeded` and `payment_intent.payment_failed` events
+  - Webhook endpoint updates payment_status to 'succeeded' or 'failed' based on event type
+  - Added webhook route to main.rs at `/api/v1/webhooks/stripe` (POST)
+  - Exported webhooks module in `/code/api/src/openapi.rs`
+  - Added `STRIPE_WEBHOOK_SECRET` to `/code/api/.env.example` with documentation
+  - Added hmac dependency to `/code/api/Cargo.toml` for signature verification
+  - Created helper function `insert_stripe_contract_request` in tests for DRY
+  - Added 3 unit tests: `test_update_payment_status_to_succeeded`, `test_update_payment_status_to_failed`, `test_update_payment_status_nonexistent_intent`
+  - Added 4 unit tests for webhook signature verification in webhooks.rs module
+  - Created sqlx cache entry for new UPDATE query: `/code/api/.sqlx/query-b620310c29449b63ac201fa35eb6b8058abbfdd1d19226784af0326e27aff8cb.json`
 - **Review**:
-- **Outcome**:
+  - Build passes with SQLX_OFFLINE=true (release build completed in 6m 32s)
+  - Webhook handler verifies Stripe signatures before processing events
+  - Payment status updates are idempotent (no error if payment_intent_id not found)
+  - Unit tests cover both positive (valid signature, status updates) and negative (invalid signature, missing fields) paths
+  - Code follows YAGNI/KISS principles - minimal implementation focused on core requirements
+- **Outcome**: Success - Webhook endpoint operational, signature verification secure, payment status tracking integrated
 
 ### Step 3
 - **Implementation**:
