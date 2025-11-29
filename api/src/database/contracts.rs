@@ -47,6 +47,11 @@ pub struct Contract {
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
     pub provisioning_completed_at_ns: Option<i64>,
+    pub payment_method: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub stripe_payment_intent_id: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub stripe_customer_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -108,7 +113,7 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -125,7 +130,7 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -142,7 +147,7 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -159,7 +164,7 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -204,7 +209,7 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -293,14 +298,17 @@ impl Database {
         // Insert contract request
         let original_duration_hours = duration_hours;
         let requested_status = "requested";
+        let payment_method = "dct"; // Default to DCT token payments
+        let stripe_payment_intent_id: Option<&str> = None;
+        let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
             r#"INSERT INTO contract_sign_requests (
                 contract_id, requester_pubkey, requester_ssh_pubkey,
                 requester_contact, provider_pubkey, offering_id,
                 payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                 duration_hours, original_duration_hours, request_memo,
-                created_at_ns, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             contract_id,
             requester_pubkey,
             ssh_pubkey,
@@ -314,7 +322,10 @@ impl Database {
             original_duration_hours,
             memo,
             created_at_ns,
-            requested_status
+            requested_status,
+            payment_method,
+            stripe_payment_intent_id,
+            stripe_customer_id
         )
         .execute(&self.pool)
         .await?;

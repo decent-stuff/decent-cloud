@@ -18,6 +18,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/007_username_case_sensitive.sql"),
         include_str!("../../migrations/008_example_offerings.sql"),
         include_str!("../../migrations/009_email_queue.sql"),
+        include_str!("../../migrations/010_payment_methods.sql"),
     ];
 
     for migration in &migrations {

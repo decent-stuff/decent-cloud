@@ -10,14 +10,20 @@ async fn insert_contract_request(
     created_at_ns: i64,
     status: &str,
 ) {
+    let payment_method = "dct";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?)",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?, ?, ?, ?)",
         contract_id,
         requester_pubkey,
         provider_pubkey,
         offering_id,
         created_at_ns,
-        status
+        status,
+        payment_method,
+        stripe_payment_intent_id,
+        stripe_customer_id
     )
     .execute(&db.pool)
     .await
@@ -310,6 +316,9 @@ async fn test_create_rental_request_success() {
     assert_eq!(contract.requester_contact, "email:test@example.com");
     assert_eq!(contract.request_memo, "Test rental");
     assert_eq!(contract.payment_amount_e9s, 100_000_000_000);
+    assert_eq!(contract.payment_method, "dct");
+    assert_eq!(contract.stripe_payment_intent_id, None);
+    assert_eq!(contract.stripe_customer_id, None);
 }
 
 #[tokio::test]

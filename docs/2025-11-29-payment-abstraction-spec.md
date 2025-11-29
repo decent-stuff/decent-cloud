@@ -291,8 +291,42 @@ curl -X POST /api/contracts -d '{"payment_method": "paypal", ...}'  # 400 error
 - Indexes created for query performance
 - Total implementation: 15 lines (well under budget)
 
-### Step 3: Update Contract struct
-**Status**: Pending
+### Step 3: Update Contract struct and database queries
+**Status**: Completed
+
+**Implementation**:
+- Added three new fields to Contract struct in `api/src/database/contracts.rs`:
+  - `payment_method: String` - payment type (dct/stripe)
+  - `stripe_payment_intent_id: Option<String>` - Stripe PaymentIntent ID
+  - `stripe_customer_id: Option<String>` - Stripe Customer ID
+- Updated ALL SELECT queries (5 total) to include new payment fields
+- Updated INSERT query in `create_rental_request` to include payment fields with defaults
+- Updated test helper `insert_contract_request` in contracts/tests.rs
+- Updated all INSERT queries in stats/tests.rs (4 occurrences)
+- Added migration 010 to test_helpers.rs for test database setup
+- TypeScript types regenerated automatically via ts-rs
+
+**Files Changed**:
+- api/src/database/contracts.rs (3 struct fields, 5 SELECT queries, 1 INSERT query updated)
+- api/src/database/contracts/tests.rs (test helper + 3 assertions added)
+- api/src/database/stats/tests.rs (4 INSERT queries updated)
+- api/src/database/test_helpers.rs (1 migration added to array)
+- website/src/lib/types/generated/Contract.ts (auto-generated - 3 fields added)
+- .sqlx/*.json (10 query metadata files regenerated)
+
+**Tests Updated**: 22 contract tests updated and passing
+- All test INSERT queries now include payment_method='dct'
+- Added assertions in test_create_rental_request_success to verify payment fields
+- All contract database tests pass
+
+**Outcome**: Success
+- All 349 tests pass (cargo make clean)
+- Code compiles with no errors (only pre-existing ts-rs warnings)
+- Contract struct properly includes payment metadata
+- Database queries all include new fields
+- TypeScript types synchronized
+- Migration applied in all test databases
+- Total changes: ~65 lines (within budget)
 
 ### Step 4: Update contract creation logic
 **Status**: Pending

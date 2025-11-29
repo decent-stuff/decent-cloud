@@ -44,11 +44,17 @@ async fn test_get_platform_stats_with_data() {
         let contract_id_ref = &contract_id;
         let requester_pubkey_ref = &requester_pubkey;
         let pubkey_ref = &pubkey;
+        let payment_method = "dct";
+        let stripe_payment_intent_id: Option<&str> = None;
+        let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending', ?, ?, ?)",
             contract_id_ref,
             requester_pubkey_ref,
-            pubkey_ref
+            pubkey_ref,
+            payment_method,
+            stripe_payment_intent_id,
+            stripe_customer_id
         )
         .execute(&db.pool)
         .await
@@ -188,11 +194,17 @@ async fn test_get_provider_stats_with_data() {
         let contract_id_ref = &pending_contract_id;
         let requester_ref = &pending_requester;
         let pubkey_ref = &pubkey;
+        let payment_method = "dct";
+        let stripe_payment_intent_id: Option<&str> = None;
+        let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending', ?, ?, ?)",
             contract_id_ref,
             requester_ref,
-            pubkey_ref
+            pubkey_ref,
+            payment_method,
+            stripe_payment_intent_id,
+            stripe_customer_id
         )
         .execute(&db.pool)
         .await
@@ -204,11 +216,17 @@ async fn test_get_provider_stats_with_data() {
         let contract_id_ref = &active_contract_id;
         let requester_ref = &active_requester;
         let pubkey_ref = &pubkey;
+        let payment_method = "dct";
+        let stripe_payment_intent_id: Option<&str> = None;
+        let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 2000, 'memo', 1000, 'active')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 2000, 'memo', 1000, 'active', ?, ?, ?)",
             contract_id_ref,
             requester_ref,
-            pubkey_ref
+            pubkey_ref,
+            payment_method,
+            stripe_payment_intent_id,
+            stripe_customer_id
         )
         .execute(&db.pool)
         .await
@@ -361,11 +379,17 @@ async fn test_search_accounts_with_reputation_and_activity() {
 
     // Add contract for alice
     let contract_id = vec![3u8; 32];
+    let payment_method = "dct";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000, 'memo', 0, 'active')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000, 'memo', 0, 'active', ?, ?, ?)",
         contract_id,
         pubkey2,
-        pubkey1
+        pubkey1,
+        payment_method,
+        stripe_payment_intent_id,
+        stripe_customer_id
     )
     .execute(&db.pool)
     .await
