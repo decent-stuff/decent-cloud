@@ -77,7 +77,7 @@
 	}
 
 	// Format balance from e9s to tokens
-	function formatBalance(balanceE9s: number, currency: string = 'dct'): string {
+	function formatBalance(balanceE9s: number, currency: string): string {
 		return (balanceE9s / 1_000_000_000).toFixed(4);
 	}
 
@@ -436,7 +436,7 @@
 			>
 				<div class="text-white/60 text-sm mb-1">Account Balance</div>
 				<div class="text-3xl font-bold text-white">
-					{formatBalance(balance)}
+					{formatBalance(balance, 'dct')}
 					<span class="text-xl text-white/60">DC</span>
 				</div>
 			</div>
@@ -640,7 +640,7 @@
 							Total Spent
 						</div>
 						<div class="text-2xl font-bold text-red-400">
-							{formatBalance(txStats.totalSent)} DC
+							{formatBalance(txStats.totalSent, 'dct')} DC
 						</div>
 					</div>
 					<div>
@@ -648,7 +648,7 @@
 							Total Received
 						</div>
 						<div class="text-2xl font-bold text-green-400">
-							{formatBalance(txStats.totalReceived)} DC
+							{formatBalance(txStats.totalReceived, 'dct')} DC
 						</div>
 					</div>
 					<div>
@@ -703,10 +703,10 @@
 								</div>
 								<div class="text-right">
 									<div class="text-lg font-bold text-white">
-										{formatBalance(transfer.amount_e9s)} DC
+										{formatBalance(transfer.amount_e9s, 'dct')} DC
 									</div>
 									<div class="text-xs text-white/50">
-										Fee: {formatBalance(transfer.fee_e9s)} DC
+										Fee: {formatBalance(transfer.fee_e9s, 'dct')} DC
 									</div>
 								</div>
 							</div>

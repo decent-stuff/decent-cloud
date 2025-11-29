@@ -130,9 +130,22 @@ The reputation page doesn't clearly show critical rental behavior patterns that 
 
 ### Step 3
 - **Implementation:**
+  - Added calculateCancellationMetrics() function to analyze cancelled contracts
+  - Calculates counts and percentages for 1h, 24h, 7d, 180d time windows
+  - Added derived variables: requesterCancellations, providerCancellations
+  - Added "Cancellation Patterns" UI section with split view (requester/provider)
+  - Color coding: red for >50% within 1h, yellow for >80% within 24h
 - **Review:**
+  - Minimal calculation logic (simple loop, no external dependencies)
+  - Reused existing contract data structure
+  - DRY - single function for both requester and provider metrics
 - **Verification:**
-- **Outcome:**
+  - npm run check: 0 errors, 0 warnings ✓
+  - Fixed TypeScript type issue with percentage fields
+- **Outcome:** SUCCESS
+  - Commit: 930548e "feat: add cancellation metrics to reputation page (orchestrator step 3/5)"
+  - Files: reputation page (+147 lines)
+  - Now shows concerning patterns prominently (e.g., "100% cancelled within 1h")
 
 ### Step 4
 - **Implementation:**
