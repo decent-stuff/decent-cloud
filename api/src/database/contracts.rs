@@ -86,6 +86,8 @@ pub struct RentalRequestParams {
     pub request_memo: Option<String>,
     #[oai(skip_serializing_if_is_none)]
     pub duration_hours: Option<i64>,
+    #[oai(skip_serializing_if_is_none)]
+    pub payment_method: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
@@ -269,6 +271,12 @@ impl Database {
             .request_memo
             .unwrap_or_else(|| format!("Rental request for {}", offering.offer_name));
 
+        // Validate and default payment method
+        let payment_method_str = params.payment_method.as_deref().unwrap_or("dct");
+        use std::str::FromStr;
+        dcc_common::PaymentMethod::from_str(payment_method_str)
+            .map_err(|e| anyhow::anyhow!("Invalid payment method: {}", e))?;
+
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         // Calculate duration and timestamps
@@ -298,7 +306,6 @@ impl Database {
         // Insert contract request
         let original_duration_hours = duration_hours;
         let requested_status = "requested";
-        let payment_method = "dct"; // Default to DCT token payments
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -323,7 +330,7 @@ impl Database {
             memo,
             created_at_ns,
             requested_status,
-            payment_method,
+            payment_method_str,
             stripe_payment_intent_id,
             stripe_customer_id
         )

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE email_queue SET status = 'failed' WHERE id = ? AND attempts >= max_attempts",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "3e76357dd455daa8e71081df15799cdb536adb89286a7c04873d43fd859ec53f"
+}

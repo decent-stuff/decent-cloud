@@ -329,7 +329,33 @@ curl -X POST /api/contracts -d '{"payment_method": "paypal", ...}'  # 400 error
 - Total changes: ~65 lines (within budget)
 
 ### Step 4: Update contract creation logic
-**Status**: Pending
+**Status**: Completed
+
+**Implementation**:
+- Added `payment_method: Option<String>` field to RentalRequestParams struct
+- Updated `create_rental_request` to validate payment_method using `PaymentMethod::from_str()`
+- Defaults to "dct" when payment_method is None
+- Returns proper error for invalid payment methods via anyhow
+- Used validated payment_method_str in INSERT query
+
+**Files Changed**:
+- api/src/database/contracts.rs (RentalRequestParams struct + create_rental_request method)
+- api/src/database/contracts/tests.rs (4 new tests + 4 existing tests updated)
+- api/.sqlx/*.json (query metadata regenerated)
+
+**Tests Added**: 4 new unit tests
+- test_create_rental_request_with_dct_payment_method - verifies DCT payment method
+- test_create_rental_request_with_stripe_payment_method - verifies Stripe payment method
+- test_create_rental_request_invalid_payment_method - rejects invalid payment method (paypal)
+- test_create_rental_request_defaults_to_dct - verifies default when not specified
+
+**Outcome**: Success
+- All 8 contract creation tests pass (4 new + 4 existing)
+- Invalid payment methods properly rejected with error message
+- Backward compatibility maintained - missing payment_method defaults to "dct"
+- Code compiles cleanly with SQLX_OFFLINE=true
+- Total changes: ~30 lines of code + 4 tests (~130 lines)
+- Well under 50 line budget
 
 ### Step 5: Add validation and helpers
 **Status**: Pending

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO contract_sign_requests (\n                contract_id, requester_pubkey, requester_ssh_pubkey,\n                requester_contact, provider_pubkey, offering_id,\n                payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n                duration_hours, original_duration_hours, request_memo,\n                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 17
+    },
+    "nullable": []
+  },
+  "hash": "2a46b88e8fd0480dc19ab478d5c925af2603ee200aaac7af76f4bb5d78180ea6"
+}

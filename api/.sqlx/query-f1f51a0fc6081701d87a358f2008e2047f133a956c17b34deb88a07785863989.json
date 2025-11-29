@@ -1,0 +1,140 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey,\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id\n               FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "contract_id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "requester_pubkey",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "requester_ssh_pubkey!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "requester_contact!",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "provider_pubkey",
+        "ordinal": 4,
+        "type_info": "Blob"
+      },
+      {
+        "name": "offering_id!",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "region_name",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "instance_config",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "payment_amount_e9s",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "start_timestamp_ns",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "end_timestamp_ns",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "duration_hours",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "original_duration_hours",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "request_memo!",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns",
+        "ordinal": 14,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status!",
+        "ordinal": 15,
+        "type_info": "Text"
+      },
+      {
+        "name": "provisioning_instance_details",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "provisioning_completed_at_ns",
+        "ordinal": 17,
+        "type_info": "Integer"
+      },
+      {
+        "name": "payment_method!",
+        "ordinal": 18,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_payment_intent_id",
+        "ordinal": 19,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_customer_id",
+        "ordinal": 20,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "f1f51a0fc6081701d87a358f2008e2047f133a956c17b34deb88a07785863989"
+}
