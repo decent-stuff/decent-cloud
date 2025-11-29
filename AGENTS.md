@@ -8,17 +8,18 @@
 - Every part of execution, every function, must be covered by at least one unit test.
 - WRITE NEW UNIT TESTS that cover both the positive and negative path of the new functionality.
 - Tests that you write MUST ASSERT MEANINGFUL BEHAVIOR and MAY NOT overlap coverage with other tests (check for overlaps!).
-- Check and FIX ANY LINTING warnings and errors with `cargo make`
-- Run `cargo make` from the repo root as often as needed to check for any compilation issues. You must fix any warnings or errors before moving on to the next step.
-- Only commit changes after `cargo make` is clean and you check "git diff" changes and confirm made changes are minimal. Reduce changes if possible to make them minimal!
+- Prefer running crate-local `cargo clippy` and `cargo nextest run` that you are building.
+- You must fix any warnings or errors before moving on to the next step.
 - WHENEVER you fix any issue you MUST check the rest of the codebase to see if the same or similar issue exists elsewhere and FIX ALL INSTANCES.
+- You must strictly adhere to MINIMAL, YAGNI, KISS, DRY, YAGNI, POLA principles. If you can't - STOP and ask the user how to proceed
 - You must strictly adhere to best practices and to above rules, at all times. Push back on any requests that go against either. Be brutally honest.
-
-- You must strictly adhere to TDD, DRY, YAGNI, POLA, KISS principles. If you can't - STOP and ask the user how to proceed
 
 BE ALWAYS BRUTALLY HONEST AND OBJECTIVE. You are smart and confident.
 
 ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses! No unnecessary complexity - this is a monorepo. Change all that's needed to end up with clean code and clean architecture.
+- When FULLY done and clippy and tests are completely clean (fix if not!), run `cargo make` and fix ANY warnings or errors
+- Check `git diff` changes and confirm made changes are minimal and aligned with project rules. Reduce changes if possible to make them minimal!
+- Commit changes if the functionality is FULLY implemented and `cargo make` passes
 
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
