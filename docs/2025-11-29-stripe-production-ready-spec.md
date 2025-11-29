@@ -273,8 +273,50 @@ Run full test suite and verify production readiness.
 
 ### Step 7
 - **Implementation**:
+  - Created `/code/website/tests/e2e/payment-flows.spec.ts` with 3 comprehensive E2E tests:
+    - **TEST 1: DCT Payment Flow** - Verifies existing DCT payment functionality:
+      - User navigates to marketplace and selects offering
+      - DCT payment method selected by default
+      - Fills rental details and submits request
+      - Verifies contract created with `payment_method="dct"` and `payment_status="succeeded"`
+      - Verifies contract status remains `"requested"` (requires manual provider acceptance)
+    - **TEST 2: Stripe Payment Success Flow** - Tests complete Stripe payment flow with webhook:
+      - User selects offering and chooses Stripe payment method
+      - Fills in Stripe test card 4242 4242 4242 4242 (always succeeds)
+      - Submits rental request and confirms payment
+      - Verifies contract created with `payment_method="stripe"` and `payment_status="pending"`
+      - Simulates webhook POST to `/api/v1/webhooks/stripe` with `payment_intent.succeeded` event
+      - Verifies `payment_status` updated to `"succeeded"` after webhook
+      - Verifies contract auto-accepted (`status="accepted"`) on payment success
+    - **TEST 3: Stripe Payment Failure Flow** - Tests declined card error handling:
+      - User selects offering and chooses Stripe payment method
+      - Fills in Stripe test card 4000 0000 0000 0002 (always declines)
+      - Submits rental request
+      - Verifies user-friendly error message shown ("Your card was declined")
+      - Verifies no success message and dialog remains open for retry
+  - Added helper functions in test file:
+    - `createTestOffering()`: Creates test offering via API for isolated testing
+    - `getContract()`: Retrieves contract details via GET `/api/v1/contracts/:id`
+    - `simulateStripeWebhook()`: Simulates Stripe webhook with HMAC-SHA256 signature verification
+  - Installed `@types/node` as dev dependency for crypto module support in E2E tests
+  - Used existing test patterns from `registration-flow.spec.ts` and `auth-helpers.ts`
+  - Tests use Stripe test mode keys from `.env.development`
+  - Tests verify payment status transitions: pending → succeeded (Stripe), instant succeeded (DCT)
+  - Tests verify contract auto-acceptance only happens for successful Stripe payments
 - **Review**:
-- **Outcome**:
+  - TypeScript compilation clean: `npm run check` passes with 0 errors, 0 warnings
+  - Playwright test listing successful: 3 tests recognized in payment-flows.spec.ts
+  - Test structure follows existing E2E test patterns in codebase
+  - Tests use proper authentication fixtures from `test-account.ts`
+  - Webhook simulation uses HMAC-SHA256 signature (same as production webhook handler)
+  - Test coverage complete:
+    - DCT payment flow (existing functionality verification)
+    - Stripe success flow with webhook simulation and auto-acceptance
+    - Stripe failure flow with error handling
+  - Helper functions minimize duplication (DRY principle)
+  - Tests isolated: each test can run independently
+  - Tests use Stripe test cards as documented in Stripe docs
+- **Outcome**: Success - E2E tests created for all payment flows, TypeScript clean, tests ready to run when API + website servers available
 
 ### Step 8
 - **Implementation**:
