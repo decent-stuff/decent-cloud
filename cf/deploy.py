@@ -20,7 +20,7 @@ def calculate_binary_hash() -> str:
     - Dependency updates
     """
     cf_dir = Path(__file__).parent
-    binary_path = cf_dir.parent / "target" / "x86_64-unknown-linux-gnu" / "release" / "api-server"
+    binary_path = cf_dir.parent / "target" / "x86_64-unknown-linux-gnu" / "release-fast" / "api-server"
 
     if not binary_path.exists():
         return "no-binary"
@@ -304,15 +304,16 @@ def build_rust_binaries_natively() -> bool:
 
         # Build for linux/amd64 target (required for Docker)
         # SQLX_OFFLINE=true uses pre-prepared .sqlx queries instead of live DB
+        # Use release-fast profile for faster deployment builds
         build_env = {**os.environ, "SQLX_OFFLINE": "true"}
         subprocess.run(
-            ["cargo", "build", "--release", "--bin", "api-server", "--bin", "dc", "--target", "x86_64-unknown-linux-gnu"],
+            ["cargo", "build", "--profile", "release-fast", "--bin", "api-server", "--bin", "dc", "--target", "x86_64-unknown-linux-gnu"],
             check=True,
             env=build_env,
         )
 
-        # Verify binary was created
-        binary_path = project_root / "target" / "x86_64-unknown-linux-gnu" / "release" / "api-server"
+        # Verify binary was created (release-fast profile outputs to release-fast/ directory)
+        binary_path = project_root / "target" / "x86_64-unknown-linux-gnu" / "release-fast" / "api-server"
         if not binary_path.exists():
             print_error(f"API binary not found at {binary_path}")
             return False
