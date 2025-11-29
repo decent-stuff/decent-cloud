@@ -80,17 +80,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 which = "8.0"
 
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
-panic = "abort"
-
 # Fast release profile for deployment builds
 # Optimizes for build speed while maintaining good runtime performance
 [profile.release-fast]
 inherits = "release"
-opt-level = 3           # Speed optimization (faster to compile than "s")
-lto = "thin"            # Thin LTO (much faster than full LTO, still optimizes)
-codegen-units = 16      # Parallel codegen (faster build)
-incremental = true      # Enable incremental compilation
+opt-level = 3        # Speed optimization (faster to compile than "s")
+lto = "thin"         # Thin LTO (much faster than full LTO, still optimizes)
+codegen-units = 16   # Parallel codegen (faster build)
+incremental = true   # Enable incremental compilation
