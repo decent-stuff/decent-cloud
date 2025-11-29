@@ -11,10 +11,11 @@ async fn insert_contract_request(
     status: &str,
 ) {
     let payment_method = "dct";
+    let payment_status = "succeeded"; // DCT payments are pre-paid
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?, ?, ?, ?)",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?, ?, ?, ?, ?)",
         contract_id,
         requester_pubkey,
         provider_pubkey,
@@ -23,7 +24,8 @@ async fn insert_contract_request(
         status,
         payment_method,
         stripe_payment_intent_id,
-        stripe_customer_id
+        stripe_customer_id,
+        payment_status
     )
     .execute(&db.pool)
     .await
@@ -922,7 +924,10 @@ async fn test_update_stripe_payment_intent() {
 
     // Verify payment intent was stored
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.stripe_payment_intent_id, Some(payment_intent_id.to_string()));
+    assert_eq!(
+        contract.stripe_payment_intent_id,
+        Some(payment_intent_id.to_string())
+    );
 }
 
 #[tokio::test]
@@ -957,5 +962,74 @@ async fn test_update_stripe_payment_intent_overwrites() {
 
     // Verify only second intent is stored
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.stripe_payment_intent_id, Some(second_intent.to_string()));
+    assert_eq!(
+        contract.stripe_payment_intent_id,
+        Some(second_intent.to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_payment_status_dct_payment_succeeds_immediately() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Create offering
+    let provider_pk_clone = provider_pk.clone();
+    let offering_id = sqlx::query_scalar!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-status-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        provider_pk_clone
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some("ssh-key".to_string()),
+        contact_method: Some("email:test@example.com".to_string()),
+        request_memo: Some("Test rental".to_string()),
+        duration_hours: None,
+        payment_method: Some("dct".to_string()),
+    };
+
+    let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    // DCT payments are pre-paid, so payment_status should be 'succeeded'
+    assert_eq!(contract.payment_method, "dct");
+    assert_eq!(contract.payment_status, "succeeded");
+}
+
+#[tokio::test]
+async fn test_payment_status_stripe_payment_starts_pending() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Create offering
+    let provider_pk_clone = provider_pk.clone();
+    let offering_id = sqlx::query_scalar!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-status-2', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        provider_pk_clone
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some("ssh-key".to_string()),
+        contact_method: Some("email:test@example.com".to_string()),
+        request_memo: Some("Test rental".to_string()),
+        duration_hours: None,
+        payment_method: Some("stripe".to_string()),
+    };
+
+    let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    // Stripe payments require webhook confirmation, so payment_status should start as 'pending'
+    assert_eq!(contract.payment_method, "stripe");
+    assert_eq!(contract.payment_status, "pending");
 }
