@@ -164,8 +164,30 @@ Run full test suite and verify production readiness.
 
 ### Step 4
 - **Implementation**:
+  - Added `get_contract_by_payment_intent(payment_intent_id)` method in `/code/api/src/database/contracts.rs` to retrieve contracts by Stripe payment_intent_id
+  - Added `accept_contract(contract_id)` method in `/code/api/src/database/contracts.rs` to auto-accept contracts
+  - Auto-acceptance only works for contracts in 'requested' status
+  - Auto-acceptance updates contract status to 'accepted' and records in contract_status_history with memo "Auto-accepted on successful Stripe payment"
+  - Modified webhook handler in `/code/api/src/openapi/webhooks.rs` to auto-accept contracts when payment_intent.succeeded event received
+  - Auto-acceptance only triggers for Stripe payments (payment_method == "stripe")
+  - DCT payments continue to require manual provider acceptance (no change to existing flow)
+  - Auto-acceptance errors are logged but don't fail the webhook (payment status already updated)
+  - Added 5 unit tests in `/code/api/src/database/contracts/tests.rs`:
+    - `test_get_contract_by_payment_intent`: Verify contract retrieval by payment_intent_id
+    - `test_get_contract_by_payment_intent_not_found`: Verify None returned for non-existent payment_intent_id
+    - `test_accept_contract_success`: Verify contract auto-acceptance changes status from 'requested' to 'accepted'
+    - `test_accept_contract_not_in_requested_status`: Verify auto-acceptance fails for non-requested contracts
+    - `test_accept_contract_not_found`: Verify auto-acceptance fails for non-existent contracts
+  - Created SQLX query cache entries for new queries
 - **Review**:
-- **Outcome**:
+  - All 372 tests pass (372 passed, 38 leaky tests in canister code)
+  - cargo make passes in 153.33 seconds
+  - Auto-acceptance flow: payment_intent.succeeded → update payment_status → get_contract_by_payment_intent → accept_contract (if Stripe) → status becomes 'accepted'
+  - DCT payment flow unchanged: payment_status immediately 'succeeded', contract status remains 'requested' until provider manually accepts
+  - Stripe payment flow improved: payment_status starts 'pending', webhook updates to 'succeeded' AND auto-accepts contract
+  - Error handling is clean: auto-acceptance errors logged as warnings, don't break webhook processing
+  - Code follows KISS/DRY principles: accept_contract is reusable, webhook integration is minimal
+- **Outcome**: Success - Contracts auto-accept when Stripe payment succeeds, DCT payments still require manual acceptance, all tests pass
 
 ### Step 5
 - **Implementation**:

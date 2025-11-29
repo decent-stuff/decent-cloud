@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey,\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\"\n               FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC",
+  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey,\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\"\n               FROM contract_sign_requests WHERE stripe_payment_intent_id = ?",
   "describe": {
     "columns": [
       {
@@ -142,5 +142,5 @@
       false
     ]
   },
-  "hash": "5da894705606c1a042a7a992b9dd321f171d596907992a2babbb85b7d9f634be"
+  "hash": "f01a3af897eaf342c6588b9f3c7a51dd59968bcff7e6aa19bbe99706837652df"
 }

@@ -129,6 +129,7 @@ pub async fn stripe_webhook(
             let payment_intent_id = &event.data.object.id;
             tracing::info!("Payment succeeded: {}", payment_intent_id);
 
+            // Update payment status to succeeded
             db.update_payment_status(payment_intent_id, "succeeded")
                 .await
                 .map_err(|e| {
@@ -138,6 +139,34 @@ pub async fn stripe_webhook(
                         poem::http::StatusCode::INTERNAL_SERVER_ERROR,
                     )
                 })?;
+
+            // Auto-accept contract for Stripe payments
+            // Get contract by payment_intent_id to find contract_id
+            if let Ok(Some(contract)) = db.get_contract_by_payment_intent(payment_intent_id).await {
+                if contract.payment_method == "stripe" {
+                    match db.accept_contract(&contract.contract_id).await {
+                        Ok(_) => {
+                            tracing::info!(
+                                "Auto-accepted contract {} after successful Stripe payment",
+                                hex::encode(&contract.contract_id)
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to auto-accept contract {}: {}",
+                                hex::encode(&contract.contract_id),
+                                e
+                            );
+                            // Don't fail the webhook - payment status is already updated
+                        }
+                    }
+                }
+            } else {
+                tracing::warn!(
+                    "Contract not found for payment_intent_id: {}",
+                    payment_intent_id
+                );
+            }
         }
         "payment_intent.payment_failed" => {
             let payment_intent_id = &event.data.object.id;

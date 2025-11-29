@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git log:*)",
+      "Read(//home/sat/projects/decent-cloud/cf/**)",
+      "Bash(docker compose:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

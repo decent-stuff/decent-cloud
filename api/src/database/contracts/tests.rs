@@ -1142,3 +1142,123 @@ async fn test_update_payment_status_nonexistent_intent() {
     // Should not fail even if no rows affected
     assert!(result.is_ok());
 }
+
+#[tokio::test]
+async fn test_get_contract_by_payment_intent() {
+    let db = setup_test_db().await;
+    let contract_id = vec![104u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let payment_intent_id = "pi_test_get_by_intent";
+
+    // Insert contract with Stripe payment
+    insert_stripe_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        payment_intent_id,
+        "pending",
+    )
+    .await;
+
+    // Get contract by payment_intent_id
+    let contract = db
+        .get_contract_by_payment_intent(payment_intent_id)
+        .await
+        .unwrap();
+
+    assert!(contract.is_some());
+    let contract = contract.unwrap();
+    assert_eq!(contract.contract_id, contract_id);
+    assert_eq!(
+        contract.stripe_payment_intent_id,
+        Some(payment_intent_id.to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_get_contract_by_payment_intent_not_found() {
+    let db = setup_test_db().await;
+
+    // Get contract by non-existent payment_intent_id
+    let contract = db
+        .get_contract_by_payment_intent("pi_nonexistent")
+        .await
+        .unwrap();
+
+    assert!(contract.is_none());
+}
+
+#[tokio::test]
+async fn test_accept_contract_success() {
+    let db = setup_test_db().await;
+    let contract_id = vec![105u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let payment_intent_id = "pi_test_auto_accept";
+
+    // Insert contract with Stripe payment in requested status
+    insert_stripe_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        payment_intent_id,
+        "pending",
+    )
+    .await;
+
+    // Verify initial status is requested
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "requested");
+
+    // Accept contract
+    db.accept_contract(&contract_id).await.unwrap();
+
+    // Verify status changed to accepted
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "accepted");
+}
+
+#[tokio::test]
+async fn test_accept_contract_not_in_requested_status() {
+    let db = setup_test_db().await;
+    let contract_id = vec![106u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Insert contract in accepted status (not requested)
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "accepted", // Already accepted
+    )
+    .await;
+
+    // Attempt to accept contract again
+    let result = db.accept_contract(&contract_id).await;
+
+    // Should fail because contract is not in requested status
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("auto-accepted"));
+}
+
+#[tokio::test]
+async fn test_accept_contract_not_found() {
+    let db = setup_test_db().await;
+    let nonexistent_contract_id = vec![255u8; 32];
+
+    // Attempt to accept non-existent contract
+    let result = db.accept_contract(&nonexistent_contract_id).await;
+
+    // Should fail because contract doesn't exist
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+}

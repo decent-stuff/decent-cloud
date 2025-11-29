@@ -177,6 +177,26 @@ impl Database {
         Ok(contract)
     }
 
+    /// Get contract by Stripe payment intent ID
+    pub async fn get_contract_by_payment_intent(
+        &self,
+        payment_intent_id: &str,
+    ) -> Result<Option<Contract>> {
+        let contract = sqlx::query_as!(
+            Contract,
+            r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!"
+               FROM contract_sign_requests WHERE stripe_payment_intent_id = ?"#,
+            payment_intent_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(contract)
+    }
+
     /// Get contract reply
     #[allow(dead_code)]
     pub async fn get_contract_reply(&self, contract_id: &[u8]) -> Result<Option<ContractReply>> {
@@ -554,6 +574,52 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        Ok(())
+    }
+
+    /// Accept a contract (auto-acceptance for successful Stripe payments)
+    pub async fn accept_contract(&self, contract_id: &[u8]) -> Result<()> {
+        // Get contract to verify it exists
+        let contract = self
+            .get_contract(contract_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
+
+        // Only accept if still in requested status
+        if contract.status != "requested" {
+            return Err(anyhow::anyhow!(
+                "Contract cannot be auto-accepted in '{}' status",
+                contract.status
+            ));
+        }
+
+        // Update status to accepted
+        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ? WHERE contract_id = ?",
+            "accepted",
+            updated_at_ns,
+            contract_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        // Record status change in history
+        sqlx::query!(
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            contract_id,
+            contract.status,
+            "accepted",
+            contract.provider_pubkey, // Provider auto-accepts on payment
+            updated_at_ns,
+            "Auto-accepted on successful Stripe payment"
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 
