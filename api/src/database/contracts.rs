@@ -781,62 +781,61 @@ impl Database {
 
         // Calculate prorated refund for Stripe payments
         let current_timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let (refund_amount_e9s, stripe_refund_id) = if contract.payment_method == "stripe"
-            && contract.payment_status == "succeeded"
-        {
-            if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
-                // Calculate prorated refund amount
-                let refund_e9s = Self::calculate_prorated_refund(
-                    contract.payment_amount_e9s,
-                    contract.start_timestamp_ns,
-                    contract.end_timestamp_ns,
-                    current_timestamp_ns,
-                );
+        let (refund_amount_e9s, stripe_refund_id) =
+            if contract.payment_method == "stripe" && contract.payment_status == "succeeded" {
+                if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
+                    // Calculate prorated refund amount
+                    let refund_e9s = Self::calculate_prorated_refund(
+                        contract.payment_amount_e9s,
+                        contract.start_timestamp_ns,
+                        contract.end_timestamp_ns,
+                        current_timestamp_ns,
+                    );
 
-                // Only process refund if amount is positive and stripe_client is provided
-                if refund_e9s > 0 {
-                    if let Some(client) = stripe_client {
-                        // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
-                        let refund_cents = refund_e9s / 10_000_000;
+                    // Only process refund if amount is positive and stripe_client is provided
+                    if refund_e9s > 0 {
+                        if let Some(client) = stripe_client {
+                            // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
+                            let refund_cents = refund_e9s / 10_000_000;
 
-                        // Create refund via Stripe API
-                        match client
-                            .create_refund(payment_intent_id, Some(refund_cents))
-                            .await
-                        {
-                            Ok(refund_id) => {
-                                eprintln!(
+                            // Create refund via Stripe API
+                            match client
+                                .create_refund(payment_intent_id, Some(refund_cents))
+                                .await
+                            {
+                                Ok(refund_id) => {
+                                    eprintln!(
                                     "Stripe refund created: {} for contract {} (amount: {} cents)",
                                     refund_id,
                                     hex::encode(contract_id),
                                     refund_cents
                                 );
-                                (Some(refund_e9s), Some(refund_id))
+                                    (Some(refund_e9s), Some(refund_id))
+                                }
+                                Err(e) => {
+                                    // Log error but don't fail cancellation
+                                    eprintln!(
+                                        "Failed to create Stripe refund for contract {}: {}",
+                                        hex::encode(contract_id),
+                                        e
+                                    );
+                                    (Some(refund_e9s), None)
+                                }
                             }
-                            Err(e) => {
-                                // Log error but don't fail cancellation
-                                eprintln!(
-                                    "Failed to create Stripe refund for contract {}: {}",
-                                    hex::encode(contract_id),
-                                    e
-                                );
-                                (Some(refund_e9s), None)
-                            }
+                        } else {
+                            // No stripe_client provided, just track the calculated amount
+                            (Some(refund_e9s), None)
                         }
                     } else {
-                        // No stripe_client provided, just track the calculated amount
-                        (Some(refund_e9s), None)
+                        (None, None)
                     }
                 } else {
                     (None, None)
                 }
             } else {
+                // Not a Stripe payment or payment not succeeded yet
                 (None, None)
-            }
-        } else {
-            // Not a Stripe payment or payment not succeeded yet
-            (None, None)
-        };
+            };
 
         // Update status, refund info, and history atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);

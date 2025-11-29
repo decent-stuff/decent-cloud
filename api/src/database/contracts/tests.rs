@@ -1457,6 +1457,10 @@ async fn test_cancel_contract_stripe_payment_without_client() {
     let contract_id = vec![101u8; 32];
 
     // Insert Stripe contract with succeeded payment
+    // Use future timestamps so refund is calculated (contract hasn't expired)
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let start_ns = now_ns - 1_000_000_000; // Started 1 second ago
+    let end_ns = now_ns + 10_000_000_000; // Ends in 10 seconds
     insert_stripe_contract_with_timestamps(
         &db,
         &contract_id,
@@ -1466,8 +1470,8 @@ async fn test_cancel_contract_stripe_payment_without_client() {
         "pi_test_123",
         "succeeded",
         1000000000,
-        0,
-        10000,
+        start_ns,
+        end_ns,
     )
     .await;
 
