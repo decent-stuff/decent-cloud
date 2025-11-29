@@ -1,0 +1,315 @@
+# Payment Abstraction Layer Implementation Spec
+
+**Date**: 2025-11-29
+**Orchestrator Goal**: Add payment method abstraction to support multiple payment types (DCT, Stripe)
+**Mode**: Phase 1 - Abstraction only, no Stripe implementation yet
+**Status**: In Progress
+
+---
+
+## Overview
+
+Create a clean payment method abstraction layer that:
+1. Supports current DCT token payments
+2. Prepares database and types for future Stripe integration
+3. Maintains backward compatibility with existing contracts
+4. Follows KISS, DRY, YAGNI principles
+
+**Non-goals for this phase:**
+- Webhook infrastructure (deferred to phase 2)
+- Escrow logic changes (deferred to phase 2)
+- Full frontend payment UI with Stripe Elements (deferred to phase 2)
+
+**Included in this phase:**
+- Basic Stripe PaymentIntent creation
+- Environment variables for Stripe API keys
+- Payment verification for both DCT and Stripe
+
+---
+
+## Requirements
+
+### Must-Have
+1. ✅ PaymentMethod enum supporting DCT and Stripe (placeholder)
+2. ✅ Database schema extended with payment_method and stripe_payment_intent_id
+3. ✅ Contract struct updated with payment metadata
+4. ✅ Contract creation flow accepts payment method
+5. ✅ Migration for existing contracts (set to DCT)
+6. ✅ Unit tests for new payment types
+7. ✅ All existing tests still pass
+
+### Nice-to-Have
+- Payment method validation logic
+- Helper functions for payment amount conversion
+
+---
+
+## Implementation Steps
+
+### Step 1: Add PaymentMethod enum to common
+**Files**: `common/src/payment_method.rs` (NEW)
+
+**Tasks**:
+- Create PaymentMethod enum with DCT and Stripe variants
+- Add Serialize/Deserialize derives
+- Add helper methods: is_dct(), is_stripe()
+- Export from common/src/lib.rs
+
+**Success Criteria**:
+- Enum compiles
+- Can serialize/deserialize to/from JSON
+- Unit tests pass (basic enum tests)
+
+**Estimated LOC**: ~60 lines
+
+---
+
+### Step 2: Create database migration
+**Files**: `api/migrations/010_payment_methods.sql` (NEW)
+
+**Tasks**:
+- Add payment_method TEXT column to contract_sign_requests (default 'dct')
+- Add stripe_payment_intent_id TEXT column (nullable)
+- Add stripe_customer_id TEXT column (nullable)
+- Create index on payment_method
+- Migrate existing contracts to 'dct' payment method
+
+**Success Criteria**:
+- Migration runs successfully
+- Rollback works
+- Existing data preserved
+- All existing contracts have payment_method='dct'
+
+**Estimated LOC**: ~30 lines
+
+---
+
+### Step 3: Update Contract struct and database queries
+**Files**:
+- `api/src/database/contracts.rs`
+
+**Tasks**:
+- Add payment_method: String to Contract struct
+- Add stripe_payment_intent_id: Option<String> to Contract struct
+- Add stripe_customer_id: Option<String> to Contract struct
+- Update all SQL queries to include new fields
+- Update TypeScript export (ts-rs)
+
+**Success Criteria**:
+- Contract struct compiles
+- All database queries include new fields
+- TypeScript types regenerated
+- Existing tests compile (may need updates)
+
+**Estimated LOC**: ~40 lines (changes to existing file)
+
+---
+
+### Step 4: Update contract creation logic
+**Files**:
+- `api/src/openapi/contracts.rs`
+- `api/src/database/contracts.rs` (insert_contract method)
+
+**Tasks**:
+- Add payment_method parameter to RentalRequestParams (default to "dct")
+- Update contract insertion to store payment_method
+- Validate payment_method is valid enum value
+- Ensure backward compatibility (missing payment_method defaults to DCT)
+
+**Success Criteria**:
+- Can create contracts with payment_method="dct"
+- Can create contracts with payment_method="stripe" (even if not processed yet)
+- Invalid payment methods rejected
+- Existing API tests pass with updates
+
+**Estimated LOC**: ~50 lines (changes)
+
+---
+
+### Step 5: Add validation and helper functions
+**Files**:
+- `common/src/payment_method.rs` (extend)
+
+**Tasks**:
+- Add PaymentMethod::from_str() for parsing
+- Add PaymentMethod::to_string() for serialization
+- Add validation: validate_payment_amount() stub
+- Add tests for validation
+
+**Success Criteria**:
+- Can parse "dct" and "stripe" strings
+- Invalid strings return error
+- Round-trip string conversion works
+- Tests pass
+
+**Estimated LOC**: ~40 lines
+
+---
+
+### Step 6: Update tests
+**Files**:
+- `api/src/database/contracts/tests.rs`
+- `common/src/payment_method.rs` (tests)
+
+**Tasks**:
+- Add unit tests for PaymentMethod enum
+- Update contract creation tests to include payment_method
+- Test contract retrieval includes payment_method
+- Test migration with existing data
+
+**Success Criteria**:
+- All new code has >80% test coverage
+- All existing tests still pass
+- cargo test succeeds
+- cargo make succeeds
+
+**Estimated LOC**: ~80 lines
+
+---
+
+### Step 7: Add Stripe integration basics
+**Files**:
+- `api/Cargo.toml` - add async-stripe dependency
+- `api/src/stripe_client.rs` (NEW)
+- `.env.example` - document Stripe env vars
+
+**Tasks**:
+- Add async-stripe dependency to Cargo.toml
+- Create StripeClient wrapper struct
+- Implement create_payment_intent() method
+- Add verify_payment_intent() stub
+- Load Stripe API keys from environment
+- Add basic error handling
+
+**Success Criteria**:
+- Can create Stripe PaymentIntent with test API key
+- Proper error handling for missing/invalid keys
+- Code compiles with new dependency
+- Basic unit tests (can mock Stripe API)
+
+**Estimated LOC**: ~120 lines
+
+---
+
+### Step 8: Frontend type updates (automatic)
+**Files**:
+- `website/src/lib/types/generated/Contract.ts` (auto-generated)
+
+**Tasks**:
+- Run ts-rs export to regenerate TypeScript types
+- Verify Contract type includes payment_method fields
+- No frontend code changes needed (yet)
+
+**Success Criteria**:
+- TypeScript types compile
+- Contract.ts includes payment_method field
+
+**Estimated LOC**: ~10 lines (generated)
+
+---
+
+## Success Metrics
+
+**Definition of Done**:
+- [ ] All 7 steps completed
+- [ ] cargo make clean (no warnings/errors)
+- [ ] All tests pass
+- [ ] Database migration tested (up and down)
+- [ ] TypeScript types generated
+- [ ] Git commits for each step
+- [ ] No duplication introduced
+- [ ] Code follows existing patterns
+
+**Acceptance Test**:
+```bash
+# Can create contract with DCT payment
+curl -X POST /api/contracts -d '{"payment_method": "dct", ...}'
+
+# Can create contract with Stripe payment (stored but not processed)
+curl -X POST /api/contracts -d '{"payment_method": "stripe", ...}'
+
+# Invalid payment method rejected
+curl -X POST /api/contracts -d '{"payment_method": "paypal", ...}'  # 400 error
+```
+
+---
+
+## Execution Log
+
+### Step 1: Add PaymentMethod enum to common
+**Status**: Completed
+
+**Implementation**:
+- Created `common/src/payment_method.rs` with PaymentMethod enum
+- Added DCT and Stripe variants with Serialize/Deserialize derives
+- Implemented helper methods: is_dct(), is_stripe()
+- Implemented FromStr and Display traits for string conversion
+- Exported from common/src/lib.rs
+
+**Files Changed**:
+- common/src/payment_method.rs (NEW - 117 lines)
+- common/src/lib.rs (2 lines added for module declaration and export)
+
+**Tests Added**: 8 unit tests covering:
+- is_dct() and is_stripe() helper methods (positive/negative)
+- FromStr parsing (valid/invalid cases)
+- Display formatting
+- Serialize/Deserialize to/from JSON (valid/invalid)
+
+**Outcome**: Success
+- All 8 tests pass
+- Code compiles cleanly with no warnings
+- Follows existing enum patterns (CursorDirection)
+- Total implementation: 119 lines (within budget)
+
+### Step 2: Create database migration
+**Status**: Pending
+
+### Step 3: Update Contract struct
+**Status**: Pending
+
+### Step 4: Update contract creation logic
+**Status**: Pending
+
+### Step 5: Add validation and helpers
+**Status**: Pending
+
+### Step 6: Update tests
+**Status**: Pending
+
+### Step 7: Add Stripe integration basics
+**Status**: Pending
+
+### Step 8: Frontend type updates
+**Status**: Pending
+
+---
+
+## Rollback Plan
+
+If implementation fails:
+1. Revert database migration (sqlx migrate revert)
+2. Revert code changes via git
+3. Re-run cargo make to verify clean state
+4. No data loss (migration is additive only)
+
+---
+
+## Future Work (Phase 2)
+
+After this abstraction is complete:
+1. Add Stripe API client (async-stripe crate)
+2. Implement payment intent creation
+3. Add webhook handler for payment events
+4. Frontend payment UI with Stripe Elements
+5. Escrow logic
+6. Refund handling
+
+---
+
+## Notes
+
+- This is a pure refactoring/extension - no behavior changes
+- All existing contracts remain functional
+- Stripe integration deferred to minimize scope
+- Follows repository's TDD, DRY, YAGNI principles
