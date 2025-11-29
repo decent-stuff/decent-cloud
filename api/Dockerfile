@@ -25,9 +25,9 @@ RUN groupadd -g ${GROUP_ID} appuser && \
 ARG BINARY_HASH=unknown
 RUN echo "API binary hash: ${BINARY_HASH}"
 
-# Copy pre-built binaries from host (built with --profile release-fast)
-COPY target/x86_64-unknown-linux-gnu/release-fast/api-server /usr/local/bin/api-server
-COPY target/x86_64-unknown-linux-gnu/release-fast/dc /usr/local/bin/dc
+# Copy pre-built binaries from host (built with --profile release)
+COPY target/x86_64-unknown-linux-gnu/release/api-server /usr/local/bin/api-server
+COPY target/x86_64-unknown-linux-gnu/release/dc /usr/local/bin/dc
 
 # Copy migrations and validation script
 COPY api/migrations /migrations

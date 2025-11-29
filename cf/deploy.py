@@ -20,7 +20,7 @@ def calculate_binary_hash() -> str:
     - Dependency updates
     """
     cf_dir = Path(__file__).parent
-    binary_path = cf_dir.parent / "target" / "x86_64-unknown-linux-gnu" / "release-fast" / "api-server"
+    binary_path = cf_dir.parent / "target" / "x86_64-unknown-linux-gnu" / "release" / "api-server"
 
     if not binary_path.exists():
         return "no-binary"
@@ -28,9 +28,9 @@ def calculate_binary_hash() -> str:
     hasher = hashlib.sha256()
 
     # Hash the binary content
-    with open(binary_path, 'rb') as f:
+    with open(binary_path, "rb") as f:
         # Read in chunks for memory efficiency (binary can be large)
-        for chunk in iter(lambda: f.read(4096), b''):
+        for chunk in iter(lambda: f.read(4096), b""):
             hasher.update(chunk)
 
     return hasher.hexdigest()[:16]  # Short hash for readability
@@ -207,7 +207,9 @@ def get_tunnel_token(env_file: Path) -> Optional[str]:
     return env_vars.get("TUNNEL_TOKEN")
 
 
-def run_docker_compose(compose_files: list[str], command: list[str], env_vars: dict[str, str], project_name: Optional[str] = None) -> bool:
+def run_docker_compose(
+    compose_files: list[str], command: list[str], env_vars: dict[str, str], project_name: Optional[str] = None
+) -> bool:
     """Run docker compose with specified files and environment."""
     cmd = ["docker", "compose"]
     if project_name:
@@ -304,16 +306,25 @@ def build_rust_binaries_natively() -> bool:
 
         # Build for linux/amd64 target (required for Docker)
         # SQLX_OFFLINE=true uses pre-prepared .sqlx queries instead of live DB
-        # Use release-fast profile for faster deployment builds
         build_env = {**os.environ, "SQLX_OFFLINE": "true"}
         subprocess.run(
-            ["cargo", "build", "--profile", "release-fast", "--bin", "api-server", "--bin", "dc", "--target", "x86_64-unknown-linux-gnu"],
+            [
+                "cargo",
+                "build",
+                "--release",
+                "--bin",
+                "api-server",
+                "--bin",
+                "dc",
+                "--target",
+                "x86_64-unknown-linux-gnu",
+            ],
             check=True,
             env=build_env,
         )
 
-        # Verify binary was created (release-fast profile outputs to release-fast/ directory)
-        binary_path = project_root / "target" / "x86_64-unknown-linux-gnu" / "release-fast" / "api-server"
+        # Verify binary was created
+        binary_path = project_root / "target" / "x86_64-unknown-linux-gnu" / "release" / "api-server"
         if not binary_path.exists():
             print_error(f"API binary not found at {binary_path}")
             return False
