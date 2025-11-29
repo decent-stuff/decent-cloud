@@ -7,11 +7,12 @@ set -euo pipefail
 # Read hook context from stdin
 CONTEXT=$(cat)
 
-# Extract session ID
+# Extract session ID and project directory
 SESSION_ID=$(echo "$CONTEXT" | jq -r '.session_id // "unknown"')
+PROJECT_DIR=$(echo "$CONTEXT" | jq -r '.cwd // "."')
 
 # State file to track tool calls per session
-STATE_DIR="${CLAUDE_PROJECT_DIR}/.claude/hook-state"
+STATE_DIR="${PROJECT_DIR}/.claude/hook-state"
 mkdir -p "$STATE_DIR"
 STATE_FILE="${STATE_DIR}/tool-calls-${SESSION_ID}.count"
 
