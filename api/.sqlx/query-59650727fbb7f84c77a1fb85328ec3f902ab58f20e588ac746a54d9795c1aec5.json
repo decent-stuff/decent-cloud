@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, to_addr, from_addr, subject, body, is_html, email_type,\n                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at\n               FROM email_queue\n               WHERE status = 'failed'\n               ORDER BY created_at DESC\n               LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "to_addr",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "from_addr",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "subject",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "body",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_html",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "email_type",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "attempts",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "max_attempts",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_error",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_attempted_at",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "sent_at",
+        "ordinal": 13,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "59650727fbb7f84c77a1fb85328ec3f902ab58f20e588ac746a54d9795c1aec5"
+}

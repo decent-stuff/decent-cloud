@@ -53,6 +53,14 @@ pub struct Contract {
     #[oai(skip_serializing_if_is_none)]
     pub stripe_customer_id: Option<String>,
     pub payment_status: String,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub refund_amount_e9s: Option<i64>,
+    #[oai(skip_serializing_if_is_none)]
+    pub stripe_refund_id: Option<String>,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub refund_created_at_ns: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -116,7 +124,8 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!"
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -133,7 +142,8 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!"
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -150,7 +160,8 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!"
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -167,7 +178,8 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!"
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -187,7 +199,8 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!"
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests WHERE stripe_payment_intent_id = ?"#,
             payment_intent_id
         )
@@ -232,7 +245,8 @@ impl Database {
             r#"SELECT contract_id, requester_pubkey, requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", provider_pubkey,
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!"
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               refund_amount_e9s, stripe_refund_id, refund_created_at_ns
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -653,6 +667,61 @@ impl Database {
         )
     }
 
+    /// Calculate prorated refund amount based on time used
+    ///
+    /// Formula: refund = (unused_time / total_time) * payment_amount
+    /// Only returns a refund for contracts that haven't started or are in early stages
+    ///
+    /// # Arguments
+    /// * `payment_amount_e9s` - Original payment amount in e9s
+    /// * `start_timestamp_ns` - Contract start time in nanoseconds
+    /// * `end_timestamp_ns` - Contract end time in nanoseconds
+    /// * `current_timestamp_ns` - Current time in nanoseconds
+    ///
+    /// # Returns
+    /// Refund amount in e9s (cents for Stripe conversion)
+    fn calculate_prorated_refund(
+        payment_amount_e9s: i64,
+        start_timestamp_ns: Option<i64>,
+        end_timestamp_ns: Option<i64>,
+        current_timestamp_ns: i64,
+    ) -> i64 {
+        // If timestamps are missing, no refund (contract structure invalid)
+        let (start, end) = match (start_timestamp_ns, end_timestamp_ns) {
+            (Some(s), Some(e)) => (s, e),
+            _ => return 0,
+        };
+
+        // Total contract duration
+        let total_duration_ns = end - start;
+        if total_duration_ns <= 0 {
+            return 0;
+        }
+
+        // Time already used
+        let time_used_ns = current_timestamp_ns.saturating_sub(start);
+
+        // If current time is before start, full refund
+        if time_used_ns <= 0 {
+            return payment_amount_e9s;
+        }
+
+        // Time remaining
+        let time_remaining_ns = end.saturating_sub(current_timestamp_ns);
+
+        // If contract already expired, no refund
+        if time_remaining_ns <= 0 {
+            return 0;
+        }
+
+        // Calculate prorated refund: (time_remaining / total_duration) * payment_amount
+        let refund_amount = (payment_amount_e9s as f64 * time_remaining_ns as f64
+            / total_duration_ns as f64) as i64;
+
+        // Ensure non-negative
+        refund_amount.max(0)
+    }
+
     /// Update Stripe payment intent ID for a contract
     pub async fn update_stripe_payment_intent(
         &self,
@@ -681,11 +750,14 @@ impl Database {
     /// Non-cancellable statuses:
     /// - provisioned/active: Already deployed, requires termination instead
     /// - rejected/cancelled: Already in terminal state
+    ///
+    /// For Stripe payments: automatically processes prorated refund
     pub async fn cancel_contract(
         &self,
         contract_id: &[u8],
         cancelled_by_pubkey: &[u8],
         cancel_memo: Option<&str>,
+        stripe_client: Option<&crate::stripe_client::StripeClient>,
     ) -> Result<()> {
         // Get contract to verify it exists and check authorization
         let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
@@ -707,20 +779,95 @@ impl Database {
             ));
         }
 
-        // Update status and history atomically
+        // Calculate prorated refund for Stripe payments
+        let current_timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let (refund_amount_e9s, stripe_refund_id) = if contract.payment_method == "stripe"
+            && contract.payment_status == "succeeded"
+        {
+            if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
+                // Calculate prorated refund amount
+                let refund_e9s = Self::calculate_prorated_refund(
+                    contract.payment_amount_e9s,
+                    contract.start_timestamp_ns,
+                    contract.end_timestamp_ns,
+                    current_timestamp_ns,
+                );
+
+                // Only process refund if amount is positive and stripe_client is provided
+                if refund_e9s > 0 {
+                    if let Some(client) = stripe_client {
+                        // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
+                        let refund_cents = refund_e9s / 10_000_000;
+
+                        // Create refund via Stripe API
+                        match client
+                            .create_refund(payment_intent_id, Some(refund_cents))
+                            .await
+                        {
+                            Ok(refund_id) => {
+                                eprintln!(
+                                    "Stripe refund created: {} for contract {} (amount: {} cents)",
+                                    refund_id,
+                                    hex::encode(contract_id),
+                                    refund_cents
+                                );
+                                (Some(refund_e9s), Some(refund_id))
+                            }
+                            Err(e) => {
+                                // Log error but don't fail cancellation
+                                eprintln!(
+                                    "Failed to create Stripe refund for contract {}: {}",
+                                    hex::encode(contract_id),
+                                    e
+                                );
+                                (Some(refund_e9s), None)
+                            }
+                        }
+                    } else {
+                        // No stripe_client provided, just track the calculated amount
+                        (Some(refund_e9s), None)
+                    }
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            // Not a Stripe payment or payment not succeeded yet
+            (None, None)
+        };
+
+        // Update status, refund info, and history atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let mut tx = self.pool.begin().await?;
 
-        // Update contract status to cancelled
-        sqlx::query!(
-            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
-            "cancelled",
-            updated_at_ns,
-            cancelled_by_pubkey,
-            contract_id
-        )
-        .execute(&mut *tx)
-        .await?;
+        // Update contract status to cancelled with refund info
+        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() {
+            sqlx::query!(
+                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ?, payment_status = ?, refund_amount_e9s = ?, stripe_refund_id = ?, refund_created_at_ns = ? WHERE contract_id = ?",
+                "cancelled",
+                updated_at_ns,
+                cancelled_by_pubkey,
+                "refunded",
+                refund_amount_e9s,
+                stripe_refund_id,
+                updated_at_ns,
+                contract_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+                "cancelled",
+                updated_at_ns,
+                cancelled_by_pubkey,
+                contract_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
 
         // Record status change in history
         sqlx::query!(

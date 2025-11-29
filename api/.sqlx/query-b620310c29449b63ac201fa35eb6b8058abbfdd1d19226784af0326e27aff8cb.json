@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_sign_requests SET payment_status = ? WHERE stripe_payment_intent_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b620310c29449b63ac201fa35eb6b8058abbfdd1d19226784af0326e27aff8cb"
+}

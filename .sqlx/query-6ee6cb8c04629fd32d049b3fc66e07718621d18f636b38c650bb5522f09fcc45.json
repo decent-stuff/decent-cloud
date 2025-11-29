@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey,\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\"\n               FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC",
+  "query": "SELECT contract_id, requester_pubkey, requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", provider_pubkey,\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\",\n               refund_amount_e9s, stripe_refund_id, refund_created_at_ns\n               FROM contract_sign_requests WHERE stripe_payment_intent_id = ?",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,21 @@
         "name": "payment_status!",
         "ordinal": 21,
         "type_info": "Text"
+      },
+      {
+        "name": "refund_amount_e9s",
+        "ordinal": 22,
+        "type_info": "Integer"
+      },
+      {
+        "name": "stripe_refund_id",
+        "ordinal": 23,
+        "type_info": "Text"
+      },
+      {
+        "name": "refund_created_at_ns",
+        "ordinal": 24,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -139,8 +154,11 @@
       false,
       true,
       true,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "0deb3e7386c6cb999914f160d7f4efaa28c8f94fa7612cc93f969df4f5e975d6"
+  "hash": "6ee6cb8c04629fd32d049b3fc66e07718621d18f636b38c650bb5522f09fcc45"
 }

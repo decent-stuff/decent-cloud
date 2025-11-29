@@ -276,8 +276,16 @@ impl ContractsApi {
             }
         };
 
+        // Create Stripe client for potential refund processing
+        let stripe_client = crate::stripe_client::StripeClient::new().ok();
+
         match db
-            .cancel_contract(&contract_id, &auth.pubkey, req.memo.as_deref())
+            .cancel_contract(
+                &contract_id,
+                &auth.pubkey,
+                req.memo.as_deref(),
+                stripe_client.as_ref(),
+            )
             .await
         {
             Ok(_) => Json(ApiResponse {

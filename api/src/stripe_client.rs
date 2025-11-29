@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use stripe::{Client, CreatePaymentIntent, Currency, PaymentIntent, PaymentIntentId};
+use stripe::{
+    Client, CreatePaymentIntent, CreateRefund, Currency, PaymentIntent, PaymentIntentId, Refund,
+    RefundId,
+};
 
 /// Stripe API client wrapper for payment processing
 pub struct StripeClient {
@@ -77,6 +80,54 @@ impl StripeClient {
             .context("Failed to retrieve PaymentIntent")?;
 
         Ok(payment_intent.status == stripe::PaymentIntentStatus::Succeeded)
+    }
+
+    /// Creates a refund for a payment intent
+    ///
+    /// # Arguments
+    /// * `payment_intent_id` - The PaymentIntent ID to refund
+    /// * `amount` - Amount to refund in cents (None = full refund)
+    ///
+    /// # Returns
+    /// Refund ID on success
+    pub async fn create_refund(
+        &self,
+        payment_intent_id: &str,
+        amount: Option<i64>,
+    ) -> Result<String> {
+        let intent_id: PaymentIntentId = payment_intent_id
+            .parse()
+            .context("Invalid PaymentIntent ID format")?;
+
+        let mut params = CreateRefund::new();
+        params.payment_intent = Some(intent_id);
+
+        if let Some(amt) = amount {
+            params.amount = Some(amt);
+        }
+
+        let refund = Refund::create(&self.client, params)
+            .await
+            .context("Failed to create Stripe refund")?;
+
+        Ok(refund.id.to_string())
+    }
+
+    /// Verifies a refund exists
+    ///
+    /// # Arguments
+    /// * `refund_id` - The Refund ID to verify
+    ///
+    /// # Returns
+    /// True if refund exists, false otherwise
+    pub async fn verify_refund(&self, refund_id: &str) -> Result<bool> {
+        let id: RefundId = refund_id.parse().context("Invalid Refund ID format")?;
+        let _refund = Refund::retrieve(&self.client, &id, &[])
+            .await
+            .context("Failed to retrieve Refund")?;
+
+        // Refund retrieved successfully, it exists
+        Ok(true)
     }
 }
 

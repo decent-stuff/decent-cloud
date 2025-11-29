@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns\n             FROM token_transfers\n             WHERE from_account = ? OR to_account = ?\n             ORDER BY created_at_ns DESC LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "from_account",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "to_account",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "amount_e9s",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "fee_e9s",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "memo",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns",
+        "ordinal": 5,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "81b5f23a8d94054150e6b5012256dbab06b8b3fb047be216769069770f4e8b8f"
+}

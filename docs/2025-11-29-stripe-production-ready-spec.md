@@ -222,8 +222,54 @@ Run full test suite and verify production readiness.
 
 ### Step 6
 - **Implementation**:
+  - Created migration `/code/api/migrations/012_refund_tracking.sql` adding 3 fields to `contract_sign_requests`:
+    - `refund_amount_e9s INTEGER`: Stores calculated refund amount in e9s
+    - `stripe_refund_id TEXT`: Stores Stripe refund ID for tracking
+    - `refund_created_at_ns INTEGER`: Timestamp when refund was created
+  - Extended `StripeClient` in `/code/api/src/stripe_client.rs` with 2 methods:
+    - `create_refund(payment_intent_id, amount)`: Creates Stripe refund (amount in cents, None = full refund)
+    - `verify_refund(refund_id)`: Verifies refund exists
+  - Added `calculate_prorated_refund()` helper function in `/code/api/src/database/contracts.rs`:
+    - Formula: `refund = (time_remaining / total_duration) * payment_amount`
+    - Returns full refund if contract hasn't started
+    - Returns 0 if contract expired or timestamps missing
+    - Handles edge cases: no timestamps, negative durations, expired contracts
+  - Updated `cancel_contract()` signature to accept optional `StripeClient`
+    - Only processes refunds for Stripe payments with `payment_status == "succeeded"`
+    - Calculates prorated refund amount based on time remaining
+    - Converts e9s to cents for Stripe API (divide by 10,000,000)
+    - Creates Stripe refund if client provided and amount > 0
+    - Logs errors but doesn't fail cancellation if refund fails
+    - Updates `payment_status` to "refunded" when refund processed
+    - Stores refund_amount_e9s, stripe_refund_id, and refund_created_at_ns
+  - Updated `Contract` struct to include 3 new refund fields
+  - Updated all 6 SQL SELECT queries to include refund fields
+  - Updated `/code/api/src/openapi/contracts.rs` cancel endpoint to create StripeClient
+  - Added test helper `insert_stripe_contract_with_timestamps()` for testing with custom timestamps
+  - Added 5 unit tests for prorated refund calculation:
+    - Full refund before contract starts
+    - 50% refund at halfway point
+    - 90% refund with 10% time used
+    - No refund after contract expires
+    - No refund with missing timestamps
+  - Added 4 unit tests for cancel_contract integration:
+    - DCT payment: no refund, payment_status unchanged
+    - Stripe payment without client: refund calculated but not processed
+    - Unauthorized cancellation: fails with error
+    - Invalid status: fails for non-cancellable statuses
+  - Updated `/code/api/src/database/test_helpers.rs` to include migration 012
+  - Regenerated SQLX query cache with `cargo sqlx prepare`
 - **Review**:
-- **Outcome**:
+  - All changes compile successfully
+  - cargo make completes successfully (tests pass, canister tests pass)
+  - Prorated refund logic correctly calculates partial refunds based on time used
+  - Stripe refund integration uses correct cent conversion (e9s / 10_000_000)
+  - DCT payments unaffected - no refund logic applied
+  - Error handling is robust: refund failures logged but don't block cancellation
+  - Database schema properly extended with refund tracking fields
+  - Code follows KISS/DRY principles - refund logic centralized in helper function
+  - Follows YAGNI - only implements refunds for Stripe, not DCT (different mechanism needed)
+- **Outcome**: Success - Prorated refund logic fully implemented, Stripe refund API integrated, all tests structured (cargo make passes)
 
 ### Step 7
 - **Implementation**:

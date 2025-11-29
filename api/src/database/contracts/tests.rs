@@ -60,6 +60,51 @@ async fn insert_stripe_contract_request(
     .unwrap();
 }
 
+async fn insert_stripe_contract_with_timestamps(
+    db: &Database,
+    contract_id: &[u8],
+    requester_pubkey: &[u8],
+    provider_pubkey: &[u8],
+    offering_id: &str,
+    payment_intent_id: &str,
+    payment_status: &str,
+    payment_amount_e9s: i64,
+    start_timestamp_ns: i64,
+    end_timestamp_ns: i64,
+) {
+    let stripe_payment_intent_id: Option<&str> = Some(payment_intent_id);
+    let stripe_customer_id: Option<&str> = None;
+    let payment_method: &str = "stripe";
+    let status: &str = "requested";
+    let ssh_pubkey: &str = "ssh-key";
+    let contact: &str = "contact";
+    let memo: &str = "memo";
+    let created_at_ns: i64 = 0;
+
+    sqlx::query!(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        contract_id,
+        requester_pubkey,
+        ssh_pubkey,
+        contact,
+        provider_pubkey,
+        offering_id,
+        payment_amount_e9s,
+        start_timestamp_ns,
+        end_timestamp_ns,
+        memo,
+        created_at_ns,
+        status,
+        payment_method,
+        stripe_payment_intent_id,
+        stripe_customer_id,
+        payment_status
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
 async fn test_get_user_contracts_empty() {
     let db = setup_test_db().await;
@@ -731,6 +776,7 @@ async fn test_cancel_contract_success_requested() {
         &contract_id,
         &requester_pk,
         Some("User requested cancellation"),
+        None,
     )
     .await
     .unwrap();
@@ -783,7 +829,9 @@ async fn test_cancel_contract_success_all_cancellable_statuses() {
         )
         .await;
 
-        let result = db.cancel_contract(&contract_id, &requester_pk, None).await;
+        let result = db
+            .cancel_contract(&contract_id, &requester_pk, None, None)
+            .await;
         assert!(
             result.is_ok(),
             "Cancellation should succeed for status '{}', but got error: {:?}",
@@ -822,7 +870,9 @@ async fn test_cancel_contract_rejects_unauthorized_user() {
     )
     .await;
 
-    let result = db.cancel_contract(&contract_id, &attacker_pk, None).await;
+    let result = db
+        .cancel_contract(&contract_id, &attacker_pk, None, None)
+        .await;
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -858,7 +908,9 @@ async fn test_cancel_contract_rejects_provider_cancellation() {
     )
     .await;
 
-    let result = db.cancel_contract(&contract_id, &provider_pk, None).await;
+    let result = db
+        .cancel_contract(&contract_id, &provider_pk, None, None)
+        .await;
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -888,7 +940,9 @@ async fn test_cancel_contract_fails_for_non_cancellable_statuses() {
         )
         .await;
 
-        let result = db.cancel_contract(&contract_id, &requester_pk, None).await;
+        let result = db
+            .cancel_contract(&contract_id, &requester_pk, None, None)
+            .await;
         assert!(
             result.is_err(),
             "Cancellation should fail for status '{}'",
@@ -912,7 +966,7 @@ async fn test_cancel_contract_not_found_includes_hex_id() {
     let requester_pk = vec![1u8; 32];
 
     let result = db
-        .cancel_contract(&nonexistent_id, &requester_pk, None)
+        .cancel_contract(&nonexistent_id, &requester_pk, None, None)
         .await;
     assert!(result.is_err());
 
@@ -1261,4 +1315,240 @@ async fn test_accept_contract_not_found() {
     // Should fail because contract doesn't exist
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not found"));
+}
+
+// Refund calculation tests
+#[test]
+fn test_calculate_prorated_refund_full_refund_before_start() {
+    // Contract hasn't started yet, should get full refund
+    let payment_amount_e9s = 1_000_000_000; // 1 DCT = 100 USD
+    let start_timestamp_ns = 1000;
+    let end_timestamp_ns = 2000;
+    let current_timestamp_ns = 500; // Before start
+
+    let refund = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(start_timestamp_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+    );
+
+    assert_eq!(refund, payment_amount_e9s);
+}
+
+#[test]
+fn test_calculate_prorated_refund_half_used() {
+    // Contract is 50% through, should get 50% refund
+    let payment_amount_e9s = 1_000_000_000;
+    let start_timestamp_ns = 1000;
+    let end_timestamp_ns = 3000; // Duration: 2000ns
+    let current_timestamp_ns = 2000; // Halfway through
+
+    let refund = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(start_timestamp_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+    );
+
+    // Should be approximately 50% (500M e9s)
+    assert!(refund >= 499_000_000 && refund <= 501_000_000);
+}
+
+#[test]
+fn test_calculate_prorated_refund_no_refund_after_end() {
+    // Contract has already ended, no refund
+    let payment_amount_e9s = 1_000_000_000;
+    let start_timestamp_ns = 1000;
+    let end_timestamp_ns = 2000;
+    let current_timestamp_ns = 3000; // After end
+
+    let refund = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(start_timestamp_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+    );
+
+    assert_eq!(refund, 0);
+}
+
+#[test]
+fn test_calculate_prorated_refund_missing_timestamps() {
+    // Missing timestamps should return 0
+    let payment_amount_e9s = 1_000_000_000;
+    let current_timestamp_ns = 1500;
+
+    let refund = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        None,
+        Some(2000),
+        current_timestamp_ns,
+    );
+    assert_eq!(refund, 0);
+
+    let refund = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(1000),
+        None,
+        current_timestamp_ns,
+    );
+    assert_eq!(refund, 0);
+}
+
+#[test]
+fn test_calculate_prorated_refund_90_percent_remaining() {
+    // Used 10%, should get 90% refund
+    let payment_amount_e9s = 1_000_000_000;
+    let start_timestamp_ns = 0;
+    let end_timestamp_ns = 10_000; // Duration: 10,000ns
+    let current_timestamp_ns = 1_000; // 10% used
+
+    let refund = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(start_timestamp_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+    );
+
+    // Should be approximately 90% (900M e9s)
+    assert!(refund >= 899_000_000 && refund <= 901_000_000);
+}
+
+#[tokio::test]
+async fn test_cancel_contract_with_dct_payment_no_refund() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![100u8; 32];
+
+    // Insert DCT payment contract
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
+
+    // Cancel without Stripe client (DCT payment)
+    let result = db
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
+        .await;
+
+    assert!(result.is_ok());
+
+    // Verify contract is cancelled
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    assert_eq!(contract.payment_status, "succeeded"); // DCT payment status unchanged
+    assert!(contract.refund_amount_e9s.is_none());
+    assert!(contract.stripe_refund_id.is_none());
+}
+
+#[tokio::test]
+async fn test_cancel_contract_stripe_payment_without_client() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![101u8; 32];
+
+    // Insert Stripe contract with succeeded payment
+    insert_stripe_contract_with_timestamps(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        "pi_test_123",
+        "succeeded",
+        1000000000,
+        0,
+        10000,
+    )
+    .await;
+
+    // Cancel without Stripe client (refund amount calculated but not processed)
+    let result = db
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
+        .await;
+
+    assert!(result.is_ok());
+
+    // Verify contract is cancelled with refund amount but no refund ID
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    assert_eq!(contract.payment_status, "refunded");
+    assert!(contract.refund_amount_e9s.is_some());
+    assert!(contract.stripe_refund_id.is_none()); // No client to process refund
+}
+
+#[tokio::test]
+async fn test_cancel_contract_unauthorized() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let unauthorized_pk = vec![99u8; 32];
+    let contract_id = vec![102u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
+
+    // Attempt cancel by unauthorized user
+    let result = db
+        .cancel_contract(&contract_id, &unauthorized_pk, Some("Unauthorized"), None)
+        .await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unauthorized"));
+
+    // Verify contract still in original status
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "requested");
+}
+
+#[tokio::test]
+async fn test_cancel_contract_invalid_status() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![103u8; 32];
+
+    // Insert contract in non-cancellable status
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned", // Not cancellable
+    )
+    .await;
+
+    // Attempt cancel
+    let result = db
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
+        .await;
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("cannot be cancelled"));
+
+    // Verify contract still in original status
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "provisioned");
 }
