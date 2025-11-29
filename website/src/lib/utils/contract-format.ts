@@ -48,3 +48,35 @@ export function derivePrincipalFromPubkey(publicKeyBytes: Uint8Array): Principal
 	// Create self-authenticating principal from DER-encoded key
 	return Principal.selfAuthenticating(derEncodedKey);
 }
+
+/**
+ * Calculate actual runtime duration of a contract in nanoseconds.
+ * For cancelled/completed: uses status_updated_at_ns - created_at_ns
+ * For active: uses current time - created_at_ns
+ */
+export function calculateActualDuration(
+	created_at_ns: number,
+	status: string,
+	status_updated_at_ns?: number
+): number {
+	if (status === 'cancelled' || status === 'completed') {
+		return status_updated_at_ns ? status_updated_at_ns - created_at_ns : 0;
+	}
+	return Date.now() * 1_000_000 - created_at_ns;
+}
+
+/**
+ * Format duration from nanoseconds to human-readable string.
+ */
+export function formatDuration(duration_ns: number): string {
+	const hours = duration_ns / (1_000_000_000 * 60 * 60);
+	if (hours < 1) {
+		const minutes = duration_ns / (1_000_000_000 * 60);
+		return `${minutes.toFixed(1)}m`;
+	}
+	if (hours < 24) {
+		return `${hours.toFixed(1)}h`;
+	}
+	const days = hours / 24;
+	return `${days.toFixed(1)}d`;
+}

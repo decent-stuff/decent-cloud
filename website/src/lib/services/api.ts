@@ -516,6 +516,7 @@ export interface Contract {
 	refund_amount_e9s?: number;
 	stripe_refund_id?: string;
 	refund_created_at_ns?: number;
+	status_updated_at_ns?: number;
 }
 
 export interface RentalRequestParams {

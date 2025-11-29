@@ -24,6 +24,8 @@
 		formatContractDate,
 		computePubkey,
 		derivePrincipalFromPubkey,
+		calculateActualDuration,
+		formatDuration,
 	} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import type { IdentityInfo } from "$lib/stores/auth";
@@ -606,9 +608,18 @@
 							</p>
 							{#if contract.duration_hours}
 								<p class="text-sm text-white/60">
-									Duration: {contract.duration_hours} hours
+									Planned: {contract.duration_hours}h
 								</p>
 							{/if}
+							<p class="text-sm text-white/60">
+								Actual runtime: {formatDuration(
+									calculateActualDuration(
+										contract.created_at_ns,
+										contract.status,
+										contract.status_updated_at_ns,
+									),
+								)}
+							</p>
 						</div>
 					{/each}
 				</div>
@@ -664,9 +675,18 @@
 							</p>
 							{#if contract.duration_hours}
 								<p class="text-sm text-white/60">
-									Duration: {contract.duration_hours} hours
+									Planned: {contract.duration_hours}h
 								</p>
 							{/if}
+							<p class="text-sm text-white/60">
+								Actual runtime: {formatDuration(
+									calculateActualDuration(
+										contract.created_at_ns,
+										contract.status,
+										contract.status_updated_at_ns,
+									),
+								)}
+							</p>
 						</div>
 					{/each}
 				</div>
