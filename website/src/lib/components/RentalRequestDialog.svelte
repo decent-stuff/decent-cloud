@@ -9,6 +9,7 @@
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 	import { loadStripe, type Stripe, type StripeElements, type StripeCardElement } from "@stripe/stripe-js";
 	import { onMount } from "svelte";
+	import { isStripeSupportedCurrency } from "$lib/utils/stripe-currencies";
 
 	interface Props {
 		offering: Offering | null;
@@ -30,6 +31,11 @@
 	let elements: StripeElements | null = null;
 	let cardElement: StripeCardElement | null = null;
 	let cardMountPoint = $state<HTMLDivElement | undefined>();
+
+	// Check if Stripe is supported for this offering's currency
+	let isStripeAvailable = $derived(
+		offering ? isStripeSupportedCurrency(offering.currency) : false
+	);
 
 	onMount(async () => {
 		const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
@@ -297,14 +303,23 @@
 						</button>
 						<button
 							type="button"
-							onclick={() => paymentMethod = "stripe"}
+							onclick={() => isStripeAvailable && (paymentMethod = "stripe")}
+							disabled={!isStripeAvailable}
 							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod === 'stripe'
 								? 'bg-blue-500/20 border-blue-500 text-white'
-								: 'bg-white/10 border-white/20 text-white/60 hover:border-white/40'}"
+								: isStripeAvailable
+									? 'bg-white/10 border-white/20 text-white/60 hover:border-white/40'
+									: 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'}"
+							title={!isStripeAvailable ? `Stripe does not support ${offering?.currency} currency` : ''}
 						>
 							Credit Card
 						</button>
 					</div>
+					{#if !isStripeAvailable}
+						<p class="text-xs text-yellow-400/80 mt-2">
+							Stripe payment is not available for {offering?.currency} currency
+						</p>
+					{/if}
 				</fieldset>
 
 				<!-- Stripe Card Element -->

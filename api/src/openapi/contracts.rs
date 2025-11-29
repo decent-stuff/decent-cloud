@@ -11,12 +11,24 @@ use std::sync::Arc;
 pub struct ContractsApi;
 
 /// Helper function to create Stripe payment intent and update contract
-async fn create_stripe_payment_intent(db: &Database, contract_id: &[u8]) -> Result<String, String> {
+async fn create_stripe_payment_intent(
+    db: &Database,
+    contract_id: &[u8],
+    currency: &str,
+) -> Result<String, String> {
     let contract = db
         .get_contract(contract_id)
         .await
         .map_err(|e| format!("Failed to retrieve contract: {}", e))?
         .ok_or_else(|| "Contract created but not found".to_string())?;
+
+    // Validate currency is supported by Stripe
+    if !dcc_common::is_stripe_supported_currency(currency) {
+        return Err(format!(
+            "Currency '{}' is not supported by Stripe",
+            currency
+        ));
+    }
 
     let stripe_client = crate::stripe_client::StripeClient::new()
         .map_err(|e| format!("Failed to initialize Stripe client: {}", e))?;
@@ -24,7 +36,7 @@ async fn create_stripe_payment_intent(db: &Database, contract_id: &[u8]) -> Resu
     // Convert e9s to cents (divide by 10^7)
     let amount_cents = contract.payment_amount_e9s / 10_000_000;
     let (payment_intent_id, client_secret) = stripe_client
-        .create_payment_intent(amount_cents, "usd")
+        .create_payment_intent(amount_cents, &currency.to_lowercase())
         .await
         .map_err(|e| format!("Failed to create Stripe payment intent: {}", e))?;
 
@@ -154,10 +166,30 @@ impl ContractsApi {
             .clone()
             .unwrap_or_else(|| "dct".to_string());
 
+        // Get offering to retrieve currency
+        let offering = match db.get_offering(params.0.offering_db_id).await {
+            Ok(Some(offering)) => offering,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Offering not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to retrieve offering: {}", e)),
+                })
+            }
+        };
+
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
                 let client_secret = if payment_method.to_lowercase() == "stripe" {
-                    match create_stripe_payment_intent(&db, &contract_id).await {
+                    match create_stripe_payment_intent(&db, &contract_id, &offering.currency).await
+                    {
                         Ok(secret) => Some(secret),
                         Err(e) => {
                             return Json(ApiResponse {
