@@ -49,7 +49,7 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 # Install cargo tools using binstall for faster installation
-RUN cargo binstall cargo-make cargo-nextest
+RUN cargo binstall cargo-make cargo-nextest sqlx-cli
 
 # Configure npm to use user-specific global directory and install Claude Code and Happy Coder
 RUN mkdir -p ~/.npm-global \
