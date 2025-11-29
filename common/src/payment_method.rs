@@ -60,9 +60,18 @@ mod tests {
     fn test_payment_method_from_str_valid() {
         assert_eq!("dct".parse::<PaymentMethod>().unwrap(), PaymentMethod::DCT);
         assert_eq!("DCT".parse::<PaymentMethod>().unwrap(), PaymentMethod::DCT);
-        assert_eq!("stripe".parse::<PaymentMethod>().unwrap(), PaymentMethod::Stripe);
-        assert_eq!("Stripe".parse::<PaymentMethod>().unwrap(), PaymentMethod::Stripe);
-        assert_eq!("STRIPE".parse::<PaymentMethod>().unwrap(), PaymentMethod::Stripe);
+        assert_eq!(
+            "stripe".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Stripe
+        );
+        assert_eq!(
+            "Stripe".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Stripe
+        );
+        assert_eq!(
+            "STRIPE".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Stripe
+        );
     }
 
     #[test]
