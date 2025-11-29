@@ -18,6 +18,9 @@ x-api-base: &api-base
     - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
     - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30} # Used for the sync service only
     - LEDGER_DIR=/data/ledger
+    - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+    - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+    - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
   volumes:
     - ../data/api-data-prod:/data
 
@@ -32,6 +35,8 @@ services:
     restart: unless-stopped
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-dev}
+      # NOTE: VITE_* env vars must be set at BUILD time (before npm run build)
+      # Not at runtime - they're baked into the static build
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
