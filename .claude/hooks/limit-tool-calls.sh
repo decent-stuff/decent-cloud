@@ -14,9 +14,19 @@ if ! command -v jq &>/dev/null; then
     exit 0
 fi
 
-# Extract session ID and project directory
-SESSION_ID=$(echo "$CONTEXT" | jq -r '.session_id // "unknown"')
-PROJECT_DIR=$(echo "$CONTEXT" | jq -r '.cwd // "."')
+# Extract session ID from JSON input
+# Disable errexit temporarily to handle invalid JSON gracefully
+set +e
+SESSION_ID=$(echo "$CONTEXT" | jq -r '.session_id // "unknown"' 2>/dev/null)
+set -e
+
+# Fallback to default if jq parsing failed
+if [[ -z "$SESSION_ID" ]] || [[ "$SESSION_ID" == "null" ]]; then
+    SESSION_ID="unknown"
+fi
+
+# Use environment variable for project directory
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
 # State file to track tool calls per session
 STATE_DIR="${PROJECT_DIR}/.claude/hook-state"
@@ -49,7 +59,7 @@ if [[ $NEW_COUNT -gt $MAX_CALLS ]]; then
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "permissionDecisionReason": "LOOP DETECTED: Tool call limit exceeded ($NEW_COUNT/$MAX_CALLS). You have made $NEW_CALLS tool calls without completing your task. This indicates an infinite loop. Update the spec with blockers and EXIT immediately. Do NOT retry."
+    "permissionDecisionReason": "LOOP DETECTED: Tool call limit exceeded ($NEW_COUNT/$MAX_CALLS). You have made $NEW_COUNT tool calls without completing your task. This indicates an infinite loop. Update the spec with blockers and EXIT immediately. Do NOT retry."
   }
 }
 EOF
