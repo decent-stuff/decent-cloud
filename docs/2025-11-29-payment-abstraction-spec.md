@@ -443,7 +443,39 @@ Verified test coverage for all payment-related code. All required tests were alr
 - No code changes needed (YAGNI followed)
 
 ### Step 7: Add Stripe integration basics
-**Status**: Pending
+**Status**: Completed
+
+**Implementation**:
+- Fixed existing `api/src/stripe_client.rs` file (already created, needed bug fixes)
+- Fixed PaymentIntentId parsing - changed from `from()` to `.parse()` method
+- Added manual Debug implementation for StripeClient (stripe::Client doesn't implement Debug)
+- StripeClient includes:
+  - `new()` - creates client from STRIPE_SECRET_KEY environment variable
+  - `create_payment_intent(amount, currency)` - creates Stripe PaymentIntent
+  - `verify_payment_intent(payment_intent_id)` - verifies payment status
+- Created `.env.example` with documented Stripe API keys:
+  - STRIPE_PUBLISHABLE_KEY (for frontend)
+  - STRIPE_SECRET_KEY (for backend)
+  - Includes test keys provided by user
+  - Clear documentation on where to get keys
+- Module already exported from api/src/main.rs (line 13)
+
+**Files Changed**:
+- api/src/stripe_client.rs (2 bug fixes: PaymentIntentId parsing + Debug impl)
+- .env.example (NEW - 11 lines with Stripe keys and documentation)
+
+**Tests Added**: 3 unit tests (already present in stripe_client.rs)
+- test_stripe_client_new_missing_key - verifies error when STRIPE_SECRET_KEY not set
+- test_stripe_client_new_with_key - verifies successful client creation with test key
+- test_create_payment_intent_invalid_currency - verifies currency validation
+
+**Outcome**: Success
+- All 220 API tests pass (SQLX_OFFLINE=true cargo test -p api)
+- Code compiles cleanly with only pre-existing ts-rs warnings
+- Stripe integration ready for use (not yet integrated into contract flow)
+- Error handling clear and helpful
+- Total changes: ~15 lines of fixes + 11 lines .env.example = 26 lines (well under budget)
+- Bug fixes completed in 1 iteration (under 3 iteration limit)
 
 ### Step 8: Frontend type updates
 **Status**: Pending

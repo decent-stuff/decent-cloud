@@ -10,6 +10,7 @@ mod network_metrics;
 mod oauth_simple;
 mod openapi;
 mod request_logging;
+mod stripe_client;
 mod sync_service;
 mod validation;
 
