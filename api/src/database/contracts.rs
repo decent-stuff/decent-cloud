@@ -270,6 +270,18 @@ impl Database {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Offering not found"))?;
 
+        // Validate offering has valid currency (fail-fast principle)
+        if offering.currency.is_empty() || offering.currency == "???" {
+            return Err(anyhow::anyhow!(
+                "Offering {} has invalid currency '{}'. Cannot create contract.",
+                offering.offering_id, offering.currency
+            ));
+        }
+
+        // DEBUG: Log offering currency to diagnose currency mismatch issue
+        eprintln!("DEBUG create_rental_request: offering_id={}, currency={}, monthly_price={}",
+                  offering.offering_id, offering.currency, offering.monthly_price);
+
         // Get user's SSH key and contact if not provided
         let ssh_pubkey = if let Some(key) = params.ssh_pubkey {
             key

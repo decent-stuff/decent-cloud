@@ -76,6 +76,31 @@ This causes:
 - **Verification:** All unit and integration tests passing
 - **Outcome:** Success
 
+## Long-Term Fix (Added After User Feedback)
+
+**User Feedback:** "Where's the long-term fix?"
+
+The initial fix only changed the DEFAULT value, but didn't prevent the root cause.
+
+**Root Cause Analysis:**
+- Offerings can have any currency value (including empty, '???', or invalid codes)
+- Contract creation blindly copies offering.currency without validation
+- If offering has wrong currency, contract inherits wrong currency
+- DEFAULT '???' makes errors visible but doesn't PREVENT them
+
+**Long-Term Solution - Added Validation:**
+1. Added currency validation in `create_rental_request()` (contracts.rs:273-279)
+2. Fails fast if offering.currency is empty or '???'
+3. Returns clear error message pointing to the offering
+4. Prevents contracts from being created with invalid currency
+
+**Additional Migration 015:**
+- Updates example offerings to have correct currencies for testing
+- compute-001: USD, compute-002: EUR
+- Ensures test data has realistic currency values
+
+This follows the fail-fast principle correctly: detect errors at contract creation time, not silently use wrong values.
+
 ## Completion Summary
 **Completed:** 2025-11-29 | **Agents:** 1/15 | **Steps:** 4/4
 Changes: 3 files, +84/-2 lines, 1 commit
