@@ -6,8 +6,9 @@
 -- Step 1: Drop existing index
 DROP INDEX IF EXISTS idx_contract_currency;
 
--- Step 2: Add new column without DEFAULT
-ALTER TABLE contract_sign_requests ADD COLUMN currency_v2 TEXT NOT NULL;
+-- Step 2: Add new column with temporary DEFAULT (required for NOT NULL in SQLite)
+-- The DEFAULT is only for migration; application code will not have a default
+ALTER TABLE contract_sign_requests ADD COLUMN currency_v2 TEXT NOT NULL DEFAULT '???';
 
 -- Step 3: Copy existing data from old column to new column
 UPDATE contract_sign_requests SET currency_v2 = currency;
