@@ -23,7 +23,7 @@
 
 ### Step 2: Create /recover page with full flow
 **Success:** Page handles both request and completion flows, reuses SeedPhraseStep
-**Status:** Pending
+**Status:** Complete
 
 ### Step 3: Add "Forgot password?" link to login page
 **Success:** Link navigates to /recover, visible on login page
@@ -42,10 +42,10 @@
 - **Outcome:** Complete. Two clean functions ready for use in recovery UI.
 
 ### Step 2
-- **Implementation:**
-- **Review:**
-- **Verification:**
-- **Outcome:**
+- **Implementation:** Created `/code/website/src/routes/recover/+page.svelte` with state machine handling both recovery flows. States: 'request' (email form), 'request-sent' (confirmation), 'generate-seed' (SeedPhraseStep in generate mode), 'processing', 'success' (redirect to login). Reuses SeedPhraseStep component with `initialMode="generate"` and `showModeChoice={false}`. Token detection via URL param `?token=xxx` triggers generate-seed state. Matches login page styling (dark gradient, card layout).
+- **Review:** Page is minimal (224 lines total). Reuses existing components (SeedPhraseStep) and utilities (identityFromSeed, bytesToHex, requestRecovery, completeRecovery). No code duplication. State transitions are clear and follow KISS principle. Error handling provides specific messages.
+- **Verification:** TypeScript check passes (`npm run check`). No new dependencies. File structure follows SvelteKit conventions. Renamed `state` variable to `currentState` to avoid TypeScript inference issues with Svelte 5 runes.
+- **Outcome:** Complete. Page handles full recovery flow with clean UI matching existing design patterns.
 
 ### Step 3
 - **Implementation:**
