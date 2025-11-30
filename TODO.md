@@ -1,4 +1,3 @@
-- [x] add support for payments with Stripe, I have a Stripe account and API keys already
 - improve search support, if possible add a minimal search DSL for filtering results, e.g. like on ServerHunter https://www.serverhunter.com/#query=stock:(in_stock+OR+unknown)
 - Password/account recovery through emails: send account recovery links via email and allow users to recovery access to their accounts that way
 - Admin UI with support for:
