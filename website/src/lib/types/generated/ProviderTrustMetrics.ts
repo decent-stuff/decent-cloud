@@ -75,4 +75,16 @@ has_critical_flags: boolean,
 /**
  * Human-readable list of exceeded thresholds
  */
-critical_flag_reasons: Array<string>, };
+critical_flag_reasons: Array<string>,
+/**
+ * Provider tenure classification: "new" (<5), "growing" (5-20), "established" (>20)
+ */
+provider_tenure: string,
+/**
+ * Ratio of actual contract duration to expected (avg_actual/avg_expected)
+ */
+avg_contract_duration_ratio: number | undefined,
+/**
+ * Percentage of requests that received no response (>7 days old, still "requested")
+ */
+no_response_rate_pct: number | undefined, };

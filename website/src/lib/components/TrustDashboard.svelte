@@ -44,6 +44,31 @@
 
 	// Convert trust_score from bigint to number safely
 	const trustScore = $derived(Number(metrics.trust_score));
+
+	// Provider tenure badge helpers
+	function getTenureBadgeColor(tenure: string): string {
+		if (tenure === 'established') return 'bg-green-500/20 border-green-500/50 text-green-300';
+		if (tenure === 'growing') return 'bg-blue-500/20 border-blue-500/50 text-blue-300';
+		return 'bg-purple-500/20 border-purple-500/50 text-purple-300';
+	}
+
+	function getTenureLabel(tenure: string): string {
+		if (tenure === 'established') return 'Established Provider';
+		if (tenure === 'growing') return 'Growing Provider';
+		return 'New Provider';
+	}
+
+	// Format contract duration ratio as descriptive text
+	function formatDurationRatio(ratio: number | undefined): string {
+		if (ratio === undefined || ratio === null) return 'N/A';
+		const percentage = (ratio * 100).toFixed(0);
+		return `Contracts run ${percentage}% of expected duration`;
+	}
+
+	// Determine if no-response rate is concerning
+	function isNoResponseConcerning(rate: number | undefined): boolean {
+		return rate !== undefined && rate !== null && rate > 10;
+	}
 </script>
 
 <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/10">
@@ -101,17 +126,21 @@
 		</div>
 	</div>
 
-	<!-- Provider Status Badge -->
-	{#if metrics.is_new_provider}
-		<div
-			class="flex items-center gap-2 px-3 py-2 bg-blue-500/20 border border-blue-500/50 rounded-lg mb-4"
-		>
-			<span class="text-blue-400">&#x1F195;</span>
-			<span class="text-sm text-blue-300"
-				>New Provider - Fewer than 5 completed contracts. Track record still building.</span
-			>
-		</div>
-	{/if}
+	<!-- Provider Tenure Badge -->
+	<div
+		class="flex items-center gap-2 px-3 py-2 border rounded-lg mb-4 {getTenureBadgeColor(
+			metrics.provider_tenure
+		)}"
+	>
+		<span class="text-sm font-medium">{getTenureLabel(metrics.provider_tenure)}</span>
+		{#if metrics.provider_tenure === 'new'}
+			<span class="text-xs opacity-70">(&lt;5 contracts)</span>
+		{:else if metrics.provider_tenure === 'growing'}
+			<span class="text-xs opacity-70">(5-20 contracts)</span>
+		{:else}
+			<span class="text-xs opacity-70">(&gt;20 contracts)</span>
+		{/if}
+	</div>
 
 	<!-- Critical Flags Section -->
 	{#if metrics.has_critical_flags && metrics.critical_flag_reasons.length > 0}
@@ -140,6 +169,30 @@
 				{metrics.avg_response_time_hours < 1
 					? `${Math.round(metrics.avg_response_time_hours * 60)} minutes`
 					: `${metrics.avg_response_time_hours.toFixed(1)} hours`}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Contract Duration Ratio -->
+	{#if metrics.avg_contract_duration_ratio !== undefined}
+		<div class="border-t border-white/10 pt-4 mt-4">
+			<div class="text-xs text-white/50 mb-1">Contract Duration Performance</div>
+			<div class="text-sm">{formatDurationRatio(metrics.avg_contract_duration_ratio)}</div>
+		</div>
+	{/if}
+
+	<!-- No Response Rate with Warning -->
+	{#if metrics.no_response_rate_pct !== undefined}
+		<div class="border-t border-white/10 pt-4 mt-4">
+			<div class="text-xs text-white/50 mb-1">No Response Rate</div>
+			<div class="flex items-center gap-2">
+				<div class="text-sm">{metrics.no_response_rate_pct.toFixed(1)}%</div>
+				{#if isNoResponseConcerning(metrics.no_response_rate_pct)}
+					<span
+						class="text-xs px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 rounded"
+						>Concern: &gt;10%</span
+					>
+				{/if}
 			</div>
 		</div>
 	{/if}
