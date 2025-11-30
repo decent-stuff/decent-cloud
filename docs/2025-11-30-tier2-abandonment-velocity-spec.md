@@ -1,13 +1,13 @@
 # Tier 2: Abandonment Velocity Metric
-**Status:** In Progress
+**Status:** Complete ✅
 
 ## Requirements
 ### Must-have
-- [ ] Calculate abandonment velocity: ratio of recent cancellation rate vs historical baseline
-- [ ] Add `abandonment_velocity` field to `ProviderTrustMetrics` struct
-- [ ] Display metric in TrustDashboard with appropriate warning styling
-- [ ] Unit tests covering positive/negative paths and edge cases
-- [ ] Update TODO.md: remove infeasible Tier 2 metrics, mark this complete
+- [x] Calculate abandonment velocity: ratio of recent cancellation rate vs historical baseline
+- [x] Add `abandonment_velocity` field to `ProviderTrustMetrics` struct
+- [x] Display metric in TrustDashboard with appropriate warning styling
+- [x] Unit tests covering positive/negative paths and edge cases
+- [x] Update TODO.md: remove infeasible Tier 2 metrics, mark this complete
 
 ### Nice-to-have
 - [ ] Include abandonment velocity in trust score calculation (penalty for high velocity)
@@ -41,11 +41,11 @@ Where:
 
 ### Step 2: Frontend Display
 **Success:** TrustDashboard shows abandonment velocity with warning styling for high values
-**Status:** Pending
+**Status:** Complete
 
 ### Step 3: Unit Tests + Cleanup
 **Success:** Tests cover all edge cases, TODO.md updated, cargo make clean
-**Status:** Pending
+**Status:** Complete
 
 ## Execution Log
 
