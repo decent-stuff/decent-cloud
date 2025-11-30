@@ -416,36 +416,6 @@ async fn test_create_rental_request_invalid_payment_method() {
 }
 
 #[tokio::test]
-async fn test_create_rental_request_defaults_to_dct() {
-    let db = setup_test_db().await;
-    let user_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-
-    // Create offering
-    let provider_pk_clone = provider_pk.clone();
-    let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-4', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
-        provider_pk_clone
-    )
-    .fetch_one(&db.pool)
-    .await
-    .unwrap();
-
-    let params = RentalRequestParams {
-        offering_db_id: offering_id,
-        ssh_pubkey: Some("ssh-key".to_string()),
-        contact_method: Some("email:test@example.com".to_string()),
-        request_memo: Some("Test rental".to_string()),
-        duration_hours: None,
-        payment_method: None, // Not specified
-    };
-
-    let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.payment_method, "dct"); // Should default to "dct"
-}
-
-#[tokio::test]
 async fn test_list_contracts_pagination() {
     let db = setup_test_db().await;
 
@@ -497,7 +467,7 @@ async fn test_create_rental_request_success() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: Some("Test rental".to_string()),
         duration_hours: None,
-        payment_method: None,
+        payment_method: Some("stripe".to_string()),
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -515,7 +485,7 @@ async fn test_create_rental_request_success() {
     assert_eq!(contract.requester_contact, "email:test@example.com");
     assert_eq!(contract.request_memo, "Test rental");
     assert_eq!(contract.payment_amount_e9s, 100_000_000_000);
-    assert_eq!(contract.payment_method, "dct");
+    assert_eq!(contract.payment_method, "stripe");
     assert_eq!(contract.stripe_payment_intent_id, None);
     assert_eq!(contract.stripe_customer_id, None);
 }
@@ -555,7 +525,7 @@ async fn test_create_rental_request_with_defaults() {
         contact_method: None,
         request_memo: None,
         duration_hours: None,
-        payment_method: None,
+        payment_method: Some("dct".to_string()),
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -578,7 +548,7 @@ async fn test_create_rental_request_offering_not_found() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: None,
         duration_hours: None,
-        payment_method: None,
+        payment_method: Some("dct".to_string()),
     };
 
     let result = db.create_rental_request(&user_pk, params).await;
@@ -611,7 +581,7 @@ async fn test_create_rental_request_calculates_price() {
         contact_method: Some("contact".to_string()),
         request_memo: None,
         duration_hours: None,
-        payment_method: None,
+        payment_method: Some("dct".to_string()),
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -619,6 +589,40 @@ async fn test_create_rental_request_calculates_price() {
 
     // 499.99 * 1_000_000_000 = 499_990_000_000
     assert_eq!(contract.payment_amount_e9s, 499_990_000_000);
+}
+
+#[tokio::test]
+async fn test_create_rental_request_eur_stripe() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Create offering with EUR currency
+    let provider_pk_clone = provider_pk.clone();
+    let offering_id = sqlx::query_scalar!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-eur-1', 'EU Server', 'EUR', 89.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', 0, 0) RETURNING id",
+        provider_pk_clone
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some("ssh-key".to_string()),
+        contact_method: Some("email:eu@example.com".to_string()),
+        request_memo: Some("EU rental".to_string()),
+        duration_hours: Some(720),
+        payment_method: Some("stripe".to_string()),
+    };
+
+    let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    assert_eq!(contract.currency, "EUR");
+    assert_eq!(contract.payment_method, "stripe");
+    assert_eq!(contract.payment_amount_e9s, 89_990_000_000);
+    assert_eq!(contract.payment_status, "pending"); // Stripe payments start as pending
 }
 
 #[tokio::test]
