@@ -37,7 +37,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN chown -R ubuntu:ubuntu $HOME /usr/local/cargo /usr/local/rustup
 
 # Install Playwright system dependencies (requires root)
-RUN npx playwright install-deps chromium
+RUN npx playwright install-deps chromium && chown -R ubuntu:ubuntu /home/ubuntu
 
 # Switch to non-root user
 USER ubuntu
