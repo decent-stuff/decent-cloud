@@ -355,6 +355,13 @@
 				<span class="text-white font-medium">@{createdAccount.username}</span>
 			</p>
 
+			{#if email}
+				<div class="p-4 bg-purple-500/20 border border-purple-500/30 rounded-lg">
+					<p class="text-purple-200 text-sm font-medium">Check your email to verify your account</p>
+					<p class="text-purple-300/80 text-xs mt-1">We sent a verification link to <span class="font-medium">{email}</span></p>
+				</div>
+			{/if}
+
 			<div class="pt-4">
 				<button
 					type="button"

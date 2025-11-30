@@ -455,6 +455,44 @@ export async function completeRecovery(token: string, publicKeyHex: string): Pro
 	return result.data;
 }
 
+/**
+ * Verify email address with token from verification email
+ * Sets email_verified=true for the account
+ */
+export async function verifyEmail(token: string): Promise<string> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/verify-email`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ token })
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Email verification failed (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			if (text) {
+				errorMessage = `Email verification failed (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
+			}
+		}
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<string> = await response.json();
+
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Email verification failed');
+	}
+
+	return result.data;
+}
+
 function bytesToHex(bytes: Uint8Array): string {
 	return Array.from(bytes)
 		.map((b) => b.toString(16).padStart(2, '0'))

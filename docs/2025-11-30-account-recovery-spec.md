@@ -112,10 +112,10 @@
 - **Outcome:** Complete. Registration flow now collects email address alongside username. Email is validated with basic HTML5 pattern, passed to backend API, and stored in accounts table. UI is clean and follows existing design patterns. Ready for Step 9 (verification pending/success UI).
 
 ### Step 9
-- **Implementation:**
-- **Review:**
-- **Verification:**
-- **Outcome:**
+- **Implementation:** Created `/code/website/src/routes/verify-email/+page.svelte` following recovery page pattern. Page handles three states: 'verifying' (shows loading spinner while calling verifyEmail API), 'success' (shows checkmark with success message and buttons to dashboard/login), 'error' (shows error message with link to login). Token read from URL `?token=xxx` parameter on mount. Added `verifyEmail(token: string)` function to `/code/website/src/lib/services/account-api.ts` following same pattern as completeRecovery (POST to /api/v1/accounts/verify-email, handle ApiResponse wrapper, detailed error messages). Updated AuthFlow.svelte success state to show purple notification box with message "Check your email to verify your account" and display the email address user registered with. User remains logged in after registration and can access dashboard immediately.
+- **Review:** Changes are minimal and follow existing patterns. verify-email page (134 lines) matches recovery page styling (dark gradient, card layout, same state transitions). verifyEmail() function (32 lines) reuses exact same error handling pattern as other API functions. AuthFlow.svelte change (5 lines) adds conditional email verification reminder only when email is present. No code duplication - all functionality extends existing patterns.
+- **Verification:** Ran `npm run check` - TypeScript compiles cleanly with 0 errors and 0 warnings. verify-email page uses same UI components and patterns as recovery page (loading spinner, gradient buttons, error/success states). Email verification message appears in AuthFlow success state with purple background matching app color scheme.
+- **Outcome:** Complete. Email verification flow implemented. Users see "check your email" message after registration with their email address displayed. Verification links from email navigate to /verify-email?token=xxx which calls backend API to set email_verified=true. All three states (verifying, success, error) handled with clear UI. TypeScript compilation passes. All 9 steps of mandatory email + verification complete.
 
 ## Blockers
 
