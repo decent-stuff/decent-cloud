@@ -110,7 +110,7 @@ impl From<Account> for AccountProfile {
 
 impl Database {
     /// Create a new account with initial public key
-    pub async fn create_account(&self, username: &str, public_key: &[u8]) -> Result<Account> {
+    pub async fn create_account(&self, username: &str, public_key: &[u8], email: &str) -> Result<Account> {
         if public_key.len() != 32 {
             bail!("Public key must be 32 bytes");
         }
@@ -120,9 +120,10 @@ impl Database {
 
         // Insert account
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        sqlx::query("INSERT INTO accounts (id, username) VALUES (?, ?)")
+        sqlx::query("INSERT INTO accounts (id, username, email) VALUES (?, ?, ?)")
             .bind(&account_id)
             .bind(username)
+            .bind(email)
             .execute(&mut *tx)
             .await?;
 
@@ -144,6 +145,29 @@ impl Database {
         self.get_account(&account_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Account not found after creation"))
+    }
+
+    /// Create an email verification token for an account
+    /// Returns the token bytes that should be sent via email
+    pub async fn create_email_verification_token(&self, account_id: &[u8], email: &str) -> Result<Vec<u8>> {
+        // Generate secure random token (32 bytes = 256 bits)
+        let token = uuid::Uuid::new_v4().as_bytes().to_vec();
+        let now = chrono::Utc::now().timestamp();
+        let expires_at = now + (24 * 3600); // 24 hours expiry
+
+        // Store token
+        sqlx::query(
+            "INSERT INTO email_verification_tokens (token, account_id, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(&token)
+        .bind(account_id)
+        .bind(email)
+        .bind(now)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(token)
     }
 
     /// Get account by ID

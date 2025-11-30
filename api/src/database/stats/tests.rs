@@ -299,7 +299,7 @@ async fn test_search_accounts_by_username() {
     let db = setup_test_db().await;
 
     // Create account
-    db.create_account("alice", &[1u8; 32]).await.unwrap();
+    db.create_account("alice", &[1u8; 32], "alice@example.com").await.unwrap();
 
     // Search for username
     let results = db.search_accounts("alice", 50).await.unwrap();
@@ -316,7 +316,7 @@ async fn test_search_accounts_by_display_name() {
     let db = setup_test_db().await;
 
     // Create account
-    let account = db.create_account("alice", &[1u8; 32]).await.unwrap();
+    let account = db.create_account("alice", &[1u8; 32], "alice@example.com").await.unwrap();
 
     // Update display name
     sqlx::query!(
@@ -345,7 +345,7 @@ async fn test_search_accounts_by_pubkey() {
     // Create account with specific pubkey
     let pubkey = vec![0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89];
     let pubkey_full = [pubkey.clone(), vec![0u8; 24]].concat();
-    db.create_account("bob", &pubkey_full).await.unwrap();
+    db.create_account("bob", &pubkey_full, "bob@example.com").await.unwrap();
 
     // Search by pubkey prefix (uppercase hex)
     let results = db.search_accounts("ABCD", 50).await.unwrap();
@@ -365,8 +365,8 @@ async fn test_search_accounts_with_reputation_and_activity() {
     // Create two accounts
     let pubkey1 = vec![1u8; 32];
     let pubkey2 = vec![2u8; 32];
-    db.create_account("alice", &pubkey1).await.unwrap();
-    db.create_account("alicia", &pubkey2).await.unwrap();
+    db.create_account("alice", &pubkey1, "alice@example.com").await.unwrap();
+    db.create_account("alicia", &pubkey2, "alicia@example.com").await.unwrap();
 
     // Add reputation for alice
     sqlx::query!(
@@ -421,9 +421,9 @@ async fn test_search_accounts_limit() {
     let db = setup_test_db().await;
 
     // Create 3 accounts
-    db.create_account("alice", &[1u8; 32]).await.unwrap();
-    db.create_account("alicia", &[2u8; 32]).await.unwrap();
-    db.create_account("alex", &[3u8; 32]).await.unwrap();
+    db.create_account("alice", &[1u8; 32], "alice@example.com").await.unwrap();
+    db.create_account("alicia", &[2u8; 32], "alicia@example.com").await.unwrap();
+    db.create_account("alex", &[3u8; 32], "alex@example.com").await.unwrap();
 
     // Search with limit of 2
     let results = db.search_accounts("al", 2).await.unwrap();
@@ -434,7 +434,7 @@ async fn test_search_accounts_limit() {
 async fn test_search_accounts_case_insensitive() {
     let db = setup_test_db().await;
 
-    db.create_account("alice", &[1u8; 32]).await.unwrap();
+    db.create_account("alice", &[1u8; 32], "alice@example.com").await.unwrap();
 
     // Search with different cases - should all match
     let results1 = db.search_accounts("alice", 50).await.unwrap();

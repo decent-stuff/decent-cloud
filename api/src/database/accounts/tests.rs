@@ -13,7 +13,7 @@ async fn test_create_account() {
     let username = "alice";
     let public_key = [1u8; 32];
 
-    let account = db.create_account(username, &public_key).await.unwrap();
+    let account = db.create_account(username, &public_key, "test@example.com").await.unwrap();
 
     assert_eq!(account.username, username);
     assert_eq!(account.id.len(), 16);
@@ -25,7 +25,7 @@ async fn test_get_account_by_username() {
     let username = "bob";
     let public_key = [2u8; 32];
 
-    db.create_account(username, &public_key).await.unwrap();
+    db.create_account(username, &public_key, "test@example.com").await.unwrap();
 
     let fetched = db.get_account_by_username(username).await.unwrap();
     assert!(fetched.is_some());
@@ -38,7 +38,7 @@ async fn test_get_account_with_keys() {
     let username = "charlie";
     let public_key = [3u8; 32];
 
-    db.create_account(username, &public_key).await.unwrap();
+    db.create_account(username, &public_key, "test@example.com").await.unwrap();
 
     let account_with_keys = db.get_account_with_keys(username).await.unwrap();
     assert!(account_with_keys.is_some());
@@ -56,7 +56,7 @@ async fn test_add_account_key() {
     let public_key1 = [4u8; 32];
     let public_key2 = [5u8; 32];
 
-    let account = db.create_account(username, &public_key1).await.unwrap();
+    let account = db.create_account(username, &public_key1, "test@example.com").await.unwrap();
 
     let new_key = db.add_account_key(&account.id, &public_key2).await.unwrap();
     assert_eq!(new_key.public_key, public_key2);
@@ -71,7 +71,7 @@ async fn test_max_keys_limit() {
     let username = "eve";
     let public_key1 = [6u8; 32];
 
-    let account = db.create_account(username, &public_key1).await.unwrap();
+    let account = db.create_account(username, &public_key1, "test@example.com").await.unwrap();
 
     // Add 9 more keys (total 10)
     for i in 0..9 {
@@ -93,7 +93,7 @@ async fn test_disable_account_key() {
     let public_key1 = [8u8; 32];
     let public_key2 = [9u8; 32];
 
-    let account = db.create_account(username, &public_key1).await.unwrap();
+    let account = db.create_account(username, &public_key1, "test@example.com").await.unwrap();
     let key2 = db.add_account_key(&account.id, &public_key2).await.unwrap();
 
     let keys = db.get_account_keys(&account.id).await.unwrap();
@@ -128,7 +128,7 @@ async fn test_cannot_disable_last_key() {
     let username = "grace";
     let public_key = [10u8; 32];
 
-    let account = db.create_account(username, &public_key).await.unwrap();
+    let account = db.create_account(username, &public_key, "test@example.com").await.unwrap();
     let keys = db.get_account_keys(&account.id).await.unwrap();
     let key_id = keys[0].id.clone();
 
@@ -246,7 +246,7 @@ async fn test_create_oauth_account() {
     let db = create_test_db().await;
 
     // Create a regular account first
-    let account = db.create_account("testuser", &[0u8; 32]).await.unwrap();
+    let account = db.create_account("testuser", &[0u8; 32], "test@example.com").await.unwrap();
 
     // Create OAuth link
     let oauth_acc = db
@@ -269,7 +269,7 @@ async fn test_create_oauth_account() {
 async fn test_create_oauth_account_duplicate_external_id() {
     let db = create_test_db().await;
 
-    let account = db.create_account("testuser", &[0u8; 32]).await.unwrap();
+    let account = db.create_account("testuser", &[0u8; 32], "test@example.com").await.unwrap();
 
     // Create first OAuth link
     db.create_oauth_account(
@@ -301,7 +301,7 @@ async fn test_create_oauth_account_duplicate_external_id() {
 async fn test_get_oauth_account() {
     let db = create_test_db().await;
 
-    let account = db.create_account("testuser", &[0u8; 32]).await.unwrap();
+    let account = db.create_account("testuser", &[0u8; 32], "test@example.com").await.unwrap();
 
     // Create OAuth link
     let created = db
@@ -341,7 +341,7 @@ async fn test_get_oauth_account_not_found() {
 async fn test_get_oauth_account_by_provider_and_external_id() {
     let db = create_test_db().await;
 
-    let account = db.create_account("testuser", &[0u8; 32]).await.unwrap();
+    let account = db.create_account("testuser", &[0u8; 32], "test@example.com").await.unwrap();
 
     // Create OAuth link
     let created = db
@@ -462,7 +462,7 @@ async fn test_create_oauth_linked_account_duplicate_username() {
     let db = create_test_db().await;
 
     // Create first account
-    db.create_account("duplicate", &[1u8; 32]).await.unwrap();
+    db.create_account("duplicate", &[1u8; 32], "test@example.com").await.unwrap();
 
     // Try to create OAuth account with same username
     let result = db
@@ -527,7 +527,7 @@ async fn test_usernames_preserve_case_but_unique_case_insensitive() {
 
     // Create account with specific case
     let account = db
-        .create_account("AliceWonderland", &[1u8; 32])
+        .create_account("AliceWonderland", &[1u8; 32], "test@example.com")
         .await
         .unwrap();
 
@@ -535,9 +535,9 @@ async fn test_usernames_preserve_case_but_unique_case_insensitive() {
     assert_eq!(account.username, "AliceWonderland");
 
     // Try to create account with same name but different case - should fail
-    let result_lower = db.create_account("alicewonderland", &[2u8; 32]).await;
-    let result_upper = db.create_account("ALICEWONDERLAND", &[3u8; 32]).await;
-    let result_mixed = db.create_account("aLiCeWoNdErLaNd", &[4u8; 32]).await;
+    let result_lower = db.create_account("alicewonderland", &[2u8; 32], "test2@example.com").await;
+    let result_upper = db.create_account("ALICEWONDERLAND", &[3u8; 32], "test3@example.com").await;
+    let result_mixed = db.create_account("aLiCeWoNdErLaNd", &[4u8; 32], "test4@example.com").await;
 
     // All should fail due to case-insensitive unique constraint
     assert!(
@@ -560,7 +560,7 @@ async fn test_username_search_is_case_insensitive() {
 
     // Create account with mixed case
     let _account = db
-        .create_account("AliceWonderland", &[1u8; 32])
+        .create_account("AliceWonderland", &[1u8; 32], "test@example.com")
         .await
         .unwrap();
 
@@ -610,4 +610,58 @@ async fn test_create_oauth_linked_account_queues_welcome_email() {
     assert!(email.body.contains("Welcome to Decent Cloud"));
     assert_eq!(email.is_html, 0);
     assert_eq!(email.status, "pending");
+}
+
+#[tokio::test]
+async fn test_create_email_verification_token() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+
+    // Create verification token
+    let token = db.create_email_verification_token(&account.id, "test@example.com").await.unwrap();
+
+    // Token should be 16 bytes (UUID)
+    assert_eq!(token.len(), 16);
+
+    // Verify token was stored in database
+    let result: Option<(Vec<u8>, Vec<u8>, String)> = sqlx::query_as(
+        "SELECT token, account_id, email FROM email_verification_tokens WHERE token = ?"
+    )
+    .bind(&token)
+    .fetch_optional(&db.pool)
+    .await
+    .unwrap();
+
+    assert!(result.is_some());
+    let (stored_token, stored_account_id, stored_email) = result.unwrap();
+    assert_eq!(stored_token, token);
+    assert_eq!(stored_account_id, account.id);
+    assert_eq!(stored_email, "test@example.com");
+}
+
+#[tokio::test]
+async fn test_create_email_verification_token_expires() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+
+    // Create verification token
+    let token = db.create_email_verification_token(&account.id, "test@example.com").await.unwrap();
+
+    // Verify expiry is set (24 hours from now)
+    let result: Option<(i64, i64)> = sqlx::query_as(
+        "SELECT created_at, expires_at FROM email_verification_tokens WHERE token = ?"
+    )
+    .bind(&token)
+    .fetch_optional(&db.pool)
+    .await
+    .unwrap();
+
+    assert!(result.is_some());
+    let (created_at, expires_at) = result.unwrap();
+    let expected_expiry = created_at + (24 * 3600);
+    assert_eq!(expires_at, expected_expiry);
 }

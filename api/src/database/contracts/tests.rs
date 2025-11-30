@@ -497,7 +497,7 @@ async fn test_create_rental_request_with_defaults() {
     let provider_pk = vec![2u8; 32];
 
     // Create user account
-    let account = db.create_account("testuser", &user_pk).await.unwrap();
+    let account = db.create_account("testuser", &user_pk, "test@example.com").await.unwrap();
 
     // Create offering (no explicit id)
     let provider_pk_clone = provider_pk.clone();

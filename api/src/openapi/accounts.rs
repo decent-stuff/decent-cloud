@@ -53,6 +53,15 @@ impl AccountsApi {
             }
         };
 
+        // Validate email
+        if let Err(e) = crate::validation::validate_email(&body_data.email) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
         // Decode public key
         let public_key = match hex::decode(&body_data.public_key) {
             Ok(pk) => pk,
@@ -190,7 +199,7 @@ impl AccountsApi {
         }
 
         // Create account
-        match db.create_account(&username, &public_key).await {
+        match db.create_account(&username, &public_key, &body_data.email).await {
             Ok(account) => {
                 // Insert audit record
                 let req_body_str = String::from_utf8_lossy(&req_body_bytes);
@@ -208,6 +217,45 @@ impl AccountsApi {
                     .await
                 {
                     tracing::warn!("Failed to insert audit record: {}", e);
+                }
+
+                // Create email verification token
+                match db.create_email_verification_token(&account.id, &body_data.email).await {
+                    Ok(token) => {
+                        // Build verification URL
+                        let base_url = std::env::var("FRONTEND_URL")
+                            .unwrap_or_else(|_| "http://localhost:59000".to_string());
+                        let token_hex = hex::encode(&token);
+                        let verification_url = format!("{}/verify-email?token={}", base_url, token_hex);
+
+                        // Queue verification email
+                        let subject = "Verify Your Decent Cloud Email";
+                        let body = format!(
+                            "Hello {},\n\n\
+                            Thank you for registering with Decent Cloud!\n\n\
+                            Please verify your email address by clicking the link below:\n\
+                            {}\n\n\
+                            This link will expire in 24 hours.\n\n\
+                            If you did not create this account, please ignore this email.\n\n\
+                            Best regards,\n\
+                            The Decent Cloud Team",
+                            username,
+                            verification_url
+                        );
+
+                        db.queue_email_safe(
+                            Some(&body_data.email),
+                            "noreply@decent-cloud.org",
+                            subject,
+                            &body,
+                            false,
+                            EmailType::Welcome, // Welcome emails: 12 attempts
+                        )
+                        .await;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create verification token: {}", e);
+                    }
                 }
 
                 // Fetch full account with keys

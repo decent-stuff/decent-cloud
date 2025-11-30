@@ -148,6 +148,7 @@ pub struct CancelContractRequest {
 pub struct RegisterAccountRequest {
     pub username: String,
     pub public_key: String,
+    pub email: String,
 }
 
 #[derive(Debug, Deserialize, Object)]
