@@ -51,18 +51,24 @@ export function derivePrincipalFromPubkey(publicKeyBytes: Uint8Array): Principal
 
 /**
  * Calculate actual runtime duration of a contract in nanoseconds.
- * For cancelled/completed: uses status_updated_at_ns - created_at_ns
- * For active: uses current time - created_at_ns
+ * Uses provisioning_completed_at_ns as start time (when service actually started).
+ * Falls back to created_at_ns if never provisioned.
+ * For cancelled/completed: uses status_updated_at_ns - start_time
+ * For active: uses current time - start_time
  */
 export function calculateActualDuration(
 	created_at_ns: number,
 	status: string,
-	status_updated_at_ns?: number
+	status_updated_at_ns?: number,
+	provisioning_completed_at_ns?: number
 ): number {
+	// Use provisioning time as start, fall back to created time if never provisioned
+	const start_ns = provisioning_completed_at_ns ?? created_at_ns;
+
 	if (status === 'cancelled' || status === 'completed') {
-		return status_updated_at_ns ? status_updated_at_ns - created_at_ns : 0;
+		return status_updated_at_ns ? status_updated_at_ns - start_ns : 0;
 	}
-	return Date.now() * 1_000_000 - created_at_ns;
+	return Date.now() * 1_000_000 - start_ns;
 }
 
 /**

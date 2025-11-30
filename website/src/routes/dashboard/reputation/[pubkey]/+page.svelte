@@ -836,6 +836,7 @@
 										contract.created_at_ns,
 										contract.status,
 										contract.status_updated_at_ns,
+										contract.provisioning_completed_at_ns,
 									),
 								)}
 							</p>
@@ -903,6 +904,7 @@
 										contract.created_at_ns,
 										contract.status,
 										contract.status_updated_at_ns,
+										contract.provisioning_completed_at_ns,
 									),
 								)}
 							</p>

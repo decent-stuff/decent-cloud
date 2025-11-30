@@ -468,6 +468,7 @@ fn test_trust_score_perfect_provider() {
         false,     // no active contracts
         15,        // 15 repeat customers (bonus!)
         98.0,      // 98% completion rate (bonus!)
+        true,      // has contact info
     );
 
     // Base 100 + 5 (repeat customers) + 5 (completion rate) + 5 (fast response) = 115, clamped to 100
@@ -489,6 +490,7 @@ fn test_trust_score_high_early_cancellation() {
         false,
         0,
         50.0,
+        true, // has contact info
     );
 
     // Base 100 - 25 (early cancellation penalty) = 75
@@ -511,6 +513,7 @@ fn test_trust_score_provisioning_failure() {
         false,
         0,
         50.0,
+        true, // has contact info
     );
 
     // Base 100 - 20 (provisioning failure penalty) = 80
@@ -533,6 +536,7 @@ fn test_trust_score_slow_response() {
         false,
         0,
         50.0,
+        true, // has contact info
     );
 
     // Base 100 - 15 (slow response penalty) = 85
@@ -547,7 +551,7 @@ fn test_trust_score_ghost_risk() {
     let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
         None, None, None, None, 0, 0, 14,   // 14 days since last check-in
         true, // HAS active contracts
-        0, 50.0,
+        0, 50.0, true, // has contact info
     );
 
     // Base 100 - 10 (ghost risk penalty) = 90
@@ -555,13 +559,31 @@ fn test_trust_score_ghost_risk() {
     assert!(has_flags);
     assert_eq!(flags.len(), 1);
     assert!(flags[0].contains("Ghost risk"));
+    assert!(flags[0].contains("14 days since last activity"));
+}
+
+#[test]
+fn test_trust_score_ghost_risk_never_checked_in() {
+    // -1 means provider never checked in
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, -1,   // never checked in
+        true, // HAS active contracts
+        0, 50.0, true,
+    );
+
+    // Base 100 - 10 (ghost risk penalty) = 90
+    assert_eq!(score, 90);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("Ghost risk"));
+    assert!(flags[0].contains("no platform activity"));
 }
 
 #[test]
 fn test_trust_score_negative_reputation() {
     let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
         None, None, None, None, -75, // -75 reputation points in 90 days (<-50 threshold)
-        0, 1, false, 0, 50.0,
+        0, 1, false, 0, 50.0, true, // has contact info
     );
 
     // Base 100 - 15 (negative reputation penalty) = 85
@@ -584,12 +606,13 @@ fn test_trust_score_multiple_flags() {
         true,               // with active contracts (ghost risk)
         0,
         30.0,
+        false, // no contact info (adds 8th flag)
     );
 
-    // All penalties: -25 -20 -15 -15 -15 -10 -10 = -110, clamped to 0
+    // All penalties: -25 -20 -15 -15 -15 -10 -10 -10 = -120, clamped to 0
     assert_eq!(score, 0);
     assert!(has_flags);
-    assert_eq!(flags.len(), 7); // All 7 flags triggered
+    assert_eq!(flags.len(), 8); // All 8 flags triggered (including no contact)
 }
 
 #[test]
@@ -605,6 +628,7 @@ fn test_trust_score_bonuses() {
         false,
         20,   // lots of repeat customers (bonus!)
         99.0, // high completion rate (bonus!)
+        true, // has contact info
     );
 
     // Base 100 + 5 + 5 + 5 = 115, clamped to 100
@@ -613,10 +637,41 @@ fn test_trust_score_bonuses() {
     assert!(flags.is_empty());
 }
 
+#[test]
+fn test_trust_score_no_contact_info() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, false, // no contact info
+    );
+
+    // Base 100 - 10 (no contact info penalty) = 90
+    assert_eq!(score, 90);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("No contact info"));
+}
+
 #[tokio::test]
 async fn test_get_provider_trust_metrics_new_provider() {
     let db = setup_test_db().await;
     let pubkey = vec![1u8; 32];
+
+    // Create provider profile first (required for contact info foreign key)
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Add contact info to avoid "no contact info" penalty
+    sqlx::query(
+        "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, 'email', 'test@example.com')",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
 
     // Provider with no contracts
     let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
@@ -634,6 +689,24 @@ async fn test_get_provider_trust_metrics_with_contracts() {
     let provider_pubkey = vec![1u8; 32];
     let requester1 = vec![2u8; 32];
     let requester2 = vec![3u8; 32];
+
+    // Create provider profile first (required for contact info foreign key)
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Add contact info to avoid "no contact info" penalty
+    sqlx::query(
+        "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, 'email', 'provider@example.com')",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
 
     // Add some completed contracts
     for i in 0..5 {

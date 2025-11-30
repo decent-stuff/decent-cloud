@@ -243,11 +243,22 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
-        // Last check-in timestamp
-        let last_active_ns: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(MAX(block_timestamp_ns), 0) FROM provider_check_ins WHERE pubkey = ?",
-            pubkey
+        // Last activity timestamp - check multiple sources:
+        // 1. Blockchain check-ins
+        // 2. Contract activity (status updates as provider)
+        // 3. Profile updates
+        let last_active_ns: i64 = sqlx::query_scalar::<_, i64>(
+            r#"SELECT COALESCE(MAX(activity_ns), 0) FROM (
+                SELECT MAX(block_timestamp_ns) as activity_ns FROM provider_check_ins WHERE pubkey = ?
+                UNION ALL
+                SELECT MAX(COALESCE(status_updated_at_ns, created_at_ns)) FROM contract_sign_requests WHERE provider_pubkey = ?
+                UNION ALL
+                SELECT MAX(updated_at_ns) FROM provider_profiles WHERE pubkey = ?
+            )"#,
         )
+        .bind(pubkey)
+        .bind(pubkey)
+        .bind(pubkey)
         .fetch_one(&self.pool)
         .await?;
 
@@ -345,13 +356,23 @@ impl Database {
         let avg_response_time_hours = avg_response_time_ns.map(|ns| ns / ns_per_hour as f64);
         let time_to_delivery_hours = avg_delivery_time_ns.map(|ns| ns / ns_per_hour as f64);
 
+        // -1 indicates provider has never checked in
         let days_since_last_checkin = if last_active_ns > 0 {
             (now_ns - last_active_ns) / ns_per_day
         } else {
-            i64::MAX // Never checked in
+            -1
         };
 
         let is_new_provider = completed_contracts < 5;
+
+        // Check if provider has contact info
+        let contact_count: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM provider_profiles_contacts WHERE provider_pubkey = ?",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let has_contact_info = contact_count > 0;
 
         // Calculate trust score and critical flags
         let (trust_score, has_critical_flags, critical_flag_reasons) =
@@ -366,6 +387,7 @@ impl Database {
                 active_contract_value_e9s > 0,
                 repeat_customer_count,
                 completion_rate_pct,
+                has_contact_info,
             );
 
         // Update cached trust score in provider_profiles
@@ -396,6 +418,7 @@ impl Database {
             stuck_contracts_value_e9s,
             days_since_last_checkin,
             is_new_provider,
+            has_contact_info,
             has_critical_flags,
             critical_flag_reasons,
         })
@@ -413,6 +436,7 @@ impl Database {
         has_active_contracts: bool,
         repeat_customer_count: i64,
         completion_rate_pct: f64,
+        has_contact_info: bool,
     ) -> (i64, bool, Vec<String>) {
         let mut score: i64 = 100;
         let mut flags: Vec<String> = Vec::new();
@@ -467,12 +491,20 @@ impl Database {
         }
 
         // Ghost risk: inactive but has active contracts
-        if days_since_last_checkin > 7 && has_active_contracts {
+        // days_since_last_checkin = -1 means no activity recorded
+        if has_active_contracts && (days_since_last_checkin > 7 || days_since_last_checkin == -1) {
             score -= 10;
-            flags.push(format!(
-                "Ghost risk: {} days inactive with active contracts",
-                days_since_last_checkin
-            ));
+            if days_since_last_checkin == -1 {
+                flags.push(
+                    "Ghost risk: no platform activity recorded but has active contracts"
+                        .to_string(),
+                );
+            } else {
+                flags.push(format!(
+                    "Ghost risk: {} days since last activity with active contracts",
+                    days_since_last_checkin
+                ));
+            }
         }
 
         // Stuck contracts (convert e9s to approximate dollars: e9s / 1e9)
@@ -483,6 +515,12 @@ impl Database {
                 "Stuck contracts: ~${} in contracts without progress for >72h",
                 stuck_dollars
             ));
+        }
+
+        // No contact info - users can't reach provider for support
+        if !has_contact_info {
+            score -= 10;
+            flags.push("No contact info: provider has no public contact methods".to_string());
         }
 
         // Bonuses
@@ -655,6 +693,8 @@ pub struct ProviderTrustMetrics {
     // Flags
     /// True if provider has <5 completed contracts
     pub is_new_provider: bool,
+    /// True if provider has at least one contact method set
+    pub has_contact_info: bool,
     /// True if any critical threshold exceeded
     pub has_critical_flags: bool,
     /// Human-readable list of exceeded thresholds
