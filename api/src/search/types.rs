@@ -8,7 +8,6 @@ pub enum Operator {
     Gt,       // field:>value
     Lt,       // field:<value
     Range,    // field:[min TO max]
-    Contains, // field:*value* (for text search)
 }
 
 #[derive(Debug, Clone, PartialEq)]
