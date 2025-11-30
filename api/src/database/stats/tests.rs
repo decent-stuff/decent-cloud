@@ -1482,3 +1482,472 @@ async fn test_no_response_rate_pct_only_counts_last_90_days() {
     let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
     assert!(metrics.no_response_rate_pct.is_none()); // None because no requests in last 90 days
 }
+
+#[tokio::test]
+async fn test_abandonment_velocity_none_no_baseline() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
+
+    // Add contracts in recent period only (no baseline contracts)
+    let contract_id = vec![10u8; 32];
+    let requester = vec![2u8; 32];
+    let status_updated_ns = now_ns - 10 * ns_per_day; // 10 days ago (recent)
+    let payment_method = "dct";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+    )
+    .bind(&contract_id)
+    .bind(&requester)
+    .bind(&pubkey)
+    .bind(status_updated_ns)
+    .bind(payment_method)
+    .bind(stripe_payment_intent_id)
+    .bind(stripe_customer_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
+    assert!(metrics.abandonment_velocity.is_none()); // None because baseline_total == 0
+}
+
+#[tokio::test]
+async fn test_abandonment_velocity_zero_no_recent() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
+
+    // Add contracts in baseline period only (no recent contracts)
+    // Baseline: 31-90 days ago
+    for i in 0..5 {
+        let contract_id = vec![i + 10u8; 32];
+        let requester = vec![2u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64 * 5) * ns_per_day; // 40, 45, 50, 55, 60 days ago
+        let payment_method = "dct";
+        let stripe_payment_intent_id: Option<&str> = None;
+        let stripe_customer_id: Option<&str> = None;
+
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
+    assert!(metrics.abandonment_velocity.is_some());
+    assert_eq!(metrics.abandonment_velocity.unwrap(), 0.0); // recent_total == 0, so recent_rate = 0.0
+}
+
+#[tokio::test]
+async fn test_abandonment_velocity_stable() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
+    let requester = vec![2u8; 32];
+    let payment_method = "dct";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // Baseline: 31-90 days ago - 10 contracts, 2 cancelled (20% rate)
+    for i in 0..8 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    for i in 8..10 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Recent: last 30 days - 10 contracts, 2 cancelled (20% rate)
+    for i in 20..28 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day; // 1-8 days ago
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    for i in 28..30 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day; // 9-10 days ago
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
+    assert!(metrics.abandonment_velocity.is_some());
+    let velocity = metrics.abandonment_velocity.unwrap();
+    assert!((velocity - 1.0).abs() < 0.01); // 0.2/0.2 = 1.0
+}
+
+#[tokio::test]
+async fn test_abandonment_velocity_improving() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
+    let requester = vec![2u8; 32];
+    let payment_method = "dct";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // Baseline: 31-90 days ago - 10 contracts, 4 cancelled (40% rate)
+    for i in 0..6 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    for i in 6..10 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Recent: last 30 days - 10 contracts, 2 cancelled (20% rate - improved!)
+    for i in 20..28 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    for i in 28..30 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
+    assert!(metrics.abandonment_velocity.is_some());
+    let velocity = metrics.abandonment_velocity.unwrap();
+    assert!((velocity - 0.5).abs() < 0.01); // 0.2/0.4 = 0.5
+}
+
+#[tokio::test]
+async fn test_abandonment_velocity_spike() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
+    let requester = vec![2u8; 32];
+    let payment_method = "dct";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // Baseline: 31-90 days ago - 10 contracts, 1 cancelled (10% rate)
+    for i in 0..9 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    for i in 9..10 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Recent: last 30 days - 10 contracts, 5 cancelled (50% rate - spike!)
+    for i in 20..25 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    for i in 25..30 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
+    assert!(metrics.abandonment_velocity.is_some());
+    let velocity = metrics.abandonment_velocity.unwrap();
+    assert!((velocity - 5.0).abs() < 0.01); // 0.5/0.1 = 5.0
+}
+
+#[tokio::test]
+async fn test_abandonment_velocity_baseline_zero_cancellations() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
+    let requester = vec![2u8; 32];
+    let payment_method = "dct";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // Baseline: 31-90 days ago - 10 contracts, 0 cancelled (0% rate)
+    for i in 0..10 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Recent: last 30 days - 10 contracts, 2 cancelled (20% rate)
+    for i in 20..28 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    for i in 28..30 {
+        let contract_id = vec![i + 10u8; 32];
+        let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(status_updated_ns)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
+    assert!(metrics.abandonment_velocity.is_some());
+    let velocity = metrics.abandonment_velocity.unwrap();
+    assert!((velocity - 0.2).abs() < 0.01); // baseline_rate == 0, so returns recent_rate directly (0.2)
+}

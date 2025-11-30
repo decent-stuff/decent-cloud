@@ -25,10 +25,7 @@ Visual trust dashboard on provider profiles and offering listings showing:
 - **Ghost Risk**: Provider with no check-in in >7 days but has active contracts
 
 #### Tier 2 - Behavioral Anomaly Detection
-- **Cancellation Cluster Detection**: Alert when 3+ cancellations occur within 48 hours (pattern suggests sudden degradation)
-- **Overcommitment Warning**: Provider has >2x their historical average active contracts
-- **Price Spike Detection**: Provider raised prices >50% recently (could indicate desperation)
-- **Abandonment Velocity**: Sudden spike in cancellations after stable history
+- ✅ **Abandonment Velocity**: Ratio of recent (30d) to baseline (31-90d) cancellation rate
 
 #### Tier 3 - Contextual Info ✅ COMPLETED (2025-11-30)
 See docs/2025-11-30-tier3-contextual-metrics-spec.md for implementation details.
