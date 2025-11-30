@@ -9,14 +9,14 @@
 
 	const navItems = $derived([
 		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
-		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
 		{
 			href: "/dashboard/reputation",
 			icon: "⭐",
 			label: "Reputation",
 		},
-		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
 		{ href: "/dashboard/validators", icon: "✓", label: "Validators" },
+		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
+		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
 	]);
 
 	let currentPath = $state("");
@@ -107,7 +107,9 @@
 					class="block px-4 py-2 text-white/90 hover:text-white transition-colors text-center border-b border-white/10 mb-2"
 					title="View account settings"
 				>
-					<span class="font-medium">@{currentIdentity.account.username}</span>
+					<span class="font-medium"
+						>@{currentIdentity.account.username}</span
+					>
 				</a>
 			{/if}
 			<a
