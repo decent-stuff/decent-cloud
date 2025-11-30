@@ -1,6 +1,26 @@
-- Admin UI with support for:
-    - sending test and other emails
-    - performing actions in the name of other users (impersonating)
+## Admin Tools
+
+### CLI Admin Management
+- [ ] `dc admin grant <username>` - Grant admin access to an account
+- [ ] `dc admin revoke <username>` - Revoke admin access from an account
+- [ ] `dc admin list` - List all admin accounts
+NOTE: `dc` command currently doesn't have access to the DB to change values directly. We could extend it, but we could also add another cli for the api only, possibly absorbing `test-email` into it. The cli should have an option to pick --env dev|prod (alias --environment). The cli should use clap to parse args.
+
+### Admin Dashboard (Web UI)
+- [ ] Admin-only route with auth guard checking admin status
+- [ ] View failed emails queue with retry action
+- [ ] Send test email to verify configuration
+- [ ] Account lookup and management (view keys, disable keys, add recovery keys)
+- [ ] Email queue inspection (pending, sent, failed counts)
+
+### Database Operations (Admin API)
+- [ ] Reset email retry counter for specific email
+- [ ] Reset all failed emails to pending (bulk retry)
+- [ ] View/edit account email verification status
+
+### Email System Fix
+- [x] **BUG**: Email processor not starting in production (emails queued but never sent)
+  - Fixed: Added missing MAILCHANNELS_API_KEY, DKIM_* env vars to docker-compose files (2025-11-30)
 
 ## Provider Trust & Reliability System
 
@@ -13,18 +33,18 @@ Visual trust dashboard on provider profiles and offering listings showing:
 - Repeat Customer Count (users who came back for more)
 - Active Contract Value ($ currently being served)
 
-### Red Flag Detection (Prominent Warnings)
+### Red Flag Detection (Prominent Warnings) ✅ COMPLETED (2025-11-30)
 
 #### Tier 1 - Critical Flags
-- **Early Cancellation Rate**: % contracts cancelled within first 10% of duration (threshold: >20% = critical)
-- **Provider Response Time**: Average hours from request to first response (threshold: >48h = critical)
-- **Provisioning Failure Rate**: % accepted contracts never provisioned (threshold: >15% = critical)
-- **Rejection Rate**: % contract requests rejected (threshold: >30% = critical)
-- **Negative Reputation Trend**: Sum of negative reputation changes in last 90 days (threshold: <-50 = critical)
-- **Money at Risk**: Total $ in "stuck" contracts (requested/pending/accepted >72h without progress)
-- **Ghost Risk**: Provider with no check-in in >7 days but has active contracts
+- ✅ **Early Cancellation Rate**: % contracts cancelled within first 10% of duration (threshold: >20% = critical)
+- ✅ **Provider Response Time**: Average hours from request to first response (threshold: >48h = critical)
+- ✅ **Provisioning Failure Rate**: % accepted contracts never provisioned (threshold: >15% = critical)
+- ✅ **Rejection Rate**: % contract requests rejected (threshold: >30% = critical)
+- ✅ **Negative Reputation Trend**: Sum of negative reputation changes in last 90 days (threshold: <-50 = critical)
+- ✅ **Money at Risk**: Total $ in "stuck" contracts (requested/pending/accepted >72h without progress)
+- ✅ **Ghost Risk**: Provider with no check-in in >7 days but has active contracts
 
-#### Tier 2 - Behavioral Anomaly Detection
+#### Tier 2 - Behavioral Anomaly Detection ✅ COMPLETED (2025-11-30)
 - ✅ **Abandonment Velocity**: Ratio of recent (30d) to baseline (31-90d) cancellation rate
 
 #### Tier 3 - Contextual Info ✅ COMPLETED (2025-11-30)
