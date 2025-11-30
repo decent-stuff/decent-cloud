@@ -40,6 +40,7 @@ export interface OfferingSearchParams {
 	min_price_monthly?: number;
 	max_price_monthly?: number;
 	in_stock_only?: boolean;
+	q?: string; // DSL query
 }
 
 // CSV import types
@@ -130,6 +131,7 @@ export async function searchOfferings(params: OfferingSearchParams = {}): Promis
 	if (params.min_price_monthly !== undefined) searchParams.set('min_price_monthly', params.min_price_monthly.toString());
 	if (params.max_price_monthly !== undefined) searchParams.set('max_price_monthly', params.max_price_monthly.toString());
 	if (params.in_stock_only) searchParams.set('in_stock_only', 'true');
+	if (params.q) searchParams.set('q', params.q);
 
 	const url = `${API_BASE_URL}/api/v1/offerings?${searchParams.toString()}`;
 	const response = await fetch(url);

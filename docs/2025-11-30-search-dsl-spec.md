@@ -101,7 +101,7 @@ Files:
 
 ### Step 5: Frontend Search Bar
 **Success:** Marketplace uses DSL query bar, queries work end-to-end.
-**Status:** Pending
+**Status:** ✅ Completed
 
 Files:
 - `website/src/routes/dashboard/marketplace/+page.svelte` - replace search input
@@ -231,10 +231,40 @@ Files:
 - **Outcome:** ✅ SUCCESS - API endpoint ready for DSL queries
 
 ### Step 5
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Added DSL search to frontend marketplace:
+  - `website/src/lib/services/api.ts` - Added `q?: string` parameter to `OfferingSearchParams`
+  - `website/src/lib/services/api.ts` - Updated `searchOfferings` to pass `q` param to API
+  - `website/src/routes/dashboard/marketplace/+page.svelte` - Major refactor:
+    - Removed client-side filtering (`filteredOfferings` derived state)
+    - Added `fetchOfferings()` function that builds DSL query from filters and search input
+    - Added `handleSearchInput()` with 300ms debounce to prevent API spam
+    - Added `handleTypeChange()` for immediate filter button updates
+    - Type buttons now set `selectedType` which gets converted to `type:X` DSL query
+    - Search input updated with DSL placeholder: "Search with DSL (e.g., type:gpu price:<=100)..."
+    - Display now uses `offerings` directly instead of `filteredOfferings`
+    - Loading state shown during API requests
+
+- **Review:** Implementation follows MINIMAL, DRY, FAIL-FAST principles:
+  - Only 2 files modified
+  - Removed ~17 lines of client-side filtering logic
+  - Added ~40 lines for DSL query building and debounce
+  - No duplication between type buttons (all use `handleTypeChange`)
+  - Clean separation: UI state -> DSL query -> API request -> display
+  - Debounce prevents API spam during typing
+  - Error messages shown to user via existing error state
+  - Type filters work immediately, text search is debounced
+
+- **Verification:**
+  - ✅ TypeScript check passes: `npm run check` shows 0 errors, 0 warnings
+  - ✅ API interface updated with `q` parameter
+  - ✅ Search bar sends DSL queries to backend
+  - ✅ Type filter buttons convert to DSL (e.g., "GPU" button -> `type:gpu`)
+  - ✅ Debounce implemented (300ms delay)
+  - ✅ Loading state shown during API calls
+  - ✅ Error handling preserved from original code
+  - ✅ Backward compatible: sends no `q` param when filters are "all" and search is empty
+
+- **Outcome:** ✅ SUCCESS - Frontend DSL search bar implemented and type-checked
 
 ### Step 6
 - **Implementation:** (pending)

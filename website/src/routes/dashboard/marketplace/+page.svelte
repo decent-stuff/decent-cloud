@@ -15,18 +15,35 @@
 	let successMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let showAuthModal = $state(false);
+	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
 	});
 
-	onMount(async () => {
+	async function fetchOfferings() {
 		try {
 			loading = true;
 			error = null;
+
+			// Build DSL query from search and filters
+			let dslQuery = "";
+
+			// Add type filter if selected
+			if (selectedType !== "all") {
+				dslQuery = `type:${selectedType}`;
+			}
+
+			// Add user search query
+			if (searchQuery.trim()) {
+				dslQuery = dslQuery ? `${dslQuery} ${searchQuery.trim()}` : searchQuery.trim();
+			}
+
+			// Fetch with DSL query
 			offerings = await searchOfferings({
 				limit: 100,
 				in_stock_only: true,
+				q: dslQuery || undefined, // Only send q if there's a query
 			});
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load offerings";
@@ -34,6 +51,10 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(async () => {
+		await fetchOfferings();
 	});
 
 	function handleRentClick(offering: Offering) {
@@ -56,24 +77,22 @@
 		}, 5000);
 	}
 
-	const filteredOfferings = $derived(
-		offerings.filter((offering) => {
-			const matchesSearch =
-				offering.offer_name
-					.toLowerCase()
-					.includes(searchQuery.toLowerCase()) ||
-				offering.description
-					?.toLowerCase()
-					.includes(searchQuery.toLowerCase()) ||
-				offering.product_type
-					.toLowerCase()
-					.includes(searchQuery.toLowerCase());
-			const matchesType =
-				selectedType === "all" ||
-				offering.product_type === selectedType;
-			return matchesSearch && matchesType;
-		}),
-	);
+	function handleSearchInput() {
+		// Clear existing timer
+		if (debounceTimer) {
+			clearTimeout(debounceTimer);
+		}
+
+		// Set new timer for 300ms debounce
+		debounceTimer = setTimeout(() => {
+			fetchOfferings();
+		}, 300);
+	}
+
+	function handleTypeChange(type: "all" | string) {
+		selectedType = type;
+		fetchOfferings(); // Immediate fetch for filter buttons
+	}
 
 	function getTypeIcon(productType: string) {
 		const type = productType.toLowerCase();
@@ -169,14 +188,15 @@
 			<div class="flex-1">
 				<input
 					type="text"
-					placeholder="Search offerings..."
+					placeholder="Search with DSL (e.g., type:gpu price:<=100)..."
 					bind:value={searchQuery}
+					oninput={handleSearchInput}
 					class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors"
 				/>
 			</div>
 			<div class="flex gap-2">
 				<button
-					onclick={() => (selectedType = "all")}
+					onclick={() => handleTypeChange("all")}
 					class="px-4 py-3 rounded-lg font-medium transition-all {selectedType ===
 					'all'
 						? 'bg-blue-600 text-white'
@@ -185,7 +205,7 @@
 					All
 				</button>
 				<button
-					onclick={() => (selectedType = "compute")}
+					onclick={() => handleTypeChange("compute")}
 					class="px-4 py-3 rounded-lg font-medium transition-all {selectedType ===
 					'compute'
 						? 'bg-blue-600 text-white'
@@ -194,7 +214,7 @@
 					💻 Compute
 				</button>
 				<button
-					onclick={() => (selectedType = "gpu")}
+					onclick={() => handleTypeChange("gpu")}
 					class="px-4 py-3 rounded-lg font-medium transition-all {selectedType ===
 					'gpu'
 						? 'bg-blue-600 text-white'
@@ -203,7 +223,7 @@
 					🎮 GPU
 				</button>
 				<button
-					onclick={() => (selectedType = "storage")}
+					onclick={() => handleTypeChange("storage")}
 					class="px-4 py-3 rounded-lg font-medium transition-all {selectedType ===
 					'storage'
 						? 'bg-blue-600 text-white'
@@ -212,7 +232,7 @@
 					💾 Storage
 				</button>
 				<button
-					onclick={() => (selectedType = "network")}
+					onclick={() => handleTypeChange("network")}
 					class="px-4 py-3 rounded-lg font-medium transition-all {selectedType ===
 					'network'
 						? 'bg-blue-600 text-white'
@@ -225,12 +245,12 @@
 
 		<!-- Results Count -->
 		<div class="text-white/60">
-			Showing {filteredOfferings.length} of {offerings.length} offerings
+			Showing {offerings.length} offerings
 		</div>
 
 		<!-- Marketplace Grid -->
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-			{#each filteredOfferings as offering}
+			{#each offerings as offering}
 				<div
 					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-blue-400 transition-all group"
 				>
@@ -323,7 +343,7 @@
 		</div>
 
 		<!-- Empty State -->
-		{#if filteredOfferings.length === 0}
+		{#if offerings.length === 0}
 			<div class="text-center py-16">
 				<span class="text-6xl mb-4 block">🔍</span>
 				<h3 class="text-2xl font-bold text-white mb-2">
