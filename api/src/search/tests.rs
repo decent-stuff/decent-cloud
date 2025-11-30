@@ -1,5 +1,5 @@
-use super::{build_sql, parse_dsl, SqlValue};
 use super::types::{Operator, Value};
+use super::{build_sql, parse_dsl, SqlValue};
 
 #[test]
 fn test_simple_exact_match() {
@@ -118,8 +118,8 @@ fn test_explicit_and() {
 
 #[test]
 fn test_complex_query() {
-    let result = parse_dsl("type:(gpu OR compute) price:[50 TO 500] cores:>=8 !stock:out_of_stock")
-        .unwrap();
+    let result =
+        parse_dsl("type:(gpu OR compute) price:[50 TO 500] cores:>=8 !stock:out_of_stock").unwrap();
     assert_eq!(result.len(), 4);
 
     // First filter: type:(gpu OR compute)
@@ -176,7 +176,10 @@ fn test_field_with_underscore() {
 #[test]
 fn test_value_with_underscore() {
     let result = parse_dsl("stock:out_of_stock").unwrap();
-    assert_eq!(result[0].values, vec![Value::String("out_of_stock".to_string())]);
+    assert_eq!(
+        result[0].values,
+        vec![Value::String("out_of_stock".to_string())]
+    );
 }
 
 #[test]
@@ -341,7 +344,10 @@ fn test_sql_or_group() {
 fn test_sql_or_group_three_values() {
     let filters = parse_dsl("country:(US OR DE OR NL)").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "(datacenter_country = ? OR datacenter_country = ? OR datacenter_country = ?)");
+    assert_eq!(
+        sql,
+        "(datacenter_country = ? OR datacenter_country = ? OR datacenter_country = ?)"
+    );
     assert_eq!(
         values,
         vec![
@@ -466,7 +472,10 @@ fn test_sql_integer_to_float_conversion() {
 fn test_sql_multiple_filters_and() {
     let filters = parse_dsl("type:gpu price:>=100 country:US").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "product_type = ? AND monthly_price >= ? AND datacenter_country = ?");
+    assert_eq!(
+        sql,
+        "product_type = ? AND monthly_price >= ? AND datacenter_country = ?"
+    );
     assert_eq!(
         values,
         vec![
@@ -479,8 +488,8 @@ fn test_sql_multiple_filters_and() {
 
 #[test]
 fn test_sql_complex_query() {
-    let filters = parse_dsl("type:(gpu OR compute) price:[50 TO 500] cores:>=8 !stock:out_of_stock")
-        .unwrap();
+    let filters =
+        parse_dsl("type:(gpu OR compute) price:[50 TO 500] cores:>=8 !stock:out_of_stock").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
 
     assert_eq!(

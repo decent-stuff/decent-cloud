@@ -264,8 +264,8 @@ impl Database {
         );
 
         // Build query with bindings
-        let mut query_builder = sqlx::query_as::<_, Offering>(&query_sql)
-            .bind(&example_provider_pubkey);
+        let mut query_builder =
+            sqlx::query_as::<_, Offering>(&query_sql).bind(&example_provider_pubkey);
 
         // Bind DSL values
         for value in dsl_values {

@@ -970,7 +970,10 @@ async fn test_search_offerings_dsl_basic_type_filter() {
     .unwrap();
 
     // Search for compute type only
-    let results = db.search_offerings_dsl("type:compute", 10, 0).await.unwrap();
+    let results = db
+        .search_offerings_dsl("type:compute", 10, 0)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].product_type, "compute");
     assert_eq!(results[0].offer_name, "Compute Server");
@@ -984,12 +987,18 @@ async fn test_search_offerings_dsl_price_range() {
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
 
     // Search for price range [0 TO 100]
-    let results = db.search_offerings_dsl("price:[0 TO 100]", 10, 0).await.unwrap();
+    let results = db
+        .search_offerings_dsl("price:[0 TO 100]", 10, 0)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].monthly_price, 50.0);
 
     // Search for price range [100 TO 200]
-    let results = db.search_offerings_dsl("price:[100 TO 200]", 10, 0).await.unwrap();
+    let results = db
+        .search_offerings_dsl("price:[100 TO 200]", 10, 0)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].monthly_price, 150.0);
 }
@@ -1033,7 +1042,10 @@ async fn test_search_offerings_dsl_combined_filters() {
     .unwrap();
 
     // Combined query: type:compute AND country:US
-    let results = db.search_offerings_dsl("type:compute AND country:US", 10, 0).await.unwrap();
+    let results = db
+        .search_offerings_dsl("type:compute AND country:US", 10, 0)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].product_type, "compute");
     assert_eq!(results[0].datacenter_country, "US");
@@ -1109,7 +1121,10 @@ async fn test_search_offerings_dsl_excludes_private_and_example() {
     .unwrap();
 
     // DSL search should only return public offerings
-    let results = db.search_offerings_dsl("type:compute", 10, 0).await.unwrap();
+    let results = db
+        .search_offerings_dsl("type:compute", 10, 0)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].visibility.to_lowercase(), "public");
     assert_eq!(results[0].offering_id, "off-1");

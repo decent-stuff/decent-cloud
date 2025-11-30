@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'EU Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'EU', 'Berlin', 0, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "fd53fdce4fa49c66eebd7b159a0a5df8c0d000403ac9e57909eb14f640172cc8"
+}

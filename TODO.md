@@ -1,4 +1,8 @@
-- improve search support, if possible add a minimal search DSL for filtering results, e.g. like on ServerHunter https://www.serverhunter.com/#query=stock:(in_stock+OR+unknown)
+- ✅ COMPLETED (2025-11-30): Search DSL implementation with ServerHunter-style syntax
+  - See docs/2025-11-30-search-dsl-spec.md for full details
+  - 15 searchable fields, operators (>=, <=, ranges), OR groups, negation
+  - Backend: api/src/search/* (parser, builder, tests)
+  - Frontend: marketplace search bar with DSL support
 - Admin UI with support for:
     - sending test and other emails
     - performing actions in the name of other users (impersonating)
