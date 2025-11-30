@@ -59,6 +59,16 @@ struct EmailErrorResponse {
     errors: Vec<String>,
 }
 
+struct EmailParams<'a> {
+    to_email: &'a str,
+    to_name: &'a str,
+    from_email: &'a str,
+    from_name: &'a str,
+    subject: &'a str,
+    body: &'a str,
+    is_html: bool,
+}
+
 pub struct EmailService {
     api_key: String,
     client: reqwest::Client,
@@ -83,36 +93,27 @@ impl EmailService {
         }
     }
 
-    async fn send_email_api(
-        &self,
-        to_email: &str,
-        to_name: &str,
-        from_email: &str,
-        from_name: &str,
-        subject: &str,
-        body: &str,
-        is_html: bool,
-    ) -> Result<()> {
-        let content_type = if is_html { "text/html" } else { "text/plain" };
+    async fn send_email_api(&self, params: EmailParams<'_>) -> Result<()> {
+        let content_type = if params.is_html { "text/html" } else { "text/plain" };
 
         let request = EmailRequest {
             personalizations: vec![EmailPersonalization {
                 to: vec![EmailAddress {
-                    email: to_email.to_string(),
-                    name: to_name.to_string(),
+                    email: params.to_email.to_string(),
+                    name: params.to_name.to_string(),
                 }],
                 dkim_domain: self.dkim_domain.clone(),
                 dkim_selector: self.dkim_selector.clone(),
                 dkim_private_key: self.dkim_private_key.clone(),
             }],
             from: EmailAddress {
-                email: from_email.to_string(),
-                name: from_name.to_string(),
+                email: params.from_email.to_string(),
+                name: params.from_name.to_string(),
             },
-            subject: subject.to_string(),
+            subject: params.subject.to_string(),
             content: vec![EmailContent {
                 content_type: content_type.to_string(),
-                value: body.to_string(),
+                value: params.body.to_string(),
             }],
         };
 
@@ -163,16 +164,17 @@ impl EmailService {
             parse_email_address(to_addr).context("Failed to parse recipient address")?;
         let (from_email, from_name) =
             parse_email_address(from_addr).context("Failed to parse sender address")?;
+        let subject = subject.into();
 
-        self.send_email_api(
-            &to_email,
-            &to_name,
-            &from_email,
-            &from_name,
-            &subject.into(),
+        self.send_email_api(EmailParams {
+            to_email: &to_email,
+            to_name: &to_name,
+            from_email: &from_email,
+            from_name: &from_name,
+            subject: &subject,
             body,
             is_html,
-        )
+        })
         .await
     }
 }

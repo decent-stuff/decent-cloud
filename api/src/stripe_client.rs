@@ -71,6 +71,7 @@ impl StripeClient {
     ///
     /// # Returns
     /// True if payment succeeded, false otherwise
+    #[allow(dead_code)]
     pub async fn verify_payment_intent(&self, payment_intent_id: &str) -> Result<bool> {
         let id: PaymentIntentId = payment_intent_id
             .parse()
@@ -120,6 +121,7 @@ impl StripeClient {
     ///
     /// # Returns
     /// True if refund exists, false otherwise
+    #[allow(dead_code)]
     pub async fn verify_refund(&self, refund_id: &str) -> Result<bool> {
         let id: RefundId = refund_id.parse().context("Invalid Refund ID format")?;
         let _refund = Refund::retrieve(&self.client, &id, &[])

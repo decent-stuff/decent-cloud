@@ -10,6 +10,7 @@ pub enum EmailType {
     /// Important: Welcome emails - 12 attempts over ~4 hours
     Welcome,
     /// General: Other notifications - 6 attempts over ~2 hours
+    #[allow(dead_code)]
     General,
 }
 
