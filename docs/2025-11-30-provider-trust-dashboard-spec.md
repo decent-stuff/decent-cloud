@@ -36,10 +36,10 @@
   - Shows warning when: has_critical_flags=true OR trust_score < 50
   - Links to provider's reputation page for review
 
-### Nice-to-have - NOT DONE
+### Nice-to-have - DEFERRED
 - [ ] Behavioral anomaly detection (cancellation clusters, overcommitment)
 - [ ] Price comparison vs market average
-- [ ] Caching for expensive metric calculations
+- [ ] Caching for expensive metric calculations (partially done: trust_score cached in provider_profiles)
 
 ## Architecture
 
@@ -138,23 +138,18 @@ Maximum score: 100
 - **Verification:** Endpoint exists
 - **Outcome:** Success
 
-### Step 4: Frontend Components - PARTIALLY DONE
-- **DONE:**
+### Step 4: Frontend Components - DONE
+- **Components:**
   - `TrustDashboard.svelte` - Full dashboard component
   - `TrustBadge.svelte` - Compact badge component
   - `getProviderTrustMetrics()` - API function in `api.ts`
   - `ProviderTrustMetrics.ts` - Generated TypeScript types
-- **NOT DONE:**
-  - `TrustWarningDialog.svelte` - Pre-checkout warning (not created)
-- **Outcome:** Partial
+- **Outcome:** Success
 
-### Step 5: Integration - PARTIALLY DONE
-- **DONE:**
-  - TrustDashboard integrated into `reputation/[pubkey]/+page.svelte`
-- **NOT DONE:**
-  - TrustBadge not used in offering cards or marketplace listings
-  - No pre-checkout warning in rental flow
-- **Outcome:** Partial
+### Step 5: Integration - DONE
+- TrustDashboard integrated into `reputation/[pubkey]/+page.svelte`
+- TrustBadge integrated into marketplace offering cards (`marketplace/+page.svelte`)
+- **Outcome:** Success
 
 ### Step 6: Final Review - DONE
 - **Clippy:** 4 warnings (non-blocking)
@@ -165,7 +160,7 @@ Maximum score: 100
 ## Completion Summary
 **Completed:** 2025-11-30 | **Agents:** 1/15 | **Steps:** 9/9
 Changes: 12 files, +150/-20 lines, 256 tests pass
-Requirements: 11/11 must-have, 0/3 nice-to-have
+Requirements: 11/11 must-have, 0/3 nice-to-have (deferred)
 Tests pass ✓, cargo make clean ✓
 
 ### Implementation Notes
@@ -173,3 +168,11 @@ Tests pass ✓, cargo make clean ✓
 - Trust cache updated automatically when `get_provider_trust_metrics()` is called
 - Pre-checkout warning threshold: has_critical_flags=true OR trust_score < 50
 - Warning integrated inline in RentalRequestDialog (not a separate dialog) for better UX
+
+### Verification Summary (2025-11-30)
+All must-have items verified present in codebase:
+- `TrustDashboard.svelte`, `TrustBadge.svelte` - frontend components exist
+- `TrustBadge` imported and used in `marketplace/+page.svelte` (lines 242-248)
+- Pre-checkout warning in `RentalRequestDialog.svelte` (lines 239-276)
+- Migration `018_provider_trust_cache.sql` adds trust_score/has_critical_flags
+- `Offering.ts` generated types include trust_score/has_critical_flags fields
