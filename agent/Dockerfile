@@ -25,7 +25,14 @@ RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install
 
 # Install deps (exact from CI Dockerfile)
 RUN apt update && \
-    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3
+    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3 gnupg
+
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | \
+    gpg --no-default-keyring --keyring gnupg-ring:/etc/apt/trusted.gpg.d/google.gpg --import && \
+    chmod 644 /etc/apt/trusted.gpg.d/google.gpg && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update && \
+    apt-get install -y google-chrome-stable
 
 # Install Node.js directly from NodeSource repository (simpler than NVM for Docker)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
@@ -58,9 +65,6 @@ RUN mkdir -p ~/.npm-global \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile \
     && export PATH=~/.npm-global/bin:$PATH \
     && npm install -g @anthropic-ai/claude-code happy-coder playwright-core
-
-# Install playwright deps
-RUN playwright-core install --with-deps chrome
 
 # Configure git hooks
 COPY --chown=ubuntu:ubuntu .git-hooks/ $HOME/.git-hooks/
