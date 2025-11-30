@@ -69,6 +69,14 @@
 	function isNoResponseConcerning(rate: number | undefined): boolean {
 		return rate !== undefined && rate !== null && rate > 10;
 	}
+
+	// Get abandonment velocity status
+	function getVelocityStatus(velocity: number | undefined): 'good' | 'warning' | 'critical' | null {
+		if (velocity === undefined || velocity === null) return null;
+		if (velocity >= 2.0) return 'critical';
+		if (velocity >= 1.5) return 'warning';
+		return 'good';
+	}
 </script>
 
 <div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/10">
@@ -191,6 +199,38 @@
 					<span
 						class="text-xs px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 rounded"
 						>Concern: &gt;10%</span
+					>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Abandonment Velocity -->
+	{#if metrics.abandonment_velocity !== undefined}
+		<div class="border-t border-white/10 pt-4 mt-4">
+			<div class="text-xs text-white/50 mb-1">Abandonment Velocity</div>
+			<div class="text-xs text-white/40 mb-2">
+				Ratio of recent (30d) to baseline (31-90d) cancellation rate
+			</div>
+			<div class="flex items-center gap-2">
+				<div
+					class="text-sm {getVelocityStatus(metrics.abandonment_velocity) === 'critical'
+						? 'text-red-400'
+						: getVelocityStatus(metrics.abandonment_velocity) === 'warning'
+							? 'text-yellow-400'
+							: 'text-green-400'}"
+				>
+					{metrics.abandonment_velocity.toFixed(1)}x
+				</div>
+				{#if getVelocityStatus(metrics.abandonment_velocity) === 'critical'}
+					<span
+						class="text-xs px-2 py-0.5 bg-red-500/20 border border-red-500/50 text-red-300 rounded"
+						>Critical: &gt;2.0x</span
+					>
+				{:else if getVelocityStatus(metrics.abandonment_velocity) === 'warning'}
+					<span
+						class="text-xs px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 rounded"
+						>Warning: &gt;1.5x</span
 					>
 				{/if}
 			</div>
