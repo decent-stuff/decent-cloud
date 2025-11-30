@@ -78,7 +78,7 @@ Files:
 
 ### Step 2: Create SQL Query Builder
 **Success:** Builds safe parameterized SQL from parsed AST. No SQL injection possible.
-**Status:** Pending
+**Status:** ✅ Completed
 
 Files:
 - `api/src/search/builder.rs` - SQL generation with bind values
@@ -146,10 +146,43 @@ Files:
 - **Outcome:** ✅ SUCCESS - Parser module complete and fully tested. Module is self-contained with #[cfg(test)] and NOT added to main.rs yet (as per Step 3).
 
 ### Step 2
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created SQL query builder with parameterized queries:
+  - `api/src/search/builder.rs` - SQL generation engine (188 lines)
+    - `SqlValue` enum for type-safe bind values (String, Integer, Float, Bool)
+    - `field_allowlist()` with 15 fields mapped to DB columns with types
+    - `build_sql()` main entry point returning (sql_where, bind_values)
+    - `build_filter_sql()` converts Filter to SQL with type checking
+    - Support for all operators: Eq, Gte, Lte, Gt, Lt, Range
+    - LIKE clause for text search fields (name, memory, gpu, features)
+    - OR group handling with parentheses
+    - Negation support with operator inversion
+    - Type conversions (Integer→Float for price field)
+  - `api/src/search/mod.rs` - Added builder exports
+  - `api/src/search/tests.rs` - Added 26 SQL builder tests
+  - `api/src/main.rs` - Added search module declaration
+
+- **Review:** Code follows MINIMAL, DRY, FAIL-FAST principles:
+  - Allowlist prevents SQL injection - unknown fields return error
+  - Parameterized queries with `?` placeholders for all values
+  - Type checking ensures values match field types
+  - Clear error messages for type mismatches
+  - Zero external dependencies beyond stdlib
+  - All field mappings in single location
+  - Clean separation: builder receives parsed AST, returns SQL
+
+- **Verification:**
+  - ✅ All 56 tests pass (30 parser + 26 builder)
+  - ✅ No clippy warnings
+  - ✅ Security: Only allowlisted fields accepted
+  - ✅ SQL injection prevention via bind values
+  - ✅ All searchable fields tested
+  - ✅ Complex queries work: `type:(gpu OR compute) price:[50 TO 500] cores:>=8 !stock:out_of_stock`
+  - ✅ Type conversions: Integer→Float for price field
+  - ✅ Text search: LIKE with % wildcards for name, memory, gpu, features
+  - ✅ Unknown field error: `invalid_field:value` returns error
+  - ✅ Empty filters handled: returns ("", [])
+
+- **Outcome:** ✅ SUCCESS - SQL builder complete with full test coverage and security guarantees
 
 ### Step 3
 - **Implementation:** (pending)
