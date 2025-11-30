@@ -226,6 +226,63 @@ impl Database {
         hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
             .expect("Example provider pubkey hex should always decode successfully")
     }
+
+    /// Search offerings using DSL query
+    pub async fn search_offerings_dsl(
+        &self,
+        query: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Offering>> {
+        let example_provider_pubkey = Self::example_provider_pubkey();
+
+        // Parse DSL query
+        let filters = crate::search::parse_dsl(query)
+            .map_err(|e| anyhow::anyhow!("DSL parse error: {}", e))?;
+
+        // Build SQL WHERE clause and bind values
+        let (dsl_where, dsl_values) = crate::search::build_sql(&filters)
+            .map_err(|e| anyhow::anyhow!("SQL build error: {}", e))?;
+
+        // Base SELECT with same fields as search_offerings
+        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey";
+
+        // Build WHERE clause: base filters + DSL filters
+        let where_clause = if dsl_where.is_empty() {
+            "WHERE LOWER(o.visibility) = 'public' AND o.pubkey != ?".to_string()
+        } else {
+            format!(
+                "WHERE LOWER(o.visibility) = 'public' AND o.pubkey != ? AND ({})",
+                dsl_where
+            )
+        };
+
+        // Complete query with ORDER BY and pagination
+        let query_sql = format!(
+            "{} {} ORDER BY o.monthly_price ASC LIMIT ? OFFSET ?",
+            base_select, where_clause
+        );
+
+        // Build query with bindings
+        let mut query_builder = sqlx::query_as::<_, Offering>(&query_sql)
+            .bind(&example_provider_pubkey);
+
+        // Bind DSL values
+        for value in dsl_values {
+            query_builder = match value {
+                crate::search::SqlValue::String(s) => query_builder.bind(s),
+                crate::search::SqlValue::Integer(i) => query_builder.bind(i),
+                crate::search::SqlValue::Float(f) => query_builder.bind(f),
+                crate::search::SqlValue::Bool(b) => query_builder.bind(b),
+            };
+        }
+
+        // Bind pagination
+        query_builder = query_builder.bind(limit).bind(offset);
+
+        let offerings = query_builder.fetch_all(&self.pool).await?;
+        Ok(offerings)
+    }
 }
 
 #[allow(dead_code)]

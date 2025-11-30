@@ -929,3 +929,218 @@ gpu-1,GPU Server,USD,500.0,0.0,public,gpu,monthly,in_stock,US,NYC,false,NVIDIA A
     assert_eq!(offering.gpu_count, Some(4));
     assert_eq!(offering.gpu_memory_gb, Some(80));
 }
+
+// DSL Search Tests
+#[tokio::test]
+async fn test_search_offerings_dsl_empty_query() {
+    let db = setup_test_db().await;
+    insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
+
+    // Empty query returns all public offerings
+    let results = db.search_offerings_dsl("", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 2);
+}
+
+#[tokio::test]
+async fn test_search_offerings_dsl_basic_type_filter() {
+    let db = setup_test_db().await;
+
+    // Insert offerings with different product types
+    let pubkey1 = vec![1u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'VPS Server', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        101,
+        pubkey1,
+        "vps-1"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let pubkey2 = vec![2u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'Compute Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        102,
+        pubkey2,
+        "compute-1"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Search for compute type only
+    let results = db.search_offerings_dsl("type:compute", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].product_type, "compute");
+    assert_eq!(results[0].offer_name, "Compute Server");
+}
+
+#[tokio::test]
+async fn test_search_offerings_dsl_price_range() {
+    let db = setup_test_db().await;
+    insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
+    insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
+
+    // Search for price range [0 TO 100]
+    let results = db.search_offerings_dsl("price:[0 TO 100]", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].monthly_price, 50.0);
+
+    // Search for price range [100 TO 200]
+    let results = db.search_offerings_dsl("price:[100 TO 200]", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].monthly_price, 150.0);
+}
+
+#[tokio::test]
+async fn test_search_offerings_dsl_combined_filters() {
+    let db = setup_test_db().await;
+
+    // Insert offerings with different attributes
+    let pubkey1 = vec![1u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'US Compute', 'USD', 80.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+        101,
+        pubkey1,
+        "us-compute"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let pubkey2 = vec![2u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'EU Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'EU', 'Berlin', 0, 0)",
+        102,
+        pubkey2,
+        "eu-compute"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let pubkey3 = vec![3u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'US VPS', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+        103,
+        pubkey3,
+        "us-vps"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Combined query: type:compute AND country:US
+    let results = db.search_offerings_dsl("type:compute AND country:US", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].product_type, "compute");
+    assert_eq!(results[0].datacenter_country, "US");
+    assert_eq!(results[0].offer_name, "US Compute");
+}
+
+#[tokio::test]
+async fn test_search_offerings_dsl_comparison_operators() {
+    let db = setup_test_db().await;
+
+    // Insert offerings with different core counts
+    let pubkey1 = vec![1u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '4 Core Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 4, 0)",
+        101,
+        pubkey1,
+        "server-4core"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let pubkey2 = vec![2u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '8 Core Server', 'USD', 150.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 8, 0)",
+        102,
+        pubkey2,
+        "server-8core"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let pubkey3 = vec![3u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '16 Core Server', 'USD', 200.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 16, 0)",
+        103,
+        pubkey3,
+        "server-16core"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Test >= operator
+    let results = db.search_offerings_dsl("cores:>=8", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) >= 8));
+
+    // Test < operator
+    let results = db.search_offerings_dsl("cores:<8", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].processor_cores, Some(4));
+}
+
+#[tokio::test]
+async fn test_search_offerings_dsl_excludes_private_and_example() {
+    let db = setup_test_db().await;
+
+    // Insert public offering
+    insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
+
+    // Insert private offering (should be excluded)
+    let pubkey = vec![2u8; 32];
+    sqlx::query!(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'Private', 'USD', 50.0, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        200,
+        pubkey,
+        "private-1"
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // DSL search should only return public offerings
+    let results = db.search_offerings_dsl("type:compute", 10, 0).await.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].visibility.to_lowercase(), "public");
+    assert_eq!(results[0].offering_id, "off-1");
+}
+
+#[tokio::test]
+async fn test_search_offerings_dsl_invalid_query() {
+    let db = setup_test_db().await;
+
+    // Invalid field name should return error
+    let result = db.search_offerings_dsl("invalid_field:value", 10, 0).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unknown field"));
+}
+
+#[tokio::test]
+async fn test_search_offerings_dsl_pagination() {
+    let db = setup_test_db().await;
+    for i in 0..5 {
+        insert_test_offering(&db, i, &[i as u8; 32], "US", 100.0 + i as f64).await;
+    }
+
+    // First page
+    let page1 = db.search_offerings_dsl("", 2, 0).await.unwrap();
+    assert_eq!(page1.len(), 2);
+    assert_eq!(page1[0].monthly_price, 100.0);
+    assert_eq!(page1[1].monthly_price, 101.0);
+
+    // Second page
+    let page2 = db.search_offerings_dsl("", 2, 2).await.unwrap();
+    assert_eq!(page2.len(), 2);
+    assert_eq!(page2[0].monthly_price, 102.0);
+    assert_eq!(page2[1].monthly_price, 103.0);
+}
