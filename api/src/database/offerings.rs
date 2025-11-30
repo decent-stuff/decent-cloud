@@ -70,6 +70,10 @@ pub struct Offering {
     #[ts(type = "boolean | undefined")]
     #[sqlx(default)]
     pub has_critical_flags: Option<bool>,
+    // Example flag - indicates if this is an example offering
+    #[ts(type = "boolean")]
+    #[sqlx(default)]
+    pub is_example: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -88,9 +92,9 @@ impl Database {
         &self,
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
-        let example_provider_pubkey = Self::example_provider_pubkey();
+        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let mut query = String::from(
-            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey WHERE LOWER(o.visibility) = 'public' AND o.pubkey != ?"
+            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey WHERE LOWER(o.visibility) = 'public'"
         );
 
         if params.product_type.is_some() {
@@ -128,6 +132,7 @@ impl Database {
 
     /// Get offerings by provider
     pub async fn get_provider_offerings(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
+        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
@@ -136,9 +141,10 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
                FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#
         )
+        .bind(example_provider_pubkey)
         .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
@@ -148,6 +154,7 @@ impl Database {
 
     /// Get single offering by id
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
+        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offering =
             sqlx::query_as::<_, Offering>(r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                 setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
@@ -156,8 +163,9 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
                FROM provider_offerings WHERE id = ?"#)
+                .bind(example_provider_pubkey)
                 .bind(offering_id)
                 .fetch_optional(&self.pool)
                 .await?;
@@ -168,6 +176,7 @@ impl Database {
     /// Get example offerings for CSV template generation
     pub async fn get_example_offerings(&self) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
+        let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
@@ -176,9 +185,10 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
                FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#
         )
+        .bind(&example_provider_pubkey_hex)
         .bind(&example_provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
@@ -189,6 +199,7 @@ impl Database {
     /// Get example offerings filtered by product type
     pub async fn get_example_offerings_by_type(&self, product_type: &str) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
+        let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
@@ -197,9 +208,10 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
                FROM provider_offerings WHERE pubkey = ? AND product_type = ? ORDER BY offering_id ASC"#
         )
+        .bind(&example_provider_pubkey_hex)
         .bind(&example_provider_pubkey)
         .bind(product_type)
         .fetch_all(&self.pool)
@@ -234,7 +246,7 @@ impl Database {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<Offering>> {
-        let example_provider_pubkey = Self::example_provider_pubkey();
+        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
 
         // Parse DSL query
         let filters = crate::search::parse_dsl(query)
@@ -245,14 +257,14 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("SQL build error: {}", e))?;
 
         // Base SELECT with same fields as search_offerings
-        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey";
+        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey";
 
         // Build WHERE clause: base filters + DSL filters
         let where_clause = if dsl_where.is_empty() {
-            "WHERE LOWER(o.visibility) = 'public' AND o.pubkey != ?".to_string()
+            "WHERE LOWER(o.visibility) = 'public'".to_string()
         } else {
             format!(
-                "WHERE LOWER(o.visibility) = 'public' AND o.pubkey != ? AND ({})",
+                "WHERE LOWER(o.visibility) = 'public' AND ({})",
                 dsl_where
             )
         };
@@ -289,18 +301,16 @@ impl Database {
 impl Database {
     /// Count offerings
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {
-        let example_provider_pubkey = Self::example_provider_pubkey();
         let query = if let Some(f) = filters {
             format!(
-                "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ? AND ({})",
+                "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND ({})",
                 f
             )
         } else {
-            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ?".to_string()
+            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public'".to_string()
         };
 
         let count: (i64,) = sqlx::query_as(&query)
-            .bind(example_provider_pubkey)
             .fetch_one(&self.pool)
             .await?;
 
@@ -362,6 +372,7 @@ impl Database {
             operating_systems,
             trust_score: _,
             has_critical_flags: _,
+            is_example: _,
         } = params;
 
         let mut tx = self.pool.begin().await?;
@@ -532,6 +543,7 @@ impl Database {
             operating_systems,
             trust_score: _,
             has_critical_flags: _,
+            is_example: _,
         } = params;
 
         sqlx::query!(
@@ -699,6 +711,7 @@ impl Database {
             operating_systems: source.operating_systems,
             trust_score: None,
             has_critical_flags: None,
+            is_example: false,
         };
 
         self.create_offering(pubkey, params).await
@@ -947,6 +960,7 @@ impl Database {
             operating_systems: get_opt_csv("operating_systems"),
             trust_score: None,
             has_critical_flags: None,
+            is_example: false,
         })
     }
 }

@@ -73,7 +73,8 @@ async fn test_count_offerings_no_filters() {
     insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
 
     let count = db.count_offerings(None).await.unwrap();
-    assert_eq!(count, 2);
+    // Count includes example offerings from migration 008
+    assert!(count >= 2);
 }
 
 #[tokio::test]
@@ -87,16 +88,20 @@ async fn test_search_offerings_no_filters() {
             product_type: None,
             country: None,
             in_stock_only: false,
-            limit: 10,
+            limit: 100,
             offset: 0,
         })
         .await
         .unwrap();
-    assert_eq!(results.len(), 2);
+    // Results include example offerings from migration 008
+    assert!(results.len() >= 2);
+    // Verify our test offerings are present
+    assert!(results.iter().any(|o| o.offering_id == "off-1"));
+    assert!(results.iter().any(|o| o.offering_id == "off-2"));
 }
 
 #[tokio::test]
-async fn test_search_offerings_excludes_private_and_example() {
+async fn test_search_offerings_excludes_private() {
     let db = setup_test_db().await;
     let pubkey = vec![1u8; 32];
 
@@ -125,16 +130,18 @@ async fn test_search_offerings_excludes_private_and_example() {
             product_type: None,
             country: None,
             in_stock_only: false,
-            limit: 10,
+            limit: 100,
             offset: 0,
         })
         .await
         .unwrap();
 
-    // Should only return the public offering, not the private one or examples
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].offering_id, "off-1");
-    assert_eq!(results[0].visibility.to_lowercase(), "public");
+    // Should return public offerings (including examples), not the private one
+    assert!(results.len() >= 1);
+    assert!(results.iter().any(|o| o.offering_id == "off-1"));
+    assert!(results.iter().all(|o| o.visibility.to_lowercase() == "public"));
+    // Verify private offering is NOT in results
+    assert!(!results.iter().any(|o| o.offering_id == "off-2"));
 }
 
 #[tokio::test]
@@ -265,6 +272,7 @@ async fn test_create_offering_success() {
         operating_systems: Some("Ubuntu 22.04".to_string()),
         trust_score: None,
         has_critical_flags: None,
+        is_example: false,
     };
 
     let offering_id = db.create_offering(&pubkey, params).await.unwrap();
@@ -357,6 +365,7 @@ async fn test_create_offering_duplicate_id() {
         operating_systems: None,
         trust_score: None,
         has_critical_flags: None,
+        is_example: false,
     };
 
     // First creation should succeed
@@ -419,6 +428,7 @@ async fn test_create_offering_missing_required_fields() {
         operating_systems: None,
         trust_score: None,
         has_critical_flags: None,
+        is_example: false,
     };
 
     let result = db.create_offering(&pubkey, params).await;
@@ -480,6 +490,7 @@ async fn test_update_offering_success() {
         operating_systems: Some("Debian 12".to_string()),
         trust_score: None,
         has_critical_flags: None,
+        is_example: false,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -550,6 +561,7 @@ async fn test_update_offering_unauthorized() {
         operating_systems: None,
         trust_score: None,
         has_critical_flags: None,
+        is_example: false,
     };
 
     let result = db.update_offering(&pubkey2, db_id, params).await;
@@ -937,9 +949,11 @@ async fn test_search_offerings_dsl_empty_query() {
     insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
 
-    // Empty query returns all public offerings
-    let results = db.search_offerings_dsl("", 10, 0).await.unwrap();
-    assert_eq!(results.len(), 2);
+    // Empty query returns all public offerings (including examples)
+    let results = db.search_offerings_dsl("", 100, 0).await.unwrap();
+    assert!(results.len() >= 2);
+    assert!(results.iter().any(|o| o.offering_id == "off-1"));
+    assert!(results.iter().any(|o| o.offering_id == "off-2"));
 }
 
 #[tokio::test]
@@ -1102,7 +1116,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
 }
 
 #[tokio::test]
-async fn test_search_offerings_dsl_excludes_private_and_example() {
+async fn test_search_offerings_dsl_excludes_private() {
     let db = setup_test_db().await;
 
     // Insert public offering
@@ -1120,14 +1134,16 @@ async fn test_search_offerings_dsl_excludes_private_and_example() {
     .await
     .unwrap();
 
-    // DSL search should only return public offerings
+    // DSL search should only return public offerings (including examples)
     let results = db
-        .search_offerings_dsl("type:compute", 10, 0)
+        .search_offerings_dsl("type:compute", 100, 0)
         .await
         .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].visibility.to_lowercase(), "public");
-    assert_eq!(results[0].offering_id, "off-1");
+    assert!(results.len() >= 1);
+    assert!(results.iter().all(|o| o.visibility.to_lowercase() == "public"));
+    assert!(results.iter().any(|o| o.offering_id == "off-1"));
+    // Verify private offering is NOT in results
+    assert!(!results.iter().any(|o| o.offering_id == "private-1"));
 }
 
 #[tokio::test]
