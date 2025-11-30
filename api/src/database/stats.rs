@@ -445,6 +445,63 @@ impl Database {
             None
         };
 
+        // Abandonment velocity (Tier 2 metric)
+        let cutoff_30d_ns = now_ns - 30 * ns_per_day;
+        let cutoff_31d_ns = now_ns - 31 * ns_per_day;
+
+        // Recent period: last 30 days
+        let recent_cancelled: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'cancelled' AND status_updated_at_ns > ?",
+            pubkey,
+            cutoff_30d_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let recent_total: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('completed', 'cancelled') AND status_updated_at_ns > ?",
+            pubkey,
+            cutoff_30d_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Baseline period: 31-90 days ago
+        let baseline_cancelled: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'cancelled' AND status_updated_at_ns > ? AND status_updated_at_ns <= ?",
+            pubkey,
+            cutoff_90d_ns,
+            cutoff_31d_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let baseline_total: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('completed', 'cancelled') AND status_updated_at_ns > ? AND status_updated_at_ns <= ?",
+            pubkey,
+            cutoff_90d_ns,
+            cutoff_31d_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let abandonment_velocity = if baseline_total == 0 {
+            None
+        } else {
+            let recent_rate = if recent_total > 0 {
+                recent_cancelled as f64 / recent_total as f64
+            } else {
+                0.0
+            };
+            let baseline_rate = baseline_cancelled as f64 / baseline_total as f64;
+
+            if baseline_rate == 0.0 {
+                Some(recent_rate)
+            } else {
+                Some(recent_rate / baseline_rate)
+            }
+        };
+
         // Calculate trust score and critical flags
         let (trust_score, has_critical_flags, critical_flag_reasons) =
             Self::calculate_trust_score_and_flags(
@@ -495,6 +552,7 @@ impl Database {
             provider_tenure: provider_tenure.to_string(),
             avg_contract_duration_ratio,
             no_response_rate_pct,
+            abandonment_velocity,
         })
     }
 
@@ -785,6 +843,11 @@ pub struct ProviderTrustMetrics {
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub no_response_rate_pct: Option<f64>,
+    /// Abandonment velocity: ratio of recent (30d) to baseline (31-90d) cancellation rates.
+    /// >1.5 = concerning, >2.0 = critical. None if insufficient baseline data.
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub abandonment_velocity: Option<f64>,
 }
 
 /// Account search result with reputation and activity stats

@@ -87,4 +87,9 @@ avg_contract_duration_ratio: number | undefined,
 /**
  * Percentage of requests that received no response (>7 days old, still "requested")
  */
-no_response_rate_pct: number | undefined, };
+no_response_rate_pct: number | undefined, 
+/**
+ * Abandonment velocity: ratio of recent (30d) to baseline (31-90d) cancellation rates.
+ * >1.5 = concerning, >2.0 = critical. None if insufficient baseline data.
+ */
+abandonment_velocity: number | undefined, };
