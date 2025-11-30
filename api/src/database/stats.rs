@@ -380,6 +380,71 @@ impl Database {
         .await?;
         let has_contact_info = contact_count > 0;
 
+        // Tier 3 Contextual Metrics
+
+        // Provider tenure classification based on completed contracts
+        let provider_tenure = if completed_contracts < 5 {
+            "new"
+        } else if completed_contracts <= 20 {
+            "growing"
+        } else {
+            "established"
+        };
+
+        // Average contract duration ratio (actual vs expected)
+        // Calculate for completed and cancelled contracts only
+        let avg_contract_duration_ratio: Option<f64> = sqlx::query_scalar!(
+            r#"SELECT
+                CASE
+                    WHEN AVG(duration_hours) > 0 THEN
+                        AVG(CAST(
+                            CASE
+                                WHEN status = 'completed' AND end_timestamp_ns IS NOT NULL AND start_timestamp_ns IS NOT NULL THEN
+                                    (end_timestamp_ns - start_timestamp_ns) / 3600000000000.0
+                                WHEN status = 'cancelled' AND status_updated_at_ns IS NOT NULL AND start_timestamp_ns IS NOT NULL THEN
+                                    (status_updated_at_ns - start_timestamp_ns) / 3600000000000.0
+                                ELSE NULL
+                            END AS REAL
+                        )) / AVG(duration_hours)
+                    ELSE NULL
+                END as "ratio: f64"
+            FROM contract_sign_requests
+            WHERE provider_pubkey = ?
+            AND status IN ('completed', 'cancelled')
+            AND duration_hours IS NOT NULL
+            AND duration_hours > 0"#,
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // No response rate (% of requests >7 days old still in "requested" status)
+        let cutoff_7d_ns = now_ns - 7 * ns_per_day;
+
+        // Count total requests in last 90 days
+        let total_requests_90d: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND created_at_ns > ?",
+            pubkey,
+            cutoff_90d_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Count requests still in "requested" status and older than 7 days
+        let no_response_count: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'requested' AND created_at_ns < ?",
+            pubkey,
+            cutoff_7d_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let no_response_rate_pct = if total_requests_90d > 0 {
+            Some((no_response_count as f64 / total_requests_90d as f64) * 100.0)
+        } else {
+            None
+        };
+
         // Calculate trust score and critical flags
         let (trust_score, has_critical_flags, critical_flag_reasons) =
             Self::calculate_trust_score_and_flags(
@@ -427,6 +492,9 @@ impl Database {
             has_contact_info,
             has_critical_flags,
             critical_flag_reasons,
+            provider_tenure: provider_tenure.to_string(),
+            avg_contract_duration_ratio,
+            no_response_rate_pct,
         })
     }
 
@@ -705,6 +773,18 @@ pub struct ProviderTrustMetrics {
     pub has_critical_flags: bool,
     /// Human-readable list of exceeded thresholds
     pub critical_flag_reasons: Vec<String>,
+
+    // Tier 3 Contextual Info Metrics
+    /// Provider tenure classification: "new" (<5), "growing" (5-20), "established" (>20)
+    pub provider_tenure: String,
+    /// Ratio of actual contract duration to expected (avg_actual/avg_expected)
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub avg_contract_duration_ratio: Option<f64>,
+    /// Percentage of requests that received no response (>7 days old, still "requested")
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub no_response_rate_pct: Option<f64>,
 }
 
 /// Account search result with reputation and activity stats
