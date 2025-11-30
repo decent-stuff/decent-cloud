@@ -5,7 +5,10 @@ async fn test_create_recovery_token() {
     let db = setup_test_db().await;
 
     // Create account first
-    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
     // Add email via OAuth link
     db.create_oauth_account(
         &account.id,
@@ -36,7 +39,10 @@ async fn test_verify_recovery_token() {
     let db = setup_test_db().await;
 
     // Create account with email
-    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
     db.create_oauth_account(
         &account.id,
         "google_oauth",
@@ -69,7 +75,10 @@ async fn test_complete_recovery() {
     let db = setup_test_db().await;
 
     // Create account with one key
-    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
     db.create_oauth_account(
         &account.id,
         "google_oauth",
@@ -100,7 +109,10 @@ async fn test_complete_recovery() {
 async fn test_complete_recovery_token_used_twice() {
     let db = setup_test_db().await;
 
-    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
     db.create_oauth_account(
         &account.id,
         "google_oauth",
@@ -128,7 +140,10 @@ async fn test_complete_recovery_token_used_twice() {
 async fn test_cleanup_expired_recovery_tokens() {
     let db = setup_test_db().await;
 
-    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
     db.create_oauth_account(
         &account.id,
         "google_oauth",

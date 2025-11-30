@@ -110,7 +110,12 @@ impl From<Account> for AccountProfile {
 
 impl Database {
     /// Create a new account with initial public key
-    pub async fn create_account(&self, username: &str, public_key: &[u8], email: &str) -> Result<Account> {
+    pub async fn create_account(
+        &self,
+        username: &str,
+        public_key: &[u8],
+        email: &str,
+    ) -> Result<Account> {
         if public_key.len() != 32 {
             bail!("Public key must be 32 bytes");
         }
@@ -149,7 +154,11 @@ impl Database {
 
     /// Create an email verification token for an account
     /// Returns the token bytes that should be sent via email
-    pub async fn create_email_verification_token(&self, account_id: &[u8], email: &str) -> Result<Vec<u8>> {
+    pub async fn create_email_verification_token(
+        &self,
+        account_id: &[u8],
+        email: &str,
+    ) -> Result<Vec<u8>> {
         // Generate secure random token (32 bytes = 256 bits)
         let token = uuid::Uuid::new_v4().as_bytes().to_vec();
         let now = chrono::Utc::now().timestamp();

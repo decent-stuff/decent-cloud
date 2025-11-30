@@ -1,7 +1,8 @@
 use super::common::{
     AddAccountContactRequest, AddAccountExternalKeyRequest, AddAccountKeyRequest,
     AddAccountSocialRequest, ApiResponse, ApiTags, CompleteRecoveryRequest, RegisterAccountRequest,
-    RequestRecoveryRequest, UpdateAccountProfileRequest, UpdateDeviceNameRequest, VerifyEmailRequest,
+    RequestRecoveryRequest, UpdateAccountProfileRequest, UpdateDeviceNameRequest,
+    VerifyEmailRequest,
 };
 use crate::{auth::ApiAuthenticatedUser, database::email::EmailType, database::Database};
 use poem::web::Data;
@@ -199,7 +200,10 @@ impl AccountsApi {
         }
 
         // Create account
-        match db.create_account(&username, &public_key, &body_data.email).await {
+        match db
+            .create_account(&username, &public_key, &body_data.email)
+            .await
+        {
             Ok(account) => {
                 // Insert audit record
                 let req_body_str = String::from_utf8_lossy(&req_body_bytes);
@@ -220,13 +224,17 @@ impl AccountsApi {
                 }
 
                 // Create email verification token
-                match db.create_email_verification_token(&account.id, &body_data.email).await {
+                match db
+                    .create_email_verification_token(&account.id, &body_data.email)
+                    .await
+                {
                     Ok(token) => {
                         // Build verification URL
                         let base_url = std::env::var("FRONTEND_URL")
                             .unwrap_or_else(|_| "http://localhost:59000".to_string());
                         let token_hex = hex::encode(&token);
-                        let verification_url = format!("{}/verify-email?token={}", base_url, token_hex);
+                        let verification_url =
+                            format!("{}/verify-email?token={}", base_url, token_hex);
 
                         // Queue verification email
                         let subject = "Verify Your Decent Cloud Email";
@@ -239,8 +247,7 @@ impl AccountsApi {
                             If you did not create this account, please ignore this email.\n\n\
                             Best regards,\n\
                             The Decent Cloud Team",
-                            username,
-                            verification_url
+                            username, verification_url
                         );
 
                         db.queue_email_safe(
