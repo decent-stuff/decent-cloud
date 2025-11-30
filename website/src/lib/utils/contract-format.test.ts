@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey } from './contract-format';
+import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration } from './contract-format';
 
 describe('contract formatting helpers', () => {
 	it('formats timestamps into readable strings', () => {
@@ -47,6 +47,28 @@ describe('contract formatting helpers', () => {
 			// Ed25519 public key is 32 bytes = 64 hex characters
 			expect(hex).toHaveLength(64);
 			expect(hex).toBe('f'.repeat(64));
+		});
+	});
+
+	describe('formatDuration', () => {
+		it('formats sub-hour durations in minutes', () => {
+			const thirtyMinNs = 30 * 60 * 1_000_000_000;
+			expect(formatDuration(thirtyMinNs)).toBe('30.0min');
+		});
+
+		it('formats hour durations', () => {
+			const twoHoursNs = 2 * 60 * 60 * 1_000_000_000;
+			expect(formatDuration(twoHoursNs)).toBe('2.0h');
+		});
+
+		it('formats day durations', () => {
+			const threeDaysNs = 3 * 24 * 60 * 60 * 1_000_000_000;
+			expect(formatDuration(threeDaysNs)).toBe('3.0d');
+		});
+
+		it('formats fractional minutes clearly', () => {
+			const ninetySecondsNs = 90 * 1_000_000_000;
+			expect(formatDuration(ninetySecondsNs)).toBe('1.5min');
 		});
 	});
 });

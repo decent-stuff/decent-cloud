@@ -72,7 +72,7 @@ export function formatDuration(duration_ns: number): string {
 	const hours = duration_ns / (1_000_000_000 * 60 * 60);
 	if (hours < 1) {
 		const minutes = duration_ns / (1_000_000_000 * 60);
-		return `${minutes.toFixed(1)}m`;
+		return `${minutes.toFixed(1)}min`;
 	}
 	if (hours < 24) {
 		return `${hours.toFixed(1)}h`;
