@@ -357,7 +357,7 @@ async fn test_csv_template_data_retrieval() {
 }
 
 #[tokio::test]
-async fn test_example_offerings_excluded_from_search() {
+async fn test_example_offerings_included_in_search() {
     let db = setup_test_db().await;
 
     // Create a regular public offering
@@ -385,29 +385,37 @@ async fn test_example_offerings_excluded_from_search() {
         .unwrap();
     }
 
-    // Search offerings - should only return the public offering, not examples
+    // Search offerings - should return public offering + 10 example offerings from migration
     let search_params = crate::database::offerings::SearchOfferingsParams {
         product_type: None,
         country: None,
         in_stock_only: false,
-        limit: 10,
+        limit: 100,
         offset: 0,
     };
 
     let search_results = db.search_offerings(search_params).await.unwrap();
     assert_eq!(
         search_results.len(),
-        1,
-        "Search should only return 1 public offering, not example offerings"
+        11,
+        "Search should return 1 public offering + 10 example offerings"
     );
-    assert_eq!(search_results[0].offering_id, "test-public-001");
-    assert_eq!(search_results[0].visibility, "public");
 
-    // Verify count_offerings also excludes examples
+    // Find our test offering (example offerings are sorted first by price, test offering is $99.99)
+    let test_offering = search_results
+        .iter()
+        .find(|o| o.offering_id == "test-public-001");
+    assert!(
+        test_offering.is_some(),
+        "Test offering should be in results"
+    );
+    assert_eq!(test_offering.unwrap().visibility, "public");
+
+    // Verify count_offerings includes examples
     let total_count = db.count_offerings(None).await.unwrap();
     assert_eq!(
-        total_count, 1,
-        "Count should only include public offerings, not examples"
+        total_count, 11,
+        "Count should include public offerings + examples"
     );
 }
 

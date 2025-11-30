@@ -263,10 +263,7 @@ impl Database {
         let where_clause = if dsl_where.is_empty() {
             "WHERE LOWER(o.visibility) = 'public'".to_string()
         } else {
-            format!(
-                "WHERE LOWER(o.visibility) = 'public' AND ({})",
-                dsl_where
-            )
+            format!("WHERE LOWER(o.visibility) = 'public' AND ({})", dsl_where)
         };
 
         // Complete query with ORDER BY and pagination
@@ -310,9 +307,7 @@ impl Database {
             "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public'".to_string()
         };
 
-        let count: (i64,) = sqlx::query_as(&query)
-            .fetch_one(&self.pool)
-            .await?;
+        let count: (i64,) = sqlx::query_as(&query).fetch_one(&self.pool).await?;
 
         Ok(count.0)
     }

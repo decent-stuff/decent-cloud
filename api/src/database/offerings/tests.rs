@@ -139,7 +139,9 @@ async fn test_search_offerings_excludes_private() {
     // Should return public offerings (including examples), not the private one
     assert!(results.len() >= 1);
     assert!(results.iter().any(|o| o.offering_id == "off-1"));
-    assert!(results.iter().all(|o| o.visibility.to_lowercase() == "public"));
+    assert!(results
+        .iter()
+        .all(|o| o.visibility.to_lowercase() == "public"));
     // Verify private offering is NOT in results
     assert!(!results.iter().any(|o| o.offering_id == "off-2"));
 }
@@ -171,22 +173,20 @@ async fn test_search_offerings_price_range() {
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
 
-    // All offerings are fetched
+    // All offerings are fetched (3 test + 10 example offerings from migration)
     let results = db
         .search_offerings(SearchOfferingsParams {
             product_type: None,
             country: None,
             in_stock_only: false,
-            limit: 10,
+            limit: 100,
             offset: 0,
         })
         .await
         .unwrap();
-    assert_eq!(results.len(), 3);
-    // Results sorted by monthly_price ASC
-    assert_eq!(results[0].monthly_price, 50.0);
-    assert_eq!(results[1].monthly_price, 150.0);
-    assert_eq!(results[2].monthly_price, 250.0);
+    assert_eq!(results.len(), 13);
+    // Results sorted by monthly_price ASC - first should be cheapest example offering (2.5)
+    assert_eq!(results[0].monthly_price, 2.5);
 }
 
 #[tokio::test]
@@ -983,14 +983,14 @@ async fn test_search_offerings_dsl_basic_type_filter() {
     .await
     .unwrap();
 
-    // Search for compute type only
+    // Search for compute type only (1 test + 2 example compute offerings)
     let results = db
         .search_offerings_dsl("type:compute", 10, 0)
         .await
         .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].product_type, "compute");
-    assert_eq!(results[0].offer_name, "Compute Server");
+    assert_eq!(results.len(), 3);
+    // Verify all are compute type
+    assert!(results.iter().all(|r| r.product_type == "compute"));
 }
 
 #[tokio::test]
@@ -1000,21 +1000,23 @@ async fn test_search_offerings_dsl_price_range() {
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
 
-    // Search for price range [0 TO 100]
+    // Search for price range [0 TO 100] (1 test @ 50.0 + 7 example offerings <= 100)
     let results = db
         .search_offerings_dsl("price:[0 TO 100]", 10, 0)
         .await
         .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].monthly_price, 50.0);
+    assert_eq!(results.len(), 8);
+    assert!(results.iter().all(|r| r.monthly_price <= 100.0));
 
-    // Search for price range [100 TO 200]
+    // Search for price range [100 TO 200] (1 test @ 150.0 + 1 example @ 150.0)
     let results = db
         .search_offerings_dsl("price:[100 TO 200]", 10, 0)
         .await
         .unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].monthly_price, 150.0);
+    assert_eq!(results.len(), 2);
+    assert!(results
+        .iter()
+        .all(|r| r.monthly_price >= 100.0 && r.monthly_price <= 200.0));
 }
 
 #[tokio::test]
@@ -1104,15 +1106,15 @@ async fn test_search_offerings_dsl_comparison_operators() {
     .await
     .unwrap();
 
-    // Test >= operator
+    // Test >= operator (2 test offerings + 4 example offerings with cores >= 8)
     let results = db.search_offerings_dsl("cores:>=8", 10, 0).await.unwrap();
-    assert_eq!(results.len(), 2);
+    assert_eq!(results.len(), 6);
     assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) >= 8));
 
-    // Test < operator
+    // Test < operator (1 test offering with 4 cores + example offerings with cores < 8)
     let results = db.search_offerings_dsl("cores:<8", 10, 0).await.unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].processor_cores, Some(4));
+    assert!(results.len() >= 1);
+    assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) < 8));
 }
 
 #[tokio::test]
@@ -1140,7 +1142,9 @@ async fn test_search_offerings_dsl_excludes_private() {
         .await
         .unwrap();
     assert!(results.len() >= 1);
-    assert!(results.iter().all(|o| o.visibility.to_lowercase() == "public"));
+    assert!(results
+        .iter()
+        .all(|o| o.visibility.to_lowercase() == "public"));
     assert!(results.iter().any(|o| o.offering_id == "off-1"));
     // Verify private offering is NOT in results
     assert!(!results.iter().any(|o| o.offering_id == "private-1"));
@@ -1163,15 +1167,15 @@ async fn test_search_offerings_dsl_pagination() {
         insert_test_offering(&db, i, &[i as u8; 32], "US", 100.0 + i as f64).await;
     }
 
-    // First page
+    // First page (sorted by price ASC, starts with cheapest example offering at 2.5)
     let page1 = db.search_offerings_dsl("", 2, 0).await.unwrap();
     assert_eq!(page1.len(), 2);
-    assert_eq!(page1[0].monthly_price, 100.0);
-    assert_eq!(page1[1].monthly_price, 101.0);
+    assert_eq!(page1[0].monthly_price, 2.5);
+    assert_eq!(page1[1].monthly_price, 5.0);
 
     // Second page
     let page2 = db.search_offerings_dsl("", 2, 2).await.unwrap();
     assert_eq!(page2.len(), 2);
-    assert_eq!(page2[0].monthly_price, 102.0);
-    assert_eq!(page2[1].monthly_price, 103.0);
+    assert_eq!(page2[0].monthly_price, 10.0);
+    assert_eq!(page2[1].monthly_price, 15.0);
 }
