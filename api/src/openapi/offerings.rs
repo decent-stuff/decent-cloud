@@ -10,7 +10,7 @@ pub struct OfferingsApi;
 impl OfferingsApi {
     /// Search offerings
     ///
-    /// Search for offerings with optional filters
+    /// Search for offerings with optional filters or DSL query
     #[oai(path = "/offerings", method = "get", tag = "ApiTags::Offerings")]
     async fn search_offerings(
         &self,
@@ -20,7 +20,27 @@ impl OfferingsApi {
         product_type: poem_openapi::param::Query<Option<String>>,
         country: poem_openapi::param::Query<Option<String>>,
         #[oai(default = "default_false")] in_stock_only: poem_openapi::param::Query<bool>,
+        q: poem_openapi::param::Query<Option<String>>,
     ) -> Json<ApiResponse<Vec<crate::database::offerings::Offering>>> {
+        // If DSL query is provided, use search_offerings_dsl
+        if let Some(query) = q.0.as_ref() {
+            if !query.trim().is_empty() {
+                return match db.search_offerings_dsl(query, limit.0, offset.0).await {
+                    Ok(offerings) => Json(ApiResponse {
+                        success: true,
+                        data: Some(offerings),
+                        error: None,
+                    }),
+                    Err(e) => Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(e.to_string()),
+                    }),
+                };
+            }
+        }
+
+        // Otherwise, use traditional parameter-based search for backward compatibility
         let search_params = crate::database::offerings::SearchOfferingsParams {
             product_type: product_type.0.as_deref(),
             country: country.0.as_deref(),
