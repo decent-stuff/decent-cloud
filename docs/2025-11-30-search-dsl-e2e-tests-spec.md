@@ -5,8 +5,8 @@
 
 ### Must-have
 - [x] Show example offerings in marketplace (remove filter)
-- [ ] Add "Demo" badge to example offerings in UI
-- [ ] Disable "Rent" button for example offerings
+- [x] Add "Demo" badge to example offerings in UI
+- [x] Disable "Rent" button for example offerings
 - [ ] E2E test for DSL text search input (e.g., `price:<=100`)
 - [ ] E2E test for type filter buttons (All, Compute, GPU, Storage, Network)
 - [ ] E2E test for combined filters (type button + DSL query)
@@ -43,7 +43,7 @@ Files:
 
 ### Step 2: Add Demo Badge and Disable Rent for Examples
 **Success:** Example offerings show "Demo" badge, rent button is disabled with tooltip.
-**Status:** Pending
+**Status:** Complete
 
 Files:
 - `website/src/routes/dashboard/marketplace/+page.svelte` - UI changes
@@ -102,5 +102,36 @@ Key changes:
 - Example provider pubkey: `6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572`
 - Migration 008 provides 10 example offerings (2 compute, 2 gpu, 2 storage, 2 network, 2 dedicated)
 - Kept `example_provider_pubkey()` helper function for calculating is_example field
+
+### Step 2: Add Demo Badge and Disable Rent for Examples (2025-11-30)
+**Implementation:**
+
+Changed files:
+- `/code/website/src/lib/types/generated/Offering.ts` - Added is_example field
+- `/code/website/src/routes/dashboard/marketplace/+page.svelte` - UI changes for demo badge and disabled rent button
+- `/code/website/src/lib/components/QuickEditOfferingDialog.svelte` - Include is_example in params
+
+Key changes:
+1. Added `is_example: boolean` field to TypeScript `Offering` type
+2. Added amber-colored "Demo" badge next to "Available" badge for example offerings
+   - Badge uses `bg-amber-500/20 text-amber-400 border border-amber-500/30` styling
+   - Shows tooltip: "This is a demo offering for testing search functionality"
+3. Disabled "Rent Resource" button for example offerings:
+   - Added `disabled={offering.is_example}` attribute
+   - Added disabled state styling: `disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:brightness-100`
+   - Shows tooltip when disabled: "Demo offerings cannot be rented"
+4. Updated QuickEditOfferingDialog to include `is_example` field in CreateOfferingParams
+
+**Outcome:** SUCCESS
+- Demo badge appears on example offerings in marketplace
+- Rent button is visually disabled and non-functional for example offerings
+- TypeScript check passes with no errors (`npm run check`)
+- UI follows existing design patterns with Tailwind utility classes
+- Minimal, clean implementation following KISS principle
+
+**Notes:**
+- Badge placement: Shows between TrustBadge and Available badge
+- Color scheme: Amber for demo vs green for available - clear visual distinction
+- Accessibility: Disabled button includes title tooltip for users
 
 ## Completion Summary

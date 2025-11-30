@@ -266,6 +266,14 @@
 									compact={true}
 								/>
 							{/if}
+							{#if offering.is_example}
+								<span
+									class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30"
+									title="This is a demo offering for testing search functionality"
+								>
+									Demo
+								</span>
+							{/if}
 							<span
 								class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30"
 							>
@@ -334,7 +342,9 @@
 
 					<button
 						onclick={() => handleRentClick(offering)}
-						class="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
+						disabled={offering.is_example}
+						class="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:brightness-100"
+						title={offering.is_example ? "Demo offerings cannot be rented" : ""}
 					>
 						🚀 Rent Resource
 					</button>

@@ -103,7 +103,8 @@
 				features: offering.features || undefined,
 				operating_systems: offering.operating_systems || undefined,
 				trust_score: undefined,
-				has_critical_flags: undefined
+				has_critical_flags: undefined,
+				is_example: offering.is_example
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed
