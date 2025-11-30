@@ -1,8 +1,23 @@
-# Development overrides - no tunnel, access via localhost only
+# Development overrides with Cloudflare Tunnel for public access
 # Deploy with: python3 deploy.py deploy dev
-# Or export an environment variable: VITE_DECENT_CLOUD_API_URL=http://localhost:59001
+# Public URLs: dev.decent-cloud.org, dev-api.decent-cloud.org
 
 x-api-base: &api-base
+  environment:
+    - ENVIRONMENT=dev
+    - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
+    - RUST_LOG=${RUST_LOG:-info}
+    - API_SERVER_PORT=59001
+    - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30}
+    - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+    - LEDGER_DIR=/data/ledger
+    - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+    - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+    - GOOGLE_OAUTH_REDIRECT_URL=${GOOGLE_OAUTH_REDIRECT_URL}
+    - FRONTEND_URL=${FRONTEND_URL}
+    - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+    - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+    - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
   volumes:
     - ../data/api-data-dev:/data
   networks:
@@ -11,8 +26,10 @@ x-api-base: &api-base
 services:
   website:
     container_name: decent-cloud-website-dev
+    environment:
+      - ENVIRONMENT=dev
     ports:
-      - "59000:3000" # Dev: host 59000 -> container 3000
+      - "59000:3000" # Dev: host 59000 -> container 3000 (local access)
     networks:
       - decent-cloud-dev
 
@@ -20,7 +37,7 @@ services:
     <<: *api-base
     container_name: decent-cloud-api-serve-dev
     ports:
-      - "59001:59001" # Dev: host 59001 -> container 59001
+      - "59001:59001" # Dev: host 59001 -> container 59001 (local access)
 
   api-sync:
     <<: *api-base
@@ -31,6 +48,21 @@ services:
     container_name: decent-cloud-api-validate-dev
     # Validator disabled by default in dev, comment out to enable it
     profiles: ["validator"]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: decent-cloud-tunnel-dev
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN
+    networks:
+      - decent-cloud-dev
+    depends_on:
+      website:
+        condition: service_healthy
+      api-serve:
+        condition: service_healthy
 
 networks:
   decent-cloud-dev:

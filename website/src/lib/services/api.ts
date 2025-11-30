@@ -58,7 +58,7 @@ export interface CsvImportResult {
 export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey'>;
 
 // API URLs for different environments
-const DEV_API_BASE_URL = 'http://localhost:59001';
+const DEV_API_BASE_URL = 'http://dev-api.decent-cloud.org';
 const PROD_API_BASE_URL = 'https://api.decent-cloud.org';
 
 // Determine API URL based on build mode and environment variable

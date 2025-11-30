@@ -376,7 +376,7 @@ def build_website_natively(environment: str, env_vars: dict[str, str]) -> bool:
 
             if environment == "dev":
                 f.write("# Development/staging API endpoint\n")
-                f.write("VITE_DECENT_CLOUD_API_URL=http://localhost:59001\n")
+                f.write("VITE_DECENT_CLOUD_API_URL=https://dev-api.decent-cloud.org\n")
             else:  # prod
                 f.write("# Production API endpoint (uses default from .env)\n")
                 f.write("VITE_DECENT_CLOUD_API_URL=https://api.decent-cloud.org\n")
@@ -456,16 +456,20 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     # Merge file env vars into env_vars (file vars take precedence)
     env_vars.update(file_env_vars)
 
-    if is_prod:
-        # Verify tunnel token exists for production
-        if not env_vars.get("TUNNEL_TOKEN"):
+    # Verify tunnel token exists
+    if not env_vars.get("TUNNEL_TOKEN"):
+        if is_prod:
             print_error("TUNNEL_TOKEN not found in production config")
             print()
             print(f"Add TUNNEL_TOKEN to {env_file}")
             print(f"Get token from: https://one.dash.cloudflare.com/")
             print()
             return 1
-
+        else:
+            print_warning("TUNNEL_TOKEN not found - public access will not work")
+            print_info(f"Add TUNNEL_TOKEN to {env_file} for public access")
+            print()
+    else:
         print_success("Tunnel token loaded")
         print()
 
@@ -521,20 +525,21 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     if is_prod:
         print("Production Deployment Complete!")
     else:
-        print("Containers Started!")
+        print("Development Deployment Complete!")
     print(f"========================================{NC}")
     print()
     print("Services started:")
     if is_prod:
-        print("  • Decent Cloud Website (production build)")
+        print("  • Decent Cloud Website (production)")
+        print("  • Cloudflare Tunnel (api.decent-cloud.org)")
     else:
-        print("  • Decent Cloud Website")
-    print("  • Cloudflare Tunnel")
+        print("  • Decent Cloud Website (development)")
+        print("  • Cloudflare Tunnel (dev-api.decent-cloud.org)")
     print()
 
-    if is_prod:
-        # Check tunnel connection
-        print_warning("Verifying tunnel connection..." if is_prod else "Checking tunnel connection...")
+    # Check tunnel connection (both dev and prod now use tunnels)
+    if env_vars.get("TUNNEL_TOKEN"):
+        print_warning("Verifying tunnel connection...")
         import time
 
         time.sleep(5)
@@ -545,22 +550,22 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
             print_success("Tunnel connected successfully!")
             print()
             if is_prod:
-                print("Your website is now live and accessible")
-                print()
-                print("Verify deployment:")
-                print("  • Check tunnel status in Cloudflare dashboard")
-                print("  • Test your domain: https://your-domain.com/health")
+                print("Your website is live at: https://decent-cloud.org")
+                print("API available at: https://api.decent-cloud.org")
             else:
-                print("Your website is now accessible through Cloudflare")
+                print("Your website is live at: https://dev.decent-cloud.org")
+                print("API available at: https://dev-api.decent-cloud.org")
+            print()
+            print("Verify deployment:")
+            print("  • Check tunnel status in Cloudflare dashboard")
+            domain = "decent-cloud.org" if is_prod else "dev.decent-cloud.org"
+            print(f"  • Test your domain: https://{domain}/health")
         elif status == "unauthorized":
             print_error("Tunnel authentication failed!")
             print()
-            if is_prod:
-                print("Possible causes:")
-                print("  1. Tunnel doesn't exist in Cloudflare dashboard")
-                print("  2. Token is invalid or expired")
-            else:
-                print("The tunnel token is invalid or the tunnel doesn't exist")
+            print("Possible causes:")
+            print("  1. Tunnel doesn't exist in Cloudflare dashboard")
+            print("  2. Token is invalid or expired")
             print()
             print(f"Fix: {BLUE}python3 setup_tunnel.py{NC}")
             print()

@@ -248,6 +248,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         // Development: allow all localhost origins for testing
         tracing::info!("CORS: Development mode - allowing all localhost origins");
         Cors::new()
+            .allow_origin("https://dev.decent-cloud.org")
             .allow_origin("http://localhost:59000")
             .allow_origin("http://localhost:59010")
             .allow_origin("http://localhost:3000")
