@@ -6,14 +6,18 @@
 
 ### Must-have
 - [x] "Forgot password?" link on login page
-- [ ] Recovery request form (enter email)
-- [ ] `/recover` page to handle recovery token from email link
-- [ ] Recovery completion flow (generate new seed phrase, add key)
-- [ ] API client functions for recovery endpoints
+- [x] Recovery request form (enter email)
+- [x] `/recover` page to handle recovery token from email link
+- [x] Recovery completion flow (generate new seed phrase, add key)
+- [x] API client functions for recovery endpoints
 - [ ] E2E test for recovery flow
 
 ### Nice-to-have
 - [ ] Rate limiting feedback on excessive requests
+
+### Expanded Scope (User Requested)
+- [ ] Mandatory email during account creation
+- [ ] Email verification flow
 
 ## Steps
 
@@ -58,5 +62,13 @@
 - **Review:**
 - **Verification:**
 - **Outcome:**
+
+## Blockers
+
+**Tool call limit reached (100/100)** - Session needs reset to continue.
+
+Remaining work:
+1. Step 4: E2E test for recovery flow
+2. Expanded scope: Mandatory email + verification (requires new session to plan)
 
 ## Completion Summary
