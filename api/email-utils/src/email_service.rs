@@ -94,7 +94,11 @@ impl EmailService {
     }
 
     async fn send_email_api(&self, params: EmailParams<'_>) -> Result<()> {
-        let content_type = if params.is_html { "text/html" } else { "text/plain" };
+        let content_type = if params.is_html {
+            "text/html"
+        } else {
+            "text/plain"
+        };
 
         let request = EmailRequest {
             personalizations: vec![EmailPersonalization {

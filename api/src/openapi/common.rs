@@ -180,7 +180,7 @@ pub struct UpdateAccountProfileRequest {
 pub struct AddAccountContactRequest {
     pub contact_type: String,
     pub contact_value: String,
-    #[serde(default)]
+    #[oai(default = "default_false")]
     pub verified: bool,
 }
 
