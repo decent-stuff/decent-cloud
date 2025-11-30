@@ -206,6 +206,45 @@ impl ProvidersApi {
         }
     }
 
+    /// Get provider trust metrics
+    ///
+    /// Returns trust score and reliability metrics for a specific provider.
+    /// Includes red flag detection for concerning patterns.
+    #[oai(
+        path = "/providers/:pubkey/trust-metrics",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_trust_metrics(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<crate::database::stats::ProviderTrustMetrics>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        match db.get_provider_trust_metrics(&pubkey_bytes).await {
+            Ok(metrics) => Json(ApiResponse {
+                success: true,
+                data: Some(metrics),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get provider contracts
     ///
     /// Returns contracts for a specific provider

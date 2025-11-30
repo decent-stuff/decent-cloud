@@ -450,4 +450,233 @@ async fn test_search_accounts_case_insensitive() {
 fn export_typescript_types() {
     PlatformStats::export().expect("Failed to export PlatformStats type");
     AccountSearchResult::export().expect("Failed to export AccountSearchResult type");
+    ProviderTrustMetrics::export().expect("Failed to export ProviderTrustMetrics type");
+}
+
+// Trust score calculation tests
+
+#[test]
+fn test_trust_score_perfect_provider() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        Some(0.0), // no early cancellations
+        Some(0.0), // no provisioning failures
+        Some(0.0), // no rejections
+        Some(2.0), // 2 hour response time (fast!)
+        0,         // no negative reputation
+        0,         // no stuck contracts
+        1,         // active yesterday
+        false,     // no active contracts
+        15,        // 15 repeat customers (bonus!)
+        98.0,      // 98% completion rate (bonus!)
+    );
+
+    // Base 100 + 5 (repeat customers) + 5 (completion rate) + 5 (fast response) = 115, clamped to 100
+    assert_eq!(score, 100);
+    assert!(!has_flags);
+    assert!(flags.is_empty());
+}
+
+#[test]
+fn test_trust_score_high_early_cancellation() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        Some(25.0), // 25% early cancellation rate (>20% threshold)
+        Some(0.0),
+        Some(0.0),
+        Some(10.0),
+        0,
+        0,
+        1,
+        false,
+        0,
+        50.0,
+    );
+
+    // Base 100 - 25 (early cancellation penalty) = 75
+    assert_eq!(score, 75);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("early cancellation"));
+}
+
+#[test]
+fn test_trust_score_provisioning_failure() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None,
+        Some(20.0), // 20% provisioning failure (>15% threshold)
+        Some(0.0),
+        Some(10.0),
+        0,
+        0,
+        1,
+        false,
+        0,
+        50.0,
+    );
+
+    // Base 100 - 20 (provisioning failure penalty) = 80
+    assert_eq!(score, 80);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("Provisioning failures"));
+}
+
+#[test]
+fn test_trust_score_slow_response() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None,
+        None,
+        None,
+        Some(72.0), // 72 hours response time (>48h threshold)
+        0,
+        0,
+        1,
+        false,
+        0,
+        50.0,
+    );
+
+    // Base 100 - 15 (slow response penalty) = 85
+    assert_eq!(score, 85);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("Slow response"));
+}
+
+#[test]
+fn test_trust_score_ghost_risk() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 14,   // 14 days since last check-in
+        true, // HAS active contracts
+        0, 50.0,
+    );
+
+    // Base 100 - 10 (ghost risk penalty) = 90
+    assert_eq!(score, 90);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("Ghost risk"));
+}
+
+#[test]
+fn test_trust_score_negative_reputation() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, -75, // -75 reputation points in 90 days (<-50 threshold)
+        0, 1, false, 0, 50.0,
+    );
+
+    // Base 100 - 15 (negative reputation penalty) = 85
+    assert_eq!(score, 85);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("Negative reputation"));
+}
+
+#[test]
+fn test_trust_score_multiple_flags() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        Some(30.0),         // high early cancellation
+        Some(25.0),         // high provisioning failure
+        Some(40.0),         // high rejection rate
+        Some(60.0),         // slow response
+        -100,               // very negative reputation
+        10_000_000_000_000, // $10k stuck (>$5k threshold)
+        10,                 // 10 days inactive
+        true,               // with active contracts (ghost risk)
+        0,
+        30.0,
+    );
+
+    // All penalties: -25 -20 -15 -15 -15 -10 -10 = -110, clamped to 0
+    assert_eq!(score, 0);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 7); // All 7 flags triggered
+}
+
+#[test]
+fn test_trust_score_bonuses() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        Some(5.0),  // low early cancellation (no penalty)
+        Some(5.0),  // low provisioning failure (no penalty)
+        Some(10.0), // low rejection rate (no penalty)
+        Some(2.0),  // fast response (<4h = bonus!)
+        0,
+        0,
+        1,
+        false,
+        20,   // lots of repeat customers (bonus!)
+        99.0, // high completion rate (bonus!)
+    );
+
+    // Base 100 + 5 + 5 + 5 = 115, clamped to 100
+    assert_eq!(score, 100);
+    assert!(!has_flags);
+    assert!(flags.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_provider_trust_metrics_new_provider() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Provider with no contracts
+    let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
+
+    assert_eq!(metrics.trust_score, 100); // No penalties
+    assert_eq!(metrics.total_contracts, 0);
+    assert_eq!(metrics.completion_rate_pct, 0.0);
+    assert!(metrics.is_new_provider); // <5 completed contracts
+    assert_eq!(metrics.repeat_customer_count, 0);
+}
+
+#[tokio::test]
+async fn test_get_provider_trust_metrics_with_contracts() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+    let requester1 = vec![2u8; 32];
+    let requester2 = vec![3u8; 32];
+
+    // Add some completed contracts
+    for i in 0..5 {
+        let contract_id = vec![i + 10; 32];
+        let requester = if i % 2 == 0 { &requester1 } else { &requester2 };
+        let payment_method = "dct";
+        let stripe_payment_intent_id: Option<&str> = None;
+        let stripe_customer_id: Option<&str> = None;
+        sqlx::query!(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, 'usd')",
+            contract_id,
+            requester,
+            provider_pubkey,
+            payment_method,
+            stripe_payment_intent_id,
+            stripe_customer_id
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Add a check-in
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let nonce = vec![0u8; 64];
+    sqlx::query!(
+        "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, 'active', ?, ?)",
+        provider_pubkey,
+        nonce,
+        now_ns
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let metrics = db
+        .get_provider_trust_metrics(&provider_pubkey)
+        .await
+        .unwrap();
+
+    assert_eq!(metrics.total_contracts, 5);
+    assert_eq!(metrics.completion_rate_pct, 100.0); // All completed
+    assert!(!metrics.is_new_provider); // >=5 completed contracts
+    assert_eq!(metrics.days_since_last_checkin, 0); // Just checked in
+    assert!(!metrics.has_critical_flags);
 }

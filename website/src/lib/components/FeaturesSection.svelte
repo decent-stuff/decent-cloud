@@ -1,28 +1,28 @@
 <script lang="ts">
 	const features = [
 		{
-			icon: '🌐',
-			title: 'Decentralized Physical Infrastructure (DePIN)',
+			icon: '🛡️',
+			title: 'Trust Score System',
 			description:
-				'Access virtual servers, physical hardware, and cloud services from verified providers worldwide. Deploy infrastructure and services where and when you need them, with transparent pricing and reputation metrics.'
+				'Every provider has a 0-100 trust score calculated from real data: delivery speed, completion rate, response time, and customer patterns. No self-reported metrics.'
 		},
 		{
-			icon: '⭐',
-			title: 'Reputation-Based System',
+			icon: '🚨',
+			title: 'Red Flag Detection',
 			description:
-				'Make informed decisions with our transparent provider reputation system. Every provider is tracked for uptime, performance, and service quality with verifiable on-chain metrics.'
+				'Automatic alerts for concerning patterns: sudden cancellation spikes, slow responses, stuck contracts, or inactive providers. You see warnings before you buy.'
 		},
 		{
-			icon: '🔒',
-			title: 'Confidential Computing',
+			icon: '💸',
+			title: 'Escrow & Refunds',
 			description:
-				'Process sensitive data securely in Confidential Computing VMs with hardware-level encryption. Your workloads remain private and verifiable, even from the infrastructure provider.'
+				'Payments held until delivery. Cancel anytime with automatic prorated refunds. Your money is protected from the moment you click "rent".'
 		},
 		{
-			icon: '🤝',
-			title: 'No Vendor Lock-in',
+			icon: '👁️',
+			title: 'Full Transparency',
 			description:
-				'Deploy across multiple providers through a unified API. Built on liberal Open Source principles, ensuring portability and preventing dependency on any single vendor.'
+				'See every provider\'s contract history, repeat customer count, and time-to-delivery. All metrics derived from real transactions, not reviews that can be faked.'
 		}
 	];
 </script>
@@ -31,7 +31,8 @@
 	<div class="max-w-7xl mx-auto">
 		<h2 class="text-4xl md:text-5xl font-bold text-center mb-4">Why Decent Cloud?</h2>
 		<p class="text-xl text-white/70 text-center mb-16">
-			A decentralized marketplace connecting providers with users who need compute, storage, GPUs, and cloud services.
+			A marketplace where trust is earned, not claimed. Every metric you see is calculated from real
+			transactions.
 		</p>
 
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">

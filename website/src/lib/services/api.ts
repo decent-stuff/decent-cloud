@@ -8,6 +8,7 @@ import type { UserContact } from '$lib/types/generated/UserContact';
 import type { UserSocial } from '$lib/types/generated/UserSocial';
 import type { UserPublicKey } from '$lib/types/generated/UserPublicKey';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
+import type { ProviderTrustMetrics as ProviderTrustMetricsRaw } from '$lib/types/generated/ProviderTrustMetrics';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
 type NullToUndefined<T> = T extends null ? undefined : T;
@@ -21,6 +22,7 @@ export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pub
 export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey: string };
 export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey: string };
 export type PlatformStats = ConvertNullToUndefined<PlatformOverview>;
+export type ProviderTrustMetrics = ConvertNullToUndefined<ProviderTrustMetricsRaw>;
 
 // Generic API response wrapper
 export interface ApiResponse<T> {
@@ -170,6 +172,26 @@ export async function getActiveProviders(days: number = 1): Promise<ProviderProf
 		...p,
 		pubkey: normalizePubkey(p.pubkey)
 	}));
+}
+
+export async function getProviderTrustMetrics(
+	pubkey: string | Uint8Array
+): Promise<ProviderTrustMetrics> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/trust-metrics`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch trust metrics: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderTrustMetrics>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider trust metrics');
+	}
+
+	return payload.data;
 }
 
 export async function getActiveValidators(days: number = 1): Promise<Validator[]> {

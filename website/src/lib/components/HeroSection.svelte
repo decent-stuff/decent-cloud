@@ -2,10 +2,10 @@
 	import { onMount } from 'svelte';
 
 	const words = [
-		'Peer-to-Peer Cloud Marketplace',
-		'No Vendor Lock-in',
-		'Community-Driven',
-		'Liberal Open Source License'
+		'Transparent Trust Scores',
+		'Escrow-Protected Payments',
+		'Real-Time Red Flag Detection',
+		'Verified Provider Track Records'
 	];
 
 	let currentWordIndex = 0;
@@ -56,7 +56,10 @@
 			</h1>
 
 			<p class="text-base md:text-lg xl:text-xl mt-4 text-white/80">
-				Shop, compare, and order cloud resources through one unified platform. Peer-to-peer marketplace with verified providers - transparent track records, regular health checks, and security deposits ensure accountability.
+				Rent cloud resources with confidence. Every provider has a trust score based on real
+				performance data. See response times, completion rates, and red flags <strong
+					>before</strong
+				> you pay.
 			</p>
 
 			<h2 class="text-lg md:text-2xl mt-2 text-white/80 font-bold min-h-[3rem]">

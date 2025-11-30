@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(MAX(block_timestamp_ns), 0) FROM provider_check_ins WHERE pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "COALESCE(MAX(block_timestamp_ns), 0)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ca9d61f46acd4c883f47dad4506b4f44de93f8a1872d2c30b1b727e0129d20bd"
+}

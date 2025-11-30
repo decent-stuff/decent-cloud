@@ -5,6 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeaturesSection from '$lib/components/FeaturesSection.svelte';
+	import TrustGuaranteesSection from '$lib/components/TrustGuaranteesSection.svelte';
 	import BenefitsSection from '$lib/components/BenefitsSection.svelte';
 	import AIFeaturesSection from '$lib/components/AIFeaturesSection.svelte';
 	import DashboardSection from '$lib/components/DashboardSection.svelte';
@@ -46,6 +47,7 @@
 	<Header />
 	<HeroSection />
 	<FeaturesSection />
+	<TrustGuaranteesSection />
 	<BenefitsSection />
 	<AIFeaturesSection />
 	<DashboardSection {dashboardData} {error} />

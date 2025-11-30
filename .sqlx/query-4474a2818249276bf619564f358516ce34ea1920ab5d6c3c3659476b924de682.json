@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM contract_sign_requests c\n               INNER JOIN contract_status_history h ON c.contract_id = h.contract_id\n               WHERE c.provider_pubkey = ?\n               AND c.status = 'cancelled'\n               AND h.new_status = 'cancelled'\n               AND c.duration_hours IS NOT NULL\n               AND c.duration_hours > 0\n               AND (h.changed_at_ns - c.start_timestamp_ns) < (c.duration_hours * 3600000000000 / 10)",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4474a2818249276bf619564f358516ce34ea1920ab5d6c3c3659476b924de682"
+}

@@ -3,38 +3,40 @@
 		{
 			title: 'For Providers',
 			items: [
-				'Monetize idle infrastructure and offer cloud services',
-				'Flexible pricing with AI-powered recommendations',
-				'Build verifiable on-chain reputation',
-				'Access global demand through unified marketplace',
-				'Automated anomaly detection for security'
+				'Clear guidance on what users expect from good service',
+				'AI support agent handles common requests automatically',
+				'Build a verifiable track record that attracts customers',
+				'Fair system: good providers rise, bad ones get flagged',
+				'Access global demand through unified marketplace'
 			],
 			icon: '🖥️',
-			tagline: 'Turn spare capacity into revenue'
+			tagline: 'Excellence is rewarded, not just promised',
+			warning:
+				'Trust scores are earned through real performance. Cutting corners will show in your metrics.'
 		},
 		{
 			title: 'For Users',
 			items: [
-				'Access infrastructure and services from verified providers globally',
-				'AI-assisted provider selection and cost optimization',
-				'Transparent pricing with no hidden fees',
-				'Choose providers based on verified reputation metrics',
-				'No vendor lock-in with unified API'
+				'See trust scores, response times, and red flags before buying',
+				'Escrow protection: pay only when service is delivered',
+				'Automatic prorated refunds if you cancel early',
+				'Real-time alerts if provider behavior changes',
+				'Full transparency: nothing hidden, all data verifiable'
 			],
 			icon: '👥',
-			tagline: 'Deploy anywhere with confidence'
+			tagline: 'Your money is protected, your data is transparent'
 		},
 		{
 			title: 'For Developers',
 			items: [
 				'Unified API across all providers',
-				'Seamless multi-cloud deployments',
+				'Query provider trust metrics programmatically',
 				'Liberal open source license (Apache 2.0)',
-				'AI-powered migration from existing clouds',
+				'Integrate trust checks into your deployment pipelines',
 				'Active community and transparent development'
 			],
 			icon: '💻',
-			tagline: 'Build without constraints'
+			tagline: 'Build with confidence, deploy with data'
 		}
 	];
 </script>
@@ -57,6 +59,14 @@
 							</li>
 						{/each}
 					</ul>
+					{#if benefit.warning}
+						<div class="mt-4 pt-4 border-t border-white/10">
+							<p class="text-amber-400/80 text-xs flex items-start gap-2">
+								<span>⚠️</span>
+								<span>{benefit.warning}</span>
+							</p>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>

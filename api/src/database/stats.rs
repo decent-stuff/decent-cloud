@@ -173,6 +173,330 @@ impl Database {
         })
     }
 
+    /// Get trust metrics for a provider
+    pub async fn get_provider_trust_metrics(&self, pubkey: &[u8]) -> Result<ProviderTrustMetrics> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let ns_per_hour: i64 = 3600 * 1_000_000_000;
+        let ns_per_day: i64 = 24 * ns_per_hour;
+        let cutoff_90d_ns = now_ns - 90 * ns_per_day;
+        let cutoff_72h_ns = now_ns - 72 * ns_per_hour;
+
+        // Total contracts for this provider
+        let total_contracts: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ?",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Completed contracts
+        let completed_contracts: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'completed'",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Cancelled contracts
+        let cancelled_contracts: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'cancelled'",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Rejected contracts
+        let rejected_contracts: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'rejected'",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Active contracts value
+        let active_contract_value_e9s: i64 = sqlx::query_scalar!(
+            "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('active', 'provisioned')",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Stuck contracts (>72h without progress in early stages)
+        let stuck_contracts_value_e9s: i64 = sqlx::query_scalar!(
+            "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending', 'accepted') AND created_at_ns < ?",
+            pubkey,
+            cutoff_72h_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Repeat customers (users who rented more than once from this provider)
+        let repeat_customer_count: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) FROM (
+                SELECT requester_pubkey FROM contract_sign_requests
+                WHERE provider_pubkey = ?
+                GROUP BY requester_pubkey
+                HAVING COUNT(*) > 1
+            )"#,
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Last check-in timestamp
+        let last_active_ns: i64 = sqlx::query_scalar!(
+            "SELECT COALESCE(MAX(block_timestamp_ns), 0) FROM provider_check_ins WHERE pubkey = ?",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Negative reputation in last 90 days
+        let negative_reputation_90d: i64 = sqlx::query_scalar!(
+            "SELECT COALESCE(SUM(CASE WHEN change_amount < 0 THEN change_amount ELSE 0 END), 0) FROM reputation_changes WHERE pubkey = ? AND block_timestamp_ns > ?",
+            pubkey,
+            cutoff_90d_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Average response time (time from created_at to first status change)
+        let avg_response_time_ns: Option<f64> = sqlx::query_scalar!(
+            r#"SELECT AVG(CAST(h.changed_at_ns - c.created_at_ns AS REAL)) as "avg: f64"
+               FROM contract_sign_requests c
+               INNER JOIN contract_status_history h ON c.contract_id = h.contract_id
+               WHERE c.provider_pubkey = ?
+               AND h.old_status = 'requested'
+               AND h.changed_at_ns IS NOT NULL"#,
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Time to delivery (median time from created to provisioned)
+        // Using average as SQLite doesn't have native MEDIAN
+        let avg_delivery_time_ns: Option<f64> = sqlx::query_scalar!(
+            r#"SELECT AVG(CAST(provisioning_completed_at_ns - created_at_ns AS REAL)) as "avg: f64"
+               FROM contract_sign_requests
+               WHERE provider_pubkey = ?
+               AND provisioning_completed_at_ns IS NOT NULL"#,
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Early cancellations (cancelled within first 10% of duration)
+        let early_cancellations: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) FROM contract_sign_requests c
+               INNER JOIN contract_status_history h ON c.contract_id = h.contract_id
+               WHERE c.provider_pubkey = ?
+               AND c.status = 'cancelled'
+               AND h.new_status = 'cancelled'
+               AND c.duration_hours IS NOT NULL
+               AND c.duration_hours > 0
+               AND (h.changed_at_ns - c.start_timestamp_ns) < (c.duration_hours * 3600000000000 / 10)"#,
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Provisioning failures (accepted but never provisioned, older than 72h)
+        let provisioning_failures: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'accepted' AND provisioning_completed_at_ns IS NULL AND created_at_ns < ?",
+            pubkey,
+            cutoff_72h_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Accepted contracts count for failure rate
+        let accepted_contracts: i64 = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('accepted', 'provisioning', 'provisioned', 'active', 'completed')",
+            pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Calculate derived metrics
+        let completion_rate_pct = if total_contracts > 0 {
+            (completed_contracts as f64 / total_contracts as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let rejection_rate_pct = if total_contracts > 0 {
+            Some((rejected_contracts as f64 / total_contracts as f64) * 100.0)
+        } else {
+            None
+        };
+
+        let early_cancellation_rate_pct = if cancelled_contracts > 0 {
+            Some((early_cancellations as f64 / cancelled_contracts as f64) * 100.0)
+        } else {
+            None
+        };
+
+        let provisioning_failure_rate_pct = if accepted_contracts > 0 {
+            Some((provisioning_failures as f64 / accepted_contracts as f64) * 100.0)
+        } else {
+            None
+        };
+
+        let avg_response_time_hours = avg_response_time_ns.map(|ns| ns / ns_per_hour as f64);
+        let time_to_delivery_hours = avg_delivery_time_ns.map(|ns| ns / ns_per_hour as f64);
+
+        let days_since_last_checkin = if last_active_ns > 0 {
+            (now_ns - last_active_ns) / ns_per_day
+        } else {
+            i64::MAX // Never checked in
+        };
+
+        let is_new_provider = completed_contracts < 5;
+
+        // Calculate trust score and critical flags
+        let (trust_score, has_critical_flags, critical_flag_reasons) =
+            Self::calculate_trust_score_and_flags(
+                early_cancellation_rate_pct,
+                provisioning_failure_rate_pct,
+                rejection_rate_pct,
+                avg_response_time_hours,
+                negative_reputation_90d,
+                stuck_contracts_value_e9s,
+                days_since_last_checkin,
+                active_contract_value_e9s > 0,
+                repeat_customer_count,
+                completion_rate_pct,
+            );
+
+        Ok(ProviderTrustMetrics {
+            pubkey: hex::encode(pubkey),
+            trust_score,
+            time_to_delivery_hours,
+            completion_rate_pct,
+            last_active_ns,
+            repeat_customer_count,
+            active_contract_value_e9s,
+            total_contracts,
+            early_cancellation_rate_pct,
+            avg_response_time_hours,
+            provisioning_failure_rate_pct,
+            rejection_rate_pct,
+            negative_reputation_90d,
+            stuck_contracts_value_e9s,
+            days_since_last_checkin,
+            is_new_provider,
+            has_critical_flags,
+            critical_flag_reasons,
+        })
+    }
+
+    /// Calculate trust score (0-100) and identify critical flags
+    fn calculate_trust_score_and_flags(
+        early_cancellation_rate_pct: Option<f64>,
+        provisioning_failure_rate_pct: Option<f64>,
+        rejection_rate_pct: Option<f64>,
+        avg_response_time_hours: Option<f64>,
+        negative_reputation_90d: i64,
+        stuck_contracts_value_e9s: i64,
+        days_since_last_checkin: i64,
+        has_active_contracts: bool,
+        repeat_customer_count: i64,
+        completion_rate_pct: f64,
+    ) -> (i64, bool, Vec<String>) {
+        let mut score: i64 = 100;
+        let mut flags: Vec<String> = Vec::new();
+
+        // Penalties
+        if let Some(rate) = early_cancellation_rate_pct {
+            if rate > 20.0 {
+                score -= 25;
+                flags.push(format!(
+                    "High early cancellation rate: {:.0}% of contracts cancelled quickly",
+                    rate
+                ));
+            }
+        }
+
+        if let Some(rate) = provisioning_failure_rate_pct {
+            if rate > 15.0 {
+                score -= 20;
+                flags.push(format!(
+                    "Provisioning failures: {:.0}% of accepted contracts never delivered",
+                    rate
+                ));
+            }
+        }
+
+        if let Some(rate) = rejection_rate_pct {
+            if rate > 30.0 {
+                score -= 15;
+                flags.push(format!(
+                    "High rejection rate: {:.0}% of requests rejected",
+                    rate
+                ));
+            }
+        }
+
+        if let Some(hours) = avg_response_time_hours {
+            if hours > 48.0 {
+                score -= 15;
+                flags.push(format!(
+                    "Slow response time: average {:.0} hours to respond",
+                    hours
+                ));
+            }
+        }
+
+        if negative_reputation_90d < -50 {
+            score -= 15;
+            flags.push(format!(
+                "Negative reputation trend: {} points lost in 90 days",
+                negative_reputation_90d
+            ));
+        }
+
+        // Ghost risk: inactive but has active contracts
+        if days_since_last_checkin > 7 && has_active_contracts {
+            score -= 10;
+            flags.push(format!(
+                "Ghost risk: {} days inactive with active contracts",
+                days_since_last_checkin
+            ));
+        }
+
+        // Stuck contracts (convert e9s to approximate dollars: e9s / 1e9)
+        let stuck_dollars = stuck_contracts_value_e9s / 1_000_000_000;
+        if stuck_dollars > 5000 {
+            score -= 10;
+            flags.push(format!(
+                "Stuck contracts: ~${} in contracts without progress for >72h",
+                stuck_dollars
+            ));
+        }
+
+        // Bonuses
+        if repeat_customer_count > 10 {
+            score += 5;
+        }
+
+        if completion_rate_pct > 95.0 {
+            score += 5;
+        }
+
+        if let Some(hours) = avg_response_time_hours {
+            if hours < 4.0 {
+                score += 5;
+            }
+        }
+
+        // Clamp to 0-100
+        score = score.clamp(0, 100);
+
+        let has_critical = !flags.is_empty();
+
+        (score, has_critical, flags)
+    }
+
     /// Search accounts by username, display name, or public key
     pub async fn search_accounts(
         &self,
@@ -259,6 +583,71 @@ pub struct ProviderStats {
     pub pending_contracts: i64,
     pub total_revenue_e9s: i64,
     pub offerings_count: i64,
+}
+
+/// Provider trust metrics for transparency and red flag detection
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
+pub struct ProviderTrustMetrics {
+    pub pubkey: String,
+
+    // Core metrics
+    /// Composite trust score 0-100
+    pub trust_score: i64,
+    /// Median hours from payment to provisioned service
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub time_to_delivery_hours: Option<f64>,
+    /// Percentage of contracts completed successfully
+    pub completion_rate_pct: f64,
+    /// Last check-in timestamp in nanoseconds
+    #[ts(type = "number")]
+    pub last_active_ns: i64,
+    /// Number of users who rented more than once
+    #[ts(type = "number")]
+    pub repeat_customer_count: i64,
+    /// Total payment value of active contracts (e9s)
+    #[ts(type = "number")]
+    pub active_contract_value_e9s: i64,
+    /// Total contracts received (track record size)
+    #[ts(type = "number")]
+    pub total_contracts: i64,
+
+    // Red flag metrics
+    /// Percentage of contracts cancelled within first 10% of duration
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub early_cancellation_rate_pct: Option<f64>,
+    /// Average hours to first response after contract request
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub avg_response_time_hours: Option<f64>,
+    /// Percentage of accepted contracts never provisioned
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub provisioning_failure_rate_pct: Option<f64>,
+    /// Percentage of contract requests rejected
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub rejection_rate_pct: Option<f64>,
+    /// Sum of negative reputation changes in last 90 days
+    #[ts(type = "number")]
+    pub negative_reputation_90d: i64,
+    /// Total value of contracts stuck >72h without progress
+    #[ts(type = "number")]
+    pub stuck_contracts_value_e9s: i64,
+    /// Days since last provider check-in
+    #[ts(type = "number")]
+    pub days_since_last_checkin: i64,
+
+    // Flags
+    /// True if provider has <5 completed contracts
+    pub is_new_provider: bool,
+    /// True if any critical threshold exceeded
+    pub has_critical_flags: bool,
+    /// Human-readable list of exceeded thresholds
+    pub critical_flag_reasons: Vec<String>,
 }
 
 /// Account search result with reputation and activity stats
