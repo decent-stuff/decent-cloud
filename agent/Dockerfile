@@ -64,7 +64,7 @@ RUN mkdir -p ~/.npm-global \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile \
     && export PATH=~/.npm-global/bin:$PATH \
-    && npm install -g @anthropic-ai/claude-code happy-coder playwright-core
+    && npm install -g @anthropic-ai/claude-code happy-coder playwright
 
 # Configure git hooks
 COPY --chown=ubuntu:ubuntu .git-hooks/ $HOME/.git-hooks/
