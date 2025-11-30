@@ -2,12 +2,12 @@
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
-    Eq,       // field:value
-    Gte,      // field:>=value
-    Lte,      // field:<=value
-    Gt,       // field:>value
-    Lt,       // field:<value
-    Range,    // field:[min TO max]
+    Eq,    // field:value
+    Gte,   // field:>=value
+    Lte,   // field:<=value
+    Gt,    // field:>value
+    Lt,    // field:<value
+    Range, // field:[min TO max]
 }
 
 #[derive(Debug, Clone, PartialEq)]
