@@ -1,7 +1,7 @@
 # Dockerfile for Decent Cloud + Containerized development environment
 # Based on .github/container/Dockerfile with additions for Claude Code and Happy Coder
 
-FROM rust:latest
+FROM rust:1.91
 
 # Environment variables (from CI Dockerfile)
 ENV HOME=/home/ubuntu \
@@ -45,7 +45,7 @@ RUN curl -L https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-
 
 # Install Rust (exact from CI Dockerfile)
 RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
-    && rustup toolchain install nightly --profile=complete \
+    && rustup toolchain install nightly-2025-11-27 --profile=complete \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 # Install cargo tools using binstall for faster installation
