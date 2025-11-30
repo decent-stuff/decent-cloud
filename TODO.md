@@ -1,5 +1,4 @@
 - improve search support, if possible add a minimal search DSL for filtering results, e.g. like on ServerHunter https://www.serverhunter.com/#query=stock:(in_stock+OR+unknown)
-- Password/account recovery through emails: send account recovery links via email and allow users to recovery access to their accounts that way
 - Admin UI with support for:
     - sending test and other emails
     - performing actions in the name of other users (impersonating)
