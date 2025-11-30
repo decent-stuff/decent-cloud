@@ -110,9 +110,11 @@ test.describe('Anonymous Browsing', () => {
 
 	test('should navigate to /login with returnUrl when clicking button from banner', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
+		await page.waitForLoadState('networkidle');
 
 		// Click first "Login / Create Account" button (in banner)
 		const loginButtons = page.locator('button:has-text("Login / Create Account")');
+		await expect(loginButtons.first()).toBeVisible();
 		await loginButtons.first().click();
 
 		// Should navigate to /login with returnUrl parameter

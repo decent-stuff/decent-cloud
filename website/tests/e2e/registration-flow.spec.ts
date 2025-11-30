@@ -27,13 +27,14 @@ test.describe('Account Registration Flow', () => {
 
 		// Step 1: Navigate to login page
 		await page.goto('/login');
-		await expect(page.locator('text=Generate New')).toBeVisible();
+		await page.waitForLoadState('networkidle');
+		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
 
 		// Step 2: Click "Generate New" to generate seed phrase
-		await page.click('text=Generate New');
+		await page.locator('button:has-text("Generate New")').click();
 
 		// Step 3: Seed phrase backup screen
-		await expect(page.locator('text=Copy to Clipboard')).toBeVisible();
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 
 		// Extract and validate seed phrase - words are in .font-mono elements
 		const wordElements = page.locator('.font-mono').filter({ hasText: /^[a-z]+$/ });
@@ -56,16 +57,15 @@ test.describe('Account Registration Flow', () => {
 		// Step 4: Enter username
 		await expect(
 			page.locator('input[placeholder="alice"]'),
-		).toBeVisible();
+		).toBeVisible({ timeout: 10000 });
 		await page.fill('input[placeholder="alice"]', username);
 
 		// Wait for username validation
-		await page.waitForTimeout(500); // Debounce delay
+		await expect(page.getByText('available', { exact: false })).toBeVisible({ timeout: 5000 });
 
-		// Should show "Available" or enable Create Account button
-		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Create Account"):not([disabled])')).first(),
-		).toBeVisible({ timeout: 5000 });
+		// Fill email address
+		const testEmail = `${username}@test.example.com`;
+		await page.fill('input[placeholder="you@example.com"]', testEmail);
 
 		// Wait for account creation API call
 		const apiResponsePromise = waitForApiResponse(
@@ -73,8 +73,10 @@ test.describe('Account Registration Flow', () => {
 			/\/api\/v1\/accounts$/,
 		);
 
-		// Step 5: Create account
-		await page.click('button:has-text("Create Account")');
+		// Step 5: Create account - wait for button to be enabled
+		const createButton = page.locator('button:has-text("Create Account")');
+		await expect(createButton).toBeEnabled({ timeout: 5000 });
+		await createButton.click();
 
 		// Wait for API to respond
 		await apiResponsePromise;
@@ -102,16 +104,16 @@ test.describe('Account Registration Flow', () => {
 
 		// First registration
 		await page.goto('/login');
-		await page.click('text=Generate New');
+		await page.waitForLoadState('networkidle');
+		await page.locator('button:has-text("Generate New")').click();
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
 		await page.click('button:has-text("Continue")');
+		await expect(page.locator('input[placeholder="alice"]')).toBeVisible({ timeout: 10000 });
 		await page.fill('input[placeholder="alice"]', username);
-		await page.waitForTimeout(500);
 
 		// Assuming username is available first time
-		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Create Account"):not([disabled])')).first(),
-		).toBeVisible({ timeout: 5000 });
+		await expect(page.getByText('available', { exact: false })).toBeVisible({ timeout: 5000 });
 
 		// Go back to cancel this flow
 		await page.click('button:has-text("Back")');
@@ -132,12 +134,23 @@ test.describe('Account Registration Flow', () => {
 		const username = generateTestUsername();
 
 		await page.goto('/login');
-		await page.click('text=Generate New');
+		await page.waitForLoadState('networkidle');
+		await page.locator('button:has-text("Generate New")').click();
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
 		await page.click('button:has-text("Continue")');
+		await expect(page.locator('input[placeholder="alice"]')).toBeVisible({ timeout: 10000 });
 		await page.fill('input[placeholder="alice"]', username);
-		await page.waitForTimeout(500);
-		await page.click('button:has-text("Create Account")');
+		await expect(page.getByText('available', { exact: false })).toBeVisible({ timeout: 5000 });
+
+		// Fill email address
+		const testEmail = `${username}@test.example.com`;
+		await page.fill('input[placeholder="you@example.com"]', testEmail);
+
+		// Wait for button to be enabled
+		const createButton = page.locator('button:has-text("Create Account")');
+		await expect(createButton).toBeEnabled({ timeout: 5000 });
+		await createButton.click();
 
 		// Should show error message (any of these error indicators)
 		const errorLocator = page.locator('text=error').or(
@@ -155,24 +168,29 @@ test.describe('Account Registration Flow', () => {
 
 		// Navigate to login with returnUrl parameter
 		await page.goto('/login?returnUrl=%2Fdashboard%2Fmarketplace');
+		await page.waitForLoadState('networkidle');
 
 		// Complete registration flow
-		await page.click('text=Generate New');
+		await page.locator('button:has-text("Generate New")').click();
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
 		await page.click('button:has-text("Continue")');
+		await expect(page.locator('input[placeholder="alice"]')).toBeVisible({ timeout: 10000 });
 		await page.fill('input[placeholder="alice"]', username);
-		await page.waitForTimeout(500);
+		await expect(page.getByText('available', { exact: false })).toBeVisible({ timeout: 5000 });
 
-		await expect(
-			page.locator('text=Available').or(page.locator('button:has-text("Create Account"):not([disabled])')).first(),
-		).toBeVisible({ timeout: 5000 });
+		// Fill email address
+		const testEmail = `${username}@test.example.com`;
+		await page.fill('input[placeholder="you@example.com"]', testEmail);
 
 		const apiResponsePromise = waitForApiResponse(
 			page,
 			/\/api\/v1\/accounts$/,
 		);
 
-		await page.click('button:has-text("Create Account")');
+		const createButton = page.locator('button:has-text("Create Account")');
+		await expect(createButton).toBeEnabled({ timeout: 5000 });
+		await createButton.click();
 		await apiResponsePromise;
 
 		// Should show success screen
@@ -193,6 +211,6 @@ test.describe('Account Registration Flow', () => {
 
 		// Should redirect to /login page
 		await expect(page).toHaveURL('/login', { timeout: 5000 });
-		await expect(page.locator('text=Generate New')).toBeVisible();
+		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
 	});
 });

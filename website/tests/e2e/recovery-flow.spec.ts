@@ -22,6 +22,7 @@ test.describe('Recovery Flow', () => {
 
 	test('should show "Lost access?" link on login page that navigates to /recover', async ({ page }) => {
 		await page.goto('/login');
+		await page.waitForLoadState('networkidle');
 
 		// Verify "Lost access?" link is visible
 		const recoveryLink = page.locator('a:has-text("Lost access? Recover your account")');
@@ -36,11 +37,12 @@ test.describe('Recovery Flow', () => {
 
 	test('should display email input form on /recover page', async ({ page }) => {
 		await page.goto('/recover');
+		await page.waitForLoadState('networkidle');
 
 		// Verify page title and description
-		await expect(page.locator('text=Account Recovery')).toBeVisible();
+		await expect(page.getByText('Account Recovery', { exact: true })).toBeVisible();
 		await expect(page.locator('h3:has-text("Request Account Recovery")')).toBeVisible();
-		await expect(page.locator('text=Enter the email address associated with your account')).toBeVisible();
+		await expect(page.getByText('Enter the email address associated with your account', { exact: false })).toBeVisible();
 
 		// Verify email input field exists
 		const emailInput = page.locator('input#email[type="email"]');
@@ -56,17 +58,20 @@ test.describe('Recovery Flow', () => {
 
 	test('should submit email request and show success message', async ({ page }) => {
 		await page.goto('/recover');
+		await page.waitForLoadState('networkidle');
 
 		// Fill in email
 		const emailInput = page.locator('input#email[type="email"]');
 		await emailInput.fill('test@example.com');
 
 		// Submit form
-		await page.click('button:has-text("Send Recovery Link")');
+		const submitButton = page.locator('button:has-text("Send Recovery Link")');
+		await expect(submitButton).toBeVisible();
+		await submitButton.click();
 
 		// Should show success message
 		await expect(page.locator('h3:has-text("Check Your Email")')).toBeVisible({ timeout: 5000 });
-		await expect(page.locator('text=We sent a recovery link to your email address')).toBeVisible();
+		await expect(page.locator('text=If an account exists with this email, a recovery link has been sent')).toBeVisible();
 
 		// Should show envelope emoji
 		await expect(page.locator('text=✉️')).toBeVisible();
@@ -77,9 +82,12 @@ test.describe('Recovery Flow', () => {
 
 	test('should validate email field is required', async ({ page }) => {
 		await page.goto('/recover');
+		await page.waitForLoadState('networkidle');
 
 		// Try to submit without entering email
-		await page.click('button:has-text("Send Recovery Link")');
+		const submitButton = page.locator('button:has-text("Send Recovery Link")');
+		await expect(submitButton).toBeVisible();
+		await submitButton.click();
 
 		// HTML5 validation should prevent submission
 		// The form should still be visible (not navigated away)
@@ -88,16 +96,21 @@ test.describe('Recovery Flow', () => {
 
 	test('should allow sending to different email after success', async ({ page }) => {
 		await page.goto('/recover');
+		await page.waitForLoadState('networkidle');
 
 		// Submit first email
 		await page.fill('input#email[type="email"]', 'first@example.com');
-		await page.click('button:has-text("Send Recovery Link")');
+		const submitButton = page.locator('button:has-text("Send Recovery Link")');
+		await expect(submitButton).toBeVisible();
+		await submitButton.click();
 
 		// Wait for success
 		await expect(page.locator('h3:has-text("Check Your Email")')).toBeVisible({ timeout: 5000 });
 
 		// Click "Send to a different email"
-		await page.click('button:has-text("Send to a different email")');
+		const differentEmailButton = page.locator('button:has-text("Send to a different email")');
+		await expect(differentEmailButton).toBeVisible();
+		await differentEmailButton.click();
 
 		// Should go back to request form
 		await expect(page.locator('h3:has-text("Request Account Recovery")')).toBeVisible();
@@ -107,28 +120,27 @@ test.describe('Recovery Flow', () => {
 	test('should show seed phrase generation flow when token is provided in URL', async ({ page }) => {
 		// Navigate to /recover with a token parameter
 		await page.goto('/recover?token=test-recovery-token-123');
+		await page.waitForLoadState('networkidle');
 
 		// Should skip email request and go directly to seed phrase generation
 		await expect(page.locator('h3:has-text("Complete Recovery")')).toBeVisible({ timeout: 5000 });
 		await expect(page.locator('text=Generate a new seed phrase to regain access to your account')).toBeVisible();
 
-		// Should show seed phrase component
-		// Look for "Generate New" button which is part of SeedPhraseStep
-		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
+		// Should show auto-generated seed phrase (no mode choice when token provided)
+		// The SeedPhraseStep is initialized with initialMode="generate" and showModeChoice=false
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 	});
 
 	test('should complete recovery flow with valid token', async ({ page }) => {
 		// Navigate with token
 		await page.goto('/recover?token=test-recovery-token-123');
+		await page.waitForLoadState('networkidle');
 
-		// Wait for seed phrase step
+		// Wait for seed phrase step - auto-generates when token is provided
 		await expect(page.locator('h3:has-text("Complete Recovery")')).toBeVisible({ timeout: 5000 });
 
-		// Click "Generate New" to generate seed phrase
-		await page.click('button:has-text("Generate New")');
-
-		// Wait for seed phrase to be generated
-		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 5000 });
+		// Seed phrase is auto-generated (no mode choice when token provided)
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 
 		// Check the confirmation checkbox
 		await page.check('input[type="checkbox"]');
@@ -149,13 +161,13 @@ test.describe('Recovery Flow', () => {
 	test('should show error message when completing recovery with invalid token', async ({ page }) => {
 		// Navigate with invalid token
 		await page.goto('/recover?token=invalid-token-that-does-not-exist');
+		await page.waitForLoadState('networkidle');
 
-		// Wait for seed phrase step
+		// Wait for seed phrase step - auto-generates when token is provided
 		await expect(page.locator('h3:has-text("Complete Recovery")')).toBeVisible({ timeout: 5000 });
 
-		// Generate seed phrase
-		await page.click('button:has-text("Generate New")');
-		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 5000 });
+		// Seed phrase is auto-generated (no mode choice when token provided)
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 
 		// Complete the flow
 		await page.check('input[type="checkbox"]');
@@ -174,12 +186,13 @@ test.describe('Recovery Flow', () => {
 
 	test('should navigate back to login from /recover page', async ({ page }) => {
 		await page.goto('/recover');
+		await page.waitForLoadState('networkidle');
 
 		// Click back to login link
 		await page.click('a:has-text("← Back to login")');
 
 		// Should navigate to /login
 		await expect(page).toHaveURL('/login');
-		await expect(page.locator('text=Import Existing')).toBeVisible();
+		await expect(page.locator('button:has-text("Import Existing")')).toBeVisible();
 	});
 });

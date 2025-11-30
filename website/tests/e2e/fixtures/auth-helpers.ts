@@ -57,11 +57,15 @@ export async function registerNewAccount(
 	// Navigate to login page
 	await page.goto('/login');
 
-	// Wait for seed phrase choice to appear
-	await expect(page.locator('text=Generate New')).toBeVisible({ timeout: 10000 });
+	// Wait for seed phrase choice to appear and be interactive
+	const generateNewButton = page.locator('button:has-text("Generate New")');
+	await expect(generateNewButton).toBeVisible({ timeout: 10000 });
+
+	// Wait for page to be fully hydrated by checking network idle
+	await page.waitForLoadState('networkidle');
 
 	// Click "Generate New" to generate seed phrase
-	await page.click('text=Generate New');
+	await generateNewButton.click();
 
 	// Wait for seed phrase to be generated and "Copy to Clipboard" button to appear
 	await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
@@ -89,10 +93,18 @@ export async function registerNewAccount(
 
 	// Wait for validation (username should be available)
 	// The UsernameInput component shows "Available" when valid
-	await expect(page.locator('text=Available').or(page.locator('button:has-text("Create Account")')).first()).toBeVisible({ timeout: 10000 });
+	await expect(page.getByText('available', { exact: false })).toBeVisible({ timeout: 10000 });
+
+	// Fill email address (required for account creation)
+	const testEmail = `${username}@test.example.com`;
+	await page.fill('input[placeholder="you@example.com"]', testEmail);
+
+	// Wait for Create Account button to become enabled
+	const createButton = page.locator('button:has-text("Create Account")');
+	await expect(createButton).toBeEnabled({ timeout: 10000 });
 
 	// Click "Create Account" button
-	await page.click('button:has-text("Create Account")');
+	await createButton.click();
 
 	// Wait for success message
 	await expect(
@@ -118,15 +130,19 @@ export async function signIn(
 	// Navigate to login page
 	await page.goto('/login');
 
-	// Wait for seed phrase choice to appear
-	await expect(page.locator('text=Import Existing')).toBeVisible();
+	// Wait for page to be fully hydrated
+	await page.waitForLoadState('networkidle');
+
+	// Wait for seed phrase choice to appear and be interactive
+	const importButton = page.locator('button:has-text("Import Existing")');
+	await expect(importButton).toBeVisible({ timeout: 10000 });
 
 	// Click "Import Existing"
-	await page.click('text=Import Existing');
+	await importButton.click();
 
 	// Wait for seed phrase textarea
 	const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
-	await expect(seedInput).toBeVisible();
+	await expect(seedInput).toBeVisible({ timeout: 10000 });
 
 	// Enter seed phrase
 	await seedInput.fill(credentials.seedPhrase);

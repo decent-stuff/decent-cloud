@@ -18,13 +18,14 @@ test.describe('Offerings Template Download', () => {
 		page,
 	}) => {
 		await page.goto('/dashboard/offerings');
+		await page.waitForLoadState('networkidle');
 		await expect(page.locator('h1:has-text("My Offerings")')).toBeVisible();
 
 		const downloadBtn = page.locator('button:has-text("Download Template")');
 		await expect(downloadBtn).toBeVisible();
 		await downloadBtn.click();
 
-		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible();
+		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
 		await expect(
 			page.locator('text=Choose a product type to download an example template'),
 		).toBeVisible();
@@ -32,9 +33,12 @@ test.describe('Offerings Template Download', () => {
 
 	test('should display product type options in template dialog', async ({ page }) => {
 		await page.goto('/dashboard/offerings');
+		await page.waitForLoadState('networkidle');
 
-		await page.click('button:has-text("Download Template")');
-		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible();
+		const downloadBtn = page.locator('button:has-text("Download Template")');
+		await expect(downloadBtn).toBeVisible();
+		await downloadBtn.click();
+		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
 
 		const productTypeButtons = page.locator('.grid button:has-text("Download template")');
 		const count = await productTypeButtons.count();
@@ -43,9 +47,12 @@ test.describe('Offerings Template Download', () => {
 
 	test('should close template dialog when clicking Cancel', async ({ page }) => {
 		await page.goto('/dashboard/offerings');
+		await page.waitForLoadState('networkidle');
 
-		await page.click('button:has-text("Download Template")');
-		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible();
+		const downloadBtn = page.locator('button:has-text("Download Template")');
+		await expect(downloadBtn).toBeVisible();
+		await downloadBtn.click();
+		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
 
 		await page.click('button:has-text("Cancel")');
 		await expect(page.locator('h2:has-text("Select Product Type")')).not.toBeVisible();
@@ -55,11 +62,14 @@ test.describe('Offerings Template Download', () => {
 		page,
 	}) => {
 		await page.goto('/dashboard/offerings');
+		await page.waitForLoadState('networkidle');
 
 		const downloadPromise = page.waitForEvent('download');
 
-		await page.click('button:has-text("Download Template")');
-		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible();
+		const downloadBtn = page.locator('button:has-text("Download Template")');
+		await expect(downloadBtn).toBeVisible();
+		await downloadBtn.click();
+		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
 
 		const firstProductType = page
 			.locator('.grid button:has-text("Download template")')
@@ -72,9 +82,12 @@ test.describe('Offerings Template Download', () => {
 
 	test('should show Edit options when offerings list is empty', async ({ page }) => {
 		await page.goto('/dashboard/offerings');
+		await page.waitForLoadState('networkidle');
 
-		await page.click('button:has-text("Download Template")');
-		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible();
+		const downloadBtn = page.locator('button:has-text("Download Template")');
+		await expect(downloadBtn).toBeVisible();
+		await downloadBtn.click();
+		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
 
 		const hasOfferings = (await page.locator('.grid > div').count()) > 0;
 

@@ -58,11 +58,12 @@ test.describe('Account Settings Page', () => {
 
 	test('should show username in header', async ({ page, testAccount }) => {
 		await page.goto('/dashboard');
+		await page.waitForLoadState('networkidle');
 
 		// Username should appear in header
 		await expect(
 			page.locator(`text=@${testAccount.username}`).first(),
-		).toBeVisible();
+		).toBeVisible({ timeout: 10000 });
 
 		// Clicking username should navigate to account page
 		const usernameLink = page.locator(`a:has-text("@${testAccount.username}")`).first();
@@ -203,9 +204,10 @@ test.describe('Account Settings Page', () => {
 
 	test('should display device key info correctly', async ({ page }) => {
 		await page.goto('/dashboard/account/security');
+		await page.waitForLoadState('networkidle');
 
 		// Should show device with Active status
-		await expect(page.locator('text=Active').first()).toBeVisible();
+		await expect(page.locator('text=Active').first()).toBeVisible({ timeout: 10000 });
 
 		// Should show key icon for active key
 		await expect(page.locator('text=🔑')).toBeVisible();

@@ -26,10 +26,12 @@ test.describe('Sign-In Flow', () => {
 	}) => {
 		// Step 1: Navigate to login page
 		await page.goto('/login');
-		await expect(page.locator('text=Import Existing')).toBeVisible();
+		await page.waitForLoadState('networkidle');
+		const importButton = page.locator('button:has-text("Import Existing")');
+		await expect(importButton).toBeVisible();
 
 		// Step 2: Click "Import Existing"
-		await page.click('text=Import Existing');
+		await importButton.click();
 
 		// Step 3: Enter seed phrase
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -65,7 +67,8 @@ test.describe('Sign-In Flow', () => {
 
 	test('should reject invalid seed phrase', async ({ page }) => {
 		await page.goto('/login');
-		await page.click('text=Import Existing');
+		await page.waitForLoadState('networkidle');
+		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
 		await expect(seedInput).toBeVisible();
@@ -86,7 +89,8 @@ test.describe('Sign-In Flow', () => {
 	test('should maintain session after page refresh', async ({ page, testAccountLoggedOut }) => {
 		// Sign in
 		await page.goto('/login');
-		await page.click('text=Import Existing');
+		await page.waitForLoadState('networkidle');
+		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
 		await seedInput.fill(testAccountLoggedOut.seedPhrase);
@@ -116,7 +120,8 @@ test.describe('Sign-In Flow', () => {
 	test('should sign out successfully', async ({ page, testAccountLoggedOut }) => {
 		// Sign in first
 		await page.goto('/login');
-		await page.click('text=Import Existing');
+		await page.waitForLoadState('networkidle');
+		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
 		await seedInput.fill(testAccountLoggedOut.seedPhrase);
@@ -146,9 +151,10 @@ test.describe('Sign-In Flow', () => {
 	test('should auto-detect account from seed phrase', async ({ page, testAccountLoggedOut }) => {
 		// Step 1: Navigate to login
 		await page.goto('/login');
+		await page.waitForLoadState('networkidle');
 
 		// Step 2: Click "Import Existing"
-		await page.click('text=Import Existing');
+		await page.locator('button:has-text("Import Existing")').click();
 
 		// Step 3: Enter seed phrase
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -174,9 +180,10 @@ test.describe('Sign-In Flow', () => {
 	test('should redirect to returnUrl after successful sign-in', async ({ page, testAccountLoggedOut }) => {
 		// Navigate to login with returnUrl parameter
 		await page.goto('/login?returnUrl=%2Fdashboard%2Frentals');
+		await page.waitForLoadState('networkidle');
 
 		// Complete sign-in flow
-		await page.click('text=Import Existing');
+		await page.locator('button:has-text("Import Existing")').click();
 
 		// Enter seed phrase
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -198,21 +205,26 @@ test.describe('Sign-In Flow', () => {
 	test('should redirect to returnUrl when accessing protected page directly', async ({ page, testAccountLoggedOut }) => {
 		// Try to access protected page directly while logged out
 		await page.goto('/dashboard/account');
+		await page.waitForLoadState('networkidle');
 
 		// Should stay on page with login prompt (not redirect)
 		await expect(page).toHaveURL('/dashboard/account');
 		await expect(page.getByText('Login Required')).toBeVisible();
 
 		// Click the login button in main content
-		await page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i }).click();
+		const loginButton = page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i });
+		await expect(loginButton).toBeVisible();
+		await loginButton.click();
 
 		// Should navigate to login with returnUrl
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Faccount');
 
 		// Complete sign-in
-		await page.click('text=Import Existing');
+		await page.waitForLoadState('networkidle');
+		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
+		await expect(seedInput).toBeVisible({ timeout: 10000 });
 		await seedInput.fill(testAccountLoggedOut.seedPhrase);
 		await page.click('button:has-text("Continue")');
 

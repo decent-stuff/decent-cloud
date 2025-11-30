@@ -40,9 +40,12 @@ test.describe('Auth Protection', () => {
 
 	test('should redirect to /login with returnUrl when clicking login button', async ({ page }) => {
 		await page.goto('/dashboard/rentals');
+		await page.waitForLoadState('networkidle');
 
 		// Click the login button in main content
-		await page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i }).click();
+		const loginButton = page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i });
+		await expect(loginButton).toBeVisible();
+		await loginButton.click();
 
 		// Should navigate to /login with returnUrl
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Frentals');
