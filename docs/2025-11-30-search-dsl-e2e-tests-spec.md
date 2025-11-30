@@ -7,11 +7,11 @@
 - [x] Show example offerings in marketplace (remove filter)
 - [x] Add "Demo" badge to example offerings in UI
 - [x] Disable "Rent" button for example offerings
-- [ ] E2E test for DSL text search input (e.g., `price:<=100`)
-- [ ] E2E test for type filter buttons (All, Compute, GPU, Storage, Network)
-- [ ] E2E test for combined filters (type button + DSL query)
-- [ ] E2E test for empty results state (using impossible query)
-- [ ] E2E test for search results count changing based on filter
+- [x] E2E test for DSL text search input (e.g., `price:<=100`)
+- [x] E2E test for type filter buttons (All, Compute, GPU, Storage, Network)
+- [x] E2E test for combined filters (type button + DSL query)
+- [x] E2E test for empty results state (using impossible query)
+- [x] E2E test for search results count changing based on filter
 
 ### Nice-to-have
 - [ ] E2E test for invalid DSL query error handling
@@ -57,7 +57,7 @@ Files:
 4. Empty results state shown for impossible query
 5. Results count updates correctly
 
-**Status:** Pending
+**Status:** Complete
 
 Files:
 - `website/tests/e2e/search-dsl.spec.ts` - E2E test file
