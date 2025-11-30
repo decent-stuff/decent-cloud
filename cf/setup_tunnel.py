@@ -3,10 +3,8 @@
 
 import sys
 from pathlib import Path
-from cf_common import (
-    print_header, print_success, print_error, print_warning, print_info,
-    BLUE, NC
-)
+from cf_common import print_header, print_success, print_error, print_warning, print_info, BLUE, NC
+
 
 def main() -> int:
     """Main setup function."""
@@ -14,13 +12,13 @@ def main() -> int:
 
     # Change to cf directory if not already there
     cf_dir = Path(__file__).parent
-    env_file = cf_dir / '.env'
-    example_file = cf_dir / '.env.tunnel.example'
+    env_file = cf_dir / ".env"
+    example_file = cf_dir / ".env.tunnel.example"
 
     if env_file.exists():
         print_warning(f".env file already exists at {env_file}")
         response = input("Do you want to overwrite it? (y/N): ").strip().lower()
-        if response != 'y':
+        if response != "y":
             print_info("Setup cancelled")
             return 0
 
@@ -37,7 +35,7 @@ def main() -> int:
     print("     - Subdomain: your choice (e.g., 'app' or 'decent-cloud')")
     print("     - Domain: your domain")
     print("     - Service Type: HTTP")
-    print("     - URL: website:8080")
+    print("     - URL: website:59100")
     print("  7. Click 'Save hostname'")
     print()
     print("  8. Select 'Docker' environment")
@@ -51,19 +49,19 @@ def main() -> int:
         print_error("No token provided")
         return 1
 
-    if not token.startswith('eyJ'):
+    if not token.startswith("eyJ"):
         print_warning("Token doesn't look correct (should start with 'eyJ')")
         response = input("Continue anyway? (y/N): ").strip().lower()
-        if response != 'y':
+        if response != "y":
             return 1
 
     # Create .env file
-    with open(env_file, 'w') as f:
+    with open(env_file, "w") as f:
         if example_file.exists():
             # Copy template if exists
             with open(example_file) as template:
                 for line in template:
-                    if line.startswith('TUNNEL_TOKEN=') or line.startswith('export TUNNEL_TOKEN='):
+                    if line.startswith("TUNNEL_TOKEN=") or line.startswith("export TUNNEL_TOKEN="):
                         f.write(f"export TUNNEL_TOKEN={token}\n")
                     else:
                         f.write(line)
@@ -81,6 +79,7 @@ def main() -> int:
     print()
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
