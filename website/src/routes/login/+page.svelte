@@ -56,15 +56,22 @@
 			<AuthFlow onSuccess={handleSuccess} />
 		</div>
 
-		<!-- Back link -->
-		<div class="text-center mt-6">
-			<button
-				type="button"
-				onclick={handleCancel}
-				class="text-white/60 hover:text-white transition-colors text-sm"
-			>
-				← Back to home
-			</button>
+		<!-- Footer links -->
+		<div class="text-center mt-6 space-y-2">
+			<div>
+				<a href="/recover" class="text-white/50 hover:text-white/80 transition-colors text-xs">
+					Lost access? Recover your account
+				</a>
+			</div>
+			<div>
+				<button
+					type="button"
+					onclick={handleCancel}
+					class="text-white/60 hover:text-white transition-colors text-sm"
+				>
+					← Back to home
+				</button>
+			</div>
 		</div>
 	</div>
 </div>

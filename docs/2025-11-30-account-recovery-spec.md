@@ -5,7 +5,7 @@
 ## Requirements
 
 ### Must-have
-- [ ] "Forgot password?" link on login page
+- [x] "Forgot password?" link on login page
 - [ ] Recovery request form (enter email)
 - [ ] `/recover` page to handle recovery token from email link
 - [ ] Recovery completion flow (generate new seed phrase, add key)
@@ -27,7 +27,7 @@
 
 ### Step 3: Add "Forgot password?" link to login page
 **Success:** Link navigates to /recover, visible on login page
-**Status:** Pending
+**Status:** Complete
 
 ### Step 4: E2E test for recovery flow
 **Success:** Playwright test covers request → complete → login
@@ -48,10 +48,10 @@
 - **Outcome:** Complete. Page handles full recovery flow with clean UI matching existing design patterns.
 
 ### Step 3
-- **Implementation:**
-- **Review:**
-- **Verification:**
-- **Outcome:**
+- **Implementation:** Added recovery link to `/code/website/src/routes/login/+page.svelte` in footer area. Link text "Lost access? Recover your account" navigates to `/recover`. Positioned above "Back to home" button. Styling: `text-white/50` base color (more subtle than back button), `hover:text-white/80` on hover, `text-xs` size (smaller than back button). Uses `space-y-2` for vertical spacing between footer links.
+- **Review:** Minimal change - added 9 lines total. Follows KISS principle: just a plain `<a>` tag, no new components. Styling matches existing page theme (white text with transparency, smooth transitions). Recovery link is more subtle (50% opacity, xs text) than back button (60% opacity, sm text) to maintain visual hierarchy.
+- **Verification:** TypeScript check passes (`npm run check`). No errors or warnings. Link appears in footer below auth flow card.
+- **Outcome:** Complete. Recovery link is visible on login page and navigates to `/recover` route.
 
 ### Step 4
 - **Implementation:**
