@@ -1,8 +1,3 @@
-- ✅ COMPLETED (2025-11-30): Search DSL implementation with ServerHunter-style syntax
-  - See docs/2025-11-30-search-dsl-spec.md for full details
-  - 15 searchable fields, operators (>=, <=, ranges), OR groups, negation
-  - Backend: api/src/search/* (parser, builder, tests)
-  - Frontend: marketplace search bar with DSL support
 - Admin UI with support for:
     - sending test and other emails
     - performing actions in the name of other users (impersonating)
@@ -35,11 +30,12 @@ Visual trust dashboard on provider profiles and offering listings showing:
 - **Price Spike Detection**: Provider raised prices >50% recently (could indicate desperation)
 - **Abandonment Velocity**: Sudden spike in cancellations after stable history
 
-#### Tier 3 - Contextual Info
-- **Refund Processing Speed**: Average time from cancellation to refund
-- **Provider Tenure**: New (<5 contracts), Growing (5-20), Established (20+)
-- **Average Contract Duration** vs expected (contracts ending early = quality issues)
-- **No Response Rate**: % requests still in "requested" status after 7 days
+#### Tier 3 - Contextual Info ✅ COMPLETED (2025-11-30)
+See docs/2025-11-30-tier3-contextual-metrics-spec.md for implementation details.
+- ~~**Refund Processing Speed**~~: N/A - refunds handled automatically by platform/Stripe
+- ✅ **Provider Tenure**: New (<5 contracts), Growing (5-20), Established (20+)
+- ✅ **Average Contract Duration Ratio**: actual vs expected duration (contracts ending early = quality issues)
+- ✅ **No Response Rate**: % requests still in "requested" status after 7 days
 
 ### External Benchmarking Integration
 Integrate with or scrape external sources for additional trust signals:
