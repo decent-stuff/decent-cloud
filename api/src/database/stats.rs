@@ -247,6 +247,7 @@ impl Database {
         // 1. Blockchain check-ins
         // 2. Contract activity (status updates as provider)
         // 3. Profile updates
+        // 4. Account login (via account_public_keys link)
         let last_active_ns: i64 = sqlx::query_scalar::<_, i64>(
             r#"SELECT COALESCE(MAX(activity_ns), 0) FROM (
                 SELECT MAX(block_timestamp_ns) as activity_ns FROM provider_check_ins WHERE pubkey = ?
@@ -254,8 +255,13 @@ impl Database {
                 SELECT MAX(COALESCE(status_updated_at_ns, created_at_ns)) FROM contract_sign_requests WHERE provider_pubkey = ?
                 UNION ALL
                 SELECT MAX(updated_at_ns) FROM provider_profiles WHERE pubkey = ?
+                UNION ALL
+                SELECT MAX(a.last_login_at) FROM accounts a
+                INNER JOIN account_public_keys apk ON a.id = apk.account_id
+                WHERE apk.public_key = ?
             )"#,
         )
+        .bind(pubkey)
         .bind(pubkey)
         .bind(pubkey)
         .bind(pubkey)

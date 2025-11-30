@@ -65,6 +65,10 @@ days_since_last_checkin: number,
  */
 is_new_provider: boolean, 
 /**
+ * True if provider has at least one contact method set
+ */
+has_contact_info: boolean, 
+/**
  * True if any critical threshold exceeded
  */
 has_critical_flags: boolean, 

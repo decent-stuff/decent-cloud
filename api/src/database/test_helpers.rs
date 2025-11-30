@@ -27,6 +27,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/016_contract_currency.sql"),
         include_str!("../../migrations/017_drop_currency_default.sql"),
         include_str!("../../migrations/018_provider_trust_cache.sql"),
+        include_str!("../../migrations/019_last_login_tracking.sql"),
     ];
 
     for migration in &migrations {

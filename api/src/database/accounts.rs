@@ -19,6 +19,8 @@ pub struct Account {
     pub bio: Option<String>,
     pub avatar_url: Option<String>,
     pub profile_updated_at: Option<i64>,
+    // Last login timestamp for activity tracking
+    pub last_login_at: Option<i64>,
 }
 
 /// Account public key record
@@ -147,7 +149,7 @@ impl Database {
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at
              FROM accounts WHERE id = ?",
         )
         .bind(account_id)
@@ -160,7 +162,7 @@ impl Database {
     /// Get account by username (case-insensitive search)
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at
              FROM accounts WHERE LOWER(username) = LOWER(?)",
         )
         .bind(username)
@@ -400,6 +402,7 @@ impl Database {
     }
 
     /// Get account with keys by public key (for login without username)
+    /// Also updates last_login_at timestamp as this represents a login action
     pub async fn get_account_with_keys_by_public_key(
         &self,
         public_key: &[u8],
@@ -408,6 +411,11 @@ impl Database {
             Some(id) => id,
             None => return Ok(None),
         };
+
+        // Update last login timestamp (best-effort, don't fail if this fails)
+        if let Err(e) = self.update_last_login_by_public_key(public_key).await {
+            tracing::warn!("Failed to update last_login_at: {}", e);
+        }
 
         let account = match self.get_account(&account_id).await? {
             Some(acc) => acc,
@@ -558,7 +566,7 @@ impl Database {
     /// Get account by email
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at
              FROM accounts WHERE email = ?",
         )
         .bind(email)
@@ -566,6 +574,22 @@ impl Database {
         .await?;
 
         Ok(account)
+    }
+
+    /// Update last login timestamp for account by public key
+    /// Returns true if an account was updated, false if no account found for this pubkey
+    pub async fn update_last_login_by_public_key(&self, public_key: &[u8]) -> Result<bool> {
+        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let result = sqlx::query(
+            "UPDATE accounts SET last_login_at = ?
+             WHERE id IN (SELECT account_id FROM account_public_keys WHERE public_key = ? AND is_active = 1)",
+        )
+        .bind(now)
+        .bind(public_key)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
     }
 
     /// Create account with email and link to OAuth provider

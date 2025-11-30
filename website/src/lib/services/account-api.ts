@@ -377,6 +377,82 @@ export function generateUsernameSuggestions(username: string): string[] {
 	return suggestions;
 }
 
+/**
+ * Request account recovery via email
+ * Sends recovery link to the email associated with the account
+ */
+export async function requestRecovery(email: string): Promise<string> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/recovery/request`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ email })
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Recovery request failed (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			if (text) {
+				errorMessage = `Recovery request failed (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
+			}
+		}
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<string> = await response.json();
+
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Recovery request failed');
+	}
+
+	return result.data;
+}
+
+/**
+ * Complete account recovery with token and new public key
+ * Adds the new key to the account, allowing access with the new identity
+ */
+export async function completeRecovery(token: string, publicKeyHex: string): Promise<string> {
+	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/recovery/complete`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ token, publicKey: publicKeyHex })
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Recovery completion failed (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			if (text) {
+				errorMessage = `Recovery completion failed (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
+			}
+		}
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<string> = await response.json();
+
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Recovery completion failed');
+	}
+
+	return result.data;
+}
+
 function bytesToHex(bytes: Uint8Array): string {
 	return Array.from(bytes)
 		.map((b) => b.toString(16).padStart(2, '0'))
