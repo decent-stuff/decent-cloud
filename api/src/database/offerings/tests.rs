@@ -263,6 +263,8 @@ async fn test_create_offering_success() {
         payment_methods: Some("BTC,ETH".to_string()),
         features: Some("RAID,Backup".to_string()),
         operating_systems: Some("Ubuntu 22.04".to_string()),
+        trust_score: None,
+        has_critical_flags: None,
     };
 
     let offering_id = db.create_offering(&pubkey, params).await.unwrap();
@@ -353,6 +355,8 @@ async fn test_create_offering_duplicate_id() {
         payment_methods: None,
         features: None,
         operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
     };
 
     // First creation should succeed
@@ -413,6 +417,8 @@ async fn test_create_offering_missing_required_fields() {
         payment_methods: None,
         features: None,
         operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
     };
 
     let result = db.create_offering(&pubkey, params).await;
@@ -472,6 +478,8 @@ async fn test_update_offering_success() {
         payment_methods: Some("ETH".to_string()),
         features: Some("Backup".to_string()),
         operating_systems: Some("Debian 12".to_string()),
+        trust_score: None,
+        has_critical_flags: None,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -540,6 +548,8 @@ async fn test_update_offering_unauthorized() {
         payment_methods: None,
         features: None,
         operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
     };
 
     let result = db.update_offering(&pubkey2, db_id, params).await;

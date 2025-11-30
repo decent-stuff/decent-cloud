@@ -101,7 +101,9 @@
 				max_contract_hours: undefined,
 				payment_methods: offering.payment_methods || undefined,
 				features: offering.features || undefined,
-				operating_systems: offering.operating_systems || undefined
+				operating_systems: offering.operating_systems || undefined,
+				trust_score: undefined,
+				has_critical_flags: undefined
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed

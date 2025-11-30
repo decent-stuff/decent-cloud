@@ -235,6 +235,46 @@
 
 			<!-- Content -->
 			<div class="p-6 space-y-6">
+				<!-- Trust Warning -->
+				{#if offering.has_critical_flags || (offering.trust_score !== undefined && offering.trust_score < 50)}
+					<div
+						class="bg-red-500/20 border border-red-500/30 rounded-lg p-4"
+					>
+						<div class="flex items-start gap-3">
+							<span class="text-2xl">&#x26A0;</span>
+							<div>
+								<h4 class="text-red-400 font-semibold">
+									Provider Risk Warning
+								</h4>
+								<p class="text-red-300/80 text-sm mt-1">
+									{#if offering.has_critical_flags}
+										This provider has critical reliability flags. Review their
+										<a
+											href="/dashboard/reputation/{offering.pubkey}"
+											target="_blank"
+											class="underline hover:text-red-200"
+										>
+											trust metrics
+										</a>
+										before proceeding.
+									{:else if offering.trust_score !== undefined && offering.trust_score < 50}
+										This provider has a low trust score ({offering.trust_score}/100).
+										Consider reviewing their
+										<a
+											href="/dashboard/reputation/{offering.pubkey}"
+											target="_blank"
+											class="underline hover:text-red-200"
+										>
+											reputation
+										</a>
+										before renting.
+									{/if}
+								</p>
+							</div>
+						</div>
+					</div>
+				{/if}
+
 				<!-- Resource Summary -->
 				<div class="bg-white/5 rounded-lg p-4 border border-white/10">
 					<h3 class="text-sm font-semibold text-white/70 mb-3">

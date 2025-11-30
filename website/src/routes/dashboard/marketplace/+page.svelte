@@ -3,6 +3,7 @@
 	import { searchOfferings, type Offering } from "$lib/services/api";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
+	import TrustBadge from "$lib/components/TrustBadge.svelte";
 	import { authStore } from "$lib/stores/auth";
 
 	let offerings = $state<Offering[]>([]);
@@ -237,13 +238,22 @@
 						<span class="text-4xl"
 							>{getTypeIcon(offering.product_type)}</span
 						>
-						<span
-							class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30"
-						>
-							<span class="w-2 h-2 rounded-full bg-current"
-							></span>
-							Available
-						</span>
+						<div class="flex items-center gap-2">
+							{#if offering.trust_score !== undefined}
+								<TrustBadge
+									score={offering.trust_score}
+									hasFlags={offering.has_critical_flags ?? false}
+									compact={true}
+								/>
+							{/if}
+							<span
+								class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30"
+							>
+								<span class="w-2 h-2 rounded-full bg-current"
+								></span>
+								Available
+							</span>
+						</div>
 					</div>
 
 					<h3

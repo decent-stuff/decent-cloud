@@ -64,6 +64,12 @@ pub struct Offering {
     pub payment_methods: Option<String>,
     pub features: Option<String>,
     pub operating_systems: Option<String>,
+    // Trust fields - populated only in search results (from provider_profiles)
+    #[ts(type = "number | undefined")]
+    pub trust_score: Option<i64>,
+    #[ts(type = "boolean | undefined")]
+    #[sqlx(default)]
+    pub has_critical_flags: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,19 +89,21 @@ impl Database {
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
-        let mut query = String::from("SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name, memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic, datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude, control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ?");
+        let mut query = String::from(
+            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey WHERE LOWER(o.visibility) = 'public' AND o.pubkey != ?"
+        );
 
         if params.product_type.is_some() {
-            query.push_str(" AND product_type = ?");
+            query.push_str(" AND o.product_type = ?");
         }
         if params.country.is_some() {
-            query.push_str(" AND datacenter_country = ?");
+            query.push_str(" AND o.datacenter_country = ?");
         }
         if params.in_stock_only {
-            query.push_str(" AND stock_status = ?");
+            query.push_str(" AND o.stock_status = ?");
         }
 
-        query.push_str(" ORDER BY monthly_price ASC LIMIT ? OFFSET ?");
+        query.push_str(" ORDER BY o.monthly_price ASC LIMIT ? OFFSET ?");
 
         let mut query_builder = sqlx::query_as::<_, Offering>(&query).bind(example_provider_pubkey);
 
@@ -127,7 +135,8 @@ impl Database {
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
+               NULL as trust_score, NULL as has_critical_flags
                FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#
         )
         .bind(pubkey)
@@ -146,7 +155,8 @@ impl Database {
                 memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
+               NULL as trust_score, NULL as has_critical_flags
                FROM provider_offerings WHERE id = ?"#)
                 .bind(offering_id)
                 .fetch_optional(&self.pool)
@@ -165,7 +175,8 @@ impl Database {
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
+               NULL as trust_score, NULL as has_critical_flags
                FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey)
@@ -185,7 +196,8 @@ impl Database {
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
+               NULL as trust_score, NULL as has_critical_flags
                FROM provider_offerings WHERE pubkey = ? AND product_type = ? ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey)
@@ -291,6 +303,8 @@ impl Database {
             payment_methods,
             features,
             operating_systems,
+            trust_score: _,
+            has_critical_flags: _,
         } = params;
 
         let mut tx = self.pool.begin().await?;
@@ -459,6 +473,8 @@ impl Database {
             payment_methods,
             features,
             operating_systems,
+            trust_score: _,
+            has_critical_flags: _,
         } = params;
 
         sqlx::query!(
@@ -624,6 +640,8 @@ impl Database {
             payment_methods: source.payment_methods,
             features: source.features,
             operating_systems: source.operating_systems,
+            trust_score: None,
+            has_critical_flags: None,
         };
 
         self.create_offering(pubkey, params).await
@@ -870,6 +888,8 @@ impl Database {
             payment_methods: get_opt_csv("payment_methods"),
             features: get_opt_csv("features"),
             operating_systems: get_opt_csv("operating_systems"),
+            trust_score: None,
+            has_critical_flags: None,
         })
     }
 }

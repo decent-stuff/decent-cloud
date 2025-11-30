@@ -368,6 +368,17 @@ impl Database {
                 completion_rate_pct,
             );
 
+        // Update cached trust score in provider_profiles
+        let has_flags_int: i64 = if has_critical_flags { 1 } else { 0 };
+        sqlx::query!(
+            "UPDATE provider_profiles SET trust_score = ?, has_critical_flags = ? WHERE pubkey = ?",
+            trust_score,
+            has_flags_int,
+            pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(ProviderTrustMetrics {
             pubkey: hex::encode(pubkey),
             trust_score,
