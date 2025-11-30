@@ -4,7 +4,9 @@ FROM rust:1.91
 ENV HOME=/code \
     XDG_DATA_HOME=/usr/local \
     PATH=/usr/local/dfx/bin:$PATH \
-    POCKET_IC_BIN=/usr/local/bin/pocket-ic
+    POCKET_IC_BIN=/usr/local/bin/pocket-ic \
+    RUST_BACKTRACE=1
+
 RUN mkdir $HOME
 WORKDIR $HOME
 
@@ -12,11 +14,12 @@ WORKDIR $HOME
 RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 
 # Install deps
-RUN apt update && apt install -y libunwind-dev curl libssl-dev pkg-config
+RUN apt update && \
+    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3
 
 # Install Rust
 RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
-    && rustup toolchain install nightly-2025-10-27 --profile=complete \
+    && rustup toolchain install nightly-2025-11-27 --profile=complete \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 # Install cargo tools using binstall for faster installation

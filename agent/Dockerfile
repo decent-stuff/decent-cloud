@@ -14,24 +14,24 @@ ENV HOME=/home/ubuntu \
 RUN useradd -m -u 1000 ubuntu && mkdir -p $HOME/.git/hooks $HOME/bin $XDG_DATA_HOME
 WORKDIR $HOME
 
-# Add tini for proper signal handling (from CI Dockerfile)
+# Add tini for proper signal handling
 ENV TINI_VERSION=v0.19.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 
-# Install dfx (exact from CI Dockerfile)
+# Install dfx
 RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)" \
     && dfxvm default 0.29.2
 
-# Install deps (exact from CI Dockerfile)
+# Install deps
 RUN apt update && \
-    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3 gnupg
+    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3
 
 # Install Node.js directly from NodeSource repository (simpler than NVM for Docker)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs
 
-# Install UV (exact from CI Dockerfile)
+# Install UV
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 RUN chown -R ubuntu:ubuntu $HOME /usr/local/cargo /usr/local/rustup
@@ -42,11 +42,11 @@ RUN npx playwright install-deps chromium && chown -R ubuntu:ubuntu /home/ubuntu
 # Switch to non-root user
 USER ubuntu
 
-# Install pocket-ic-server (exact from CI Dockerfile)
+# Install pocket-ic-server
 RUN curl -L https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz -o $HOME/bin/pocket-ic.gz \
     && gunzip $HOME/bin/pocket-ic.gz && chmod +x $HOME/bin/pocket-ic
 
-# Install Rust (exact from CI Dockerfile)
+# Install Rust
 RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
     && rustup toolchain install nightly-2025-11-27 --profile=complete \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
