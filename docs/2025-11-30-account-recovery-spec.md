@@ -106,10 +106,10 @@
 - **Outcome:** Complete. Email verification endpoint implemented and tested. Users can now verify their email by clicking link from registration email which calls POST /accounts/verify-email with token, sets email_verified=1, and marks token as used. All tests passing. Ready for Step 8 (frontend email input).
 
 ### Step 8
-- **Implementation:**
-- **Review:**
-- **Verification:**
-- **Outcome:**
+- **Implementation:** Added email input to registration flow. Updated `registerAccount()` in `/code/website/src/lib/services/account-api.ts` to accept `email: string` parameter and include it in request body. Updated `registerNewAccount()` in `/code/website/src/lib/stores/auth.ts` to accept `email: string` parameter and pass it to registerAccount(). Modified AuthFlow.svelte 'enter-username' step to collect email alongside username: added state variables (`email`, `emailValid`), added `validateEmail()` function using basic HTML5 email pattern (/^[^\s@]+@[^\s@]+\.[^\s@]+$/), added email input field with label "Email Address" and placeholder "you@example.com", added inline validation error message, updated "Create Account" button to require both `usernameValid && emailValid`, updated goBack() to clear email state. Email input uses same styling as username (bg-white/10, border-white/20, purple focus ring). Changed step heading from "Choose Your Username" to "Create Your Account" with subtitle "Choose a username and provide your email address".
+- **Review:** Changes are minimal and follow existing patterns. Email input styling matches UsernameInput component patterns (same color scheme, focus states, transitions). Email validation is simple and uses basic HTML5 pattern (no over-engineering). No code duplication - extends existing registration flow. All three files updated follow KISS principle with minimal changes (3 line change to account-api.ts, 2 line change to auth.ts, 30 lines added to AuthFlow.svelte for email field and validation). Email field appears below username field in same step for simpler UX (no separate step needed).
+- **Verification:** Ran `npm run check` - TypeScript compiles cleanly with 0 errors and 0 warnings. Email validation logic tested with basic pattern matching. Button disable state correctly requires both username and email to be valid.
+- **Outcome:** Complete. Registration flow now collects email address alongside username. Email is validated with basic HTML5 pattern, passed to backend API, and stored in accounts table. UI is clean and follows existing design patterns. Ready for Step 9 (verification pending/success UI).
 
 ### Step 9
 - **Implementation:**

@@ -25,6 +25,8 @@
 	let username = $state('');
 	let usernameValid = $state(false);
 	let normalizedUsername = $state('');
+	let email = $state('');
+	let emailValid = $state(false);
 	let error = $state<string | null>(null);
 	let createdAccount = $state<AccountInfo | null>(null);
 
@@ -103,9 +105,24 @@
 		normalizedUsername = normalized;
 	}
 
+	function validateEmail() {
+		const trimmed = email.trim();
+		if (!trimmed) {
+			emailValid = false;
+			return;
+		}
+		// Basic HTML5 email pattern
+		const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+		emailValid = emailPattern.test(trimmed);
+	}
+
 	async function registerAndLogin() {
 		if (!usernameValid) {
 			error = 'Please enter a valid username';
+			return;
+		}
+		if (!emailValid) {
+			error = 'Please enter a valid email address';
 			return;
 		}
 
@@ -119,6 +136,7 @@
 			const account = await authStore.registerNewAccount(
 				identity,
 				normalizedUsername,
+				email.trim(),
 				seedPhrase
 			);
 
@@ -140,6 +158,8 @@
 		if (currentStep === 'enter-username') {
 			currentStep = 'seed';
 			seedPhrase = '';
+			email = '';
+			emailValid = false;
 		}
 	}
 
@@ -219,15 +239,33 @@
 	<!-- Step 5: Enter Username -->
 	{#if currentStep === 'enter-username'}
 		<div class="space-y-4">
-			<h3 class="text-2xl font-bold text-white">Choose Your Username</h3>
+			<h3 class="text-2xl font-bold text-white">Create Your Account</h3>
 			<p class="text-white/60">
-				This will be your unique identifier on Decent Cloud
+				Choose a username and provide your email address
 			</p>
 
 			<UsernameInput
 				bind:value={username}
 				onValidChange={handleUsernameValidChange}
 			/>
+
+			<div class="space-y-2">
+				<label for="email" class="block text-sm font-medium text-white/80">
+					Email Address
+				</label>
+				<input
+					id="email"
+					type="email"
+					bind:value={email}
+					oninput={validateEmail}
+					placeholder="you@example.com"
+					class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+					required
+				/>
+				{#if email && !emailValid}
+					<p class="text-xs text-red-400">Please enter a valid email address</p>
+				{/if}
+			</div>
 
 			{#if error}
 				<div
@@ -249,7 +287,7 @@
 					type="button"
 					onclick={registerAndLogin}
 					class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-					disabled={!usernameValid}
+					disabled={!usernameValid || !emailValid}
 				>
 					Create Account
 				</button>

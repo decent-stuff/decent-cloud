@@ -40,14 +40,16 @@ interface ApiResponse<T> {
  */
 export async function registerAccount(
 	identity: Ed25519KeyIdentity,
-	username: string
+	username: string,
+	email: string
 ): Promise<AccountWithKeys> {
 	const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
 	const publicKeyHex = bytesToHex(publicKeyBytes);
 
 	const requestBody = {
 		username,
-		publicKey: publicKeyHex
+		publicKey: publicKeyHex,
+		email
 	};
 
 	const { headers, body } = await signRequest(

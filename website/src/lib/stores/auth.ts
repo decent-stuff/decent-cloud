@@ -182,10 +182,11 @@ function createAuthStore() {
 	async function registerNewAccount(
 		identity: Ed25519KeyIdentity,
 		username: string,
+		email: string,
 		seedPhrase: string
 	): Promise<AccountInfo> {
 		const { registerAccount } = await import('../services/account-api');
-		const account = await registerAccount(identity, username);
+		const account = await registerAccount(identity, username, email);
 
 		// Persist seed phrase to localStorage so it survives page reload
 		persistSeedPhrase(seedPhrase);
