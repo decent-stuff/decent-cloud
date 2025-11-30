@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT account_id, expires_at, used_at\n               FROM email_verification_tokens\n               WHERE token = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "account_id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "expires_at",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "used_at",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "dc618e048425b196853c9a117f8287de771ed4b041ca7a3c681bb1d4e1ba3412"
+}

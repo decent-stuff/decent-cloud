@@ -170,6 +170,57 @@ impl Database {
         Ok(token)
     }
 
+    /// Verify an email verification token and mark the email as verified
+    /// Returns error if token is invalid, expired, or already used
+    pub async fn verify_email_token(&self, token: &[u8]) -> Result<()> {
+        // Start transaction
+        let mut tx = self.pool.begin().await?;
+
+        // Verify token (within transaction)
+        let now = chrono::Utc::now().timestamp();
+        let result = sqlx::query!(
+            r#"SELECT account_id, expires_at, used_at
+               FROM email_verification_tokens
+               WHERE token = ?"#,
+            token
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(row) = result else {
+            bail!("Invalid email verification token");
+        };
+
+        if row.used_at.is_some() {
+            bail!("Email verification token has already been used");
+        }
+
+        if now > row.expires_at {
+            bail!("Email verification token has expired");
+        }
+
+        // Mark token as used
+        sqlx::query!(
+            "UPDATE email_verification_tokens SET used_at = ? WHERE token = ?",
+            now,
+            token
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        // Update email_verified flag on account
+        sqlx::query!(
+            "UPDATE accounts SET email_verified = 1 WHERE id = ?",
+            row.account_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(

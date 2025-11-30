@@ -665,3 +665,101 @@ async fn test_create_email_verification_token_expires() {
     let expected_expiry = created_at + (24 * 3600);
     assert_eq!(expires_at, expected_expiry);
 }
+
+#[tokio::test]
+async fn test_verify_email_token_success() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+
+    // Verify email is not verified initially
+    let account_check = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(account_check.email.as_deref(), Some("test@example.com"));
+
+    // Create verification token
+    let token = db.create_email_verification_token(&account.id, "test@example.com").await.unwrap();
+
+    // Verify token
+    db.verify_email_token(&token).await.unwrap();
+
+    // Check that email_verified is now 1
+    let result: Option<(i64,)> = sqlx::query_as(
+        "SELECT email_verified FROM accounts WHERE id = ?"
+    )
+    .bind(&account.id)
+    .fetch_optional(&db.pool)
+    .await
+    .unwrap();
+
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().0, 1);
+
+    // Check that token is marked as used
+    let token_result: Option<(Option<i64>,)> = sqlx::query_as(
+        "SELECT used_at FROM email_verification_tokens WHERE token = ?"
+    )
+    .bind(&token)
+    .fetch_optional(&db.pool)
+    .await
+    .unwrap();
+
+    assert!(token_result.is_some());
+    assert!(token_result.unwrap().0.is_some());
+}
+
+#[tokio::test]
+async fn test_verify_email_token_invalid() {
+    let db = create_test_db().await;
+
+    // Try to verify with invalid token
+    let invalid_token = vec![0u8; 16];
+    let result = db.verify_email_token(&invalid_token).await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Invalid email verification token"));
+}
+
+#[tokio::test]
+async fn test_verify_email_token_already_used() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+
+    // Create verification token
+    let token = db.create_email_verification_token(&account.id, "test@example.com").await.unwrap();
+
+    // Verify token once
+    db.verify_email_token(&token).await.unwrap();
+
+    // Try to verify again
+    let result = db.verify_email_token(&token).await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("already been used"));
+}
+
+#[tokio::test]
+async fn test_verify_email_token_expired() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db.create_account("testuser", &[1u8; 32], "test@example.com").await.unwrap();
+
+    // Create verification token
+    let token = db.create_email_verification_token(&account.id, "test@example.com").await.unwrap();
+
+    // Manually expire the token by updating expires_at to past
+    let past = chrono::Utc::now().timestamp() - 3600;
+    sqlx::query!("UPDATE email_verification_tokens SET expires_at = ? WHERE token = ?", past, token)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // Try to verify expired token
+    let result = db.verify_email_token(&token).await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("expired"));
+}

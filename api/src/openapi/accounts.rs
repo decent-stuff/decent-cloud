@@ -1,7 +1,7 @@
 use super::common::{
     AddAccountContactRequest, AddAccountExternalKeyRequest, AddAccountKeyRequest,
     AddAccountSocialRequest, ApiResponse, ApiTags, CompleteRecoveryRequest, RegisterAccountRequest,
-    RequestRecoveryRequest, UpdateAccountProfileRequest, UpdateDeviceNameRequest,
+    RequestRecoveryRequest, UpdateAccountProfileRequest, UpdateDeviceNameRequest, VerifyEmailRequest,
 };
 use crate::{auth::ApiAuthenticatedUser, database::email::EmailType, database::Database};
 use poem::web::Data;
@@ -1652,6 +1652,47 @@ impl AccountsApi {
             Ok(_) => Json(ApiResponse {
                 success: true,
                 data: Some("Account recovery completed successfully. You can now sign in with your new key.".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Verify email address
+    ///
+    /// Verifies an email address using a token sent via email.
+    /// This is a public endpoint (no authentication required).
+    #[oai(
+        path = "/accounts/verify-email",
+        method = "post",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn verify_email(
+        &self,
+        db: Data<&Arc<Database>>,
+        req: Json<VerifyEmailRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Decode token
+        let token = match hex::decode(&req.token) {
+            Ok(t) => t,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid token format: {}", e)),
+                })
+            }
+        };
+
+        // Verify email
+        match db.verify_email_token(&token).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Email verified successfully.".to_string()),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

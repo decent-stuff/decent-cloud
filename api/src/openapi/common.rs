@@ -220,6 +220,13 @@ pub struct CompleteRecoveryRequest {
     pub public_key: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyEmailRequest {
+    pub token: String,
+}
+
 // Request types for admin
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
