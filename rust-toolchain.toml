@@ -5,5 +5,5 @@ targets = [
     "wasm32-unknown-unknown",
     "aarch64-apple-darwin",
 ]
-components = ["rust-analyzer"]
+components = ["rust-analyzer", "rustfmt", "clippy"]
 #profile = "minimal"
