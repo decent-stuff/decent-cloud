@@ -54,7 +54,7 @@ async function authenticatedFetch<T>(
 	const response = await fetch(`${API_BASE_URL}${path}`, {
 		method,
 		headers: headers as HeadersInit,
-		body
+		body: method === 'GET' || method === 'HEAD' ? undefined : body
 	});
 
 	if (!response.ok) {

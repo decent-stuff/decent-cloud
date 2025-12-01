@@ -1012,3 +1012,68 @@ async fn test_list_admins() {
         assert_eq!(admin.is_admin, 1);
     }
 }
+
+#[tokio::test]
+async fn test_get_account_with_keys_includes_is_admin() {
+    let db = create_test_db().await;
+
+    // Create account (not admin by default)
+    let _account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
+
+    // Get account with keys and verify is_admin is false
+    let account_with_keys = db.get_account_with_keys("testuser").await.unwrap().unwrap();
+    assert!(
+        !account_with_keys.is_admin,
+        "Non-admin should have is_admin=false"
+    );
+
+    // Grant admin status
+    db.set_admin_status("testuser", true).await.unwrap();
+
+    // Get account with keys again and verify is_admin is now true
+    let account_with_keys = db.get_account_with_keys("testuser").await.unwrap().unwrap();
+    assert!(
+        account_with_keys.is_admin,
+        "Admin should have is_admin=true"
+    );
+}
+
+#[tokio::test]
+async fn test_get_account_with_keys_by_public_key_includes_is_admin() {
+    let db = create_test_db().await;
+    let pubkey = [2u8; 32];
+
+    // Create account (not admin by default)
+    let _account = db
+        .create_account("pkuser", &pubkey, "pkuser@example.com")
+        .await
+        .unwrap();
+
+    // Get account with keys by public key and verify is_admin is false
+    let account_with_keys = db
+        .get_account_with_keys_by_public_key(&pubkey)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !account_with_keys.is_admin,
+        "Non-admin should have is_admin=false"
+    );
+
+    // Grant admin status
+    db.set_admin_status("pkuser", true).await.unwrap();
+
+    // Get account with keys again and verify is_admin is now true
+    let account_with_keys = db
+        .get_account_with_keys_by_public_key(&pubkey)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        account_with_keys.is_admin,
+        "Admin should have is_admin=true"
+    );
+}

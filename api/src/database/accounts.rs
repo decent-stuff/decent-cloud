@@ -59,6 +59,7 @@ pub struct AccountWithKeys {
     #[oai(skip_serializing_if_is_none)]
     pub profile_updated_at: Option<i64>,
     pub public_keys: Vec<PublicKeyInfo>,
+    pub is_admin: bool,
 }
 
 /// Public key information for API responses
@@ -288,6 +289,7 @@ impl Database {
                         disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
                     })
                     .collect(),
+                is_admin: account.is_admin != 0,
             }))
         } else {
             Ok(None)
@@ -533,6 +535,7 @@ impl Database {
                     disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
                 })
                 .collect(),
+            is_admin: account.is_admin != 0,
         }))
     }
 

@@ -332,6 +332,11 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
         // Read body
         let body_bytes = body.take()?.into_vec().await?;
 
+        // Get the full path including /api/v1 prefix for signature verification
+        // The request.uri().path() only returns the path within the nested service
+        // but the client signs the full path including the prefix
+        let full_path = format!("/api/v1{}", request.uri().path());
+
         // Verify signature
         let pubkey = verify_request_signature(
             pubkey_hex,
@@ -339,7 +344,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
             timestamp,
             nonce,
             request.method().as_str(),
-            request.uri().path(),
+            &full_path,
             &body_bytes,
             None,
         )?;
