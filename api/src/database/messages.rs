@@ -46,6 +46,7 @@ pub struct Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct MessageThreadParticipant {
     pub thread_id: Vec<u8>,
     pub pubkey: String,
@@ -293,6 +294,66 @@ impl Database {
         .await?;
 
         Ok(notification_id)
+    }
+
+    /// Get pending message notifications for email processing
+    pub async fn get_pending_message_notifications(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<MessageNotification>> {
+        let notifications = sqlx::query_as!(
+            MessageNotification,
+            r#"SELECT id, message_id, recipient_pubkey, status, created_at_ns, sent_at_ns
+               FROM message_notifications
+               WHERE status = 'pending'
+               ORDER BY created_at_ns ASC
+               LIMIT ?"#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(notifications)
+    }
+
+    /// Mark notification as sent
+    pub async fn mark_notification_sent(&self, notification_id: &[u8]) -> Result<()> {
+        let sent_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query!(
+            "UPDATE message_notifications SET status = 'sent', sent_at_ns = ? WHERE id = ?",
+            sent_at_ns,
+            notification_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Mark notification as skipped (e.g., message already read)
+    pub async fn mark_notification_skipped(&self, notification_id: &[u8]) -> Result<()> {
+        sqlx::query!(
+            "UPDATE message_notifications SET status = 'skipped' WHERE id = ?",
+            notification_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Check if a message is already read by the recipient
+    pub async fn is_message_read(&self, message_id: &[u8], reader_pubkey: &str) -> Result<bool> {
+        let count = sqlx::query_scalar!(
+            "SELECT COUNT(*) as count FROM message_read_receipts WHERE message_id = ? AND reader_pubkey = ?",
+            message_id,
+            reader_pubkey
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(count > 0)
     }
 }
 

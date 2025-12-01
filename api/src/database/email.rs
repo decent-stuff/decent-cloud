@@ -10,8 +10,9 @@ pub enum EmailType {
     /// Important: Welcome emails - 12 attempts over ~4 hours
     Welcome,
     /// General: Other notifications - 6 attempts over ~2 hours
-    #[allow(dead_code)]
     General,
+    /// Message notifications - 6 attempts over ~2 hours
+    MessageNotification,
 }
 
 impl EmailType {
@@ -20,14 +21,16 @@ impl EmailType {
             EmailType::Recovery => "recovery",
             EmailType::Welcome => "welcome",
             EmailType::General => "general",
+            EmailType::MessageNotification => "message_notification",
         }
     }
 
     pub fn max_attempts(&self) -> i64 {
         match self {
-            EmailType::Recovery => 24, // Critical: many retries
-            EmailType::Welcome => 12,  // Important: moderate retries
-            EmailType::General => 6,   // Normal: fewer retries
+            EmailType::Recovery => 24,           // Critical: many retries
+            EmailType::Welcome => 12,            // Important: moderate retries
+            EmailType::General => 6,             // Normal: fewer retries
+            EmailType::MessageNotification => 6, // Normal: fewer retries
         }
     }
 }

@@ -280,9 +280,27 @@ Files:
 - **Outcome:** SUCCESS - All message API endpoints implemented and tested
 
 ### Step 3
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** COMPLETE
+  - Added `MessageNotification` to `EmailType` enum in `api/src/database/email.rs`
+    - Set max_attempts to 6 (same as General emails)
+    - Added "message_notification" type string
+  - Added notification management functions in `api/src/database/messages.rs`:
+    - `get_pending_message_notifications()` - Retrieves pending notifications for processing
+    - `mark_notification_sent()` - Marks notification as sent with timestamp
+    - `mark_notification_skipped()` - Marks notification as skipped (e.g., already read)
+    - `is_message_read()` - Checks if message has been read by recipient
+  - Updated `api/src/email_processor.rs` to process message notifications:
+    - Added `process_message_notifications()` method that runs in batch alongside email processing
+    - Checks if message is already read before sending (skips if read)
+    - Looks up recipient's verified email from `account_contacts` via pubkey
+    - Generates HTML email with message preview and link to view full message
+    - Uses `{FRONTEND_URL}/dashboard/rentals/{contract_id}/messages` as view URL
+    - Queues email via existing `email_queue` table with `MessageNotification` type
+    - Properly handles errors and logs all actions
+- **Testing:** COMPLETE - All 832 tests passing
+  - `cargo make` completed successfully
+  - No warnings or errors
+- **Outcome:** SUCCESS - Message email notifications fully integrated
 
 ### Step 4
 - **Implementation:** (pending)
