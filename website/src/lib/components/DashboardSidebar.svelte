@@ -1,15 +1,20 @@
 <script lang="ts">
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
+	import { messagesStore } from "$lib/stores/messages";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import { onMount, onDestroy } from "svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
+	import UnreadBadge from "./UnreadBadge.svelte";
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
 	let currentPath = $state("");
 	let currentIdentity = $state<IdentityInfo | null>(null);
+	let unreadCount = $state(0);
 	let unsubscribeIdentity: (() => void) | null = null;
+	let unsubscribeAuth: (() => void) | null = null;
+	let unsubscribeUnread: (() => void) | null = null;
 
 	const navItems = $derived([
 		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
@@ -21,6 +26,7 @@
 		{ href: "/dashboard/validators", icon: "✓", label: "Validators" },
 		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
 		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
+		{ href: "/dashboard/messages", icon: "💬", label: "Messages" },
 	]);
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
@@ -33,10 +39,22 @@
 		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
 		});
+
+		unsubscribeAuth = authStore.isAuthenticated.subscribe(async (isAuth) => {
+			if (isAuth) {
+				await messagesStore.loadUnreadCount();
+			}
+		});
+
+		unsubscribeUnread = messagesStore.unreadCount.subscribe((count) => {
+			unreadCount = count;
+		});
 	});
 
 	onDestroy(() => {
 		unsubscribeIdentity?.();
+		unsubscribeAuth?.();
+		unsubscribeUnread?.();
 	});
 
 	async function handleLogout() {
@@ -85,7 +103,9 @@
 			{@const isActive =
 				currentPath === item.href ||
 				(item.label === "Reputation" &&
-					currentPath.startsWith("/dashboard/reputation"))}
+					currentPath.startsWith("/dashboard/reputation")) ||
+				(item.label === "Messages" &&
+					currentPath.startsWith("/dashboard/messages"))}
 			<a
 				href={item.href}
 				onclick={closeSidebar}
@@ -95,6 +115,9 @@
 			>
 				<span class="text-xl">{item.icon}</span>
 				<span class="font-medium">{item.label}</span>
+				{#if item.label === "Messages" && isAuthenticated}
+					<UnreadBadge count={unreadCount} />
+				{/if}
 			</a>
 		{/each}
 

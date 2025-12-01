@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, message_id, recipient_pubkey, status, created_at_ns, sent_at_ns\n               FROM message_notifications\n               WHERE status = 'pending'\n               ORDER BY created_at_ns ASC\n               LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "message_id",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "recipient_pubkey",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "sent_at_ns",
+        "ordinal": 5,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "549bdf54bd3a07fd6220a7220bfa4e7d5d142faf7ef48098e57b1e09a06a6c28"
+}

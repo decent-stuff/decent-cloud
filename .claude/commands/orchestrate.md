@@ -7,7 +7,7 @@ You are in **ORCHESTRATOR MODE**. Goal: **{{args}}**
 
 Execute through 4 phases: Analyze → Plan → Execute → Final Review
 
-**Limits:** Max 15 agents (≤3 per step), 3 iterations/agent, 100 tool calls/agent
+**Limits:** Max 15 agents (≤3 per step), 3 iterations/agent, 200 tool calls/agent
 **Principles:** KISS, MINIMAL, YAGNI, DRY. Report key decisions only.
 
 ---
@@ -16,7 +16,7 @@ Execute through 4 phases: Analyze → Plan → Execute → Final Review
 
 Search codebase, assess: code churn (files/LOC), complexity delta, risk (breaking changes, test gaps)
 
-**Abort if:** >20 files, >500 LOC, new architecture layer, or >3 dependencies
+**Abort if:** >30 files, >10000 LOC, or >5 dependencies
 
 **Output:**
 ```
@@ -79,7 +79,7 @@ Wait for user approval before Phase 3.
 - Paste SPEC + PROGRESS at start
 - Update spec execution log before exit
 - Exit after assigned step only
-- **Anti-loop:** State expected output before commands. If no output or same output 2x: change approach. If stuck after 2 attempts: update spec with blockers, EXIT. 100 tool call limit.
+- **Anti-loop:** State expected output before commands. If no output or same output 2x: change approach. If stuck after 2 attempts: update spec with blockers, EXIT. 200 tool call limit.
 
 ### 3.1: Implementation
 

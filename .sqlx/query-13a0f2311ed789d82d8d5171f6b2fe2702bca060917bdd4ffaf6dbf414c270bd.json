@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE message_notifications SET status = 'sent', sent_at_ns = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "13a0f2311ed789d82d8d5171f6b2fe2702bca060917bdd4ffaf6dbf414c270bd"
+}

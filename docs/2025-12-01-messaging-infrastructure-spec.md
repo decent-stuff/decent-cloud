@@ -371,10 +371,48 @@ Files:
 - **Outcome:** SUCCESS - Messaging UI components complete and ready for integration
 
 ### Step 6
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** COMPLETE
+  - Created `/code/website/src/routes/dashboard/messages/+page.svelte`:
+    - Inbox page displaying all message threads
+    - Uses ThreadListItem component for thread preview
+    - Authentication guard with login prompt
+    - Loading, error, and empty states
+    - Navigates to contract messages on thread click
+    - Proper store subscription pattern (not using $ syntax on object store)
+  - Created `/code/website/src/routes/dashboard/rentals/[id]/messages/+page.svelte`:
+    - Contract-specific messaging page
+    - MessageList component for displaying messages
+    - MessageComposer component for sending messages
+    - Auto-load messages on mount
+    - Auto-mark messages as read (via MessageList onMarkRead)
+    - Back navigation to rentals list
+    - Thread subject display
+    - Proper contractId handling from route params
+    - Uses hexEncode for public key conversion
+  - Updated `/code/website/src/lib/components/DashboardSidebar.svelte`:
+    - Added "Messages" navigation item with icon
+    - Integrated UnreadBadge showing total unread count
+    - Loads unread count on authentication
+    - Subscribes to messagesStore.unreadCount for real-time updates
+    - Active state highlighting for messages routes
+  - All pages follow existing dashboard patterns:
+    - Consistent layout and styling
+    - Authentication guards
+    - Loading spinners
+    - Error handling
+    - Empty states with call-to-action
+  - Store integration:
+    - Proper subscription to individual store properties (messages, currentThread, inbox, unreadCount, isLoading, error)
+    - Cleanup of subscriptions in onDestroy
+    - Avoids async subscribe anti-pattern
+- **Testing:** COMPLETE
+  - `npm run check` passed with 0 errors and 0 warnings
+  - Fixed store subscription pattern (subscribed to individual properties, not whole store)
+  - Fixed type issues with AuthenticatedIdentityResult (publicKeyBytes not publicKey)
+  - Fixed contractId type (handled undefined from route params)
+  - All TypeScript types verified
+- **Verification:** SUCCESS - All pages type-check and integrate properly with existing dashboard
+- **Outcome:** SUCCESS - Full messaging UI integrated into dashboard with navigation and unread counts
 
 ## Completion Summary
 (To be filled in Phase 4)
