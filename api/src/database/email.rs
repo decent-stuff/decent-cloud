@@ -178,6 +178,25 @@ impl Database {
         Ok(emails)
     }
 
+    /// Get sent emails for admin review
+    pub async fn get_sent_emails(&self, limit: i64) -> Result<Vec<EmailQueueEntry>> {
+        let emails = sqlx::query_as!(
+            EmailQueueEntry,
+            r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
+                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
+                      related_account_id, user_notified_retry, user_notified_gave_up
+               FROM email_queue
+               WHERE status = 'sent'
+               ORDER BY sent_at DESC
+               LIMIT ?"#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(emails)
+    }
+
     /// Retry a failed email by resetting its status and attempts
     pub async fn retry_failed_email(&self, id: &[u8]) -> Result<()> {
         // Reset status, attempts, and also update created_at to restart the 7-day window

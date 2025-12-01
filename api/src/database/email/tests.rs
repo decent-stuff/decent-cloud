@@ -200,6 +200,53 @@ async fn test_mark_email_permanently_failed() {
 }
 
 #[tokio::test]
+async fn test_get_sent_emails() {
+    let db = setup_test_db().await;
+
+    // Create and send 3 emails
+    let mut sent_ids = vec![];
+    for i in 0..3 {
+        let id = db
+            .queue_email(
+                &format!("sent{}@example.com", i),
+                "sender@example.com",
+                &format!("Subject {}", i),
+                "Body",
+                false,
+                EmailType::General,
+            )
+            .await
+            .unwrap();
+        db.mark_email_sent(&id).await.unwrap();
+        sent_ids.push(id);
+    }
+
+    // Create a pending email (should NOT appear in sent)
+    db.queue_email(
+        "pending@example.com",
+        "sender@example.com",
+        "Pending",
+        "Body",
+        false,
+        EmailType::General,
+    )
+    .await
+    .unwrap();
+
+    // Get sent emails
+    let sent = db.get_sent_emails(10).await.unwrap();
+    assert_eq!(sent.len(), 3);
+    assert_eq!(sent[0].status, "sent");
+    assert!(sent[0].sent_at.is_some());
+
+    // Verify ordering (sent_at DESC - most recent first)
+    for email in &sent {
+        assert_eq!(email.status, "sent");
+        assert!(sent_ids.contains(&email.id));
+    }
+}
+
+#[tokio::test]
 async fn test_get_pending_emails_excludes_failed() {
     let db = setup_test_db().await;
 
