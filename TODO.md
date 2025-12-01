@@ -1,22 +1,25 @@
-## Admin Tools
+## Admin Tools ✅ COMPLETED (2025-11-30)
+See docs/2025-11-30-admin-tools-spec.md for implementation details.
 
-### CLI Admin Management
-- [ ] `dc admin grant <username>` - Grant admin access to an account
-- [ ] `dc admin revoke <username>` - Revoke admin access from an account
-- [ ] `dc admin list` - List all admin accounts
-NOTE: `dc` command currently doesn't have access to the DB to change values directly. We could extend it, but we could also add another cli for the api only, possibly absorbing `test-email` into it. The cli should have an option to pick --env dev|prod (alias --environment). The cli should use clap to parse args.
+### CLI Admin Management (`api-cli` binary)
+- [x] `api-cli admin grant <username>` - Grant admin access to an account
+- [x] `api-cli admin revoke <username>` - Revoke admin access from an account
+- [x] `api-cli admin list` - List all admin accounts
+- [x] `api-cli test-email --to <email>` - Send test email (absorbs test-email binary)
+- [x] `--env dev|prod` flag for environment selection
 
-### Admin Dashboard (Web UI)
-- [ ] Admin-only route with auth guard checking admin status
-- [ ] View failed emails queue with retry action
-- [ ] Send test email to verify configuration
-- [ ] Account lookup and management (view keys, disable keys, add recovery keys)
-- [ ] Email queue inspection (pending, sent, failed counts)
+### Admin Dashboard (Web UI) - `/dashboard/admin`
+- [x] Admin-only route with auth guard checking `account.isAdmin`
+- [x] View failed emails queue with retry action
+- [x] Email queue inspection (pending, sent, failed counts)
+- [ ] Send test email to verify configuration (nice-to-have)
+- [ ] Account lookup and management (view keys, disable keys, add recovery keys) (nice-to-have)
 
 ### Database Operations (Admin API)
-- [ ] Reset email retry counter for specific email
-- [ ] Reset all failed emails to pending (bulk retry)
-- [ ] View/edit account email verification status
+- [x] Reset email retry counter for specific email (`POST /admin/emails/reset/:email_id`)
+- [x] Reset all failed emails to pending (`POST /admin/emails/retry-all-failed`)
+- [x] Get email queue stats (`GET /admin/emails/stats`)
+- [ ] View/edit account email verification status (nice-to-have)
 
 ### Email System Fix
 - [x] **BUG**: Email processor not starting in production (emails queued but never sent)

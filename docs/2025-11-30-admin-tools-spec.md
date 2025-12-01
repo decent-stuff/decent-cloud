@@ -1,18 +1,18 @@
 # Admin Tools
-**Status:** Planning
+**Status:** Complete (2025-11-30)
 
 ## Requirements
 
 ### Must-have
-- [ ] API CLI with `--env dev|prod` flag (absorbs `test-email` binary)
-- [ ] CLI: `api-cli admin grant <username>` - Grant admin access
-- [ ] CLI: `api-cli admin revoke <username>` - Revoke admin access
-- [ ] CLI: `api-cli admin list` - List all admin accounts
-- [ ] CLI: `api-cli test-email --to <email>` - Send test email (replaces test-email binary)
-- [ ] Admin Dashboard: View failed emails queue with retry action
-- [ ] Admin Dashboard: Email queue stats (pending/sent/failed counts)
-- [ ] Admin API: Reset email retry counter for specific email
-- [ ] Admin API: Bulk retry all failed emails
+- [x] API CLI with `--env dev|prod` flag (absorbs `test-email` binary)
+- [x] CLI: `api-cli admin grant <username>` - Grant admin access
+- [x] CLI: `api-cli admin revoke <username>` - Revoke admin access
+- [x] CLI: `api-cli admin list` - List all admin accounts
+- [x] CLI: `api-cli test-email --to <email>` - Send test email (replaces test-email binary)
+- [x] Admin Dashboard: View failed emails queue with retry action
+- [x] Admin Dashboard: Email queue stats (pending/sent/failed counts)
+- [x] Admin API: Reset email retry counter for specific email
+- [x] Admin API: Bulk retry all failed emails
 
 ### Nice-to-have
 - [ ] Admin Dashboard: Account lookup (view keys, disable keys, add recovery keys)
@@ -86,7 +86,7 @@ GET  /admin/emails/stats               - Get email queue statistics
 
 ### Step 1: Database Migration - Add is_admin column
 **Success:** Migration runs, accounts table has is_admin column, existing accounts have is_admin=0
-**Status:** Pending
+**Status:** Complete
 
 ### Step 2: Update AdminAuthenticatedUser to use is_admin flag
 **Success:** Admin auth checks account.is_admin instead of ADMIN_PUBLIC_KEYS env var
@@ -211,9 +211,17 @@ GET  /admin/emails/stats               - Get email queue statistics
 - **Outcome:** Success - Admin dashboard frontend complete with email queue management UI
 
 ## Completion Summary
-All steps (1-5) complete. Admin tools feature fully implemented:
-- Database migration adds `is_admin` column
-- Admin authentication uses database flag instead of environment variable
-- CLI tool (`api-cli`) for admin management and test emails
-- Admin API endpoints for email queue management
-- Frontend dashboard for admin operations
+**Completed:** 2025-11-30 | **Agents:** 5/15 | **Steps:** 5/5
+
+**Changes:** 26 files, +1648/-17 lines, 13 new tests
+
+**Requirements:** 9/9 must-have, 0/3 nice-to-have
+
+**Tests pass:** ✓ (cargo make clean)
+
+**Notes:**
+- Database migration adds `is_admin` column with index
+- Admin authentication uses database flag instead of `ADMIN_PUBLIC_KEYS` env var (deprecated)
+- CLI tool (`api-cli`) with `--env dev|prod` for admin management and test emails
+- Admin API endpoints: reset email, bulk retry, email stats
+- Frontend dashboard at `/dashboard/admin` with email queue management
