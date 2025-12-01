@@ -1,15 +1,6 @@
 
 ## Provider Trust & Reliability System
 
-### Trust Dashboard (Core Display)
-Visual trust dashboard on provider profiles and offering listings showing:
-- Trust Score (0-100 composite score with color-coded badge)
-- Time to Delivery (median hours from payment to working service)
-- Success/Completion Rate (% contracts completed vs cancelled/failed)
-- Last Activity indicator (real-time "last seen X ago")
-- Repeat Customer Count (users who came back for more)
-- Active Contract Value ($ currently being served)
-
 ### External Benchmarking Integration
 Integrate with or scrape external sources for additional trust signals:
 - https://serververify.com/ - Server verification and uptime data
@@ -40,10 +31,3 @@ Integrate with or scrape external sources for additional trust signals:
 - Timestamp all provider-user interactions
 - Detect "provider went silent during contract" patterns
 - Requires: Messaging infrastructure
-
-### Display Strategy
-- **Provider Profile Page**: Large trust score badge, expandable metrics section, prominent red flag warnings
-- **Offering Listings**: Small trust score badge, hover tooltip with top concerns, red border on risky offerings
-- **Pre-Checkout Warning**: If provider has any critical red flags, show confirmation dialog with specific concerns
-- **Data Freshness**: Calculate from last 90 days, require minimum 5 contracts for score (else "New Provider - Insufficient Data")
-
