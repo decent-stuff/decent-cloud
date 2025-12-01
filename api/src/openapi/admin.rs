@@ -266,6 +266,33 @@ impl AdminApi {
         }
     }
 
+    /// Admin: Get sent emails
+    ///
+    /// Returns a list of successfully sent emails.
+    /// Useful for monitoring and audit purposes.
+    #[oai(path = "/admin/emails/sent", method = "get", tag = "ApiTags::Admin")]
+    async fn admin_get_sent_emails(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        limit: Query<Option<i64>>,
+    ) -> Json<ApiResponse<Vec<EmailQueueEntry>>> {
+        let limit = limit.0.unwrap_or(50);
+
+        match db.get_sent_emails(limit).await {
+            Ok(emails) => Json(ApiResponse {
+                success: true,
+                data: Some(emails),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Admin: Retry a failed email
     ///
     /// Resets a failed email back to pending status with 0 attempts, allowing it to be retried.
