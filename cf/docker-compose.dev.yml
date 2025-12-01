@@ -33,7 +33,7 @@ services:
     environment:
       - ENVIRONMENT=dev
     ports:
-      - "59000:3000" # Dev: host 59000 -> container 3000 (local access)
+      - "59000:59010" # Dev: host 59000 -> container 59010 (local access)
     networks:
       - decent-cloud-dev
 

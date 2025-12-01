@@ -11,7 +11,7 @@ RUN apk add --no-cache curl ca-certificates
 # Copy nginx config
 COPY <<EOF /etc/nginx/conf.d/default.conf
 server {
-    listen 3000;
+    listen 59010;
     server_name _;
 
     # Serve static website
@@ -78,9 +78,7 @@ EOF
 # Copy pre-built website output (assumes website was built natively first)
 COPY website/build /usr/share/nginx/html
 
-EXPOSE 3000
-
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD curl -f http://localhost:59010/health || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

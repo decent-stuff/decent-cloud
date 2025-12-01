@@ -214,7 +214,7 @@ async fn main() -> Result<(), std::io::Error> {
 }
 
 async fn serve_command() -> Result<(), std::io::Error> {
-    let port = env::var("API_SERVER_PORT").unwrap_or_else(|_| "59001".to_string());
+    let port = env::var("API_SERVER_PORT").unwrap_or_else(|_| "59011".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
     let ctx = setup_app_context().await?;

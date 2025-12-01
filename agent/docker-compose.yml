@@ -26,7 +26,8 @@ services:
     tty: true
     ports:
       # Expose website port if needed
-      - "3000:3000"
+      - "59010:59010"
+      - "59011:59011"
     networks:
       - decent-cloud-network
 

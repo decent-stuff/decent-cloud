@@ -21,7 +21,7 @@ impl EmailProcessor {
         batch_size: i64,
     ) -> Self {
         let frontend_url =
-            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59000".to_string());
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
 
         Self {
             database,

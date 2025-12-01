@@ -41,12 +41,6 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-dev}
       # NOTE: VITE_* env vars must be set at BUILD time (before npm run build)
       # Not at runtime - they're baked into the static build
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 3s
-      start_period: 5s
-      retries: 3
 
   api-serve:
     <<: *api-base

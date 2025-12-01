@@ -78,7 +78,7 @@ fn create_google_oauth_client() -> Result<BasicClient> {
     let client_secret = std::env::var("GOOGLE_OAUTH_CLIENT_SECRET")
         .map_err(|_| anyhow!("GOOGLE_OAUTH_CLIENT_SECRET environment variable not set"))?;
     let redirect_url = std::env::var("GOOGLE_OAUTH_REDIRECT_URL")
-        .unwrap_or_else(|_| "http://localhost:59001/api/v1/oauth/google/callback".to_string());
+        .unwrap_or_else(|_| "http://localhost:59011/api/v1/oauth/google/callback".to_string());
 
     let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())?;
     let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".to_string())?;
@@ -326,7 +326,7 @@ pub async fn google_callback(
     }
 
     let frontend_url =
-        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59000".to_string());
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
 
     let redirect_path = if username.is_some() {
         "/dashboard/marketplace"
@@ -669,7 +669,7 @@ mod tests {
         std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "test_client_secret");
         std::env::set_var(
             "GOOGLE_OAUTH_REDIRECT_URL",
-            "http://localhost:59001/api/v1/oauth/google/callback",
+            "http://localhost:59011/api/v1/oauth/google/callback",
         );
 
         let result = create_google_oauth_client();
@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn test_should_use_secure_cookies_with_http() {
-        std::env::set_var("FRONTEND_URL", "http://localhost:59000");
+        std::env::set_var("FRONTEND_URL", "http://localhost:59010");
         assert!(
             !should_use_secure_cookies(),
             "Should return false for HTTP frontend URL"

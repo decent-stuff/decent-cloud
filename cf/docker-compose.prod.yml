@@ -30,7 +30,7 @@ services:
     environment:
       - ENVIRONMENT=prod
     ports:
-      - "59100:3000" # Prod: host 59100 -> container 3000
+      - "59100:59010" # Prod: host 59100 -> container 59010
     networks:
       - decent-cloud-prod
 
