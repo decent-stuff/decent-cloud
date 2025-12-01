@@ -11,6 +11,8 @@ export interface AccountWithKeys {
 	createdAt: number; // Timestamp in nanoseconds
 	updatedAt: number; // Timestamp in nanoseconds
 	isAdmin: boolean; // Admin flag from backend
+	emailVerified: boolean;
+	email?: string;
 	publicKeys: PublicKeyInfo[];
 }
 
@@ -489,6 +491,48 @@ export async function verifyEmail(token: string): Promise<string> {
 
 	if (!result.success || !result.data) {
 		throw new Error(result.error || 'Email verification failed');
+	}
+
+	return result.data;
+}
+
+/**
+ * Resend verification email to the account's registered email address
+ * Requires authentication. Rate limited to 1 request per minute.
+ */
+export async function resendVerificationEmail(identity: Ed25519KeyIdentity): Promise<string> {
+	const { headers, body } = await signRequest(
+		identity,
+		'POST',
+		'/api/v1/accounts/resend-verification'
+	);
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/resend-verification`, {
+		method: 'POST',
+		headers: headers as HeadersInit,
+		body
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Failed to resend verification email (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			if (text) {
+				errorMessage = `Failed to resend verification email (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
+			}
+		}
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<string> = await response.json();
+
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to resend verification email');
 	}
 
 	return result.data;

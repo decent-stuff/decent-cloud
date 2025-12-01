@@ -60,6 +60,8 @@ export interface AccountInfo {
 	createdAt: number; // Timestamp in nanoseconds
 	updatedAt: number; // Timestamp in nanoseconds
 	isAdmin: boolean; // Admin flag from backend
+	emailVerified: boolean;
+	email?: string;
 	publicKeys: Array<{
 		id: string;
 		publicKey: string;

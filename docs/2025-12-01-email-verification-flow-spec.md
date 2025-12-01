@@ -6,12 +6,12 @@
 ### Must-have
 - [x] OAuth users (Google) have email auto-verified (Google already verified ownership)
 - [x] `email_verified` field exposed in AccountWithKeys API response
-- [ ] Frontend stores `emailVerified` and `email` in auth state
+- [x] Frontend stores `emailVerified` and `email` in auth state
 - [ ] Prominent banner in dashboard for unverified email users
-- [ ] Resend verification email endpoint with 1-minute rate limit
+- [x] Resend verification email endpoint with 1-minute rate limit
 - [ ] Resend button in verification banner
 - [ ] Success page thanks user and mentions reputation improvement
-- [ ] Unit tests for all backend changes
+- [x] Unit tests for all backend changes
 - [ ] E2E test for verification flow
 
 ### Nice-to-have
@@ -46,7 +46,7 @@ Files:
 
 ### Step 4: Frontend - Auth Store Updates
 **Success:** AccountInfo interface includes emailVerified and email. TypeScript compiles.
-**Status:** Pending
+**Status:** COMPLETE
 
 Files:
 - `website/src/lib/stores/auth.ts` - Add emailVerified, email to AccountInfo
@@ -104,10 +104,13 @@ Files:
 - **Outcome:** SUCCESS - Resend verification email endpoint implemented with 1-minute rate limit. Authenticated users can request new verification emails.
 
 ### Step 4
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:**
+  - Added `emailVerified` (boolean) and `email` (optional string) fields to `AccountWithKeys` interface in `account-api.ts` (lines 14-15)
+  - Added `emailVerified` (boolean) and `email` (optional string) fields to `AccountInfo` interface in `auth.ts` (lines 63-64)
+  - Added `resendVerificationEmail` function in `account-api.ts` (lines 499-539) that creates a signed POST request to `/api/v1/accounts/resend-verification`
+- **Review:** Changes are minimal and follow existing patterns. New function reuses `signRequest` helper (DRY). Interface fields match backend API exactly. Error handling follows existing pattern used throughout the file.
+- **Verification:** `npm run check` passes with 0 errors and 0 warnings. TypeScript compiles successfully.
+- **Outcome:** SUCCESS - Frontend now has email verification fields in auth store. UI can access emailVerified and email from account info. Resend function ready for use in banner component.
 
 ### Step 5
 - **Implementation:** (pending)
