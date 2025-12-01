@@ -3,6 +3,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import {
+		getSentEmails,
 		getFailedEmails,
 		getEmailStats,
 		resetEmail,
@@ -19,6 +20,7 @@
 	let unsubscribe: (() => void) | null = null;
 
 	let stats = $state<EmailStats | null>(null);
+	let sentEmails = $state<EmailQueueEntry[]>([]);
 	let failedEmails = $state<EmailQueueEntry[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -59,12 +61,14 @@
 		error = null;
 
 		try {
-			const [statsData, emailsData] = await Promise.all([
+			const [statsData, sentEmailsData, failedEmailsData] = await Promise.all([
 				getEmailStats(currentIdentity.identity),
+				getSentEmails(currentIdentity.identity, 50),
 				getFailedEmails(currentIdentity.identity, 50),
 			]);
 			stats = statsData;
-			failedEmails = emailsData;
+			sentEmails = sentEmailsData;
+			failedEmails = failedEmailsData;
 		} catch (err) {
 			error = err instanceof Error ? err.message : "Failed to load data";
 			console.error("Failed to load admin data:", err);
@@ -351,6 +355,46 @@
 								</p>
 							</div>
 						</div>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Sent Emails -->
+			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+				<h2 class="text-2xl font-bold text-white mb-4">Sent Emails</h2>
+
+				{#if sentEmails.length === 0}
+					<p class="text-white/60 text-center py-8">
+						No sent emails
+					</p>
+				{:else}
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-white/90">
+							<thead class="text-white/70 border-b border-white/20">
+								<tr>
+									<th class="pb-3 px-2">To</th>
+									<th class="pb-3 px-2">Subject</th>
+									<th class="pb-3 px-2">Type</th>
+									<th class="pb-3 px-2">Sent</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each sentEmails as email}
+									<tr class="border-b border-white/10 hover:bg-white/5">
+										<td class="py-3 px-2 font-mono text-sm">
+											{email.toAddr}
+										</td>
+										<td class="py-3 px-2">{email.subject}</td>
+										<td class="py-3 px-2 text-sm">
+											{email.emailType}
+										</td>
+										<td class="py-3 px-2 text-sm">
+											{email.sentAt ? formatTimestamp(email.sentAt) : "N/A"}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
 					</div>
 				{/if}
 			</div>

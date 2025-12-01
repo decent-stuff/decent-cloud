@@ -87,6 +87,17 @@ async function authenticatedFetch<T>(
 }
 
 /**
+ * Get sent emails from the queue
+ */
+export async function getSentEmails(
+	identity: Ed25519KeyIdentity,
+	limit?: number
+): Promise<EmailQueueEntry[]> {
+	const path = limit ? `/api/v1/admin/emails/sent?limit=${limit}` : '/api/v1/admin/emails/sent';
+	return authenticatedFetch<EmailQueueEntry[]>(identity, 'GET', path);
+}
+
+/**
  * Get failed emails from the queue
  */
 export async function getFailedEmails(
