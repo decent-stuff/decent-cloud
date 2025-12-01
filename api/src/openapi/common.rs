@@ -279,4 +279,6 @@ pub enum ApiTags {
     Transfers,
     /// Platform statistics endpoints
     Stats,
+    /// Message and communication endpoints
+    Messages,
 }

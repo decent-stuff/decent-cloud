@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO message_thread_participants (thread_id, pubkey, role, joined_at_ns) VALUES (?, ?, 'provider', ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6f077fe6b7d22213bae063925324646a4e13826abadc2d3944fd0fba4a86073b"
+}

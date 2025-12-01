@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod admin;
 pub mod common;
 pub mod contracts;
+pub mod messages;
 pub mod offerings;
 pub mod providers;
 pub mod stats;
@@ -14,6 +15,7 @@ pub mod webhooks;
 pub use accounts::AccountsApi;
 pub use admin::AdminApi;
 pub use contracts::ContractsApi;
+pub use messages::MessagesApi;
 pub use offerings::OfferingsApi;
 pub use providers::ProvidersApi;
 pub use stats::StatsApi;
@@ -34,6 +36,7 @@ pub fn create_combined_api() -> impl OpenApi {
         ValidatorsApi,
         OfferingsApi,
         ContractsApi,
+        MessagesApi,
         UsersApi,
         TransfersApi,
         StatsApi,

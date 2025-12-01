@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(DISTINCT m.id) as \"count!\"\n               FROM messages m\n               INNER JOIN message_thread_participants mtp ON m.thread_id = mtp.thread_id\n               LEFT JOIN message_read_receipts mrr ON m.id = mrr.message_id AND mrr.reader_pubkey = ?\n               WHERE mtp.pubkey = ? AND m.sender_pubkey != ? AND mrr.message_id IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "75a47293466df1a30540bb12fc516e8fb6d04cec857efb4a84b2b97e5a109ec8"
+}

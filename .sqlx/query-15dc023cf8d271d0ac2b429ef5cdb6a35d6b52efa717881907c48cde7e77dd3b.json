@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO message_notifications (id, message_id, recipient_pubkey, status, created_at_ns) VALUES (?, ?, ?, 'pending', ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "15dc023cf8d271d0ac2b429ef5cdb6a35d6b52efa717881907c48cde7e77dd3b"
+}

@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.id, m.thread_id, m.sender_pubkey as \"sender_pubkey!\", m.sender_role as \"sender_role!\", m.body as \"body!\", m.created_at_ns as \"created_at_ns!\",\n               COALESCE((SELECT 1 FROM message_read_receipts WHERE message_id = m.id AND reader_pubkey = ?), 0) as \"is_read: i64\"\n               FROM messages m\n               WHERE m.thread_id = ?\n               ORDER BY m.created_at_ns ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "thread_id",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "sender_pubkey!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "sender_role!",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "body!",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns!",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_read: i64",
+        "ordinal": 6,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "1c7b0d95597b9e3b1c3a2393566131733200f11d84d0fb28205aa72573d0902f"
+}
