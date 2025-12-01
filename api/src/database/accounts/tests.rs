@@ -883,3 +883,132 @@ async fn test_is_admin_migration() {
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
     assert_eq!(fetched.is_admin, 1);
 }
+
+#[tokio::test]
+async fn test_set_admin_status_grant() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db
+        .create_account("testadmin", &[1u8; 32], "admin@example.com")
+        .await
+        .unwrap();
+
+    // Verify not admin initially
+    assert_eq!(account.is_admin, 0);
+
+    // Grant admin status
+    db.set_admin_status("testadmin", true).await.unwrap();
+
+    // Verify is_admin is now 1
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.is_admin, 1);
+}
+
+#[tokio::test]
+async fn test_set_admin_status_revoke() {
+    let db = create_test_db().await;
+
+    // Create account and make them admin
+    let account = db
+        .create_account("revokeadmin", &[2u8; 32], "revoke@example.com")
+        .await
+        .unwrap();
+
+    sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = ?", account.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.is_admin, 1);
+
+    // Revoke admin status
+    db.set_admin_status("revokeadmin", false).await.unwrap();
+
+    // Verify is_admin is now 0
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.is_admin, 0);
+}
+
+#[tokio::test]
+async fn test_set_admin_status_case_insensitive() {
+    let db = create_test_db().await;
+
+    // Create account with mixed case
+    let account = db
+        .create_account("MixedCase", &[3u8; 32], "mixed@example.com")
+        .await
+        .unwrap();
+
+    // Grant admin using different case
+    db.set_admin_status("mixedcase", true).await.unwrap();
+
+    // Verify is_admin is 1
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.is_admin, 1);
+}
+
+#[tokio::test]
+async fn test_set_admin_status_nonexistent_account() {
+    let db = create_test_db().await;
+
+    // Try to grant admin to nonexistent account
+    let result = db.set_admin_status("nonexistent", true).await;
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Account not found"));
+}
+
+#[tokio::test]
+async fn test_list_admins_empty() {
+    let db = create_test_db().await;
+
+    // Create some non-admin accounts
+    db.create_account("user1", &[1u8; 32], "user1@example.com")
+        .await
+        .unwrap();
+    db.create_account("user2", &[2u8; 32], "user2@example.com")
+        .await
+        .unwrap();
+
+    // List admins should be empty
+    let admins = db.list_admins().await.unwrap();
+    assert_eq!(admins.len(), 0);
+}
+
+#[tokio::test]
+async fn test_list_admins() {
+    let db = create_test_db().await;
+
+    // Create accounts
+    db.create_account("admin1", &[1u8; 32], "admin1@example.com")
+        .await
+        .unwrap();
+    db.create_account("admin2", &[2u8; 32], "admin2@example.com")
+        .await
+        .unwrap();
+    db.create_account("user3", &[3u8; 32], "user3@example.com")
+        .await
+        .unwrap();
+
+    // Grant admin to two accounts
+    db.set_admin_status("admin1", true).await.unwrap();
+    db.set_admin_status("admin2", true).await.unwrap();
+
+    // List admins
+    let admins = db.list_admins().await.unwrap();
+    assert_eq!(admins.len(), 2);
+
+    // Verify results are sorted by username
+    let usernames: Vec<String> = admins.iter().map(|a| a.username.clone()).collect();
+    assert_eq!(usernames, vec!["admin1", "admin2"]);
+
+    // Verify all returned accounts have is_admin = 1
+    for admin in admins {
+        assert_eq!(admin.is_admin, 1);
+    }
+}

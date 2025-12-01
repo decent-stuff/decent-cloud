@@ -765,6 +765,35 @@ impl Database {
 
         Ok((account, oauth_account))
     }
+
+    /// Set admin status for an account by username
+    pub async fn set_admin_status(&self, username: &str, is_admin: bool) -> Result<()> {
+        let is_admin_value = if is_admin { 1 } else { 0 };
+        let result =
+            sqlx::query("UPDATE accounts SET is_admin = ? WHERE LOWER(username) = LOWER(?)")
+                .bind(is_admin_value)
+                .bind(username)
+                .execute(&self.pool)
+                .await?;
+
+        if result.rows_affected() == 0 {
+            bail!("Account not found: {}", username);
+        }
+
+        Ok(())
+    }
+
+    /// List all admin accounts
+    pub async fn list_admins(&self) -> Result<Vec<Account>> {
+        let admins = sqlx::query_as::<_, Account>(
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+             FROM accounts WHERE is_admin = 1 ORDER BY username ASC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(admins)
+    }
 }
 
 /// OAuth account record from database

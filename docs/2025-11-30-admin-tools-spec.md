@@ -94,7 +94,7 @@ GET  /admin/emails/stats               - Get email queue statistics
 
 ### Step 3: Create api-cli binary with admin commands
 **Success:** `api-cli admin grant/revoke/list` commands work, `test-email` binary functionality absorbed
-**Status:** Pending
+**Status:** Complete
 
 ### Step 4: Add new admin API endpoints
 **Success:** Reset email, bulk retry, and stats endpoints work with tests
@@ -134,5 +134,29 @@ GET  /admin/emails/stats               - Get email queue statistics
 - **Review:** All tests pass (`SQLX_OFFLINE=true cargo make` - 490 tests passed)
 - **Outcome:** Success - Admin authentication now uses `is_admin` database flag instead of `ADMIN_PUBLIC_KEYS` environment variable
 
+### Step 3
+- **Implementation:** Complete
+  - Created `/code/api/src/lib.rs` to expose `database` module as a library
+    - Added `mod search` and `mod stripe_client` as dependencies for database module
+  - Added database methods to `/code/api/src/database/accounts.rs`:
+    - `set_admin_status(username: &str, is_admin: bool) -> Result<()>` - Grant/revoke admin status
+    - `list_admins() -> Result<Vec<Account>>` - List all admin accounts (sorted by username)
+  - Added comprehensive tests to `/code/api/src/database/accounts/tests.rs`:
+    - `test_set_admin_status_grant` - Verify granting admin status
+    - `test_set_admin_status_revoke` - Verify revoking admin status
+    - `test_set_admin_status_case_insensitive` - Verify case-insensitive username lookup
+    - `test_set_admin_status_nonexistent_account` - Verify error handling for missing accounts
+    - `test_list_admins_empty` - Verify empty list when no admins exist
+    - `test_list_admins` - Verify listing admins with proper sorting
+  - Created `/code/api/src/bin/api-cli.rs` with clap-based CLI:
+    - `--env dev|prod` flag to select environment (loads appropriate .env file)
+    - `admin grant <username>` - Grant admin access
+    - `admin revoke <username>` - Revoke admin access
+    - `admin list` - List all admin accounts with formatted table output
+    - `test-email --to <email> [--with-dkim]` - Send test email (absorbed from test-email binary)
+  - Updated `/code/api/Cargo.toml` to register `api-cli` binary
+- **Review:** All tests pass (`SQLX_OFFLINE=true cargo make` - 778 tests passed)
+- **Outcome:** Success - api-cli binary created with admin commands and test-email functionality
+
 ## Completion Summary
-Steps 1-2 complete. Admin authentication migrated to database-based approach, all tests passing.
+Steps 1-3 complete. Admin authentication migrated to database-based approach, api-cli tool created for admin management, all tests passing.

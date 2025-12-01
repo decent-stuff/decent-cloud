@@ -11,6 +11,10 @@ path = "src/main.rs"
 name = "test-email"
 path = "src/bin/test-email.rs"
 
+[[bin]]
+name = "api-cli"
+path = "src/bin/api-cli.rs"
+
 [dependencies]
 anyhow.workspace = true
 async-stripe = { version = "0.41.0", features = ["runtime-tokio-hyper"] }
