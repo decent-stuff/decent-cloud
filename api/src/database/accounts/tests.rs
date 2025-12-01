@@ -1172,6 +1172,97 @@ async fn test_disabled_key_cannot_lookup_account() {
 }
 
 #[tokio::test]
+async fn test_get_account_with_keys_includes_email_and_verification_status() {
+    let db = create_test_db().await;
+
+    // Create account (email_verified=0 by default)
+    let _account = db
+        .create_account("emailuser", &[30u8; 32], "emailuser@example.com")
+        .await
+        .unwrap();
+
+    // Get account with keys and verify email fields
+    let account_with_keys = db.get_account_with_keys("emailuser").await.unwrap().unwrap();
+    assert_eq!(account_with_keys.email, Some("emailuser@example.com".to_string()));
+    assert!(!account_with_keys.email_verified, "Email should not be verified initially");
+
+    // Verify email
+    let token = db
+        .create_email_verification_token(&hex::decode(&account_with_keys.id).unwrap(), "emailuser@example.com")
+        .await
+        .unwrap();
+    db.verify_email_token(&token).await.unwrap();
+
+    // Get account with keys again and verify email_verified is now true
+    let account_with_keys = db.get_account_with_keys("emailuser").await.unwrap().unwrap();
+    assert_eq!(account_with_keys.email, Some("emailuser@example.com".to_string()));
+    assert!(account_with_keys.email_verified, "Email should be verified after verification");
+}
+
+#[tokio::test]
+async fn test_get_account_with_keys_by_public_key_includes_email_and_verification_status() {
+    let db = create_test_db().await;
+    let pubkey = [31u8; 32];
+
+    // Create account (email_verified=0 by default)
+    let _account = db
+        .create_account("pkemailuser", &pubkey, "pkemailuser@example.com")
+        .await
+        .unwrap();
+
+    // Get account with keys by public key and verify email fields
+    let account_with_keys = db
+        .get_account_with_keys_by_public_key(&pubkey)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(account_with_keys.email, Some("pkemailuser@example.com".to_string()));
+    assert!(!account_with_keys.email_verified, "Email should not be verified initially");
+
+    // Verify email
+    let token = db
+        .create_email_verification_token(&hex::decode(&account_with_keys.id).unwrap(), "pkemailuser@example.com")
+        .await
+        .unwrap();
+    db.verify_email_token(&token).await.unwrap();
+
+    // Get account with keys again and verify email_verified is now true
+    let account_with_keys = db
+        .get_account_with_keys_by_public_key(&pubkey)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(account_with_keys.email, Some("pkemailuser@example.com".to_string()));
+    assert!(account_with_keys.email_verified, "Email should be verified after verification");
+}
+
+#[tokio::test]
+async fn test_oauth_account_with_keys_has_verified_email() {
+    let db = create_test_db().await;
+
+    let pubkey = [32u8; 32];
+    let (_account, _oauth_acc) = db
+        .create_oauth_linked_account(
+            "oauth_email_user",
+            &pubkey,
+            "oauth@example.com",
+            "google_oauth",
+            "google_456",
+        )
+        .await
+        .unwrap();
+
+    // Get account with keys and verify email is verified for OAuth accounts
+    let account_with_keys = db
+        .get_account_with_keys("oauth_email_user")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(account_with_keys.email, Some("oauth@example.com".to_string()));
+    assert!(account_with_keys.email_verified, "OAuth accounts should have verified email");
+}
+
+#[tokio::test]
 async fn test_oauth_account_creation_sets_email_verified() {
     let db = create_test_db().await;
 

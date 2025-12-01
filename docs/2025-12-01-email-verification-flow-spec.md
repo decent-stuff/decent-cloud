@@ -4,8 +4,8 @@
 ## Requirements
 
 ### Must-have
-- [ ] OAuth users (Google) have email auto-verified (Google already verified ownership)
-- [ ] `email_verified` field exposed in AccountWithKeys API response
+- [x] OAuth users (Google) have email auto-verified (Google already verified ownership)
+- [x] `email_verified` field exposed in AccountWithKeys API response
 - [ ] Frontend stores `emailVerified` and `email` in auth state
 - [ ] Prominent banner in dashboard for unverified email users
 - [ ] Resend verification email endpoint with 1-minute rate limit
@@ -30,7 +30,7 @@ Files:
 
 ### Step 2: Backend - Expose email_verified in API
 **Success:** AccountWithKeys includes `emailVerified` and `email` fields. Unit tests pass.
-**Status:** Pending
+**Status:** COMPLETE
 
 Files:
 - `api/src/database/accounts.rs` - Add fields to AccountWithKeys struct
@@ -84,10 +84,14 @@ Files:
 - **Outcome:** SUCCESS - OAuth accounts now have email auto-verified. All tests pass.
 
 ### Step 2
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:**
+  - Added `email_verified` (bool) and `email` (Option<String>) fields to `AccountWithKeys` struct (lines 63-65 in accounts.rs)
+  - Updated `get_account_with_keys` to populate new fields: `email_verified: account.email_verified != 0`, `email: account.email.clone()` (lines 296-297)
+  - Updated `get_account_with_keys_by_public_key` to populate new fields (lines 544-545)
+  - Added 3 unit tests: `test_get_account_with_keys_includes_email_and_verification_status`, `test_get_account_with_keys_by_public_key_includes_email_and_verification_status`, `test_oauth_account_with_keys_has_verified_email`
+- **Review:** Changes are minimal and follow KISS principle. Both functions reuse existing account data. Tests verify both verified and unverified states.
+- **Verification:** Added 3 unit tests covering both API methods and verification state transitions. Tests verify: unverified state initially, verified state after verification, OAuth accounts have verified=true.
+- **Outcome:** SUCCESS - AccountWithKeys now exposes email_verified and email fields. Frontend can display verification status.
 
 ### Step 3
 - **Implementation:** (pending)

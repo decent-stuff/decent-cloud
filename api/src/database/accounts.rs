@@ -60,6 +60,9 @@ pub struct AccountWithKeys {
     pub profile_updated_at: Option<i64>,
     pub public_keys: Vec<PublicKeyInfo>,
     pub is_admin: bool,
+    pub email_verified: bool,
+    #[oai(skip_serializing_if_is_none)]
+    pub email: Option<String>,
 }
 
 /// Public key information for API responses
@@ -290,6 +293,8 @@ impl Database {
                     })
                     .collect(),
                 is_admin: account.is_admin != 0,
+                email_verified: account.email_verified != 0,
+                email: account.email.clone(),
             }))
         } else {
             Ok(None)
@@ -536,6 +541,8 @@ impl Database {
                 })
                 .collect(),
             is_admin: account.is_admin != 0,
+            email_verified: account.email_verified != 0,
+            email: account.email.clone(),
         }))
     }
 
