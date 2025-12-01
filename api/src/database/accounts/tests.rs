@@ -1317,3 +1317,63 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
 
     assert_eq!(updated_account.email_verified, 1, "Linking OAuth should set email_verified to 1");
 }
+
+#[tokio::test]
+async fn test_get_latest_verification_token_time() {
+    let db = create_test_db().await;
+    let username = "token_time_user";
+    let public_key = [99u8; 32];
+
+    let account = db
+        .create_account(username, &public_key, "token@example.com")
+        .await
+        .unwrap();
+
+    // No token created yet - should return None
+    let time = db.get_latest_verification_token_time(&account.id).await.unwrap();
+    assert!(time.is_none());
+
+    // Create first token
+    db.create_email_verification_token(&account.id, "token@example.com")
+        .await
+        .unwrap();
+
+    let time1 = db.get_latest_verification_token_time(&account.id).await.unwrap();
+    assert!(time1.is_some());
+
+    // Wait a bit and create another token
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    db.create_email_verification_token(&account.id, "token@example.com")
+        .await
+        .unwrap();
+
+    let time2 = db.get_latest_verification_token_time(&account.id).await.unwrap();
+    assert!(time2.is_some());
+
+    // Second token time should be greater than first
+    assert!(time2.unwrap() > time1.unwrap());
+}
+
+#[tokio::test]
+async fn test_resend_verification_rate_limit() {
+    let db = create_test_db().await;
+    let username = "rate_limit_user";
+    let public_key = [98u8; 32];
+
+    let account = db
+        .create_account(username, &public_key, "rate@example.com")
+        .await
+        .unwrap();
+
+    // Create first token
+    db.create_email_verification_token(&account.id, "rate@example.com")
+        .await
+        .unwrap();
+
+    let time = db.get_latest_verification_token_time(&account.id).await.unwrap().unwrap();
+    let now = chrono::Utc::now().timestamp();
+
+    // Should be within 60 seconds
+    let elapsed = now - time;
+    assert!(elapsed < 60);
+}

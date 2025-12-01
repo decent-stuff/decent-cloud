@@ -187,6 +187,22 @@ impl Database {
         Ok(token)
     }
 
+    /// Get the created_at timestamp of the most recent verification token for an account
+    /// Used for rate limiting resend requests
+    pub async fn get_latest_verification_token_time(
+        &self,
+        account_id: &[u8],
+    ) -> Result<Option<i64>> {
+        let result: Option<(i64,)> = sqlx::query_as(
+            "SELECT created_at FROM email_verification_tokens WHERE account_id = ? ORDER BY created_at DESC LIMIT 1"
+        )
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(|row| row.0))
+    }
+
     /// Verify an email verification token and mark the email as verified
     /// Returns error if token is invalid, expired, or already used
     pub async fn verify_email_token(&self, token: &[u8]) -> Result<()> {
