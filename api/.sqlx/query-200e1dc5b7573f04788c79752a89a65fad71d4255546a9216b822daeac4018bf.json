@@ -1,0 +1,176 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns\n               FROM contract_sign_requests WHERE stripe_payment_intent_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "contract_id!: String",
+        "ordinal": 0,
+        "type_info": "Null"
+      },
+      {
+        "name": "requester_pubkey!: String",
+        "ordinal": 1,
+        "type_info": "Null"
+      },
+      {
+        "name": "requester_ssh_pubkey!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "requester_contact!",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "provider_pubkey!: String",
+        "ordinal": 4,
+        "type_info": "Null"
+      },
+      {
+        "name": "offering_id!",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "region_name",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "instance_config",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "payment_amount_e9s",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "start_timestamp_ns",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "end_timestamp_ns",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "duration_hours",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "original_duration_hours",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "request_memo!",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns",
+        "ordinal": 14,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status!",
+        "ordinal": 15,
+        "type_info": "Text"
+      },
+      {
+        "name": "provisioning_instance_details",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "provisioning_completed_at_ns",
+        "ordinal": 17,
+        "type_info": "Integer"
+      },
+      {
+        "name": "payment_method!",
+        "ordinal": 18,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_payment_intent_id",
+        "ordinal": 19,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_customer_id",
+        "ordinal": 20,
+        "type_info": "Text"
+      },
+      {
+        "name": "payment_status!",
+        "ordinal": 21,
+        "type_info": "Text"
+      },
+      {
+        "name": "currency!",
+        "ordinal": 22,
+        "type_info": "Text"
+      },
+      {
+        "name": "refund_amount_e9s",
+        "ordinal": 23,
+        "type_info": "Integer"
+      },
+      {
+        "name": "stripe_refund_id",
+        "ordinal": 24,
+        "type_info": "Text"
+      },
+      {
+        "name": "refund_created_at_ns",
+        "ordinal": 25,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status_updated_at_ns",
+        "ordinal": 26,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      false,
+      null,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "200e1dc5b7573f04788c79752a89a65fad71d4255546a9216b822daeac4018bf"
+}

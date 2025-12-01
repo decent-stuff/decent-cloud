@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT SUM(amount_e9s) FROM token_transfers",
+  "describe": {
+    "columns": [
+      {
+        "name": "SUM(amount_e9s)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9b6be3337253b44fe0c1667b9fa007a7e417efe684e7da22cf43efb0f34766d2"
+}

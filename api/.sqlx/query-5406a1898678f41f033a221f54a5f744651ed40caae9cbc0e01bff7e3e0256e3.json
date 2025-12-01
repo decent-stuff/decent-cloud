@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT AVG(CAST(provisioning_completed_at_ns - created_at_ns AS REAL)) as \"avg: f64\"\n               FROM contract_sign_requests\n               WHERE provider_pubkey = ?\n               AND provisioning_completed_at_ns IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "avg: f64",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "5406a1898678f41f033a221f54a5f744651ed40caae9cbc0e01bff7e3e0256e3"
+}

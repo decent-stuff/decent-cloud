@@ -21,6 +21,8 @@ pub struct Account {
     pub profile_updated_at: Option<i64>,
     // Last login timestamp for activity tracking
     pub last_login_at: Option<i64>,
+    // Admin flag for admin access control
+    pub is_admin: i64,
 }
 
 /// Account public key record
@@ -233,7 +235,7 @@ impl Database {
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
              FROM accounts WHERE id = ?",
         )
         .bind(account_id)
@@ -246,7 +248,7 @@ impl Database {
     /// Get account by username (case-insensitive search)
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
              FROM accounts WHERE LOWER(username) = LOWER(?)",
         )
         .bind(username)
@@ -650,7 +652,7 @@ impl Database {
     /// Get account by email
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at
+            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
              FROM accounts WHERE email = ?",
         )
         .bind(email)

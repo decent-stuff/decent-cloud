@@ -839,3 +839,47 @@ async fn test_verify_email_token_expired() {
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("expired"));
 }
+
+#[tokio::test]
+async fn test_is_admin_migration() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
+
+    // Verify is_admin is 0 by default
+    assert_eq!(account.is_admin, 0);
+
+    // Verify is_admin is included in get_account query
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.is_admin, 0);
+
+    // Verify is_admin is included in get_account_by_username query
+    let fetched = db
+        .get_account_by_username("testuser")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fetched.is_admin, 0);
+
+    // Verify is_admin is included in get_account_by_email query
+    let fetched = db
+        .get_account_by_email("test@example.com")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fetched.is_admin, 0);
+
+    // Manually set is_admin to 1 to test non-default value
+    sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = ?", account.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // Verify is_admin is now 1
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.is_admin, 1);
+}
