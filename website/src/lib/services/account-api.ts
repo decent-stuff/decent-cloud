@@ -10,6 +10,7 @@ export interface AccountWithKeys {
 	username: string;
 	createdAt: number; // Timestamp in nanoseconds
 	updatedAt: number; // Timestamp in nanoseconds
+	isAdmin: boolean; // Admin flag from backend
 	publicKeys: PublicKeyInfo[];
 }
 

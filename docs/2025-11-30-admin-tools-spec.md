@@ -102,7 +102,7 @@ GET  /admin/emails/stats               - Get email queue statistics
 
 ### Step 5: Create admin dashboard frontend
 **Success:** Admin-only route with email queue management UI
-**Status:** Pending
+**Status:** Complete
 
 ## Execution Log
 ### Step 1
@@ -183,5 +183,37 @@ GET  /admin/emails/stats               - Get email queue statistics
 - **Review:** Library code passes clippy with no errors. Binary builds successfully (`cargo build --release --bin dc`)
 - **Outcome:** Success - Admin email management endpoints implemented with database methods and tests
 
+### Step 5
+- **Implementation:** Complete
+  - Created `/code/website/src/lib/services/admin-api.ts` with admin API client functions:
+    - `getFailedEmails(identity, limit?)` - Get failed emails from queue
+    - `getEmailStats(identity)` - Get email queue statistics
+    - `resetEmail(identity, emailId)` - Reset single email for retry
+    - `retryAllFailed(identity)` - Retry all failed emails
+    - Includes `EmailQueueEntry` and `EmailStats` TypeScript interfaces
+    - Uses `authenticatedFetch` helper for signed requests
+  - Added `isAdmin: boolean` field to account types:
+    - Updated `AccountInfo` interface in `/code/website/src/lib/stores/auth.ts`
+    - Updated `AccountWithKeys` interface in `/code/website/src/lib/services/account-api.ts`
+  - Created `/code/website/src/routes/dashboard/admin/+page.svelte`:
+    - Admin-only access guard (shows "Access Denied" if not admin)
+    - Email queue statistics display (pending, sent, failed, total counts)
+    - Failed emails table with columns: to, subject, attempts, created, error
+    - "Retry" button per email row (disables during retry)
+    - "Retry All Failed" button at top of table
+    - Auto-refresh data after retry actions
+    - Loading states and error handling
+  - Updated `/code/website/src/lib/components/DashboardSidebar.svelte`:
+    - Added `isAdmin` derived state based on `currentIdentity?.account?.isAdmin`
+    - Added "Admin" navigation link (only visible if user is admin)
+    - Fixed variable declaration order to avoid TypeScript errors
+- **Review:** TypeScript check passes (`npm run check` - 0 errors, 0 warnings). Production build succeeds (`npm run build`)
+- **Outcome:** Success - Admin dashboard frontend complete with email queue management UI
+
 ## Completion Summary
-Steps 1-4 complete. Admin authentication migrated to database-based approach, api-cli tool created for admin management, admin email management API endpoints added with tests.
+All steps (1-5) complete. Admin tools feature fully implemented:
+- Database migration adds `is_admin` column
+- Admin authentication uses database flag instead of environment variable
+- CLI tool (`api-cli`) for admin management and test emails
+- Admin API endpoints for email queue management
+- Frontend dashboard for admin operations

@@ -59,6 +59,7 @@ export interface AccountInfo {
 	username: string; // Human-readable username
 	createdAt: number; // Timestamp in nanoseconds
 	updatedAt: number; // Timestamp in nanoseconds
+	isAdmin: boolean; // Admin flag from backend
 	publicKeys: Array<{
 		id: string;
 		publicKey: string;

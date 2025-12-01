@@ -7,6 +7,10 @@
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
+	let currentPath = $state("");
+	let currentIdentity = $state<IdentityInfo | null>(null);
+	let unsubscribeIdentity: (() => void) | null = null;
+
 	const navItems = $derived([
 		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
 		{
@@ -19,9 +23,7 @@
 		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
 	]);
 
-	let currentPath = $state("");
-	let currentIdentity = $state<IdentityInfo | null>(null);
-	let unsubscribeIdentity: (() => void) | null = null;
+	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
 
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
@@ -95,6 +97,19 @@
 				<span class="font-medium">{item.label}</span>
 			</a>
 		{/each}
+
+		{#if isAdmin}
+			<a
+				href="/dashboard/admin"
+				onclick={closeSidebar}
+				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath.startsWith('/dashboard/admin')
+					? 'bg-blue-600 text-white'
+					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+			>
+				<span class="text-xl">🔧</span>
+				<span class="font-medium">Admin</span>
+			</a>
+		{/if}
 	</nav>
 
 	<!-- User Section -->
