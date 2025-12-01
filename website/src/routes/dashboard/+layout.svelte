@@ -2,14 +2,18 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
+	import type { AccountInfo } from '$lib/stores/auth';
 	import DashboardSidebar from '$lib/components/DashboardSidebar.svelte';
 	import AuthPromptBanner from '$lib/components/AuthPromptBanner.svelte';
+	import EmailVerificationBanner from '$lib/components/EmailVerificationBanner.svelte';
 
 	let { children } = $props();
 	let isAuthenticated = $state(false);
 	let isInitialized = $state(false);
 	let isSidebarOpen = $state(false);
+	let account = $state<AccountInfo | null>(null);
 	let unsubscribe: (() => void) | null = null;
+	let unsubscribeIdentity: (() => void) | null = null;
 
 	onMount(async () => {
 		// Wait for auth to initialize before checking authentication
@@ -19,15 +23,22 @@
 		unsubscribe = authStore.isAuthenticated.subscribe((value) => {
 			isAuthenticated = value;
 		});
+
+		unsubscribeIdentity = authStore.activeIdentity.subscribe((identity) => {
+			account = identity?.account || null;
+		});
 	});
 
 	onDestroy(() => {
 		unsubscribe?.();
+		unsubscribeIdentity?.();
 	});
 
 	function toggleSidebar() {
 		isSidebarOpen = !isSidebarOpen;
 	}
+
+	const showEmailVerificationBanner = $derived(isAuthenticated && account && !account.emailVerified);
 </script>
 
 <div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
@@ -52,10 +63,12 @@
 	<!-- Auth prompt banner for anonymous users -->
 	{#if !isAuthenticated}
 		<AuthPromptBanner />
+	{:else if showEmailVerificationBanner}
+		<EmailVerificationBanner />
 	{/if}
 
 	<!-- Main content area -->
-	<main class="md:ml-64 p-4 md:p-8 pt-20 md:pt-8 {!isAuthenticated ? 'md:pt-24' : ''}">
+	<main class="md:ml-64 p-4 md:p-8 pt-20 md:pt-8 {!isAuthenticated || showEmailVerificationBanner ? 'md:pt-24' : ''}">
 		<div class="max-w-7xl mx-auto">
 			{@render children()}
 		</div>

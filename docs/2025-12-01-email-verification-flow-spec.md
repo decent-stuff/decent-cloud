@@ -7,9 +7,9 @@
 - [x] OAuth users (Google) have email auto-verified (Google already verified ownership)
 - [x] `email_verified` field exposed in AccountWithKeys API response
 - [x] Frontend stores `emailVerified` and `email` in auth state
-- [ ] Prominent banner in dashboard for unverified email users
+- [x] Prominent banner in dashboard for unverified email users
 - [x] Resend verification email endpoint with 1-minute rate limit
-- [ ] Resend button in verification banner
+- [x] Resend button in verification banner
 - [ ] Success page thanks user and mentions reputation improvement
 - [x] Unit tests for all backend changes
 - [ ] E2E test for verification flow
@@ -55,7 +55,7 @@ Files:
 
 ### Step 5: Frontend - Email Verification Banner
 **Success:** Banner shows for unverified users with resend button. Visual is prominent.
-**Status:** Pending
+**Status:** COMPLETE
 
 Files:
 - `website/src/lib/components/EmailVerificationBanner.svelte` - New component
@@ -113,10 +113,16 @@ Files:
 - **Outcome:** SUCCESS - Frontend now has email verification fields in auth store. UI can access emailVerified and email from account info. Resend function ready for use in banner component.
 
 ### Step 5
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:**
+  - Created `EmailVerificationBanner.svelte` component (56 lines) with amber/yellow warning colors for high visibility
+  - Banner includes: warning icon, clear headline "Verify Your Email Address", explanation of benefits, resend button with loading state
+  - Integrated into `dashboard/+layout.svelte` using conditional rendering (shows only if authenticated AND emailVerified===false)
+  - Added account subscription to track emailVerified status reactively
+  - Used `$derived` for computed showEmailVerificationBanner (Svelte 5 runes mode)
+  - Banner displays success/error messages for resend attempts with user-friendly rate limit messages
+- **Review:** Component follows AuthPromptBanner pattern exactly. Minimal implementation (56 lines including template). Reuses existing `resendVerificationEmail` and `authStore` APIs (DRY). Warning colors (amber-500/amber-600) provide VERY EXPLICIT visibility as required.
+- **Verification:** `npm run check` passes with 0 errors and 0 warnings. Component properly typed with AccountInfo interface.
+- **Outcome:** SUCCESS - Email verification banner implemented. Authenticated users with unverified email see prominent amber warning banner with resend functionality.
 
 ### Step 6
 - **Implementation:** (pending)
