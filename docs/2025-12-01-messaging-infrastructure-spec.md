@@ -328,10 +328,47 @@ Files:
 - **Outcome:** SUCCESS - Frontend service layer complete, ready for UI components
 
 ### Step 5
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** COMPLETE
+  - Created `MessageBubble.svelte` - Single message display component:
+    - Props: message, isOwnMessage, senderName
+    - Different alignment and styling for own vs others' messages
+    - Timestamp formatting (shows time for today, date for older)
+    - Read status indicator (✓ / ✓✓) for own messages
+    - AI role badge for assistant/system messages
+    - Dark theme with gradient styling for own messages
+  - Created `MessageList.svelte` - Scrollable message list:
+    - Props: messages[], currentUserPubkey, onMarkRead callback
+    - Auto-scroll to bottom on new messages
+    - Date separator headers (Today/Yesterday/Date)
+    - Viewport-based read tracking (marks visible unread messages as read)
+    - Empty state display
+  - Created `MessageComposer.svelte` - Message input component:
+    - Props: onSend callback, disabled, placeholder
+    - Auto-resizing textarea (max 150px height)
+    - Enter to send, Shift+Enter for newline
+    - Loading state with spinner while sending
+    - Auto-clear after successful send
+    - Error handling with message restoration on failure
+  - Created `UnreadBadge.svelte` - Unread count indicator:
+    - Props: count
+    - Red badge with number
+    - Shows "99+" for counts over 99
+    - Hides when count is 0
+  - Created `ThreadListItem.svelte` - Thread preview for inbox:
+    - Props: thread, unreadCount, messageCount, onClick
+    - Shows subject, contract ID (truncated), timestamp
+    - Unread badge integration
+    - Highlight styling for threads with unread messages
+    - Status and message count display
+  - All components follow Svelte 5 syntax ($props, $state, $derived, $effect)
+  - Consistent dark theme styling with existing components
+  - Reusable and composable component design
+- **Testing:** COMPLETE
+  - `npm run check` passed with 0 errors and 0 warnings
+  - Fixed textarea self-closing tag warning
+  - Handled type mismatch for message_count/unread_count (passed as props)
+- **Verification:** SUCCESS - All components type-check and follow project patterns
+- **Outcome:** SUCCESS - Messaging UI components complete and ready for integration
 
 ### Step 6
 - **Implementation:** (pending)
