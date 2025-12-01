@@ -21,10 +21,6 @@ See docs/2025-11-30-admin-tools-spec.md for implementation details.
 - [x] Get email queue stats (`GET /admin/emails/stats`)
 - [ ] View/edit account email verification status (nice-to-have)
 
-### Email System Fix
-- [x] **BUG**: Email processor not starting in production (emails queued but never sent)
-  - Fixed: Added missing MAILCHANNELS_API_KEY, DKIM_* env vars to docker-compose files (2025-11-30)
-
 ## Provider Trust & Reliability System
 
 ### Trust Dashboard (Core Display)
@@ -35,27 +31,6 @@ Visual trust dashboard on provider profiles and offering listings showing:
 - Last Activity indicator (real-time "last seen X ago")
 - Repeat Customer Count (users who came back for more)
 - Active Contract Value ($ currently being served)
-
-### Red Flag Detection (Prominent Warnings) ✅ COMPLETED (2025-11-30)
-
-#### Tier 1 - Critical Flags
-- ✅ **Early Cancellation Rate**: % contracts cancelled within first 10% of duration (threshold: >20% = critical)
-- ✅ **Provider Response Time**: Average hours from request to first response (threshold: >48h = critical)
-- ✅ **Provisioning Failure Rate**: % accepted contracts never provisioned (threshold: >15% = critical)
-- ✅ **Rejection Rate**: % contract requests rejected (threshold: >30% = critical)
-- ✅ **Negative Reputation Trend**: Sum of negative reputation changes in last 90 days (threshold: <-50 = critical)
-- ✅ **Money at Risk**: Total $ in "stuck" contracts (requested/pending/accepted >72h without progress)
-- ✅ **Ghost Risk**: Provider with no check-in in >7 days but has active contracts
-
-#### Tier 2 - Behavioral Anomaly Detection ✅ COMPLETED (2025-11-30)
-- ✅ **Abandonment Velocity**: Ratio of recent (30d) to baseline (31-90d) cancellation rate
-
-#### Tier 3 - Contextual Info ✅ COMPLETED (2025-11-30)
-See docs/2025-11-30-tier3-contextual-metrics-spec.md for implementation details.
-- ~~**Refund Processing Speed**~~: N/A - refunds handled automatically by platform/Stripe
-- ✅ **Provider Tenure**: New (<5 contracts), Growing (5-20), Established (20+)
-- ✅ **Average Contract Duration Ratio**: actual vs expected duration (contracts ending early = quality issues)
-- ✅ **No Response Rate**: % requests still in "requested" status after 7 days
 
 ### External Benchmarking Integration
 Integrate with or scrape external sources for additional trust signals:
