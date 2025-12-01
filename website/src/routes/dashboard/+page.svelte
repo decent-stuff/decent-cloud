@@ -6,6 +6,8 @@
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
+	import { getProviderTrustMetrics, type ProviderTrustMetrics } from "$lib/services/api";
+	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 
 	let dashboardData = $state<DashboardData>({
 		totalProviders: 0,
@@ -16,6 +18,8 @@
 	});
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<IdentityInfo | null>(null);
+	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
+	let trustMetricsLoading = $state(false);
 
 	onMount(() => {
 		if (!browser) return;
@@ -26,8 +30,20 @@
 		const unsubscribeError = dashboardStore.error.subscribe((value) => {
 			error = value;
 		});
-		const unsubscribeAuth = authStore.currentIdentity.subscribe((value) => {
+		const unsubscribeAuth = authStore.currentIdentity.subscribe(async (value) => {
 			currentIdentity = value;
+			if (value?.publicKeyBytes) {
+				trustMetricsLoading = true;
+				try {
+					trustMetrics = await getProviderTrustMetrics(value.publicKeyBytes);
+				} catch {
+					trustMetrics = null; // User has no trust data yet
+				} finally {
+					trustMetricsLoading = false;
+				}
+			} else {
+				trustMetrics = null;
+			}
 		});
 
 		dashboardStore.load();
@@ -77,6 +93,24 @@
 				</div>
 			</div>
 		</div>
+
+		<!-- User's Trust Metrics -->
+		{#if trustMetricsLoading}
+			<div class="flex justify-center items-center p-8">
+				<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-400"></div>
+			</div>
+		{:else if trustMetrics}
+			<div class="flex items-center justify-between mb-2">
+				<h2 class="text-2xl font-bold text-white">Your Trust Score</h2>
+				<a
+					href="/dashboard/reputation/{computePubkey(currentIdentity.publicKeyBytes!)}"
+					class="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+				>
+					View full profile &rarr;
+				</a>
+			</div>
+			<TrustDashboard metrics={trustMetrics} />
+		{/if}
 	{/if}
 
 	<div>
