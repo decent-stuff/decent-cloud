@@ -90,7 +90,7 @@ GET  /admin/emails/stats               - Get email queue statistics
 
 ### Step 2: Update AdminAuthenticatedUser to use is_admin flag
 **Success:** Admin auth checks account.is_admin instead of ADMIN_PUBLIC_KEYS env var
-**Status:** Pending
+**Status:** Complete
 
 ### Step 3: Create api-cli binary with admin commands
 **Success:** `api-cli admin grant/revoke/list` commands work, `test-email` binary functionality absorbed
@@ -121,5 +121,18 @@ GET  /admin/emails/stats               - Get email queue statistics
 - **Review:** All tests pass (`cargo make` - 490 tests passed)
 - **Outcome:** Success - Database migration complete, all accounts have `is_admin=0` by default
 
+### Step 2
+- **Implementation:** Complete
+  - Modified `AdminAuthenticatedUser::from_request` in `/code/api/src/auth.rs` to:
+    - Get database from request context using `request.data::<Arc<Database>>()`
+    - Look up account by public key using `get_account_id_by_public_key()`
+    - Fetch account using `get_account()`
+    - Check `account.is_admin == 1` and return 403 Forbidden if not admin
+  - Deprecated `get_admin_pubkeys()` function with `#[deprecated]` attribute
+  - Marked all legacy `test_get_admin_pubkeys_*` tests with `#[allow(deprecated)]`
+  - Updated documentation comments to reflect database-based authentication
+- **Review:** All tests pass (`SQLX_OFFLINE=true cargo make` - 490 tests passed)
+- **Outcome:** Success - Admin authentication now uses `is_admin` database flag instead of `ADMIN_PUBLIC_KEYS` environment variable
+
 ## Completion Summary
-Step 1 complete. Migration added, Account struct updated, all tests passing.
+Steps 1-2 complete. Admin authentication migrated to database-based approach, all tests passing.

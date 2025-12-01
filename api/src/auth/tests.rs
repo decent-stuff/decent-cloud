@@ -223,7 +223,12 @@ fn export_typescript_types() {
     SignedRequestHeaders::export().expect("Failed to export SignedRequestHeaders type");
 }
 
+// DEPRECATED: Legacy tests for get_admin_pubkeys (now deprecated)
+// These tests remain to ensure the deprecated function still works as expected
+// but are no longer relevant for admin authentication which now uses the database.
+
 #[test]
+#[allow(deprecated)]
 fn test_get_admin_pubkeys_empty() {
     // No environment variable set
     std::env::remove_var("ADMIN_PUBLIC_KEYS");
@@ -232,6 +237,7 @@ fn test_get_admin_pubkeys_empty() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_get_admin_pubkeys_single() {
     let (_, pubkey) = create_test_identity();
     let pubkey_hex = hex::encode(&pubkey);
@@ -245,6 +251,7 @@ fn test_get_admin_pubkeys_single() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_get_admin_pubkeys_multiple() {
     let (_, pubkey1) = create_test_identity();
     let seed2 = [99u8; 32];
@@ -265,6 +272,7 @@ fn test_get_admin_pubkeys_multiple() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_get_admin_pubkeys_with_whitespace() {
     let (_, pubkey) = create_test_identity();
     let pubkey_hex = hex::encode(&pubkey);
@@ -279,6 +287,7 @@ fn test_get_admin_pubkeys_with_whitespace() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_get_admin_pubkeys_invalid_hex() {
     std::env::set_var("ADMIN_PUBLIC_KEYS", "not-valid-hex");
 

@@ -159,7 +159,7 @@ pub struct ApiAuthenticatedUser {
     pub pubkey: Vec<u8>,
 }
 
-/// Admin authenticated user (signature-based with admin public key list)
+/// Admin authenticated user (signature-based with is_admin database flag)
 #[derive(Debug, Clone)]
 pub struct AdminAuthenticatedUser {
     pub pubkey: Vec<u8>,
@@ -248,9 +248,15 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
     }
 }
 
-/// Get admin public keys from environment variable
-/// Format: comma-separated hex-encoded Ed25519 public keys (32 bytes each)
-/// Example: ADMIN_PUBLIC_KEYS="abc123...,def456..."
+/// DEPRECATED: Get admin public keys from environment variable
+/// This function is deprecated and no longer used for admin authentication.
+/// Admin access is now controlled by the is_admin flag in the accounts table.
+/// Kept for backward compatibility only - will be removed in a future version.
+#[deprecated(
+    since = "0.1.0",
+    note = "Admin authentication now uses is_admin database flag instead of ADMIN_PUBLIC_KEYS env var"
+)]
+#[allow(dead_code)]
 pub(crate) fn get_admin_pubkeys() -> Vec<Vec<u8>> {
     std::env::var("ADMIN_PUBLIC_KEYS")
         .ok()
@@ -338,14 +344,43 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
             None,
         )?;
 
-        // Check if public key is in admin list
-        let admin_pubkeys = get_admin_pubkeys();
-        if !admin_pubkeys.iter().any(|admin_key| admin_key == &pubkey) {
+        // Get database from request data
+        let db = request
+            .data::<std::sync::Arc<crate::database::Database>>()
+            .ok_or_else(|| {
+                AuthError::InternalError("Database not available in request context".to_string())
+            })?;
+
+        // Look up account by public key and check is_admin flag
+        let account_id = db
+            .get_account_id_by_public_key(&pubkey)
+            .await
+            .map_err(|e| AuthError::InternalError(format!("Failed to query account: {}", e)))?
+            .ok_or_else(|| {
+                poem::Error::from_string(
+                    format!(
+                        "Admin access denied. Public key '{}' is not associated with any account",
+                        hex::encode(&pubkey)
+                    ),
+                    StatusCode::FORBIDDEN,
+                )
+            })?;
+
+        let account = db
+            .get_account(&account_id)
+            .await
+            .map_err(|e| AuthError::InternalError(format!("Failed to fetch account: {}", e)))?;
+
+        let account = account.ok_or_else(|| {
+            AuthError::InternalError("Account not found after ID lookup".to_string())
+        })?;
+
+        // Check is_admin flag
+        if account.is_admin != 1 {
             return Err(poem::Error::from_string(
                 format!(
-                    "Admin access required. Public key '{}' is not in the admin list ({} admins configured)",
-                    hex::encode(&pubkey),
-                    admin_pubkeys.len()
+                    "Admin access denied. Account '{}' does not have admin privileges",
+                    account.username
                 ),
                 StatusCode::FORBIDDEN,
             ));
