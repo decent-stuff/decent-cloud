@@ -192,15 +192,18 @@ python3 deploy.py deploy dev
 python3 deploy.py deploy prod
 ```
 
-Or manually with docker compose (using simplified Dockerfiles):
+Or manually with docker compose:
 ```bash
 cd cf
 
-# Load the tunnel token and start services
-source .env && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Load env and start services (dev)
+source .env.dev && docker compose -f docker-compose.dev.yml up -d
+
+# Or production
+source .env.prod && docker compose -f docker-compose.prod.yml up -d
 ```
 
-**Note:** The simplified Dockerfiles assume native builds have been completed first. When using manual docker compose, ensure you've built:
+**Note:** Manual docker compose assumes native builds completed first:
 - Website: `cd website && npm run build`
 - API binary: `cargo build --release --bin api-server --target x86_64-unknown-linux-gnu`
 
@@ -208,10 +211,10 @@ source .env && docker compose -f docker-compose.yml -f docker-compose.prod.yml u
 
 ```bash
 # Check service health
-docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 
 # View logs
-docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f
 
 # Test the website endpoint
 curl https://your-subdomain.your-domain.com/health
@@ -225,29 +228,29 @@ curl https://your-subdomain.your-domain.com/health
 
 ```bash
 # All services
-docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f
 
 # Website only
-docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f website
+docker compose -f docker-compose.prod.yml logs -f website
 
 # Cloudflared only
-docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f cloudflared
+docker compose -f docker-compose.prod.yml logs -f cloudflared
 ```
 
 ### Restart Services
 
 ```bash
 # Restart all
-export $(cat .env.tunnel | xargs) && docker compose -f docker-compose.yml -f docker-compose.prod.yml restart
+docker compose -f docker-compose.prod.yml restart
 
 # Restart specific service
-export $(cat .env.tunnel | xargs) && docker compose -f docker-compose.yml -f docker-compose.prod.yml restart website
+docker compose -f docker-compose.prod.yml restart website
 ```
 
 ### Stop Services
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml down
 ```
 
 ### Update and Rebuild
@@ -256,11 +259,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 # Pull latest code changes
 git pull
 
-# Rebuild and restart (using simplified Dockerfiles)
-export $(cat .env.tunnel | xargs) && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Rebuild and restart
+docker compose -f docker-compose.prod.yml up -d --build
 ```
-
-**Note:** The simplified Dockerfiles will rebuild quickly since they don't need to compile WASM or Rust code in-container. The native builds are handled by the deploy.py script.
 
 ## Monitoring
 
@@ -269,7 +270,7 @@ export $(cat .env.tunnel | xargs) && docker compose -f docker-compose.yml -f doc
 The website service includes a built-in health check that runs every 30 seconds:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml ps  # Shows health status
+docker compose -f docker-compose.prod.yml ps  # Shows health status
 ```
 
 ### Tunnel Status

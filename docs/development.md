@@ -111,10 +111,10 @@ export USER_ID=1001
 export GROUP_ID=1001
 
 # Rebuild the API container
-docker compose -f cf/docker-compose.yml -f cf/docker-compose.prod.yml build api
+docker compose -f cf/docker-compose.prod.yml build api-serve
 ```
 
-The build arguments are defined in `cf/docker-compose.yml` and default to 1000 if not specified.
+The build arguments are defined in `cf/docker-compose.prod.yml` and default to 1000 if not specified.
 
 ## Building the Project
 

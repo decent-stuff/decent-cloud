@@ -43,10 +43,10 @@ def get_env_config(environment: str) -> tuple[dict[str, str], list[str]]:
 
     if environment == "prod":
         env_vars = {"ENVIRONMENT": "prod", "NETWORK_NAME": "decent-cloud-prod"}
-        compose_files = [str(cf_dir / "docker-compose.yml"), str(cf_dir / "docker-compose.prod.yml")]
+        compose_files = [str(cf_dir / "docker-compose.prod.yml")]
     else:  # dev
         env_vars = {"ENVIRONMENT": "dev", "NETWORK_NAME": "decent-cloud-dev"}
-        compose_files = [str(cf_dir / "docker-compose.yml"), str(cf_dir / "docker-compose.dev.yml")]
+        compose_files = [str(cf_dir / "docker-compose.dev.yml")]
 
     return env_vars, compose_files
 

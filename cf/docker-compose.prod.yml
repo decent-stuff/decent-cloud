@@ -1,52 +1,121 @@
-# Production overrides - adds Cloudflare Tunnel
-x-api-base: &api-base
-  environment:
-    - ENVIRONMENT=prod
-    - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
-    - RUST_LOG=${RUST_LOG:-info}
-    - API_SERVER_PORT=59001
-    - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30} # Used for the sync service only
-    - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
-    - LEDGER_DIR=/data/ledger
-    - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
-    - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
-    - GOOGLE_OAUTH_REDIRECT_URL=${GOOGLE_OAUTH_REDIRECT_URL}
-    - FRONTEND_URL=${FRONTEND_URL}
-    - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-    - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
-    - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-    - MAILCHANNELS_API_KEY=${MAILCHANNELS_API_KEY}
-    - DKIM_DOMAIN=${DKIM_DOMAIN}
-    - DKIM_SELECTOR=${DKIM_SELECTOR}
-    - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY}
-  volumes:
-    - ../data/api-data-prod:/data
-  networks:
-    - decent-cloud-prod
+# Production environment - standalone
+# Deploy: python3 cf/deploy.py deploy prod
+# Manual: docker compose -f cf/docker-compose.prod.yml up -d
+# URLs: decent-cloud.org, api.decent-cloud.org
 
 services:
   website:
+    build:
+      context: ..
+      dockerfile: cf/Dockerfile
+    image: decent-cloud-website:prod
     container_name: decent-cloud-website-prod
+    restart: unless-stopped
     environment:
       - ENVIRONMENT=prod
     ports:
-      - "59100:59010" # Prod: host 59100 -> container 59010
+      - "59100:59010"
     networks:
       - decent-cloud-prod
 
   api-serve:
-    <<: *api-base
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        BINARY_HASH: ${BINARY_HASH:-unknown}
+    image: decent-cloud-api:prod
     container_name: decent-cloud-api-serve-prod
+    restart: unless-stopped
+    command: ["api-server", "serve"]
+    environment:
+      - ENVIRONMENT=prod
+      - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
+      - RUST_LOG=${RUST_LOG:-info}
+      - API_SERVER_PORT=59001
+      - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+      - LEDGER_DIR=/data/ledger
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - GOOGLE_OAUTH_REDIRECT_URL=${GOOGLE_OAUTH_REDIRECT_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - MAILCHANNELS_API_KEY=${MAILCHANNELS_API_KEY}
+      - DKIM_DOMAIN=${DKIM_DOMAIN}
+      - DKIM_SELECTOR=${DKIM_SELECTOR}
+      - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY}
+    volumes:
+      - ../data/api-data-prod:/data
     ports:
-      - "59101:59001" # Prod: host 59101 -> container 59001
+      - "59101:59001"
+    networks:
+      - decent-cloud-prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:59001/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
 
   api-sync:
-    <<: *api-base
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        BINARY_HASH: ${BINARY_HASH:-unknown}
+    image: decent-cloud-api:prod
     container_name: decent-cloud-api-sync-prod
+    restart: unless-stopped
+    command: ["api-server", "sync"]
+    environment:
+      - ENVIRONMENT=prod
+      - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
+      - RUST_LOG=${RUST_LOG:-info}
+      - API_SERVER_PORT=59001
+      - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30}
+      - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+      - LEDGER_DIR=/data/ledger
+    volumes:
+      - ../data/api-data-prod:/data
+    networks:
+      - decent-cloud-prod
 
   api-validate:
-    <<: *api-base
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        BINARY_HASH: ${BINARY_HASH:-unknown}
+    image: decent-cloud-api:prod
     container_name: decent-cloud-api-validate-prod
+    restart: unless-stopped
+    command: ["/usr/local/bin/validator-entrypoint.sh"]
+    environment:
+      - ENVIRONMENT=prod
+      - NETWORK=${NETWORK:-ic}
+      - VALIDATION_INTERVAL_SECS=${VALIDATION_INTERVAL_SECS:-600}
+      - VALIDATION_MEMO=${VALIDATION_MEMO:-Automated periodic validation}
+      - LOCAL_LEDGER_DIR=/data/ledger
+      - IDENTITY_PATH=/identity
+    volumes:
+      - ../data/api-data-prod:/data
+      - ${IDENTITY_LOCAL_PATH}:/identity:ro
+    networks:
+      - decent-cloud-prod
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/validator-healthy"]
+      interval: 15m
+      timeout: 10s
+      start_period: 1m
+      retries: 2
 
   cloudflared:
     image: cloudflare/cloudflared:latest

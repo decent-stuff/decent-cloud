@@ -83,7 +83,7 @@ By running the validation command, you automatically fetch the latest ledger and
 
 ```bash
 # See cf/README.md for full setup instructions
-# 1. Mount your identity directory in docker-compose.yml
+# 1. Mount your identity directory in docker-compose.prod.yml
 # 2. Deploy with validator included
 python3 cf/deploy.py deploy prod
 ```

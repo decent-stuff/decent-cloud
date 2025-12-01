@@ -125,8 +125,8 @@ Set BEFORE running `npm run build`:
 |----------|-------|----------|
 | `VITE_STRIPE_PUBLISHABLE_KEY` | `pk_live_...` | Stripe.js initialization in browser |
 
-### Runtime (docker-compose)
-Set BEFORE running `docker-compose up`:
+### Runtime (Docker Compose)
+Set BEFORE running `docker compose up`:
 
 | Variable | Value | Used For |
 |----------|-------|----------|
@@ -210,7 +210,7 @@ If payments fail in production:
    ```bash
    unset STRIPE_SECRET_KEY
    unset STRIPE_WEBHOOK_SECRET
-   docker-compose restart api-serve
+   docker compose -f docker-compose.prod.yml restart api-serve
    ```
    This disables credit card payments; DCT payments still work.
 

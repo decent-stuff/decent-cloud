@@ -57,9 +57,8 @@ Validator (optional)
 ## Deployment Files
 
 ### Docker Compose
-- `cf/docker-compose.yml` - Base configuration for website
-- `cf/docker-compose.prod.yml` - Production overrides (adds tunnel)
-- `cf/docker-compose.dev.yml` - Development overrides
+- `cf/docker-compose.dev.yml` - Development configuration
+- `cf/docker-compose.prod.yml` - Production configuration
 
 ### Dockerfiles
 - `cf/Dockerfile` - Build for website (assumes website built natively and then added to the image)

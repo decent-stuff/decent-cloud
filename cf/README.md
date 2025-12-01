@@ -17,7 +17,7 @@ python3 deploy.py deploy prod   # Production
 
 The deployment includes an optional blockchain validator service that earns DCT rewards by validating blocks every 10 minutes.
 
-**By default, the validator is DISABLED** (using docker-compose profiles) to prevent accidental startup without a configured identity.
+**By default, the validator is DISABLED** (using Docker Compose profiles) to prevent accidental startup without a configured identity.
 
 ### Prerequisites
 
@@ -46,7 +46,7 @@ The deployment includes an optional blockchain validator service that earns DCT 
 
    Example: `~/.dcc/identity/my-identity/`
 
-2. **Enable the validator** by editing `docker-compose.yml`:
+2. **Enable the validator** by editing `docker-compose.prod.yml`:
 
    a. Comment out the `profiles: ["validator"]` line in the `api-validate` service
 
@@ -66,7 +66,7 @@ The deployment includes an optional blockchain validator service that earns DCT 
 
    **Alternative: Use profiles** (keeps base config unchanged):
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile validator up -d
+   docker compose -f docker-compose.prod.yml --profile validator up -d
    ```
 
    > **What are profiles?** Docker Compose profiles allow services to be selectively enabled/disabled.
@@ -110,8 +110,8 @@ See [docs/mining-and-validation.md](../docs/mining-and-validation.md) for more d
 
 ### Docker Files
 
-- **docker-compose.yml** - Base Docker Compose configuration
-- **docker-compose.prod.yml** - Production overrides (adds Cloudflare Tunnel)
+- **docker-compose.dev.yml** - Development configuration
+- **docker-compose.prod.yml** - Production configuration
 - **Dockerfile** - Builds the docker image for website (assumes native build)
 
 ### Configuration
