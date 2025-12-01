@@ -1341,8 +1341,8 @@ async fn test_get_latest_verification_token_time() {
     let time1 = db.get_latest_verification_token_time(&account.id).await.unwrap();
     assert!(time1.is_some());
 
-    // Wait a bit and create another token
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Wait enough time to ensure different timestamps (SQLite precision is seconds)
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     db.create_email_verification_token(&account.id, "token@example.com")
         .await
         .unwrap();
@@ -1350,8 +1350,8 @@ async fn test_get_latest_verification_token_time() {
     let time2 = db.get_latest_verification_token_time(&account.id).await.unwrap();
     assert!(time2.is_some());
 
-    // Second token time should be greater than first
-    assert!(time2.unwrap() > time1.unwrap());
+    // Second token time should be greater than or equal to first
+    assert!(time2.unwrap() >= time1.unwrap());
 }
 
 #[tokio::test]

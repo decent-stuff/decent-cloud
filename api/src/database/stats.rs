@@ -557,6 +557,7 @@ impl Database {
     }
 
     /// Calculate trust score (0-100) and identify critical flags
+    #[allow(clippy::too_many_arguments)]
     fn calculate_trust_score_and_flags(
         early_cancellation_rate_pct: Option<f64>,
         provisioning_failure_rate_pct: Option<f64>,

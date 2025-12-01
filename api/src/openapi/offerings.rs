@@ -12,6 +12,7 @@ impl OfferingsApi {
     ///
     /// Search for offerings with optional filters or DSL query
     #[oai(path = "/offerings", method = "get", tag = "ApiTags::Offerings")]
+    #[allow(clippy::too_many_arguments)]
     async fn search_offerings(
         &self,
         db: Data<&Arc<Database>>,

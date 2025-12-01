@@ -795,6 +795,7 @@ impl Database {
     }
 
     /// Set admin status for an account by username
+    #[allow(dead_code)]
     pub async fn set_admin_status(&self, username: &str, is_admin: bool) -> Result<()> {
         let is_admin_value = if is_admin { 1 } else { 0 };
         let result =
@@ -812,6 +813,7 @@ impl Database {
     }
 
     /// List all admin accounts
+    #[allow(dead_code)]
     pub async fn list_admins(&self) -> Result<Vec<Account>> {
         let admins = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
