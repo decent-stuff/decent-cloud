@@ -31,6 +31,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/020_email_verification.sql"),
         include_str!("../../migrations/021_admin_accounts.sql"),
         include_str!("../../migrations/022_messaging.sql"),
+        include_str!("../../migrations/023_email_queue_time_based_retry.sql"),
     ];
 
     for migration in &migrations {

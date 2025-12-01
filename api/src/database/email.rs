@@ -2,16 +2,34 @@ use super::types::Database;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-/// Email type for retry policy configuration
+/// Maximum time window for email retries: 7 days in seconds
+pub const EMAIL_RETRY_WINDOW_SECS: i64 = 7 * 24 * 60 * 60;
+
+/// Calculate backoff delay for a given attempt number.
+/// Schedule: immediate, 1min, 2min, 4min, 8min, 16min, 32min, then 1h intervals
+pub fn calculate_backoff_secs(attempts: i64) -> i64 {
+    match attempts {
+        0 => 0,       // immediate
+        1 => 60,      // 1 min
+        2 => 2 * 60,  // 2 min
+        3 => 4 * 60,  // 4 min
+        4 => 8 * 60,  // 8 min
+        5 => 16 * 60, // 16 min
+        6 => 32 * 60, // 32 min
+        _ => 60 * 60, // 1 hour for all subsequent attempts
+    }
+}
+
+/// Email type categorization (all types now retry for 7 days)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmailType {
-    /// Critical: Account recovery emails - 24 attempts over ~8 hours
+    /// Account recovery emails
     Recovery,
-    /// Important: Welcome emails - 12 attempts over ~4 hours
+    /// Welcome emails
     Welcome,
-    /// General: Other notifications - 6 attempts over ~2 hours
+    /// General notifications
     General,
-    /// Message notifications - 6 attempts over ~2 hours
+    /// Message notifications (tracks sender for failure notification)
     MessageNotification,
 }
 
@@ -22,15 +40,6 @@ impl EmailType {
             EmailType::Welcome => "welcome",
             EmailType::General => "general",
             EmailType::MessageNotification => "message_notification",
-        }
-    }
-
-    pub fn max_attempts(&self) -> i64 {
-        match self {
-            EmailType::Recovery => 24,           // Critical: many retries
-            EmailType::Welcome => 12,            // Important: moderate retries
-            EmailType::General => 6,             // Normal: fewer retries
-            EmailType::MessageNotification => 6, // Normal: fewer retries
         }
     }
 }
@@ -55,6 +64,14 @@ pub struct EmailQueueEntry {
     pub created_at: i64,
     pub last_attempted_at: Option<i64>,
     pub sent_at: Option<i64>,
+    /// Account to notify on failure (e.g., message sender)
+    #[oai(skip)]
+    #[serde(skip)]
+    pub related_account_id: Option<Vec<u8>>,
+    /// Whether we've notified the user about retry
+    pub user_notified_retry: i64,
+    /// Whether we've notified the user about permanent failure
+    pub user_notified_gave_up: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
@@ -68,6 +85,8 @@ pub struct EmailStats {
 }
 
 impl Database {
+    /// Queue an email for delivery. All emails retry for 7 days before permanent failure.
+    /// `related_account_id` is optional - used to notify the account owner on failure.
     pub async fn queue_email(
         &self,
         to_addr: &str,
@@ -77,16 +96,31 @@ impl Database {
         is_html: bool,
         email_type: EmailType,
     ) -> Result<Vec<u8>> {
+        self.queue_email_with_account(to_addr, from_addr, subject, body, is_html, email_type, None)
+            .await
+    }
+
+    /// Queue an email with an associated account for failure notifications.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn queue_email_with_account(
+        &self,
+        to_addr: &str,
+        from_addr: &str,
+        subject: &str,
+        body: &str,
+        is_html: bool,
+        email_type: EmailType,
+        related_account_id: Option<&[u8]>,
+    ) -> Result<Vec<u8>> {
         let id = uuid::Uuid::new_v4().as_bytes().to_vec();
         let is_html_int = if is_html { 1 } else { 0 };
         let created_at = chrono::Utc::now().timestamp();
         let email_type_str = email_type.as_str();
-        let max_attempts = email_type.max_attempts();
 
         sqlx::query!(
             r#"INSERT INTO email_queue
-               (id, to_addr, from_addr, subject, body, is_html, email_type, status, attempts, max_attempts, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)"#,
+               (id, to_addr, from_addr, subject, body, is_html, email_type, status, attempts, max_attempts, created_at, related_account_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 999, ?, ?)"#,
             id,
             to_addr,
             from_addr,
@@ -94,8 +128,8 @@ impl Database {
             body,
             is_html_int,
             email_type_str,
-            max_attempts,
-            created_at
+            created_at,
+            related_account_id
         )
         .execute(&self.pool)
         .await?;
@@ -103,15 +137,20 @@ impl Database {
         Ok(id)
     }
 
+    /// Get pending emails that are still within the 7-day retry window
     pub async fn get_pending_emails(&self, limit: i64) -> Result<Vec<EmailQueueEntry>> {
+        let cutoff = chrono::Utc::now().timestamp() - EMAIL_RETRY_WINDOW_SECS;
+
         let emails = sqlx::query_as!(
             EmailQueueEntry,
             r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
-                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at
+                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
+                      related_account_id, user_notified_retry, user_notified_gave_up
                FROM email_queue
-               WHERE status = 'pending' AND attempts < max_attempts
+               WHERE status = 'pending' AND created_at >= ?
                ORDER BY created_at ASC
                LIMIT ?"#,
+            cutoff,
             limit
         )
         .fetch_all(&self.pool)
@@ -125,7 +164,8 @@ impl Database {
         let emails = sqlx::query_as!(
             EmailQueueEntry,
             r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
-                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at
+                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
+                      related_account_id, user_notified_retry, user_notified_gave_up
                FROM email_queue
                WHERE status = 'failed'
                ORDER BY created_at DESC
@@ -140,8 +180,11 @@ impl Database {
 
     /// Retry a failed email by resetting its status and attempts
     pub async fn retry_failed_email(&self, id: &[u8]) -> Result<()> {
+        // Reset status, attempts, and also update created_at to restart the 7-day window
+        let now = chrono::Utc::now().timestamp();
         sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL WHERE id = ? AND status = 'failed'",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = ?, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = ? AND status = 'failed'",
+            now,
             id
         )
         .execute(&self.pool)
@@ -151,10 +194,13 @@ impl Database {
     }
 
     /// Reset a single email for retry - reset attempts to 0, status to pending, clear last_error
+    /// Also resets created_at to restart the 7-day window
     /// Returns true if an email was found and reset
     pub async fn reset_email_for_retry(&self, id: &[u8]) -> Result<bool> {
+        let now = chrono::Utc::now().timestamp();
         let result = sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL WHERE id = ?",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = ?, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = ?",
+            now,
             id
         )
         .execute(&self.pool)
@@ -166,8 +212,10 @@ impl Database {
     /// Reset all failed emails to pending status for bulk retry
     /// Returns the count of emails reset
     pub async fn retry_all_failed_emails(&self) -> Result<u64> {
+        let now = chrono::Utc::now().timestamp();
         let result = sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL WHERE status = 'failed'"
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = ?, user_notified_retry = 0, user_notified_gave_up = 0 WHERE status = 'failed'",
+            now
         )
         .execute(&self.pool)
         .await?;
@@ -217,6 +265,8 @@ impl Database {
         Ok(())
     }
 
+    /// Mark an email attempt as failed (increments attempts, stores error)
+    /// Does NOT mark as permanently failed - that's handled by time-based expiration
     pub async fn mark_email_failed(&self, id: &[u8], error: &str) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
 
@@ -229,9 +279,103 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
-        // Mark as permanently failed if max attempts reached
+        Ok(())
+    }
+
+    /// Mark an email as permanently failed (7-day window expired)
+    pub async fn mark_email_permanently_failed(&self, id: &[u8]) -> Result<()> {
         sqlx::query!(
-            "UPDATE email_queue SET status = 'failed' WHERE id = ? AND attempts >= max_attempts",
+            "UPDATE email_queue SET status = 'failed' WHERE id = ? AND status = 'pending'",
+            id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get pending emails that have exceeded the 7-day retry window
+    pub async fn get_expired_pending_emails(&self, limit: i64) -> Result<Vec<EmailQueueEntry>> {
+        let cutoff = chrono::Utc::now().timestamp() - EMAIL_RETRY_WINDOW_SECS;
+
+        let emails = sqlx::query_as!(
+            EmailQueueEntry,
+            r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
+                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
+                      related_account_id, user_notified_retry, user_notified_gave_up
+               FROM email_queue
+               WHERE status = 'pending' AND created_at < ?
+               ORDER BY created_at ASC
+               LIMIT ?"#,
+            cutoff,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(emails)
+    }
+
+    /// Get emails that failed at least once, have a related account, and haven't been notified about retry
+    pub async fn get_emails_needing_retry_notification(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<EmailQueueEntry>> {
+        let emails = sqlx::query_as!(
+            EmailQueueEntry,
+            r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
+                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
+                      related_account_id, user_notified_retry, user_notified_gave_up
+               FROM email_queue
+               WHERE status = 'pending' AND attempts > 0 AND related_account_id IS NOT NULL AND user_notified_retry = 0
+               ORDER BY last_attempted_at ASC
+               LIMIT ?"#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(emails)
+    }
+
+    /// Get emails that permanently failed, have a related account, and haven't been notified
+    pub async fn get_emails_needing_gave_up_notification(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<EmailQueueEntry>> {
+        let emails = sqlx::query_as!(
+            EmailQueueEntry,
+            r#"SELECT id, to_addr, from_addr, subject, body, is_html, email_type,
+                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
+                      related_account_id, user_notified_retry, user_notified_gave_up
+               FROM email_queue
+               WHERE status = 'failed' AND related_account_id IS NOT NULL AND user_notified_gave_up = 0
+               ORDER BY last_attempted_at ASC
+               LIMIT ?"#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(emails)
+    }
+
+    /// Mark that we've notified the user about email retry
+    pub async fn mark_retry_notified(&self, id: &[u8]) -> Result<()> {
+        sqlx::query!(
+            "UPDATE email_queue SET user_notified_retry = 1 WHERE id = ?",
+            id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Mark that we've notified the user about permanent failure
+    pub async fn mark_gave_up_notified(&self, id: &[u8]) -> Result<()> {
+        sqlx::query!(
+            "UPDATE email_queue SET user_notified_gave_up = 1 WHERE id = ?",
             id
         )
         .execute(&self.pool)

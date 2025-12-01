@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, to_addr, from_addr, subject, body, is_html, email_type,\n                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at\n               FROM email_queue\n               WHERE status = 'failed'\n               ORDER BY created_at DESC\n               LIMIT ?",
+  "query": "SELECT id, to_addr, from_addr, subject, body, is_html, email_type,\n                      status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,\n                      related_account_id, user_notified_retry, user_notified_gave_up\n               FROM email_queue\n               WHERE status = 'pending' AND created_at >= ?\n               ORDER BY created_at ASC\n               LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -72,10 +72,25 @@
         "name": "sent_at",
         "ordinal": 13,
         "type_info": "Integer"
+      },
+      {
+        "name": "related_account_id",
+        "ordinal": 14,
+        "type_info": "Blob"
+      },
+      {
+        "name": "user_notified_retry",
+        "ordinal": 15,
+        "type_info": "Integer"
+      },
+      {
+        "name": "user_notified_gave_up",
+        "ordinal": 16,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false,
@@ -91,8 +106,11 @@
       true,
       false,
       true,
-      true
+      true,
+      true,
+      false,
+      false
     ]
   },
-  "hash": "59650727fbb7f84c77a1fb85328ec3f902ab58f20e588ac746a54d9795c1aec5"
+  "hash": "4794ad8aba7d85025dfa075feb0de8998585c8ccd8d6db80975271a8cf39270d"
 }

@@ -1,4 +1,4 @@
-use crate::database::email::EmailType;
+use crate::database::email::{calculate_backoff_secs, EmailType};
 use crate::database::test_helpers::setup_test_db;
 
 #[tokio::test]
@@ -27,8 +27,11 @@ async fn test_queue_email() {
     assert_eq!(email.email_type, "general");
     assert_eq!(email.status, "pending");
     assert_eq!(email.attempts, 0);
-    assert_eq!(email.max_attempts, 6);
+    assert_eq!(email.max_attempts, 999); // Time-based retry (7 days)
     assert!(email.last_attempted_at.is_none());
+    assert!(email.related_account_id.is_none());
+    assert_eq!(email.user_notified_retry, 0);
+    assert_eq!(email.user_notified_gave_up, 0);
 }
 
 #[tokio::test]
@@ -51,7 +54,7 @@ async fn test_queue_html_email() {
     let email = &emails[0];
     assert_eq!(email.is_html, 1);
     assert_eq!(email.email_type, "welcome");
-    assert_eq!(email.max_attempts, 12);
+    assert_eq!(email.max_attempts, 999); // Time-based retry (7 days)
     assert_eq!(email.body, "<h1>HTML Body</h1>");
 }
 
@@ -168,7 +171,7 @@ async fn test_mark_email_failed() {
 }
 
 #[tokio::test]
-async fn test_mark_email_failed_max_attempts() {
+async fn test_mark_email_permanently_failed() {
     let db = setup_test_db().await;
 
     let id = db
@@ -183,14 +186,17 @@ async fn test_mark_email_failed_max_attempts() {
         .await
         .unwrap();
 
-    for _ in 0..6 {
-        // General emails have 6 max attempts
-        db.mark_email_failed(&id, "Failed").await.unwrap();
-    }
+    // Mark as permanently failed (simulating 7-day expiration)
+    db.mark_email_permanently_failed(&id).await.unwrap();
 
-    // Should not be in pending queue anymore (marked as failed)
+    // Should not be in pending queue anymore
     let pending = db.get_pending_emails(10).await.unwrap();
     assert_eq!(pending.len(), 0);
+
+    // Should be in failed queue
+    let failed = db.get_failed_emails(10).await.unwrap();
+    assert_eq!(failed.len(), 1);
+    assert_eq!(failed[0].status, "failed");
 }
 
 #[tokio::test]
@@ -221,10 +227,8 @@ async fn test_get_pending_emails_excludes_failed() {
         .await
         .unwrap();
 
-    for _ in 0..6 {
-        // General emails have 6 max attempts
-        db.mark_email_failed(&id2, "Error").await.unwrap();
-    }
+    // Mark as permanently failed
+    db.mark_email_permanently_failed(&id2).await.unwrap();
 
     let emails = db.get_pending_emails(10).await.unwrap();
     assert_eq!(emails.len(), 1);
@@ -278,7 +282,7 @@ async fn test_queue_email_safe_with_none_address() {
 async fn test_reset_email_for_retry_success() {
     let db = setup_test_db().await;
 
-    // Create and fail an email
+    // Create and permanently fail an email
     let id = db
         .queue_email(
             "test@example.com",
@@ -291,15 +295,13 @@ async fn test_reset_email_for_retry_success() {
         .await
         .unwrap();
 
-    for _ in 0..6 {
-        db.mark_email_failed(&id, "Test error").await.unwrap();
-    }
+    db.mark_email_failed(&id, "Test error").await.unwrap();
+    db.mark_email_permanently_failed(&id).await.unwrap();
 
     // Verify it's failed
     let failed = db.get_failed_emails(10).await.unwrap();
     assert_eq!(failed.len(), 1);
     assert_eq!(failed[0].status, "failed");
-    assert_eq!(failed[0].attempts, 6);
 
     // Reset it
     let result = db.reset_email_for_retry(&id).await.unwrap();
@@ -311,6 +313,8 @@ async fn test_reset_email_for_retry_success() {
     assert_eq!(pending[0].status, "pending");
     assert_eq!(pending[0].attempts, 0);
     assert!(pending[0].last_error.is_none());
+    assert_eq!(pending[0].user_notified_retry, 0);
+    assert_eq!(pending[0].user_notified_gave_up, 0);
 }
 
 #[tokio::test]
@@ -334,7 +338,7 @@ async fn test_retry_all_failed_emails_none() {
 async fn test_retry_all_failed_emails_multiple() {
     let db = setup_test_db().await;
 
-    // Create and fail 3 emails
+    // Create and permanently fail 3 emails
     for i in 0..3 {
         let id = db
             .queue_email(
@@ -348,9 +352,7 @@ async fn test_retry_all_failed_emails_multiple() {
             .await
             .unwrap();
 
-        for _ in 0..6 {
-            db.mark_email_failed(&id, "Test error").await.unwrap();
-        }
+        db.mark_email_permanently_failed(&id).await.unwrap();
     }
 
     // Verify all are failed
@@ -405,7 +407,7 @@ async fn test_retry_all_failed_emails_excludes_pending_and_sent() {
         .unwrap();
     db.mark_email_sent(&sent_id).await.unwrap();
 
-    // Create and fail one email
+    // Create and permanently fail one email
     let failed_id = db
         .queue_email(
             "failed@example.com",
@@ -417,9 +419,7 @@ async fn test_retry_all_failed_emails_excludes_pending_and_sent() {
         )
         .await
         .unwrap();
-    for _ in 0..6 {
-        db.mark_email_failed(&failed_id, "Error").await.unwrap();
-    }
+    db.mark_email_permanently_failed(&failed_id).await.unwrap();
 
     // Retry all failed - should only affect the 1 failed email
     let count = db.retry_all_failed_emails().await.unwrap();
@@ -484,7 +484,7 @@ async fn test_get_email_stats_accuracy() {
         db.mark_email_sent(&id).await.unwrap();
     }
 
-    // Create and fail 1 email
+    // Create and permanently fail 1 email
     let failed_id = db
         .queue_email(
             "failed@example.com",
@@ -496,9 +496,7 @@ async fn test_get_email_stats_accuracy() {
         )
         .await
         .unwrap();
-    for _ in 0..6 {
-        db.mark_email_failed(&failed_id, "Error").await.unwrap();
-    }
+    db.mark_email_permanently_failed(&failed_id).await.unwrap();
 
     // Verify stats
     let stats = db.get_email_stats().await.unwrap();
@@ -506,4 +504,217 @@ async fn test_get_email_stats_accuracy() {
     assert_eq!(stats.sent, 3);
     assert_eq!(stats.failed, 1);
     assert_eq!(stats.total, 6);
+}
+
+#[test]
+fn test_calculate_backoff_secs() {
+    // Verify the backoff schedule: immediate, 1m, 2m, 4m, 8m, 16m, 32m, then 1h
+    assert_eq!(calculate_backoff_secs(0), 0); // immediate
+    assert_eq!(calculate_backoff_secs(1), 60); // 1 min
+    assert_eq!(calculate_backoff_secs(2), 120); // 2 min
+    assert_eq!(calculate_backoff_secs(3), 240); // 4 min
+    assert_eq!(calculate_backoff_secs(4), 480); // 8 min
+    assert_eq!(calculate_backoff_secs(5), 960); // 16 min
+    assert_eq!(calculate_backoff_secs(6), 1920); // 32 min
+    assert_eq!(calculate_backoff_secs(7), 3600); // 1 hour
+    assert_eq!(calculate_backoff_secs(8), 3600); // 1 hour
+    assert_eq!(calculate_backoff_secs(100), 3600); // 1 hour (capped)
+}
+
+#[tokio::test]
+async fn test_queue_email_with_account() {
+    let db = setup_test_db().await;
+    let account_id = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+    let id = db
+        .queue_email_with_account(
+            "test@example.com",
+            "sender@example.com",
+            "Subject",
+            "Body",
+            false,
+            EmailType::MessageNotification,
+            Some(&account_id),
+        )
+        .await
+        .unwrap();
+
+    let emails = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(emails.len(), 1);
+    assert_eq!(emails[0].id, id);
+    assert_eq!(emails[0].related_account_id, Some(account_id));
+    assert_eq!(emails[0].email_type, "message_notification");
+}
+
+#[tokio::test]
+async fn test_get_emails_needing_retry_notification() {
+    let db = setup_test_db().await;
+    let account_id = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+    // Create email with related account
+    let id = db
+        .queue_email_with_account(
+            "test@example.com",
+            "sender@example.com",
+            "Subject",
+            "Body",
+            false,
+            EmailType::MessageNotification,
+            Some(&account_id),
+        )
+        .await
+        .unwrap();
+
+    // Initially, no emails need retry notification (no failures yet)
+    let needing = db.get_emails_needing_retry_notification(10).await.unwrap();
+    assert_eq!(needing.len(), 0);
+
+    // Mark as failed once
+    db.mark_email_failed(&id, "Connection error").await.unwrap();
+
+    // Now it should need retry notification
+    let needing = db.get_emails_needing_retry_notification(10).await.unwrap();
+    assert_eq!(needing.len(), 1);
+    assert_eq!(needing[0].id, id);
+}
+
+#[tokio::test]
+async fn test_mark_retry_notified() {
+    let db = setup_test_db().await;
+    let account_id = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+    let id = db
+        .queue_email_with_account(
+            "test@example.com",
+            "sender@example.com",
+            "Subject",
+            "Body",
+            false,
+            EmailType::MessageNotification,
+            Some(&account_id),
+        )
+        .await
+        .unwrap();
+
+    db.mark_email_failed(&id, "Error").await.unwrap();
+
+    // Verify it needs retry notification
+    let needing = db.get_emails_needing_retry_notification(10).await.unwrap();
+    assert_eq!(needing.len(), 1);
+
+    // Mark as notified
+    db.mark_retry_notified(&id).await.unwrap();
+
+    // Should no longer need notification
+    let needing = db.get_emails_needing_retry_notification(10).await.unwrap();
+    assert_eq!(needing.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_emails_needing_gave_up_notification() {
+    let db = setup_test_db().await;
+    let account_id = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+    let id = db
+        .queue_email_with_account(
+            "test@example.com",
+            "sender@example.com",
+            "Subject",
+            "Body",
+            false,
+            EmailType::MessageNotification,
+            Some(&account_id),
+        )
+        .await
+        .unwrap();
+
+    // Initially, no emails need gave-up notification
+    let needing = db
+        .get_emails_needing_gave_up_notification(10)
+        .await
+        .unwrap();
+    assert_eq!(needing.len(), 0);
+
+    // Mark as permanently failed
+    db.mark_email_permanently_failed(&id).await.unwrap();
+
+    // Now it should need gave-up notification
+    let needing = db
+        .get_emails_needing_gave_up_notification(10)
+        .await
+        .unwrap();
+    assert_eq!(needing.len(), 1);
+    assert_eq!(needing[0].id, id);
+}
+
+#[tokio::test]
+async fn test_mark_gave_up_notified() {
+    let db = setup_test_db().await;
+    let account_id = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+    let id = db
+        .queue_email_with_account(
+            "test@example.com",
+            "sender@example.com",
+            "Subject",
+            "Body",
+            false,
+            EmailType::MessageNotification,
+            Some(&account_id),
+        )
+        .await
+        .unwrap();
+
+    db.mark_email_permanently_failed(&id).await.unwrap();
+
+    // Verify it needs gave-up notification
+    let needing = db
+        .get_emails_needing_gave_up_notification(10)
+        .await
+        .unwrap();
+    assert_eq!(needing.len(), 1);
+
+    // Mark as notified
+    db.mark_gave_up_notified(&id).await.unwrap();
+
+    // Should no longer need notification
+    let needing = db
+        .get_emails_needing_gave_up_notification(10)
+        .await
+        .unwrap();
+    assert_eq!(needing.len(), 0);
+}
+
+#[tokio::test]
+async fn test_emails_without_related_account_not_in_notification_queries() {
+    let db = setup_test_db().await;
+
+    // Create email WITHOUT related account
+    let id = db
+        .queue_email(
+            "test@example.com",
+            "sender@example.com",
+            "Subject",
+            "Body",
+            false,
+            EmailType::General,
+        )
+        .await
+        .unwrap();
+
+    db.mark_email_failed(&id, "Error").await.unwrap();
+
+    // Should NOT appear in retry notification query (no related_account_id)
+    let needing = db.get_emails_needing_retry_notification(10).await.unwrap();
+    assert_eq!(needing.len(), 0);
+
+    // Mark as permanently failed
+    db.mark_email_permanently_failed(&id).await.unwrap();
+
+    // Should NOT appear in gave-up notification query either
+    let needing = db
+        .get_emails_needing_gave_up_notification(10)
+        .await
+        .unwrap();
+    assert_eq!(needing.len(), 0);
 }

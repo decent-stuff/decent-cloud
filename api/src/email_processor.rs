@@ -1,4 +1,4 @@
-use crate::database::email::EmailType;
+use crate::database::email::{calculate_backoff_secs, EmailType};
 use crate::database::Database;
 use crate::email_service::{EmailService, EmailServiceExt};
 use std::sync::Arc;
@@ -37,22 +37,62 @@ impl EmailProcessor {
         let mut interval = tokio::time::interval(self.interval);
 
         // Process immediately on startup
-        if let Err(e) = self.process_batch().await {
-            tracing::error!("Initial email processing failed: {}", e);
-        }
-        if let Err(e) = self.process_message_notifications().await {
-            tracing::error!("Initial message notification processing failed: {}", e);
-        }
+        self.run_all_processors().await;
 
         loop {
             interval.tick().await;
-            if let Err(e) = self.process_batch().await {
-                tracing::error!("Email processing failed: {}", e);
-            }
-            if let Err(e) = self.process_message_notifications().await {
-                tracing::error!("Message notification processing failed: {}", e);
-            }
+            self.run_all_processors().await;
         }
+    }
+
+    async fn run_all_processors(&self) {
+        if let Err(e) = self.process_expired_emails().await {
+            tracing::error!("Expired email processing failed: {}", e);
+        }
+        if let Err(e) = self.process_batch().await {
+            tracing::error!("Email processing failed: {}", e);
+        }
+        if let Err(e) = self.process_message_notifications().await {
+            tracing::error!("Message notification processing failed: {}", e);
+        }
+        if let Err(e) = self.process_user_notifications().await {
+            tracing::error!("User notification processing failed: {}", e);
+        }
+    }
+
+    /// Mark emails that exceeded the 7-day window as permanently failed
+    async fn process_expired_emails(&self) -> anyhow::Result<()> {
+        let expired = self
+            .database
+            .get_expired_pending_emails(self.batch_size)
+            .await?;
+
+        if expired.is_empty() {
+            return Ok(());
+        }
+
+        let mut failed_count = 0;
+        for email in expired {
+            self.database
+                .mark_email_permanently_failed(&email.id)
+                .await?;
+            tracing::warn!(
+                "Email {} PERMANENTLY FAILED after 7 days (type: {}, attempts: {})",
+                hex::encode(&email.id),
+                email.email_type,
+                email.attempts
+            );
+            failed_count += 1;
+        }
+
+        if failed_count > 0 {
+            tracing::info!(
+                "Marked {} emails as permanently failed (7-day window expired)",
+                failed_count
+            );
+        }
+
+        Ok(())
     }
 
     async fn process_batch(&self) -> anyhow::Result<()> {
@@ -69,13 +109,8 @@ impl EmailProcessor {
         let mut skipped_count = 0;
 
         for email in pending {
-            // Calculate exponential backoff delay: 2^attempts minutes
-            let backoff_seconds = (if email.attempts > 0 {
-                2_i64.pow(email.attempts as u32) * 60
-            } else {
-                0
-            })
-            .min(20 * 60); // Max 20 minutes
+            // Calculate backoff: immediate, 1m, 2m, 4m, 8m, 16m, 32m, then 1h intervals
+            let backoff_seconds = calculate_backoff_secs(email.attempts);
 
             // Check if enough time has passed since last attempt
             if let Some(last_attempt) = email.last_attempted_at {
@@ -109,25 +144,14 @@ impl EmailProcessor {
                         .mark_email_failed(&email.id, &error_msg)
                         .await?;
 
-                    if email.attempts + 1 >= email.max_attempts {
-                        tracing::error!(
-                            "Email {} PERMANENTLY FAILED after {} attempts (type: {}): {}",
-                            hex::encode(&email.id),
-                            email.attempts + 1,
-                            email.email_type,
-                            error_msg
-                        );
-                    } else {
-                        tracing::warn!(
-                            "Email {} failed (attempt {}/{}, type: {}): {}",
-                            hex::encode(&email.id),
-                            email.attempts + 1,
-                            email.max_attempts,
-                            email.email_type,
-                            error_msg
-                        );
-                        retry_count += 1;
-                    }
+                    tracing::warn!(
+                        "Email {} failed (attempt {}, type: {}): {}",
+                        hex::encode(&email.id),
+                        email.attempts + 1,
+                        email.email_type,
+                        error_msg
+                    );
+                    retry_count += 1;
                 }
             }
         }
@@ -230,7 +254,7 @@ impl EmailProcessor {
             };
 
             // Get message details for email content
-            let (contract_id, _sender_name, message_body) =
+            let (contract_id, sender_pubkey, message_body) =
                 match self.get_message_details(&notification.message_id).await {
                     Ok(details) => details,
                     Err(e) => {
@@ -242,6 +266,15 @@ impl EmailProcessor {
                         continue;
                     }
                 };
+
+            // Get sender's account ID for failure notifications
+            let sender_account_id = match self.get_account_id_by_pubkey(&sender_pubkey).await {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::debug!("Could not get sender account ID: {}", e);
+                    None
+                }
+            };
 
             // Generate email content
             let subject = "New message in your rental contract";
@@ -285,19 +318,20 @@ impl EmailProcessor {
                 message_preview, view_url
             );
 
-            // Queue email
+            // Queue email with sender's account for failure notifications
             let from_addr = std::env::var("SMTP_FROM_ADDR")
                 .unwrap_or_else(|_| "noreply@decloud.org".to_string());
 
             match self
                 .database
-                .queue_email(
+                .queue_email_with_account(
                     &recipient_email,
                     &from_addr,
                     subject,
                     &body,
                     true,
                     EmailType::MessageNotification,
+                    sender_account_id.as_deref(),
                 )
                 .await
             {
@@ -384,6 +418,194 @@ impl EmailProcessor {
         let contract_id = message.contract_id;
 
         Ok((contract_id, sender_name, body))
+    }
+
+    /// Process user notifications for failed email deliveries
+    async fn process_user_notifications(&self) -> anyhow::Result<()> {
+        // Notify users about first-time failures (will retry)
+        let retry_notifications = self
+            .database
+            .get_emails_needing_retry_notification(self.batch_size)
+            .await?;
+
+        for email in retry_notifications {
+            if let Some(ref account_id) = email.related_account_id {
+                if let Err(e) = self.send_retry_notification(account_id, &email).await {
+                    tracing::warn!(
+                        "Failed to send retry notification for email {}: {}",
+                        hex::encode(&email.id),
+                        e
+                    );
+                    continue;
+                }
+            }
+            self.database.mark_retry_notified(&email.id).await?;
+        }
+
+        // Notify users about permanent failures (gave up after 7 days)
+        let gave_up_notifications = self
+            .database
+            .get_emails_needing_gave_up_notification(self.batch_size)
+            .await?;
+
+        for email in gave_up_notifications {
+            if let Some(ref account_id) = email.related_account_id {
+                if let Err(e) = self.send_gave_up_notification(account_id, &email).await {
+                    tracing::warn!(
+                        "Failed to send gave-up notification for email {}: {}",
+                        hex::encode(&email.id),
+                        e
+                    );
+                    continue;
+                }
+            }
+            self.database.mark_gave_up_notified(&email.id).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Send notification to user that email delivery failed but will be retried
+    async fn send_retry_notification(
+        &self,
+        account_id: &[u8],
+        failed_email: &crate::database::email::EmailQueueEntry,
+    ) -> anyhow::Result<()> {
+        let user_email = self.get_account_email(account_id).await?;
+        let Some(user_email) = user_email else {
+            tracing::debug!("No verified email for account, skipping retry notification");
+            return Ok(());
+        };
+
+        let from_addr =
+            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decloud.org".to_string());
+
+        let subject = "Email delivery issue - we're retrying";
+        let body = format!(
+            r#"<html>
+<body style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #f59e0b;">Email Delivery Issue</h2>
+        <p>We encountered an issue sending an email notification on your behalf.</p>
+
+        <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+            <p style="margin: 0;"><strong>Subject:</strong> {}</p>
+            <p style="margin: 5px 0 0 0;"><strong>Recipient:</strong> {}</p>
+        </div>
+
+        <p>Don't worry - we'll keep trying to deliver this email for up to 7 days. No action is needed from you.</p>
+
+        <p style="color: #6b7280; font-size: 12px; margin-top: 30px;">
+            This is an automated notification from your account.
+        </p>
+    </div>
+</body>
+</html>"#,
+            failed_email.subject, failed_email.to_addr
+        );
+
+        // Queue without related_account_id to avoid infinite loops
+        self.database
+            .queue_email(
+                &user_email,
+                &from_addr,
+                subject,
+                &body,
+                true,
+                EmailType::General,
+            )
+            .await?;
+
+        tracing::info!(
+            "Queued retry notification for account {} about email {}",
+            hex::encode(account_id),
+            hex::encode(&failed_email.id)
+        );
+
+        Ok(())
+    }
+
+    /// Send notification to user that we permanently gave up on email delivery
+    async fn send_gave_up_notification(
+        &self,
+        account_id: &[u8],
+        failed_email: &crate::database::email::EmailQueueEntry,
+    ) -> anyhow::Result<()> {
+        let user_email = self.get_account_email(account_id).await?;
+        let Some(user_email) = user_email else {
+            tracing::debug!("No verified email for account, skipping gave-up notification");
+            return Ok(());
+        };
+
+        let from_addr =
+            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decloud.org".to_string());
+
+        let subject = "Email delivery failed permanently";
+        let body = format!(
+            r#"<html>
+<body style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #dc2626;">Email Delivery Failed</h2>
+        <p>After trying for 7 days, we were unable to deliver an email notification on your behalf.</p>
+
+        <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <p style="margin: 0;"><strong>Subject:</strong> {}</p>
+            <p style="margin: 5px 0 0 0;"><strong>Recipient:</strong> {}</p>
+            <p style="margin: 5px 0 0 0;"><strong>Last error:</strong> {}</p>
+        </div>
+
+        <p>The recipient may need to check their email address or spam settings. You may want to contact them through another channel.</p>
+
+        <p style="color: #6b7280; font-size: 12px; margin-top: 30px;">
+            This is an automated notification from your account.
+        </p>
+    </div>
+</body>
+</html>"#,
+            failed_email.subject,
+            failed_email.to_addr,
+            failed_email
+                .last_error
+                .as_deref()
+                .unwrap_or("Unknown error")
+        );
+
+        // Queue without related_account_id to avoid infinite loops
+        self.database
+            .queue_email(
+                &user_email,
+                &from_addr,
+                subject,
+                &body,
+                true,
+                EmailType::General,
+            )
+            .await?;
+
+        tracing::info!(
+            "Queued gave-up notification for account {} about email {}",
+            hex::encode(account_id),
+            hex::encode(&failed_email.id)
+        );
+
+        Ok(())
+    }
+
+    /// Get verified email for an account
+    async fn get_account_email(&self, account_id: &[u8]) -> anyhow::Result<Option<String>> {
+        let contacts = self.database.get_account_contacts(account_id).await?;
+        for contact in contacts {
+            if contact.contact_type == "email" && contact.verified {
+                return Ok(Some(contact.contact_value));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Get account ID from pubkey hex string
+    async fn get_account_id_by_pubkey(&self, pubkey_hex: &str) -> anyhow::Result<Option<Vec<u8>>> {
+        let pubkey = hex::decode(pubkey_hex)?;
+        self.database.get_account_id_by_public_key(&pubkey).await
     }
 }
 
