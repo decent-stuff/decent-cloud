@@ -9,10 +9,13 @@ const apiURL = autoStartServers ? 'http://localhost:59011' : 'http://localhost:5
 /**
  * Playwright E2E Test Configuration
  *
- * Run modes:
- *   E2E_AUTO_SERVER=1 npm run test:e2e  - Auto-start API + website servers
- *   npm run test:e2e                     - Expect Docker containers running
- *   PLAYWRIGHT_BASE_URL=http://localhost:5173 npm run test:e2e - Manual servers
+ * DEFAULT: npm run test:e2e - Auto-starts API server (port 59011) + website (port 59010)
+ *
+ * Alternative run modes:
+ *   npm run test:e2e:docker  - Expect Docker containers running (ports 59000/59001)
+ *   PLAYWRIGHT_BASE_URL=http://localhost:5173 npm run test:e2e:docker - Custom servers
+ *
+ * The API server is built with SQLX_OFFLINE=true and uses a fresh e2e-test.db.
  */
 export default defineConfig({
 	testDir: './tests/e2e',

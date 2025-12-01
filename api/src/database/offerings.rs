@@ -718,7 +718,7 @@ impl Database {
         pubkey: &[u8],
         offering_ids: &[i64],
         new_status: &str,
-    ) -> Result<usize> {
+    ) -> Result<u64> {
         if offering_ids.is_empty() {
             return Ok(0);
         }
@@ -759,7 +759,7 @@ impl Database {
         }
 
         let result = update_builder.execute(&self.pool).await?;
-        Ok(result.rows_affected() as usize)
+        Ok(result.rows_affected())
     }
 
     // Helper function to convert Vec<String> to Option<String> (comma-separated)

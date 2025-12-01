@@ -14,12 +14,12 @@
 		"lint": "npm run check",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"test:e2e": "playwright test",
-		"test:e2e:auto": "E2E_AUTO_SERVER=1 playwright test",
-		"test:e2e:ui": "playwright test --ui",
-		"test:e2e:debug": "playwright test --debug",
-		"test:e2e:headed": "playwright test --headed",
-		"test:e2e:clean": "./tests/e2e/cleanup-test-data.sh && playwright test"
+		"test:e2e": "E2E_AUTO_SERVER=1 playwright test",
+		"test:e2e:docker": "playwright test",
+		"test:e2e:ui": "E2E_AUTO_SERVER=1 playwright test --ui",
+		"test:e2e:debug": "E2E_AUTO_SERVER=1 playwright test --debug",
+		"test:e2e:headed": "E2E_AUTO_SERVER=1 playwright test --headed",
+		"test:e2e:clean": "E2E_AUTO_SERVER=1 ./tests/e2e/cleanup-test-data.sh && playwright test"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.56.1",

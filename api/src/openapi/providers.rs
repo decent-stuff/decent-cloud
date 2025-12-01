@@ -539,7 +539,7 @@ impl ProvidersApi {
         auth: ApiAuthenticatedUser,
         pubkey: Path<String>,
         req: Json<BulkUpdateStatusRequest>,
-    ) -> Json<ApiResponse<usize>> {
+    ) -> Json<ApiResponse<u64>> {
         let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
             Err(e) => {

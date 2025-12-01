@@ -121,3 +121,58 @@ export async function resetEmail(identity: Ed25519KeyIdentity, emailId: string):
 export async function retryAllFailed(identity: Ed25519KeyIdentity): Promise<string> {
 	return authenticatedFetch<string>(identity, 'POST', '/api/v1/admin/emails/retry-all-failed');
 }
+
+/**
+ * Admin account info from API
+ */
+export interface AdminAccountInfo {
+	id: string;
+	username: string;
+	email: string | null;
+	emailVerified: boolean;
+	createdAt: number;
+	lastLoginAt: number | null;
+	isAdmin: boolean;
+	activeKeys: number;
+	totalKeys: number;
+}
+
+/**
+ * Send test email to verify configuration
+ */
+export async function sendTestEmail(
+	identity: Ed25519KeyIdentity,
+	toEmail: string
+): Promise<string> {
+	return authenticatedFetch<string>(identity, 'POST', '/api/v1/admin/emails/test', { toEmail });
+}
+
+/**
+ * Lookup account by username
+ */
+export async function getAccount(
+	identity: Ed25519KeyIdentity,
+	username: string
+): Promise<AdminAccountInfo> {
+	return authenticatedFetch<AdminAccountInfo>(
+		identity,
+		'GET',
+		`/api/v1/admin/accounts/${encodeURIComponent(username)}`
+	);
+}
+
+/**
+ * Set email verification status for an account
+ */
+export async function setEmailVerified(
+	identity: Ed25519KeyIdentity,
+	username: string,
+	verified: boolean
+): Promise<string> {
+	return authenticatedFetch<string>(
+		identity,
+		'POST',
+		`/api/v1/admin/accounts/${encodeURIComponent(username)}/email-verified`,
+		{ verified }
+	);
+}

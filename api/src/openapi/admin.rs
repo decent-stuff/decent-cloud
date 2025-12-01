@@ -1,12 +1,33 @@
-use super::common::{AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, ApiResponse, ApiTags};
+use super::common::{
+    AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, AdminSendTestEmailRequest,
+    AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
+};
 use crate::{
     auth::AdminAuthenticatedUser,
     database::email::{EmailQueueEntry, EmailStats},
     database::Database,
+    email_service::EmailService,
 };
 use poem::web::Data;
-use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
+use poem_openapi::{param::Path, param::Query, payload::Json, Object, OpenApi};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+/// Admin account info for lookup responses
+#[derive(Debug, Clone, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminAccountInfo {
+    pub id: String,
+    pub username: String,
+    pub email: Option<String>,
+    pub email_verified: bool,
+    pub created_at: i64,
+    pub last_login_at: Option<i64>,
+    pub is_admin: bool,
+    pub active_keys: i64,
+    pub total_keys: i64,
+}
 
 pub struct AdminApi;
 
@@ -377,6 +398,185 @@ impl AdminApi {
             Ok(stats) => Json(ApiResponse {
                 success: true,
                 data: Some(stats),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Send test email
+    ///
+    /// Sends a test email to verify email configuration. The email is sent via the queue
+    /// and processed by the email processor to verify the full email pipeline.
+    #[oai(path = "/admin/emails/test", method = "post", tag = "ApiTags::Admin")]
+    async fn admin_send_test_email(
+        &self,
+        email_service: Data<&Option<Arc<EmailService>>>,
+        _admin: AdminAuthenticatedUser,
+        req: Json<AdminSendTestEmailRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Check email service is configured
+        let Some(email_svc) = email_service.as_ref() else {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Email service not configured (missing MAILCHANNELS_API_KEY)".into()),
+            });
+        };
+
+        // Validate email
+        if let Err(e) = email_utils::validate_email(&req.to_email) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Invalid email: {}", e)),
+            });
+        }
+
+        // Send test email directly (not via queue) for immediate feedback
+        let subject = "Decent Cloud Admin Test Email";
+        let body = format!(
+            "This is a test email from the Decent Cloud Admin Dashboard.\n\n\
+            Timestamp: {}\n\n\
+            If you received this email, your email configuration is working correctly!\n\n\
+            Best regards,\n\
+            The Decent Cloud Team",
+            chrono::Utc::now().to_rfc3339()
+        );
+
+        match email_svc
+            .send_email(
+                "noreply@decent-cloud.org",
+                &req.to_email,
+                subject,
+                &body,
+                false,
+            )
+            .await
+        {
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: Some(format!("Test email sent to {}", req.to_email)),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to send test email: {:#}", e)),
+            }),
+        }
+    }
+
+    /// Admin: Lookup account by username
+    ///
+    /// Returns detailed account information including email verification status and key counts.
+    #[oai(
+        path = "/admin/accounts/:username",
+        method = "get",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_get_account(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        username: Path<String>,
+    ) -> Json<ApiResponse<AdminAccountInfo>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Get keys for counts
+        let keys = match db.get_account_keys(&account.id).await {
+            Ok(k) => k,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let active_keys = keys.iter().filter(|k| k.is_active != 0).count() as i64;
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(AdminAccountInfo {
+                id: hex::encode(&account.id),
+                username: account.username,
+                email: account.email,
+                email_verified: account.email_verified != 0,
+                created_at: account.created_at,
+                last_login_at: account.last_login_at,
+                is_admin: account.is_admin != 0,
+                active_keys,
+                total_keys: keys.len() as i64,
+            }),
+            error: None,
+        })
+    }
+
+    /// Admin: Set email verification status
+    ///
+    /// Allows admin to manually set email verification status for an account.
+    #[oai(
+        path = "/admin/accounts/:username/email-verified",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_set_email_verified(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        username: Path<String>,
+        req: Json<AdminSetEmailVerifiedRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Update email verification status
+        match db.set_email_verified(&account.id, req.verified).await {
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: Some(format!(
+                    "Email verification status set to {} for {}",
+                    req.verified, username.0
+                )),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

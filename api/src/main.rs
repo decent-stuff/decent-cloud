@@ -306,6 +306,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .at("/api/v1/canister/:method", post(canister_proxy))
         .data(ctx.database.clone())
         .data(ctx.metadata_cache.clone())
+        .data(ctx.email_service.clone())
         .with(CookieJarManager::new())
         .with(request_logging::RequestLogging)
         .with(cors);

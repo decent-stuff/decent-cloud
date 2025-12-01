@@ -238,6 +238,20 @@ pub struct AdminDisableKeyRequest {
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+pub struct AdminSendTestEmailRequest {
+    pub to_email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminSetEmailVerifiedRequest {
+    pub verified: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AdminAddRecoveryKeyRequest {
     pub public_key: String,
     pub reason: String,

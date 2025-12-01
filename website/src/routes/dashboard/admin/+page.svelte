@@ -7,8 +7,12 @@
 		getEmailStats,
 		resetEmail,
 		retryAllFailed,
+		sendTestEmail,
+		getAccount,
+		setEmailVerified,
 		type EmailQueueEntry,
 		type EmailStats,
+		type AdminAccountInfo,
 	} from "$lib/services/admin-api";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -20,6 +24,18 @@
 	let error = $state<string | null>(null);
 	let retryingEmailId = $state<string | null>(null);
 	let retryingAll = $state(false);
+
+	// Test email state
+	let testEmailAddress = $state("");
+	let sendingTestEmail = $state(false);
+	let testEmailResult = $state<{ success: boolean; message: string } | null>(null);
+
+	// Account lookup state
+	let lookupUsername = $state("");
+	let lookingUpAccount = $state(false);
+	let accountInfo = $state<AdminAccountInfo | null>(null);
+	let accountError = $state<string | null>(null);
+	let updatingEmailVerified = $state(false);
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
 
@@ -105,6 +121,61 @@
 	function formatTimestamp(ts: number): string {
 		return new Date(ts * 1000).toLocaleString();
 	}
+
+	async function handleSendTestEmail() {
+		if (!currentIdentity?.identity || !testEmailAddress.trim()) return;
+
+		sendingTestEmail = true;
+		testEmailResult = null;
+
+		try {
+			const result = await sendTestEmail(currentIdentity.identity, testEmailAddress.trim());
+			testEmailResult = { success: true, message: result };
+		} catch (err) {
+			testEmailResult = {
+				success: false,
+				message: err instanceof Error ? err.message : "Failed to send test email",
+			};
+		} finally {
+			sendingTestEmail = false;
+		}
+	}
+
+	async function handleLookupAccount() {
+		if (!currentIdentity?.identity || !lookupUsername.trim()) return;
+
+		lookingUpAccount = true;
+		accountInfo = null;
+		accountError = null;
+
+		try {
+			accountInfo = await getAccount(currentIdentity.identity, lookupUsername.trim());
+		} catch (err) {
+			accountError = err instanceof Error ? err.message : "Failed to lookup account";
+		} finally {
+			lookingUpAccount = false;
+		}
+	}
+
+	async function handleToggleEmailVerified() {
+		if (!currentIdentity?.identity || !accountInfo) return;
+
+		updatingEmailVerified = true;
+
+		try {
+			await setEmailVerified(
+				currentIdentity.identity,
+				accountInfo.username,
+				!accountInfo.emailVerified
+			);
+			// Refresh account info
+			accountInfo = await getAccount(currentIdentity.identity, accountInfo.username);
+		} catch (err) {
+			accountError = err instanceof Error ? err.message : "Failed to update email verification";
+		} finally {
+			updatingEmailVerified = false;
+		}
+	}
 </script>
 
 <div class="space-y-8">
@@ -169,6 +240,120 @@
 					</div>
 				</div>
 			{/if}
+
+			<!-- Test Email -->
+			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+				<h2 class="text-2xl font-bold text-white mb-4">Send Test Email</h2>
+				<p class="text-white/60 mb-4">
+					Test your email configuration by sending a test email.
+				</p>
+				<form onsubmit={(e) => { e.preventDefault(); handleSendTestEmail(); }} class="flex gap-4">
+					<input
+						type="email"
+						bind:value={testEmailAddress}
+						placeholder="recipient@example.com"
+						class="flex-1 px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+						required
+					/>
+					<button
+						type="submit"
+						disabled={sendingTestEmail || !testEmailAddress.trim()}
+						class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+					>
+						{sendingTestEmail ? "Sending..." : "Send Test"}
+					</button>
+				</form>
+				{#if testEmailResult}
+					<div class="mt-4 p-3 rounded-lg {testEmailResult.success ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}">
+						{testEmailResult.message}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Account Lookup -->
+			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+				<h2 class="text-2xl font-bold text-white mb-4">Account Lookup</h2>
+				<p class="text-white/60 mb-4">
+					Search for an account by username to view details and manage settings.
+				</p>
+				<form onsubmit={(e) => { e.preventDefault(); handleLookupAccount(); }} class="flex gap-4 mb-4">
+					<input
+						type="text"
+						bind:value={lookupUsername}
+						placeholder="username"
+						class="flex-1 px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+						required
+					/>
+					<button
+						type="submit"
+						disabled={lookingUpAccount || !lookupUsername.trim()}
+						class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+					>
+						{lookingUpAccount ? "Searching..." : "Lookup"}
+					</button>
+				</form>
+
+				{#if accountError}
+					<div class="p-3 rounded-lg bg-red-500/20 text-red-200 mb-4">
+						{accountError}
+					</div>
+				{/if}
+
+				{#if accountInfo}
+					<div class="bg-white/5 rounded-lg p-4 space-y-4">
+						<div class="grid grid-cols-2 gap-4">
+							<div>
+								<p class="text-white/50 text-sm">Username</p>
+								<p class="text-white font-medium">@{accountInfo.username}</p>
+							</div>
+							<div>
+								<p class="text-white/50 text-sm">Account ID</p>
+								<p class="text-white font-mono text-sm">{accountInfo.id.slice(0, 8)}...{accountInfo.id.slice(-8)}</p>
+							</div>
+							<div>
+								<p class="text-white/50 text-sm">Email</p>
+								<p class="text-white">{accountInfo.email || "Not set"}</p>
+							</div>
+							<div>
+								<p class="text-white/50 text-sm">Email Verified</p>
+								<div class="flex items-center gap-2">
+									<span class="{accountInfo.emailVerified ? 'text-green-400' : 'text-red-400'}">
+										{accountInfo.emailVerified ? "Yes" : "No"}
+									</span>
+									<button
+										type="button"
+										onclick={handleToggleEmailVerified}
+										disabled={updatingEmailVerified}
+										class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+									>
+										{updatingEmailVerified ? "..." : accountInfo.emailVerified ? "Unverify" : "Verify"}
+									</button>
+								</div>
+							</div>
+							<div>
+								<p class="text-white/50 text-sm">Created</p>
+								<p class="text-white">{formatTimestamp(accountInfo.createdAt)}</p>
+							</div>
+							<div>
+								<p class="text-white/50 text-sm">Last Login</p>
+								<p class="text-white">
+									{accountInfo.lastLoginAt ? formatTimestamp(accountInfo.lastLoginAt) : "Never"}
+								</p>
+							</div>
+							<div>
+								<p class="text-white/50 text-sm">Active Keys</p>
+								<p class="text-white">{accountInfo.activeKeys} / {accountInfo.totalKeys}</p>
+							</div>
+							<div>
+								<p class="text-white/50 text-sm">Admin</p>
+								<p class="{accountInfo.isAdmin ? 'text-yellow-400' : 'text-white'}">
+									{accountInfo.isAdmin ? "Yes" : "No"}
+								</p>
+							</div>
+						</div>
+					</div>
+				{/if}
+			</div>
 
 			<!-- Failed Emails -->
 			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">

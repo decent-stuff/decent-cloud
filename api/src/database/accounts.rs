@@ -14,6 +14,8 @@ pub struct Account {
     pub auth_provider: String,
     // Email for account linking (nullable for backward compatibility)
     pub email: Option<String>,
+    // Email verification status
+    pub email_verified: i64,
     // Profile fields (nullable)
     pub display_name: Option<String>,
     pub bio: Option<String>,
@@ -235,7 +237,7 @@ impl Database {
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
              FROM accounts WHERE id = ?",
         )
         .bind(account_id)
@@ -248,7 +250,7 @@ impl Database {
     /// Get account by username (case-insensitive search)
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
              FROM accounts WHERE LOWER(username) = LOWER(?)",
         )
         .bind(username)
@@ -652,7 +654,7 @@ impl Database {
     /// Get account by email
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
              FROM accounts WHERE email = ?",
         )
         .bind(email)
@@ -786,13 +788,29 @@ impl Database {
     /// List all admin accounts
     pub async fn list_admins(&self) -> Result<Vec<Account>> {
         let admins = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
              FROM accounts WHERE is_admin = 1 ORDER BY username ASC"
         )
         .fetch_all(&self.pool)
         .await?;
 
         Ok(admins)
+    }
+
+    /// Admin: Set email verification status for an account
+    pub async fn set_email_verified(&self, account_id: &[u8], verified: bool) -> Result<()> {
+        let verified_value = if verified { 1 } else { 0 };
+        let result = sqlx::query("UPDATE accounts SET email_verified = ? WHERE id = ?")
+            .bind(verified_value)
+            .bind(account_id)
+            .execute(&self.pool)
+            .await?;
+
+        if result.rows_affected() == 0 {
+            bail!("Account not found");
+        }
+
+        Ok(())
     }
 }
 

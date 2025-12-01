@@ -1,9 +1,4 @@
 
-### Admin Dashboard Improvements
-- [ ] Send test email to verify configuration
-- [ ] Account lookup and management (view keys, disable keys, add recovery keys)
-- [ ] View/edit account email verification status
-
 ## Provider Trust & Reliability System
 
 ### Trust Dashboard (Core Display)
