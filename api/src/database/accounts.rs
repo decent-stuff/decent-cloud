@@ -699,10 +699,10 @@ impl Database {
         // Start transaction
         let mut tx = self.pool.begin().await?;
 
-        // Insert account with email
+        // Insert account with email and verified status (OAuth providers have already verified the email)
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO accounts (id, username, email, auth_provider) VALUES (?, ?, ?, ?)",
+            "INSERT INTO accounts (id, username, email, auth_provider, email_verified) VALUES (?, ?, ?, ?, 1)",
         )
         .bind(&account_id)
         .bind(username)

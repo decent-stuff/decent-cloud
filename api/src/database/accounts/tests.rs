@@ -1170,3 +1170,59 @@ async fn test_disabled_key_cannot_lookup_account() {
         "Disabled key should NOT find account"
     );
 }
+
+#[tokio::test]
+async fn test_oauth_account_creation_sets_email_verified() {
+    let db = create_test_db().await;
+
+    let pubkey = [10u8; 32];
+    let (account, _oauth_acc) = db
+        .create_oauth_linked_account(
+            "oauth_user",
+            &pubkey,
+            "oauth@example.com",
+            "google_oauth",
+            "google_123",
+        )
+        .await
+        .unwrap();
+
+    // Verify email_verified is set to 1 (true)
+    assert_eq!(account.email_verified, 1, "OAuth accounts should have email_verified set to 1");
+}
+
+#[tokio::test]
+async fn test_oauth_linking_to_existing_account_sets_email_verified() {
+    let db = create_test_db().await;
+
+    // Create an account with unverified email
+    let account = db
+        .create_account("existing_user", &[11u8; 32], "existing@example.com")
+        .await
+        .unwrap();
+
+    // Verify email is not verified initially
+    assert_eq!(account.email_verified, 0, "New accounts should have email_verified=0");
+
+    // Link OAuth account to existing account
+    db.create_oauth_account(
+        &account.id,
+        "google_oauth",
+        "google_456",
+        Some("existing@example.com"),
+    )
+    .await
+    .unwrap();
+
+    // Set email as verified (simulating what oauth_simple.rs does)
+    db.set_email_verified(&account.id, true).await.unwrap();
+
+    // Fetch account again and verify email_verified is now set
+    let updated_account = db
+        .get_account_by_username("existing_user")
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(updated_account.email_verified, 1, "Linking OAuth should set email_verified to 1");
+}

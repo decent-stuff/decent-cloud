@@ -265,6 +265,16 @@ pub async fn google_callback(
                 )
             })?;
 
+            // Mark email as verified since OAuth provider has verified it
+            db.set_email_verified(&existing_account.id, true)
+                .await
+                .map_err(|e| {
+                    poem::Error::from_string(
+                        format!("Failed to set email verified: {}", e),
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })?;
+
             tracing::info!(
                 "Linked Google OAuth account {} to existing account {} by email",
                 user_info.id,
