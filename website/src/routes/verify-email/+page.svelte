@@ -71,10 +71,15 @@
 			{#if currentState === 'success'}
 				<div class="space-y-4 text-center py-8">
 					<div class="text-6xl">✅</div>
-					<h3 class="text-2xl font-bold text-white">Email Verified!</h3>
-					<p class="text-white/60">
-						{successMessage || 'You can now use all features.'}
-					</p>
+					<h3 class="text-2xl font-bold text-green-400">Email Verified!</h3>
+					<div class="space-y-2">
+						<p class="text-white text-lg">
+							Thank you for verifying your email!
+						</p>
+						<p class="text-white/70">
+							Your account reputation has been improved. You now have full access to all platform features.
+						</p>
+					</div>
 
 					<div class="pt-4 flex flex-col gap-3">
 						<button
