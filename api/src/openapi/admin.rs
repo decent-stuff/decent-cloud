@@ -1,5 +1,9 @@
 use super::common::{AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, ApiResponse, ApiTags};
-use crate::{auth::AdminAuthenticatedUser, database::email::EmailQueueEntry, database::Database};
+use crate::{
+    auth::AdminAuthenticatedUser,
+    database::email::{EmailQueueEntry, EmailStats},
+    database::Database,
+};
 use poem::web::Data;
 use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
 use std::sync::Arc;
@@ -272,6 +276,107 @@ impl AdminApi {
             Ok(_) => Json(ApiResponse {
                 success: true,
                 data: Some("Email queued for retry".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Reset email for retry
+    ///
+    /// Resets a single email back to pending status with 0 attempts, clearing any error state.
+    /// Works on any email regardless of current status.
+    #[oai(
+        path = "/admin/emails/reset/:email_id",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_reset_email(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        email_id: Path<String>,
+    ) -> Json<ApiResponse<String>> {
+        let email_id_bytes = match hex::decode(&email_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid email ID format".to_string()),
+                })
+            }
+        };
+
+        match db.reset_email_for_retry(&email_id_bytes).await {
+            Ok(found) => {
+                if found {
+                    Json(ApiResponse {
+                        success: true,
+                        data: Some("Email reset for retry".to_string()),
+                        error: None,
+                    })
+                } else {
+                    Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Email not found".to_string()),
+                    })
+                }
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Retry all failed emails
+    ///
+    /// Bulk operation to reset all failed emails back to pending status.
+    /// Returns the count of emails that were reset.
+    #[oai(
+        path = "/admin/emails/retry-all-failed",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_retry_all_failed_emails(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+    ) -> Json<ApiResponse<u64>> {
+        match db.retry_all_failed_emails().await {
+            Ok(count) => Json(ApiResponse {
+                success: true,
+                data: Some(count),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Get email queue statistics
+    ///
+    /// Returns statistics about the email queue including counts of pending, sent, failed, and total emails.
+    #[oai(path = "/admin/emails/stats", method = "get", tag = "ApiTags::Admin")]
+    async fn admin_get_email_stats(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+    ) -> Json<ApiResponse<EmailStats>> {
+        match db.get_email_stats().await {
+            Ok(stats) => Json(ApiResponse {
+                success: true,
+                data: Some(stats),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

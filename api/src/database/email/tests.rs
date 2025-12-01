@@ -273,3 +273,237 @@ async fn test_queue_email_safe_with_none_address() {
     let pending = db.get_pending_emails(10).await.unwrap();
     assert_eq!(pending.len(), 0);
 }
+
+#[tokio::test]
+async fn test_reset_email_for_retry_success() {
+    let db = setup_test_db().await;
+
+    // Create and fail an email
+    let id = db
+        .queue_email(
+            "test@example.com",
+            "sender@example.com",
+            "Subject",
+            "Body",
+            false,
+            EmailType::General,
+        )
+        .await
+        .unwrap();
+
+    for _ in 0..6 {
+        db.mark_email_failed(&id, "Test error").await.unwrap();
+    }
+
+    // Verify it's failed
+    let failed = db.get_failed_emails(10).await.unwrap();
+    assert_eq!(failed.len(), 1);
+    assert_eq!(failed[0].status, "failed");
+    assert_eq!(failed[0].attempts, 6);
+
+    // Reset it
+    let result = db.reset_email_for_retry(&id).await.unwrap();
+    assert!(result);
+
+    // Verify it's back in pending queue with reset attempts
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].status, "pending");
+    assert_eq!(pending[0].attempts, 0);
+    assert!(pending[0].last_error.is_none());
+}
+
+#[tokio::test]
+async fn test_reset_email_for_retry_not_found() {
+    let db = setup_test_db().await;
+
+    let nonexistent_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+    let result = db.reset_email_for_retry(&nonexistent_id).await.unwrap();
+    assert!(!result);
+}
+
+#[tokio::test]
+async fn test_retry_all_failed_emails_none() {
+    let db = setup_test_db().await;
+
+    let count = db.retry_all_failed_emails().await.unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_retry_all_failed_emails_multiple() {
+    let db = setup_test_db().await;
+
+    // Create and fail 3 emails
+    for i in 0..3 {
+        let id = db
+            .queue_email(
+                &format!("test{}@example.com", i),
+                "sender@example.com",
+                "Subject",
+                "Body",
+                false,
+                EmailType::General,
+            )
+            .await
+            .unwrap();
+
+        for _ in 0..6 {
+            db.mark_email_failed(&id, "Test error").await.unwrap();
+        }
+    }
+
+    // Verify all are failed
+    let failed = db.get_failed_emails(10).await.unwrap();
+    assert_eq!(failed.len(), 3);
+
+    // Reset all failed
+    let count = db.retry_all_failed_emails().await.unwrap();
+    assert_eq!(count, 3);
+
+    // Verify all are back in pending
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 3);
+    for email in &pending {
+        assert_eq!(email.status, "pending");
+        assert_eq!(email.attempts, 0);
+        assert!(email.last_error.is_none());
+    }
+
+    // Verify failed queue is empty
+    let failed = db.get_failed_emails(10).await.unwrap();
+    assert_eq!(failed.len(), 0);
+}
+
+#[tokio::test]
+async fn test_retry_all_failed_emails_excludes_pending_and_sent() {
+    let db = setup_test_db().await;
+
+    // Create one pending email
+    db.queue_email(
+        "pending@example.com",
+        "sender@example.com",
+        "Pending",
+        "Body",
+        false,
+        EmailType::General,
+    )
+    .await
+    .unwrap();
+
+    // Create and send one email
+    let sent_id = db
+        .queue_email(
+            "sent@example.com",
+            "sender@example.com",
+            "Sent",
+            "Body",
+            false,
+            EmailType::General,
+        )
+        .await
+        .unwrap();
+    db.mark_email_sent(&sent_id).await.unwrap();
+
+    // Create and fail one email
+    let failed_id = db
+        .queue_email(
+            "failed@example.com",
+            "sender@example.com",
+            "Failed",
+            "Body",
+            false,
+            EmailType::General,
+        )
+        .await
+        .unwrap();
+    for _ in 0..6 {
+        db.mark_email_failed(&failed_id, "Error").await.unwrap();
+    }
+
+    // Retry all failed - should only affect the 1 failed email
+    let count = db.retry_all_failed_emails().await.unwrap();
+    assert_eq!(count, 1);
+
+    // Verify pending queue now has 2 emails (original pending + reset failed)
+    let pending = db.get_pending_emails(10).await.unwrap();
+    assert_eq!(pending.len(), 2);
+}
+
+#[tokio::test]
+async fn test_get_email_stats_empty() {
+    let db = setup_test_db().await;
+
+    let stats = db.get_email_stats().await.unwrap();
+    assert_eq!(stats.pending, 0);
+    assert_eq!(stats.sent, 0);
+    assert_eq!(stats.failed, 0);
+    assert_eq!(stats.total, 0);
+}
+
+#[tokio::test]
+async fn test_get_email_stats_accuracy() {
+    let db = setup_test_db().await;
+
+    // Create 2 pending emails
+    db.queue_email(
+        "pending1@example.com",
+        "sender@example.com",
+        "Pending 1",
+        "Body",
+        false,
+        EmailType::General,
+    )
+    .await
+    .unwrap();
+
+    db.queue_email(
+        "pending2@example.com",
+        "sender@example.com",
+        "Pending 2",
+        "Body",
+        false,
+        EmailType::General,
+    )
+    .await
+    .unwrap();
+
+    // Create and send 3 emails
+    for i in 0..3 {
+        let id = db
+            .queue_email(
+                &format!("sent{}@example.com", i),
+                "sender@example.com",
+                "Sent",
+                "Body",
+                false,
+                EmailType::General,
+            )
+            .await
+            .unwrap();
+        db.mark_email_sent(&id).await.unwrap();
+    }
+
+    // Create and fail 1 email
+    let failed_id = db
+        .queue_email(
+            "failed@example.com",
+            "sender@example.com",
+            "Failed",
+            "Body",
+            false,
+            EmailType::General,
+        )
+        .await
+        .unwrap();
+    for _ in 0..6 {
+        db.mark_email_failed(&failed_id, "Error").await.unwrap();
+    }
+
+    // Verify stats
+    let stats = db.get_email_stats().await.unwrap();
+    assert_eq!(stats.pending, 2);
+    assert_eq!(stats.sent, 3);
+    assert_eq!(stats.failed, 1);
+    assert_eq!(stats.total, 6);
+}

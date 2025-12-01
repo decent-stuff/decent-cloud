@@ -54,6 +54,16 @@ pub struct EmailQueueEntry {
     pub sent_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct EmailStats {
+    pub pending: i64,
+    pub sent: i64,
+    pub failed: i64,
+    pub total: i64,
+}
+
 impl Database {
     pub async fn queue_email(
         &self,
@@ -135,6 +145,59 @@ impl Database {
         .await?;
 
         Ok(())
+    }
+
+    /// Reset a single email for retry - reset attempts to 0, status to pending, clear last_error
+    /// Returns true if an email was found and reset
+    pub async fn reset_email_for_retry(&self, id: &[u8]) -> Result<bool> {
+        let result = sqlx::query!(
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL WHERE id = ?",
+            id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Reset all failed emails to pending status for bulk retry
+    /// Returns the count of emails reset
+    pub async fn retry_all_failed_emails(&self) -> Result<u64> {
+        let result = sqlx::query!(
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL WHERE status = 'failed'"
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Get email queue statistics
+    pub async fn get_email_stats(&self) -> Result<EmailStats> {
+        let pending =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue WHERE status = 'pending'")
+                .fetch_one(&self.pool)
+                .await?;
+
+        let sent = sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue WHERE status = 'sent'")
+            .fetch_one(&self.pool)
+            .await?;
+
+        let failed =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue WHERE status = 'failed'")
+                .fetch_one(&self.pool)
+                .await?;
+
+        let total = sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue")
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(EmailStats {
+            pending,
+            sent,
+            failed,
+            total,
+        })
     }
 
     pub async fn mark_email_sent(&self, id: &[u8]) -> Result<()> {
