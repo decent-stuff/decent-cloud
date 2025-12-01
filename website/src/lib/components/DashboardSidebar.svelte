@@ -41,18 +41,23 @@
 			currentIdentity = value;
 		});
 
-		unsubscribeAuth = authStore.isAuthenticated.subscribe(async (isAuth) => {
-			if (isAuth) {
-				await messagesStore.loadUnreadCount();
-				// Poll for new messages every 30 seconds
-				if (!pollInterval) {
-					pollInterval = setInterval(() => messagesStore.loadUnreadCount(), 30000);
+		unsubscribeAuth = authStore.isAuthenticated.subscribe(
+			async (isAuth) => {
+				if (isAuth) {
+					await messagesStore.loadUnreadCount();
+					// Poll for new messages every 10 seconds
+					if (!pollInterval) {
+						pollInterval = setInterval(
+							() => messagesStore.loadUnreadCount(),
+							10000,
+						);
+					}
+				} else if (pollInterval) {
+					clearInterval(pollInterval);
+					pollInterval = null;
 				}
-			} else if (pollInterval) {
-				clearInterval(pollInterval);
-				pollInterval = null;
-			}
-		});
+			},
+		);
 
 		unsubscribeUnread = messagesStore.unreadCount.subscribe((count) => {
 			unreadCount = count;
@@ -134,7 +139,9 @@
 			<a
 				href="/dashboard/admin"
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath.startsWith('/dashboard/admin')
+				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath.startsWith(
+					'/dashboard/admin',
+				)
 					? 'bg-blue-600 text-white'
 					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
 			>
