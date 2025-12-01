@@ -15,20 +15,13 @@ script = '''
 set -eEuo pipefail
 
 cd ic-canister
-OUTPUT=$(
-    for i in {1..10}; do dfx stop 2>&1 && break; sleep 1; pkill -9 -f versions || true; done;
-    dfx start --background --clean 2>&1
-    while true; do
-        dfx ping local 2>&1 && break;
-        sleep 1;
-    done;
-    dfx canister create --all 2>&1
-)
-RESULT=$?
-if [ $RESULT -ne 0 ]; then
-    echo "$OUTPUT"
-    exit $RESULT
-fi
+for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done;
+dfx start --background --clean
+while true; do
+    dfx ping local && break;
+    sleep 1;
+done;
+dfx canister create --all
 '''
 
 [tasks.format]
@@ -39,18 +32,9 @@ args = ["fmt", "--", "--emit=files"]
 
 [tasks.canister]
 dependencies = ["dfx-start"]
-script = '''
-#!/usr/bin/env bash
-set -eEuo pipefail
-
-cd ic-canister
-OUTPUT=$(dfx build --all 2>&1)
-RESULT=$?
-if [ $RESULT -ne 0 ]; then
-    echo "$OUTPUT"
-    exit $RESULT
-fi
-'''
+command = "dfx"
+args = ["build", "--all"]
+cwd = "./ic-canister/"
 
 [tasks.clippy]
 dependencies = ["sqlx-prepare", "dfx-start"]
@@ -107,15 +91,9 @@ args = ["nextest", "run"]
 [tasks.dfx-stop]
 script = '''
 #!/usr/bin/env bash
-set -eEuo pipefail
+set -eExuo pipefail
 
-cd ic-canister
-OUTPUT=$(for i in {1..10}; do dfx stop 2>&1 && break; sleep 1; pkill -9 -f versions || true; done)
-RESULT=$?
-if [ $RESULT -ne 0 ]; then
-    echo "$OUTPUT"
-    exit $RESULT
-fi
+( cd ./ic-canister && for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done; )
 '''
 
 [tasks.sqlx-prepare]
