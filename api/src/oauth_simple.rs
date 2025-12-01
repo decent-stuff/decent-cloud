@@ -284,13 +284,36 @@ pub async fn google_callback(
         (None, None)
     };
 
-    if username.is_some() {
-        // User has account - set persistent oauth_keypair cookie
+    if let (Some(ref acc_id), Some(ref uname)) = (&account_id, &username) {
+        // User has account - add session key to database and set cookie
+        let account_id_bytes = hex::decode(acc_id).map_err(|e| {
+            poem::Error::from_string(
+                format!("Failed to decode account ID: {}", e),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            )
+        })?;
+
+        // Add new session key to account (for signing API requests)
+        db.add_account_key(&account_id_bytes, &public_key)
+            .await
+            .map_err(|e| {
+                poem::Error::from_string(
+                    format!("Failed to add session key: {}", e),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            })?;
+
+        tracing::info!(
+            "Added OAuth session key for account {} ({})",
+            uname,
+            hex::encode(&public_key)
+        );
+
         let cookie_data = SessionKeypairData {
             private_key: hex::encode(&private_key),
             public_key: hex::encode(&public_key),
-            account_id,
-            username: username.clone(),
+            account_id: Some(acc_id.clone()),
+            username: Some(uname.clone()),
         };
 
         let cookie_value = serde_json::to_string(&cookie_data).map_err(|e| {

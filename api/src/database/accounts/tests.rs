@@ -1077,3 +1077,96 @@ async fn test_get_account_with_keys_by_public_key_includes_is_admin() {
         "Admin should have is_admin=true"
     );
 }
+
+/// Test that new session keys (added on OAuth re-login) can be used for account lookup.
+/// This verifies the fix for admin auth failing when OAuth users log in again.
+#[tokio::test]
+async fn test_oauth_session_key_can_lookup_account() {
+    let db = create_test_db().await;
+
+    // Create OAuth account with initial key (simulates first OAuth registration)
+    let initial_key = [10u8; 32];
+    let (account, _oauth) = db
+        .create_oauth_linked_account(
+            "oauthuser",
+            &initial_key,
+            "oauth@example.com",
+            "google_oauth",
+            "google_123",
+        )
+        .await
+        .unwrap();
+
+    // Verify initial key can lookup account
+    let account_id = db.get_account_id_by_public_key(&initial_key).await.unwrap();
+    assert!(account_id.is_some(), "Initial key should find account");
+    assert_eq!(account_id.unwrap(), account.id);
+
+    // Add a new session key (simulates what happens on OAuth re-login)
+    let session_key = [11u8; 32];
+    db.add_account_key(&account.id, &session_key).await.unwrap();
+
+    // Verify new session key can also lookup account (this is what admin auth does)
+    let account_id = db.get_account_id_by_public_key(&session_key).await.unwrap();
+    assert!(
+        account_id.is_some(),
+        "New session key should find account for admin auth"
+    );
+    assert_eq!(account_id.unwrap(), account.id);
+}
+
+/// Test that disabled keys cannot be used for account lookup
+#[tokio::test]
+async fn test_disabled_key_cannot_lookup_account() {
+    let db = create_test_db().await;
+
+    // Create account with two keys
+    let key1 = [20u8; 32];
+    let key2 = [21u8; 32];
+
+    let account = db
+        .create_account("twokeys", &key1, "twokeys@example.com")
+        .await
+        .unwrap();
+    let key2_record = db.add_account_key(&account.id, &key2).await.unwrap();
+
+    // Both keys should work initially
+    assert!(db
+        .get_account_id_by_public_key(&key1)
+        .await
+        .unwrap()
+        .is_some());
+    assert!(db
+        .get_account_id_by_public_key(&key2)
+        .await
+        .unwrap()
+        .is_some());
+
+    // Disable key2
+    let keys = db.get_account_keys(&account.id).await.unwrap();
+    let key1_id = keys
+        .iter()
+        .find(|k| k.public_key == key1)
+        .unwrap()
+        .id
+        .clone();
+    db.disable_account_key(&key2_record.id, &key1_id)
+        .await
+        .unwrap();
+
+    // key1 should still work, key2 should not (is_active = 0)
+    assert!(
+        db.get_account_id_by_public_key(&key1)
+            .await
+            .unwrap()
+            .is_some(),
+        "Active key should still find account"
+    );
+    assert!(
+        db.get_account_id_by_public_key(&key2)
+            .await
+            .unwrap()
+            .is_none(),
+        "Disabled key should NOT find account"
+    );
+}
