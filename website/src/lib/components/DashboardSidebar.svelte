@@ -15,6 +15,7 @@
 	let unsubscribeIdentity: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 	let unsubscribeUnread: (() => void) | null = null;
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 	const navItems = $derived([
 		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
@@ -43,6 +44,13 @@
 		unsubscribeAuth = authStore.isAuthenticated.subscribe(async (isAuth) => {
 			if (isAuth) {
 				await messagesStore.loadUnreadCount();
+				// Poll for new messages every 30 seconds
+				if (!pollInterval) {
+					pollInterval = setInterval(() => messagesStore.loadUnreadCount(), 30000);
+				}
+			} else if (pollInterval) {
+				clearInterval(pollInterval);
+				pollInterval = null;
 			}
 		});
 
@@ -55,6 +63,7 @@
 		unsubscribeIdentity?.();
 		unsubscribeAuth?.();
 		unsubscribeUnread?.();
+		if (pollInterval) clearInterval(pollInterval);
 	});
 
 	async function handleLogout() {
