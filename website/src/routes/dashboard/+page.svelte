@@ -21,6 +21,22 @@
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let trustMetricsLoading = $state(false);
 
+	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
+		if (!publicKeyBytes) {
+			trustMetrics = null;
+			return;
+		}
+
+		trustMetricsLoading = true;
+		try {
+			trustMetrics = await getProviderTrustMetrics(publicKeyBytes);
+		} catch {
+			trustMetrics = null; // User has no trust data yet
+		} finally {
+			trustMetricsLoading = false;
+		}
+	}
+
 	onMount(() => {
 		if (!browser) return;
 
@@ -30,20 +46,9 @@
 		const unsubscribeError = dashboardStore.error.subscribe((value) => {
 			error = value;
 		});
-		const unsubscribeAuth = authStore.currentIdentity.subscribe(async (value) => {
+		const unsubscribeAuth = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
-			if (value?.publicKeyBytes) {
-				trustMetricsLoading = true;
-				try {
-					trustMetrics = await getProviderTrustMetrics(value.publicKeyBytes);
-				} catch {
-					trustMetrics = null; // User has no trust data yet
-				} finally {
-					trustMetricsLoading = false;
-				}
-			} else {
-				trustMetrics = null;
-			}
+			loadTrustMetrics(value?.publicKeyBytes ?? null);
 		});
 
 		dashboardStore.load();
