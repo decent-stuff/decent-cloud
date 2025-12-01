@@ -30,6 +30,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/019_last_login_tracking.sql"),
         include_str!("../../migrations/020_email_verification.sql"),
         include_str!("../../migrations/021_admin_accounts.sql"),
+        include_str!("../../migrations/022_messaging.sql"),
     ];
 
     for migration in &migrations {
