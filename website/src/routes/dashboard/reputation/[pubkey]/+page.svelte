@@ -45,10 +45,14 @@
 	let contacts = $state<UserContact[]>([]);
 	let socials = $state<UserSocial[]>([]);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
+	let accountInfo = $state<{ emailVerified: boolean; email?: string } | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isNotFound = $state(false);
 	let currentIdentity = $state<IdentityInfo | null>(null);
+
+	// Filter out email contacts (account email is now separate)
+	const filteredContacts = $derived(contacts.filter(c => c.contactType !== 'email'));
 
 	authStore.currentIdentity.subscribe((value) => {
 		currentIdentity = value;
@@ -207,6 +211,10 @@
 				const account = await getAccountByPublicKey(pubkey);
 				if (account) {
 					accountExists = true;
+					accountInfo = {
+						emailVerified: account.emailVerified,
+						email: account.email,
+					};
 					// Use account username as display name if no profile
 					if (!profile) {
 						profile = {
@@ -316,11 +324,11 @@
 		</div>
 
 		<!-- Contact Information & Socials -->
-		{#if contacts.length > 0 || socials.length > 0}
+		{#if filteredContacts.length > 0 || socials.length > 0 || accountInfo?.emailVerified}
 			<div class="mt-4 pt-4 border-t border-white/10">
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					<!-- Contacts -->
-					{#if contacts.length > 0}
+					{#if filteredContacts.length > 0 || accountInfo?.emailVerified}
 						<div>
 							<h3
 								class="text-sm font-semibold text-white/80 mb-2"
@@ -328,29 +336,24 @@
 								Contact
 							</h3>
 							<div class="space-y-2">
-								{#each contacts as contact}
+								{#if accountInfo?.emailVerified}
+									<div class="flex items-center gap-2 text-sm">
+										<span class="text-white/60">Email:</span>
+										<span class="text-green-400 text-xs bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30">
+											✓ Verified
+										</span>
+									</div>
+								{/if}
+								{#each filteredContacts as contact}
 									<div
 										class="flex items-center gap-2 text-sm"
 									>
 										<span class="text-white/60 capitalize"
 											>{contact.contactType}:</span
 										>
-										{#if contact.contactType === "email"}
-											<a
-												href="mailto:{contact.contactValue}"
-												class="text-blue-400 hover:text-blue-300"
-											>
-												{contact.contactValue}
-											</a>
-										{:else if contact.contactType === "discord"}
-											<span class="text-white/90"
-												>{contact.contactValue}</span
-											>
-										{:else}
-											<span class="text-white/90"
-												>{contact.contactValue}</span
-											>
-										{/if}
+										<span class="text-white/90"
+											>{contact.contactValue}</span
+										>
 										{#if contact.verified}
 											<span class="text-green-400 text-xs"
 												>✓</span

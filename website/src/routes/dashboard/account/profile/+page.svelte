@@ -4,11 +4,13 @@
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import UserProfileEditor from "$lib/components/UserProfileEditor.svelte";
+	import AccountEmailEditor from "$lib/components/AccountEmailEditor.svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let isAuthenticated = $state(false);
+	let accountEmail = $state<string>('');
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 
@@ -19,8 +21,13 @@
 
 		unsubscribe = authStore.activeIdentity.subscribe((value) => {
 			currentIdentity = value;
+			accountEmail = value?.account?.email || '';
 		});
 	});
+
+	function handleEmailUpdated(newEmail: string) {
+		accountEmail = newEmail;
+	}
 
 	function handleLogin() {
 		navigateToLogin($page.url.pathname);
@@ -83,6 +90,16 @@
 					</p>
 				{/if}
 			</div>
+		</div>
+
+		<!-- Account Email Section -->
+		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<h3 class="text-xl font-semibold text-white mb-4">Account Email</h3>
+			<AccountEmailEditor
+				email={accountEmail}
+				username={currentIdentity.account?.username || ''}
+				onEmailUpdated={handleEmailUpdated}
+			/>
 		</div>
 	{/if}
 

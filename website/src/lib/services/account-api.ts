@@ -538,6 +538,55 @@ export async function resendVerificationEmail(identity: Ed25519KeyIdentity): Pro
 	return result.data;
 }
 
+/**
+ * Update account email address
+ * Requires authentication. Resets email verification status and sends verification email.
+ */
+export async function updateAccountEmail(
+	identity: Ed25519KeyIdentity,
+	username: string,
+	email: string
+): Promise<AccountWithKeys> {
+	const requestBody = { email };
+
+	const { headers, body } = await signRequest(
+		identity,
+		'PUT',
+		`/api/v1/accounts/${username}/email`,
+		requestBody
+	);
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/email`, {
+		method: 'PUT',
+		headers: headers as HeadersInit,
+		body
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Failed to update email (HTTP ${response.status} ${response.statusText})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) {
+				errorMessage = `${errorData.error} (HTTP ${response.status})`;
+			}
+		} catch {
+			if (text) {
+				errorMessage = `Failed to update email (HTTP ${response.status} ${response.statusText}: ${text.substring(0, 200)})`;
+			}
+		}
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<AccountWithKeys> = await response.json();
+
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to update email');
+	}
+
+	return result.data;
+}
+
 function bytesToHex(bytes: Uint8Array): string {
 	return Array.from(bytes)
 		.map((b) => b.toString(16).padStart(2, '0'))

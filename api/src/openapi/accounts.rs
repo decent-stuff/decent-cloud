@@ -1,8 +1,8 @@
 use super::common::{
     AddAccountContactRequest, AddAccountExternalKeyRequest, AddAccountKeyRequest,
     AddAccountSocialRequest, ApiResponse, ApiTags, CompleteRecoveryRequest, RegisterAccountRequest,
-    RequestRecoveryRequest, UpdateAccountProfileRequest, UpdateDeviceNameRequest,
-    VerifyEmailRequest,
+    RequestRecoveryRequest, UpdateAccountEmailRequest, UpdateAccountProfileRequest,
+    UpdateDeviceNameRequest, VerifyEmailRequest,
 };
 use crate::{auth::ApiAuthenticatedUser, database::email::EmailType, database::Database};
 use poem::web::Data;
@@ -855,6 +855,164 @@ impl AccountsApi {
         }
     }
 
+    /// Update account email
+    ///
+    /// Updates the account's email address. Resets email verification status.
+    /// A verification email will be sent to the new address.
+    #[oai(
+        path = "/accounts/:username/email",
+        method = "put",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn update_account_email(
+        &self,
+        db: Data<&Arc<Database>>,
+        username: Path<String>,
+        auth: ApiAuthenticatedUser,
+        req: Json<UpdateAccountEmailRequest>,
+    ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
+        // Validate email format
+        let email = req.email.trim();
+        if email.is_empty() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Email address is required".to_string()),
+            });
+        }
+        let email_pattern = regex::Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap();
+        if !email_pattern.is_match(email) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Invalid email address format".to_string()),
+            });
+        }
+
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Verify authenticated user owns this account
+        match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc_id)) if acc_id == account.id => {}
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Unauthorized: Cannot modify another user's email".to_string()),
+                })
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        // Update email
+        let updated_account = match db.update_account_email(&account.id, email).await {
+            Ok(acc) => acc,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Queue verification email (non-blocking)
+        let token = match db.create_email_verification_token(&account.id, email).await {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::error!("Failed to create verification token: {}", e);
+                // Still return success as the email was updated
+                return match db.get_account_with_keys(&username.0).await {
+                    Ok(Some(acc)) => Json(ApiResponse {
+                        success: true,
+                        data: Some(acc),
+                        error: None,
+                    }),
+                    _ => Json(ApiResponse {
+                        success: true,
+                        data: None,
+                        error: None,
+                    }),
+                };
+            }
+        };
+
+        let token_hex = hex::encode(&token);
+        let verification_url = format!(
+            "{}/verify-email?token={}",
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "https://decent-cloud.org".to_string()),
+            token_hex
+        );
+
+        db.queue_email_safe(
+            Some(email),
+            "noreply@decent-cloud.org",
+            "Verify your email address",
+            &format!(
+                "Hello {}!\n\n\
+                Please verify your email address by clicking the link below:\n\n\
+                {}\n\n\
+                This link will expire in 24 hours.\n\n\
+                If you did not request this, please ignore this email.\n\n\
+                Best regards,\n\
+                The Decent Cloud Team",
+                updated_account.username, verification_url
+            ),
+            false,
+            EmailType::Welcome,
+        )
+        .await;
+
+        // Return updated account
+        match db.get_account_with_keys(&username.0).await {
+            Ok(Some(acc)) => Json(ApiResponse {
+                success: true,
+                data: Some(acc),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Account not found after update".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get account contacts
     ///
     /// Returns contact information for an account (public, no authentication required)
@@ -1687,6 +1845,11 @@ impl AccountsApi {
         let token = match hex::decode(&req.token) {
             Ok(t) => t,
             Err(e) => {
+                tracing::warn!(
+                    "Email verification failed: invalid hex format (len={}): {}",
+                    req.token.len(),
+                    e
+                );
                 return Json(ApiResponse {
                     success: false,
                     data: None,
@@ -1694,6 +1857,11 @@ impl AccountsApi {
                 })
             }
         };
+
+        tracing::info!(
+            "Email verification attempt: token_len={} bytes",
+            token.len()
+        );
 
         // Verify email
         match db.verify_email_token(&token).await {

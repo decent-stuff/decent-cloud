@@ -378,23 +378,22 @@ impl EmailProcessor {
         // Decode pubkey
         let pubkey = hex::decode(pubkey_hex)?;
 
-        // Get account ID from pubkey
-        let account_id = match self.database.get_account_id_by_public_key(&pubkey).await? {
-            Some(id) => id,
+        // Get account by pubkey
+        let account = match self
+            .database
+            .get_account_with_keys_by_public_key(&pubkey)
+            .await?
+        {
+            Some(acc) => acc,
             None => return Ok(None),
         };
 
-        // Get account contacts
-        let contacts = self.database.get_account_contacts(&account_id).await?;
-
-        // Find first verified email
-        for contact in contacts {
-            if contact.contact_type == "email" && contact.verified {
-                return Ok(Some(contact.contact_value));
-            }
+        // Return email only if verified
+        if account.email_verified {
+            Ok(account.email)
+        } else {
+            Ok(None)
         }
-
-        Ok(None)
     }
 
     /// Get message details for email content (contract_id, sender_name, message_body)
@@ -593,13 +592,17 @@ impl EmailProcessor {
 
     /// Get verified email for an account
     async fn get_account_email(&self, account_id: &[u8]) -> anyhow::Result<Option<String>> {
-        let contacts = self.database.get_account_contacts(account_id).await?;
-        for contact in contacts {
-            if contact.contact_type == "email" && contact.verified {
-                return Ok(Some(contact.contact_value));
-            }
+        let account = match self.database.get_account(account_id).await? {
+            Some(acc) => acc,
+            None => return Ok(None),
+        };
+
+        // Return email only if verified
+        if account.email_verified != 0 {
+            Ok(account.email)
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 
     /// Get account ID from pubkey hex string

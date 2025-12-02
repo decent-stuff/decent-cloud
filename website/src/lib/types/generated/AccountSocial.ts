@@ -3,4 +3,4 @@
 /**
  * Social media account for an account (account_socials table)
  */
-export type AccountSocial = { id: number, platform: string, username: string, profile_url: string | null, };
+export type AccountSocial = { id: number, platform: string, username: string, profileUrl: string | null, };

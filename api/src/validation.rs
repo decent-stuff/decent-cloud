@@ -76,7 +76,8 @@ pub fn validate_public_key(key_type: &str, key_data: &str) -> Result<()> {
 }
 
 pub fn validate_contact_type(contact_type: &str) -> Result<()> {
-    const VALID_TYPES: &[&str] = &["email", "phone", "telegram", "discord", "signal"];
+    // Note: email is NOT a valid contact type - use account email instead
+    const VALID_TYPES: &[&str] = &["phone", "telegram", "discord", "signal"];
     if !VALID_TYPES.contains(&contact_type) {
         bail!(
             "Invalid contact type. Must be one of: {}",
@@ -95,7 +96,6 @@ pub fn validate_contact_value(contact_type: &str, contact_value: &str) -> Result
     }
 
     match contact_type {
-        "email" => validate_email(contact_value)?,
         "phone" => {
             // Basic phone validation - allow digits, spaces, +, -, ()
             if !contact_value

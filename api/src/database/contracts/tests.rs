@@ -517,10 +517,8 @@ async fn test_create_rental_request_with_defaults() {
         .await
         .unwrap();
 
-    // Add contact to account
-    db.add_account_contact(&account.id, "email", "user@example.com", true)
-        .await
-        .unwrap();
+    // Note: Account email (test@example.com) is set during create_account
+    // No need to add contact email - account email is used as default contact
 
     let params = RentalRequestParams {
         offering_db_id: offering_id,
@@ -533,10 +531,10 @@ async fn test_create_rental_request_with_defaults() {
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
 
-    // Verify defaults were used
+    // Verify defaults were used (account email as contact)
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.requester_ssh_pubkey, "AAAAC3...user-key");
-    assert_eq!(contract.requester_contact, "email:user@example.com");
+    assert_eq!(contract.requester_contact, "email:test@example.com");
     assert_eq!(contract.request_memo, "Rental request for Test Server");
 }
 

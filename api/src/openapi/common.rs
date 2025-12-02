@@ -178,6 +178,13 @@ pub struct UpdateAccountProfileRequest {
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateAccountEmailRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AddAccountContactRequest {
     pub contact_type: String,
     pub contact_value: String,

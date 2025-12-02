@@ -6,7 +6,9 @@ use ts_rs::TS;
 
 /// Contact information for an account (account_contacts table)
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[ts(export, export_to = "../../website/src/lib/types/generated/", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
 pub struct AccountContact {
     #[ts(type = "number")]
     pub id: i64,
@@ -17,8 +19,9 @@ pub struct AccountContact {
 
 /// Social media account for an account (account_socials table)
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(skip_serializing_if_is_none)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
 pub struct AccountSocial {
     #[ts(type = "number")]
     pub id: i64,
@@ -30,8 +33,9 @@ pub struct AccountSocial {
 
 /// External public key (SSH/GPG) for an account (account_external_keys table)
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(skip_serializing_if_is_none)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
 pub struct AccountExternalKey {
     #[ts(type = "number")]
     pub id: i64,

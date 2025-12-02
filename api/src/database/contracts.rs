@@ -305,14 +305,22 @@ impl Database {
         let contact = if let Some(c) = params.contact_method {
             c
         } else {
-            // Try to get first contact from user's account profile
+            // Try to get account email (primary contact method)
             match self.get_account_id_by_public_key(requester_pubkey).await? {
                 Some(account_id) => {
-                    let contacts = self.get_account_contacts(&account_id).await?;
-                    contacts
-                        .first()
-                        .map(|c| format!("{}:{}", c.contact_type, c.contact_value))
-                        .unwrap_or_else(|| "".to_string())
+                    match self.get_account(&account_id).await? {
+                        Some(account) if account.email.is_some() => {
+                            format!("email:{}", account.email.unwrap())
+                        }
+                        _ => {
+                            // Fall back to first non-email contact (phone, telegram, etc.)
+                            let contacts = self.get_account_contacts(&account_id).await?;
+                            contacts
+                                .first()
+                                .map(|c| format!("{}:{}", c.contact_type, c.contact_value))
+                                .unwrap_or_default()
+                        }
+                    }
                 }
                 None => "".to_string(),
             }

@@ -28,12 +28,27 @@ fn test_validate_public_key() {
 }
 
 #[test]
+fn test_validate_contact_type() {
+    // Valid contact types
+    assert!(validate_contact_type("phone").is_ok());
+    assert!(validate_contact_type("telegram").is_ok());
+    assert!(validate_contact_type("discord").is_ok());
+    assert!(validate_contact_type("signal").is_ok());
+
+    // email is NOT a valid contact type - use account email instead
+    assert!(validate_contact_type("email").is_err());
+    assert!(validate_contact_type("invalid").is_err());
+    assert!(validate_contact_type("").is_err());
+}
+
+#[test]
 fn test_validate_contact_value() {
-    assert!(validate_contact_value("email", "user@example.com").is_ok());
+    // Note: email is NOT a valid contact type - use account email instead
     assert!(validate_contact_value("phone", "+1 (555) 123-4567").is_ok());
     assert!(validate_contact_value("phone", "5551234567").is_ok());
     assert!(validate_contact_value("telegram", "@username").is_ok());
-    assert!(validate_contact_value("email", "invalid").is_err());
+    assert!(validate_contact_value("discord", "username#1234").is_ok());
+    assert!(validate_contact_value("signal", "+1234567890").is_ok());
     assert!(validate_contact_value("phone", "abc").is_err());
     assert!(validate_contact_value("phone", "123").is_err()); // too short
 }

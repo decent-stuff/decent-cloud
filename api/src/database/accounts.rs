@@ -221,14 +221,21 @@ impl Database {
         .await?;
 
         let Some(row) = result else {
+            tracing::warn!("Email verification failed: token not found in database");
             bail!("Invalid email verification token");
         };
 
         if row.used_at.is_some() {
+            tracing::warn!("Email verification failed: token already used");
             bail!("Email verification token has already been used");
         }
 
         if now > row.expires_at {
+            tracing::warn!(
+                "Email verification failed: token expired (now={}, expires_at={})",
+                now,
+                row.expires_at
+            );
             bail!("Email verification token has expired");
         }
 
@@ -613,6 +620,24 @@ impl Database {
         self.get_account(account_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Account not found after profile update"))
+    }
+
+    /// Update account email
+    /// When email changes, email_verified is reset to false
+    pub async fn update_account_email(&self, account_id: &[u8], email: &str) -> Result<Account> {
+        sqlx::query(
+            "UPDATE accounts
+             SET email = ?, email_verified = 0
+             WHERE id = ?",
+        )
+        .bind(email)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+
+        self.get_account(account_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Account not found after email update"))
     }
 
     /// Create OAuth account link

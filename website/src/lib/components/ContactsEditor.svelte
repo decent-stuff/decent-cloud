@@ -21,7 +21,7 @@
 	let { username, apiClient }: Props = $props();
 
 	let contacts = $state<Contact[]>([]);
-	let newContact = $state({ type: "email", value: "" });
+	let newContact = $state({ type: "phone", value: "" });
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
@@ -69,7 +69,7 @@
 				throw new Error(data.error || "Failed to add contact");
 			}
 
-			newContact = { type: "email", value: "" };
+			newContact = { type: "phone", value: "" };
 			await loadContacts();
 			successMessage = "Contact added successfully!";
 			setTimeout(() => {
@@ -157,7 +157,6 @@
 			bind:value={newContact.type}
 			class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
 		>
-			<option value="email">Email</option>
 			<option value="phone">Phone</option>
 			<option value="telegram">Telegram</option>
 		</select>
