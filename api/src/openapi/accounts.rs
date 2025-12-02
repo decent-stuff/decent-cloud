@@ -970,7 +970,8 @@ impl AccountsApi {
         let token_hex = hex::encode(&token);
         let verification_url = format!(
             "{}/verify-email?token={}",
-            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "https://decent-cloud.org".to_string()),
+            std::env::var("FRONTEND_URL")
+                .unwrap_or_else(|_| "https://decent-cloud.org".to_string()),
             token_hex
         );
 
@@ -1854,7 +1855,7 @@ impl AccountsApi {
                     success: false,
                     data: None,
                     error: Some(format!("Invalid token format: {}", e)),
-                })
+                });
             }
         };
 
