@@ -1182,21 +1182,44 @@ async fn test_get_account_with_keys_includes_email_and_verification_status() {
         .unwrap();
 
     // Get account with keys and verify email fields
-    let account_with_keys = db.get_account_with_keys("emailuser").await.unwrap().unwrap();
-    assert_eq!(account_with_keys.email, Some("emailuser@example.com".to_string()));
-    assert!(!account_with_keys.email_verified, "Email should not be verified initially");
+    let account_with_keys = db
+        .get_account_with_keys("emailuser")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        account_with_keys.email,
+        Some("emailuser@example.com".to_string())
+    );
+    assert!(
+        !account_with_keys.email_verified,
+        "Email should not be verified initially"
+    );
 
     // Verify email
     let token = db
-        .create_email_verification_token(&hex::decode(&account_with_keys.id).unwrap(), "emailuser@example.com")
+        .create_email_verification_token(
+            &hex::decode(&account_with_keys.id).unwrap(),
+            "emailuser@example.com",
+        )
         .await
         .unwrap();
     db.verify_email_token(&token).await.unwrap();
 
     // Get account with keys again and verify email_verified is now true
-    let account_with_keys = db.get_account_with_keys("emailuser").await.unwrap().unwrap();
-    assert_eq!(account_with_keys.email, Some("emailuser@example.com".to_string()));
-    assert!(account_with_keys.email_verified, "Email should be verified after verification");
+    let account_with_keys = db
+        .get_account_with_keys("emailuser")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        account_with_keys.email,
+        Some("emailuser@example.com".to_string())
+    );
+    assert!(
+        account_with_keys.email_verified,
+        "Email should be verified after verification"
+    );
 }
 
 #[tokio::test]
@@ -1216,12 +1239,21 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(account_with_keys.email, Some("pkemailuser@example.com".to_string()));
-    assert!(!account_with_keys.email_verified, "Email should not be verified initially");
+    assert_eq!(
+        account_with_keys.email,
+        Some("pkemailuser@example.com".to_string())
+    );
+    assert!(
+        !account_with_keys.email_verified,
+        "Email should not be verified initially"
+    );
 
     // Verify email
     let token = db
-        .create_email_verification_token(&hex::decode(&account_with_keys.id).unwrap(), "pkemailuser@example.com")
+        .create_email_verification_token(
+            &hex::decode(&account_with_keys.id).unwrap(),
+            "pkemailuser@example.com",
+        )
         .await
         .unwrap();
     db.verify_email_token(&token).await.unwrap();
@@ -1232,8 +1264,14 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(account_with_keys.email, Some("pkemailuser@example.com".to_string()));
-    assert!(account_with_keys.email_verified, "Email should be verified after verification");
+    assert_eq!(
+        account_with_keys.email,
+        Some("pkemailuser@example.com".to_string())
+    );
+    assert!(
+        account_with_keys.email_verified,
+        "Email should be verified after verification"
+    );
 }
 
 #[tokio::test]
@@ -1258,8 +1296,14 @@ async fn test_oauth_account_with_keys_has_verified_email() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(account_with_keys.email, Some("oauth@example.com".to_string()));
-    assert!(account_with_keys.email_verified, "OAuth accounts should have verified email");
+    assert_eq!(
+        account_with_keys.email,
+        Some("oauth@example.com".to_string())
+    );
+    assert!(
+        account_with_keys.email_verified,
+        "OAuth accounts should have verified email"
+    );
 }
 
 #[tokio::test]
@@ -1279,7 +1323,10 @@ async fn test_oauth_account_creation_sets_email_verified() {
         .unwrap();
 
     // Verify email_verified is set to 1 (true)
-    assert_eq!(account.email_verified, 1, "OAuth accounts should have email_verified set to 1");
+    assert_eq!(
+        account.email_verified, 1,
+        "OAuth accounts should have email_verified set to 1"
+    );
 }
 
 #[tokio::test]
@@ -1293,7 +1340,10 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
         .unwrap();
 
     // Verify email is not verified initially
-    assert_eq!(account.email_verified, 0, "New accounts should have email_verified=0");
+    assert_eq!(
+        account.email_verified, 0,
+        "New accounts should have email_verified=0"
+    );
 
     // Link OAuth account to existing account
     db.create_oauth_account(
@@ -1315,7 +1365,10 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(updated_account.email_verified, 1, "Linking OAuth should set email_verified to 1");
+    assert_eq!(
+        updated_account.email_verified, 1,
+        "Linking OAuth should set email_verified to 1"
+    );
 }
 
 #[tokio::test]
@@ -1330,7 +1383,10 @@ async fn test_get_latest_verification_token_time() {
         .unwrap();
 
     // No token created yet - should return None
-    let time = db.get_latest_verification_token_time(&account.id).await.unwrap();
+    let time = db
+        .get_latest_verification_token_time(&account.id)
+        .await
+        .unwrap();
     assert!(time.is_none());
 
     // Create first token
@@ -1338,7 +1394,10 @@ async fn test_get_latest_verification_token_time() {
         .await
         .unwrap();
 
-    let time1 = db.get_latest_verification_token_time(&account.id).await.unwrap();
+    let time1 = db
+        .get_latest_verification_token_time(&account.id)
+        .await
+        .unwrap();
     assert!(time1.is_some());
 
     // Wait enough time to ensure different timestamps (SQLite precision is seconds)
@@ -1347,7 +1406,10 @@ async fn test_get_latest_verification_token_time() {
         .await
         .unwrap();
 
-    let time2 = db.get_latest_verification_token_time(&account.id).await.unwrap();
+    let time2 = db
+        .get_latest_verification_token_time(&account.id)
+        .await
+        .unwrap();
     assert!(time2.is_some());
 
     // Second token time should be greater than or equal to first
@@ -1370,7 +1432,11 @@ async fn test_resend_verification_rate_limit() {
         .await
         .unwrap();
 
-    let time = db.get_latest_verification_token_time(&account.id).await.unwrap().unwrap();
+    let time = db
+        .get_latest_verification_token_time(&account.id)
+        .await
+        .unwrap()
+        .unwrap();
     let now = chrono::Utc::now().timestamp();
 
     // Should be within 60 seconds
