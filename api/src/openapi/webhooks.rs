@@ -194,6 +194,88 @@ pub async fn stripe_webhook(
         .body(""))
 }
 
+// Chatwoot webhook types
+#[derive(Debug, Deserialize)]
+struct ChatwootWebhookPayload {
+    event: String,
+    conversation: Option<ChatwootConversation>,
+    message: Option<ChatwootMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatwootConversation {
+    id: i64,
+    custom_attributes: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatwootMessage {
+    id: i64,
+    message_type: String,
+    created_at: i64,
+}
+
+/// Handle Chatwoot webhook events for response time tracking
+#[handler]
+pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Response, PoemError> {
+    let body_bytes = body.into_vec().await.map_err(|e| {
+        PoemError::from_string(
+            format!("Failed to read body: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let payload: ChatwootWebhookPayload = serde_json::from_slice(&body_bytes).map_err(|e| {
+        PoemError::from_string(
+            format!("Invalid JSON: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    tracing::info!("Received Chatwoot webhook: {}", payload.event);
+
+    if payload.event == "message_created" {
+        if let (Some(conv), Some(msg)) = (payload.conversation, payload.message) {
+            // Extract contract_id from custom_attributes
+            let contract_id = conv
+                .custom_attributes
+                .as_ref()
+                .and_then(|attrs| attrs.get("contract_id"))
+                .and_then(|v| v.as_str());
+
+            if let Some(contract_id) = contract_id {
+                let sender_type = match msg.message_type.as_str() {
+                    "incoming" => "customer",
+                    "outgoing" => "provider",
+                    _ => {
+                        return Ok(Response::builder()
+                            .status(poem::http::StatusCode::OK)
+                            .body(""))
+                    }
+                };
+
+                if let Err(e) = db
+                    .insert_chatwoot_message_event(
+                        contract_id,
+                        conv.id,
+                        msg.id,
+                        sender_type,
+                        msg.created_at,
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to insert Chatwoot message event: {}", e);
+                    // Don't fail webhook - event may be duplicate
+                }
+            }
+        }
+    }
+
+    Ok(Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .body(""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,0 +1,8 @@
+mod client;
+mod hmac;
+
+pub use client::ChatwootClient;
+pub use hmac::generate_identity_hash;
+
+#[cfg(test)]
+mod tests;

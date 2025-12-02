@@ -288,4 +288,6 @@ pub enum ApiTags {
     Stats,
     /// Message and communication endpoints
     Messages,
+    /// Chatwoot integration endpoints
+    Chatwoot,
 }

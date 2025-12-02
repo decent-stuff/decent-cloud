@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod chatwoot;
 pub mod contracts;
 pub mod core;
 pub mod email;

@@ -6,6 +6,10 @@
 	import DashboardSidebar from '$lib/components/DashboardSidebar.svelte';
 	import AuthPromptBanner from '$lib/components/AuthPromptBanner.svelte';
 	import EmailVerificationBanner from '$lib/components/EmailVerificationBanner.svelte';
+	import ChatwootWidget from '$lib/components/ChatwootWidget.svelte';
+
+	const CHATWOOT_TOKEN = import.meta.env.VITE_CHATWOOT_WEBSITE_TOKEN;
+	const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL;
 
 	let { children } = $props();
 	let isAuthenticated = $state(false);
@@ -73,4 +77,9 @@
 			{@render children()}
 		</div>
 	</main>
+
+	<!-- Chatwoot support widget (only if configured) -->
+	{#if CHATWOOT_TOKEN}
+		<ChatwootWidget websiteToken={CHATWOOT_TOKEN} baseUrl={CHATWOOT_BASE_URL} />
+	{/if}
 </div>

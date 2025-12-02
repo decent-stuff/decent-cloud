@@ -1,4 +1,5 @@
 mod auth;
+mod chatwoot;
 mod cleanup_service;
 mod database;
 mod email_processor;
@@ -300,6 +301,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .at(
             "/api/v1/webhooks/stripe",
             post(openapi::webhooks::stripe_webhook),
+        )
+        .at(
+            "/api/v1/webhooks/chatwoot",
+            post(openapi::webhooks::chatwoot_webhook),
         )
         // Legacy endpoints (canister proxy - ICP integration pending)
         // NOTE: CSV operations are now included in OpenAPI schema above
