@@ -3,6 +3,26 @@ use serde::{Deserialize, Serialize};
 
 const MAILCHANNELS_API_URL: &str = "https://api.mailchannels.net/tx/v1/send";
 
+/// Check if email domain is a test domain per RFC 2606 (reserved for testing/documentation).
+/// Returns true for domains that should NOT receive real emails.
+fn is_test_domain(email: &str) -> bool {
+    let domain = match email.rsplit_once('@') {
+        Some((_, domain)) => domain.to_lowercase(),
+        None => return false,
+    };
+    // RFC 2606 reserved domains + common test patterns
+    domain.ends_with(".test")
+        || domain.ends_with(".example")
+        || domain.ends_with(".invalid")
+        || domain.ends_with(".localhost")
+        || domain == "example.com"
+        || domain == "example.net"
+        || domain == "example.org"
+        || domain.ends_with(".example.com")
+        || domain.ends_with(".example.net")
+        || domain.ends_with(".example.org")
+}
+
 /// Parse RFC 2822 email address format: "Name <email@example.com>" or "email@example.com"
 fn parse_email_address(addr: &str) -> Result<(String, String)> {
     let trimmed = addr.trim();
@@ -166,6 +186,12 @@ impl EmailService {
     ) -> Result<()> {
         let (to_email, to_name) =
             parse_email_address(to_addr).context("Failed to parse recipient address")?;
+
+        // Skip sending to RFC 2606 reserved test domains (used in testing)
+        if is_test_domain(&to_email) {
+            return Ok(());
+        }
+
         let (from_email, from_name) =
             parse_email_address(from_addr).context("Failed to parse sender address")?;
         let subject = subject.into();
@@ -180,5 +206,38 @@ impl EmailService {
             is_html,
         })
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_test_domain() {
+        // RFC 2606 reserved TLDs
+        assert!(is_test_domain("user@domain.test"));
+        assert!(is_test_domain("user@sub.domain.test"));
+        assert!(is_test_domain("user@domain.example"));
+        assert!(is_test_domain("user@domain.invalid"));
+        assert!(is_test_domain("user@domain.localhost"));
+
+        // RFC 2606 reserved second-level domains
+        assert!(is_test_domain("user@example.com"));
+        assert!(is_test_domain("user@example.net"));
+        assert!(is_test_domain("user@example.org"));
+
+        // Subdomains of reserved domains (common in tests)
+        assert!(is_test_domain("user@test.example.com"));
+        assert!(is_test_domain("user@sub.test.example.com"));
+
+        // Real domains should NOT be blocked
+        assert!(!is_test_domain("user@gmail.com"));
+        assert!(!is_test_domain("user@decent-cloud.org"));
+        assert!(!is_test_domain("user@company.io"));
+
+        // Case insensitive
+        assert!(is_test_domain("user@EXAMPLE.COM"));
+        assert!(is_test_domain("user@Test.Example.Com"));
     }
 }
