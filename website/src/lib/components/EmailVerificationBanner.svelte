@@ -29,7 +29,7 @@
 	}
 </script>
 
-<div class="fixed top-0 left-0 md:left-64 right-0 z-50 bg-amber-500 border-b-2 border-amber-600 p-4 shadow-lg">
+<div class="fixed top-16 md:top-0 left-0 md:left-64 right-0 z-40 bg-amber-500 border-b-2 border-amber-600 p-4 shadow-lg">
 	<div class="max-w-7xl mx-auto">
 		<div class="flex flex-col md:flex-row items-start md:items-center gap-3">
 			<div class="flex items-start gap-3 flex-1">
