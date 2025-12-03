@@ -61,7 +61,6 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::database::test_helpers::setup_test_db;
 
     #[tokio::test]

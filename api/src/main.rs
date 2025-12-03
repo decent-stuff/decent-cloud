@@ -4,6 +4,7 @@ mod cleanup_service;
 mod database;
 mod email_processor;
 mod email_service;
+mod icpay_client;
 mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
