@@ -182,10 +182,28 @@ Replace the current DCT payment method with ICPay integration to provide:
 - **Outcome:** SUCCESS - PaymentMethod::ICPay exists, "icpay" serializes/deserializes correctly, is_icpay() helper works, migration runs successfully, all tests pass
 
 ### Step 2
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Completed
+  - Installed @ic-pay/icpay-sdk@1.4.19 package in /code/website/package.json
+  - Added VITE_ICPAY_PUBLISHABLE_KEY to /code/website/.env.example with documentation
+  - Added VITE_ICPAY_PUBLISHABLE_KEY=pk_test_xxx to /code/website/.env.development (placeholder)
+  - Added ICPAY_SECRET_KEY to /code/api/.env.example with documentation comment explaining usage
+  - Created /code/website/src/lib/utils/icpay.ts utility module with:
+    - getIcpay(): Lazy initialization singleton pattern for Icpay instance
+    - isIcpayConfigured(): Check if publishable key is configured
+    - Returns null if VITE_ICPAY_PUBLISHABLE_KEY not set (graceful degradation)
+- **Files Changed:**
+  - /code/website/package.json (added @ic-pay/icpay-sdk dependency)
+  - /code/website/.env.example (added VITE_ICPAY_PUBLISHABLE_KEY)
+  - /code/website/.env.development (added VITE_ICPAY_PUBLISHABLE_KEY=pk_test_xxx)
+  - /code/api/.env.example (added ICPAY_SECRET_KEY with documentation)
+  - /code/website/src/lib/utils/icpay.ts (NEW - 17 lines)
+- **Review:** All changes follow KISS, MINIMAL, YAGNI, DRY principles. Utility module is minimal - just initialization logic. No duplication.
+- **Verification:**
+  - npm list @ic-pay/icpay-sdk: Package installed successfully (v1.4.19)
+  - npx svelte-check: No icpay-specific TypeScript errors (pre-existing test file errors unrelated)
+  - Module exports two functions: getIcpay() and isIcpayConfigured()
+  - Graceful handling when VITE_ICPAY_PUBLISHABLE_KEY not configured
+- **Outcome:** SUCCESS - ICPay SDK installed, environment variables documented, icpay.ts utility module created, TypeScript compiles without errors
 
 ### Step 3
 - **Implementation:** (pending)
