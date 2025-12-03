@@ -1,6 +1,6 @@
 use super::common::{
     default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
-    ExtendContractResponse, RentalRequestResponse,
+    ExtendContractResponse, RentalRequestResponse, UpdateIcpayTransactionRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
@@ -390,6 +390,73 @@ impl ContractsApi {
             Ok(extensions) => Json(ApiResponse {
                 success: true,
                 data: Some(extensions),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update ICPay transaction ID
+    ///
+    /// Updates the ICPay transaction ID for a contract after payment (requires authentication)
+    #[oai(
+        path = "/contracts/:id/icpay-transaction",
+        method = "put",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn update_icpay_transaction(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+        req: Json<UpdateIcpayTransactionRequest>,
+    ) -> Json<ApiResponse<String>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Verify contract exists and user is the requester
+        match db.get_contract(&contract_id).await {
+            Ok(Some(contract)) => {
+                if contract.requester_pubkey != hex::encode(&auth.pubkey) {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Unauthorized: only requester can update transaction ID".to_string()),
+                    });
+                }
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        match db.update_icpay_transaction_id(&contract_id, &req.transaction_id).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("ICPay transaction ID updated successfully".to_string()),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns\n               FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC",
+  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns\n               FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -109,33 +109,38 @@
         "type_info": "Text"
       },
       {
-        "name": "payment_status!",
+        "name": "icpay_transaction_id",
         "ordinal": 21,
         "type_info": "Text"
       },
       {
-        "name": "currency!",
+        "name": "payment_status!",
         "ordinal": 22,
         "type_info": "Text"
       },
       {
-        "name": "refund_amount_e9s",
+        "name": "currency!",
         "ordinal": 23,
+        "type_info": "Text"
+      },
+      {
+        "name": "refund_amount_e9s",
+        "ordinal": 24,
         "type_info": "Integer"
       },
       {
         "name": "stripe_refund_id",
-        "ordinal": 24,
+        "ordinal": 25,
         "type_info": "Text"
       },
       {
         "name": "refund_created_at_ns",
-        "ordinal": 25,
+        "ordinal": 26,
         "type_info": "Integer"
       },
       {
         "name": "status_updated_at_ns",
-        "ordinal": 26,
+        "ordinal": 27,
         "type_info": "Integer"
       }
     ],
@@ -164,6 +169,7 @@
       false,
       true,
       true,
+      true,
       false,
       false,
       true,
@@ -172,5 +178,5 @@
       true
     ]
   },
-  "hash": "e9721883134e78a11bae4709d8c9a8aa54ac0b6473fa7952f743ec637b029d77"
+  "hash": "1d5876f3049e3ec2d689a42cea7b0672d69d55913d4c229232fde31fbfe54629"
 }

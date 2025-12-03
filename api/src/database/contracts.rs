@@ -770,6 +770,23 @@ impl Database {
         Ok(())
     }
 
+    /// Update ICPay transaction ID for a contract
+    pub async fn update_icpay_transaction_id(
+        &self,
+        contract_id: &[u8],
+        transaction_id: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET icpay_transaction_id = ? WHERE contract_id = ?",
+            transaction_id,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Cancel a rental request (only by the original requester)
     ///
     /// Cancellable statuses:

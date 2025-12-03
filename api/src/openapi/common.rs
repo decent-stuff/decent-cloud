@@ -141,6 +141,13 @@ pub struct CancelContractRequest {
     pub memo: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateIcpayTransactionRequest {
+    pub transaction_id: String,
+}
+
 // Request types for accounts
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

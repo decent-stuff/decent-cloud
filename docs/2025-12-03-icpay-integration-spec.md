@@ -232,10 +232,34 @@ Replace the current DCT payment method with ICPay integration to provide:
 - **Outcome:** SUCCESS - RentalRequestDialog supports ICPay payments, TypeScript compiles cleanly, both payment methods work independently
 
 ### Step 4
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Completed
+  - Reviewed create_rental_request flow in /code/api/src/openapi/contracts.rs:
+    - Payment method check at line 195: `if payment_method.to_lowercase() == "stripe"`
+    - For Stripe: creates PaymentIntent and returns client_secret
+    - For ICPay: skips Stripe flow, returns None for client_secret (correct behavior)
+    - Database already sets payment_status="succeeded" for ICPay (line 379-383 in contracts.rs)
+  - Added update_icpay_transaction_id method to Database in /code/api/src/database/contracts.rs:
+    - Similar pattern to update_stripe_payment_intent (lines 773-788)
+    - Updates icpay_transaction_id field in contract_sign_requests table
+  - Added PUT /contracts/:id/icpay-transaction endpoint in /code/api/src/openapi/contracts.rs:
+    - Allows authenticated requester to update transaction ID after payment
+    - Includes authorization check (only requester can update)
+    - Returns success message on completion
+  - Added UpdateIcpayTransactionRequest type to /code/api/src/openapi/common.rs:
+    - Contains transaction_id field
+    - Uses camelCase serialization for API consistency
+- **Files Changed:**
+  - /code/api/src/database/contracts.rs (added update_icpay_transaction_id method)
+  - /code/api/src/openapi/contracts.rs (added update_icpay_transaction endpoint, imported UpdateIcpayTransactionRequest)
+  - /code/api/src/openapi/common.rs (added UpdateIcpayTransactionRequest struct)
+  - /code/api/.sqlx/* (regenerated offline query cache)
+- **Review:** All changes follow KISS, MINIMAL, YAGNI, DRY principles. No code duplication. ICPay flow is simple - backend just creates contract and stores metadata. Stripe flow unchanged.
+- **Verification:**
+  - Regenerated sqlx offline cache with `cargo sqlx prepare --workspace -- --tests`
+  - SQLX_OFFLINE=true cargo test -p api --lib: PASSED (340 tests, all passed)
+  - No breaking changes to existing API
+  - Payment method validation already accepts "icpay" (from Step 1)
+- **Outcome:** SUCCESS - Backend supports ICPay contracts. For payment_method="icpay", backend creates contract without client_secret. For payment_method="stripe", Stripe flow unchanged. Frontend can update icpay_transaction_id via PUT endpoint after payment.
 
 ### Step 5
 - **Implementation:** (pending)
