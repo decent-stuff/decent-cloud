@@ -13,7 +13,7 @@ import { createHmac } from 'crypto';
  * - Stripe webhook secret configured (STRIPE_WEBHOOK_SECRET)
  *
  * Test Coverage:
- * - DCT payment method selection and contract creation
+ * - ICPay payment method selection and contract creation
  * - Stripe payment success flow with webhook simulation
  * - Stripe payment failure flow with error handling
  * - Stripe UI availability for supported currencies
@@ -99,7 +99,7 @@ test.describe('Payment Flows', () => {
 		setupConsoleLogging(page);
 	});
 
-	test('DCT Payment Flow - should create contract with DCT payment method', async ({
+	test('ICPay Payment Flow - should create contract with ICPay payment method', async ({
 		page,
 	}) => {
 		// Navigate to marketplace
@@ -121,13 +121,13 @@ test.describe('Payment Flows', () => {
 		// Wait for rental dialog to appear
 		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
 
-		// DCT should be selected by default (button style)
-		await expect(page.locator('button:has-text("DCT Tokens")').filter({ hasText: /.*/ })).toBeVisible();
+		// ICPay should be selected by default (button style)
+		await expect(page.locator('button:has-text("ICPay")').filter({ hasText: /.*/ })).toBeVisible();
 
 		// Fill in rental details
 		await page.fill('textarea[placeholder*="ssh-ed25519"]', 'ssh-ed25519 AAAAB3NzaC1lZDI1NTE5AAAAITest test@example.com');
 		await page.fill('input[placeholder*="email:you@example.com"]', 'email:test@example.com');
-		await page.fill('textarea[placeholder*="special requirements"]', 'E2E test rental - DCT payment');
+		await page.fill('textarea[placeholder*="special requirements"]', 'E2E test rental - ICPay payment');
 
 		// Wait for contract creation API call
 		const apiResponsePromise = waitForApiResponse(page, /\/api\/v1\/contracts$/);
@@ -149,8 +149,8 @@ test.describe('Payment Flows', () => {
 		// Verify contract via API
 		const contract = await getContract(page, contractId!);
 		expect(contract).toBeTruthy();
-		expect(contract.payment_method).toBe('dct');
-		expect(contract.payment_status).toBe('succeeded'); // DCT payments succeed immediately
+		expect(contract.payment_method).toBe('icpay');
+		expect(contract.payment_status).toBe('succeeded'); // ICPay payments succeed immediately
 		expect(contract.status).toBe('requested'); // Should NOT be auto-accepted
 	});
 
@@ -184,7 +184,7 @@ test.describe('Payment Flows', () => {
 
 		// Should show payment method options
 		await expect(page.locator('legend:has-text("Payment Method")')).toBeVisible();
-		await expect(page.locator('button:has-text("DCT Tokens")')).toBeVisible();
+		await expect(page.locator('button:has-text("ICPay")')).toBeVisible();
 
 		// Credit Card option should be visible (may be disabled for unsupported currencies)
 		await expect(page.locator('button:has-text("Credit Card")')).toBeVisible();
@@ -231,7 +231,7 @@ test.describe('Payment Flows', () => {
 		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
 
 		// Verify both payment methods are available
-		await expect(page.locator('button:has-text("DCT Tokens")')).toBeVisible();
+		await expect(page.locator('button:has-text("ICPay")')).toBeVisible();
 		await expect(page.locator('button:has-text("Credit Card")')).toBeVisible();
 
 		// Select Stripe payment method

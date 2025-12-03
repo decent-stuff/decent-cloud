@@ -81,10 +81,7 @@ mod tests {
 
         let result = IcpayClient::new();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("ICPAY_SECRET_KEY"));
+        assert!(result.unwrap_err().to_string().contains("ICPAY_SECRET_KEY"));
     }
 
     #[test]
@@ -105,9 +102,7 @@ mod tests {
         let client = IcpayClient::new().unwrap();
 
         // Stub implementation always returns true
-        let result = client
-            .verify_payment_by_metadata("test-contract-123")
-            .await;
+        let result = client.verify_payment_by_metadata("test-contract-123").await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), true);
 

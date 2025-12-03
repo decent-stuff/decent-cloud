@@ -433,7 +433,9 @@ impl ContractsApi {
                     return Json(ApiResponse {
                         success: false,
                         data: None,
-                        error: Some("Unauthorized: only requester can update transaction ID".to_string()),
+                        error: Some(
+                            "Unauthorized: only requester can update transaction ID".to_string(),
+                        ),
                     });
                 }
             }
@@ -453,7 +455,10 @@ impl ContractsApi {
             }
         }
 
-        match db.update_icpay_transaction_id(&contract_id, &req.transaction_id).await {
+        match db
+            .update_icpay_transaction_id(&contract_id, &req.transaction_id)
+            .await
+        {
             Ok(_) => Json(ApiResponse {
                 success: true,
                 data: Some("ICPay transaction ID updated successfully".to_string()),

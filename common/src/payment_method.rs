@@ -79,9 +79,18 @@ mod tests {
 
     #[test]
     fn test_payment_method_from_str_valid() {
-        assert_eq!("icpay".parse::<PaymentMethod>().unwrap(), PaymentMethod::ICPay);
-        assert_eq!("ICPay".parse::<PaymentMethod>().unwrap(), PaymentMethod::ICPay);
-        assert_eq!("ICPAY".parse::<PaymentMethod>().unwrap(), PaymentMethod::ICPay);
+        assert_eq!(
+            "icpay".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::ICPay
+        );
+        assert_eq!(
+            "ICPay".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::ICPay
+        );
+        assert_eq!(
+            "ICPAY".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::ICPay
+        );
         assert_eq!(
             "stripe".parse::<PaymentMethod>().unwrap(),
             PaymentMethod::Stripe
