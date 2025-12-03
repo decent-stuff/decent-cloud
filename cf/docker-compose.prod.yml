@@ -1,9 +1,144 @@
 # Production environment - standalone
 # Deploy: python3 cf/deploy.py deploy prod
 # Manual: docker compose -f cf/docker-compose.prod.yml up -d
-# URLs: decent-cloud.org, api.decent-cloud.org
+# URLs: decent-cloud.org, api.decent-cloud.org, support.decent-cloud.org
 
 services:
+  # ============================================
+  # Chatwoot - Customer Support Platform
+  # ============================================
+  chatwoot-postgres:
+    image: postgres:15-alpine
+    container_name: chatwoot-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
+      POSTGRES_DB: chatwoot_production
+    volumes:
+      - chatwoot-postgres-prod:/var/lib/postgresql/data
+    networks:
+      - decent-cloud-prod
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatwoot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chatwoot-redis:
+    image: redis:7-alpine
+    container_name: chatwoot-redis-prod
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - chatwoot-redis-prod:/data
+    networks:
+      - decent-cloud-prod
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chatwoot-web:
+    image: chatwoot/chatwoot:v3.14.1
+    container_name: chatwoot-web-prod
+    restart: unless-stopped
+    depends_on:
+      chatwoot-postgres:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+    environment:
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
+      POSTGRES_HOST: chatwoot-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: chatwoot_production
+      POSTGRES_USERNAME: chatwoot
+      POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
+      REDIS_URL: redis://chatwoot-redis:6379
+      FRONTEND_URL: ${CHATWOOT_FRONTEND_URL:-https://support.decent-cloud.org}
+      # HMAC for customer identity validation (must match API)
+      CHATWOOT_INBOX_HMAC_SECRET_KEY: ${CHATWOOT_HMAC_SECRET}
+      # Email notifications
+      MAILER_SENDER_EMAIL: ${CHATWOOT_MAILER_SENDER:-support@decent-cloud.org}
+      SMTP_ADDRESS: ${SMTP_ADDRESS}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_AUTHENTICATION: plain
+      SMTP_ENABLE_STARTTLS_AUTO: "true"
+      # Optional AI features
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Disable telemetry
+      DISABLE_TELEMETRY: "true"
+    command: bundle exec rails s -p 3000 -b '0.0.0.0'
+    ports:
+      - "59102:3000"
+    networks:
+      - decent-cloud-prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  chatwoot-worker:
+    image: chatwoot/chatwoot:v3.14.1
+    container_name: chatwoot-worker-prod
+    restart: unless-stopped
+    depends_on:
+      chatwoot-postgres:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+    environment:
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
+      POSTGRES_HOST: chatwoot-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: chatwoot_production
+      POSTGRES_USERNAME: chatwoot
+      POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
+      REDIS_URL: redis://chatwoot-redis:6379
+      FRONTEND_URL: ${CHATWOOT_FRONTEND_URL:-https://support.decent-cloud.org}
+      CHATWOOT_INBOX_HMAC_SECRET_KEY: ${CHATWOOT_HMAC_SECRET}
+      MAILER_SENDER_EMAIL: ${CHATWOOT_MAILER_SENDER:-support@decent-cloud.org}
+      SMTP_ADDRESS: ${SMTP_ADDRESS}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+    command: bundle exec sidekiq -C config/sidekiq.yml
+    networks:
+      - decent-cloud-prod
+
+  # Run database migrations on startup (one-time)
+  chatwoot-migrate:
+    image: chatwoot/chatwoot:v3.14.1
+    container_name: chatwoot-migrate-prod
+    depends_on:
+      chatwoot-postgres:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+    environment:
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
+      POSTGRES_HOST: chatwoot-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: chatwoot_production
+      POSTGRES_USERNAME: chatwoot
+      POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
+      REDIS_URL: redis://chatwoot-redis:6379
+    command: bundle exec rails db:chatwoot_prepare
+    networks:
+      - decent-cloud-prod
+
+  # ============================================
+  # Application Services
+  # ============================================
   website:
     build:
       context: ..
@@ -48,6 +183,12 @@ services:
       - DKIM_DOMAIN=${DKIM_DOMAIN}
       - DKIM_SELECTOR=${DKIM_SELECTOR}
       - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY}
+      # Chatwoot integration
+      - CHATWOOT_BASE_URL=http://chatwoot-web:3000
+      - CHATWOOT_API_TOKEN=${CHATWOOT_API_TOKEN}
+      - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID:-1}
+      - CHATWOOT_HMAC_SECRET=${CHATWOOT_HMAC_SECRET}
+      - CHATWOOT_INBOX_ID=${CHATWOOT_INBOX_ID:-1}
     volumes:
       - ../data/api-data-prod:/data
     ports:
@@ -131,6 +272,12 @@ services:
         condition: service_healthy
       api-serve:
         condition: service_healthy
+      chatwoot-web:
+        condition: service_healthy
+
+volumes:
+  chatwoot-postgres-prod:
+  chatwoot-redis-prod:
 
 networks:
   decent-cloud-prod:

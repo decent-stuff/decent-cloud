@@ -208,6 +208,30 @@ impl ContractsApi {
                     None
                 };
 
+                // Create Chatwoot conversation for customer-provider messaging
+                if crate::chatwoot::integration::is_configured() {
+                    if let Err(e) = crate::chatwoot::integration::create_contract_conversation(
+                        &db,
+                        &contract_id,
+                        &auth.pubkey,
+                    )
+                    .await
+                    {
+                        tracing::error!(
+                            "Failed to create Chatwoot conversation for contract: {}",
+                            e
+                        );
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(format!(
+                                "Contract created but Chatwoot conversation creation failed: {}",
+                                e
+                            )),
+                        });
+                    }
+                }
+
                 Json(ApiResponse {
                     success: true,
                     data: Some(RentalRequestResponse {

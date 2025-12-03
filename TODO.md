@@ -18,11 +18,12 @@ Using Chatwoot Community Edition (MIT license, self-hosted, free) to provide:
 - [x] Select solution: Chatwoot Community Edition
 - [x] Design authentication integration (HMAC for customers, separate credentials for providers)
 - [x] Document integration plan
-- [ ] Deploy Chatwoot infrastructure (Docker + Redis, uses existing PostgreSQL)
-- [ ] Implement backend integration (Rust: HMAC generation, API client, webhooks)
-- [ ] Implement frontend integration (SvelteKit: widget component)
-- [ ] Hook provider registration → Chatwoot agent creation
-- [ ] Hook contract creation → Chatwoot conversation creation
+- [x] Implement backend integration (Rust: HMAC generation, API client, webhooks)
+- [x] Implement frontend integration (SvelteKit: widget component)
+- [x] Hook provider registration → Chatwoot agent creation
+- [x] Hook contract creation → Chatwoot conversation creation
+- [ ] Deploy Chatwoot infrastructure (see docker-compose.*.yml - requires Cloudflare tunnel config)
+- [ ] Configure Chatwoot admin account and inbox (see cf/.env.example for setup instructions)
 
 **Features delivered by Chatwoot:**
 - Message/ticket system between users and providers

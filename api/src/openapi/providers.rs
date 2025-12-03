@@ -359,12 +359,38 @@ impl ProvidersApi {
         params.id = None;
         params.pubkey = hex::encode(&pubkey_bytes);
 
+        // Check if this is provider's first offering (for Chatwoot agent creation)
+        let is_first_offering = match db.get_provider_offerings(&pubkey_bytes).await {
+            Ok(offerings) => offerings.is_empty(),
+            Err(_) => false, // Assume not first if check fails
+        };
+
         match db.create_offering(&pubkey_bytes, params).await {
-            Ok(id) => Json(ApiResponse {
-                success: true,
-                data: Some(id),
-                error: None,
-            }),
+            Ok(id) => {
+                // Create Chatwoot agent for new providers (first offering)
+                if is_first_offering && crate::chatwoot::integration::is_configured() {
+                    if let Err(e) =
+                        crate::chatwoot::integration::create_provider_agent(&db, &pubkey_bytes)
+                            .await
+                    {
+                        tracing::error!("Failed to create Chatwoot agent for provider: {}", e);
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(format!(
+                                "Offering created but Chatwoot agent creation failed: {}",
+                                e
+                            )),
+                        });
+                    }
+                }
+
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(id),
+                    error: None,
+                })
+            }
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,
