@@ -44,7 +44,7 @@ async fn test_get_platform_stats_with_data() {
         let contract_id_ref = &contract_id;
         let requester_pubkey_ref = &requester_pubkey;
         let pubkey_ref = &pubkey;
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -194,7 +194,7 @@ async fn test_get_provider_stats_with_data() {
         let contract_id_ref = &pending_contract_id;
         let requester_ref = &pending_requester;
         let pubkey_ref = &pubkey;
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -216,7 +216,7 @@ async fn test_get_provider_stats_with_data() {
         let contract_id_ref = &active_contract_id;
         let requester_ref = &active_requester;
         let pubkey_ref = &pubkey;
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -390,7 +390,7 @@ async fn test_search_accounts_with_reputation_and_activity() {
 
     // Add contract for alice
     let contract_id = vec![3u8; 32];
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
@@ -731,7 +731,7 @@ async fn test_get_provider_trust_metrics_with_contracts() {
     for i in 0..5 {
         let contract_id = vec![i + 10; 32];
         let requester = if i % 2 == 0 { &requester1 } else { &requester2 };
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -793,7 +793,7 @@ async fn test_provider_tenure_new() {
     for i in 0..4 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -832,7 +832,7 @@ async fn test_provider_tenure_growing() {
     for i in 0..5 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -871,7 +871,7 @@ async fn test_provider_tenure_growing_at_boundary() {
     for i in 0..20 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -910,7 +910,7 @@ async fn test_provider_tenure_established() {
     for i in 0..21 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -989,7 +989,7 @@ async fn test_avg_contract_duration_ratio_completed_exact() {
     let requester = vec![2u8; 32];
     let start_ns = 1000000000000i64; // 1000 seconds
     let end_ns = start_ns + (100 * 3600 * 1_000_000_000i64); // +100 hours in nanoseconds
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1034,7 +1034,7 @@ async fn test_avg_contract_duration_ratio_completed_longer() {
     let requester = vec![2u8; 32];
     let start_ns = 1000000000000i64;
     let end_ns = start_ns + (150 * 3600 * 1_000_000_000i64);
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1079,7 +1079,7 @@ async fn test_avg_contract_duration_ratio_cancelled_early() {
     let requester = vec![2u8; 32];
     let start_ns = 1000000000000i64;
     let status_updated_ns = start_ns + (25 * 3600 * 1_000_000_000i64);
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1123,7 +1123,7 @@ async fn test_avg_contract_duration_ratio_mixed_contracts() {
     let requester = vec![2u8; 32];
     let start_ns1 = 1000000000000i64;
     let end_ns1 = start_ns1 + (100 * 3600 * 1_000_000_000i64);
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1186,7 +1186,7 @@ async fn test_avg_contract_duration_ratio_ignores_active_contracts() {
     // Active contract (should be ignored)
     let contract_id = vec![10u8; 32];
     let requester = vec![2u8; 32];
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1248,7 +1248,7 @@ async fn test_no_response_rate_pct_zero() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = now_ns - (i as i64 + 1) * 10 * ns_per_day; // 10, 20, 30, 40, 50 days ago
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1295,7 +1295,7 @@ async fn test_no_response_rate_pct_all_ignored() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = cutoff_7d_ns - (i as i64 + 1) * ns_per_day; // 8, 9, 10 days ago
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1342,7 +1342,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = cutoff_7d_ns - (i as i64 + 1) * ns_per_day;
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1366,7 +1366,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = now_ns - (i as i64 + 1) * ns_per_day; // 3, 4, 5 days ago
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1413,7 +1413,7 @@ async fn test_no_response_rate_pct_recent_requested_not_counted() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = now_ns - (i as i64 + 1) * ns_per_day; // 1, 2, 3 days ago
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1460,7 +1460,7 @@ async fn test_no_response_rate_pct_only_counts_last_90_days() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = cutoff_90d_ns - (i as i64 + 1) * ns_per_day; // 91, 92 days ago
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1504,7 +1504,7 @@ async fn test_abandonment_velocity_none_no_baseline() {
     let contract_id = vec![10u8; 32];
     let requester = vec![2u8; 32];
     let status_updated_ns = now_ns - 10 * ns_per_day; // 10 days ago (recent)
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1549,7 +1549,7 @@ async fn test_abandonment_velocity_zero_no_recent() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64 * 5) * ns_per_day; // 40, 45, 50, 55, 60 days ago
-        let payment_method = "dct";
+        let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1590,7 +1590,7 @@ async fn test_abandonment_velocity_stable() {
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1689,7 +1689,7 @@ async fn test_abandonment_velocity_improving() {
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1788,7 +1788,7 @@ async fn test_abandonment_velocity_spike() {
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1887,7 +1887,7 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 

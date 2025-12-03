@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT AVG(CAST(h.changed_at_ns - c.created_at_ns AS REAL)) as \"avg: f64\"\n               FROM contract_sign_requests c\n               INNER JOIN contract_status_history h ON c.contract_id = h.contract_id\n               WHERE c.provider_pubkey = ?\n               AND h.old_status = 'requested'\n               AND h.changed_at_ns IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "avg: f64",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "88ae85985851561d5ffa58d446beb014603e848270788ba9bbc77408a9131149"
+}

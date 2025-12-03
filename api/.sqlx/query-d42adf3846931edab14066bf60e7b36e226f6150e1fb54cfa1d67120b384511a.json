@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE message_threads SET last_message_at_ns = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d42adf3846931edab14066bf60e7b36e226f6150e1fb54cfa1d67120b384511a"
+}

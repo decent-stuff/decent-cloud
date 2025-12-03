@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE message_notifications SET status = 'skipped' WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a8869e5c838e869382bc63b197e18dde4ea66788a0863a2bec60f4c30f05eeab"
+}

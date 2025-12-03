@@ -10,8 +10,8 @@ async fn insert_contract_request(
     created_at_ns: i64,
     status: &str,
 ) {
-    let payment_method = "dct";
-    let payment_status = "succeeded"; // DCT payments are pre-paid
+    let payment_method = "icpay";
+    let payment_status = "succeeded"; // ICPay payments are pre-paid
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
@@ -323,7 +323,7 @@ async fn test_get_contract_payments() {
 }
 
 #[tokio::test]
-async fn test_create_rental_request_with_dct_payment_method() {
+async fn test_create_rental_request_with_icpay_payment_method() {
     let db = setup_test_db().await;
     let user_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
@@ -344,12 +344,12 @@ async fn test_create_rental_request_with_dct_payment_method() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: Some("Test rental".to_string()),
         duration_hours: None,
-        payment_method: Some("dct".to_string()),
+        payment_method: Some("icpay".to_string()),
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.payment_method, "dct");
+    assert_eq!(contract.payment_method, "icpay");
 }
 
 #[tokio::test]
@@ -526,7 +526,7 @@ async fn test_create_rental_request_with_defaults() {
         contact_method: None,
         request_memo: None,
         duration_hours: None,
-        payment_method: Some("dct".to_string()),
+        payment_method: Some("icpay".to_string()),
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -549,7 +549,7 @@ async fn test_create_rental_request_offering_not_found() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: None,
         duration_hours: None,
-        payment_method: Some("dct".to_string()),
+        payment_method: Some("icpay".to_string()),
     };
 
     let result = db.create_rental_request(&user_pk, params).await;
@@ -582,7 +582,7 @@ async fn test_create_rental_request_calculates_price() {
         contact_method: Some("contact".to_string()),
         request_memo: None,
         duration_hours: None,
-        payment_method: Some("dct".to_string()),
+        payment_method: Some("icpay".to_string()),
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -1056,7 +1056,7 @@ async fn test_update_stripe_payment_intent_overwrites() {
 }
 
 #[tokio::test]
-async fn test_payment_status_dct_payment_succeeds_immediately() {
+async fn test_payment_status_icpay_payment_succeeds_immediately() {
     let db = setup_test_db().await;
     let user_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
@@ -1077,14 +1077,14 @@ async fn test_payment_status_dct_payment_succeeds_immediately() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: Some("Test rental".to_string()),
         duration_hours: None,
-        payment_method: Some("dct".to_string()),
+        payment_method: Some("icpay".to_string()),
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
 
-    // DCT payments are pre-paid, so payment_status should be 'succeeded'
-    assert_eq!(contract.payment_method, "dct");
+    // ICPay payments are pre-paid, so payment_status should be 'succeeded'
+    assert_eq!(contract.payment_method, "icpay");
     assert_eq!(contract.payment_status, "succeeded");
 }
 
@@ -1326,7 +1326,7 @@ async fn test_accept_contract_not_found() {
 #[test]
 fn test_calculate_prorated_refund_full_refund_before_start() {
     // Contract hasn't started yet, should get full refund
-    let payment_amount_e9s = 1_000_000_000; // 1 DCT = 100 USD
+    let payment_amount_e9s = 1_000_000_000; // Test amount in e9s
     let start_timestamp_ns = 1000;
     let end_timestamp_ns = 2000;
     let current_timestamp_ns = 500; // Before start
@@ -1421,13 +1421,13 @@ fn test_calculate_prorated_refund_90_percent_remaining() {
 }
 
 #[tokio::test]
-async fn test_cancel_contract_with_dct_payment_no_refund() {
+async fn test_cancel_contract_with_icpay_payment_no_refund() {
     let db = setup_test_db().await;
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
     let contract_id = vec![100u8; 32];
 
-    // Insert DCT payment contract
+    // Insert ICPay payment contract
     insert_contract_request(
         &db,
         &contract_id,
@@ -1439,7 +1439,7 @@ async fn test_cancel_contract_with_dct_payment_no_refund() {
     )
     .await;
 
-    // Cancel without Stripe client (DCT payment)
+    // Cancel without Stripe client (ICPay payment)
     let result = db
         .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
         .await;
@@ -1449,7 +1449,7 @@ async fn test_cancel_contract_with_dct_payment_no_refund() {
     // Verify contract is cancelled
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
-    assert_eq!(contract.payment_status, "succeeded"); // DCT payment status unchanged
+    assert_eq!(contract.payment_status, "succeeded"); // ICPay payment status unchanged
     assert!(contract.refund_amount_e9s.is_none());
     assert!(contract.stripe_refund_id.is_none());
 }

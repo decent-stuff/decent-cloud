@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT p.pubkey, p.name, p.description, p.website_url, p.logo_url, p.why_choose_us, p.api_version, p.profile_version, p.updated_at_ns FROM provider_profiles p\n             INNER JOIN provider_check_ins c ON p.pubkey = c.pubkey\n             WHERE c.block_timestamp_ns > ?\n             ORDER BY p.name",
+  "describe": {
+    "columns": [
+      {
+        "name": "pubkey",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "website_url",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "logo_url",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "why_choose_us",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_version",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "profile_version",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at_ns",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "94d0d093147761130d793a0fac97794f507a76dd0df809bca948331e1b19e939"
+}

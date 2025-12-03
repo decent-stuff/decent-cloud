@@ -20,14 +20,14 @@ pub const STRIPE_SUPPORTED_CURRENCIES: &[&str] = &[
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaymentMethod {
-    #[serde(rename = "dct")]
-    DCT,
+    #[serde(rename = "icpay")]
+    ICPay,
     Stripe,
 }
 
 impl PaymentMethod {
-    pub fn is_dct(&self) -> bool {
-        matches!(self, PaymentMethod::DCT)
+    pub fn is_icpay(&self) -> bool {
+        matches!(self, PaymentMethod::ICPay)
     }
 
     pub fn is_stripe(&self) -> bool {
@@ -38,7 +38,7 @@ impl PaymentMethod {
 impl std::fmt::Display for PaymentMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PaymentMethod::DCT => write!(f, "dct"),
+            PaymentMethod::ICPay => write!(f, "icpay"),
             PaymentMethod::Stripe => write!(f, "stripe"),
         }
     }
@@ -49,7 +49,7 @@ impl std::str::FromStr for PaymentMethod {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "dct" => Ok(PaymentMethod::DCT),
+            "icpay" => Ok(PaymentMethod::ICPay),
             "stripe" => Ok(PaymentMethod::Stripe),
             _ => Err(format!("Invalid payment method: {}", s)),
         }
@@ -66,21 +66,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_payment_method_is_dct() {
-        assert!(PaymentMethod::DCT.is_dct());
-        assert!(!PaymentMethod::Stripe.is_dct());
+    fn test_payment_method_is_icpay() {
+        assert!(PaymentMethod::ICPay.is_icpay());
+        assert!(!PaymentMethod::Stripe.is_icpay());
     }
 
     #[test]
     fn test_payment_method_is_stripe() {
         assert!(PaymentMethod::Stripe.is_stripe());
-        assert!(!PaymentMethod::DCT.is_stripe());
+        assert!(!PaymentMethod::ICPay.is_stripe());
     }
 
     #[test]
     fn test_payment_method_from_str_valid() {
-        assert_eq!("dct".parse::<PaymentMethod>().unwrap(), PaymentMethod::DCT);
-        assert_eq!("DCT".parse::<PaymentMethod>().unwrap(), PaymentMethod::DCT);
+        assert_eq!("icpay".parse::<PaymentMethod>().unwrap(), PaymentMethod::ICPay);
+        assert_eq!("ICPay".parse::<PaymentMethod>().unwrap(), PaymentMethod::ICPay);
+        assert_eq!("ICPAY".parse::<PaymentMethod>().unwrap(), PaymentMethod::ICPay);
         assert_eq!(
             "stripe".parse::<PaymentMethod>().unwrap(),
             PaymentMethod::Stripe
@@ -104,15 +105,15 @@ mod tests {
 
     #[test]
     fn test_payment_method_display() {
-        assert_eq!(PaymentMethod::DCT.to_string(), "dct");
+        assert_eq!(PaymentMethod::ICPay.to_string(), "icpay");
         assert_eq!(PaymentMethod::Stripe.to_string(), "stripe");
     }
 
     #[test]
     fn test_payment_method_serialize() {
-        let dct = PaymentMethod::DCT;
-        let json = serde_json::to_string(&dct).unwrap();
-        assert_eq!(json, r#""dct""#);
+        let icpay = PaymentMethod::ICPay;
+        let json = serde_json::to_string(&icpay).unwrap();
+        assert_eq!(json, r#""icpay""#);
 
         let stripe = PaymentMethod::Stripe;
         let json = serde_json::to_string(&stripe).unwrap();
@@ -121,8 +122,8 @@ mod tests {
 
     #[test]
     fn test_payment_method_deserialize() {
-        let dct: PaymentMethod = serde_json::from_str(r#""dct""#).unwrap();
-        assert_eq!(dct, PaymentMethod::DCT);
+        let icpay: PaymentMethod = serde_json::from_str(r#""icpay""#).unwrap();
+        assert_eq!(icpay, PaymentMethod::ICPay);
 
         let stripe: PaymentMethod = serde_json::from_str(r#""stripe""#).unwrap();
         assert_eq!(stripe, PaymentMethod::Stripe);
@@ -151,6 +152,6 @@ mod tests {
         assert!(!is_stripe_supported_currency("eth"));
         assert!(!is_stripe_supported_currency("invalid"));
         assert!(!is_stripe_supported_currency(""));
-        assert!(!is_stripe_supported_currency("dct"));
+        assert!(!is_stripe_supported_currency("icp"));
     }
 }

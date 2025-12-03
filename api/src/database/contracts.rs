@@ -49,6 +49,8 @@ pub struct Contract {
     pub stripe_payment_intent_id: Option<String>,
     #[oai(skip_serializing_if_is_none)]
     pub stripe_customer_id: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub icpay_transaction_id: Option<String>,
     pub payment_status: String,
     pub currency: String,
     #[ts(type = "number | undefined")]
@@ -125,7 +127,7 @@ impl Database {
             r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
@@ -143,7 +145,7 @@ impl Database {
             r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
@@ -161,7 +163,7 @@ impl Database {
             r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
@@ -179,7 +181,7 @@ impl Database {
             r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
@@ -200,7 +202,7 @@ impl Database {
             r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns
                FROM contract_sign_requests WHERE stripe_payment_intent_id = ?"#,
             payment_intent_id
@@ -246,7 +248,7 @@ impl Database {
             r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, payment_status as "payment_status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
@@ -372,9 +374,9 @@ impl Database {
         let stripe_customer_id: Option<&str> = None;
 
         // Set payment_status based on payment method
-        // DCT payments are pre-paid, so they succeed immediately
+        // ICPay payments are pre-paid, so they succeed immediately
         // Stripe payments require webhook confirmation, so they start as pending
-        let payment_status = if payment_method_str == "dct" {
+        let payment_status = if payment_method_str == "icpay" {
             "succeeded"
         } else {
             "pending"

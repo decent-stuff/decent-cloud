@@ -33,6 +33,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/022_messaging.sql"),
         include_str!("../../migrations/023_email_queue_time_based_retry.sql"),
         include_str!("../../migrations/024_chatwoot_tracking.sql"),
+        include_str!("../../migrations/025_icpay_rename.sql"),
     ];
 
     for migration in &migrations {

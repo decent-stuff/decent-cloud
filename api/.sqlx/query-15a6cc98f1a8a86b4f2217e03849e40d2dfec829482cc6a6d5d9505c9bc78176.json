@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT mt.id, mt.contract_id, mt.subject as \"subject!\", mt.created_at_ns as \"created_at_ns!\", mt.last_message_at_ns as \"last_message_at_ns!\", mt.status as \"status!\"\n               FROM message_threads mt\n               INNER JOIN message_thread_participants mtp ON mt.id = mtp.thread_id\n               WHERE mtp.pubkey = ?\n               ORDER BY mt.last_message_at_ns DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "contract_id",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "subject!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns!",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_message_at_ns!",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status!",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "15a6cc98f1a8a86b4f2217e03849e40d2dfec829482cc6a6d5d9505c9bc78176"
+}

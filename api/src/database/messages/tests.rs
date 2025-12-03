@@ -6,7 +6,7 @@ async fn insert_test_contract(
     requester_pubkey: &[u8],
     provider_pubkey: &[u8],
 ) {
-    let payment_method = "dct";
+    let payment_method = "icpay";
     let payment_status = "succeeded";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;

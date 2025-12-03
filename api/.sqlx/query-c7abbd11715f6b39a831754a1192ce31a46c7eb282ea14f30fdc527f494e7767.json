@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "c7abbd11715f6b39a831754a1192ce31a46c7eb282ea14f30fdc527f494e7767"
+}

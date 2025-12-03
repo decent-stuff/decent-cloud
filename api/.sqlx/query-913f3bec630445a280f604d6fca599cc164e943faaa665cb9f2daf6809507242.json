@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT m.body, m.sender_pubkey, m.thread_id, mt.contract_id\n               FROM messages m\n               JOIN message_threads mt ON m.thread_id = mt.id\n               WHERE m.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "body",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "sender_pubkey",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "thread_id",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "contract_id",
+        "ordinal": 3,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "913f3bec630445a280f604d6fca599cc164e943faaa665cb9f2daf6809507242"
+}

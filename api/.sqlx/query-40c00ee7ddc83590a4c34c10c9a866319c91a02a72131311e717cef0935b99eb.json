@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(SUM(amount_e9s), 0) FROM token_transfers WHERE to_account = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "COALESCE(SUM(amount_e9s), 0)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "40c00ee7ddc83590a4c34c10c9a866319c91a02a72131311e717cef0935b99eb"
+}

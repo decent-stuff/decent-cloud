@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i64\" FROM provider_offerings WHERE offering_id = ? AND (pubkey) = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "cb7d7bc4fbf92fcbae1001aa2f5f67691b76ecdf84ee747faeff4fb8fe52cba6"
+}
