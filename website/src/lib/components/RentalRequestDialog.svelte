@@ -15,6 +15,7 @@
 	} from "@stripe/stripe-js";
 	import { onMount } from "svelte";
 	import { isStripeSupportedCurrency } from "$lib/utils/stripe-currencies";
+	import { getIcpay, isIcpayConfigured } from "$lib/utils/icpay";
 
 	interface Props {
 		offering: Offering | null;
@@ -31,7 +32,7 @@
 	let loading = $state(false);
 	let processingPayment = $state(false);
 	let error = $state<string | null>(null);
-	let paymentMethod = $state<"dct" | "stripe">("dct");
+	let paymentMethod = $state<"icpay" | "stripe">("icpay");
 	let stripe: Stripe | null = null;
 	let elements: StripeElements | null = null;
 	let cardElement: StripeCardElement | null = null;
@@ -76,7 +77,7 @@
 				},
 			});
 			cardElement.mount(mountPoint);
-		} else if (paymentMethod === "dct" && cardElement) {
+		} else if (paymentMethod === "icpay" && cardElement) {
 			cardElement.unmount();
 			cardElement = null;
 			elements = null;
@@ -128,6 +129,11 @@
 			return;
 		}
 
+		if (paymentMethod === "icpay" && !isIcpayConfigured()) {
+			error = "ICPay is not configured. Please contact support.";
+			return;
+		}
+
 		loading = true;
 		processingPayment = false;
 		error = null;
@@ -150,6 +156,42 @@
 			);
 
 			const response = await createRentalRequest(params, signed.headers);
+
+			// If ICPay payment, process crypto payment
+			if (paymentMethod === "icpay") {
+				const icpay = getIcpay();
+				if (!icpay) {
+					error = "Failed to initialize ICPay SDK";
+					loading = false;
+					return;
+				}
+
+				processingPayment = true;
+
+				try {
+					const usdAmount = parseFloat(calculatePrice());
+					const result = await icpay.createPaymentUsd({
+						usdAmount,
+						tokenShortcode: 'ic_icp',
+						metadata: { contractId: response.contractId },
+					});
+
+					if (result.status === 'failed') {
+						error = "ICPay payment failed";
+						loading = false;
+						processingPayment = false;
+						return;
+					}
+				} catch (icpayError) {
+					error = icpayError instanceof Error ? icpayError.message : "ICPay payment failed";
+					console.error("ICPay payment error:", icpayError);
+					loading = false;
+					processingPayment = false;
+					return;
+				}
+
+				processingPayment = false;
+			}
 
 			// If Stripe payment, confirm with card element
 			if (
@@ -352,13 +394,13 @@
 					<div class="grid grid-cols-2 gap-3">
 						<button
 							type="button"
-							onclick={() => (paymentMethod = "dct")}
+							onclick={() => (paymentMethod = "icpay")}
 							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod ===
-							'dct'
+							'icpay'
 								? 'bg-blue-500/20 border-blue-500 text-white'
 								: 'bg-white/10 border-white/20 text-white/60 hover:border-white/40'}"
 						>
-							DCT Tokens
+							Crypto (ICPay)
 						</button>
 						<button
 							type="button"
@@ -385,6 +427,18 @@
 						</p>
 					{/if}
 				</fieldset>
+
+				<!-- ICPay Payment Section -->
+				{#if paymentMethod === "icpay"}
+					<div class="bg-white/5 rounded-lg p-4 border border-white/10">
+						<h3 class="text-sm font-semibold text-white/70 mb-2">
+							Crypto Payment via ICPay
+						</h3>
+						<p class="text-sm text-white/60">
+							You will connect your wallet (Internet Identity, Plug, etc.) to complete the payment with ICP or other supported tokens.
+						</p>
+					</div>
+				{/if}
 
 				<!-- Stripe Card Element -->
 				{#if paymentMethod === "stripe"}

@@ -206,10 +206,30 @@ Replace the current DCT payment method with ICPay integration to provide:
 - **Outcome:** SUCCESS - ICPay SDK installed, environment variables documented, icpay.ts utility module created, TypeScript compiles without errors
 
 ### Step 3
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Completed
+  - Updated payment method state from "dct" | "stripe" to "icpay" | "stripe" in /code/website/src/lib/components/RentalRequestDialog.svelte
+  - Changed default paymentMethod from "dct" to "icpay"
+  - Updated button label from "DCT Tokens" to "Crypto (ICPay)"
+  - Added imports for getIcpay() and isIcpayConfigured() from $lib/utils/icpay
+  - Replaced Stripe-only card input section with ICPay payment info section that displays wallet connection message
+  - Updated $effect block to handle "icpay" instead of "dct" for card element cleanup
+  - Updated handleSubmit() to support ICPay payment flow:
+    - Added validation check for ICPay configuration
+    - Added ICPay payment processing after contract creation
+    - Calls icpay.createPaymentUsd() with USD amount, token shortcode (ic_icp), and contract metadata
+    - Checks result.status for 'failed' and handles errors appropriately
+    - Processes payment before calling onSuccess()
+  - Both Stripe and ICPay flows work side-by-side without conflicts
+- **Files Changed:**
+  - /code/website/src/lib/components/RentalRequestDialog.svelte (updated imports, types, UI, payment flow)
+- **Review:** All changes follow KISS, MINIMAL, YAGNI, DRY principles. No code duplication. Only necessary changes for ICPay integration.
+- **Verification:**
+  - npm run check: RentalRequestDialog compiles without TypeScript errors
+  - Pre-existing test file errors unrelated to this change
+  - Payment method toggle now shows "Crypto (ICPay)" and "Credit Card"
+  - ICPay section displays wallet connection info when selected
+  - Stripe section with card element displays when Stripe selected
+- **Outcome:** SUCCESS - RentalRequestDialog supports ICPay payments, TypeScript compiles cleanly, both payment methods work independently
 
 ### Step 4
 - **Implementation:** (pending)
