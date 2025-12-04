@@ -2,6 +2,169 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+// =============================================================================
+// Platform API Client (for user management with password control)
+// =============================================================================
+
+/// Chatwoot Platform API client for user management.
+/// Uses Platform App token from SuperAdmin console.
+pub struct ChatwootPlatformClient {
+    client: Client,
+    base_url: String,
+    platform_token: String,
+    account_id: u32,
+}
+
+impl std::fmt::Debug for ChatwootPlatformClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChatwootPlatformClient")
+            .field("base_url", &self.base_url)
+            .field("account_id", &self.account_id)
+            .finish()
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct CreatePlatformUserRequest<'a> {
+    name: &'a str,
+    email: &'a str,
+    password: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PlatformUserResponse {
+    pub id: i64,
+    pub email: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AddAccountUserRequest {
+    user_id: i64,
+    role: String,
+}
+
+#[derive(Debug, Serialize)]
+struct UpdateUserPasswordRequest<'a> {
+    password: &'a str,
+}
+
+impl ChatwootPlatformClient {
+    /// Creates a new Platform client from environment variables.
+    pub fn from_env() -> Result<Self> {
+        let base_url = std::env::var("CHATWOOT_BASE_URL").context("CHATWOOT_BASE_URL not set")?;
+        let platform_token = std::env::var("CHATWOOT_PLATFORM_API_TOKEN")
+            .context("CHATWOOT_PLATFORM_API_TOKEN not set")?;
+        let account_id: u32 = std::env::var("CHATWOOT_ACCOUNT_ID")
+            .context("CHATWOOT_ACCOUNT_ID not set")?
+            .parse()
+            .context("CHATWOOT_ACCOUNT_ID must be a number")?;
+
+        Ok(Self {
+            client: Client::new(),
+            base_url,
+            platform_token,
+            account_id,
+        })
+    }
+
+    /// Check if Platform API is configured.
+    pub fn is_configured() -> bool {
+        std::env::var("CHATWOOT_PLATFORM_API_TOKEN").is_ok()
+            && std::env::var("CHATWOOT_BASE_URL").is_ok()
+            && std::env::var("CHATWOOT_ACCOUNT_ID").is_ok()
+    }
+
+    /// Create a user via Platform API.
+    /// Returns the user ID which should be stored for future password resets.
+    pub async fn create_user(
+        &self,
+        email: &str,
+        name: &str,
+        password: &str,
+    ) -> Result<PlatformUserResponse> {
+        let url = format!("{}/platform/api/v1/users", self.base_url);
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.platform_token)
+            .json(&CreatePlatformUserRequest {
+                name,
+                email,
+                password,
+            })
+            .send()
+            .await
+            .context("Failed to send create user request")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot Platform API error {}: {}", status, body);
+        }
+
+        resp.json()
+            .await
+            .context("Failed to parse platform user response")
+    }
+
+    /// Add a user to an account as an agent.
+    pub async fn add_user_to_account(&self, user_id: i64) -> Result<()> {
+        let url = format!(
+            "{}/platform/api/v1/accounts/{}/account_users",
+            self.base_url, self.account_id
+        );
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.platform_token)
+            .json(&AddAccountUserRequest {
+                user_id,
+                role: "agent".to_string(),
+            })
+            .send()
+            .await
+            .context("Failed to send add user to account request")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot Platform API error {}: {}", status, body);
+        }
+
+        Ok(())
+    }
+
+    /// Update a user's password.
+    pub async fn update_user_password(&self, user_id: i64, new_password: &str) -> Result<()> {
+        let url = format!("{}/platform/api/v1/users/{}", self.base_url, user_id);
+
+        let resp = self
+            .client
+            .patch(&url)
+            .header("api_access_token", &self.platform_token)
+            .json(&UpdateUserPasswordRequest {
+                password: new_password,
+            })
+            .send()
+            .await
+            .context("Failed to send update password request")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot Platform API error {}: {}", status, body);
+        }
+
+        Ok(())
+    }
+}
+
+// =============================================================================
+// Account API Client (for contacts and conversations)
+// =============================================================================
+
 /// Chatwoot API client for managing agents, contacts, and conversations.
 pub struct ChatwootClient {
     client: Client,
@@ -17,19 +180,6 @@ impl std::fmt::Debug for ChatwootClient {
             .field("account_id", &self.account_id)
             .finish()
     }
-}
-
-#[derive(Debug, Serialize)]
-struct CreateAgentRequest<'a> {
-    email: &'a str,
-    name: &'a str,
-    role: &'a str,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AgentResponse {
-    pub id: u64,
-    pub email: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -92,35 +242,6 @@ impl ChatwootClient {
             api_token: api_token.to_string(),
             account_id,
         }
-    }
-
-    /// Create an agent account for a provider.
-    pub async fn create_agent(&self, email: &str, name: &str) -> Result<AgentResponse> {
-        let url = format!(
-            "{}/api/v1/accounts/{}/agents",
-            self.base_url, self.account_id
-        );
-
-        let resp = self
-            .client
-            .post(&url)
-            .header("api_access_token", &self.api_token)
-            .json(&CreateAgentRequest {
-                email,
-                name,
-                role: "agent",
-            })
-            .send()
-            .await
-            .context("Failed to send create agent request")?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Chatwoot API error {}: {}", status, body);
-        }
-
-        resp.json().await.context("Failed to parse agent response")
     }
 
     /// Create or update a contact (customer).

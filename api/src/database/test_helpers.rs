@@ -35,6 +35,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/024_chatwoot_tracking.sql"),
         include_str!("../../migrations/025_icpay_rename.sql"),
         include_str!("../../migrations/026_sla_tracking.sql"),
+        include_str!("../../migrations/027_chatwoot_user_id.sql"),
     ];
 
     for migration in &migrations {

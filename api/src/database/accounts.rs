@@ -25,6 +25,8 @@ pub struct Account {
     pub last_login_at: Option<i64>,
     // Admin flag for admin access control
     pub is_admin: i64,
+    // Chatwoot Platform API user ID for support portal management
+    pub chatwoot_user_id: Option<i64>,
 }
 
 /// Account public key record
@@ -264,7 +266,7 @@ impl Database {
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
              FROM accounts WHERE id = ?",
         )
         .bind(account_id)
@@ -277,7 +279,7 @@ impl Database {
     /// Get account by username (case-insensitive search)
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
              FROM accounts WHERE LOWER(username) = LOWER(?)",
         )
         .bind(username)
@@ -705,7 +707,7 @@ impl Database {
     /// Get account by email
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
              FROM accounts WHERE email = ?",
         )
         .bind(email)
@@ -841,7 +843,7 @@ impl Database {
     #[allow(dead_code)]
     pub async fn list_admins(&self) -> Result<Vec<Account>> {
         let admins = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
              FROM accounts WHERE is_admin = 1 ORDER BY username ASC"
         )
         .fetch_all(&self.pool)
@@ -864,6 +866,43 @@ impl Database {
         }
 
         Ok(())
+    }
+
+    /// Set Chatwoot user ID for an account
+    pub async fn set_chatwoot_user_id(
+        &self,
+        account_id: &[u8],
+        chatwoot_user_id: i64,
+    ) -> Result<()> {
+        let result = sqlx::query("UPDATE accounts SET chatwoot_user_id = ? WHERE id = ?")
+            .bind(chatwoot_user_id)
+            .bind(account_id)
+            .execute(&self.pool)
+            .await?;
+
+        if result.rows_affected() == 0 {
+            bail!("Account not found");
+        }
+
+        Ok(())
+    }
+
+    /// Get Chatwoot user ID for an account by public key
+    pub async fn get_chatwoot_user_id_by_public_key(
+        &self,
+        public_key: &[u8],
+    ) -> Result<Option<i64>> {
+        let result = sqlx::query_scalar!(
+            r#"SELECT a.chatwoot_user_id as "chatwoot_user_id: i64"
+               FROM accounts a
+               JOIN account_public_keys pk ON pk.account_id = a.id
+               WHERE pk.public_key = ? AND pk.is_active = 1"#,
+            public_key
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.flatten())
     }
 }
 
