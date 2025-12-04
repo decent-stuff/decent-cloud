@@ -5,6 +5,7 @@ pub mod core;
 pub mod email;
 pub mod handlers;
 pub mod messages;
+pub mod notification_config;
 pub mod offerings;
 pub mod providers;
 pub mod recovery;
@@ -17,6 +18,7 @@ pub mod users;
 
 // Re-export main types
 pub use chatwoot::{ProviderResponseMetrics, ResponseTimeDistribution, SlaBreach};
+pub use notification_config::ProviderNotificationConfig;
 pub use types::{Database, LedgerEntryData};
 
 // Import all handler implementations

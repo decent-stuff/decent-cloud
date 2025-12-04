@@ -125,10 +125,23 @@ Add endpoints:
 - **Outcome:** SUCCESS - Table created with proper schema, idempotent-safe with `CREATE TABLE IF NOT EXISTS`, query cache updated
 
 ### Step 2
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created database layer for provider notification config CRUD operations with:
+  - `ProviderNotificationConfig` struct with fields: provider_pubkey, chatwoot_portal_slug, notify_via, telegram_chat_id, notify_phone
+  - `get_provider_notification_config(pubkey)` - fetches config by provider pubkey, returns Option
+  - `set_provider_notification_config(pubkey, config)` - creates or updates config using UPSERT pattern
+  - Module added to `/code/api/src/database/notification_config.rs` and exported from mod.rs
+- **Files:**
+  - `/code/api/src/database/notification_config.rs` (new, 230 lines)
+  - `/code/api/src/database/mod.rs` (updated exports)
+  - `/code/api/src/database/test_helpers.rs` (added migration 028)
+- **Tests:** 5 unit tests covering:
+  - Get config when not exists (returns None)
+  - Set and get config (positive path)
+  - Update existing config (upsert behavior)
+  - Invalid notify_via value (CHECK constraint enforcement)
+  - Nonexistent provider (foreign key constraint enforcement)
+- **Verification:** `cargo make` passed cleanly - all tests pass, no compilation warnings or errors
+- **Outcome:** SUCCESS - Database layer fully functional with proper error handling and constraint validation
 
 ### Step 3
 - **Implementation:** (pending)

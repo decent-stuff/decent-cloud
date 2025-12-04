@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT provider_pubkey as \"provider_pubkey!\", chatwoot_portal_slug, notify_via as \"notify_via!\", telegram_chat_id, notify_phone\n               FROM provider_notification_config\n               WHERE provider_pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "provider_pubkey!",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "chatwoot_portal_slug",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "notify_via!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "telegram_chat_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "notify_phone",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "37ce5d9daf9d84ac62300df447538ea4641a1ac70b459279d296b012f83f9247"
+}

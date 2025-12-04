@@ -18,6 +18,7 @@ Integrate with or scrape external sources for additional trust signals:
 
 **Stack:** Chatwoot (MIT, self-hosted) + custom AgentBot + notification bridge.
 See [Support Bot & Notification System spec](docs/specs/support-bot-notification-system.md).
+In-progress: see docs/2025-12-04-support-bot-notification-system-spec.md
 
 **Chatwoot provides:**
 - Ticketing/messaging between users and providers
