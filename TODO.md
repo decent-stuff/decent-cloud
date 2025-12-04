@@ -1,4 +1,10 @@
 
+## Architectural Issues Requiring Review
+
+(No current issues)
+
+---
+
 ## Provider Trust & Reliability System
 
 ### External Benchmarking Integration
@@ -10,20 +16,13 @@ Integrate with or scrape external sources for additional trust signals:
 
 ### In-Contract Communication & Tracking
 
-**Solution: Chatwoot Integration** - See [Integration Plan](docs/chatwoot-integration-plan.md)
-
-Using Chatwoot Community Edition (MIT license, self-hosted, free) to provide:
-
-- [x] Research ticketing/messaging solutions
-- [x] Select solution: Chatwoot Community Edition
-- [x] Design authentication integration (HMAC for customers, separate credentials for providers)
-- [x] Document integration plan
-- [x] Implement backend integration (Rust: HMAC generation, API client, webhooks)
-- [x] Implement frontend integration (SvelteKit: widget component)
-- [x] Hook provider registration → Chatwoot agent creation
-- [x] Hook contract creation → Chatwoot conversation creation
-- [ ] Deploy Chatwoot infrastructure (see docker-compose.*.yml - requires Cloudflare tunnel config)
-- [ ] Configure Chatwoot admin account and inbox (see cf/.env.example for setup instructions)
+### Custom Agent Bots
+Provider-specific AI bots with custom knowledge bases:
+- Each provider can have their own Agent Bot in Chatwoot
+- Bot trained on provider-specific documentation/FAQ
+- Auto-respond to common questions before human handoff
+- Requires: Chatwoot Agent Bot API + provider knowledge base storage
+- Reference: Chatwoot Captain AI (Enterprise) or custom webhook bots (Community)
 
 **Features delivered by Chatwoot:**
 - Message/ticket system between users and providers
