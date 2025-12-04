@@ -393,6 +393,21 @@ def build_website_natively(environment: str, env_vars: dict[str, str]) -> bool:
                 f.write("# Stripe not configured - credit card payments disabled\n")
                 f.write("# VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...\n")
 
+            # Chatwoot widget configuration
+            f.write("\n")
+            chatwoot_token = env_vars.get("CHATWOOT_WEBSITE_TOKEN")
+            chatwoot_base_url = env_vars.get("CHATWOOT_BASE_URL")
+            if chatwoot_token:
+                f.write("# Chatwoot support widget\n")
+                f.write(f"VITE_CHATWOOT_WEBSITE_TOKEN={chatwoot_token}\n")
+                base_url = chatwoot_base_url or "https://support.decent-cloud.org"
+                f.write(f"VITE_CHATWOOT_BASE_URL={base_url}\n")
+                print_success("Configured Chatwoot widget for website build")
+            else:
+                f.write("# Chatwoot not configured - support widget disabled\n")
+                f.write("# VITE_CHATWOOT_WEBSITE_TOKEN=your_token\n")
+                f.write("# VITE_CHATWOOT_BASE_URL=https://support.decent-cloud.org\n")
+
         print_success(f"Created .env.local for {environment} build")
         print()
 

@@ -1,6 +1,5 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { registerNewAccount, setupConsoleLogging } from './fixtures/auth-helpers';
-import { getTestAccount } from './fixtures/test-account';
 import { ed25519ph } from '@noble/curves/ed25519';
 import { mnemonicToSeedSync } from 'bip39';
 import { sha512 } from '@noble/hashes/sha512';
