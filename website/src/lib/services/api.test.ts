@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, hexEncode, getUserContracts, getProviderContracts } from './api';
+import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, hexEncode, getUserContracts, getProviderContracts, getProviderResponseMetrics } from './api';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 
 const sampleStats = {
@@ -436,5 +436,78 @@ describe('getProviderContracts', () => {
 		} as Response);
 
 		await expect(getProviderContracts(providerHeaders, providerHex)).rejects.toThrow('Unauthorized');
+	});
+});
+
+describe('getProviderResponseMetrics', () => {
+	const sampleMetrics = {
+		avgResponseSeconds: 3600,
+		avgResponseHours: 1.0,
+		slaCompliancePercent: 95.5,
+		breachCount30d: 2,
+		totalInquiries30d: 40,
+		distribution: {
+			within1hPct: 60.0,
+			within4hPct: 85.0,
+			within12hPct: 95.0,
+			within24hPct: 98.0,
+			within72hPct: 100.0,
+			totalResponses: 40
+		}
+	};
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('returns response metrics when API succeeds with hex string', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: sampleMetrics })
+		});
+
+		const metrics = await getProviderResponseMetrics('abcd1234');
+
+		expect(metrics.avgResponseHours).toBe(1.0);
+		expect(metrics.slaCompliancePercent).toBe(95.5);
+		expect(metrics.distribution.within1hPct).toBe(60.0);
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/providers/abcd1234/response-metrics')
+		);
+	});
+
+	it('converts Uint8Array to hex string', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: sampleMetrics })
+		});
+
+		const pubkey = new Uint8Array([0xab, 0xcd, 0x12, 0x34]);
+		await getProviderResponseMetrics(pubkey);
+
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/providers/abcd1234/response-metrics')
+		);
+	});
+
+	it('throws when API fails', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 500,
+			statusText: 'Internal Server Error'
+		});
+
+		await expect(getProviderResponseMetrics('test')).rejects.toThrow(
+			'Failed to fetch response metrics'
+		);
+	});
+
+	it('throws when API reports failure', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: false, error: 'Provider not found' })
+		});
+
+		await expect(getProviderResponseMetrics('test')).rejects.toThrow('Provider not found');
 	});
 });

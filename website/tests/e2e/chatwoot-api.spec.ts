@@ -100,6 +100,48 @@ test.describe('Chatwoot API', () => {
 	});
 });
 
+test.describe('Provider Response Metrics', () => {
+	test('GET /providers/:pubkey/response-metrics returns metrics for valid pubkey', async ({
+		request
+	}) => {
+		// Use a valid 32-byte hex pubkey (64 chars)
+		const validPubkey = '0'.repeat(64);
+		const response = await request.get(
+			`${API_BASE_URL}/api/v1/providers/${validPubkey}/response-metrics`
+		);
+
+		expect(response.status()).toBe(200);
+
+		const data = await response.json();
+		expect(data.success).toBe(true);
+		expect(data.data).toHaveProperty('avgResponseSeconds');
+		expect(data.data).toHaveProperty('avgResponseHours');
+		expect(data.data).toHaveProperty('slaCompliancePercent');
+		expect(data.data).toHaveProperty('breachCount30d');
+		expect(data.data).toHaveProperty('totalInquiries30d');
+		expect(data.data).toHaveProperty('distribution');
+		expect(data.data.distribution).toHaveProperty('within1hPct');
+		expect(data.data.distribution).toHaveProperty('within4hPct');
+		expect(data.data.distribution).toHaveProperty('within12hPct');
+		expect(data.data.distribution).toHaveProperty('within24hPct');
+		expect(data.data.distribution).toHaveProperty('within72hPct');
+		expect(data.data.distribution).toHaveProperty('totalResponses');
+	});
+
+	test('GET /providers/:pubkey/response-metrics returns error for invalid pubkey', async ({
+		request
+	}) => {
+		const response = await request.get(
+			`${API_BASE_URL}/api/v1/providers/invalid-pubkey/response-metrics`
+		);
+
+		expect(response.status()).toBe(200);
+		const data = await response.json();
+		expect(data.success).toBe(false);
+		expect(data.error).toContain('Invalid pubkey');
+	});
+});
+
 test.describe('Chatwoot Webhook', () => {
 	test('POST /webhooks/chatwoot accepts valid message_created event', async ({ request }) => {
 		// The webhook should accept events even without database entries
