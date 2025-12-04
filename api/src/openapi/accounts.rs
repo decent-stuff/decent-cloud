@@ -267,7 +267,8 @@ impl AccountsApi {
 
                 // Create Chatwoot agent for support (non-blocking)
                 if crate::chatwoot::integration::is_configured() {
-                    match crate::chatwoot::integration::create_provider_agent(&db, &public_key).await
+                    match crate::chatwoot::integration::create_provider_agent(&db, &public_key)
+                        .await
                     {
                         Ok(()) => {
                             // Queue support portal welcome email
@@ -320,7 +321,11 @@ The Decent Cloud Team"#,
                             .await;
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to create Chatwoot agent for {}: {}", username, e);
+                            tracing::warn!(
+                                "Failed to create Chatwoot agent for {}: {}",
+                                username,
+                                e
+                            );
                         }
                     }
                 }

@@ -43,11 +43,8 @@
 
 	const tabs = [
 		{ href: "/dashboard/account/security", label: "Security", icon: "🔐" },
-		{
-			href: "/dashboard/account/profile",
-			label: "Public Profile",
-			icon: "👤",
-		},
+		{ href: "/dashboard/account/profile", label: "Public Profile", icon: "👤" },
+		{ href: "/dashboard/account/support", label: "Support Portal", icon: "🎫" },
 	];
 
 	const quickAccessLinks = $derived([
@@ -194,6 +191,8 @@
 									Manage devices and authentication keys
 								{:else if tab.label === "Public Profile"}
 									Edit your public profile information
+								{:else if tab.label === "Support Portal"}
+									Access and reset support portal credentials
 								{/if}
 							</p>
 						</div>

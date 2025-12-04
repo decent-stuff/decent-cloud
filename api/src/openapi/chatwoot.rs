@@ -1,7 +1,6 @@
 use super::common::ApiResponse;
 use crate::auth::ApiAuthenticatedUser;
 use crate::chatwoot::{generate_identity_hash, ChatwootPlatformClient};
-use crate::database::email::EmailType;
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{payload::Json, Object, OpenApi};
@@ -16,6 +15,32 @@ pub struct ChatwootIdentityResponse {
     pub identifier: String,
     /// HMAC hash for identity validation
     pub identifier_hash: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct SupportPortalStatus {
+    /// Whether the user has a support portal account
+    pub has_account: bool,
+    /// Chatwoot user ID (if account exists)
+    #[oai(skip_serializing_if_is_none)]
+    pub user_id: Option<i64>,
+    /// Email address used for support portal
+    #[oai(skip_serializing_if_is_none)]
+    pub email: Option<String>,
+    /// Login URL for the support portal
+    pub login_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordResetResponse {
+    /// The new password (display once, do not store)
+    pub password: String,
+    /// Login URL for the support portal
+    pub login_url: String,
 }
 
 pub struct ChatwootApi;
@@ -59,10 +84,65 @@ impl ChatwootApi {
         })
     }
 
-    /// Reset support portal access
+    /// Get support portal status
+    ///
+    /// Returns the user's support portal account status including user ID and login URL.
+    #[oai(
+        path = "/chatwoot/support-access",
+        method = "get",
+        tag = "super::common::ApiTags::Chatwoot"
+    )]
+    async fn get_support_access_status(
+        &self,
+        db: Data<&Arc<Database>>,
+        user: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<SupportPortalStatus>> {
+        let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
+            .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+
+        // Get chatwoot_user_id for this account
+        let chatwoot_user_id = match db.get_chatwoot_user_id_by_public_key(&user.pubkey).await {
+            Ok(id) => id,
+            Err(e) => {
+                tracing::error!("Failed to get chatwoot_user_id: {}", e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Database error".to_string()),
+                });
+            }
+        };
+
+        // Get account email
+        let email = match db.get_account_with_keys_by_public_key(&user.pubkey).await {
+            Ok(Some(acc)) => acc.email,
+            Ok(None) => None,
+            Err(e) => {
+                tracing::error!("Failed to get account: {}", e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Database error".to_string()),
+                });
+            }
+        };
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(SupportPortalStatus {
+                has_account: chatwoot_user_id.is_some(),
+                user_id: chatwoot_user_id,
+                email,
+                login_url: format!("{}/app/login", support_url),
+            }),
+            error: None,
+        })
+    }
+
+    /// Reset support portal password
     ///
     /// Generates a new password for the authenticated user's Chatwoot support portal account.
-    /// The new password is sent to the user's email address.
+    /// Returns the new password directly - display it once and do not store it.
     #[oai(
         path = "/chatwoot/support-access/reset",
         method = "post",
@@ -72,7 +152,7 @@ impl ChatwootApi {
         &self,
         db: Data<&Arc<Database>>,
         user: ApiAuthenticatedUser,
-    ) -> Json<ApiResponse<String>> {
+    ) -> Json<ApiResponse<PasswordResetResponse>> {
         // Check if Platform API is configured
         if !ChatwootPlatformClient::is_configured() {
             return Json(ApiResponse {
@@ -104,7 +184,7 @@ impl ChatwootApi {
             }
         };
 
-        // Get account email
+        // Get account for logging
         let account = match db.get_account_with_keys_by_public_key(&user.pubkey).await {
             Ok(Some(acc)) => acc,
             Ok(None) => {
@@ -121,17 +201,6 @@ impl ChatwootApi {
                     data: None,
                     error: Some("Database error".to_string()),
                 });
-            }
-        };
-
-        let email = match &account.email {
-            Some(e) => e.clone(),
-            None => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some("No email address on account".to_string()),
-                })
             }
         };
 
@@ -163,38 +232,8 @@ impl ChatwootApi {
             });
         }
 
-        // Queue email with new password
         let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
             .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
-
-        db.queue_email_safe(
-            Some(&email),
-            "noreply@decent-cloud.org",
-            "Your Support Portal Password Has Been Reset",
-            &format!(
-                r#"Hello {},
-
-Your Decent Cloud support portal password has been reset.
-
-NEW CREDENTIALS
----------------
-Email: {}
-Password: {}
-Login: {}/app/login
-
-IMPORTANT: For security, please change this password after logging in.
-Go to Profile → Password to set a new password of your choice.
-
-If you did not request this reset, please contact us immediately.
-
-Best regards,
-The Decent Cloud Team"#,
-                account.username, email, new_password, support_url
-            ),
-            false,
-            EmailType::General,
-        )
-        .await;
 
         tracing::info!(
             "Support portal password reset for user {} (chatwoot_user_id: {})",
@@ -204,7 +243,10 @@ The Decent Cloud Team"#,
 
         Json(ApiResponse {
             success: true,
-            data: Some("New password sent to your email address.".to_string()),
+            data: Some(PasswordResetResponse {
+                password: new_password,
+                login_url: format!("{}/app/login", support_url),
+            }),
             error: None,
         })
     }
