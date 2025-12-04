@@ -110,13 +110,13 @@ test.describe('Payment Flows', () => {
 		// Wait for offerings to load
 		await page.waitForTimeout(1000);
 
-		// Click on first offering's "Rent Resource" button
-		const firstOffering = page.locator('button:has-text("Rent Resource")').first();
-		if (!await firstOffering.isVisible()) {
-			test.skip(true, 'No offerings available in marketplace');
+		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
+		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
+		if (!await enabledRentButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+			test.skip(true, 'No rentable offerings available (only demo offerings in marketplace)');
 			return;
 		}
-		await firstOffering.click();
+		await enabledRentButton.click();
 
 		// Wait for rental dialog to appear
 		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
@@ -164,20 +164,13 @@ test.describe('Payment Flows', () => {
 		// Wait for offerings to load
 		await page.waitForTimeout(1000);
 
-		// Check if there are any offerings
-		const rentButtons = page.locator('button:has-text("Rent Resource")');
-		const count = await rentButtons.count();
-
-		if (count === 0) {
-			// Skip test if no offerings available
-			test.skip();
+		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
+		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
+		if (!await enabledRentButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+			test.skip(true, 'No rentable offerings available (only demo offerings in marketplace)');
 			return;
 		}
-
-		// Click on first offering's "Rent Resource" button
-		const firstOffering = rentButtons.first();
-		await expect(firstOffering).toBeVisible({ timeout: 10000 });
-		await firstOffering.click();
+		await enabledRentButton.click();
 
 		// Wait for rental dialog to appear
 		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
@@ -219,13 +212,13 @@ test.describe('Payment Flows', () => {
 		// Wait for offerings to load
 		await page.waitForTimeout(1000);
 
-		// Click on first offering's "Rent Resource" button
-		const firstOffering = page.locator('button:has-text("Rent Resource")').first();
-		if (!await firstOffering.isVisible()) {
-			test.skip(true, 'No offerings available in marketplace');
+		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
+		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
+		if (!await enabledRentButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+			test.skip(true, 'No rentable offerings available (only demo offerings in marketplace)');
 			return;
 		}
-		await firstOffering.click();
+		await enabledRentButton.click();
 
 		// Wait for rental dialog to appear
 		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();

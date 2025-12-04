@@ -499,15 +499,17 @@ impl MessagesApi {
         }
     }
 
-    /// Get provider response metrics
+    /// Get provider message response metrics
     ///
-    /// Returns response time statistics for a provider (public endpoint)
+    /// Returns message response time statistics for a provider (public endpoint).
+    /// Measures how quickly a provider responds to customer messages in threads.
+    /// For contract status response metrics, use `/providers/:pubkey/contract-response-metrics`.
     #[oai(
         path = "/providers/:pubkey/response-metrics",
         method = "get",
         tag = "ApiTags::Messages"
     )]
-    async fn get_provider_response_metrics(
+    async fn get_provider_message_response_metrics(
         &self,
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,

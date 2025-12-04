@@ -246,16 +246,17 @@ impl ProvidersApi {
         }
     }
 
-    /// Get provider response time metrics
+    /// Get provider contract response metrics
     ///
-    /// Returns response time and SLA compliance metrics for a specific provider.
-    /// Includes average response time, SLA compliance percentage, and breach count.
+    /// Returns response time and SLA compliance metrics for contract status changes.
+    /// Measures how quickly a provider responds to rental requests (accepts/rejects).
+    /// For message response metrics, use `/providers/:pubkey/response-metrics` instead.
     #[oai(
-        path = "/providers/:pubkey/response-metrics",
+        path = "/providers/:pubkey/contract-response-metrics",
         method = "get",
         tag = "ApiTags::Providers"
     )]
-    async fn get_provider_response_metrics(
+    async fn get_provider_contract_response_metrics(
         &self,
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,

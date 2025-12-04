@@ -45,11 +45,12 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should show account link in sidebar', async ({ page }) => {
-		await page.goto('/dashboard');
+		// Fixture already leaves us on /dashboard, just ensure page is ready
+		await page.waitForLoadState('networkidle');
 
-		// Verify "Account" link exists in sidebar
-		const accountLink = page.locator('a:has-text("Account")');
-		await expect(accountLink).toBeVisible();
+		// Verify "⚙️ Account" link exists in sidebar (be specific to avoid matching username link)
+		const accountLink = page.locator('a:has-text("⚙️ Account")');
+		await expect(accountLink).toBeVisible({ timeout: 10000 });
 
 		// Click it and verify navigation
 		await accountLink.click();
@@ -57,7 +58,7 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('should show username in header', async ({ page, testAccount }) => {
-		await page.goto('/dashboard');
+		// Fixture already leaves us on /dashboard, just ensure page is ready
 		await page.waitForLoadState('networkidle');
 
 		// Username should appear in header

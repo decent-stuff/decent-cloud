@@ -100,8 +100,8 @@ test.describe('Chatwoot API', () => {
 	});
 });
 
-test.describe('Provider Response Metrics', () => {
-	test('GET /providers/:pubkey/response-metrics returns metrics for valid pubkey', async ({
+test.describe('Provider Message Response Metrics', () => {
+	test('GET /providers/:pubkey/response-metrics returns message response metrics', async ({
 		request
 	}) => {
 		// Use a valid 32-byte hex pubkey (64 chars)
@@ -114,6 +114,42 @@ test.describe('Provider Response Metrics', () => {
 
 		const data = await response.json();
 		expect(data.success).toBe(true);
+		// Response format from MessagesApi endpoint (message thread response times)
+		expect(data.data).toHaveProperty('avgResponseTimeHours');
+		expect(data.data).toHaveProperty('responseRatePct');
+		expect(data.data).toHaveProperty('totalThreads');
+		expect(data.data).toHaveProperty('respondedThreads');
+	});
+
+	test('GET /providers/:pubkey/response-metrics returns error for invalid pubkey', async ({
+		request
+	}) => {
+		const response = await request.get(
+			`${API_BASE_URL}/api/v1/providers/invalid-pubkey/response-metrics`
+		);
+
+		expect(response.status()).toBe(200);
+		const data = await response.json();
+		expect(data.success).toBe(false);
+		expect(data.error).toContain('Invalid provider pubkey format');
+	});
+});
+
+test.describe('Provider Contract Response Metrics', () => {
+	test('GET /providers/:pubkey/contract-response-metrics returns contract response metrics', async ({
+		request
+	}) => {
+		// Use a valid 32-byte hex pubkey (64 chars)
+		const validPubkey = '0'.repeat(64);
+		const response = await request.get(
+			`${API_BASE_URL}/api/v1/providers/${validPubkey}/contract-response-metrics`
+		);
+
+		expect(response.status()).toBe(200);
+
+		const data = await response.json();
+		expect(data.success).toBe(true);
+		// Response format from ProvidersApi endpoint (contract status response times)
 		expect(data.data).toHaveProperty('avgResponseSeconds');
 		expect(data.data).toHaveProperty('avgResponseHours');
 		expect(data.data).toHaveProperty('slaCompliancePercent');
@@ -128,17 +164,17 @@ test.describe('Provider Response Metrics', () => {
 		expect(data.data.distribution).toHaveProperty('totalResponses');
 	});
 
-	test('GET /providers/:pubkey/response-metrics returns error for invalid pubkey', async ({
+	test('GET /providers/:pubkey/contract-response-metrics returns error for invalid pubkey', async ({
 		request
 	}) => {
 		const response = await request.get(
-			`${API_BASE_URL}/api/v1/providers/invalid-pubkey/response-metrics`
+			`${API_BASE_URL}/api/v1/providers/invalid-pubkey/contract-response-metrics`
 		);
 
 		expect(response.status()).toBe(200);
 		const data = await response.json();
 		expect(data.success).toBe(false);
-		expect(data.error).toContain('Invalid pubkey');
+		expect(data.error).toContain('Invalid pubkey format');
 	});
 });
 
