@@ -53,8 +53,16 @@ async function signRequest(
 test.describe('Chatwoot API', () => {
 	test('GET /chatwoot/identity returns 401 for unauthenticated request', async ({ request }) => {
 		const response = await request.get(`${API_BASE_URL}/api/v1/chatwoot/identity`);
+		expect(response.status()).toBe(401);
+	});
 
-		// Should return 401 Unauthorized for unauthenticated request
+	test('GET /chatwoot/support-access returns 401 for unauthenticated request', async ({ request }) => {
+		const response = await request.get(`${API_BASE_URL}/api/v1/chatwoot/support-access`);
+		expect(response.status()).toBe(401);
+	});
+
+	test('POST /chatwoot/support-access/reset returns 401 for unauthenticated request', async ({ request }) => {
+		const response = await request.post(`${API_BASE_URL}/api/v1/chatwoot/support-access/reset`);
 		expect(response.status()).toBe(401);
 	});
 
@@ -97,6 +105,42 @@ test.describe('Chatwoot API', () => {
 			// If not configured, should have error message
 			expect(data.error).toContain('Chatwoot not configured');
 		}
+	});
+
+	test('GET /chatwoot/support-access returns status for authenticated user', async ({ page }) => {
+		setupConsoleLogging(page);
+		const credentials = await registerNewAccount(page);
+		const { publicKey, privateKey } = seedPhraseToKeyPair(credentials.seedPhrase);
+
+		const path = '/api/v1/chatwoot/support-access';
+		const headers = await signRequest(privateKey, publicKey, 'GET', path);
+
+		const response = await page.request.get(`${API_BASE_URL}${path}`, { headers });
+		expect(response.status()).toBe(200);
+
+		const data = await response.json();
+		expect(data).toHaveProperty('success', true);
+		expect(data.data).toHaveProperty('hasAccount');
+		expect(data.data).toHaveProperty('loginUrl');
+		expect(typeof data.data.hasAccount).toBe('boolean');
+	});
+
+	test('POST /chatwoot/support-access/reset returns error without Platform API', async ({ page }) => {
+		setupConsoleLogging(page);
+		const credentials = await registerNewAccount(page);
+		const { publicKey, privateKey } = seedPhraseToKeyPair(credentials.seedPhrase);
+
+		const path = '/api/v1/chatwoot/support-access/reset';
+		const headers = await signRequest(privateKey, publicKey, 'POST', path);
+
+		const response = await page.request.post(`${API_BASE_URL}${path}`, { headers });
+		expect(response.status()).toBe(200);
+
+		const data = await response.json();
+		// Without Platform API configured, should return error
+		// Either "Platform API not configured" or "No support portal account"
+		expect(data.success).toBe(false);
+		expect(data.error).toBeTruthy();
 	});
 });
 
