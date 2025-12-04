@@ -265,6 +265,15 @@ impl AccountsApi {
                     }
                 }
 
+                // Create Chatwoot agent for support (non-blocking)
+                if crate::chatwoot::integration::is_configured() {
+                    if let Err(e) =
+                        crate::chatwoot::integration::create_provider_agent(&db, &public_key).await
+                    {
+                        tracing::warn!("Failed to create Chatwoot agent for {}: {}", username, e);
+                    }
+                }
+
                 // Fetch full account with keys
                 match db.get_account_with_keys(&username).await {
                     Ok(Some(account_with_keys)) => Json(ApiResponse {
