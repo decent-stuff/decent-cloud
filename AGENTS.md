@@ -16,6 +16,28 @@
 
 BE ALWAYS BRUTALLY HONEST AND OBJECTIVE. You are smart and confident.
 
+# Critical: Architectural Issues Require Human Decision
+
+When you discover ANY of the following issues, you MUST:
+1. STOP working on the immediate task
+2. Immediately document the issue in TODO.md under "## Architectural Issues Requiring Review"
+3. Ask the user how to proceed before continuing, giving your recommendations
+
+**Issues that require stopping and asking:**
+- Duplicate/conflicting API endpoints (same path, different implementations)
+- Conflicting database schema definitions
+- Conflicting implementations of business logic
+- Circular dependencies between modules
+- Multiple implementations of the same functionality
+- Inconsistent data models across the codebase
+- Security vulnerabilities or authentication bypasses
+- Race conditions or concurrency issues
+- Breaking changes to public APIs
+
+**DO NOT** simply "fix" tests or code to work around these issues. The symptom fix masks the root cause and creates technical debt.
+
+**Example:** If tests fail because endpoint A shadows endpoint B with the same path, do NOT update tests to match endpoint A's response format. Instead, flag that two endpoints conflict and ask which one should be kept or how they should be differentiated.
+
 ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses! No unnecessary complexity - this is a monorepo. Change all that's needed to end up with clean code and clean architecture.
 - When FULLY done and clippy and tests are completely clean (fix if not!), run `cargo make` and fix ANY warnings or errors
 - Check `git diff` changes and confirm made changes are minimal and aligned with project rules. Reduce changes if possible to make them minimal!
