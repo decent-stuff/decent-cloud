@@ -7,7 +7,8 @@
 				'AI support agent handles common requests automatically',
 				'Build a verifiable track record that attracts customers',
 				'Fair system: good providers rise, bad ones get flagged',
-				'Access global demand through unified marketplace'
+				'Access global demand through unified marketplace',
+				'Free support stack included - get your own support portal automatically'
 			],
 			icon: '🖥️',
 			tagline: 'Excellence is rewarded, not just promised',

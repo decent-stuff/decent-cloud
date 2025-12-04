@@ -5,7 +5,7 @@
 ### Must-have
 - [x] Create Chatwoot agent account automatically when user registers
 - [ ] Chatwoot sends password reset email automatically (built-in feature)
-- [ ] Update provider benefits to mention automatic support stack
+- [x] Update provider benefits to mention automatic support stack
 
 ### Nice-to-have
 - [ ] None identified
@@ -17,7 +17,7 @@
 
 ### Step 2: Update provider benefits on main page
 **Success:** BenefitsSection shows "Free support stack included" benefit
-**Status:** Pending
+**Status:** Complete
 
 ## Execution Log
 ### Step 1
@@ -26,9 +26,9 @@
 - **Outcome:** Successfully compiles with SQLX_OFFLINE=true cargo check -p api. Agent creation is now part of registration flow.
 
 ### Step 2
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Added new benefit item to providers section in BenefitsSection.svelte: "Free support stack included - get your own support portal automatically" (line 11)
+- **Files Changed:** /code/website/src/lib/components/BenefitsSection.svelte
+- **Outcome:** npm run check passes with 0 errors and 0 warnings. Benefit now visible on main page.
 
 ## Completion Summary
 (To be filled in Phase 4)
