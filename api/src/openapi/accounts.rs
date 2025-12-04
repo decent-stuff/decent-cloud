@@ -267,10 +267,61 @@ impl AccountsApi {
 
                 // Create Chatwoot agent for support (non-blocking)
                 if crate::chatwoot::integration::is_configured() {
-                    if let Err(e) =
-                        crate::chatwoot::integration::create_provider_agent(&db, &public_key).await
+                    match crate::chatwoot::integration::create_provider_agent(&db, &public_key).await
                     {
-                        tracing::warn!("Failed to create Chatwoot agent for {}: {}", username, e);
+                        Ok(()) => {
+                            // Queue support portal welcome email
+                            let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
+                                .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+
+                            db.queue_email_safe(
+                                Some(&body_data.email),
+                                "noreply@decent-cloud.org",
+                                "Your Support Portal is Ready",
+                                &format!(
+                                    r#"Hello {},
+
+Your Decent Cloud support portal account has been created. You will receive a separate email from the support system to set your password.
+
+SUPPORT PORTAL ACCESS
+---------------------
+Web: {}
+
+MOBILE APP SETUP
+----------------
+Stay connected with your customers on the go by installing the Chatwoot mobile app:
+
+iOS (iPhone/iPad):
+1. Open the App Store
+2. Search for "Chatwoot" or visit: https://apps.apple.com/app/chatwoot/id1495796682
+3. Tap "Get" to install
+
+Android:
+1. Open the Google Play Store
+2. Search for "Chatwoot" or visit: https://play.google.com/store/apps/details?id=com.chatwoot.app
+3. Tap "Install"
+
+CONNECTING THE APP
+------------------
+1. Open the Chatwoot app after installation
+2. Enter the server URL: {}
+3. Tap "Connect"
+4. Sign in with your email and the password you set
+
+With the mobile app, you can respond to customer inquiries in real-time, receive push notifications, and manage conversations from anywhere.
+
+Best regards,
+The Decent Cloud Team"#,
+                                    username, support_url, support_url
+                                ),
+                                false,
+                                EmailType::General,
+                            )
+                            .await;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to create Chatwoot agent for {}: {}", username, e);
+                        }
                     }
                 }
 
