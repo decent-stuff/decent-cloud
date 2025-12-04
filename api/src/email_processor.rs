@@ -58,6 +58,9 @@ impl EmailProcessor {
         if let Err(e) = self.process_user_notifications().await {
             tracing::error!("User notification processing failed: {}", e);
         }
+        if let Err(e) = self.process_sla_breaches().await {
+            tracing::error!("SLA breach processing failed: {}", e);
+        }
     }
 
     /// Mark emails that exceeded the 7-day window as permanently failed
@@ -586,6 +589,127 @@ impl EmailProcessor {
             hex::encode(account_id),
             hex::encode(&failed_email.id)
         );
+
+        Ok(())
+    }
+
+    /// Process SLA breaches and send alert emails to providers
+    async fn process_sla_breaches(&self) -> anyhow::Result<()> {
+        let breaches = self.database.get_sla_breaches().await?;
+
+        if breaches.is_empty() {
+            tracing::debug!("No SLA breaches to process");
+            return Ok(());
+        }
+
+        let mut alerted_count = 0;
+
+        for breach in breaches {
+            // Mark as breached first
+            self.database.mark_sla_breached(breach.message_id).await?;
+
+            // Get provider email
+            let provider_email = match self
+                .database
+                .get_account_with_keys_by_public_key(&breach.provider_pubkey)
+                .await?
+            {
+                Some(acc) if acc.email_verified && acc.email.is_some() => acc.email.unwrap(),
+                _ => {
+                    tracing::debug!(
+                        "No verified email for provider {}, skipping SLA alert",
+                        hex::encode(&breach.provider_pubkey)
+                    );
+                    self.database.mark_sla_alert_sent(breach.message_id).await?;
+                    continue;
+                }
+            };
+
+            // Calculate how long the customer has been waiting
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            let wait_hours = (now - breach.created_at) / 3600;
+
+            // Queue SLA alert email
+            let from_addr = std::env::var("SMTP_FROM_ADDR")
+                .unwrap_or_else(|_| "noreply@decloud.org".to_string());
+
+            let subject = "Action Required: Customer awaiting response";
+            let contract_url = format!(
+                "{}/dashboard/rentals/{}/messages",
+                self.frontend_url, breach.contract_id
+            );
+            let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
+                .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+
+            let body = format!(
+                r#"<html>
+<body style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #dc2626;">Response Time Alert</h2>
+        <p>A customer has been waiting for your response for over <strong>{} hours</strong>.</p>
+
+        <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <p style="margin: 0;"><strong>Contract ID:</strong> {}</p>
+            <p style="margin: 5px 0 0 0;"><strong>Waiting since:</strong> {} hours ago</p>
+        </div>
+
+        <p>Quick response times build customer trust and improve your provider rating.</p>
+
+        <p>
+            <a href="{}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; margin-right: 10px;">
+                View in Dashboard
+            </a>
+            <a href="{}" style="display: inline-block; background: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500;">
+                Open Support Portal
+            </a>
+        </p>
+
+        <p style="color: #6b7280; font-size: 12px; margin-top: 30px;">
+            You're receiving this alert because your SLA response time threshold has been exceeded.
+        </p>
+    </div>
+</body>
+</html>"#,
+                wait_hours, &breach.contract_id, wait_hours, contract_url, support_url
+            );
+
+            match self
+                .database
+                .queue_email(
+                    &provider_email,
+                    &from_addr,
+                    subject,
+                    &body,
+                    true,
+                    EmailType::General,
+                )
+                .await
+            {
+                Ok(_) => {
+                    self.database.mark_sla_alert_sent(breach.message_id).await?;
+                    tracing::info!(
+                        "Queued SLA breach alert to provider {} for contract {}",
+                        hex::encode(&breach.provider_pubkey),
+                        &breach.contract_id
+                    );
+                    alerted_count += 1;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to queue SLA alert for contract {}: {}",
+                        &breach.contract_id,
+                        e
+                    );
+                }
+            }
+        }
+
+        if alerted_count > 0 {
+            tracing::info!("Processed {} SLA breach alerts", alerted_count);
+        }
 
         Ok(())
     }

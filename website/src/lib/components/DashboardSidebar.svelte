@@ -17,6 +17,10 @@
 	let unsubscribeUnread: (() => void) | null = null;
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 
+	const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
+	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || '1';
+	const supportDashboardUrl = `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`;
+
 	const navItems = $derived([
 		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
 		{
@@ -147,6 +151,21 @@
 			>
 				<span class="text-xl">🔧</span>
 				<span class="font-medium">Admin</span>
+			</a>
+		{/if}
+
+		{#if isAuthenticated && CHATWOOT_BASE_URL}
+			<a
+				href={supportDashboardUrl}
+				target="_blank"
+				rel="noopener noreferrer"
+				onclick={closeSidebar}
+				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-white/70 hover:bg-white/10 hover:text-white"
+				title="Open support dashboard (for providers)"
+			>
+				<span class="text-xl">🎧</span>
+				<span class="font-medium">Support Dashboard</span>
+				<span class="text-xs opacity-50">↗</span>
 			</a>
 		{/if}
 	</nav>

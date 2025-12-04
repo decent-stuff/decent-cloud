@@ -6,7 +6,7 @@
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
-	import { getProviderTrustMetrics, type ProviderTrustMetrics } from "$lib/services/api";
+	import { getProviderTrustMetrics, getProviderResponseMetrics, type ProviderTrustMetrics, type ProviderResponseMetrics } from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 
 	let dashboardData = $state<DashboardData>({
@@ -19,19 +19,28 @@
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
+	let responseMetrics = $state<ProviderResponseMetrics | null>(null);
 	let trustMetricsLoading = $state(false);
 
 	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
 		if (!publicKeyBytes) {
 			trustMetrics = null;
+			responseMetrics = null;
 			return;
 		}
 
 		trustMetricsLoading = true;
 		try {
-			trustMetrics = await getProviderTrustMetrics(publicKeyBytes);
+			const pubkeyHex = computePubkey(publicKeyBytes);
+			const [trustData, responseData] = await Promise.all([
+				getProviderTrustMetrics(publicKeyBytes).catch(() => null),
+				getProviderResponseMetrics(pubkeyHex).catch(() => null),
+			]);
+			trustMetrics = trustData;
+			responseMetrics = responseData;
 		} catch {
-			trustMetrics = null; // User has no trust data yet
+			trustMetrics = null;
+			responseMetrics = null;
 		} finally {
 			trustMetricsLoading = false;
 		}
@@ -114,7 +123,7 @@
 					View full profile &rarr;
 				</a>
 			</div>
-			<TrustDashboard metrics={trustMetrics} />
+			<TrustDashboard metrics={trustMetrics} {responseMetrics} />
 		{/if}
 	{/if}
 

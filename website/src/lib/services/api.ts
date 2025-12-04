@@ -196,6 +196,44 @@ export async function getProviderTrustMetrics(
 	return payload.data;
 }
 
+export interface ResponseTimeDistribution {
+	within1hPct: number;
+	within4hPct: number;
+	within12hPct: number;
+	within24hPct: number;
+	within72hPct: number;
+	totalResponses: number;
+}
+
+export interface ProviderResponseMetrics {
+	avgResponseSeconds: number | null;
+	avgResponseHours: number | null;
+	slaCompliancePercent: number;
+	breachCount30d: number;
+	totalInquiries30d: number;
+	distribution: ResponseTimeDistribution;
+}
+
+export async function getProviderResponseMetrics(
+	pubkey: string | Uint8Array
+): Promise<ProviderResponseMetrics> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/response-metrics`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch response metrics: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderResponseMetrics>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider response metrics');
+	}
+
+	return payload.data;
+}
+
 export async function getActiveValidators(days: number = 1): Promise<Validator[]> {
 	const url = `${API_BASE_URL}/api/v1/validators/active/${days}`;
 	const response = await fetch(url);

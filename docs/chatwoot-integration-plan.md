@@ -724,15 +724,89 @@ docker compose exec chatwoot-web bundle exec rails console
 
 1. ~~**Provider mobile app usage**~~ → **DECIDED: Option A (separate credentials)**
 
-2. **WhatsApp integration** - Do providers need WhatsApp?
-   - Meta charges after free tier (1000 conversations/month)
-   - Requires business verification
-   - Decision: TBD
+2. ~~**WhatsApp integration**~~ → **DECIDED: Deferred (not needed now, can add later)**
 
-3. **Response time SLAs** - Should we enforce SLAs?
-   - Community Edition has FRT reporting but not SLA enforcement
-   - Could build our own SLA alerts via webhooks
-   - Decision: TBD
+3. ~~**Response time SLAs**~~ → **DECIDED: Implement via webhooks (see below)**
+
+---
+
+## Response Time SLA Enforcement (Custom Implementation)
+
+Since Chatwoot Enterprise SLA features require a paid license ($19-99/agent/month), we implement our own SLA tracking via webhooks:
+
+### How It Works
+
+```
+Customer sends message → Chatwoot webhook → Our API records timestamp
+                                              │
+                                              ▼
+                         Background job checks for breaches every N minutes
+                                              │
+                                              ▼
+                         If no provider response within SLA threshold:
+                         - Mark conversation as "SLA breached"
+                         - Send alert email to provider
+                         - Update provider's SLA compliance score
+```
+
+### Database Schema Addition
+
+```sql
+-- Track SLA status per conversation
+ALTER TABLE chatwoot_message_events ADD COLUMN sla_breached INTEGER DEFAULT 0;
+ALTER TABLE chatwoot_message_events ADD COLUMN sla_alert_sent INTEGER DEFAULT 0;
+
+-- Provider SLA configuration (per offering or global)
+CREATE TABLE provider_sla_config (
+    provider_pubkey BLOB PRIMARY KEY,
+    response_time_seconds INTEGER NOT NULL DEFAULT 3600,  -- 1 hour default
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+```
+
+### SLA Check Logic
+
+```rust
+// Called periodically (e.g., every 5 minutes via cron/background task)
+pub async fn check_sla_breaches(db: &Database) -> Result<Vec<SlaBreach>> {
+    // Find customer messages without provider response exceeding SLA threshold
+    let breaches = sqlx::query!(r#"
+        SELECT
+            cm.id, cm.contract_id, cm.chatwoot_conversation_id, cm.created_at,
+            c.provider_pubkey,
+            COALESCE(sla.response_time_seconds, 3600) as sla_threshold
+        FROM chatwoot_message_events cm
+        JOIN contract_sign_requests c ON hex(c.contract_id) = cm.contract_id
+        LEFT JOIN provider_sla_config sla ON sla.provider_pubkey = c.provider_pubkey
+        WHERE cm.sender_type = 'customer'
+          AND cm.sla_breached = 0
+          AND cm.sla_alert_sent = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM chatwoot_message_events response
+              WHERE response.chatwoot_conversation_id = cm.chatwoot_conversation_id
+                AND response.sender_type = 'provider'
+                AND response.created_at > cm.created_at
+          )
+          AND (strftime('%s', 'now') - cm.created_at) > sla_threshold
+    "#).fetch_all(&db.pool).await?;
+
+    // Mark as breached and send alerts
+    for breach in &breaches {
+        db.mark_sla_breached(breach.id).await?;
+        send_sla_alert_email(breach).await?;
+    }
+
+    Ok(breaches)
+}
+```
+
+### Provider Dashboard Metrics
+
+- SLA compliance rate: % of messages responded within SLA
+- Average response time
+- Number of SLA breaches (last 30 days)
+- Displayed on provider profile for customers to see
 
 ---
 
@@ -744,7 +818,6 @@ docker compose exec chatwoot-web bundle exec rails console
 | Redis container | ~$5/month (minimal VPS resources) |
 | PostgreSQL | Already have |
 | OpenAI API (optional) | ~$0.01-0.10 per suggestion |
-| WhatsApp (if used) | ~$0.005-0.08 per message after free tier |
-| **Total** | **~$5-20/month** |
+| **Total** | **~$5-10/month** |
 
 Enterprise (if needed later): $19-99/agent/month

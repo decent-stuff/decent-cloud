@@ -1,12 +1,13 @@
 <script lang="ts">
-	import type { ProviderTrustMetrics } from '$lib/services/api';
+	import type { ProviderTrustMetrics, ProviderResponseMetrics } from '$lib/services/api';
 	import { formatDuration } from '$lib/utils/contract-format';
 
 	interface Props {
 		metrics: ProviderTrustMetrics;
+		responseMetrics?: ProviderResponseMetrics | null;
 	}
 
-	let { metrics }: Props = $props();
+	let { metrics, responseMetrics = null }: Props = $props();
 
 	// Trust score color based on value
 	function getScoreColor(score: number): string {
@@ -76,6 +77,20 @@
 		if (velocity >= 2.0) return 'critical';
 		if (velocity >= 1.5) return 'warning';
 		return 'good';
+	}
+
+	// SLA compliance color based on percentage
+	function getSlaComplianceColor(percent: number): string {
+		if (percent >= 95) return 'text-green-400';
+		if (percent >= 80) return 'text-yellow-400';
+		return 'text-red-400';
+	}
+
+	// Format response time
+	function formatResponseTime(hours: number | null): string {
+		if (hours === null) return 'N/A';
+		if (hours < 1) return `${Math.round(hours * 60)}m`;
+		return `${hours.toFixed(1)}h`;
 	}
 </script>
 
@@ -234,6 +249,59 @@
 					>
 				{/if}
 			</div>
+		</div>
+	{/if}
+
+	<!-- Support Response Metrics -->
+	{#if responseMetrics}
+		<div class="border-t border-white/10 pt-4 mt-4">
+			<h4 class="text-sm font-semibold mb-3">Support Response</h4>
+			<div class="grid grid-cols-2 gap-3">
+				<div class="bg-white/5 rounded-lg p-3">
+					<div class="text-xs text-white/50 mb-1">Avg Response Time</div>
+					<div class="text-lg font-semibold">
+						{formatResponseTime(responseMetrics.avgResponseHours)}
+					</div>
+				</div>
+				<div class="bg-white/5 rounded-lg p-3">
+					<div class="text-xs text-white/50 mb-1">SLA Compliance</div>
+					<div class="text-lg font-semibold {getSlaComplianceColor(responseMetrics.slaCompliancePercent)}">
+						{responseMetrics.slaCompliancePercent.toFixed(0)}%
+					</div>
+				</div>
+			</div>
+			{#if responseMetrics.breachCount30d > 0}
+				<div class="mt-2 text-xs text-yellow-400">
+					{responseMetrics.breachCount30d} SLA breach{responseMetrics.breachCount30d > 1 ? 'es' : ''} in last 30 days
+				</div>
+			{/if}
+
+			<!-- Response Time Distribution -->
+			{#if responseMetrics.distribution.totalResponses > 0}
+				<div class="mt-4 pt-3 border-t border-white/5">
+					<div class="text-xs text-white/50 mb-2">Response Time Distribution ({responseMetrics.distribution.totalResponses} responses)</div>
+					<div class="space-y-2">
+						{#each [
+							{ label: '≤1h', pct: responseMetrics.distribution.within1hPct },
+							{ label: '≤4h', pct: responseMetrics.distribution.within4hPct },
+							{ label: '≤12h', pct: responseMetrics.distribution.within12hPct },
+							{ label: '≤24h', pct: responseMetrics.distribution.within24hPct },
+							{ label: '≤72h', pct: responseMetrics.distribution.within72hPct }
+						] as bucket}
+							<div class="flex items-center gap-2">
+								<div class="w-10 text-xs text-white/60">{bucket.label}</div>
+								<div class="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+									<div
+										class="h-full rounded-full {bucket.pct >= 80 ? 'bg-green-500' : bucket.pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}"
+										style="width: {bucket.pct}%"
+									></div>
+								</div>
+								<div class="w-12 text-xs text-white/70 text-right">{bucket.pct.toFixed(0)}%</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>

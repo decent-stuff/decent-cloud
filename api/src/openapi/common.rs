@@ -89,6 +89,44 @@ pub struct CsvImportError {
     pub message: String,
 }
 
+/// Response time distribution across time buckets
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseTimeDistributionResponse {
+    /// Percentage of inquiries responded to within 1 hour
+    pub within_1h_pct: f64,
+    /// Percentage of inquiries responded to within 4 hours
+    pub within_4h_pct: f64,
+    /// Percentage of inquiries responded to within 12 hours
+    pub within_12h_pct: f64,
+    /// Percentage of inquiries responded to within 24 hours
+    pub within_24h_pct: f64,
+    /// Percentage of inquiries responded to within 72 hours
+    pub within_72h_pct: f64,
+    /// Total number of responses measured
+    pub total_responses: i64,
+}
+
+/// Response metrics for provider support response times
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseMetricsResponse {
+    /// Average response time in seconds (None if no data)
+    pub avg_response_seconds: Option<f64>,
+    /// Average response time in hours (None if no data)
+    pub avg_response_hours: Option<f64>,
+    /// SLA compliance percentage (0-100)
+    pub sla_compliance_percent: f64,
+    /// Number of SLA breaches in last 30 days
+    pub breach_count_30d: i64,
+    /// Total customer inquiries in last 30 days
+    pub total_inquiries_30d: i64,
+    /// Response time distribution across time buckets
+    pub distribution: ResponseTimeDistributionResponse,
+}
+
 // Request types for contracts
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]

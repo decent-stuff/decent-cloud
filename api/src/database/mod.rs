@@ -16,6 +16,7 @@ pub mod types;
 pub mod users;
 
 // Re-export main types
+pub use chatwoot::{ProviderResponseMetrics, ResponseTimeDistribution, SlaBreach};
 pub use types::{Database, LedgerEntryData};
 
 // Import all handler implementations

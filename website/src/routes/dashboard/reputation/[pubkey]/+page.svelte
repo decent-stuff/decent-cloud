@@ -19,7 +19,9 @@
 	} from "$lib/services/api-user-profile";
 	import {
 		getProviderTrustMetrics,
+		getProviderResponseMetrics,
 		type ProviderTrustMetrics,
+		type ProviderResponseMetrics,
 	} from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 	import type { UserProfile } from "$lib/types/generated/UserProfile";
@@ -45,6 +47,7 @@
 	let contacts = $state<UserContact[]>([]);
 	let socials = $state<UserSocial[]>([]);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
+	let responseMetrics = $state<ProviderResponseMetrics | null>(null);
 	let accountInfo = $state<{ emailVerified: boolean; email?: string } | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -183,6 +186,7 @@
 				socialsData,
 				contactsData,
 				trustMetricsData,
+				responseMetricsData,
 			] = await Promise.all([
 				getUserActivity(pubkey).catch(() => null),
 				getReputation(pubkey).catch(() => null),
@@ -192,6 +196,7 @@
 				getUserSocials(pubkey).catch(() => []),
 				getUserContacts(pubkey).catch(() => []),
 				getProviderTrustMetrics(pubkey).catch(() => null),
+				getProviderResponseMetrics(pubkey).catch(() => null),
 			]);
 
 			activity = activityData;
@@ -202,6 +207,7 @@
 			contacts = contactsData;
 			socials = socialsData;
 			trustMetrics = trustMetricsData;
+			responseMetrics = responseMetricsData;
 
 			// Check if account exists in the new account system
 			// Try to fetch account by public key
@@ -495,7 +501,7 @@
 
 		<!-- Trust Dashboard -->
 		{#if trustMetrics}
-			<TrustDashboard metrics={trustMetrics} />
+			<TrustDashboard metrics={trustMetrics} {responseMetrics} />
 		{/if}
 
 		<!-- Cancellation Metrics -->

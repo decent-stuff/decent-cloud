@@ -1,7 +1,8 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags,
     BulkUpdateStatusRequest, CsvImportError, CsvImportResult, DuplicateOfferingRequest,
-    ProvisioningStatusRequest, RentalResponseRequest,
+    ProvisioningStatusRequest, RentalResponseRequest, ResponseMetricsResponse,
+    ResponseTimeDistributionResponse,
 };
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
@@ -235,6 +236,59 @@ impl ProvidersApi {
             Ok(metrics) => Json(ApiResponse {
                 success: true,
                 data: Some(metrics),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get provider response time metrics
+    ///
+    /// Returns response time and SLA compliance metrics for a specific provider.
+    /// Includes average response time, SLA compliance percentage, and breach count.
+    #[oai(
+        path = "/providers/:pubkey/response-metrics",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_response_metrics(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<ResponseMetricsResponse>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        match db.get_provider_response_metrics(&pubkey_bytes).await {
+            Ok(metrics) => Json(ApiResponse {
+                success: true,
+                data: Some(ResponseMetricsResponse {
+                    avg_response_seconds: metrics.avg_response_seconds,
+                    avg_response_hours: metrics.avg_response_seconds.map(|s| s / 3600.0),
+                    sla_compliance_percent: metrics.sla_compliance_percent,
+                    breach_count_30d: metrics.breach_count_30d,
+                    total_inquiries_30d: metrics.total_inquiries_30d,
+                    distribution: ResponseTimeDistributionResponse {
+                        within_1h_pct: metrics.distribution.within_1h_pct,
+                        within_4h_pct: metrics.distribution.within_4h_pct,
+                        within_12h_pct: metrics.distribution.within_12h_pct,
+                        within_24h_pct: metrics.distribution.within_24h_pct,
+                        within_72h_pct: metrics.distribution.within_72h_pct,
+                        total_responses: metrics.distribution.total_responses,
+                    },
+                }),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
