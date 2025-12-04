@@ -7,31 +7,13 @@ services:
   # ============================================
   # Chatwoot - Customer Support Platform
   # ============================================
-  chatwoot-postgres:
-    image: postgres:15-alpine
-    container_name: chatwoot-postgres-prod
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: chatwoot
-      POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
-      POSTGRES_DB: chatwoot_production
-    volumes:
-      - chatwoot-postgres-prod:/var/lib/postgresql/data
-    networks:
-      - decent-cloud-prod
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chatwoot"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   chatwoot-redis:
-    image: redis:7-alpine
-    container_name: chatwoot-redis-prod
+    image: redis:8-alpine
+    container_name: decent-cloud-prod-chatwoot-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - chatwoot-redis-prod:/data
+      - decent-cloud-prod-chatwoot-redis:/data
     networks:
       - decent-cloud-prod
     healthcheck:
@@ -41,21 +23,19 @@ services:
       retries: 5
 
   chatwoot-web:
-    image: chatwoot/chatwoot:v3.14.1
-    container_name: chatwoot-web-prod
+    image: chatwoot/chatwoot:v4.8.0
+    container_name: decent-cloud-prod-chatwoot-web
     restart: unless-stopped
     depends_on:
-      chatwoot-postgres:
-        condition: service_healthy
       chatwoot-redis:
         condition: service_healthy
     environment:
       RAILS_ENV: production
       SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
-      POSTGRES_HOST: chatwoot-postgres
+      POSTGRES_HOST: 192.168.0.2
       POSTGRES_PORT: 5432
-      POSTGRES_DATABASE: chatwoot_production
-      POSTGRES_USERNAME: chatwoot
+      POSTGRES_DATABASE: chatwoot_prod
+      POSTGRES_USERNAME: chatwoot_prod
       POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
       REDIS_URL: redis://chatwoot-redis:6379
       FRONTEND_URL: ${CHATWOOT_FRONTEND_URL:-https://support.decent-cloud.org}
@@ -73,34 +53,36 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Disable telemetry
       DISABLE_TELEMETRY: "true"
-    command: bundle exec rails s -p 3000 -b '0.0.0.0'
+    command: bundle exec rails s -p 59102 -b '0.0.0.0'
     ports:
-      - "59102:3000"
+      - "59102:59102"
     networks:
       - decent-cloud-prod
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:59102/api >/dev/null 2>&1 || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       start_period: 60s
       retries: 3
 
   chatwoot-worker:
-    image: chatwoot/chatwoot:v3.14.1
-    container_name: chatwoot-worker-prod
+    image: chatwoot/chatwoot:v4.8.0
+    container_name: decent-cloud-prod-chatwoot-worker
     restart: unless-stopped
     depends_on:
-      chatwoot-postgres:
-        condition: service_healthy
       chatwoot-redis:
         condition: service_healthy
     environment:
       RAILS_ENV: production
       SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
-      POSTGRES_HOST: chatwoot-postgres
+      POSTGRES_HOST: 192.168.0.2
       POSTGRES_PORT: 5432
-      POSTGRES_DATABASE: chatwoot_production
-      POSTGRES_USERNAME: chatwoot
+      POSTGRES_DATABASE: chatwoot_prod
+      POSTGRES_USERNAME: chatwoot_prod
       POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
       REDIS_URL: redis://chatwoot-redis:6379
       FRONTEND_URL: ${CHATWOOT_FRONTEND_URL:-https://support.decent-cloud.org}
@@ -116,20 +98,18 @@ services:
 
   # Run database migrations on startup (one-time)
   chatwoot-migrate:
-    image: chatwoot/chatwoot:v3.14.1
-    container_name: chatwoot-migrate-prod
+    image: chatwoot/chatwoot:v4.8.0
+    container_name: decent-cloud-prod-chatwoot-migrate
     depends_on:
-      chatwoot-postgres:
-        condition: service_healthy
       chatwoot-redis:
         condition: service_healthy
     environment:
       RAILS_ENV: production
       SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
-      POSTGRES_HOST: chatwoot-postgres
+      POSTGRES_HOST: 192.168.0.2
       POSTGRES_PORT: 5432
-      POSTGRES_DATABASE: chatwoot_production
-      POSTGRES_USERNAME: chatwoot
+      POSTGRES_DATABASE: chatwoot_prod
+      POSTGRES_USERNAME: chatwoot_prod
       POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD}
       REDIS_URL: redis://chatwoot-redis:6379
     command: bundle exec rails db:chatwoot_prepare
@@ -144,7 +124,7 @@ services:
       context: ..
       dockerfile: cf/Dockerfile
     image: decent-cloud-website:prod
-    container_name: decent-cloud-website-prod
+    container_name: decent-cloud-prod-website
     restart: unless-stopped
     environment:
       - ENVIRONMENT=prod
@@ -162,7 +142,7 @@ services:
         GROUP_ID: ${GROUP_ID:-1000}
         BINARY_HASH: ${BINARY_HASH:-unknown}
     image: decent-cloud-api:prod
-    container_name: decent-cloud-api-serve-prod
+    container_name: decent-cloud-prod-api-serve
     restart: unless-stopped
     command: ["api-server", "serve"]
     environment:
@@ -186,7 +166,7 @@ services:
       - DKIM_SELECTOR=${DKIM_SELECTOR}
       - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY}
       # Chatwoot integration
-      - CHATWOOT_BASE_URL=http://chatwoot-web:3000
+      - CHATWOOT_BASE_URL=http://chatwoot-web:59102
       - CHATWOOT_API_TOKEN=${CHATWOOT_API_TOKEN}
       - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID:-1}
       - CHATWOOT_HMAC_SECRET=${CHATWOOT_HMAC_SECRET}
@@ -213,7 +193,7 @@ services:
         GROUP_ID: ${GROUP_ID:-1000}
         BINARY_HASH: ${BINARY_HASH:-unknown}
     image: decent-cloud-api:prod
-    container_name: decent-cloud-api-sync-prod
+    container_name: decent-cloud-prod-api-sync
     restart: unless-stopped
     command: ["api-server", "sync"]
     environment:
@@ -229,7 +209,7 @@ services:
     networks:
       - decent-cloud-prod
 
-  api-validate:
+  validator:
     build:
       context: ..
       dockerfile: api/Dockerfile
@@ -238,7 +218,7 @@ services:
         GROUP_ID: ${GROUP_ID:-1000}
         BINARY_HASH: ${BINARY_HASH:-unknown}
     image: decent-cloud-api:prod
-    container_name: decent-cloud-api-validate-prod
+    container_name: decent-cloud-prod-validator
     restart: unless-stopped
     command: ["/usr/local/bin/validator-entrypoint.sh"]
     environment:
@@ -262,7 +242,7 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: decent-cloud-tunnel-prod
+    container_name: decent-cloud-prod-tunnel
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
@@ -278,8 +258,7 @@ services:
         condition: service_healthy
 
 volumes:
-  chatwoot-postgres-prod:
-  chatwoot-redis-prod:
+  decent-cloud-prod-chatwoot-redis:
 
 networks:
   decent-cloud-prod:
