@@ -16,23 +16,19 @@ Integrate with or scrape external sources for additional trust signals:
 
 ### In-Contract Communication & Tracking
 
-### Custom Agent Bots
-Provider-specific AI bots with custom knowledge bases:
-- Each provider can have their own Agent Bot in Chatwoot
-- Bot trained on provider-specific documentation/FAQ
-- Auto-respond to common questions before human handoff
-- Requires: Chatwoot Agent Bot API + provider knowledge base storage
-- Reference: Chatwoot Captain AI (Enterprise) or custom webhook bots (Community)
+**Stack:** Chatwoot (MIT, self-hosted) + custom AgentBot + notification bridge.
+See [Support Bot & Notification System spec](docs/specs/support-bot-notification-system.md).
 
-**Features delivered by Chatwoot:**
-- Message/ticket system between users and providers
-- Response time tracking (First Response Time metrics built-in)
-- Timestamped communication logs
-- "Provider went silent" detection via webhook events
-- Multi-channel support (web, email, WhatsApp, Telegram, etc.)
-- Mobile apps for providers
-- Email notifications
-- AI-assisted replies (OpenAI BYOK)
+**Chatwoot provides:**
+- Ticketing/messaging between users and providers
+- Help Center (native KB for provider FAQs)
+- Response time tracking, CSAT surveys
+- Multi-channel (web, email, Telegram, WhatsApp)
+- Webhooks for bot integration and escalation
+
+**We build:**
+- AI Bot (~200 lines): answers from Help Center articles, cites sources
+- Notification Bridge (~150 lines): alerts providers via Telegram/SMS on escalation
 
 ### Service Quality Verification
 - Automated health checks on provisioned services
