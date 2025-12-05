@@ -177,10 +177,10 @@ async fn call_llm_api(prompt: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::support_bot::search::HelpCenterArticle;
+    use crate::chatwoot::HelpCenterArticle;
 
     fn make_test_article(
-        id: u64,
+        id: i64,
         title: &str,
         content: &str,
         slug: &str,

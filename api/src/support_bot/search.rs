@@ -1,16 +1,10 @@
 //! Simple keyword-based article search using basic tokenization and weighted scoring
 
+use crate::chatwoot::HelpCenterArticle;
+
 const MIN_SCORE_THRESHOLD: f32 = 0.1;
 const TITLE_WEIGHT: f32 = 2.0;
 const CONTENT_WEIGHT: f32 = 1.0;
-
-#[derive(Debug, Clone)]
-pub struct HelpCenterArticle {
-    pub id: u64,
-    pub title: String,
-    pub content: String,
-    pub slug: String,
-}
 
 #[derive(Debug, Clone)]
 pub struct ScoredArticle {
@@ -91,7 +85,7 @@ fn calculate_score(keywords: &[String], article: &HelpCenterArticle) -> f32 {
 mod tests {
     use super::*;
 
-    fn create_article(id: u64, title: &str, content: &str) -> HelpCenterArticle {
+    fn create_article(id: i64, title: &str, content: &str) -> HelpCenterArticle {
         HelpCenterArticle {
             id,
             title: title.to_string(),
