@@ -340,10 +340,33 @@ Add endpoints:
 - **Outcome:** SUCCESS - Telegram bot can send notifications with message tracking. Webhook types defined for Step 9 reply handling. Environment variables required: TELEGRAM_BOT_TOKEN, CHATWOOT_BASE_URL.
 
 ### Step 9
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Added Telegram webhook handler at `/api/v1/webhooks/telegram` to post provider replies back to Chatwoot
+  - Created `telegram_webhook()` handler in `/code/api/src/openapi/webhooks.rs`:
+    - Parses TelegramUpdate payload from webhook body
+    - Checks if message contains `reply_to_message` field (indicates this is a reply)
+    - Uses `lookup_conversation(reply_to_message.message_id)` to find associated conversation_id
+    - Extracts reply text from `message.text`
+    - Creates ChatwootClient from environment and calls `send_message(conversation_id, reply_text)`
+    - Posts reply as "outgoing" message type (appears as agent response in Chatwoot)
+    - Logs errors if conversation not found or Chatwoot not configured
+    - Returns 200 OK on success, 500 on error
+  - Registered webhook route in `/code/api/src/main.rs` at line 312-315
+  - Added imports for `TelegramUpdate` and `lookup_conversation` from `crate::notifications::telegram`
+  - Fixed type mismatch in chatwoot_webhook handler (provider_pubkey hex decode)
+- **Files:**
+  - `/code/api/src/openapi/webhooks.rs` (added telegram_webhook handler, 72 lines; fixed chatwoot_webhook type issue)
+  - `/code/api/src/main.rs` (added webhook route registration)
+- **Tests:** 3 unit tests for webhook payload deserialization:
+  - `test_telegram_update_deserialization_with_reply` - validates reply_to_message parsing
+  - `test_telegram_update_deserialization_without_reply` - validates normal message parsing
+  - `test_telegram_update_no_message` - validates update without message field
+  - All existing tests continue to pass (1013 total, 38 leaky from canister tests)
+- **Verification:**
+  - `cargo make` - all 1013 tests pass
+  - `cargo build --release --bin dc` - clean build
+  - Webhook handler follows existing patterns (stripe_webhook, chatwoot_webhook)
+  - Error handling: logs warnings for unknown messages, errors for failed Chatwoot posts
+- **Outcome:** SUCCESS - Provider replies in Telegram are bridged back to Chatwoot conversations. Flow complete: Customer → Chatwoot → Bot/Notification → Telegram → Provider → Telegram webhook → Chatwoot → Customer.
 
 ### Step 10
 - **Implementation:** (pending)

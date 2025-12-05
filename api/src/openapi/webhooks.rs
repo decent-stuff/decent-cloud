@@ -1,5 +1,6 @@
 use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
+use crate::notifications::telegram::{lookup_conversation, TelegramUpdate};
 use crate::support_bot::handler::handle_customer_message;
 use crate::support_bot::notifications::{dispatch_notification, SupportNotification};
 use anyhow::{Context, Result};
@@ -257,30 +258,44 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                             Ok(contract_id_bytes) => {
                                 match db.get_contract(&contract_id_bytes).await {
                                     Ok(Some(contract)) => {
-                                        // Get Chatwoot base URL for notification link
-                                        let chatwoot_url = std::env::var("CHATWOOT_FRONTEND_URL")
-                                            .unwrap_or_else(|_| {
-                                                "https://support.decent-cloud.org".to_string()
-                                            });
+                                        // Decode provider pubkey from hex
+                                        match hex::decode(&contract.provider_pubkey) {
+                                            Ok(provider_pubkey_bytes) => {
+                                                // Get Chatwoot base URL for notification link
+                                                let chatwoot_url =
+                                                    std::env::var("CHATWOOT_FRONTEND_URL")
+                                                        .unwrap_or_else(|_| {
+                                                            "https://support.decent-cloud.org"
+                                                                .to_string()
+                                                        });
 
-                                        let notification = SupportNotification::new(
-                                            contract.provider_pubkey.clone(),
-                                            conv.id,
-                                            contract_id.to_string(),
-                                            "Customer conversation escalated to human support"
-                                                .to_string(),
-                                            &chatwoot_url,
-                                        );
+                                                let notification = SupportNotification::new(
+                                                    provider_pubkey_bytes,
+                                                    conv.id,
+                                                    contract_id.to_string(),
+                                                    "Customer conversation escalated to human support"
+                                                        .to_string(),
+                                                    &chatwoot_url,
+                                                );
 
-                                        if let Err(e) =
-                                            dispatch_notification(&db, &notification).await
-                                        {
-                                            tracing::error!(
-                                                "Failed to dispatch notification for conversation {}: {}",
-                                                conv.id,
-                                                e
-                                            );
-                                            // Don't fail webhook - notification failure shouldn't block event processing
+                                                if let Err(e) =
+                                                    dispatch_notification(&db, &notification).await
+                                                {
+                                                    tracing::error!(
+                                                        "Failed to dispatch notification for conversation {}: {}",
+                                                        conv.id,
+                                                        e
+                                                    );
+                                                    // Don't fail webhook - notification failure shouldn't block event processing
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    "Invalid provider_pubkey hex for conversation {}: {}",
+                                                    conv.id,
+                                                    e
+                                                );
+                                            }
                                         }
                                     }
                                     Ok(None) => {
@@ -389,6 +404,82 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
         .body(""))
 }
 
+/// Handle Telegram webhook updates for provider replies
+#[handler]
+pub async fn telegram_webhook(
+    _db: Data<&Arc<Database>>,
+    body: Body,
+) -> Result<Response, PoemError> {
+    let body_bytes = body.into_vec().await.map_err(|e| {
+        PoemError::from_string(
+            format!("Failed to read body: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    let update: TelegramUpdate = serde_json::from_slice(&body_bytes).map_err(|e| {
+        PoemError::from_string(
+            format!("Invalid JSON: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })?;
+
+    tracing::info!("Received Telegram update: {}", update.update_id);
+
+    // Check if this is a message with a reply
+    if let Some(msg) = update.message {
+        if let Some(reply_to) = msg.reply_to_message {
+            // This is a reply - lookup the conversation
+            if let Some(conversation_id) = lookup_conversation(reply_to.message_id) {
+                // Extract reply text
+                if let Some(reply_text) = msg.text {
+                    if !reply_text.trim().is_empty() {
+                        // Post reply to Chatwoot
+                        match ChatwootClient::from_env() {
+                            Ok(chatwoot) => {
+                                if let Err(e) = chatwoot
+                                    .send_message(conversation_id as u64, &reply_text)
+                                    .await
+                                {
+                                    tracing::error!(
+                                        "Failed to post Telegram reply to Chatwoot conversation {}: {}",
+                                        conversation_id,
+                                        e
+                                    );
+                                    return Err(PoemError::from_string(
+                                        format!("Failed to post reply: {}", e),
+                                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                                    ));
+                                }
+                                tracing::info!(
+                                    "Posted provider reply to Chatwoot conversation {}",
+                                    conversation_id
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("Chatwoot client not configured: {}", e);
+                                return Err(PoemError::from_string(
+                                    "Chatwoot not configured",
+                                    poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                                ));
+                            }
+                        }
+                    }
+                }
+            } else {
+                tracing::warn!(
+                    "Received reply to unknown Telegram message {}",
+                    reply_to.message_id
+                );
+            }
+        }
+    }
+
+    Ok(Response::builder()
+        .status(poem::http::StatusCode::OK)
+        .body(""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,5 +540,62 @@ mod tests {
         let result = verify_signature(payload, signature, secret);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("v1"));
+    }
+
+    #[test]
+    fn test_telegram_update_deserialization_with_reply() {
+        let json = r#"{
+            "update_id": 123,
+            "message": {
+                "message_id": 789,
+                "chat": {
+                    "id": 456,
+                    "type": "private"
+                },
+                "text": "This is a reply from provider",
+                "reply_to_message": {
+                    "message_id": 321
+                }
+            }
+        }"#;
+
+        let update: TelegramUpdate = serde_json::from_str(json).unwrap();
+        assert_eq!(update.update_id, 123);
+        assert!(update.message.is_some());
+
+        let msg = update.message.unwrap();
+        assert_eq!(msg.message_id, 789);
+        assert_eq!(msg.text, Some("This is a reply from provider".to_string()));
+        assert!(msg.reply_to_message.is_some());
+        assert_eq!(msg.reply_to_message.unwrap().message_id, 321);
+    }
+
+    #[test]
+    fn test_telegram_update_deserialization_without_reply() {
+        let json = r#"{
+            "update_id": 124,
+            "message": {
+                "message_id": 790,
+                "chat": {
+                    "id": 456,
+                    "type": "private"
+                },
+                "text": "Just a regular message"
+            }
+        }"#;
+
+        let update: TelegramUpdate = serde_json::from_str(json).unwrap();
+        let msg = update.message.unwrap();
+        assert!(msg.reply_to_message.is_none());
+    }
+
+    #[test]
+    fn test_telegram_update_no_message() {
+        let json = r#"{
+            "update_id": 125
+        }"#;
+
+        let update: TelegramUpdate = serde_json::from_str(json).unwrap();
+        assert!(update.message.is_none());
     }
 }

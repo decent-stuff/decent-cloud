@@ -309,6 +309,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/webhooks/chatwoot",
             post(openapi::webhooks::chatwoot_webhook),
         )
+        .at(
+            "/api/v1/webhooks/telegram",
+            post(openapi::webhooks::telegram_webhook),
+        )
         // Legacy endpoints (canister proxy - ICP integration pending)
         // NOTE: CSV operations are now included in OpenAPI schema above
         .at("/api/v1/canister/:method", post(canister_proxy))
