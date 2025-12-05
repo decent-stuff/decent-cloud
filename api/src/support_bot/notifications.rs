@@ -1,7 +1,8 @@
-use crate::database::email::EmailType;
 use crate::database::Database;
 use anyhow::{Context, Result};
+use email_utils::EmailService;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Notification payload for support escalation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -42,6 +43,7 @@ impl SupportNotification {
 /// Returns Ok(()) if at least one notification was sent, Err if all failed.
 pub async fn dispatch_notification(
     db: &Database,
+    email_service: Option<&Arc<EmailService>>,
     notification: &SupportNotification,
 ) -> Result<()> {
     // Get user notification config
@@ -74,7 +76,7 @@ pub async fn dispatch_notification(
 
     // Send to Email if enabled
     if config.notify_email {
-        match send_email_notification(db, notification, &config).await {
+        match send_email_notification(db, email_service, notification).await {
             Ok(()) => channels_sent.push("email"),
             Err(e) => errors.push(format!("email: {}", e)),
         }
@@ -143,9 +145,12 @@ async fn send_telegram_notification(
 
 async fn send_email_notification(
     db: &Database,
+    email_service: Option<&Arc<EmailService>>,
     notification: &SupportNotification,
-    _config: &crate::database::UserNotificationConfig,
 ) -> Result<()> {
+    let email_svc = email_service
+        .ok_or_else(|| anyhow::anyhow!("Email service not configured (missing MAILCHANNELS_API_KEY)"))?;
+
     // Look up account email by pubkey
     let account_id = db
         .get_account_id_by_public_key(&notification.provider_pubkey)
@@ -174,17 +179,18 @@ async fn send_email_notification(
     let from_addr =
         std::env::var("EMAIL_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
 
-    db.queue_email(
-        email_addr,
-        &from_addr,
-        "Customer Support Conversation Needs Attention",
-        &email_body,
-        false,
-        EmailType::General,
-    )
-    .await?;
+    email_svc
+        .send_email(
+            &from_addr,
+            email_addr,
+            "Customer Support Conversation Needs Attention",
+            &email_body,
+            false,
+        )
+        .await
+        .context("Failed to send email")?;
 
-    tracing::info!("Email notification queued for {}", email_addr);
+    tracing::info!("Email notification sent to {}", email_addr);
     Ok(())
 }
 
@@ -267,7 +273,7 @@ mod tests {
         );
 
         // Should succeed but skip notification (no config)
-        let result = dispatch_notification(&db, &notification).await;
+        let result = dispatch_notification(&db, None, &notification).await;
         assert!(result.is_ok());
     }
 
@@ -300,12 +306,12 @@ mod tests {
         );
 
         // Should succeed (will log error since TELEGRAM_BOT_TOKEN not set in tests)
-        let result = dispatch_notification(&db, &notification).await;
+        let result = dispatch_notification(&db, None, &notification).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn test_dispatch_notification_email() {
+    async fn test_dispatch_notification_email_no_service() {
         let db = setup_test_db().await;
         // Use 32-byte pubkey for account creation
         let pubkey = [0u8; 32];
@@ -315,54 +321,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Set email notification config (email comes from account now)
-        let config = crate::database::notification_config::UserNotificationConfig {
-            user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_telegram: false,
-            notify_email: true,
-            notify_sms: false,
-            telegram_chat_id: None,
-            notify_phone: None,
-            notify_email_address: None, // Not used - email comes from account
-        };
-        db.set_user_notification_config(&pubkey, &config)
-            .await
-            .unwrap();
-
-        let notification = SupportNotification::new(
-            pubkey.to_vec(),
-            42,
-            "abc123".to_string(),
-            "Customer escalated conversation".to_string(),
-            "https://support.test.com",
-        );
-
-        // Should queue email
-        let result = dispatch_notification(&db, &notification).await;
-        assert!(result.is_ok());
-
-        // Verify email was queued
-        let pending = db.get_pending_emails(10).await.unwrap();
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].to_addr, "user@example.com");
-        assert_eq!(
-            pending[0].subject,
-            "Customer Support Conversation Needs Attention"
-        );
-        assert!(pending[0].body.contains("abc123"));
-        assert!(pending[0]
-            .body
-            .contains("https://support.test.com/app/accounts/1/conversations/42"));
-    }
-
-    #[tokio::test]
-    async fn test_dispatch_notification_email_no_account() {
-        let db = setup_test_db().await;
-        // Use 32-byte pubkey but DON'T create account
-        let pubkey = [1u8; 32];
-
-        // Set email notification config but no account exists
+        // Set email notification config
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: Some("test-portal".to_string()),
@@ -379,19 +338,15 @@ mod tests {
 
         let notification = SupportNotification::new(
             pubkey.to_vec(),
-            1,
-            "test".to_string(),
-            "Test".to_string(),
-            "https://example.com",
+            42,
+            "abc123".to_string(),
+            "Customer escalated conversation".to_string(),
+            "https://support.test.com",
         );
 
-        // Should succeed but log error (no account found)
-        let result = dispatch_notification(&db, &notification).await;
+        // Should succeed but log error (no email service configured)
+        let result = dispatch_notification(&db, None, &notification).await;
         assert!(result.is_ok());
-
-        // Verify no email was queued
-        let pending = db.get_pending_emails(10).await.unwrap();
-        assert_eq!(pending.len(), 0);
     }
 
     #[tokio::test]
@@ -405,7 +360,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Enable email + telegram (telegram will fail since no token)
+        // Enable email + telegram (both will fail: no token, no email service)
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: None,
@@ -414,7 +369,7 @@ mod tests {
             notify_sms: false,
             telegram_chat_id: Some("123456".to_string()),
             notify_phone: None,
-            notify_email_address: None, // Not used - email comes from account
+            notify_email_address: None,
         };
         db.set_user_notification_config(&pubkey, &config)
             .await
@@ -428,14 +383,9 @@ mod tests {
             "https://example.com",
         );
 
-        // Should succeed - email will work, telegram will log error
-        let result = dispatch_notification(&db, &notification).await;
+        // Should succeed but log errors for both channels (no services configured)
+        let result = dispatch_notification(&db, None, &notification).await;
         assert!(result.is_ok());
-
-        // Verify email was queued
-        let pending = db.get_pending_emails(10).await.unwrap();
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].to_addr, "multi@example.com");
     }
 
     #[tokio::test]
@@ -467,7 +417,7 @@ mod tests {
         );
 
         // Should succeed (logs warning about no channels)
-        let result = dispatch_notification(&db, &notification).await;
+        let result = dispatch_notification(&db, None, &notification).await;
         assert!(result.is_ok());
     }
 }

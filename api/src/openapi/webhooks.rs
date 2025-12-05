@@ -223,7 +223,11 @@ struct ChatwootMessage {
 
 /// Handle Chatwoot webhook events for response time tracking and AI bot
 #[handler]
-pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Response, PoemError> {
+pub async fn chatwoot_webhook(
+    db: Data<&Arc<Database>>,
+    email_service: Data<&Option<Arc<email_utils::EmailService>>>,
+    body: Body,
+) -> Result<Response, PoemError> {
     let body_bytes = body.into_vec().await.map_err(|e| {
         PoemError::from_string(
             format!("Failed to read body: {}", e),
@@ -277,7 +281,7 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                                                 );
 
                                                 if let Err(e) =
-                                                    dispatch_notification(&db, &notification).await
+                                                    dispatch_notification(&db, email_service.as_ref(), &notification).await
                                                 {
                                                     tracing::error!(
                                                         "Failed to dispatch notification for conversation {}: {}",
