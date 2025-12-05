@@ -262,10 +262,35 @@ Add endpoints:
 - **Outcome:** SUCCESS - Bot can receive customer messages, search articles, generate answers, respond with formatted messages or escalate to human. Integration complete and tested.
 
 ### Step 7
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created notification bridge for conversation status changes:
+  - Extended `ChatwootConversation` struct with `status: Option<String>` field in `/code/api/src/openapi/webhooks.rs`
+  - Created `SupportNotification` struct in `/code/api/src/support_bot/notifications.rs` with:
+    - Fields: provider_pubkey, conversation_id, contract_id, summary, chatwoot_link
+    - `new()` constructor that formats Chatwoot dashboard link
+  - Implemented `dispatch_notification(db, notification)` function with routing based on `notify_via` preference:
+    - "telegram": Logs for now (Step 8 will implement actual Telegram sending)
+    - "email": Queues notification via existing email queue system
+    - "sms": Logs for future implementation
+  - Added `conversation_status_changed` event handler to `chatwoot_webhook`:
+    - Filters for status → "open" (human handoff escalation)
+    - Extracts contract_id from conversation custom_attributes
+    - Looks up contract to get provider_pubkey
+    - Creates and dispatches SupportNotification
+    - Handles errors gracefully (logs, doesn't fail webhook)
+  - Email notification includes: contract ID, summary, Chatwoot dashboard link, instructions to log in
+- **Files:**
+  - `/code/api/src/support_bot/notifications.rs` (new, 448 lines)
+  - `/code/api/src/support_bot/mod.rs` (updated to export notifications module)
+  - `/code/api/src/openapi/webhooks.rs` (extended ChatwootConversation struct, added conversation_status_changed handler)
+- **Tests:** 8 unit tests covering:
+  - SupportNotification creation and link formatting
+  - Dispatch with no config (graceful skip)
+  - Dispatch via telegram (logs for now)
+  - Dispatch via email (queues email, verifies content)
+  - Dispatch via email with no email address (graceful skip)
+  - Dispatch via SMS (logs for now)
+- **Verification:** `SQLX_OFFLINE=true cargo test --lib` - all 387 tests pass (379 existing + 8 new), `cargo clippy --lib` - clean except unrelated icpay_client warning
+- **Outcome:** SUCCESS - Status change webhook triggers notification dispatch logic, emails queue correctly, Telegram/SMS log for future implementation
 
 ### Step 8
 - **Implementation:** (pending)

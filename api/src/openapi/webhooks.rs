@@ -1,6 +1,7 @@
 use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
 use crate::support_bot::handler::handle_customer_message;
+use crate::support_bot::notifications::{dispatch_notification, SupportNotification};
 use anyhow::{Context, Result};
 use poem::{handler, web::Data, Body, Error as PoemError, Response};
 use serde::Deserialize;
@@ -207,6 +208,7 @@ struct ChatwootWebhookPayload {
 #[derive(Debug, Deserialize)]
 struct ChatwootConversation {
     id: i64,
+    status: Option<String>,
     custom_attributes: Option<serde_json::Value>,
 }
 
@@ -237,7 +239,79 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
 
     tracing::info!("Received Chatwoot webhook: {}", payload.event);
 
-    if payload.event == "message_created" {
+    if payload.event == "conversation_status_changed" {
+        if let Some(conv) = payload.conversation {
+            // Check if status changed to "open" (human handoff)
+            if let Some(status) = conv.status {
+                if status == "open" {
+                    // Extract contract_id from custom_attributes
+                    let contract_id = conv
+                        .custom_attributes
+                        .as_ref()
+                        .and_then(|attrs| attrs.get("contract_id"))
+                        .and_then(|v| v.as_str());
+
+                    if let Some(contract_id) = contract_id {
+                        // Lookup contract to get provider pubkey
+                        match hex::decode(contract_id) {
+                            Ok(contract_id_bytes) => {
+                                match db.get_contract(&contract_id_bytes).await {
+                                    Ok(Some(contract)) => {
+                                        // Get Chatwoot base URL for notification link
+                                        let chatwoot_url = std::env::var("CHATWOOT_FRONTEND_URL")
+                                            .unwrap_or_else(|_| {
+                                                "https://support.decent-cloud.org".to_string()
+                                            });
+
+                                        let notification = SupportNotification::new(
+                                            contract.provider_pubkey.clone(),
+                                            conv.id,
+                                            contract_id.to_string(),
+                                            "Customer conversation escalated to human support"
+                                                .to_string(),
+                                            &chatwoot_url,
+                                        );
+
+                                        if let Err(e) =
+                                            dispatch_notification(&db, &notification).await
+                                        {
+                                            tracing::error!(
+                                                "Failed to dispatch notification for conversation {}: {}",
+                                                conv.id,
+                                                e
+                                            );
+                                            // Don't fail webhook - notification failure shouldn't block event processing
+                                        }
+                                    }
+                                    Ok(None) => {
+                                        tracing::warn!(
+                                            "Contract not found for conversation {} (contract_id: {})",
+                                            conv.id,
+                                            contract_id
+                                        );
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to lookup contract for conversation {}: {}",
+                                            conv.id,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Invalid contract_id hex for conversation {}: {}",
+                                    conv.id,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else if payload.event == "message_created" {
         if let (Some(conv), Some(msg)) = (payload.conversation, payload.message) {
             // Extract contract_id from custom_attributes
             let contract_id = conv
