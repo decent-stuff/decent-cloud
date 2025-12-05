@@ -33,6 +33,54 @@ async function getContract(page: any, contractId: string): Promise<any> {
 }
 
 /**
+ * Helper: Simulate ICPay webhook event
+ * Creates properly signed webhook payload matching real ICPay webhook structure
+ *
+ * Structure based on: https://docs.icpay.org/webhooks
+ * Signature format: "t=<timestamp>,v1=<HMAC-SHA256>"
+ */
+async function simulateIcpayWebhook(
+	page: any,
+	eventType: string,
+	paymentId: string,
+	contractIdHex: string,
+	webhookSecret: string = 'whsec_test_secret'
+): Promise<void> {
+	const apiBaseUrl = page.context()._options.baseURL?.replace('59000', '59001') || 'http://localhost:59001';
+
+	const event = {
+		id: `evt_icpay_${Date.now()}`,
+		type: eventType,
+		data: {
+			object: {
+				id: paymentId,
+				status: eventType === 'payment.completed' ? 'completed' : 'failed',
+				amount: '1000000000', // 1 ICP in e8s
+				metadata: {
+					contract_id: contractIdHex
+				}
+			}
+		}
+	};
+
+	const payload = JSON.stringify(event);
+	const timestamp = Math.floor(Date.now() / 1000);
+	const signedPayload = `${timestamp}.${payload}`;
+
+	// Create HMAC signature (same algorithm as Stripe, per ICPay docs)
+	const signature = createHmac('sha256', webhookSecret)
+		.update(signedPayload)
+		.digest('hex');
+
+	await page.request.post(`${apiBaseUrl}/api/v1/webhooks/icpay`, {
+		data: payload,
+		headers: {
+			'x-icpay-signature': `t=${timestamp},v1=${signature}`
+		}
+	});
+}
+
+/**
  * Helper: Simulate Stripe webhook event
  * Creates properly signed webhook payload matching real Stripe webhook structure
  *
@@ -99,9 +147,27 @@ test.describe('Payment Flows', () => {
 		setupConsoleLogging(page);
 	});
 
-	test('ICPay Payment Flow - should create contract with ICPay payment method', async ({
+	test('ICPay Payment UI - should show ICPay payment option and wallet connection requirement', async ({
 		page,
 	}) => {
+		/**
+		 * NOTE: Full ICPay payment flow testing requires a connected wallet.
+		 *
+		 * This test verifies:
+		 * - ICPay payment UI loads correctly
+		 * - ICPay is selected by default
+		 * - Wallet connection is required before payment submission
+		 * - All form fields are present
+		 *
+		 * Cannot test (limitations of e2e testing with ICPay):
+		 * - Actual wallet connection (requires Internet Identity, Plug, etc.)
+		 * - Payment processing (requires real wallet and ICPay testnet)
+		 *
+		 * For full payment flow testing:
+		 * - Manual testing with ICPay testnet and a connected wallet
+		 * - Backend webhook tests verify payment confirmation logic
+		 */
+
 		// Navigate to marketplace
 		await page.goto('/dashboard/marketplace');
 		await page.waitForLoadState('networkidle');
@@ -121,37 +187,32 @@ test.describe('Payment Flows', () => {
 		// Wait for rental dialog to appear
 		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
 
-		// ICPay should be selected by default (button style)
-		await expect(page.locator('button:has-text("ICPay")').filter({ hasText: /.*/ })).toBeVisible();
+		// ICPay should be selected by default
+		const icpayButton = page.locator('button:has-text("Crypto (ICPay)")');
+		await expect(icpayButton).toBeVisible();
+
+		// Verify ICPay payment section appears with wallet connection prompt
+		await expect(page.locator('text=Crypto Payment via ICPay')).toBeVisible();
+		await expect(page.locator('text=Connect your wallet')).toBeVisible();
+		await expect(page.locator('button:has-text("Connect Wallet")')).toBeVisible();
 
 		// Fill in rental details
 		await page.fill('textarea[placeholder*="ssh-ed25519"]', 'ssh-ed25519 AAAAB3NzaC1lZDI1NTE5AAAAITest test@example.com');
 		await page.fill('input[placeholder*="email:you@example.com"]', 'email:test@example.com');
 		await page.fill('textarea[placeholder*="special requirements"]', 'E2E test rental - ICPay payment');
 
-		// Wait for contract creation API call
-		const apiResponsePromise = waitForApiResponse(page, /\/api\/v1\/contracts$/);
-
-		// Submit request
+		// Try to submit without wallet connection - should show error
 		await page.click('button:has-text("Submit Request")');
 
-		// Wait for API response
-		await apiResponsePromise;
+		// Should show wallet connection error
+		await expect(page.locator('text=Please connect your wallet first')).toBeVisible({ timeout: 5000 });
 
-		// Wait for success message
-		await expect(page.locator('text=Rental request created successfully')).toBeVisible({ timeout: 10000 });
+		// Verify all other form fields are still present
+		await expect(page.locator('textarea[placeholder*="ssh-ed25519"]')).toBeVisible();
+		await expect(page.locator('input[placeholder*="email:you@example.com"]')).toBeVisible();
+		await expect(page.locator('textarea[placeholder*="special requirements"]')).toBeVisible();
 
-		// Extract contract ID from success message
-		const successText = await page.locator('text=Contract ID:').textContent();
-		const contractId = successText?.match(/Contract ID: ([a-f0-9]+)/)?.[1];
-		expect(contractId).toBeTruthy();
-
-		// Verify contract via API
-		const contract = await getContract(page, contractId!);
-		expect(contract).toBeTruthy();
-		expect(contract.payment_method).toBe('icpay');
-		expect(contract.payment_status).toBe('succeeded'); // ICPay payments succeed immediately
-		expect(contract.status).toBe('requested'); // Should NOT be auto-accepted
+		// Test passed - ICPay UI loads correctly and requires wallet connection
 	});
 
 	test('Stripe payment UI - should show credit card option for supported currencies', async ({

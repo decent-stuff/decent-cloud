@@ -913,9 +913,11 @@ ICPAY_WEBHOOK_SECRET=whsec_xxx  # For signature verification
 - ✅ Provider payout aggregation endpoints
 - ✅ Admin payout trigger
 
-**Tests pass:** 400 API tests ✓, Frontend check clean ✓, Clippy clean (warnings only) ✓, Release build ✓
+**Tests pass:** 418 API tests ✓, Frontend check clean ✓, Clippy clean (warnings only) ✓, Release build ✓
 
 **Notes:**
-- ICPay payout API endpoint (`create_payout`) is a stub - needs verification against actual ICPay API docs
+- ICPay payout API endpoint (`create_payout`) is a stub - **VERIFIED 2025-12-05**: ICPay docs confirm payouts are dashboard-only (icpay.org → Payouts), no SDK API available. Code updated with detailed documentation.
+- E2E test for ICPay payment updated to verify UI elements and wallet connection requirement (cannot test actual wallet interaction in E2E)
+- Added `simulateIcpayWebhook()` helper for backend webhook testing
 - Tests skip env-dependent chatwoot/twilio tests (pre-existing)
 - Used `sqlx::query` instead of `query_as!` macro for some admin queries to avoid offline compilation issues

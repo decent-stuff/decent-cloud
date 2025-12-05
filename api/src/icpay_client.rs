@@ -162,13 +162,23 @@ impl IcpayClient {
     /// # Returns
     /// Payout ID on success
     ///
-    /// # Note
-    /// This is a stub implementation. ICPay payout API endpoint needs to be verified
-    /// against official documentation. If the endpoint doesn't exist in the current
-    /// ICPay API, this will return an error.
+    /// # Important: ICPay Payout Limitations
+    /// As of 2025-12, ICPay does NOT expose a programmatic payout API endpoint.
+    /// Payouts must be created manually via the icpay.org dashboard:
+    /// - Navigate to icpay.org → Payouts
+    /// - Create and track payouts from account balances to target addresses
+    ///
+    /// This method attempts to call a hypothetical `/sdk/private/payouts` endpoint
+    /// which will likely return a 404 or similar error. It is kept for future
+    /// compatibility if/when ICPay adds programmatic payout support.
+    ///
+    /// For production use, admin should:
+    /// 1. View pending releases via GET /api/v1/admin/payment-releases
+    /// 2. Manually create payouts in icpay.org dashboard
+    /// 3. Update release records via POST /api/v1/admin/payouts (marks as paid_out)
     pub async fn create_payout(&self, wallet_address: &str, amount_e9s: i64) -> Result<String> {
-        // TODO: Verify this endpoint exists in ICPay API documentation
-        // Current implementation is based on assumed API structure
+        // NOTE: This endpoint likely doesn't exist in ICPay API as of 2025-12
+        // Payouts are dashboard-only per https://docs.icpay.org/icpay-org
         let url = format!("{}/sdk/private/payouts", Self::API_URL);
 
         let request_body = serde_json::json!({
