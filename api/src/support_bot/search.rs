@@ -1,8 +1,9 @@
-//! Simple keyword-based article search using basic tokenization and weighted scoring
+//! Article search using keyword matching and optional semantic (embedding-based) search.
 
 use crate::chatwoot::HelpCenterArticle;
 
 const MIN_SCORE_THRESHOLD: f32 = 0.1;
+const SEMANTIC_MIN_SCORE: f32 = 0.3; // Higher threshold for semantic search
 const TITLE_WEIGHT: f32 = 2.0;
 const CONTENT_WEIGHT: f32 = 1.0;
 
@@ -79,6 +80,66 @@ fn calculate_score(keywords: &[String], article: &HelpCenterArticle) -> f32 {
     } else {
         0.0
     }
+}
+
+/// Search articles using semantic similarity (embedding-based).
+/// Falls back to keyword search if embeddings service is not configured or fails.
+pub async fn search_articles_semantic(
+    query: &str,
+    articles: &[HelpCenterArticle],
+) -> Vec<ScoredArticle> {
+    use super::embeddings::{cosine_similarity, get_embedding, is_configured};
+
+    if query.trim().is_empty() || articles.is_empty() {
+        return Vec::new();
+    }
+
+    // Fall back to keyword search if embeddings not configured
+    if !is_configured() {
+        tracing::debug!("Embeddings not configured, falling back to keyword search");
+        return search_articles(query, articles);
+    }
+
+    // Get query embedding
+    let query_embedding = match get_embedding(query).await {
+        Ok(emb) => emb,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to get query embedding: {}, falling back to keyword search",
+                e
+            );
+            return search_articles(query, articles);
+        }
+    };
+
+    // Get embeddings for all articles and score by similarity
+    let mut scored: Vec<ScoredArticle> = Vec::new();
+    for article in articles {
+        // Combine title and content for embedding
+        let article_text = format!("{}\n\n{}", article.title, article.content);
+        match get_embedding(&article_text).await {
+            Ok(article_embedding) => {
+                let score = cosine_similarity(&query_embedding, &article_embedding);
+                if score >= SEMANTIC_MIN_SCORE {
+                    scored.push(ScoredArticle {
+                        article: article.clone(),
+                        score,
+                    });
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to get embedding for article {}: {}", article.id, e);
+                // Skip this article
+            }
+        }
+    }
+
+    scored.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    scored
 }
 
 #[cfg(test)]

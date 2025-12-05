@@ -12,6 +12,7 @@ pub mod recovery;
 pub mod reputation;
 pub mod rewards;
 pub mod stats;
+pub mod telegram_tracking;
 pub mod tokens;
 pub mod types;
 pub mod users;

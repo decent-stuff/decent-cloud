@@ -68,9 +68,7 @@ pub async fn dispatch_notification(
 
     match config.notify_via.as_str() {
         "telegram" => {
-            use crate::notifications::telegram::{
-                format_notification, track_message, TelegramClient,
-            };
+            use crate::notifications::telegram::{format_notification, TelegramClient};
 
             let chat_id = match config.telegram_chat_id {
                 Some(ref id) => id,
@@ -106,8 +104,10 @@ pub async fn dispatch_notification(
                 .await
                 .context("Failed to send Telegram message")?;
 
-            // Track message ID for reply handling
-            track_message(sent_msg.message_id, notification.conversation_id);
+            // Track message ID in DB for reply handling (persistent across restarts)
+            db.track_telegram_message(sent_msg.message_id, notification.conversation_id, chat_id)
+                .await
+                .context("Failed to track Telegram message")?;
 
             tracing::info!(
                 "Telegram notification sent to chat_id: {}, message_id: {}, conversation: {}",
@@ -169,12 +169,41 @@ pub async fn dispatch_notification(
             Ok(())
         }
         "sms" => {
-            // Future implementation
+            use crate::notifications::twilio::{format_sms_notification, TwilioClient};
+
+            let phone = match config.notify_phone {
+                Some(ref p) => p,
+                None => {
+                    tracing::warn!(
+                        "No phone number configured for provider (pubkey: {})",
+                        hex::encode(&notification.provider_pubkey)
+                    );
+                    return Ok(());
+                }
+            };
+
+            if !TwilioClient::is_configured() {
+                tracing::warn!(
+                    "Twilio not configured (TWILIO_ACCOUNT_SID missing), skipping SMS notification"
+                );
+                return Ok(());
+            }
+
+            let twilio = TwilioClient::from_env().context("Failed to create Twilio client")?;
+            let message = format_sms_notification(&notification.contract_id, &notification.summary);
+
+            let sid = twilio
+                .send_sms(phone, &message)
+                .await
+                .context("Failed to send SMS")?;
+
             tracing::info!(
-                "SMS notification requested for phone: {:?}, conversation: {} (not yet implemented)",
-                config.notify_phone,
+                "SMS notification sent to {}, sid: {}, conversation: {}",
+                phone,
+                sid,
                 notification.conversation_id
             );
+
             Ok(())
         }
         unknown => {

@@ -1,7 +1,7 @@
 //! AI Bot webhook handler for answering customer questions
 
 use super::llm::{generate_answer, ArticleRef};
-use super::search::search_articles;
+use super::search::search_articles_semantic;
 use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
 use anyhow::{Context, Result};
@@ -74,8 +74,8 @@ pub async fn handle_customer_message(
         return Ok(());
     }
 
-    // 4. Search articles
-    let scored_articles = search_articles(message_content, &articles);
+    // 4. Search articles (semantic if configured, else keyword)
+    let scored_articles = search_articles_semantic(message_content, &articles).await;
 
     // 5. Generate answer
     let bot_response = generate_answer(message_content, &scored_articles).await?;

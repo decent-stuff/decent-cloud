@@ -97,8 +97,8 @@ impl ChatwootApi {
         db: Data<&Arc<Database>>,
         user: ApiAuthenticatedUser,
     ) -> Json<ApiResponse<SupportPortalStatus>> {
-        let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-            .expect("CHATWOOT_FRONTEND_URL must be set");
+        let support_url =
+            std::env::var("CHATWOOT_FRONTEND_URL").expect("CHATWOOT_FRONTEND_URL must be set");
 
         // Get chatwoot_user_id for this account
         let chatwoot_user_id = match db.get_chatwoot_user_id_by_public_key(&user.pubkey).await {
@@ -196,8 +196,8 @@ impl ChatwootApi {
                 }
             };
 
-        let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-            .expect("CHATWOOT_FRONTEND_URL must be set");
+        let support_url =
+            std::env::var("CHATWOOT_FRONTEND_URL").expect("CHATWOOT_FRONTEND_URL must be set");
 
         Json(ApiResponse {
             success: true,
@@ -302,8 +302,8 @@ impl ChatwootApi {
             });
         }
 
-        let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-            .expect("CHATWOOT_FRONTEND_URL must be set");
+        let support_url =
+            std::env::var("CHATWOOT_FRONTEND_URL").expect("CHATWOOT_FRONTEND_URL must be set");
 
         tracing::info!(
             "Support portal password reset for user {} (chatwoot_user_id: {})",

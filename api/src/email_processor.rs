@@ -641,8 +641,8 @@ impl EmailProcessor {
                 "{}/dashboard/rentals/{}/messages",
                 self.frontend_url, breach.contract_id
             );
-            let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-                .expect("CHATWOOT_FRONTEND_URL must be set");
+            let support_url =
+                std::env::var("CHATWOOT_FRONTEND_URL").expect("CHATWOOT_FRONTEND_URL must be set");
 
             let body = format!(
                 r#"<html>

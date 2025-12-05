@@ -1,14 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::{LazyLock, RwLock};
-
-/// Message tracking store mapping telegram_message_id → conversation_id
-type MessageTracker = RwLock<HashMap<i64, i64>>;
-
-/// Global message tracker for mapping Telegram message IDs to Chatwoot conversation IDs
-static MESSAGE_TRACKER: LazyLock<MessageTracker> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Telegram Bot API client for sending notifications and receiving replies.
 pub struct TelegramClient {
@@ -106,23 +98,6 @@ impl TelegramClient {
             .result
             .context("Telegram API response missing result field")
     }
-}
-
-/// Store telegram message ID → conversation ID mapping for reply tracking
-pub fn track_message(telegram_message_id: i64, conversation_id: i64) {
-    let mut tracker = MESSAGE_TRACKER.write().unwrap();
-    tracker.insert(telegram_message_id, conversation_id);
-    tracing::debug!(
-        "Tracking Telegram message {} → conversation {}",
-        telegram_message_id,
-        conversation_id
-    );
-}
-
-/// Lookup conversation ID by telegram message ID (when user replies)
-pub fn lookup_conversation(telegram_message_id: i64) -> Option<i64> {
-    let tracker = MESSAGE_TRACKER.read().unwrap();
-    tracker.get(&telegram_message_id).copied()
 }
 
 // =============================================================================
@@ -272,21 +247,6 @@ mod tests {
             resp.description,
             Some("Bad Request: chat not found".to_string())
         );
-    }
-
-    #[test]
-    fn test_message_tracking() {
-        let telegram_msg_id = 12345;
-        let conversation_id = 678;
-
-        // Initially not tracked
-        assert_eq!(lookup_conversation(telegram_msg_id), None);
-
-        // Track the message
-        track_message(telegram_msg_id, conversation_id);
-
-        // Now it should be found
-        assert_eq!(lookup_conversation(telegram_msg_id), Some(conversation_id));
     }
 
     #[test]

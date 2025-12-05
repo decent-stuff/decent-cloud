@@ -1,6 +1,6 @@
 use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
-use crate::notifications::telegram::{lookup_conversation, TelegramUpdate};
+use crate::notifications::telegram::TelegramUpdate;
 use crate::support_bot::handler::handle_customer_message;
 use crate::support_bot::notifications::{dispatch_notification, SupportNotification};
 use anyhow::{Context, Result};
@@ -262,9 +262,10 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                                         match hex::decode(&contract.provider_pubkey) {
                                             Ok(provider_pubkey_bytes) => {
                                                 // Get Chatwoot base URL for notification link
-                                                let chatwoot_url =
-                                                    std::env::var("CHATWOOT_FRONTEND_URL")
-                                                        .expect("CHATWOOT_FRONTEND_URL must be set");
+                                                let chatwoot_url = std::env::var(
+                                                    "CHATWOOT_FRONTEND_URL",
+                                                )
+                                                .expect("CHATWOOT_FRONTEND_URL must be set");
 
                                                 let notification = SupportNotification::new(
                                                     provider_pubkey_bytes,
@@ -403,10 +404,7 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
 
 /// Handle Telegram webhook updates for provider replies
 #[handler]
-pub async fn telegram_webhook(
-    _db: Data<&Arc<Database>>,
-    body: Body,
-) -> Result<Response, PoemError> {
+pub async fn telegram_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Response, PoemError> {
     let body_bytes = body.into_vec().await.map_err(|e| {
         PoemError::from_string(
             format!("Failed to read body: {}", e),
@@ -426,8 +424,19 @@ pub async fn telegram_webhook(
     // Check if this is a message with a reply
     if let Some(msg) = update.message {
         if let Some(reply_to) = msg.reply_to_message {
-            // This is a reply - lookup the conversation
-            if let Some(conversation_id) = lookup_conversation(reply_to.message_id) {
+            // This is a reply - lookup the conversation from DB
+            let conversation_id = db
+                .lookup_telegram_conversation(reply_to.message_id)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to lookup Telegram conversation: {}", e);
+                    PoemError::from_string(
+                        "Database error",
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                })?;
+
+            if let Some(conversation_id) = conversation_id {
                 // Extract reply text
                 if let Some(reply_text) = msg.text {
                     if !reply_text.trim().is_empty() {
