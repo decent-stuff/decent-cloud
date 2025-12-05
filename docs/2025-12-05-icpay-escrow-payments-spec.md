@@ -921,3 +921,32 @@ ICPAY_WEBHOOK_SECRET=whsec_xxx  # For signature verification
 - Added `simulateIcpayWebhook()` helper for backend webhook testing
 - Tests skip env-dependent chatwoot/twilio tests (pre-existing)
 - Used `sqlx::query` instead of `query_as!` macro for some admin queries to avoid offline compilation issues
+
+---
+
+## Future Work: Automated Provider Payouts
+
+### Current Limitation
+ICPay lacks a programmatic payout API. Payouts must be done manually via icpay.org dashboard.
+
+### Research Findings (2025-12-05)
+Automated payouts are possible using **direct ICRC-1 transfers** from a platform-controlled wallet:
+
+1. **Existing Infrastructure**: Codebase has `LedgerCanister` client (`cli/src/ledger_canister_client.rs`) using `ic-agent` for IC canister calls
+2. **Token Standards**: ICRC-1 (transfers) and ICRC-2 (approve/transferFrom) are supported
+3. **Ledger Canisters**: ICP (`ryjl3-tyaaa-aaaaa-aaaba-cai`), ckUSDC (`xevnm-gaaaa-aaaar-qafnq-cai`)
+
+### Implementation Path
+```
+ICPay (user payments) → Platform ICPay Account → Manual withdraw to Platform Wallet
+                                                              ↓
+PaymentReleaseService → payment_releases table → ICRC-1 transfer → Provider Principal
+```
+
+### Required Decisions
+- **Key management**: Environment variable vs HSM vs threshold signatures
+- **Token selection**: ICP, ckUSDC, or both
+- **Trigger mechanism**: Automatic (daily) vs manual approval
+
+### Estimated Effort
+~200 LOC: `Icrc1PayoutClient` using existing `ic-agent` infrastructure

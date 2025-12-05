@@ -23,23 +23,28 @@
 
 ---
 
-## ICPay Integration (In Progress)
+## ICPay Integration
 
 **Spec:** [2025-12-05-icpay-escrow-payments-spec.md](docs/2025-12-05-icpay-escrow-payments-spec.md)
-**Status:** PLANNING
+**Status:** COMPLETE (with manual payout limitation)
 
-### Current State
-- Basic SDK initialization: ✅ Done
-- Frontend payment execution: ❌ Broken (missing wallet config)
-- Backend verification: ❌ Stub only
-- Webhooks: ❌ Not implemented
-- Refunds: ❌ Not implemented for ICPay
+### Implemented
+- ✅ Frontend wallet integration (SDK + widget)
+- ✅ Backend payment verification
+- ✅ Webhook handler with HMAC-SHA256 signature verification
+- ✅ Prorated refunds on cancellation
+- ✅ Daily payment release tracking (PaymentReleaseService)
+- ✅ Admin endpoints for viewing pending releases
 
-### Planned Features
-- Prorated payments/refunds (match Stripe parity)
-- Daily payment release to providers
-- Webhook integration for real-time confirmation
-- Provider payout system
+### Manual Payout Requirement
+**ICPay does NOT have a programmatic payout API.** Provider payouts must be done manually:
+1. View pending releases: `GET /api/v1/admin/payment-releases`
+2. Create payouts in icpay.org dashboard (Payouts section)
+3. Mark as paid: `POST /api/v1/admin/payouts`
+
+### Future: Automated Payouts
+To automate payouts, implement direct ICRC-1 transfers from platform wallet using `ic-agent`.
+See spec for research details. Requires: platform wallet key management decision.
 
 ---
 
