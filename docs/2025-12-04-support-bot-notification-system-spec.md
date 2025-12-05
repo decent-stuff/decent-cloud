@@ -104,7 +104,7 @@ Extend `ChatwootClient`:
 
 ### Step 10: OpenAPI Endpoints for Config Management
 **Success:** Providers can manage notification preferences via API
-**Status:** Pending
+**Status:** COMPLETE
 
 Add endpoints:
 - `GET /api/v1/providers/me/notification-config`
@@ -369,10 +369,39 @@ Add endpoints:
 - **Outcome:** SUCCESS - Provider replies in Telegram are bridged back to Chatwoot conversations. Flow complete: Customer → Chatwoot → Bot/Notification → Telegram → Provider → Telegram webhook → Chatwoot → Customer.
 
 ### Step 10
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Added OpenAPI endpoints for provider notification config management
+  - Added request/response types to `/code/api/src/openapi/common.rs`:
+    - `NotificationConfigResponse` - response struct with chatwoot_portal_slug, notify_via, telegram_chat_id, notify_phone
+    - `UpdateNotificationConfigRequest` - request struct for PUT endpoint with same fields
+    - Both use camelCase serialization via serde/poem-openapi attributes
+  - Added two endpoints to `/code/api/src/openapi/providers.rs`:
+    - `GET /api/v1/providers/me/notification-config`:
+      - Requires ApiAuthenticatedUser (signature-based auth)
+      - Uses auth.pubkey to fetch provider's notification config
+      - Returns 200 with config data or error if not found
+      - Tagged under ApiTags::Providers
+    - `PUT /api/v1/providers/me/notification-config`:
+      - Requires ApiAuthenticatedUser (signature-based auth)
+      - Validates notify_via is one of: telegram, email, sms
+      - Creates ProviderNotificationConfig from request
+      - Calls db.set_provider_notification_config() (upsert)
+      - Returns success message or error
+      - Tagged under ApiTags::Providers
+  - Updated imports in providers.rs to include NotificationConfigResponse and UpdateNotificationConfigRequest
+- **Files:**
+  - `/code/api/src/openapi/common.rs` (added 2 types, 25 lines)
+  - `/code/api/src/openapi/providers.rs` (added 2 endpoints, 91 lines)
+- **Tests:**
+  - Database layer tests already exist in `/code/api/src/database/notification_config.rs` (5 tests)
+  - OpenAPI endpoints follow existing patterns and rely on database layer tests
+  - E2e tests can be added separately in `/code/website/tests/e2e/`
+- **Verification:**
+  - `SQLX_OFFLINE=true cargo build --lib` - clean build, 1 pre-existing warning (icpay_client)
+  - `SQLX_OFFLINE=true cargo test --lib database::notification_config` - all 5 tests pass
+  - `SQLX_OFFLINE=true cargo clippy --lib` - clean, no warnings for our changes
+  - `git diff --stat` - minimal changes: 2 files, 114 insertions, 2 deletions
+  - Follows existing patterns: ApiAuthenticatedUser, ApiResponse, check_authorization not needed (using /me endpoint)
+- **Outcome:** SUCCESS - Providers can now manage notification preferences via authenticated API endpoints. GET returns current config, PUT validates and updates config. Integration with Steps 1-2 database layer complete.
 
 ## Completion Summary
 (To be filled in Phase 4)

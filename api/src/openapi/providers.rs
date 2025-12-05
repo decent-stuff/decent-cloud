@@ -1,8 +1,8 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags,
     BulkUpdateStatusRequest, CsvImportError, CsvImportResult, DuplicateOfferingRequest,
-    ProvisioningStatusRequest, RentalResponseRequest, ResponseMetricsResponse,
-    ResponseTimeDistributionResponse,
+    NotificationConfigResponse, ProvisioningStatusRequest, RentalResponseRequest,
+    ResponseMetricsResponse, ResponseTimeDistributionResponse, UpdateNotificationConfigRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
@@ -1013,6 +1013,93 @@ impl ProvidersApi {
                     error: None,
                 })
             }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get provider notification configuration
+    ///
+    /// Returns notification preferences for the authenticated provider
+    #[oai(
+        path = "/providers/me/notification-config",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_notification_config(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<NotificationConfigResponse>> {
+        match db.get_provider_notification_config(&auth.pubkey).await {
+            Ok(Some(config)) => Json(ApiResponse {
+                success: true,
+                data: Some(NotificationConfigResponse {
+                    chatwoot_portal_slug: config.chatwoot_portal_slug,
+                    notify_via: config.notify_via,
+                    telegram_chat_id: config.telegram_chat_id,
+                    notify_phone: config.notify_phone,
+                }),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Notification configuration not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update provider notification configuration
+    ///
+    /// Updates notification preferences for the authenticated provider
+    #[oai(
+        path = "/providers/me/notification-config",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn update_provider_notification_config(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        req: Json<UpdateNotificationConfigRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Validate notify_via
+        if !matches!(req.notify_via.as_str(), "telegram" | "email" | "sms") {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Invalid notify_via value. Must be one of: telegram, email, sms".to_string(),
+                ),
+            });
+        }
+
+        let config = crate::database::notification_config::ProviderNotificationConfig {
+            provider_pubkey: auth.pubkey.clone(),
+            chatwoot_portal_slug: req.chatwoot_portal_slug.clone(),
+            notify_via: req.notify_via.clone(),
+            telegram_chat_id: req.telegram_chat_id.clone(),
+            notify_phone: req.notify_phone.clone(),
+        };
+
+        match db
+            .set_provider_notification_config(&auth.pubkey, &config)
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Notification configuration updated successfully".to_string()),
+                error: None,
+            }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

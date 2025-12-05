@@ -309,6 +309,31 @@ pub struct AdminAddRecoveryKeyRequest {
     pub reason: String,
 }
 
+// Request/Response types for provider notification config
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+#[oai(skip_serializing_if_is_none)]
+pub struct NotificationConfigResponse {
+    #[oai(skip_serializing_if_is_none)]
+    pub chatwoot_portal_slug: Option<String>,
+    pub notify_via: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub telegram_chat_id: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub notify_phone: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateNotificationConfigRequest {
+    pub chatwoot_portal_slug: Option<String>,
+    pub notify_via: String,
+    pub telegram_chat_id: Option<String>,
+    pub notify_phone: Option<String>,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints
