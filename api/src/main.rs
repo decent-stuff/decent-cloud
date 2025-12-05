@@ -12,6 +12,7 @@ mod network_metrics;
 mod notifications;
 mod oauth_simple;
 mod openapi;
+mod payment_release_service;
 mod request_logging;
 mod search;
 mod stripe_client;
@@ -28,6 +29,7 @@ use email_service::EmailService;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
+use payment_release_service::PaymentReleaseService;
 use poem::web::Redirect;
 use poem::{
     get, handler,
@@ -389,10 +391,27 @@ async fn serve_command() -> Result<(), std::io::Error> {
         None
     };
 
+    // Start payment release service in background (runs every 24 hours)
+    let release_interval_hours = env::var("PAYMENT_RELEASE_INTERVAL_HOURS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(24);
+
+    let db_for_release = ctx.database.clone();
+    let payment_release_task = tokio::spawn(async move {
+        let payment_release_service = PaymentReleaseService::new(db_for_release, release_interval_hours);
+        tracing::info!(
+            "Starting payment release service (interval: {}h)",
+            release_interval_hours
+        );
+        payment_release_service.run().await;
+    });
+
     let server_result = Server::new(TcpListener::bind(&addr)).run(app).await;
 
     metadata_cache_task.abort();
     cleanup_task.abort();
+    payment_release_task.abort();
     if let Some(task) = email_processor_task {
         task.abort();
     }

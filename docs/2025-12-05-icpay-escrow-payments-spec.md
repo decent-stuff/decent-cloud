@@ -854,16 +854,32 @@ ICPAY_WEBHOOK_SECRET=whsec_xxx  # For signature verification
 - **Outcome:** Success - Contract cancellation now supports ICPay prorated refunds with proper released amount tracking
 
 ### Step 5: ICPay Webhook Handler
-- **Implementation:** Pending
-- **Review:** Pending
-- **Verification:** Pending
-- **Outcome:** Pending
+- **Implementation:** Complete
+  - Added ICPay webhook structures (IcpayWebhookEvent, IcpayWebhookData, IcpayPaymentObject)
+  - Implemented verify_icpay_signature() with HMAC-SHA256 and 300s timestamp tolerance
+  - Added icpay_webhook() handler for payment.completed, payment.failed, payment.refunded events
+  - Auto-accepts contracts on successful ICPay payment (mirrors Stripe flow)
+  - Added database methods: update_icpay_payment_confirmed(), update_icpay_payment_status()
+  - Registered route at /api/v1/webhooks/icpay
+  - Added 7 unit tests for signature verification and event deserialization
+- **Review:** Complete - Tests fixed to use current timestamps for validation
+- **Verification:** All 5 ICPay webhook tests pass
+- **Outcome:** Success
 
 ### Step 6: Payment Release Service
-- **Implementation:** Pending
-- **Review:** Pending
-- **Verification:** Pending
-- **Outcome:** Pending
+- **Implementation:** Complete
+  - Created PaymentReleaseService in api/src/payment_release_service.rs following CleanupService pattern
+  - Added PaymentRelease struct to api/src/database/contracts.rs
+  - Implemented 3 database methods: get_contracts_for_release(), create_payment_release(), update_contract_release_tracking()
+  - Service runs on configurable interval (default: 24 hours) with PAYMENT_RELEASE_INTERVAL_HOURS env var
+  - Calculates release amount = (period_duration / total_duration) * payment_amount
+  - Only processes contracts with status 'active' or 'provisioned', payment_method='icpay', payment_status='succeeded'
+  - Added payment_release_service module to api/src/lib.rs and api/src/main.rs
+  - Registered service in main.rs with tokio::spawn background task
+  - Added 5 unit tests: test_release_calculation_half_time_elapsed, test_release_calculation_one_day_out_of_thirty, test_release_calculation_daily_incremental, test_release_calculation_no_time_elapsed, test_release_calculation_contract_ended
+- **Review:** Complete - All 5 tests pass with correct prorated calculations
+- **Verification:** Complete - SQLX_OFFLINE=true cargo test -p api --lib payment_release_service passes, cargo clippy clean (only pre-existing warnings)
+- **Outcome:** Success - Daily payment release service implemented with automatic release tracking and database persistence
 
 ### Step 7: Provider Payout System
 - **Implementation:** Pending

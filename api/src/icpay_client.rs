@@ -84,11 +84,7 @@ impl IcpayClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!(
-                "ICPay API error ({}): {}",
-                status,
-                body
-            ));
+            return Err(anyhow::anyhow!("ICPay API error ({}): {}", status, body));
         }
 
         let data: PaymentHistoryResponse = response
@@ -107,11 +103,7 @@ impl IcpayClient {
     ///
     /// # Returns
     /// Refund ID on success
-    pub async fn create_refund(
-        &self,
-        payment_id: &str,
-        amount: Option<i64>,
-    ) -> Result<String> {
+    pub async fn create_refund(&self, payment_id: &str, amount: Option<i64>) -> Result<String> {
         let url = format!("{}/sdk/private/refunds", Self::API_URL);
 
         let request_body = CreateRefundRequest {

@@ -96,6 +96,21 @@ pub struct PaymentEntry {
     pub amount_e9s: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct PaymentRelease {
+    pub id: i64,
+    pub contract_id: Vec<u8>,
+    pub release_type: String,
+    pub period_start_ns: i64,
+    pub period_end_ns: i64,
+    pub amount_e9s: i64,
+    pub provider_pubkey: Vec<u8>,
+    pub status: String,
+    pub created_at_ns: i64,
+    pub released_at_ns: Option<i64>,
+    pub payout_id: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Object)]
 #[oai(skip_serializing_if_is_none)]
 pub struct RentalRequestParams {
@@ -1058,6 +1073,89 @@ impl Database {
         .await?;
 
         tx.commit().await?;
+        Ok(())
+    }
+
+    /// Get active ICPay contracts ready for daily release
+    pub async fn get_contracts_for_release(&self) -> Result<Vec<Contract>> {
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns
+               FROM contract_sign_requests
+               WHERE payment_method = 'icpay'
+               AND payment_status = 'succeeded'
+               AND status IN ('active', 'provisioned')
+               ORDER BY created_at_ns ASC"#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
+
+    /// Calculate and create a payment release record for a contract
+    pub async fn create_payment_release(
+        &self,
+        contract_id: &[u8],
+        release_type: &str,
+        period_start_ns: i64,
+        period_end_ns: i64,
+        amount_e9s: i64,
+        provider_pubkey: &[u8],
+    ) -> Result<PaymentRelease> {
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let status = "pending";
+
+        let result = sqlx::query!(
+            r#"INSERT INTO payment_releases (contract_id, release_type, period_start_ns, period_end_ns, amount_e9s, provider_pubkey, status, created_at_ns)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+            contract_id,
+            release_type,
+            period_start_ns,
+            period_end_ns,
+            amount_e9s,
+            provider_pubkey,
+            status,
+            created_at_ns
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(PaymentRelease {
+            id: result.last_insert_rowid(),
+            contract_id: contract_id.to_vec(),
+            release_type: release_type.to_string(),
+            period_start_ns,
+            period_end_ns,
+            amount_e9s,
+            provider_pubkey: provider_pubkey.to_vec(),
+            status: status.to_string(),
+            created_at_ns,
+            released_at_ns: None,
+            payout_id: None,
+        })
+    }
+
+    /// Update contract's release tracking fields
+    pub async fn update_contract_release_tracking(
+        &self,
+        contract_id: &[u8],
+        last_release_at_ns: i64,
+        total_released_e9s: i64,
+    ) -> Result<()> {
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET last_release_at_ns = ?, total_released_e9s = ? WHERE contract_id = ?",
+            last_release_at_ns,
+            total_released_e9s,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 }
