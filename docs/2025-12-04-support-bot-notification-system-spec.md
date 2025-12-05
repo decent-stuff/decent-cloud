@@ -144,10 +144,25 @@ Add endpoints:
 - **Outcome:** SUCCESS - Database layer fully functional with proper error handling and constraint validation
 
 ### Step 3
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Extended ChatwootClient with Help Center article fetching:
+  - `HelpCenterArticle` struct with fields: id (i64), title, content, slug - implements Clone, Serialize, Deserialize, PartialEq for testability
+  - `fetch_help_center_articles(portal_slug)` - fetches articles from Chatwoot Help Center API
+    - Constructs URL: `{base_url}/hc/{portal_slug}/en/articles`
+    - Sends GET request (no auth token required for public help center)
+    - Parses JSON response with payload field containing article array
+    - Returns Vec<HelpCenterArticle> on success
+    - Returns error with status code and body on failure
+  - Module re-exports HelpCenterArticle for external use
+- **Files:**
+  - `/code/api/src/chatwoot/client.rs` (updated, added HelpCenterArticle struct and fetch method)
+  - `/code/api/src/chatwoot/mod.rs` (updated to re-export HelpCenterArticle)
+  - `/code/api/src/chatwoot/tests.rs` (added 3 unit tests for HelpCenterArticle)
+- **Tests:** 3 unit tests covering:
+  - HelpCenterArticle deserialize from JSON
+  - HelpCenterArticle serialize to JSON
+  - HelpCenterArticle Clone and PartialEq traits
+- **Verification:** Tests pass, compiles cleanly
+- **Outcome:** SUCCESS - Can fetch and parse help center articles from Chatwoot API
 
 ### Step 4
 - **Implementation:** Created article search service with simple keyword-based matching:
