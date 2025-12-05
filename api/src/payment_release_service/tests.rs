@@ -11,8 +11,8 @@ fn test_release_calculation_half_time_elapsed() {
 
     let period_duration_ns = current_ns - last_release_ns;
     let total_duration_ns = end_ns - start_ns;
-    let release_amount = (payment_amount_e9s as f64 * period_duration_ns as f64
-        / total_duration_ns as f64) as i64;
+    let release_amount =
+        (payment_amount_e9s as f64 * period_duration_ns as f64 / total_duration_ns as f64) as i64;
 
     assert_eq!(release_amount, 50);
 }
@@ -30,8 +30,8 @@ fn test_release_calculation_one_day_out_of_thirty() {
 
     let period_duration_ns = current_ns - last_release_ns;
     let total_duration_ns = end_ns - start_ns;
-    let release_amount = (payment_amount_e9s as f64 * period_duration_ns as f64
-        / total_duration_ns as f64) as i64;
+    let release_amount =
+        (payment_amount_e9s as f64 * period_duration_ns as f64 / total_duration_ns as f64) as i64;
 
     assert_eq!(release_amount, 24);
 }
@@ -74,8 +74,8 @@ fn test_release_calculation_no_time_elapsed() {
 
     let period_duration_ns = current_ns - last_release_ns;
     let total_duration_ns = end_ns - start_ns;
-    let release_amount = (payment_amount_e9s as f64 * period_duration_ns as f64
-        / total_duration_ns as f64) as i64;
+    let release_amount =
+        (payment_amount_e9s as f64 * period_duration_ns as f64 / total_duration_ns as f64) as i64;
 
     assert_eq!(release_amount, 0);
 }
@@ -93,8 +93,8 @@ fn test_release_calculation_contract_ended() {
 
     let period_duration_ns = current_ns - last_release_ns;
     let total_duration_ns = end_ns - start_ns;
-    let release_amount = (payment_amount_e9s as f64 * period_duration_ns as f64
-        / total_duration_ns as f64) as i64;
+    let release_amount =
+        (payment_amount_e9s as f64 * period_duration_ns as f64 / total_duration_ns as f64) as i64;
 
     assert_eq!(release_amount, 1000);
 }

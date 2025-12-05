@@ -1517,7 +1517,13 @@ async fn test_cancel_contract_unauthorized() {
 
     // Attempt cancel by unauthorized user
     let result = db
-        .cancel_contract(&contract_id, &unauthorized_pk, Some("Unauthorized"), None, None)
+        .cancel_contract(
+            &contract_id,
+            &unauthorized_pk,
+            Some("Unauthorized"),
+            None,
+            None,
+        )
         .await;
 
     assert!(result.is_err());

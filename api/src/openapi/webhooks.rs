@@ -588,10 +588,7 @@ pub async fn icpay_webhook(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(
-                            "Invalid contract_id hex in ICPay webhook metadata: {}",
-                            e
-                        );
+                        tracing::warn!("Invalid contract_id hex in ICPay webhook metadata: {}", e);
                     }
                 }
             } else {
@@ -634,17 +631,17 @@ pub async fn icpay_webhook(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(
-                            "Invalid contract_id hex in ICPay webhook metadata: {}",
-                            e
-                        );
+                        tracing::warn!("Invalid contract_id hex in ICPay webhook metadata: {}", e);
                     }
                 }
             }
         }
         "payment.refunded" => {
             let payment_id = &event.data.object.id;
-            tracing::info!("ICPay payment refunded (webhook confirmation): {}", payment_id);
+            tracing::info!(
+                "ICPay payment refunded (webhook confirmation): {}",
+                payment_id
+            );
             // Refund already processed via API call, this is just confirmation
         }
         _ => {

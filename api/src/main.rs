@@ -399,7 +399,8 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     let db_for_release = ctx.database.clone();
     let payment_release_task = tokio::spawn(async move {
-        let payment_release_service = PaymentReleaseService::new(db_for_release, release_interval_hours);
+        let payment_release_service =
+            PaymentReleaseService::new(db_for_release, release_interval_hours);
         tracing::info!(
             "Starting payment release service (interval: {}h)",
             release_interval_hours
