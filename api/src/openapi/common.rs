@@ -334,6 +334,17 @@ pub struct UpdateNotificationConfigRequest {
     pub notify_phone: Option<String>,
 }
 
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationUsageResponse {
+    pub telegram_count: i64,
+    pub sms_count: i64,
+    pub email_count: i64,
+    pub telegram_limit: i64,
+    pub sms_limit: i64,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints

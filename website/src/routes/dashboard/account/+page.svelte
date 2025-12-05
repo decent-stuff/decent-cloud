@@ -45,6 +45,7 @@
 		{ href: "/dashboard/account/security", label: "Security", icon: "🔐" },
 		{ href: "/dashboard/account/profile", label: "Public Profile", icon: "👤" },
 		{ href: "/dashboard/account/support", label: "Support Portal", icon: "🎫" },
+		{ href: "/dashboard/account/notifications", label: "Notifications", icon: "🔔" },
 	];
 
 	const quickAccessLinks = $derived([
@@ -193,6 +194,8 @@
 									Edit your public profile information
 								{:else if tab.label === "Support Portal"}
 									Access and reset support portal credentials
+								{:else if tab.label === "Notifications"}
+									Configure escalation alerts
 								{/if}
 							</p>
 						</div>

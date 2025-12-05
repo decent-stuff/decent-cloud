@@ -61,6 +61,55 @@ impl Database {
 
         Ok(())
     }
+
+    /// Increment notification usage count for provider/channel today.
+    pub async fn increment_notification_usage(
+        &self,
+        provider_id: &str,
+        channel: &str,
+    ) -> Result<i64> {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+        sqlx::query!(
+            r#"INSERT INTO notification_usage (provider_id, channel, date, count)
+               VALUES (?, ?, ?, 1)
+               ON CONFLICT(provider_id, channel, date) DO UPDATE SET count = count + 1"#,
+            provider_id,
+            channel,
+            today
+        )
+        .execute(&self.pool)
+        .await?;
+
+        let row = sqlx::query!(
+            r#"SELECT count as "count!" FROM notification_usage
+               WHERE provider_id = ? AND channel = ? AND date = ?"#,
+            provider_id,
+            channel,
+            today
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.count as i64)
+    }
+
+    /// Get notification usage count for provider/channel today.
+    pub async fn get_notification_usage(&self, provider_id: &str, channel: &str) -> Result<i64> {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+        let row = sqlx::query!(
+            r#"SELECT count as "count!" FROM notification_usage
+               WHERE provider_id = ? AND channel = ? AND date = ?"#,
+            provider_id,
+            channel,
+            today
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| r.count as i64).unwrap_or(0))
+    }
 }
 
 #[cfg(test)]

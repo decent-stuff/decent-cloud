@@ -1,8 +1,9 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags,
     BulkUpdateStatusRequest, CsvImportError, CsvImportResult, DuplicateOfferingRequest,
-    NotificationConfigResponse, ProvisioningStatusRequest, RentalResponseRequest,
-    ResponseMetricsResponse, ResponseTimeDistributionResponse, UpdateNotificationConfigRequest,
+    NotificationConfigResponse, NotificationUsageResponse, ProvisioningStatusRequest,
+    RentalResponseRequest, ResponseMetricsResponse, ResponseTimeDistributionResponse,
+    UpdateNotificationConfigRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
@@ -1104,6 +1105,45 @@ impl ProvidersApi {
                 success: false,
                 data: None,
                 error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get provider notification usage
+    ///
+    /// Returns today's notification usage counts for the authenticated provider
+    #[oai(
+        path = "/providers/me/notification-usage",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_notification_usage(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<NotificationUsageResponse>> {
+        let provider_id = hex::encode(&auth.pubkey);
+
+        let telegram = db.get_notification_usage(&provider_id, "telegram").await;
+        let sms = db.get_notification_usage(&provider_id, "sms").await;
+        let email = db.get_notification_usage(&provider_id, "email").await;
+
+        match (telegram, sms, email) {
+            (Ok(tg), Ok(sm), Ok(em)) => Json(ApiResponse {
+                success: true,
+                data: Some(NotificationUsageResponse {
+                    telegram_count: tg,
+                    sms_count: sm,
+                    email_count: em,
+                    telegram_limit: 50,
+                    sms_limit: 5,
+                }),
+                error: None,
+            }),
+            _ => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Failed to fetch usage data".to_string()),
             }),
         }
     }
