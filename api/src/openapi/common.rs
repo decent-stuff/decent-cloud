@@ -360,6 +360,26 @@ pub struct NotificationUsageResponse {
     pub sms_limit: i64,
 }
 
+/// Request to test a notification channel
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TestNotificationRequest {
+    /// Channel to test: "telegram", "email", or "sms"
+    pub channel: String,
+}
+
+/// Response from notification test
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TestNotificationResponse {
+    /// Whether the test was sent successfully
+    pub sent: bool,
+    /// Details about what was sent or why it failed
+    pub message: String,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints

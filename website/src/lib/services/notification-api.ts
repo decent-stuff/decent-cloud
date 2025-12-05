@@ -145,3 +145,72 @@ export async function updateNotificationConfig(
 		throw new Error(result.error || 'Failed to update notification config');
 	}
 }
+
+/**
+ * Result from testing a notification channel
+ */
+export interface TestNotificationResult {
+	sent: boolean;
+	message: string;
+}
+
+/**
+ * Send a test notification to a specific channel
+ */
+export async function testNotificationChannel(
+	identity: Ed25519KeyIdentity,
+	channel: 'telegram' | 'email' | 'sms'
+): Promise<TestNotificationResult> {
+	const { headers, body } = await signRequest(
+		identity,
+		'POST',
+		'/api/v1/providers/me/notification-test',
+		{ channel }
+	);
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/providers/me/notification-test`, {
+		method: 'POST',
+		headers: headers as HeadersInit,
+		body
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to test notification (HTTP ${response.status})`);
+	}
+
+	const result: ApiResponse<TestNotificationResult> = await response.json();
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to test notification');
+	}
+	return result.data;
+}
+
+/**
+ * Send a test escalation notification to all enabled channels
+ */
+export async function testEscalationNotification(
+	identity: Ed25519KeyIdentity
+): Promise<TestNotificationResult> {
+	const { headers } = await signRequest(
+		identity,
+		'POST',
+		'/api/v1/providers/me/notification-test/escalation',
+		{}
+	);
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/providers/me/notification-test/escalation`, {
+		method: 'POST',
+		headers: headers as HeadersInit,
+		body: JSON.stringify({})
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to test escalation (HTTP ${response.status})`);
+	}
+
+	const result: ApiResponse<TestNotificationResult> = await response.json();
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to test escalation');
+	}
+	return result.data;
+}

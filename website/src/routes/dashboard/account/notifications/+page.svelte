@@ -8,6 +8,8 @@
 		getNotificationConfig,
 		getNotificationUsage,
 		updateNotificationConfig,
+		testNotificationChannel,
+		testEscalationNotification,
 		type NotificationConfig,
 		type NotificationUsage
 	} from '$lib/services/notification-api';
@@ -32,6 +34,39 @@
 
 	// Account email comes from the account, not a separate field
 	const accountEmail = $derived(currentIdentity?.account?.email);
+
+	// Test notification state
+	let testingChannel = $state<string | null>(null);
+	let testResult = $state<{ sent: boolean; message: string } | null>(null);
+	let testingEscalation = $state(false);
+
+	async function handleTestChannel(channel: 'telegram' | 'email' | 'sms') {
+		if (!currentIdentity?.identity) return;
+		testingChannel = channel;
+		testResult = null;
+		try {
+			const result = await testNotificationChannel(currentIdentity.identity, channel);
+			testResult = result;
+		} catch (e) {
+			testResult = { sent: false, message: e instanceof Error ? e.message : 'Test failed' };
+		} finally {
+			testingChannel = null;
+		}
+	}
+
+	async function handleTestEscalation() {
+		if (!currentIdentity?.identity) return;
+		testingEscalation = true;
+		testResult = null;
+		try {
+			const result = await testEscalationNotification(currentIdentity.identity);
+			testResult = result;
+		} catch (e) {
+			testResult = { sent: false, message: e instanceof Error ? e.message : 'Test failed' };
+		} finally {
+			testingEscalation = false;
+		}
+	}
 
 	onMount(() => {
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
@@ -150,6 +185,12 @@
 				</div>
 			{/if}
 
+			{#if testResult}
+				<div class="p-4 rounded-lg {testResult.sent ? 'bg-green-500/20 border border-green-500/50 text-green-200' : 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-200'}">
+					<strong>{testResult.sent ? 'Test Sent' : 'Test Failed'}:</strong> {testResult.message}
+				</div>
+			{/if}
+
 			<!-- Channel Selection -->
 			<div class="space-y-4">
 				<!-- Email Option -->
@@ -176,6 +217,16 @@
 							<p class="text-white/60 text-sm mt-1">
 								Notifications will be sent to <span class="text-white">{accountEmail}</span>
 							</p>
+							{#if notifyEmail}
+								<button
+									type="button"
+									onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleTestChannel('email'); }}
+									disabled={testingChannel === 'email'}
+									class="mt-2 px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded border border-white/20 text-white/80 disabled:opacity-50"
+								>
+									{testingChannel === 'email' ? 'Sending...' : 'Send Test'}
+								</button>
+							{/if}
 						{:else}
 							<p class="text-yellow-400/80 text-sm mt-1">
 								Add an email in <a href="/dashboard/account/profile" class="underline">Profile Settings</a> to enable
@@ -226,6 +277,16 @@
 									> with <code>/start</code><br />
 									2. Copy the Chat ID from the bot's response
 								</p>
+								{#if telegramChatId}
+									<button
+										type="button"
+										onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleTestChannel('telegram'); }}
+										disabled={testingChannel === 'telegram'}
+										class="mt-2 px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded border border-white/20 text-white/80 disabled:opacity-50"
+									>
+										{testingChannel === 'telegram' ? 'Sending...' : 'Send Test'}
+									</button>
+								{/if}
 							</div>
 						{/if}
 					</div>
@@ -267,6 +328,16 @@
 								<p class="text-xs text-white/50">
 									Include country code (e.g. +1 for US)
 								</p>
+								{#if notifyPhone}
+									<button
+										type="button"
+										onclick={(e) => { e.preventDefault(); e.stopPropagation(); handleTestChannel('sms'); }}
+										disabled={testingChannel === 'sms'}
+										class="mt-2 px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded border border-white/20 text-white/80 disabled:opacity-50"
+									>
+										{testingChannel === 'sms' ? 'Sending...' : 'Send Test'}
+									</button>
+								{/if}
 							</div>
 						{/if}
 					</div>
@@ -312,6 +383,25 @@
 				</div>
 			</div>
 		{/if}
+
+		<!-- Test Full Escalation -->
+		<div class="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+			<h3 class="text-lg font-semibold text-white mb-3">Test Full Escalation Flow</h3>
+			<p class="text-white/60 text-sm mb-4">
+				Verify the complete notification pipeline by simulating an escalation event.
+				This sends a test notification to all your enabled channels.
+			</p>
+			<button
+				onclick={handleTestEscalation}
+				disabled={testingEscalation || (!notifyEmail && !notifyTelegram && !notifySms)}
+				class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+			>
+				{testingEscalation ? 'Testing...' : 'Test Escalation'}
+			</button>
+			{#if !notifyEmail && !notifyTelegram && !notifySms}
+				<p class="text-yellow-400/80 text-xs mt-2">Enable at least one channel to test.</p>
+			{/if}
+		</div>
 
 		<!-- Usage Info -->
 		<div class="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">

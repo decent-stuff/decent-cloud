@@ -3,7 +3,7 @@ use super::common::{
     BulkUpdateStatusRequest, CsvImportError, CsvImportResult, DuplicateOfferingRequest,
     NotificationConfigResponse, NotificationUsageResponse, ProvisioningStatusRequest,
     RentalResponseRequest, ResponseMetricsResponse, ResponseTimeDistributionResponse,
-    UpdateNotificationConfigRequest,
+    TestNotificationRequest, TestNotificationResponse, UpdateNotificationConfigRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
@@ -1144,6 +1144,79 @@ impl ProvidersApi {
                 success: false,
                 data: None,
                 error: Some("Failed to fetch usage data".to_string()),
+            }),
+        }
+    }
+
+    /// Test a notification channel
+    ///
+    /// Sends a test notification to the specified channel to verify configuration.
+    /// Channels: "telegram", "email", "sms"
+    #[oai(
+        path = "/providers/me/notification-test",
+        method = "post",
+        tag = "ApiTags::Providers"
+    )]
+    async fn test_notification_channel(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        req: Json<TestNotificationRequest>,
+    ) -> Json<ApiResponse<TestNotificationResponse>> {
+        use crate::support_bot::test_notifications::send_test_notification;
+
+        match send_test_notification(&db, &auth.pubkey, &req.channel).await {
+            Ok(message) => Json(ApiResponse {
+                success: true,
+                data: Some(TestNotificationResponse {
+                    sent: true,
+                    message,
+                }),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: true,
+                data: Some(TestNotificationResponse {
+                    sent: false,
+                    message: e.to_string(),
+                }),
+                error: None,
+            }),
+        }
+    }
+
+    /// Test the full escalation notification flow
+    ///
+    /// Creates a mock escalation event and dispatches notifications to all enabled channels.
+    /// This tests the complete pipeline from Chatwoot escalation to notification delivery.
+    #[oai(
+        path = "/providers/me/notification-test/escalation",
+        method = "post",
+        tag = "ApiTags::Providers"
+    )]
+    async fn test_escalation_notification(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<TestNotificationResponse>> {
+        use crate::support_bot::test_notifications::send_test_escalation;
+
+        match send_test_escalation(&db, &auth.pubkey).await {
+            Ok(message) => Json(ApiResponse {
+                success: true,
+                data: Some(TestNotificationResponse {
+                    sent: true,
+                    message,
+                }),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: true,
+                data: Some(TestNotificationResponse {
+                    sent: false,
+                    message: e.to_string(),
+                }),
+                error: None,
             }),
         }
     }
