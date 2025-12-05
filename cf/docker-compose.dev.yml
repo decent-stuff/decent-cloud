@@ -204,6 +204,9 @@ services:
       - CHATWOOT_INBOX_ID=${CHATWOOT_INBOX_ID:-1}
       # Telegram notifications
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_API_URL=${LLM_API_URL:-}
+      - LLM_API_MODEL=${LLM_API_MODEL:-}
     volumes:
       - ../data/api-data-dev:/data
     ports:

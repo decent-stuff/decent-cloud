@@ -135,10 +135,13 @@ async fn call_llm_api(prompt: &str) -> Result<String> {
     let api_url = std::env::var("LLM_API_URL")
         .unwrap_or_else(|_| "https://api.anthropic.com/v1/messages".to_string());
 
+    let api_model =
+        std::env::var("LLM_API_MODEL").unwrap_or_else(|_| "claude-4.5-sonnet".to_string());
+
     let client = Client::new();
 
     let request = ClaudeRequest {
-        model: "claude-3-5-sonnet-20241022".to_string(),
+        model: api_model,
         max_tokens: 1024,
         messages: vec![ClaudeMessage {
             role: "user".to_string(),
