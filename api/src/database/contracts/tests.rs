@@ -782,6 +782,7 @@ async fn test_cancel_contract_success_requested() {
         &requester_pk,
         Some("User requested cancellation"),
         None,
+        None,
     )
     .await
     .unwrap();
@@ -835,7 +836,7 @@ async fn test_cancel_contract_success_all_cancellable_statuses() {
         .await;
 
         let result = db
-            .cancel_contract(&contract_id, &requester_pk, None, None)
+            .cancel_contract(&contract_id, &requester_pk, None, None, None)
             .await;
         assert!(
             result.is_ok(),
@@ -876,7 +877,7 @@ async fn test_cancel_contract_rejects_unauthorized_user() {
     .await;
 
     let result = db
-        .cancel_contract(&contract_id, &attacker_pk, None, None)
+        .cancel_contract(&contract_id, &attacker_pk, None, None, None)
         .await;
     assert!(result.is_err());
     assert!(result
@@ -914,7 +915,7 @@ async fn test_cancel_contract_rejects_provider_cancellation() {
     .await;
 
     let result = db
-        .cancel_contract(&contract_id, &provider_pk, None, None)
+        .cancel_contract(&contract_id, &provider_pk, None, None, None)
         .await;
     assert!(result.is_err());
     assert!(result
@@ -946,7 +947,7 @@ async fn test_cancel_contract_fails_for_non_cancellable_statuses() {
         .await;
 
         let result = db
-            .cancel_contract(&contract_id, &requester_pk, None, None)
+            .cancel_contract(&contract_id, &requester_pk, None, None, None)
             .await;
         assert!(
             result.is_err(),
@@ -971,7 +972,7 @@ async fn test_cancel_contract_not_found_includes_hex_id() {
     let requester_pk = vec![1u8; 32];
 
     let result = db
-        .cancel_contract(&nonexistent_id, &requester_pk, None, None)
+        .cancel_contract(&nonexistent_id, &requester_pk, None, None, None)
         .await;
     assert!(result.is_err());
 
@@ -1441,7 +1442,7 @@ async fn test_cancel_contract_with_icpay_payment_no_refund() {
 
     // Cancel without Stripe client (ICPay payment)
     let result = db
-        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
         .await;
 
     assert!(result.is_ok());
@@ -1482,7 +1483,7 @@ async fn test_cancel_contract_stripe_payment_without_client() {
 
     // Cancel without Stripe client (refund amount calculated but not processed)
     let result = db
-        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
         .await;
 
     assert!(result.is_ok());
@@ -1516,7 +1517,7 @@ async fn test_cancel_contract_unauthorized() {
 
     // Attempt cancel by unauthorized user
     let result = db
-        .cancel_contract(&contract_id, &unauthorized_pk, Some("Unauthorized"), None)
+        .cancel_contract(&contract_id, &unauthorized_pk, Some("Unauthorized"), None, None)
         .await;
 
     assert!(result.is_err());
@@ -1548,7 +1549,7 @@ async fn test_cancel_contract_invalid_status() {
 
     // Attempt cancel
     let result = db
-        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
         .await;
 
     assert!(result.is_err());
@@ -1560,4 +1561,158 @@ async fn test_cancel_contract_invalid_status() {
     // Verify contract still in original status
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "provisioned");
+}
+
+#[tokio::test]
+async fn test_cancel_contract_icpay_refund_calculation() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![20u8; 32];
+
+    // Create contract with ICPay payment
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        1_000_000_000, // 1 ICP in e9s
+        "requested",
+    )
+    .await;
+
+    // Set up ICPay payment details
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64); // Started 10 days ago
+    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64); // 30 day contract
+
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ?, icpay_payment_id = ?, start_timestamp_ns = ?, end_timestamp_ns = ? WHERE contract_id = ?",
+        "icpay",
+        "succeeded",
+        "pay_test_123",
+        start_ns,
+        end_ns,
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Cancel the contract
+    db.cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
+        .await
+        .unwrap();
+
+    // Verify refund was calculated
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    assert_eq!(contract.payment_status, "refunded");
+    assert!(contract.refund_amount_e9s.is_some());
+    let refund = contract.refund_amount_e9s.unwrap();
+    // Should be prorated (2/3 of amount since 10/30 days used)
+    assert!(refund > 0);
+    assert!(refund < 1_000_000_000); // Less than full amount
+}
+
+#[tokio::test]
+async fn test_cancel_contract_icpay_no_payment_id() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![21u8; 32];
+
+    // Create contract without ICPay payment ID
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        1_000_000_000,
+        "requested",
+    )
+    .await;
+
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ? WHERE contract_id = ?",
+        "icpay",
+        "succeeded",
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Cancel should succeed but not calculate refund
+    db.cancel_contract(&contract_id, &requester_pk, None, None, None)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    // No refund since no payment ID
+    assert!(contract.refund_amount_e9s.is_none());
+    assert!(contract.icpay_refund_id.is_none());
+}
+
+#[tokio::test]
+async fn test_cancel_contract_icpay_with_released_amount() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![22u8; 32];
+
+    // Create contract with ICPay payment
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        1_000_000_000,
+        "requested",
+    )
+    .await;
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64);
+    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64);
+
+    // Set ICPay payment with some amount already released to provider
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ?, icpay_payment_id = ?, start_timestamp_ns = ?, end_timestamp_ns = ?, total_released_e9s = ? WHERE contract_id = ?",
+        "icpay",
+        "succeeded",
+        "pay_test_456",
+        start_ns,
+        end_ns,
+        300_000_000i64, // 0.3 ICP already released
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Cancel the contract
+    db.cancel_contract(&contract_id, &requester_pk, None, None, None)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    // Refund should be prorated amount minus already released
+    // Expected: 1B * (20/30) - 300M = 666.67M - 300M = 366.67M
+    if let Some(refund) = contract.refund_amount_e9s {
+        assert_eq!(contract.payment_status, "refunded");
+        assert!(refund > 0);
+        // Should be less than what it would be without released amount (2/3 of 1 ICP = ~667M)
+        assert!(refund < 667_000_000);
+        // Should be more than 300M (since we released 300M and there's still 666M prorated)
+        assert!(refund > 300_000_000);
+    } else {
+        // If no refund, the released amount exceeded the prorated amount
+        assert_eq!(contract.payment_status, "succeeded");
+    }
 }

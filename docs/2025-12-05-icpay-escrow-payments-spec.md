@@ -783,7 +783,7 @@ ICPAY_WEBHOOK_SECRET=whsec_xxx  # For signature verification
 #### Step 4: ICPay Refund Integration
 **Description:** Extend cancel_contract() to process ICPay refunds using new client methods
 **Success:** Unit tests for ICPay refund path, existing Stripe tests still pass
-**Status:** Pending
+**Status:** Complete
 
 #### Step 5: ICPay Webhook Handler
 **Description:** Add POST /webhooks/icpay endpoint with signature verification
@@ -841,10 +841,17 @@ ICPAY_WEBHOOK_SECRET=whsec_xxx  # For signature verification
 - **Outcome:** Success - ICPay client now makes real HTTP API calls for payment verification and refund creation
 
 ### Step 4: ICPay Refund Integration
-- **Implementation:** Pending
-- **Review:** Pending
-- **Verification:** Pending
-- **Outcome:** Pending
+- **Implementation:** Complete
+  - Added IcpayClient parameter to cancel_contract() signature
+  - Implemented process_icpay_refund() helper method to calculate net refunds (prorated - released)
+  - Extended cancel_contract() refund logic to handle both Stripe and ICPay payment methods
+  - Updated SQL query to store icpay_refund_id alongside stripe_refund_id
+  - Updated all callers in openapi/contracts.rs and tests to pass icpay_client parameter
+  - Added migration 030_icpay_escrow.sql to test_helpers.rs migration list
+  - Added 3 unit tests: test_cancel_contract_icpay_refund_calculation, test_cancel_contract_icpay_no_payment_id, test_cancel_contract_icpay_with_released_amount
+- **Review:** Complete - All 50 contract tests pass, including 3 new ICPay refund tests
+- **Verification:** Complete - SQLX_OFFLINE=true cargo test -p api --lib database::contracts::tests passes, cargo clippy clean (only pre-existing warnings)
+- **Outcome:** Success - Contract cancellation now supports ICPay prorated refunds with proper released amount tracking
 
 ### Step 5: ICPay Webhook Handler
 - **Implementation:** Pending

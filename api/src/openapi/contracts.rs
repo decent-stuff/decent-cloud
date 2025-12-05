@@ -337,8 +337,9 @@ impl ContractsApi {
             }
         };
 
-        // Create Stripe client for potential refund processing
+        // Create Stripe and ICPay clients for potential refund processing
         let stripe_client = crate::stripe_client::StripeClient::new().ok();
+        let icpay_client = crate::icpay_client::IcpayClient::new().ok();
 
         match db
             .cancel_contract(
@@ -346,6 +347,7 @@ impl ContractsApi {
                 &auth.pubkey,
                 req.memo.as_deref(),
                 stripe_client.as_ref(),
+                icpay_client.as_ref(),
             )
             .await
         {

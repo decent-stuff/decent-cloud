@@ -797,6 +797,74 @@ impl Database {
         Ok(())
     }
 
+    /// Process ICPay refund for a contract cancellation
+    ///
+    /// # Arguments
+    /// * `contract` - The contract to refund
+    /// * `icpay_client` - Optional ICPay client for API calls
+    /// * `current_timestamp_ns` - Current timestamp for prorated calculation
+    ///
+    /// # Returns
+    /// Tuple of (refund_amount_e9s, refund_id)
+    #[cfg_attr(test, allow(dead_code))]
+    async fn process_icpay_refund(
+        &self,
+        contract: &Contract,
+        icpay_client: Option<&crate::icpay_client::IcpayClient>,
+        current_timestamp_ns: i64,
+    ) -> Result<(Option<i64>, Option<String>)> {
+        // Get payment ID - prefer icpay_payment_id (webhook-set), fall back to icpay_transaction_id (frontend-set)
+        let payment_id = match (&contract.icpay_payment_id, &contract.icpay_transaction_id) {
+            (Some(id), _) => id,
+            (None, Some(id)) => id,
+            (None, None) => return Ok((None, None)),
+        };
+
+        // Calculate prorated refund amount
+        let gross_refund_e9s = Self::calculate_prorated_refund(
+            contract.payment_amount_e9s,
+            contract.start_timestamp_ns,
+            contract.end_timestamp_ns,
+            current_timestamp_ns,
+        );
+
+        // Subtract any amounts already released to provider
+        let already_released = contract.total_released_e9s.unwrap_or(0);
+        let net_refund_e9s = gross_refund_e9s.saturating_sub(already_released);
+
+        // Only process refund if amount is positive and icpay_client is provided
+        if net_refund_e9s > 0 {
+            if let Some(client) = icpay_client {
+                // Create refund via ICPay API
+                match client.create_refund(payment_id, Some(net_refund_e9s)).await {
+                    Ok(refund_id) => {
+                        eprintln!(
+                            "ICPay refund created: {} for contract {} (amount: {} e9s)",
+                            refund_id,
+                            &contract.contract_id,
+                            net_refund_e9s
+                        );
+                        Ok((Some(net_refund_e9s), Some(refund_id)))
+                    }
+                    Err(e) => {
+                        // Log error but don't fail cancellation
+                        eprintln!(
+                            "Failed to create ICPay refund for contract {}: {}",
+                            &contract.contract_id,
+                            e
+                        );
+                        Ok((Some(net_refund_e9s), None))
+                    }
+                }
+            } else {
+                // No icpay_client provided, just track the calculated amount
+                Ok((Some(net_refund_e9s), None))
+            }
+        } else {
+            Ok((None, None))
+        }
+    }
+
     /// Cancel a rental request (only by the original requester)
     ///
     /// Cancellable statuses:
@@ -809,13 +877,14 @@ impl Database {
     /// - provisioned/active: Already deployed, requires termination instead
     /// - rejected/cancelled: Already in terminal state
     ///
-    /// For Stripe payments: automatically processes prorated refund
+    /// For Stripe and ICPay payments: automatically processes prorated refund
     pub async fn cancel_contract(
         &self,
         contract_id: &[u8],
         cancelled_by_pubkey: &[u8],
         cancel_memo: Option<&str>,
         stripe_client: Option<&crate::stripe_client::StripeClient>,
+        icpay_client: Option<&crate::icpay_client::IcpayClient>,
     ) -> Result<()> {
         // Get contract to verify it exists and check authorization
         let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
@@ -837,62 +906,73 @@ impl Database {
             ));
         }
 
-        // Calculate prorated refund for Stripe payments
+        // Calculate prorated refund based on payment method
         let current_timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let (refund_amount_e9s, stripe_refund_id) =
-            if contract.payment_method == "stripe" && contract.payment_status == "succeeded" {
-                if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
-                    // Calculate prorated refund amount
-                    let refund_e9s = Self::calculate_prorated_refund(
-                        contract.payment_amount_e9s,
-                        contract.start_timestamp_ns,
-                        contract.end_timestamp_ns,
-                        current_timestamp_ns,
-                    );
+        let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) =
+            if contract.payment_status == "succeeded" {
+                match contract.payment_method.as_str() {
+                    "stripe" => {
+                        if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
+                            // Calculate prorated refund amount
+                            let refund_e9s = Self::calculate_prorated_refund(
+                                contract.payment_amount_e9s,
+                                contract.start_timestamp_ns,
+                                contract.end_timestamp_ns,
+                                current_timestamp_ns,
+                            );
 
-                    // Only process refund if amount is positive and stripe_client is provided
-                    if refund_e9s > 0 {
-                        if let Some(client) = stripe_client {
-                            // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
-                            let refund_cents = refund_e9s / 10_000_000;
+                            // Only process refund if amount is positive and stripe_client is provided
+                            if refund_e9s > 0 {
+                                if let Some(client) = stripe_client {
+                                    // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
+                                    let refund_cents = refund_e9s / 10_000_000;
 
-                            // Create refund via Stripe API
-                            match client
-                                .create_refund(payment_intent_id, Some(refund_cents))
-                                .await
-                            {
-                                Ok(refund_id) => {
-                                    eprintln!(
-                                    "Stripe refund created: {} for contract {} (amount: {} cents)",
-                                    refund_id,
-                                    hex::encode(contract_id),
-                                    refund_cents
-                                );
-                                    (Some(refund_e9s), Some(refund_id))
+                                    // Create refund via Stripe API
+                                    match client
+                                        .create_refund(payment_intent_id, Some(refund_cents))
+                                        .await
+                                    {
+                                        Ok(refund_id) => {
+                                            eprintln!(
+                                            "Stripe refund created: {} for contract {} (amount: {} cents)",
+                                            refund_id,
+                                            hex::encode(contract_id),
+                                            refund_cents
+                                        );
+                                            (Some(refund_e9s), Some(refund_id), None)
+                                        }
+                                        Err(e) => {
+                                            // Log error but don't fail cancellation
+                                            eprintln!(
+                                                "Failed to create Stripe refund for contract {}: {}",
+                                                hex::encode(contract_id),
+                                                e
+                                            );
+                                            (Some(refund_e9s), None, None)
+                                        }
+                                    }
+                                } else {
+                                    // No stripe_client provided, just track the calculated amount
+                                    (Some(refund_e9s), None, None)
                                 }
-                                Err(e) => {
-                                    // Log error but don't fail cancellation
-                                    eprintln!(
-                                        "Failed to create Stripe refund for contract {}: {}",
-                                        hex::encode(contract_id),
-                                        e
-                                    );
-                                    (Some(refund_e9s), None)
-                                }
+                            } else {
+                                (None, None, None)
                             }
                         } else {
-                            // No stripe_client provided, just track the calculated amount
-                            (Some(refund_e9s), None)
+                            (None, None, None)
                         }
-                    } else {
-                        (None, None)
                     }
-                } else {
-                    (None, None)
+                    "icpay" => {
+                        let (amount, refund_id) = self
+                            .process_icpay_refund(&contract, icpay_client, current_timestamp_ns)
+                            .await?;
+                        (amount, None, refund_id)
+                    }
+                    _ => (None, None, None),
                 }
             } else {
-                // Not a Stripe payment or payment not succeeded yet
-                (None, None)
+                // Payment not succeeded yet
+                (None, None, None)
             };
 
         // Update status, refund info, and history atomically
@@ -900,15 +980,17 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Update contract status to cancelled with refund info
-        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() {
+        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some()
+        {
             sqlx::query!(
-                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ?, payment_status = ?, refund_amount_e9s = ?, stripe_refund_id = ?, refund_created_at_ns = ? WHERE contract_id = ?",
+                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ?, payment_status = ?, refund_amount_e9s = ?, stripe_refund_id = ?, icpay_refund_id = ?, refund_created_at_ns = ? WHERE contract_id = ?",
                 "cancelled",
                 updated_at_ns,
                 cancelled_by_pubkey,
                 "refunded",
                 refund_amount_e9s,
                 stripe_refund_id,
+                icpay_refund_id,
                 updated_at_ns,
                 contract_id
             )
