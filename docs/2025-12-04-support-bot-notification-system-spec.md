@@ -150,10 +150,30 @@ Add endpoints:
 - **Outcome:** (pending)
 
 ### Step 4
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created article search service with simple keyword-based matching:
+  - `HelpCenterArticle` struct: id (u64), title, content, slug
+  - `ScoredArticle` struct: article, score (f32, 0.0-1.0)
+  - `search_articles(query, articles)` - tokenizes query to lowercase keywords, counts matches in title (2x weight) and content (1x weight), normalizes scores, filters by threshold (0.1), returns sorted by score descending
+  - Simple tokenization: lowercase, split on whitespace
+  - Module created at `/code/api/src/support_bot/search.rs` and exported from `mod.rs`
+- **Files:**
+  - `/code/api/src/support_bot/search.rs` (new, 212 lines)
+  - `/code/api/src/support_bot/mod.rs` (updated to export search module)
+  - `/code/api/src/chatwoot/client.rs` (fixed Deserialize on ListHelpCenterArticlesResponse)
+  - `/code/api/src/support_bot/llm.rs` (updated to use search::HelpCenterArticle and search::ScoredArticle)
+- **Tests:** 10 unit tests covering:
+  - Empty query returns empty results
+  - Whitespace-only query returns empty results
+  - Empty articles list returns empty results
+  - No matches returns empty results
+  - Single match found and scored
+  - Title weight higher than content weight (ranking verification)
+  - Multiple keywords ranked correctly (both in title ranks highest)
+  - Case-insensitive matching
+  - Tokenization correctness
+  - Score normalization (0.0-1.0 range)
+- **Verification:** `SQLX_OFFLINE=true cargo test --lib support_bot::search::tests` - all 10 tests pass cleanly, `SQLX_OFFLINE=true cargo clippy --lib` - no warnings for support_bot code
+- **Outcome:** SUCCESS - Search returns correctly ranked results using simple keyword matching (KISS, MINIMAL, YAGNI principles followed), tests pass, no clippy warnings
 
 ### Step 5
 - **Implementation:** (pending)
