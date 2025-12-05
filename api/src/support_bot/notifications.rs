@@ -37,184 +37,178 @@ impl SupportNotification {
     }
 }
 
-/// Dispatch a support notification to the provider based on their notification preferences.
-/// Returns Ok(()) if notification was queued successfully, Err if there was a problem.
+/// Dispatch a support notification to the user based on their notification preferences.
+/// Sends to ALL enabled channels (telegram, email, sms).
+/// Returns Ok(()) if at least one notification was sent, Err if all failed.
 pub async fn dispatch_notification(
     db: &Database,
     notification: &SupportNotification,
 ) -> Result<()> {
-    // Get provider notification config
+    // Get user notification config
     let config = db
-        .get_provider_notification_config(&notification.provider_pubkey)
+        .get_user_notification_config(&notification.provider_pubkey)
         .await
-        .context("Failed to get provider notification config")?;
+        .context("Failed to get user notification config")?;
 
     let config = match config {
         Some(c) => c,
         None => {
             tracing::warn!(
-                "No notification config found for provider (pubkey: {}), skipping notification",
+                "No notification config found for user (pubkey: {}), skipping notification",
                 hex::encode(&notification.provider_pubkey)
             );
             return Ok(());
         }
     };
 
-    tracing::info!(
-        "Dispatching support notification for conversation {} via {}",
-        notification.conversation_id,
-        config.notify_via
-    );
+    let mut channels_sent = Vec::new();
+    let mut errors = Vec::new();
 
-    match config.notify_via.as_str() {
-        "telegram" => {
-            use crate::notifications::telegram::{format_notification, TelegramClient};
-
-            let chat_id = match config.telegram_chat_id {
-                Some(ref id) => id,
-                None => {
-                    tracing::warn!(
-                        "No Telegram chat_id configured for provider (pubkey: {})",
-                        hex::encode(&notification.provider_pubkey)
-                    );
-                    return Ok(());
-                }
-            };
-
-            // Check if Telegram is configured
-            if !TelegramClient::is_configured() {
-                tracing::warn!(
-                    "Telegram client not configured (TELEGRAM_BOT_TOKEN missing), skipping notification"
-                );
-                return Ok(());
-            }
-
-            // Create Telegram client and send message
-            let telegram =
-                TelegramClient::from_env().context("Failed to create Telegram client")?;
-
-            let message = format_notification(
-                &notification.contract_id,
-                &notification.summary,
-                &notification.chatwoot_link,
-            );
-
-            let sent_msg = telegram
-                .send_message(chat_id, &message)
-                .await
-                .context("Failed to send Telegram message")?;
-
-            // Track message ID in DB for reply handling (persistent across restarts)
-            db.track_telegram_message(sent_msg.message_id, notification.conversation_id, chat_id)
-                .await
-                .context("Failed to track Telegram message")?;
-
-            tracing::info!(
-                "Telegram notification sent to chat_id: {}, message_id: {}, conversation: {}",
-                chat_id,
-                sent_msg.message_id,
-                notification.conversation_id
-            );
-
-            Ok(())
-        }
-        "email" => {
-            // Queue email notification using existing email queue
-            let email_body = format!(
-                "A customer conversation requires your attention.\n\n\
-                Contract ID: {}\n\
-                Summary: {}\n\n\
-                View conversation: {}\n\n\
-                Please log in to Chatwoot to respond.",
-                notification.contract_id, notification.summary, notification.chatwoot_link
-            );
-
-            // Get provider email - lookup by pubkey (account ID = provider pubkey)
-            let account = db
-                .get_account(&notification.provider_pubkey)
-                .await
-                .context("Failed to get provider account")?;
-
-            let email_addr = match account.and_then(|a| a.email) {
-                Some(email) => email,
-                None => {
-                    tracing::warn!(
-                        "Provider has no email address, cannot send notification (pubkey: {})",
-                        hex::encode(&notification.provider_pubkey)
-                    );
-                    return Ok(());
-                }
-            };
-
-            let from_addr = std::env::var("EMAIL_FROM_ADDR")
-                .unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
-
-            db.queue_email(
-                &email_addr,
-                &from_addr,
-                "Customer Support Conversation Needs Attention",
-                &email_body,
-                false,
-                EmailType::General,
-            )
-            .await
-            .context("Failed to queue email notification")?;
-
-            tracing::info!(
-                "Email notification queued for {} (conversation {})",
-                email_addr,
-                notification.conversation_id
-            );
-
-            Ok(())
-        }
-        "sms" => {
-            use crate::notifications::twilio::{format_sms_notification, TwilioClient};
-
-            let phone = match config.notify_phone {
-                Some(ref p) => p,
-                None => {
-                    tracing::warn!(
-                        "No phone number configured for provider (pubkey: {})",
-                        hex::encode(&notification.provider_pubkey)
-                    );
-                    return Ok(());
-                }
-            };
-
-            if !TwilioClient::is_configured() {
-                tracing::warn!(
-                    "Twilio not configured (TWILIO_ACCOUNT_SID missing), skipping SMS notification"
-                );
-                return Ok(());
-            }
-
-            let twilio = TwilioClient::from_env().context("Failed to create Twilio client")?;
-            let message = format_sms_notification(&notification.contract_id, &notification.summary);
-
-            let sid = twilio
-                .send_sms(phone, &message)
-                .await
-                .context("Failed to send SMS")?;
-
-            tracing::info!(
-                "SMS notification sent to {}, sid: {}, conversation: {}",
-                phone,
-                sid,
-                notification.conversation_id
-            );
-
-            Ok(())
-        }
-        unknown => {
-            tracing::warn!(
-                "Unknown notification method '{}' for provider (pubkey: {})",
-                unknown,
-                hex::encode(&notification.provider_pubkey)
-            );
-            Ok(())
+    // Send to Telegram if enabled
+    if config.notify_telegram {
+        match send_telegram_notification(db, notification, &config).await {
+            Ok(()) => channels_sent.push("telegram"),
+            Err(e) => errors.push(format!("telegram: {}", e)),
         }
     }
+
+    // Send to Email if enabled
+    if config.notify_email {
+        match send_email_notification(db, notification, &config).await {
+            Ok(()) => channels_sent.push("email"),
+            Err(e) => errors.push(format!("email: {}", e)),
+        }
+    }
+
+    // Send to SMS if enabled
+    if config.notify_sms {
+        match send_sms_notification(notification, &config).await {
+            Ok(()) => channels_sent.push("sms"),
+            Err(e) => errors.push(format!("sms: {}", e)),
+        }
+    }
+
+    if channels_sent.is_empty() && errors.is_empty() {
+        tracing::warn!(
+            "No notification channels enabled for user (pubkey: {})",
+            hex::encode(&notification.provider_pubkey)
+        );
+    } else {
+        tracing::info!(
+            "Dispatched notification for conversation {} - sent: [{}], errors: [{}]",
+            notification.conversation_id,
+            channels_sent.join(", "),
+            errors.join(", ")
+        );
+    }
+
+    Ok(())
+}
+
+async fn send_telegram_notification(
+    db: &Database,
+    notification: &SupportNotification,
+    config: &crate::database::UserNotificationConfig,
+) -> Result<()> {
+    use crate::notifications::telegram::{format_notification, TelegramClient};
+
+    let chat_id = config
+        .telegram_chat_id
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No Telegram chat_id configured"))?;
+
+    if !TelegramClient::is_configured() {
+        anyhow::bail!("TELEGRAM_BOT_TOKEN not configured");
+    }
+
+    let telegram = TelegramClient::from_env()?;
+    let message = format_notification(
+        &notification.contract_id,
+        &notification.summary,
+        &notification.chatwoot_link,
+    );
+
+    let sent_msg = telegram.send_message(chat_id, &message).await?;
+
+    db.track_telegram_message(sent_msg.message_id, notification.conversation_id, chat_id)
+        .await?;
+
+    tracing::info!(
+        "Telegram notification sent to chat_id: {}, message_id: {}",
+        chat_id,
+        sent_msg.message_id
+    );
+    Ok(())
+}
+
+async fn send_email_notification(
+    db: &Database,
+    notification: &SupportNotification,
+    _config: &crate::database::UserNotificationConfig,
+) -> Result<()> {
+    // Look up account email by pubkey
+    let account_id = db
+        .get_account_id_by_public_key(&notification.provider_pubkey)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("No account found for pubkey"))?;
+
+    let account = db
+        .get_account_by_id(&account_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
+
+    let email_addr = account
+        .email
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No email address on account"))?;
+
+    let email_body = format!(
+        "A customer conversation requires your attention.\n\n\
+        Contract ID: {}\n\
+        Summary: {}\n\n\
+        View conversation: {}\n\n\
+        Please log in to Chatwoot to respond.",
+        notification.contract_id, notification.summary, notification.chatwoot_link
+    );
+
+    let from_addr =
+        std::env::var("EMAIL_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
+
+    db.queue_email(
+        email_addr,
+        &from_addr,
+        "Customer Support Conversation Needs Attention",
+        &email_body,
+        false,
+        EmailType::General,
+    )
+    .await?;
+
+    tracing::info!("Email notification queued for {}", email_addr);
+    Ok(())
+}
+
+async fn send_sms_notification(
+    notification: &SupportNotification,
+    config: &crate::database::UserNotificationConfig,
+) -> Result<()> {
+    use crate::notifications::twilio::{format_sms_notification, TwilioClient};
+
+    let phone = config
+        .notify_phone
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No phone number configured"))?;
+
+    if !TwilioClient::is_configured() {
+        anyhow::bail!("Twilio not configured");
+    }
+
+    let twilio = TwilioClient::from_env()?;
+    let message = format_sms_notification(&notification.contract_id, &notification.summary);
+    let sid = twilio.send_sms(phone, &message).await?;
+
+    tracing::info!("SMS notification sent to {}, sid: {}", phone, sid);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -224,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_support_notification_creation() {
-        let pubkey = b"test_provider_123".to_vec();
+        let pubkey = b"test_user_123".to_vec();
         let notification = SupportNotification::new(
             pubkey.clone(),
             42,
@@ -246,7 +240,7 @@ mod tests {
     #[test]
     fn test_support_notification_link_format() {
         let notification = SupportNotification::new(
-            b"provider".to_vec(),
+            b"user".to_vec(),
             999,
             "contract_xyz".to_string(),
             "Test".to_string(),
@@ -262,7 +256,7 @@ mod tests {
     #[tokio::test]
     async fn test_dispatch_notification_no_config() {
         let db = setup_test_db().await;
-        let pubkey = b"nonexistent_provider";
+        let pubkey = b"nonexistent_user";
 
         let notification = SupportNotification::new(
             pubkey.to_vec(),
@@ -280,31 +274,20 @@ mod tests {
     #[tokio::test]
     async fn test_dispatch_notification_telegram() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_telegram";
-        let pubkey_slice: &[u8] = pubkey;
+        let pubkey = b"test_user_telegram";
 
-        // Create provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        // Set telegram notification config
-        let config = crate::database::notification_config::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
+        // Set telegram notification config (no FK constraint anymore)
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_via: "telegram".to_string(),
+            notify_telegram: true,
+            notify_email: false,
+            notify_sms: false,
             telegram_chat_id: Some("123456789".to_string()),
             notify_phone: None,
+            notify_email_address: None,
         };
-        db.set_provider_notification_config(pubkey, &config)
+        db.set_user_notification_config(pubkey, &config)
             .await
             .unwrap();
 
@@ -316,7 +299,7 @@ mod tests {
             "https://example.com",
         );
 
-        // Should succeed (logs for now, actual Telegram in Step 8)
+        // Should succeed (will log error since TELEGRAM_BOT_TOKEN not set in tests)
         let result = dispatch_notification(&db, &notification).await;
         assert!(result.is_ok());
     }
@@ -324,42 +307,26 @@ mod tests {
     #[tokio::test]
     async fn test_dispatch_notification_email() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_email";
-        let pubkey_slice: &[u8] = pubkey;
+        // Use 32-byte pubkey for account creation
+        let pubkey = [0u8; 32];
 
-        // Create provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
+        // Create account with email first
+        db.create_account("test_email_user", &pubkey, "user@example.com")
+            .await
+            .unwrap();
 
-        // Create account with email
-        sqlx::query!(
-            "INSERT INTO accounts (id, username, email) VALUES (?, ?, ?)",
-            pubkey_slice,
-            "testprovider",
-            "provider@example.com"
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        // Set email notification config
-        let config = crate::database::notification_config::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
+        // Set email notification config (email comes from account now)
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_via: "email".to_string(),
+            notify_telegram: false,
+            notify_email: true,
+            notify_sms: false,
             telegram_chat_id: None,
             notify_phone: None,
+            notify_email_address: None, // Not used - email comes from account
         };
-        db.set_provider_notification_config(pubkey, &config)
+        db.set_user_notification_config(&pubkey, &config)
             .await
             .unwrap();
 
@@ -378,7 +345,7 @@ mod tests {
         // Verify email was queued
         let pending = db.get_pending_emails(10).await.unwrap();
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].to_addr, "provider@example.com");
+        assert_eq!(pending[0].to_addr, "user@example.com");
         assert_eq!(
             pending[0].subject,
             "Customer Support Conversation Needs Attention"
@@ -390,44 +357,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dispatch_notification_email_no_email_address() {
+    async fn test_dispatch_notification_email_no_account() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_no_email";
-        let pubkey_slice: &[u8] = pubkey;
+        // Use 32-byte pubkey but DON'T create account
+        let pubkey = [1u8; 32];
 
-        // Create provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        // Create account WITHOUT email
-        sqlx::query!(
-            "INSERT INTO accounts (id, username, email) VALUES (?, ?, ?)",
-            pubkey_slice,
-            "testprovider",
-            None as Option<String>
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        // Set email notification config
-        let config = crate::database::notification_config::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
+        // Set email notification config but no account exists
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_via: "email".to_string(),
+            notify_telegram: false,
+            notify_email: true,
+            notify_sms: false,
             telegram_chat_id: None,
             notify_phone: None,
+            notify_email_address: None,
         };
-        db.set_provider_notification_config(pubkey, &config)
+        db.set_user_notification_config(&pubkey, &config)
             .await
             .unwrap();
 
@@ -439,7 +385,7 @@ mod tests {
             "https://example.com",
         );
 
-        // Should succeed but skip notification (no email)
+        // Should succeed but log error (no account found)
         let result = dispatch_notification(&db, &notification).await;
         assert!(result.is_ok());
 
@@ -449,71 +395,79 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dispatch_notification_sms() {
+    async fn test_dispatch_notification_multi_channel() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_sms";
-        let pubkey_slice: &[u8] = pubkey;
+        // Use 32-byte pubkey for account creation
+        let pubkey = [2u8; 32];
 
-        // Create provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
+        // Create account with email first
+        db.create_account("test_multi_user", &pubkey, "multi@example.com")
+            .await
+            .unwrap();
 
-        // Set SMS notification config
-        let config = crate::database::notification_config::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_via: "sms".to_string(),
-            telegram_chat_id: None,
-            notify_phone: Some("+1234567890".to_string()),
+        // Enable email + telegram (telegram will fail since no token)
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
+            chatwoot_portal_slug: None,
+            notify_telegram: true,
+            notify_email: true,
+            notify_sms: false,
+            telegram_chat_id: Some("123456".to_string()),
+            notify_phone: None,
+            notify_email_address: None, // Not used - email comes from account
         };
-        db.set_provider_notification_config(pubkey, &config)
+        db.set_user_notification_config(&pubkey, &config)
             .await
             .unwrap();
 
         let notification = SupportNotification::new(
             pubkey.to_vec(),
             1,
-            "test_contract".to_string(),
-            "Test notification".to_string(),
+            "contract_multi".to_string(),
+            "Multi-channel test".to_string(),
             "https://example.com",
         );
 
-        // Should succeed (logs for now, SMS not yet implemented)
+        // Should succeed - email will work, telegram will log error
         let result = dispatch_notification(&db, &notification).await;
         assert!(result.is_ok());
+
+        // Verify email was queued
+        let pending = db.get_pending_emails(10).await.unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].to_addr, "multi@example.com");
     }
 
     #[tokio::test]
-    async fn test_dispatch_notification_unknown_method() {
+    async fn test_dispatch_notification_no_channels_enabled() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_unknown";
-        let pubkey_slice: &[u8] = pubkey;
+        let pubkey = b"test_user_no_channels";
 
-        // Create provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
+        // Config exists but no channels enabled
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
+            chatwoot_portal_slug: None,
+            notify_telegram: false,
+            notify_email: false,
+            notify_sms: false,
+            telegram_chat_id: None,
+            notify_phone: None,
+            notify_email_address: None,
+        };
+        db.set_user_notification_config(pubkey, &config)
+            .await
+            .unwrap();
 
-        // Manually insert config with invalid method (bypassing CHECK constraint via raw insert)
-        // Note: This shouldn't happen in production, but test defensive handling
-        // We can't actually do this with the CHECK constraint, so we'll skip this test
-        // and rely on database constraint testing in notification_config.rs
+        let notification = SupportNotification::new(
+            pubkey.to_vec(),
+            1,
+            "test".to_string(),
+            "Test".to_string(),
+            "https://example.com",
+        );
+
+        // Should succeed (logs warning about no channels)
+        let result = dispatch_notification(&db, &notification).await;
+        assert!(result.is_ok());
     }
 }

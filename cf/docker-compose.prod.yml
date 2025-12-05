@@ -203,6 +203,8 @@ services:
       - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID:-1}
       - CHATWOOT_HMAC_SECRET=${CHATWOOT_HMAC_SECRET}
       - CHATWOOT_INBOX_ID=${CHATWOOT_INBOX_ID:-1}
+      # Telegram notifications
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     volumes:
       - ../data/api-data-prod:/data
     ports:

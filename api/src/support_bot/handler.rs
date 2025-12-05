@@ -39,9 +39,9 @@ pub async fn handle_customer_message(
     let provider_pubkey_bytes =
         hex::decode(&contract.provider_pubkey).context("Invalid provider pubkey hex")?;
 
-    // 2. Get provider notification config to find portal slug
+    // 2. Get user notification config to find portal slug
     let notification_config = db
-        .get_provider_notification_config(&provider_pubkey_bytes)
+        .get_user_notification_config(&provider_pubkey_bytes)
         .await?;
 
     let portal_slug = match notification_config {

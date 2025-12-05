@@ -317,7 +317,7 @@ pub struct AdminProcessPayoutRequest {
     pub wallet_address: String,
 }
 
-// Request/Response types for provider notification config
+// Request/Response types for user notification config
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
@@ -325,11 +325,15 @@ pub struct AdminProcessPayoutRequest {
 pub struct NotificationConfigResponse {
     #[oai(skip_serializing_if_is_none)]
     pub chatwoot_portal_slug: Option<String>,
-    pub notify_via: String,
+    pub notify_telegram: bool,
+    pub notify_email: bool,
+    pub notify_sms: bool,
     #[oai(skip_serializing_if_is_none)]
     pub telegram_chat_id: Option<String>,
     #[oai(skip_serializing_if_is_none)]
     pub notify_phone: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub notify_email_address: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Object)]
@@ -337,9 +341,12 @@ pub struct NotificationConfigResponse {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateNotificationConfigRequest {
     pub chatwoot_portal_slug: Option<String>,
-    pub notify_via: String,
+    pub notify_telegram: bool,
+    pub notify_email: bool,
+    pub notify_sms: bool,
     pub telegram_chat_id: Option<String>,
     pub notify_phone: Option<String>,
+    pub notify_email_address: Option<String>,
 }
 
 #[derive(Debug, Serialize, Object)]

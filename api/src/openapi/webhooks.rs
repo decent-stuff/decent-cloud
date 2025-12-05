@@ -682,19 +682,32 @@ pub async fn telegram_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
             if text.trim() == "/start" || text.starts_with("/start ") {
                 tracing::info!("Received /start command from chat_id: {}", chat_id);
 
-                if let Ok(telegram) = TelegramClient::from_env() {
-                    let response_text = format!(
-                        "Welcome! Your Telegram Chat ID is:\n\n`{}`\n\n\
-                        Copy this ID and paste it in your notification settings at:\n\
-                        Dashboard → Account → Notifications → Telegram Chat ID\n\n\
-                        Once configured, you'll receive support escalation alerts here.",
-                        chat_id
-                    );
+                let telegram = TelegramClient::from_env().map_err(|e| {
+                    tracing::error!("TELEGRAM_BOT_TOKEN not configured: {}", e);
+                    PoemError::from_string(
+                        "Telegram not configured",
+                        poem::http::StatusCode::SERVICE_UNAVAILABLE,
+                    )
+                })?;
 
-                    if let Err(e) = telegram.send_message(&chat_id, &response_text).await {
+                let response_text = format!(
+                    "Welcome! Your Telegram Chat ID is:\n\n`{}`\n\n\
+                    Copy this ID and paste it in your notification settings at:\n\
+                    Dashboard → Account → Notifications → Telegram Chat ID\n\n\
+                    Once configured, you'll receive support escalation alerts here.",
+                    chat_id
+                );
+
+                telegram
+                    .send_message(&chat_id, &response_text)
+                    .await
+                    .map_err(|e| {
                         tracing::error!("Failed to send /start response: {}", e);
-                    }
-                }
+                        PoemError::from_string(
+                            format!("Failed to send response: {}", e),
+                            poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                    })?;
 
                 return Ok(Response::builder()
                     .status(poem::http::StatusCode::OK)

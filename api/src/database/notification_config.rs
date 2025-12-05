@@ -3,25 +3,32 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct ProviderNotificationConfig {
-    pub provider_pubkey: Vec<u8>,
+pub struct UserNotificationConfig {
+    pub user_pubkey: Vec<u8>,
     pub chatwoot_portal_slug: Option<String>,
-    pub notify_via: String,
+    pub notify_telegram: bool,
+    pub notify_email: bool,
+    pub notify_sms: bool,
     pub telegram_chat_id: Option<String>,
     pub notify_phone: Option<String>,
+    pub notify_email_address: Option<String>,
 }
 
 impl Database {
-    /// Get provider notification configuration by pubkey.
-    pub async fn get_provider_notification_config(
+    /// Get user notification configuration by pubkey.
+    pub async fn get_user_notification_config(
         &self,
         pubkey: &[u8],
-    ) -> Result<Option<ProviderNotificationConfig>> {
+    ) -> Result<Option<UserNotificationConfig>> {
         let config = sqlx::query_as!(
-            ProviderNotificationConfig,
-            r#"SELECT provider_pubkey as "provider_pubkey!", chatwoot_portal_slug, notify_via as "notify_via!", telegram_chat_id, notify_phone
-               FROM provider_notification_config
-               WHERE provider_pubkey = ?"#,
+            UserNotificationConfig,
+            r#"SELECT user_pubkey as "user_pubkey!", chatwoot_portal_slug,
+                      notify_telegram as "notify_telegram!: bool",
+                      notify_email as "notify_email!: bool",
+                      notify_sms as "notify_sms!: bool",
+                      telegram_chat_id, notify_phone, notify_email_address
+               FROM user_notification_config
+               WHERE user_pubkey = ?"#,
             pubkey
         )
         .fetch_optional(&self.pool)
@@ -30,29 +37,36 @@ impl Database {
         Ok(config)
     }
 
-    /// Set provider notification configuration. Creates new entry or updates existing one.
-    pub async fn set_provider_notification_config(
+    /// Set user notification configuration. Creates new entry or updates existing one.
+    pub async fn set_user_notification_config(
         &self,
         pubkey: &[u8],
-        config: &ProviderNotificationConfig,
+        config: &UserNotificationConfig,
     ) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
 
         sqlx::query!(
-            r#"INSERT INTO provider_notification_config
-               (provider_pubkey, chatwoot_portal_slug, notify_via, telegram_chat_id, notify_phone, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(provider_pubkey) DO UPDATE SET
+            r#"INSERT INTO user_notification_config
+               (user_pubkey, chatwoot_portal_slug, notify_telegram, notify_email, notify_sms,
+                telegram_chat_id, notify_phone, notify_email_address, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(user_pubkey) DO UPDATE SET
                    chatwoot_portal_slug = excluded.chatwoot_portal_slug,
-                   notify_via = excluded.notify_via,
+                   notify_telegram = excluded.notify_telegram,
+                   notify_email = excluded.notify_email,
+                   notify_sms = excluded.notify_sms,
                    telegram_chat_id = excluded.telegram_chat_id,
                    notify_phone = excluded.notify_phone,
+                   notify_email_address = excluded.notify_email_address,
                    updated_at = excluded.updated_at"#,
             pubkey,
             config.chatwoot_portal_slug,
-            config.notify_via,
+            config.notify_telegram,
+            config.notify_email,
+            config.notify_sms,
             config.telegram_chat_id,
             config.notify_phone,
+            config.notify_email_address,
             now,
             now
         )
@@ -62,19 +76,15 @@ impl Database {
         Ok(())
     }
 
-    /// Increment notification usage count for provider/channel today.
-    pub async fn increment_notification_usage(
-        &self,
-        provider_id: &str,
-        channel: &str,
-    ) -> Result<i64> {
+    /// Increment notification usage count for user/channel today.
+    pub async fn increment_notification_usage(&self, user_id: &str, channel: &str) -> Result<i64> {
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
         sqlx::query!(
             r#"INSERT INTO notification_usage (provider_id, channel, date, count)
                VALUES (?, ?, ?, 1)
                ON CONFLICT(provider_id, channel, date) DO UPDATE SET count = count + 1"#,
-            provider_id,
+            user_id,
             channel,
             today
         )
@@ -84,7 +94,7 @@ impl Database {
         let row = sqlx::query!(
             r#"SELECT count as "count!" FROM notification_usage
                WHERE provider_id = ? AND channel = ? AND date = ?"#,
-            provider_id,
+            user_id,
             channel,
             today
         )
@@ -94,14 +104,14 @@ impl Database {
         Ok(row.count as i64)
     }
 
-    /// Get notification usage count for provider/channel today.
-    pub async fn get_notification_usage(&self, provider_id: &str, channel: &str) -> Result<i64> {
+    /// Get notification usage count for user/channel today.
+    pub async fn get_notification_usage(&self, user_id: &str, channel: &str) -> Result<i64> {
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
         let row = sqlx::query!(
             r#"SELECT count as "count!" FROM notification_usage
                WHERE provider_id = ? AND channel = ? AND date = ?"#,
-            provider_id,
+            user_id,
             channel,
             today
         )
@@ -117,111 +127,98 @@ mod tests {
     use crate::database::test_helpers::setup_test_db;
 
     #[tokio::test]
-    async fn test_get_provider_notification_config_not_exists() {
+    async fn test_get_user_notification_config_not_exists() {
         let db = setup_test_db().await;
-        let pubkey = b"nonexistent_provider";
+        let pubkey = b"nonexistent_user";
 
-        let result = db.get_provider_notification_config(pubkey).await;
+        let result = db.get_user_notification_config(pubkey).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
     }
 
     #[tokio::test]
-    async fn test_set_and_get_provider_notification_config() {
+    async fn test_set_and_get_user_notification_config() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_123";
-        let pubkey_slice: &[u8] = pubkey;
+        let pubkey = b"test_user_123";
 
-        // First, we need to create a provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        let config = super::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
+        let config = super::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_via: "telegram".to_string(),
+            notify_telegram: true,
+            notify_email: true,
+            notify_sms: false,
             telegram_chat_id: Some("123456789".to_string()),
             notify_phone: None,
+            notify_email_address: Some("test@example.com".to_string()),
         };
 
         // Set config
-        let set_result = db.set_provider_notification_config(pubkey, &config).await;
+        let set_result = db.set_user_notification_config(pubkey, &config).await;
         assert!(set_result.is_ok());
 
         // Get config
         let retrieved = db
-            .get_provider_notification_config(pubkey)
+            .get_user_notification_config(pubkey)
             .await
             .unwrap()
             .expect("Config should exist");
 
-        assert_eq!(retrieved.provider_pubkey, pubkey);
+        assert_eq!(retrieved.user_pubkey, pubkey);
         assert_eq!(
             retrieved.chatwoot_portal_slug,
             Some("test-portal".to_string())
         );
-        assert_eq!(retrieved.notify_via, "telegram");
+        assert!(retrieved.notify_telegram);
+        assert!(retrieved.notify_email);
+        assert!(!retrieved.notify_sms);
         assert_eq!(retrieved.telegram_chat_id, Some("123456789".to_string()));
         assert_eq!(retrieved.notify_phone, None);
+        assert_eq!(
+            retrieved.notify_email_address,
+            Some("test@example.com".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_update_existing_notification_config() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_456";
-        let pubkey_slice: &[u8] = pubkey;
+        let pubkey = b"test_user_456";
 
-        // Create provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider 2",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        // Initial config
-        let initial_config = super::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
+        // Initial config - telegram only
+        let initial_config = super::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: Some("initial-portal".to_string()),
-            notify_via: "telegram".to_string(),
+            notify_telegram: true,
+            notify_email: false,
+            notify_sms: false,
             telegram_chat_id: Some("111111111".to_string()),
             notify_phone: None,
+            notify_email_address: None,
         };
 
-        db.set_provider_notification_config(pubkey, &initial_config)
+        db.set_user_notification_config(pubkey, &initial_config)
             .await
             .unwrap();
 
-        // Update config
-        let updated_config = super::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
+        // Update config - switch to SMS + email
+        let updated_config = super::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
             chatwoot_portal_slug: Some("updated-portal".to_string()),
-            notify_via: "sms".to_string(),
+            notify_telegram: false,
+            notify_email: true,
+            notify_sms: true,
             telegram_chat_id: None,
             notify_phone: Some("+1234567890".to_string()),
+            notify_email_address: Some("updated@example.com".to_string()),
         };
 
-        db.set_provider_notification_config(pubkey, &updated_config)
+        db.set_user_notification_config(pubkey, &updated_config)
             .await
             .unwrap();
 
         // Verify update
         let retrieved = db
-            .get_provider_notification_config(pubkey)
+            .get_user_notification_config(pubkey)
             .await
             .unwrap()
             .expect("Config should exist");
@@ -230,60 +227,46 @@ mod tests {
             retrieved.chatwoot_portal_slug,
             Some("updated-portal".to_string())
         );
-        assert_eq!(retrieved.notify_via, "sms");
+        assert!(!retrieved.notify_telegram);
+        assert!(retrieved.notify_email);
+        assert!(retrieved.notify_sms);
         assert_eq!(retrieved.telegram_chat_id, None);
         assert_eq!(retrieved.notify_phone, Some("+1234567890".to_string()));
+        assert_eq!(
+            retrieved.notify_email_address,
+            Some("updated@example.com".to_string())
+        );
     }
 
     #[tokio::test]
-    async fn test_set_config_invalid_notify_via() {
+    async fn test_multi_channel_notifications() {
         let db = setup_test_db().await;
-        let pubkey = b"test_provider_789";
-        let pubkey_slice: &[u8] = pubkey;
+        let pubkey = b"test_user_multi";
 
-        // Create provider profile
-        sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
-            pubkey_slice,
-            "Test Provider 3",
-            "v1",
-            "v1",
-            1700000000i64
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-
-        let invalid_config = super::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_via: "invalid_method".to_string(),
-            telegram_chat_id: None,
-            notify_phone: None,
+        // Enable all channels
+        let config = super::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
+            chatwoot_portal_slug: None,
+            notify_telegram: true,
+            notify_email: true,
+            notify_sms: true,
+            telegram_chat_id: Some("999888777".to_string()),
+            notify_phone: Some("+1555123456".to_string()),
+            notify_email_address: Some("multi@example.com".to_string()),
         };
 
-        // Should fail due to CHECK constraint
-        let result = db
-            .set_provider_notification_config(pubkey, &invalid_config)
-            .await;
-        assert!(result.is_err());
-    }
+        db.set_user_notification_config(pubkey, &config)
+            .await
+            .unwrap();
 
-    #[tokio::test]
-    async fn test_set_config_nonexistent_provider() {
-        let db = setup_test_db().await;
-        let pubkey = b"nonexistent_provider_999";
+        let retrieved = db
+            .get_user_notification_config(pubkey)
+            .await
+            .unwrap()
+            .expect("Config should exist");
 
-        let config = super::ProviderNotificationConfig {
-            provider_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: Some("test-portal".to_string()),
-            notify_via: "telegram".to_string(),
-            telegram_chat_id: Some("123456789".to_string()),
-            notify_phone: None,
-        };
-
-        // Should fail due to foreign key constraint
-        let result = db.set_provider_notification_config(pubkey, &config).await;
-        assert!(result.is_err());
+        assert!(retrieved.notify_telegram);
+        assert!(retrieved.notify_email);
+        assert!(retrieved.notify_sms);
     }
 }

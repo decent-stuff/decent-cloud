@@ -108,17 +108,20 @@ Provider workflow:
 ## Database Schema (our side)
 
 ```sql
--- Provider notification preferences
-ALTER TABLE providers ADD COLUMN support_config JSONB;
-
--- Example:
--- {
---   "chatwoot_portal_slug": "acme-hosting",
---   "chatwoot_agent_id": 123,
---   "notify_via": "telegram",
---   "telegram_chat_id": "123456789",
---   "notify_phone": "+1234567890"
--- }
+-- User notification preferences (multi-channel support)
+CREATE TABLE user_notification_config (
+    user_pubkey BLOB PRIMARY KEY,
+    chatwoot_portal_slug TEXT,
+    notify_telegram INTEGER NOT NULL DEFAULT 0,  -- boolean flags allow multi-channel
+    notify_email INTEGER NOT NULL DEFAULT 0,
+    notify_sms INTEGER NOT NULL DEFAULT 0,
+    telegram_chat_id TEXT,
+    notify_phone TEXT,
+    notify_email_address TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+-- Users can enable multiple channels simultaneously (e.g., email + telegram)
 ```
 
 ## API Dependencies

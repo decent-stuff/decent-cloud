@@ -167,6 +167,34 @@ def print_info(text: str) -> None:
     print(f"{BLUE}→{NC} {text}")
 
 
+def setup_telegram_webhook(env_vars: dict[str, str], is_prod: bool) -> bool:
+    """Register Telegram bot webhook with Telegram API."""
+    import urllib.request
+    import json
+
+    token = env_vars.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        print_warning("TELEGRAM_BOT_TOKEN not set, skipping webhook registration")
+        return True  # Not an error, just not configured
+
+    api_domain = "api.decent-cloud.org" if is_prod else "dev-api.decent-cloud.org"
+    webhook_url = f"https://{api_domain}/api/v1/webhooks/telegram"
+
+    try:
+        url = f"https://api.telegram.org/bot{token}/setWebhook?url={webhook_url}"
+        with urllib.request.urlopen(url, timeout=10) as response:
+            result = json.loads(response.read().decode())
+            if result.get("ok"):
+                print_success(f"Telegram webhook registered: {webhook_url}")
+                return True
+            else:
+                print_error(f"Telegram webhook registration failed: {result.get('description')}")
+                return False
+    except Exception as e:
+        print_error(f"Failed to register Telegram webhook: {e}")
+        return False
+
+
 def check_docker() -> bool:
     """Check if Docker and Docker Compose are installed."""
     try:
@@ -408,6 +436,12 @@ def build_website_natively(environment: str, env_vars: dict[str, str]) -> bool:
                 f.write("# VITE_CHATWOOT_WEBSITE_TOKEN=your_token\n")
                 f.write("# VITE_CHATWOOT_BASE_URL=https://support.decent-cloud.org\n")
 
+            # Telegram bot username for UI display
+            f.write("\n")
+            telegram_bot_username = env_vars.get("TELEGRAM_BOT_USERNAME", "DecentCloudBot")
+            print_info(f"Telegram bot username: {telegram_bot_username}")
+            f.write(f"VITE_TELEGRAM_BOT_USERNAME={telegram_bot_username}\n")
+
         print_success(f"Created .env.local for {environment} build")
         print()
 
@@ -575,6 +609,10 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
             print("  • Check tunnel status in Cloudflare dashboard")
             domain = "decent-cloud.org" if is_prod else "dev.decent-cloud.org"
             print(f"  • Test your domain: https://{domain}/health")
+            print()
+
+            # Register Telegram webhook now that API is accessible
+            setup_telegram_webhook(env_vars, is_prod)
         elif status == "unauthorized":
             print_error("Tunnel authentication failed!")
             print()

@@ -22,11 +22,16 @@
 	let error = $state<string | null>(null);
 	let success = $state<string | null>(null);
 
-	// Form state
-	let notifyVia = $state<'email' | 'telegram' | 'sms'>('email');
+	// Form state - multi-channel booleans
+	let notifyTelegram = $state(false);
+	let notifyEmail = $state(false);
+	let notifySms = $state(false);
 	let telegramChatId = $state('');
 	let notifyPhone = $state('');
 	let usage = $state<NotificationUsage | null>(null);
+
+	// Account email comes from the account, not a separate field
+	const accountEmail = $derived(currentIdentity?.account?.email);
 
 	onMount(() => {
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
@@ -56,7 +61,9 @@
 				getNotificationUsage(currentIdentity.identity)
 			]);
 			if (config) {
-				notifyVia = config.notifyVia;
+				notifyTelegram = config.notifyTelegram;
+				notifyEmail = config.notifyEmail;
+				notifySms = config.notifySms;
 				telegramChatId = config.telegramChatId || '';
 				notifyPhone = config.notifyPhone || '';
 			}
@@ -77,9 +84,11 @@
 
 		try {
 			await updateNotificationConfig(currentIdentity.identity, {
-				notifyVia,
-				telegramChatId: notifyVia === 'telegram' ? telegramChatId : undefined,
-				notifyPhone: notifyVia === 'sms' ? notifyPhone : undefined
+				notifyTelegram,
+				notifyEmail,
+				notifySms,
+				telegramChatId: notifyTelegram ? telegramChatId : undefined,
+				notifyPhone: notifySms ? notifyPhone : undefined
 			});
 			success = 'Notification settings saved!';
 		} catch (e) {
@@ -124,9 +133,9 @@
 		</div>
 	{:else}
 		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6">
-			<h2 class="text-xl font-semibold text-white">Notification Channel</h2>
+			<h2 class="text-xl font-semibold text-white">Notification Channels</h2>
 			<p class="text-white/60 text-sm">
-				Choose how you want to be notified when a customer conversation is escalated to you.
+				Select one or more channels to receive alerts when a customer conversation is escalated.
 			</p>
 
 			{#if error}
@@ -145,17 +154,15 @@
 			<div class="space-y-4">
 				<!-- Email Option -->
 				<label
-					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyVia ===
-					'email'
+					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyEmail
 						? 'bg-blue-500/20 border-blue-500/50'
 						: 'bg-white/5 border-white/20 hover:border-white/40'}"
 				>
 					<input
-						type="radio"
-						name="notifyVia"
-						value="email"
-						bind:group={notifyVia}
-						class="mt-1"
+						type="checkbox"
+						bind:checked={notifyEmail}
+						disabled={!accountEmail}
+						class="mt-1 w-5 h-5"
 					/>
 					<div class="flex-1">
 						<div class="flex items-center gap-2">
@@ -165,25 +172,28 @@
 								Free
 							</span>
 						</div>
-						<p class="text-white/60 text-sm mt-1">
-							Receive notifications at your account email address
-						</p>
+						{#if accountEmail}
+							<p class="text-white/60 text-sm mt-1">
+								Notifications will be sent to <span class="text-white">{accountEmail}</span>
+							</p>
+						{:else}
+							<p class="text-yellow-400/80 text-sm mt-1">
+								Add an email in <a href="/dashboard/account/profile" class="underline">Profile Settings</a> to enable
+							</p>
+						{/if}
 					</div>
 				</label>
 
 				<!-- Telegram Option -->
 				<label
-					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyVia ===
-					'telegram'
+					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyTelegram
 						? 'bg-blue-500/20 border-blue-500/50'
 						: 'bg-white/5 border-white/20 hover:border-white/40'}"
 				>
 					<input
-						type="radio"
-						name="notifyVia"
-						value="telegram"
-						bind:group={notifyVia}
-						class="mt-1"
+						type="checkbox"
+						bind:checked={notifyTelegram}
+						class="mt-1 w-5 h-5"
 					/>
 					<div class="flex-1">
 						<div class="flex items-center gap-2">
@@ -196,7 +206,8 @@
 						<p class="text-white/60 text-sm mt-1">
 							Receive instant notifications via Telegram. Reply directly to respond.
 						</p>
-						{#if notifyVia === 'telegram'}
+						{#if notifyTelegram}
+							{@const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'DecentCloudBot'}
 							<div class="mt-3 space-y-2">
 								<label class="block text-sm text-white/80">
 									Telegram Chat ID
@@ -208,10 +219,10 @@
 									/>
 								</label>
 								<p class="text-xs text-white/50">
-								1. Message <a
-										href="https://t.me/DecentCloudBot"
+									1. Message <a
+										href="https://t.me/{botUsername}"
 										target="_blank"
-										class="text-blue-400 hover:underline">@DecentCloudBot</a
+										class="text-blue-400 hover:underline">@{botUsername}</a
 									> with <code>/start</code><br />
 									2. Copy the Chat ID from the bot's response
 								</p>
@@ -222,17 +233,14 @@
 
 				<!-- SMS Option -->
 				<label
-					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyVia ===
-					'sms'
+					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifySms
 						? 'bg-blue-500/20 border-blue-500/50'
 						: 'bg-white/5 border-white/20 hover:border-white/40'}"
 				>
 					<input
-						type="radio"
-						name="notifyVia"
-						value="sms"
-						bind:group={notifyVia}
-						class="mt-1"
+						type="checkbox"
+						bind:checked={notifySms}
+						class="mt-1 w-5 h-5"
 					/>
 					<div class="flex-1">
 						<div class="flex items-center gap-2">
@@ -245,7 +253,7 @@
 						<p class="text-white/60 text-sm mt-1">
 							Receive SMS alerts to your phone number
 						</p>
-						{#if notifyVia === 'sms'}
+						{#if notifySms}
 							<div class="mt-3 space-y-2">
 								<label class="block text-sm text-white/80">
 									Phone Number
@@ -310,8 +318,7 @@
 			<h3 class="text-lg font-semibold text-white mb-3">About Notifications</h3>
 			<ul class="text-white/60 text-sm space-y-2">
 				<li>
-					• Notifications are sent when a customer conversation is escalated to human
-					support
+					• Notifications are sent to all selected channels when a conversation is escalated
 				</li>
 				<li>• You can reply directly from Telegram to respond in the chat</li>
 				<li>• Email notifications link to your Chatwoot dashboard</li>

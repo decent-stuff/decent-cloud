@@ -7,9 +7,12 @@ import { API_BASE_URL } from './api';
  */
 export interface NotificationConfig {
 	chatwootPortalSlug?: string;
-	notifyVia: 'telegram' | 'email' | 'sms';
+	notifyTelegram: boolean;
+	notifyEmail: boolean;
+	notifySms: boolean;
 	telegramChatId?: string;
 	notifyPhone?: string;
+	notifyEmailAddress?: string;
 }
 
 /**
@@ -22,7 +25,7 @@ interface ApiResponse<T> {
 }
 
 /**
- * Get provider notification configuration
+ * Get user notification configuration
  */
 export async function getNotificationConfig(
 	identity: Ed25519KeyIdentity
@@ -77,7 +80,7 @@ export interface NotificationUsage {
 }
 
 /**
- * Get provider notification usage for today
+ * Get user notification usage for today
  */
 export async function getNotificationUsage(
 	identity: Ed25519KeyIdentity
@@ -101,9 +104,12 @@ export async function updateNotificationConfig(
 	identity: Ed25519KeyIdentity,
 	config: {
 		chatwootPortalSlug?: string;
-		notifyVia: string;
+		notifyTelegram: boolean;
+		notifyEmail: boolean;
+		notifySms: boolean;
 		telegramChatId?: string;
 		notifyPhone?: string;
+		notifyEmailAddress?: string;
 	}
 ): Promise<void> {
 	const { headers, body } = await signRequest(

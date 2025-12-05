@@ -1022,34 +1022,45 @@ impl ProvidersApi {
         }
     }
 
-    /// Get provider notification configuration
+    /// Get user notification configuration
     ///
-    /// Returns notification preferences for the authenticated provider
+    /// Returns notification preferences for the authenticated user
     #[oai(
         path = "/providers/me/notification-config",
         method = "get",
         tag = "ApiTags::Providers"
     )]
-    async fn get_provider_notification_config(
+    async fn get_user_notification_config(
         &self,
         db: Data<&Arc<Database>>,
         auth: ApiAuthenticatedUser,
     ) -> Json<ApiResponse<NotificationConfigResponse>> {
-        match db.get_provider_notification_config(&auth.pubkey).await {
+        match db.get_user_notification_config(&auth.pubkey).await {
             Ok(Some(config)) => Json(ApiResponse {
                 success: true,
                 data: Some(NotificationConfigResponse {
                     chatwoot_portal_slug: config.chatwoot_portal_slug,
-                    notify_via: config.notify_via,
+                    notify_telegram: config.notify_telegram,
+                    notify_email: config.notify_email,
+                    notify_sms: config.notify_sms,
                     telegram_chat_id: config.telegram_chat_id,
                     notify_phone: config.notify_phone,
+                    notify_email_address: config.notify_email_address,
                 }),
                 error: None,
             }),
             Ok(None) => Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("Notification configuration not found".to_string()),
+                success: true,
+                data: Some(NotificationConfigResponse {
+                    chatwoot_portal_slug: None,
+                    notify_telegram: false,
+                    notify_email: false,
+                    notify_sms: false,
+                    telegram_chat_id: None,
+                    notify_phone: None,
+                    notify_email_address: None,
+                }),
+                error: None,
             }),
             Err(e) => Json(ApiResponse {
                 success: false,
@@ -1059,43 +1070,32 @@ impl ProvidersApi {
         }
     }
 
-    /// Update provider notification configuration
+    /// Update user notification configuration
     ///
-    /// Updates notification preferences for the authenticated provider
+    /// Updates notification preferences for the authenticated user
     #[oai(
         path = "/providers/me/notification-config",
         method = "put",
         tag = "ApiTags::Providers"
     )]
-    async fn update_provider_notification_config(
+    async fn update_user_notification_config(
         &self,
         db: Data<&Arc<Database>>,
         auth: ApiAuthenticatedUser,
         req: Json<UpdateNotificationConfigRequest>,
     ) -> Json<ApiResponse<String>> {
-        // Validate notify_via
-        if !matches!(req.notify_via.as_str(), "telegram" | "email" | "sms") {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(
-                    "Invalid notify_via value. Must be one of: telegram, email, sms".to_string(),
-                ),
-            });
-        }
-
-        let config = crate::database::notification_config::ProviderNotificationConfig {
-            provider_pubkey: auth.pubkey.clone(),
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: auth.pubkey.clone(),
             chatwoot_portal_slug: req.chatwoot_portal_slug.clone(),
-            notify_via: req.notify_via.clone(),
+            notify_telegram: req.notify_telegram,
+            notify_email: req.notify_email,
+            notify_sms: req.notify_sms,
             telegram_chat_id: req.telegram_chat_id.clone(),
             notify_phone: req.notify_phone.clone(),
+            notify_email_address: req.notify_email_address.clone(),
         };
 
-        match db
-            .set_provider_notification_config(&auth.pubkey, &config)
-            .await
-        {
+        match db.set_user_notification_config(&auth.pubkey, &config).await {
             Ok(_) => Json(ApiResponse {
                 success: true,
                 data: Some("Notification configuration updated successfully".to_string()),
