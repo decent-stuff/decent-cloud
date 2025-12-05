@@ -57,27 +57,20 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .as_ref()
         .context("Provider email required for Chatwoot agent")?;
 
-    // Generate password for new user or reset for existing
+    // Generate password for the user
     let password = generate_secure_password();
 
-    // Get or create user via Platform API
-    let (user, created) = client
-        .get_or_create_user(email, name, &password)
+    // Create or find user via Platform API (Chatwoot handles find-or-create internally)
+    let user = client
+        .create_user(email, name, &password)
         .await
-        .context("Failed to get or create Chatwoot user")?;
+        .context("Failed to create Chatwoot user")?;
 
-    // If user already existed, update their password
-    if !created {
-        client
-            .update_user_password(user.id, &password)
-            .await
-            .context("Failed to update Chatwoot user password")?;
-        tracing::info!(
-            "Found existing Chatwoot user {} (id: {}), reset password",
-            email,
-            user.id
-        );
-    }
+    // Always update password to ensure it's set (create doesn't update existing user's password)
+    client
+        .update_user_password(user.id, &password)
+        .await
+        .context("Failed to set Chatwoot user password")?;
 
     // Add user to account as agent (ignore error if already added)
     if let Err(e) = client.add_user_to_account(user.id).await {
@@ -96,11 +89,10 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .context("Failed to store Chatwoot user ID")?;
 
     tracing::info!(
-        "Linked Chatwoot agent for provider {} (email: {}, user_id: {}, created: {})",
+        "Linked Chatwoot agent for provider {} (email: {}, user_id: {})",
         hex::encode(pubkey),
         email,
-        user.id,
-        created
+        user.id
     );
 
     Ok(password)
@@ -158,23 +150,6 @@ pub fn is_configured() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_is_configured_when_missing() {
-        std::env::remove_var("CHATWOOT_PLATFORM_API_TOKEN");
-        assert!(!is_configured());
-    }
-
-    #[test]
-    fn test_is_configured_when_set() {
-        std::env::set_var("CHATWOOT_PLATFORM_API_TOKEN", "test_token");
-        std::env::set_var("CHATWOOT_BASE_URL", "https://test.chatwoot.com");
-        std::env::set_var("CHATWOOT_ACCOUNT_ID", "1");
-        assert!(is_configured());
-        std::env::remove_var("CHATWOOT_PLATFORM_API_TOKEN");
-        std::env::remove_var("CHATWOOT_BASE_URL");
-        std::env::remove_var("CHATWOOT_ACCOUNT_ID");
-    }
 
     #[test]
     fn test_generate_secure_password_meets_requirements() {

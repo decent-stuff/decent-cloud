@@ -115,6 +115,36 @@ services:
     networks:
       - decent-cloud-dev
 
+  # Link platform app to account (idempotent, runs on every deploy)
+  chatwoot-setup:
+    image: chatwoot/chatwoot:v4.8.0
+    container_name: decent-cloud-dev-chatwoot-setup
+    depends_on:
+      chatwoot-migrate:
+        condition: service_completed_successfully
+    environment:
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
+      POSTGRES_HOST: 192.168.0.2
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: chatwoot_dev
+      POSTGRES_USERNAME: chatwoot_dev
+      POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD:-chatwoot_dev_password}
+      REDIS_URL: redis://chatwoot-redis:6379
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-2}
+    command: >
+      bundle exec rails runner "
+        account_id = ENV['CHATWOOT_ACCOUNT_ID'].to_i
+        account = Account.find_by(id: account_id)
+        exit 0 unless account
+        PlatformApp.find_each do |app|
+          app.platform_app_permissibles.find_or_create_by!(permissible: account)
+          puts \"Linked PlatformApp '#{app.name}' to Account #{account_id}\"
+        end
+      "
+    networks:
+      - decent-cloud-dev
+
   # ============================================
   # Application Services
   # ============================================
