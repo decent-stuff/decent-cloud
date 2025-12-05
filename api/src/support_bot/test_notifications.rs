@@ -92,22 +92,41 @@ async fn send_test_sms(phone: &Option<String>) -> Result<String> {
 }
 
 /// Send a test escalation notification to all enabled channels.
+/// Returns detailed results for each channel.
 pub async fn send_test_escalation(db: &Database, pubkey: &[u8]) -> Result<String> {
-    use super::notifications::{dispatch_notification, SupportNotification};
+    let config = db
+        .get_user_notification_config(pubkey)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("No notification config found"))?;
 
-    let chatwoot_base = std::env::var("CHATWOOT_BASE_URL")
-        .unwrap_or_else(|_| "https://support.decent-cloud.org".into());
+    let mut results = Vec::new();
 
-    let notification = SupportNotification::new(
-        pubkey.to_vec(),
-        0, // test conversation ID
-        "TEST-CONTRACT".into(),
-        "This is a test escalation from your notification settings".into(),
-        &chatwoot_base,
-    );
+    if config.notify_telegram {
+        match send_test_telegram(&config.telegram_chat_id).await {
+            Ok(msg) => results.push(format!("Telegram: {}", msg)),
+            Err(e) => results.push(format!("Telegram: FAILED - {}", e)),
+        }
+    }
 
-    dispatch_notification(db, &notification).await?;
-    Ok("Escalation test dispatched to all enabled channels".into())
+    if config.notify_email {
+        match send_test_email(db, pubkey).await {
+            Ok(msg) => results.push(format!("Email: {}", msg)),
+            Err(e) => results.push(format!("Email: FAILED - {}", e)),
+        }
+    }
+
+    if config.notify_sms {
+        match send_test_sms(&config.notify_phone).await {
+            Ok(msg) => results.push(format!("SMS: {}", msg)),
+            Err(e) => results.push(format!("SMS: FAILED - {}", e)),
+        }
+    }
+
+    if results.is_empty() {
+        bail!("No notification channels enabled");
+    }
+
+    Ok(results.join("\n"))
 }
 
 #[cfg(test)]
