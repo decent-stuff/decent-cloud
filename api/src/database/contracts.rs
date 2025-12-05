@@ -111,6 +111,14 @@ pub struct PaymentRelease {
     pub payout_id: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
+pub struct ProviderPendingReleases {
+    #[oai(skip)]
+    pub provider_pubkey: Vec<u8>,
+    pub total_pending_e9s: i64,
+    pub release_count: i64,
+}
+
 #[derive(Debug, Deserialize, Object)]
 #[oai(skip_serializing_if_is_none)]
 pub struct RentalRequestParams {
@@ -891,9 +899,7 @@ impl Database {
                     Ok(refund_id) => {
                         eprintln!(
                             "ICPay refund created: {} for contract {} (amount: {} e9s)",
-                            refund_id,
-                            &contract.contract_id,
-                            net_refund_e9s
+                            refund_id, &contract.contract_id, net_refund_e9s
                         );
                         Ok((Some(net_refund_e9s), Some(refund_id)))
                     }
@@ -901,8 +907,7 @@ impl Database {
                         // Log error but don't fail cancellation
                         eprintln!(
                             "Failed to create ICPay refund for contract {}: {}",
-                            &contract.contract_id,
-                            e
+                            &contract.contract_id, e
                         );
                         Ok((Some(net_refund_e9s), None))
                     }
@@ -959,80 +964,80 @@ impl Database {
 
         // Calculate prorated refund based on payment method
         let current_timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) =
-            if contract.payment_status == "succeeded" {
-                match contract.payment_method.as_str() {
-                    "stripe" => {
-                        if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
-                            // Calculate prorated refund amount
-                            let refund_e9s = Self::calculate_prorated_refund(
-                                contract.payment_amount_e9s,
-                                contract.start_timestamp_ns,
-                                contract.end_timestamp_ns,
-                                current_timestamp_ns,
-                            );
+        let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) = if contract.payment_status
+            == "succeeded"
+        {
+            match contract.payment_method.as_str() {
+                "stripe" => {
+                    if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
+                        // Calculate prorated refund amount
+                        let refund_e9s = Self::calculate_prorated_refund(
+                            contract.payment_amount_e9s,
+                            contract.start_timestamp_ns,
+                            contract.end_timestamp_ns,
+                            current_timestamp_ns,
+                        );
 
-                            // Only process refund if amount is positive and stripe_client is provided
-                            if refund_e9s > 0 {
-                                if let Some(client) = stripe_client {
-                                    // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
-                                    let refund_cents = refund_e9s / 10_000_000;
+                        // Only process refund if amount is positive and stripe_client is provided
+                        if refund_e9s > 0 {
+                            if let Some(client) = stripe_client {
+                                // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
+                                let refund_cents = refund_e9s / 10_000_000;
 
-                                    // Create refund via Stripe API
-                                    match client
-                                        .create_refund(payment_intent_id, Some(refund_cents))
-                                        .await
-                                    {
-                                        Ok(refund_id) => {
-                                            eprintln!(
+                                // Create refund via Stripe API
+                                match client
+                                    .create_refund(payment_intent_id, Some(refund_cents))
+                                    .await
+                                {
+                                    Ok(refund_id) => {
+                                        eprintln!(
                                             "Stripe refund created: {} for contract {} (amount: {} cents)",
                                             refund_id,
                                             hex::encode(contract_id),
                                             refund_cents
                                         );
-                                            (Some(refund_e9s), Some(refund_id), None)
-                                        }
-                                        Err(e) => {
-                                            // Log error but don't fail cancellation
-                                            eprintln!(
-                                                "Failed to create Stripe refund for contract {}: {}",
-                                                hex::encode(contract_id),
-                                                e
-                                            );
-                                            (Some(refund_e9s), None, None)
-                                        }
+                                        (Some(refund_e9s), Some(refund_id), None)
                                     }
-                                } else {
-                                    // No stripe_client provided, just track the calculated amount
-                                    (Some(refund_e9s), None, None)
+                                    Err(e) => {
+                                        // Log error but don't fail cancellation
+                                        eprintln!(
+                                            "Failed to create Stripe refund for contract {}: {}",
+                                            hex::encode(contract_id),
+                                            e
+                                        );
+                                        (Some(refund_e9s), None, None)
+                                    }
                                 }
                             } else {
-                                (None, None, None)
+                                // No stripe_client provided, just track the calculated amount
+                                (Some(refund_e9s), None, None)
                             }
                         } else {
                             (None, None, None)
                         }
+                    } else {
+                        (None, None, None)
                     }
-                    "icpay" => {
-                        let (amount, refund_id) = self
-                            .process_icpay_refund(&contract, icpay_client, current_timestamp_ns)
-                            .await?;
-                        (amount, None, refund_id)
-                    }
-                    _ => (None, None, None),
                 }
-            } else {
-                // Payment not succeeded yet
-                (None, None, None)
-            };
+                "icpay" => {
+                    let (amount, refund_id) = self
+                        .process_icpay_refund(&contract, icpay_client, current_timestamp_ns)
+                        .await?;
+                    (amount, None, refund_id)
+                }
+                _ => (None, None, None),
+            }
+        } else {
+            // Payment not succeeded yet
+            (None, None, None)
+        };
 
         // Update status, refund info, and history atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let mut tx = self.pool.begin().await?;
 
         // Update contract status to cancelled with refund info
-        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some()
-        {
+        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
             sqlx::query!(
                 "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ?, payment_status = ?, refund_amount_e9s = ?, stripe_refund_id = ?, icpay_refund_id = ?, refund_created_at_ns = ? WHERE contract_id = ?",
                 "cancelled",
@@ -1157,6 +1162,70 @@ impl Database {
         .await?;
 
         Ok(())
+    }
+
+    /// Get pending releases for a provider (status = 'released', ready for payout)
+    pub async fn get_provider_pending_releases(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<PaymentRelease>> {
+        let releases = sqlx::query_as::<_, PaymentRelease>(
+            r#"SELECT id, contract_id, release_type, period_start_ns,
+               period_end_ns, amount_e9s, provider_pubkey,
+               status, created_at_ns, released_at_ns, payout_id
+               FROM payment_releases
+               WHERE provider_pubkey = ? AND status = 'released'
+               ORDER BY created_at_ns ASC"#,
+        )
+        .bind(provider_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(releases)
+    }
+
+    /// Mark releases as paid out with payout_id
+    pub async fn mark_releases_paid_out(&self, release_ids: &[i64], payout_id: &str) -> Result<()> {
+        if release_ids.is_empty() {
+            return Ok(());
+        }
+
+        // Build placeholders for IN clause
+        let placeholders = (0..release_ids.len())
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let query = format!(
+            "UPDATE payment_releases SET status = ?, payout_id = ? WHERE id IN ({})",
+            placeholders
+        );
+
+        let mut query_builder = sqlx::query(&query);
+        query_builder = query_builder.bind("paid_out").bind(payout_id);
+        for id in release_ids {
+            query_builder = query_builder.bind(id);
+        }
+
+        query_builder.execute(&self.pool).await?;
+
+        Ok(())
+    }
+
+    /// Get all providers with pending releases (for admin overview)
+    pub async fn get_providers_with_pending_releases(
+        &self,
+    ) -> Result<Vec<ProviderPendingReleases>> {
+        let results = sqlx::query_as::<_, ProviderPendingReleases>(
+            r#"SELECT provider_pubkey, SUM(amount_e9s) as total_pending_e9s, COUNT(*) as release_count
+               FROM payment_releases
+               WHERE status = 'released'
+               GROUP BY provider_pubkey
+               ORDER BY total_pending_e9s DESC"#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(results)
     }
 }
 

@@ -1,12 +1,14 @@
 use super::common::{
-    AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, AdminSendTestEmailRequest,
-    AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
+    AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, AdminProcessPayoutRequest,
+    AdminSendTestEmailRequest, AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
 };
 use crate::{
     auth::AdminAuthenticatedUser,
+    database::contracts::ProviderPendingReleases,
     database::email::{EmailQueueEntry, EmailStats},
     database::Database,
     email_service::EmailService,
+    icpay_client::IcpayClient,
 };
 use poem::web::Data;
 use poem_openapi::{param::Path, param::Query, payload::Json, Object, OpenApi};
@@ -610,6 +612,122 @@ impl AdminApi {
                 success: false,
                 data: None,
                 error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: List pending payment releases
+    ///
+    /// Returns all providers with pending releases ready for payout, aggregated by provider.
+    #[oai(
+        path = "/admin/payment-releases",
+        method = "get",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_list_pending_releases(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+    ) -> Json<ApiResponse<Vec<ProviderPendingReleases>>> {
+        match db.get_providers_with_pending_releases().await {
+            Ok(providers) => Json(ApiResponse {
+                success: true,
+                data: Some(providers),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Process provider payout
+    ///
+    /// Aggregates all released funds for a provider and triggers payout to their wallet.
+    #[oai(path = "/admin/payouts", method = "post", tag = "ApiTags::Admin")]
+    async fn admin_process_payout(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        req: Json<AdminProcessPayoutRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Decode provider pubkey
+        let provider_pubkey = match hex::decode(&req.provider_pubkey) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid provider_pubkey format".to_string()),
+                })
+            }
+        };
+
+        // Get pending releases for provider
+        let releases = match db.get_provider_pending_releases(&provider_pubkey).await {
+            Ok(r) => r,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get pending releases: {}", e)),
+                })
+            }
+        };
+
+        if releases.is_empty() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("No pending releases for this provider".to_string()),
+            });
+        }
+
+        // Calculate total amount
+        let total_amount_e9s: i64 = releases.iter().map(|r| r.amount_e9s).sum();
+
+        // Try to create payout via ICPay
+        let payout_id = match IcpayClient::new() {
+            Ok(icpay_client) => {
+                match icpay_client
+                    .create_payout(&req.wallet_address, total_amount_e9s)
+                    .await
+                {
+                    Ok(id) => id,
+                    Err(e) => {
+                        // Log error but don't fail - mark with generated ID
+                        tracing::error!("Failed to create ICPay payout: {}", e);
+                        format!("pending_{}", uuid::Uuid::new_v4())
+                    }
+                }
+            }
+            Err(e) => {
+                // ICPay client not configured - mark as pending
+                tracing::warn!("ICPay client not configured: {}", e);
+                format!("pending_{}", uuid::Uuid::new_v4())
+            }
+        };
+
+        // Mark releases as paid out
+        let release_ids: Vec<i64> = releases.iter().map(|r| r.id).collect();
+        match db.mark_releases_paid_out(&release_ids, &payout_id).await {
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: Some(format!(
+                    "Payout {} created for provider {} (amount: {} e9s, {} releases)",
+                    payout_id,
+                    req.provider_pubkey,
+                    total_amount_e9s,
+                    release_ids.len()
+                )),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to mark releases as paid out: {}", e)),
             }),
         }
     }

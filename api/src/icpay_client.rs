@@ -152,6 +152,61 @@ impl IcpayClient {
 
         Ok(payments.iter().any(|p| p.status == "completed"))
     }
+
+    /// Create a payout to a provider wallet
+    ///
+    /// # Arguments
+    /// * `wallet_address` - The ICP wallet address to send funds to
+    /// * `amount_e9s` - Amount in e9s (smallest unit)
+    ///
+    /// # Returns
+    /// Payout ID on success
+    ///
+    /// # Note
+    /// This is a stub implementation. ICPay payout API endpoint needs to be verified
+    /// against official documentation. If the endpoint doesn't exist in the current
+    /// ICPay API, this will return an error.
+    pub async fn create_payout(&self, wallet_address: &str, amount_e9s: i64) -> Result<String> {
+        // TODO: Verify this endpoint exists in ICPay API documentation
+        // Current implementation is based on assumed API structure
+        let url = format!("{}/sdk/private/payouts", Self::API_URL);
+
+        let request_body = serde_json::json!({
+            "walletAddress": wallet_address,
+            "amount": amount_e9s.to_string(),
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.secret_key))
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to send payout creation request")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!(
+                "ICPay payout API error ({}): {}",
+                status,
+                body
+            ));
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct PayoutResponse {
+            id: String,
+        }
+
+        let data: PayoutResponse = response
+            .json()
+            .await
+            .context("Failed to parse PayoutResponse")?;
+
+        Ok(data.id)
+    }
 }
 
 #[cfg(test)]

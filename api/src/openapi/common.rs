@@ -309,6 +309,14 @@ pub struct AdminAddRecoveryKeyRequest {
     pub reason: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminProcessPayoutRequest {
+    pub provider_pubkey: String,
+    pub wallet_address: String,
+}
+
 // Request/Response types for provider notification config
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
