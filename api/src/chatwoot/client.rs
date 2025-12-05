@@ -358,4 +358,74 @@ impl ChatwootClient {
 
         Ok(response.payload)
     }
+
+    /// Send a message to a conversation.
+    pub async fn send_message(&self, conversation_id: u64, content: &str) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/conversations/{}/messages",
+            self.base_url, self.account_id, conversation_id
+        );
+
+        #[derive(Serialize)]
+        struct SendMessageRequest<'a> {
+            content: &'a str,
+            message_type: &'a str,
+            private: bool,
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&SendMessageRequest {
+                content,
+                message_type: "outgoing",
+                private: false,
+            })
+            .send()
+            .await
+            .context("Failed to send message request")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error {}: {}", status, body);
+        }
+
+        Ok(())
+    }
+
+    /// Update conversation status.
+    pub async fn update_conversation_status(
+        &self,
+        conversation_id: u64,
+        status: &str,
+    ) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/conversations/{}",
+            self.base_url, self.account_id, conversation_id
+        );
+
+        #[derive(Serialize)]
+        struct UpdateConversationRequest<'a> {
+            status: &'a str,
+        }
+
+        let resp = self
+            .client
+            .patch(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&UpdateConversationRequest { status })
+            .send()
+            .await
+            .context("Failed to update conversation status request")?;
+
+        if !resp.status().is_success() {
+            let status_code = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error {}: {}", status_code, body);
+        }
+
+        Ok(())
+    }
 }

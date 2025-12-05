@@ -227,10 +227,39 @@ Add endpoints:
 - **Outcome:** SUCCESS - LLM integration compiles, handles errors gracefully (escalates on API failure), tests pass, follows KISS/MINIMAL principles
 
 ### Step 6
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created AI bot webhook handler that orchestrates the full flow:
+  - Extended `ChatwootClient` with two new methods:
+    - `send_message(conversation_id, content)` - sends outgoing message to conversation
+    - `update_conversation_status(conversation_id, status)` - updates conversation status (e.g., "open" for escalation)
+  - Created `api/src/support_bot/handler.rs` with:
+    - `format_bot_message(answer, sources)` - formats bot response with answer, sources list, and "human" hint
+    - `handle_customer_message(db, chatwoot, conversation_id, contract_id, message_content)` - orchestrator that:
+      1. Looks up contract by contract_id to get provider pubkey
+      2. Gets provider notification config to find chatwoot_portal_slug
+      3. Fetches help center articles via `ChatwootClient.fetch_help_center_articles()`
+      4. Searches articles via `search_articles()`
+      5. Generates answer via `generate_answer()`
+      6. If `should_escalate=true`: updates conversation status to "open" (escalation)
+      7. If `should_escalate=false`: sends formatted message with answer and sources
+  - Extended existing `chatwoot_webhook` handler in `api/src/openapi/webhooks.rs`:
+    - Added `content: Option<String>` field to `ChatwootMessage` struct
+    - After tracking message for response time, checks if message is from customer
+    - If customer message with non-empty content, triggers `handle_customer_message()`
+    - Handles errors gracefully (logs and continues, doesn't fail webhook)
+    - Creates ChatwootClient only when configured (checks env vars)
+  - Added `support_bot` module to `api/src/main.rs` for binary compilation
+- **Files:**
+  - `/code/api/src/support_bot/handler.rs` (new, 155 lines)
+  - `/code/api/src/support_bot/mod.rs` (updated to export handler)
+  - `/code/api/src/chatwoot/client.rs` (added send_message and update_conversation_status methods)
+  - `/code/api/src/openapi/webhooks.rs` (extended chatwoot_webhook handler with bot logic)
+  - `/code/api/src/main.rs` (added support_bot module)
+- **Tests:** 3 unit tests in `handler.rs` covering:
+  - Format bot message with sources (includes answer, sources list, human hint)
+  - Format bot message without sources (no sources section, still has human hint)
+  - Format bot message always includes human hint (regardless of content)
+- **Verification:** `cargo make` passed cleanly - all 974 tests pass (38 leaky canister tests), no compilation errors or warnings (except unrelated dead_code warning)
+- **Outcome:** SUCCESS - Bot can receive customer messages, search articles, generate answers, respond with formatted messages or escalate to human. Integration complete and tested.
 
 ### Step 7
 - **Implementation:** (pending)

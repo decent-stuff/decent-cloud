@@ -1,4 +1,6 @@
+use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
+use crate::support_bot::handler::handle_customer_message;
 use anyhow::{Context, Result};
 use poem::{handler, web::Data, Body, Error as PoemError, Response};
 use serde::Deserialize;
@@ -213,9 +215,10 @@ struct ChatwootMessage {
     id: i64,
     message_type: String,
     created_at: i64,
+    content: Option<String>,
 }
 
-/// Handle Chatwoot webhook events for response time tracking
+/// Handle Chatwoot webhook events for response time tracking and AI bot
 #[handler]
 pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Response, PoemError> {
     let body_bytes = body.into_vec().await.map_err(|e| {
@@ -254,6 +257,7 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                     }
                 };
 
+                // Track message for response time
                 if let Err(e) = db
                     .insert_chatwoot_message_event(
                         contract_id,
@@ -266,6 +270,41 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                 {
                     tracing::warn!("Failed to insert Chatwoot message event: {}", e);
                     // Don't fail webhook - event may be duplicate
+                }
+
+                // If this is an incoming customer message, trigger bot response
+                if sender_type == "customer" {
+                    if let Some(content) = msg.content {
+                        if !content.trim().is_empty() {
+                            // Try to create Chatwoot client and handle message
+                            match ChatwootClient::from_env() {
+                                Ok(chatwoot) => {
+                                    if let Err(e) = handle_customer_message(
+                                        &db,
+                                        &chatwoot,
+                                        conv.id as u64,
+                                        contract_id,
+                                        &content,
+                                    )
+                                    .await
+                                    {
+                                        tracing::error!(
+                                            "Failed to handle customer message for conversation {}: {}",
+                                            conv.id,
+                                            e
+                                        );
+                                        // Don't fail webhook - log error and continue
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Chatwoot client not configured, skipping bot response: {}",
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

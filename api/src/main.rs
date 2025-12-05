@@ -14,6 +14,7 @@ mod openapi;
 mod request_logging;
 mod search;
 mod stripe_client;
+mod support_bot;
 mod sync_service;
 mod validation;
 
