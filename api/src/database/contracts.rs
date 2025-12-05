@@ -797,6 +797,42 @@ impl Database {
         Ok(())
     }
 
+    /// Update ICPay payment confirmation (webhook callback)
+    /// Sets icpay_payment_id and payment_status = 'succeeded'
+    pub async fn update_icpay_payment_confirmed(
+        &self,
+        contract_id: &[u8],
+        payment_id: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET icpay_payment_id = ?, payment_status = ? WHERE contract_id = ?",
+            payment_id,
+            "succeeded",
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update ICPay payment status
+    pub async fn update_icpay_payment_status(
+        &self,
+        contract_id: &[u8],
+        new_status: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET payment_status = ? WHERE contract_id = ?",
+            new_status,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Process ICPay refund for a contract cancellation
     ///
     /// # Arguments

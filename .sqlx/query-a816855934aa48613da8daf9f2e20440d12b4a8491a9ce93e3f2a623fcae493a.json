@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT status as \"status!: String\" FROM contract_sign_requests WHERE contract_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "status!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a816855934aa48613da8daf9f2e20440d12b4a8491a9ce93e3f2a623fcae493a"
+}

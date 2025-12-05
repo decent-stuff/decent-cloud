@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'VPS Server', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "79eee913674f759f917b021011d5e9e81aaf89c850ead3704e5773028bc5b181"
+}

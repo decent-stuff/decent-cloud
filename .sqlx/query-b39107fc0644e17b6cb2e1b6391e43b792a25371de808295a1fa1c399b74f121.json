@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE email_verification_tokens SET expires_at = ? WHERE token = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b39107fc0644e17b6cb2e1b6391e43b792a25371de808295a1fa1c399b74f121"
+}

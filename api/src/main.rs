@@ -306,6 +306,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
             post(openapi::webhooks::stripe_webhook),
         )
         .at(
+            "/api/v1/webhooks/icpay",
+            post(openapi::webhooks::icpay_webhook),
+        )
+        .at(
             "/api/v1/webhooks/chatwoot",
             post(openapi::webhooks::chatwoot_webhook),
         )

@@ -894,12 +894,16 @@ mod tests {
         let payload = r#"{"test":"data"}"#;
         let secret = "whsec_test_secret";
 
-        // Generate valid signature
+        // Generate valid signature with current timestamp
         use hmac::{Hmac, Mac};
         use sha2::Sha256;
         type HmacSha256 = Hmac<Sha256>;
 
-        let timestamp = "1234567890";
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            .to_string();
         let signed_payload = format!("{}.{}", timestamp, payload);
         let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
         mac.update(signed_payload.as_bytes());
@@ -915,9 +919,14 @@ mod tests {
     fn test_verify_icpay_signature_invalid() {
         let payload = r#"{"test":"data"}"#;
         let secret = "whsec_test_secret";
-        let signature = "t=1234567890,v1=invalid_signature";
+        // Use current timestamp but invalid signature hash
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let signature = format!("t={},v1=invalid_signature", timestamp);
 
-        let result = verify_icpay_signature(payload, signature, secret);
+        let result = verify_icpay_signature(payload, &signature, secret);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
