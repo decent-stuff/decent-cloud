@@ -214,6 +214,19 @@ pub struct ConversationResponse {
     pub id: u64,
 }
 
+#[derive(Debug, Deserialize)]
+struct ListHelpCenterArticlesResponse {
+    payload: Vec<HelpCenterArticle>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HelpCenterArticle {
+    pub id: i64,
+    pub title: String,
+    pub content: String,
+    pub slug: String,
+}
+
 impl ChatwootClient {
     /// Creates a new Chatwoot client from environment variables.
     pub fn from_env() -> Result<Self> {
@@ -316,5 +329,33 @@ impl ChatwootClient {
         resp.json()
             .await
             .context("Failed to parse conversation response")
+    }
+
+    /// Fetch help center articles for a portal.
+    pub async fn fetch_help_center_articles(
+        &self,
+        portal_slug: &str,
+    ) -> Result<Vec<HelpCenterArticle>> {
+        let url = format!("{}/hc/{}/en/articles", self.base_url, portal_slug);
+
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to send fetch articles request")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot Help Center API error {}: {}", status, body);
+        }
+
+        let response: ListHelpCenterArticlesResponse = resp
+            .json()
+            .await
+            .context("Failed to parse help center articles response")?;
+
+        Ok(response.payload)
     }
 }

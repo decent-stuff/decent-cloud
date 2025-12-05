@@ -176,10 +176,40 @@ Add endpoints:
 - **Outcome:** SUCCESS - Search returns correctly ranked results using simple keyword matching (KISS, MINIMAL, YAGNI principles followed), tests pass, no clippy warnings
 
 ### Step 5
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created LLM integration for answer generation with:
+  - `BotResponse` struct with fields: answer (String), sources (Vec<ArticleRef>), confidence (f32, 0.0-1.0), should_escalate (bool)
+  - `ArticleRef` struct with fields: title, slug
+  - `generate_answer(question, articles)` - main function that:
+    - Detects escalation keywords ("human", "agent") and immediately escalates
+    - Returns escalation response if no articles provided
+    - Builds prompt with top 3 articles (configurable via MAX_ARTICLES_IN_PROMPT)
+    - Calls Claude API via `call_llm_api(prompt)`
+    - Calculates confidence as average of article scores (capped at 1.0)
+    - Sets should_escalate = true if confidence < 0.5 (LOW_CONFIDENCE_THRESHOLD)
+    - Returns BotResponse with answer, article sources, confidence, and escalation flag
+  - `build_prompt(question, articles)` - constructs prompt with knowledge base articles and user question
+  - `call_llm_api(prompt)` - calls Claude API (Anthropic) with:
+    - Reads LLM_API_KEY from environment (required)
+    - Reads LLM_API_URL from environment (defaults to "https://api.anthropic.com/v1/messages")
+    - Uses claude-3-5-sonnet-20241022 model
+    - Max tokens: 1024
+    - Returns extracted text from first content block
+    - On API error: logs error and returns escalation response (fail-safe)
+  - Module created at `/code/api/src/support_bot/llm.rs` and exported from `mod.rs`
+- **Files:**
+  - `/code/api/src/support_bot/llm.rs` (new, 270 lines)
+  - `/code/api/src/support_bot/mod.rs` (already exporting llm module)
+  - `/code/api/src/lib.rs` (updated to export support_bot module)
+- **Tests:** 7 unit tests covering:
+  - Escalate on "human" keyword in question
+  - Escalate on "agent" keyword in question
+  - Escalate when no articles provided
+  - Confidence calculation from article scores
+  - Low confidence (< 0.5) triggers escalation
+  - Prompt building includes article titles and content
+  - Prompt limits to MAX_ARTICLES_IN_PROMPT (3 articles max)
+- **Verification:** `cargo make` passed cleanly with exit code 0 - all tests pass (including 7 LLM tests), no compilation errors or warnings
+- **Outcome:** SUCCESS - LLM integration compiles, handles errors gracefully (escalates on API failure), tests pass, follows KISS/MINIMAL principles
 
 ### Step 6
 - **Implementation:** (pending)

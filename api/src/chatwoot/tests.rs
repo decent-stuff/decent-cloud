@@ -116,3 +116,59 @@ fn test_platform_client_is_configured() {
     std::env::remove_var("CHATWOOT_PLATFORM_API_TOKEN");
     std::env::remove_var("CHATWOOT_ACCOUNT_ID");
 }
+
+// =============================================================================
+// Help Center tests
+// =============================================================================
+
+#[test]
+fn test_help_center_article_deserialize() {
+    let json = r#"{
+        "id": 42,
+        "title": "How to get started",
+        "content": "<p>Getting started is easy!</p>",
+        "slug": "how-to-get-started"
+    }"#;
+
+    let article: crate::chatwoot::HelpCenterArticle = serde_json::from_str(json).unwrap();
+    assert_eq!(article.id, 42);
+    assert_eq!(article.title, "How to get started");
+    assert_eq!(article.content, "<p>Getting started is easy!</p>");
+    assert_eq!(article.slug, "how-to-get-started");
+}
+
+#[test]
+fn test_help_center_article_serialize() {
+    let article = crate::chatwoot::HelpCenterArticle {
+        id: 123,
+        title: "Test Article".to_string(),
+        content: "<h1>Content</h1>".to_string(),
+        slug: "test-article".to_string(),
+    };
+
+    let json = serde_json::to_string(&article).unwrap();
+    assert!(json.contains(r#""id":123"#));
+    assert!(json.contains(r#""title":"Test Article""#));
+    assert!(json.contains(r#""slug":"test-article""#));
+}
+
+#[test]
+fn test_help_center_article_clone_and_eq() {
+    let article1 = crate::chatwoot::HelpCenterArticle {
+        id: 1,
+        title: "Article".to_string(),
+        content: "Content".to_string(),
+        slug: "article".to_string(),
+    };
+
+    let article2 = article1.clone();
+    assert_eq!(article1, article2);
+
+    let article3 = crate::chatwoot::HelpCenterArticle {
+        id: 2,
+        title: "Article".to_string(),
+        content: "Content".to_string(),
+        slug: "article".to_string(),
+    };
+    assert_ne!(article1, article3);
+}

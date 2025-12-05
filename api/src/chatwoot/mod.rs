@@ -4,6 +4,7 @@ pub mod integration;
 
 pub use client::ChatwootClient;
 pub use client::ChatwootPlatformClient;
+pub use client::HelpCenterArticle;
 pub use hmac::generate_identity_hash;
 
 #[cfg(test)]
