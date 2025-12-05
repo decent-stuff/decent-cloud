@@ -9,6 +9,7 @@ mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
 mod network_metrics;
+mod notifications;
 mod oauth_simple;
 mod openapi;
 mod request_logging;

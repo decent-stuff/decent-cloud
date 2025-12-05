@@ -293,10 +293,51 @@ Add endpoints:
 - **Outcome:** SUCCESS - Status change webhook triggers notification dispatch logic, emails queue correctly, Telegram/SMS log for future implementation
 
 ### Step 8
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created Telegram Bot integration with:
+  - `TelegramClient` struct with Bot API configuration:
+    - `from_env()` - creates client from `TELEGRAM_BOT_TOKEN` env var
+    - `is_configured()` - checks if token is set
+    - `send_message(chat_id, message)` - sends message and returns TelegramMessage with message_id
+    - Uses Telegram Bot API base URL: `https://api.telegram.org/bot{token}/`
+    - Markdown parse mode for formatting
+  - Message tracking for reply handling:
+    - `track_message(telegram_message_id, conversation_id)` - stores mapping using global LazyLock<RwLock<HashMap>>
+    - `lookup_conversation(telegram_message_id)` - retrieves conversation_id by telegram message_id
+  - Webhook payload types:
+    - `TelegramUpdate` - incoming webhook payload with update_id and optional message
+    - `TelegramIncomingMessage` - message with message_id, chat, text, and optional reply_to_message
+    - `TelegramReplyToMessage` - contains message_id of the message being replied to
+  - `format_notification(contract_id, summary, chatwoot_link)` - formats notification message with Markdown
+  - Updated `dispatch_notification()` in `/code/api/src/support_bot/notifications.rs`:
+    - Replaced logging stub with actual Telegram sending via TelegramClient
+    - Validates telegram_chat_id is configured
+    - Checks if TELEGRAM_BOT_TOKEN is set
+    - Sends formatted message and tracks message_id for reply handling
+    - Logs sent message_id and conversation_id for debugging
+  - Module structure: `/code/api/src/notifications/telegram.rs` and `/code/api/src/notifications/mod.rs`
+  - Exported from lib.rs and main.rs
+- **Files:**
+  - `/code/api/src/notifications/telegram.rs` (new, 353 lines)
+  - `/code/api/src/notifications/mod.rs` (new, 1 line)
+  - `/code/api/src/lib.rs` (added notifications module)
+  - `/code/api/src/main.rs` (added notifications module)
+  - `/code/api/src/support_bot/notifications.rs` (updated telegram branch to send actual messages)
+- **Tests:** 10 unit tests covering:
+  - TelegramClient configuration check (is_configured with and without env var)
+  - TelegramClient creation from env (missing token error, valid token success)
+  - SendMessageRequest serialization
+  - TelegramMessage deserialization from API response
+  - SendMessageResponse deserialization (success and error cases)
+  - Message tracking (track and lookup)
+  - TelegramUpdate deserialization (with and without reply_to_message)
+  - Notification message formatting
+- **Verification:**
+  - `cargo clippy --lib` - clean (1 pre-existing warning in icpay_client)
+  - `cargo test --lib notifications::telegram::tests` - all 10 tests pass
+  - `cargo test --lib support_bot::notifications::tests` - all 8 tests pass
+  - `cargo test --lib --test-threads=1` - all 397 tests pass
+  - NOTE: Parallel test execution has race condition with env var manipulation (pre-existing issue, not introduced by this PR)
+- **Outcome:** SUCCESS - Telegram bot can send notifications with message tracking. Webhook types defined for Step 9 reply handling. Environment variables required: TELEGRAM_BOT_TOKEN, CHATWOOT_BASE_URL.
 
 ### Step 9
 - **Implementation:** (pending)

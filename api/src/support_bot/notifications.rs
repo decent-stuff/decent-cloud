@@ -68,14 +68,54 @@ pub async fn dispatch_notification(
 
     match config.notify_via.as_str() {
         "telegram" => {
-            // Step 8 will implement actual Telegram sending
-            tracing::info!(
-                "Telegram notification queued for chat_id: {:?}, conversation: {}, link: {}",
-                config.telegram_chat_id,
-                notification.conversation_id,
-                notification.chatwoot_link
+            use crate::notifications::telegram::{
+                format_notification, track_message, TelegramClient,
+            };
+
+            let chat_id = match config.telegram_chat_id {
+                Some(ref id) => id,
+                None => {
+                    tracing::warn!(
+                        "No Telegram chat_id configured for provider (pubkey: {})",
+                        hex::encode(&notification.provider_pubkey)
+                    );
+                    return Ok(());
+                }
+            };
+
+            // Check if Telegram is configured
+            if !TelegramClient::is_configured() {
+                tracing::warn!(
+                    "Telegram client not configured (TELEGRAM_BOT_TOKEN missing), skipping notification"
+                );
+                return Ok(());
+            }
+
+            // Create Telegram client and send message
+            let telegram =
+                TelegramClient::from_env().context("Failed to create Telegram client")?;
+
+            let message = format_notification(
+                &notification.contract_id,
+                &notification.summary,
+                &notification.chatwoot_link,
             );
-            // TODO: Queue for Telegram in Step 8
+
+            let sent_msg = telegram
+                .send_message(chat_id, &message)
+                .await
+                .context("Failed to send Telegram message")?;
+
+            // Track message ID for reply handling
+            track_message(sent_msg.message_id, notification.conversation_id);
+
+            tracing::info!(
+                "Telegram notification sent to chat_id: {}, message_id: {}, conversation: {}",
+                chat_id,
+                sent_msg.message_id,
+                notification.conversation_id
+            );
+
             Ok(())
         }
         "email" => {
