@@ -98,7 +98,7 @@ impl ChatwootApi {
         user: ApiAuthenticatedUser,
     ) -> Json<ApiResponse<SupportPortalStatus>> {
         let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-            .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+            .expect("CHATWOOT_FRONTEND_URL must be set");
 
         // Get chatwoot_user_id for this account
         let chatwoot_user_id = match db.get_chatwoot_user_id_by_public_key(&user.pubkey).await {
@@ -133,6 +133,76 @@ impl ChatwootApi {
                 has_account: chatwoot_user_id.is_some(),
                 user_id: chatwoot_user_id,
                 email,
+                login_url: format!("{}/app/login", support_url),
+            }),
+            error: None,
+        })
+    }
+
+    /// Create support portal account
+    ///
+    /// Creates a new Chatwoot support portal account for users who don't have one yet.
+    /// Returns the initial password directly - display it once and do not store it.
+    #[oai(
+        path = "/chatwoot/support-access",
+        method = "post",
+        tag = "super::common::ApiTags::Chatwoot"
+    )]
+    async fn create_support_access(
+        &self,
+        db: Data<&Arc<Database>>,
+        user: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<PasswordResetResponse>> {
+        // Check if Platform API is configured
+        if !ChatwootPlatformClient::is_configured() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Chatwoot Platform API not configured".to_string()),
+            });
+        }
+
+        // Check if user already has an account
+        match db.get_chatwoot_user_id_by_public_key(&user.pubkey).await {
+            Ok(Some(_)) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Support portal account already exists".to_string()),
+                })
+            }
+            Ok(None) => {} // No account, proceed with creation
+            Err(e) => {
+                tracing::error!("Failed to check chatwoot_user_id: {}", e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Database error".to_string()),
+                });
+            }
+        }
+
+        // Create the account
+        let password =
+            match crate::chatwoot::integration::create_provider_agent(&db, &user.pubkey).await {
+                Ok(pwd) => pwd,
+                Err(e) => {
+                    tracing::error!("Failed to create support portal account: {:#}", e);
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("{:#}", e)),
+                    });
+                }
+            };
+
+        let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
+            .expect("CHATWOOT_FRONTEND_URL must be set");
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(PasswordResetResponse {
+                password,
                 login_url: format!("{}/app/login", support_url),
             }),
             error: None,
@@ -224,16 +294,16 @@ impl ChatwootApi {
             .update_user_password(chatwoot_user_id, &new_password)
             .await
         {
-            tracing::error!("Failed to update Chatwoot password: {}", e);
+            tracing::error!("Failed to update Chatwoot password: {:#}", e);
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Failed to reset password. Please try again later.".to_string()),
+                error: Some(format!("{:#}", e)),
             });
         }
 
         let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-            .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+            .expect("CHATWOOT_FRONTEND_URL must be set");
 
         tracing::info!(
             "Support portal password reset for user {} (chatwoot_user_id: {})",

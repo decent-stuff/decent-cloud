@@ -264,10 +264,7 @@ pub async fn chatwoot_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                                                 // Get Chatwoot base URL for notification link
                                                 let chatwoot_url =
                                                     std::env::var("CHATWOOT_FRONTEND_URL")
-                                                        .unwrap_or_else(|_| {
-                                                            "https://support.decent-cloud.org"
-                                                                .to_string()
-                                                        });
+                                                        .expect("CHATWOOT_FRONTEND_URL must be set");
 
                                                 let notification = SupportNotification::new(
                                                     provider_pubkey_bytes,

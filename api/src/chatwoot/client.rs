@@ -74,6 +74,56 @@ impl ChatwootPlatformClient {
             && std::env::var("CHATWOOT_ACCOUNT_ID").is_ok()
     }
 
+    /// Get a user by email via Platform API.
+    /// Returns None if user doesn't exist.
+    pub async fn get_user_by_email(&self, email: &str) -> Result<Option<PlatformUserResponse>> {
+        let url = format!("{}/platform/api/v1/users", self.base_url);
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.platform_token)
+            .query(&[("email", email)])
+            .send()
+            .await
+            .context("Failed to send get user request")?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot Platform API error {}: {}", status, body);
+        }
+
+        // API returns array of users, take first match
+        let users: Vec<PlatformUserResponse> = resp
+            .json()
+            .await
+            .context("Failed to parse platform users response")?;
+
+        Ok(users.into_iter().next())
+    }
+
+    /// Get or create a user by email. Returns the user and whether it was newly created.
+    pub async fn get_or_create_user(
+        &self,
+        email: &str,
+        name: &str,
+        password: &str,
+    ) -> Result<(PlatformUserResponse, bool)> {
+        // First check if user exists
+        if let Some(user) = self.get_user_by_email(email).await? {
+            return Ok((user, false));
+        }
+
+        // Create new user
+        let user = self.create_user(email, name, password).await?;
+        Ok((user, true))
+    }
+
     /// Create a user via Platform API.
     /// Returns the user ID which should be stored for future password resets.
     pub async fn create_user(

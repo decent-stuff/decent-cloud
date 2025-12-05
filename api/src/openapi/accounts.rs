@@ -270,10 +270,10 @@ impl AccountsApi {
                     match crate::chatwoot::integration::create_provider_agent(&db, &public_key)
                         .await
                     {
-                        Ok(()) => {
+                        Ok(_) => {
                             // Queue support portal welcome email
                             let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-                                .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+                                .expect("CHATWOOT_FRONTEND_URL must be set");
 
                             db.queue_email_safe(
                                 Some(&body_data.email),

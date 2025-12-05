@@ -51,10 +51,11 @@ export async function getChatwootIdentity(
 
 /**
  * Get support portal account status for authenticated user.
+ * Throws an error with the API error message on failure.
  */
 export async function getSupportPortalStatus(
 	identity: Ed25519KeyIdentity
-): Promise<SupportPortalStatus | null> {
+): Promise<SupportPortalStatus> {
 	const path = '/api/v1/chatwoot/support-access';
 	const { headers } = await signRequest(identity, 'GET', path);
 
@@ -63,16 +64,34 @@ export async function getSupportPortalStatus(
 		headers: headers as unknown as HeadersInit
 	});
 
-	if (!response.ok) {
-		console.error('Failed to get support portal status:', response.status);
-		return null;
-	}
-
 	const payload = (await response.json()) as ApiResponse<SupportPortalStatus>;
 
 	if (!payload.success || !payload.data) {
-		console.error('Support portal status API error:', payload.error);
-		return null;
+		throw new Error(payload.error || 'Failed to get support portal status');
+	}
+
+	return payload.data;
+}
+
+/**
+ * Create support portal account. Returns the initial password directly.
+ * Throws an error with the API error message on failure.
+ */
+export async function createSupportPortalAccount(
+	identity: Ed25519KeyIdentity
+): Promise<PasswordResetResponse> {
+	const path = '/api/v1/chatwoot/support-access';
+	const { headers } = await signRequest(identity, 'POST', path);
+
+	const response = await fetch(`${API_BASE_URL}${path}`, {
+		method: 'POST',
+		headers: headers as unknown as HeadersInit
+	});
+
+	const payload = (await response.json()) as ApiResponse<PasswordResetResponse>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error || 'Failed to create account');
 	}
 
 	return payload.data;
@@ -80,10 +99,11 @@ export async function getSupportPortalStatus(
 
 /**
  * Reset support portal password. Returns the new password directly.
+ * Throws an error with the API error message on failure.
  */
 export async function resetSupportPortalPassword(
 	identity: Ed25519KeyIdentity
-): Promise<PasswordResetResponse | null> {
+): Promise<PasswordResetResponse> {
 	const path = '/api/v1/chatwoot/support-access/reset';
 	const { headers } = await signRequest(identity, 'POST', path);
 
@@ -92,16 +112,10 @@ export async function resetSupportPortalPassword(
 		headers: headers as unknown as HeadersInit
 	});
 
-	if (!response.ok) {
-		console.error('Failed to reset support portal password:', response.status);
-		return null;
-	}
-
 	const payload = (await response.json()) as ApiResponse<PasswordResetResponse>;
 
 	if (!payload.success || !payload.data) {
-		console.error('Password reset API error:', payload.error);
-		return null;
+		throw new Error(payload.error || 'Failed to reset password');
 	}
 
 	return payload.data;

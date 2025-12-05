@@ -3,7 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
-	import { getSupportPortalStatus, resetSupportPortalPassword, type SupportPortalStatus } from "$lib/services/chatwoot-api";
+	import { getSupportPortalStatus, resetSupportPortalPassword, createSupportPortalAccount, type SupportPortalStatus } from "$lib/services/chatwoot-api";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -14,6 +14,7 @@
 	let status = $state<SupportPortalStatus | null>(null);
 	let loading = $state(true);
 	let resetting = $state(false);
+	let creating = $state(false);
 	let newPassword = $state<string | null>(null);
 	let error = $state<string | null>(null);
 
@@ -40,8 +41,14 @@
 		if (!currentIdentity?.identity) return;
 		loading = true;
 		error = null;
-		status = await getSupportPortalStatus(currentIdentity.identity);
-		loading = false;
+		try {
+			status = await getSupportPortalStatus(currentIdentity.identity);
+		} catch (e) {
+			status = null;
+			error = e instanceof Error ? e.message : "Failed to load status";
+		} finally {
+			loading = false;
+		}
 	}
 
 	async function handleReset() {
@@ -49,13 +56,30 @@
 		resetting = true;
 		error = null;
 		newPassword = null;
-		const result = await resetSupportPortalPassword(currentIdentity.identity);
-		resetting = false;
-		if (result) {
+		try {
+			const result = await resetSupportPortalPassword(currentIdentity.identity);
 			newPassword = result.password;
 			await loadStatus();
-		} else {
-			error = "Failed to reset password. Please try again.";
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to reset password";
+		} finally {
+			resetting = false;
+		}
+	}
+
+	async function handleCreate() {
+		if (!currentIdentity?.identity) return;
+		creating = true;
+		error = null;
+		newPassword = null;
+		try {
+			const result = await createSupportPortalAccount(currentIdentity.identity);
+			newPassword = result.password;
+			await loadStatus();
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to create account";
+		} finally {
+			creating = false;
 		}
 	}
 
@@ -142,15 +166,36 @@
 				</button>
 			</div>
 		{:else}
-			<div class="bg-yellow-500/20 border border-yellow-500/50 rounded-xl p-6">
-				<p class="text-yellow-300">
-					Your support portal account will be created when you contact support for the first time.
+			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-4">
+				<h2 class="text-xl font-semibold text-white">Create Account</h2>
+				<p class="text-white/70 text-sm">
+					No support portal account exists yet. Create one to access ticket management.
 				</p>
+				{#if newPassword}
+					<div class="bg-green-500/20 border border-green-500/50 rounded-lg p-4 space-y-3">
+						<p class="text-green-300 font-semibold">Account created! Your password:</p>
+						<div class="flex items-center gap-2">
+							<code class="bg-black/30 px-3 py-2 rounded font-mono text-white flex-1">{newPassword}</code>
+							<button onclick={copyPassword}
+								class="px-4 py-2 bg-white/10 rounded hover:bg-white/20 text-white transition-colors">
+								Copy
+							</button>
+						</div>
+						<p class="text-white/60 text-xs">This password will not be shown again. Save it now.</p>
+					</div>
+				{/if}
+				{#if error}
+					<p class="text-red-400">{error}</p>
+				{/if}
+				<button onclick={handleCreate} disabled={creating}
+					class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50">
+					{creating ? "Creating..." : "Create Account"}
+				</button>
 			</div>
 		{/if}
 	{:else}
 		<div class="bg-red-500/20 border border-red-500/50 rounded-xl p-6">
-			<p class="text-red-300">Failed to load support portal status. Please try again later.</p>
+			<p class="text-red-300">{error || "Failed to load support portal status"}</p>
 		</div>
 	{/if}
 </div>

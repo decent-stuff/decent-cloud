@@ -37,9 +37,11 @@ pub fn generate_secure_password() -> String {
     password.into_iter().collect()
 }
 
-/// Create a Chatwoot agent for a provider using Platform API.
+/// Create or link a Chatwoot agent for a provider using Platform API.
+/// If user exists in Chatwoot, links them. If not, creates new user.
 /// Stores user_id in database for future password resets.
-pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<()> {
+/// Returns the generated password for display to the user.
+pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<String> {
     let client = ChatwootPlatformClient::from_env()?;
 
     // Get provider's account info for name and email
@@ -55,20 +57,37 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<()> {
         .as_ref()
         .context("Provider email required for Chatwoot agent")?;
 
-    // Generate initial password (user will reset via email)
-    let initial_password = generate_secure_password();
+    // Generate password for new user or reset for existing
+    let password = generate_secure_password();
 
-    // Create user via Platform API
-    let user = client
-        .create_user(email, name, &initial_password)
+    // Get or create user via Platform API
+    let (user, created) = client
+        .get_or_create_user(email, name, &password)
         .await
-        .context("Failed to create Chatwoot user")?;
+        .context("Failed to get or create Chatwoot user")?;
 
-    // Add user to account as agent
-    client
-        .add_user_to_account(user.id)
-        .await
-        .context("Failed to add user to Chatwoot account")?;
+    // If user already existed, update their password
+    if !created {
+        client
+            .update_user_password(user.id, &password)
+            .await
+            .context("Failed to update Chatwoot user password")?;
+        tracing::info!(
+            "Found existing Chatwoot user {} (id: {}), reset password",
+            email,
+            user.id
+        );
+    }
+
+    // Add user to account as agent (ignore error if already added)
+    if let Err(e) = client.add_user_to_account(user.id).await {
+        // 422 typically means user is already in account
+        let err_str = format!("{:#}", e);
+        if !err_str.contains("422") {
+            return Err(e).context("Failed to add user to Chatwoot account");
+        }
+        tracing::info!("User {} already in Chatwoot account", email);
+    }
 
     // Store user_id in database for future password resets
     let account_id_bytes = hex::decode(&account.id).context("Invalid account ID")?;
@@ -77,13 +96,14 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<()> {
         .context("Failed to store Chatwoot user ID")?;
 
     tracing::info!(
-        "Created Chatwoot agent for provider {} (email: {}, user_id: {})",
+        "Linked Chatwoot agent for provider {} (email: {}, user_id: {}, created: {})",
         hex::encode(pubkey),
         email,
-        user.id
+        user.id,
+        created
     );
 
-    Ok(())
+    Ok(password)
 }
 
 /// Create a Chatwoot conversation for a contract.
