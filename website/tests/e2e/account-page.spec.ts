@@ -102,6 +102,13 @@ test.describe('Account Settings Page', () => {
 		await expect(
 			page.locator('h1:has-text("Public Profile")'),
 		).toBeVisible();
+
+		// Navigate to notifications section
+		await page.click('a:has-text("Notifications")');
+		await expect(page).toHaveURL('/dashboard/account/notifications');
+		await expect(
+			page.locator('h1:has-text("Notifications")'),
+		).toBeVisible();
 	});
 
 	test('should format created date as human-readable', async ({ page }) => {
