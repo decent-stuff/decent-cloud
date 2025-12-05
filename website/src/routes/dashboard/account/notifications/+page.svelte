@@ -208,11 +208,12 @@
 									/>
 								</label>
 								<p class="text-xs text-white/50">
-									Message our bot <a
+								1. Message <a
 										href="https://t.me/DecentCloudBot"
 										target="_blank"
 										class="text-blue-400 hover:underline">@DecentCloudBot</a
-									> to get your Chat ID
+									> with <code>/start</code><br />
+									2. Copy the Chat ID from the bot's response
 								</p>
 							</div>
 						{/if}
