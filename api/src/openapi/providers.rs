@@ -1160,12 +1160,14 @@ impl ProvidersApi {
     async fn test_notification_channel(
         &self,
         db: Data<&Arc<Database>>,
+        email_service: Data<&Option<Arc<email_utils::EmailService>>>,
         auth: ApiAuthenticatedUser,
         req: Json<TestNotificationRequest>,
     ) -> Json<ApiResponse<TestNotificationResponse>> {
         use crate::support_bot::test_notifications::send_test_notification;
 
-        match send_test_notification(&db, &auth.pubkey, &req.channel).await {
+        match send_test_notification(&db, email_service.as_ref(), &auth.pubkey, &req.channel).await
+        {
             Ok(message) => Json(ApiResponse {
                 success: true,
                 data: Some(TestNotificationResponse {
@@ -1197,11 +1199,12 @@ impl ProvidersApi {
     async fn test_escalation_notification(
         &self,
         db: Data<&Arc<Database>>,
+        email_service: Data<&Option<Arc<email_utils::EmailService>>>,
         auth: ApiAuthenticatedUser,
     ) -> Json<ApiResponse<TestNotificationResponse>> {
         use crate::support_bot::test_notifications::send_test_escalation;
 
-        match send_test_escalation(&db, &auth.pubkey).await {
+        match send_test_escalation(&db, email_service.as_ref(), &auth.pubkey).await {
             Ok(message) => Json(ApiResponse {
                 success: true,
                 data: Some(TestNotificationResponse {

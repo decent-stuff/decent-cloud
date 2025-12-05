@@ -118,7 +118,7 @@ impl Database {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|r| r.count as i64).unwrap_or(0))
+        Ok(row.map(|r| r.count).unwrap_or(0))
     }
 }
 

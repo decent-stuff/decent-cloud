@@ -18,6 +18,7 @@ pub struct IcpayPayment {
 
 /// Response from payments/by-metadata endpoint
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // total is needed for deserialization and used in tests
 pub struct PaymentHistoryResponse {
     pub payments: Vec<IcpayPayment>,
     pub total: i64,

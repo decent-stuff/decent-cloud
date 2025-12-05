@@ -1,13 +1,19 @@
 //! Test notification functionality for verifying channel configuration.
 
-use crate::database::email::EmailType;
 use crate::database::Database;
 use crate::notifications::telegram::TelegramClient;
 use crate::notifications::twilio::TwilioClient;
 use anyhow::{bail, Context, Result};
+use email_utils::EmailService;
+use std::sync::Arc;
 
 /// Send a test notification to a specific channel.
-pub async fn send_test_notification(db: &Database, pubkey: &[u8], channel: &str) -> Result<String> {
+pub async fn send_test_notification(
+    db: &Database,
+    email_service: Option<&Arc<EmailService>>,
+    pubkey: &[u8],
+    channel: &str,
+) -> Result<String> {
     let config = db
         .get_user_notification_config(pubkey)
         .await?
@@ -15,7 +21,7 @@ pub async fn send_test_notification(db: &Database, pubkey: &[u8], channel: &str)
 
     match channel {
         "telegram" => send_test_telegram(&config.telegram_chat_id).await,
-        "email" => send_test_email(db, pubkey).await,
+        "email" => send_test_email(db, email_service, pubkey).await,
         "sms" => send_test_sms(&config.notify_phone).await,
         _ => bail!("Invalid channel: {}. Use telegram, email, or sms", channel),
     }
@@ -42,7 +48,15 @@ async fn send_test_telegram(chat_id: &Option<String>) -> Result<String> {
     ))
 }
 
-async fn send_test_email(db: &Database, pubkey: &[u8]) -> Result<String> {
+async fn send_test_email(
+    db: &Database,
+    email_service: Option<&Arc<EmailService>>,
+    pubkey: &[u8],
+) -> Result<String> {
+    let email_svc = email_service.ok_or_else(|| {
+        anyhow::anyhow!("Email service not configured (missing MAILCHANNELS_API_KEY)")
+    })?;
+
     let account_id = db
         .get_account_id_by_public_key(pubkey)
         .await?
@@ -53,24 +67,25 @@ async fn send_test_email(db: &Database, pubkey: &[u8]) -> Result<String> {
         .await?
         .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
 
-    let email = account
+    let to_email = account
         .email
         .ok_or_else(|| anyhow::anyhow!("No email address on account"))?;
 
     let from =
         std::env::var("EMAIL_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".into());
 
-    db.queue_email(
-        &email,
-        &from,
-        "DecentCloud Test Notification",
-        "This is a test notification from DecentCloud.\n\nIf you received this, your email notifications are working correctly.",
-        false,
-        EmailType::General,
-    )
-    .await?;
+    email_svc
+        .send_email(
+            &from,
+            &to_email,
+            "DecentCloud Test Notification",
+            "This is a test notification from DecentCloud.\n\nIf you received this, your email notifications are working correctly.",
+            false,
+        )
+        .await
+        .context("Failed to send email")?;
 
-    Ok(format!("Email test queued for {}", email))
+    Ok(format!("Email test sent to {}", to_email))
 }
 
 async fn send_test_sms(phone: &Option<String>) -> Result<String> {
@@ -93,7 +108,11 @@ async fn send_test_sms(phone: &Option<String>) -> Result<String> {
 
 /// Send a test escalation notification to all enabled channels.
 /// Returns detailed results for each channel.
-pub async fn send_test_escalation(db: &Database, pubkey: &[u8]) -> Result<String> {
+pub async fn send_test_escalation(
+    db: &Database,
+    email_service: Option<&Arc<EmailService>>,
+    pubkey: &[u8],
+) -> Result<String> {
     let config = db
         .get_user_notification_config(pubkey)
         .await?
@@ -109,7 +128,7 @@ pub async fn send_test_escalation(db: &Database, pubkey: &[u8]) -> Result<String
     }
 
     if config.notify_email {
-        match send_test_email(db, pubkey).await {
+        match send_test_email(db, email_service, pubkey).await {
             Ok(msg) => results.push(format!("Email: {}", msg)),
             Err(e) => results.push(format!("Email: FAILED - {}", e)),
         }
@@ -137,7 +156,7 @@ mod tests {
     #[tokio::test]
     async fn test_send_test_notification_no_config() {
         let db = setup_test_db().await;
-        let result = send_test_notification(&db, b"nonexistent", "telegram").await;
+        let result = send_test_notification(&db, None, b"nonexistent", "telegram").await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -163,7 +182,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = send_test_notification(&db, pubkey, "invalid").await;
+        let result = send_test_notification(&db, None, pubkey, "invalid").await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid channel"));
     }
@@ -183,5 +202,16 @@ mod tests {
         let result = send_test_sms(&None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No phone number"));
+    }
+
+    #[tokio::test]
+    async fn test_send_test_email_no_service() {
+        let db = setup_test_db().await;
+        let result = send_test_email(&db, None, b"test").await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Email service not configured"));
     }
 }
