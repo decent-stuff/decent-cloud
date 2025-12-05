@@ -4,7 +4,6 @@ pub mod contracts;
 pub mod core;
 pub mod email;
 pub mod handlers;
-pub mod messages;
 pub mod notification_config;
 pub mod offerings;
 pub mod providers;

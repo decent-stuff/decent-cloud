@@ -29,7 +29,8 @@ pub enum EmailType {
     Welcome,
     /// General notifications
     General,
-    /// Message notifications (tracks sender for failure notification)
+    /// Message notifications - deprecated, kept for backward compatibility with existing DB records
+    #[allow(dead_code)]
     MessageNotification,
 }
 
