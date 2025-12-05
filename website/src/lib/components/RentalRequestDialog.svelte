@@ -13,9 +13,9 @@
 		type StripeElements,
 		type StripeCardElement,
 	} from "@stripe/stripe-js";
-	import { onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
 	import { isStripeSupportedCurrency } from "$lib/utils/stripe-currencies";
-	import { getIcpay, isIcpayConfigured } from "$lib/utils/icpay";
+	import { getIcpay, getWalletSelect, isIcpayConfigured } from "$lib/utils/icpay";
 
 	interface Props {
 		offering: Offering | null;
@@ -37,6 +37,9 @@
 	let elements: StripeElements | null = null;
 	let cardElement: StripeCardElement | null = null;
 	let cardMountPoint = $state<HTMLDivElement | undefined>();
+	let walletConnected = $state(false);
+	let pendingContractId = $state<string | null>(null);
+	let icpayEventUnsubscribe: (() => void) | null = null;
 
 	// Check if Stripe is supported for this offering's currency
 	let isStripeAvailable = $derived(
@@ -47,6 +50,20 @@
 		const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 		if (publishableKey) {
 			stripe = await loadStripe(publishableKey);
+		}
+
+		// Set up ICPay event listeners
+		if (isIcpayConfigured()) {
+			const icpay = getIcpay();
+			if (icpay) {
+				icpayEventUnsubscribe = icpay.on('icpay-sdk-transaction-completed', handleIcpaySuccess);
+			}
+		}
+	});
+
+	onDestroy(() => {
+		if (icpayEventUnsubscribe) {
+			icpayEventUnsubscribe();
 		}
 	});
 
@@ -88,6 +105,37 @@
 		if (!offering) return "0.00";
 		const price = (offering.monthly_price * durationHours) / 720;
 		return price.toFixed(2);
+	}
+
+	async function connectWallet() {
+		try {
+			const walletSelect = getWalletSelect();
+			// For now, we'll try to connect with Internet Identity
+			// In the future, this could show a wallet selection dialog
+			await walletSelect.connect('ii');
+			walletConnected = true;
+			error = null;
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to connect wallet";
+			console.error("Wallet connection error:", e);
+		}
+	}
+
+	async function handleIcpaySuccess(detail: any) {
+		if (!pendingContractId) {
+			console.warn("ICPay payment completed but no pending contract ID");
+			return;
+		}
+
+		processingPayment = false;
+		loading = false;
+
+		// Transaction completed successfully
+		console.log("ICPay payment completed:", detail);
+
+		// TODO: Call backend API to record transaction ID
+		// For now, proceed with success
+		onSuccess(pendingContractId);
 	}
 
 	function formatPaymentError(stripeError: any): string {
@@ -134,6 +182,11 @@
 			return;
 		}
 
+		if (paymentMethod === "icpay" && !walletConnected) {
+			error = "Please connect your wallet first";
+			return;
+		}
+
 		loading = true;
 		processingPayment = false;
 		error = null;
@@ -167,30 +220,25 @@
 				}
 
 				processingPayment = true;
+				pendingContractId = response.contractId;
 
 				try {
 					const usdAmount = parseFloat(calculatePrice());
-					const result = await icpay.createPaymentUsd({
+					// Event listener will handle completion via handleIcpaySuccess
+					await icpay.createPaymentUsd({
 						usdAmount,
 						tokenShortcode: 'ic_icp',
 						metadata: { contractId: response.contractId },
 					});
-
-					if (result.status === 'failed') {
-						error = "ICPay payment failed";
-						loading = false;
-						processingPayment = false;
-						return;
-					}
+					// Don't set processingPayment = false here; let the event handler do it
 				} catch (icpayError) {
 					error = icpayError instanceof Error ? icpayError.message : "ICPay payment failed";
 					console.error("ICPay payment error:", icpayError);
 					loading = false;
 					processingPayment = false;
+					pendingContractId = null;
 					return;
 				}
-
-				processingPayment = false;
 			}
 
 			// If Stripe payment, confirm with card element
@@ -434,9 +482,23 @@
 						<h3 class="text-sm font-semibold text-white/70 mb-2">
 							Crypto Payment via ICPay
 						</h3>
-						<p class="text-sm text-white/60">
-							You will connect your wallet (Internet Identity, Plug, etc.) to complete the payment with ICP or other supported tokens.
+						<p class="text-sm text-white/60 mb-3">
+							Connect your wallet (Internet Identity, Plug, etc.) to complete the payment with ICP or other supported tokens.
 						</p>
+						{#if !walletConnected}
+							<button
+								type="button"
+								onclick={connectWallet}
+								class="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition-colors"
+							>
+								Connect Wallet
+							</button>
+						{:else}
+							<div class="flex items-center gap-2 text-green-400">
+								<span class="w-2 h-2 bg-green-400 rounded-full"></span>
+								<span class="text-sm font-medium">Wallet Connected</span>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
