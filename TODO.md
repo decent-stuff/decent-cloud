@@ -5,6 +5,26 @@
 
 ---
 
+## ICPay Integration (In Progress)
+
+**Spec:** [2025-12-05-icpay-escrow-payments-spec.md](docs/2025-12-05-icpay-escrow-payments-spec.md)
+**Status:** PLANNING
+
+### Current State
+- Basic SDK initialization: ✅ Done
+- Frontend payment execution: ❌ Broken (missing wallet config)
+- Backend verification: ❌ Stub only
+- Webhooks: ❌ Not implemented
+- Refunds: ❌ Not implemented for ICPay
+
+### Planned Features
+- Prorated payments/refunds (match Stripe parity)
+- Daily payment release to providers
+- Webhook integration for real-time confirmation
+- Provider payout system
+
+---
+
 ## Provider Trust & Reliability System
 
 ### External Benchmarking Integration

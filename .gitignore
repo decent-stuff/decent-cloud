@@ -110,3 +110,4 @@ crash-*
 ### WebAssembly ###
 .just-tmp/
 .venv/
+third_party/
