@@ -829,10 +829,16 @@ ICPAY_WEBHOOK_SECRET=whsec_xxx  # For signature verification
 - **Outcome:** Success - Users can now connect wallet and ICPay SDK is properly configured with signing capabilities
 
 ### Step 3: Backend ICPay Client
-- **Implementation:** Pending
-- **Review:** Pending
-- **Verification:** Pending
-- **Outcome:** Pending
+- **Implementation:** Complete
+  - Created IcpayPayment and PaymentHistoryResponse structs with proper serde derives
+  - Implemented get_payments_by_metadata() with POST to /sdk/private/payments/by-metadata
+  - Implemented create_refund() with POST to /sdk/private/refunds
+  - Updated verify_payment_by_metadata() to use real API calls instead of stub
+  - Added comprehensive unit tests using mockito for HTTP mocking (6 tests)
+  - Added mockito v1.7 as dev dependency in api/Cargo.toml
+- **Review:** Complete - All 6 tests pass (test_icpay_client_new_missing_key, test_icpay_client_new_with_key, test_get_payments_by_metadata_success, test_get_payments_by_metadata_no_completed, test_create_refund_success, test_create_refund_full_amount)
+- **Verification:** Complete - SQLX_OFFLINE=true cargo test --lib icpay_client passes, cargo clippy clean (only expected dead_code warnings)
+- **Outcome:** Success - ICPay client now makes real HTTP API calls for payment verification and refund creation
 
 ### Step 4: ICPay Refund Integration
 - **Implementation:** Pending

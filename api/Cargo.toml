@@ -53,3 +53,6 @@ tracing-subscriber.workspace = true
 tracing.workspace = true
 ts-rs.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+mockito = "1.7"
