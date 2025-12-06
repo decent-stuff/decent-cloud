@@ -385,6 +385,41 @@ impl ChatwootClient {
         }
     }
 
+    /// List all inboxes in the account.
+    pub async fn list_inboxes(&self) -> Result<Vec<u32>> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/inboxes",
+            self.base_url, self.account_id
+        );
+
+        #[derive(Deserialize)]
+        struct InboxesResponse {
+            payload: Vec<Inbox>,
+        }
+
+        #[derive(Deserialize)]
+        struct Inbox {
+            id: u32,
+        }
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to list inboxes")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error listing inboxes {}: {}", status, body);
+        }
+
+        let response: InboxesResponse = resp.json().await.context("Failed to parse inboxes")?;
+        Ok(response.payload.into_iter().map(|i| i.id).collect())
+    }
+
     /// Assign an agent bot to an inbox via Account API.
     /// Uses POST /api/v1/accounts/:account_id/inboxes/:inbox_id/set_agent_bot
     pub async fn assign_agent_bot_to_inbox(&self, inbox_id: u32, agent_bot_id: i64) -> Result<()> {

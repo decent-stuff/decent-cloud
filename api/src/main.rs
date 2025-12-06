@@ -302,25 +302,26 @@ async fn doctor_command() -> Result<(), std::io::Error> {
             Ok(bot_id) => {
                 println!("[OK] configured (id={})", bot_id);
 
-                // Try to auto-assign to inbox - uses Account API's set_agent_bot endpoint
-                if let Ok(inbox_id_str) = env::var("CHATWOOT_INBOX_ID") {
-                    if let Ok(inbox_id) = inbox_id_str.parse::<u32>() {
-                        if let Ok(client) = chatwoot::ChatwootClient::from_env() {
-                            print!("  Assigning bot to inbox {}... ", inbox_id);
-                            match client.assign_agent_bot_to_inbox(inbox_id, bot_id).await {
-                                Ok(()) => println!("[OK]"),
-                                Err(e) => {
-                                    println!("[ERROR] {}", e);
-                                    errors += 1;
+                // Assign bot to all inboxes
+                if let Ok(client) = chatwoot::ChatwootClient::from_env() {
+                    match client.list_inboxes().await {
+                        Ok(inbox_ids) => {
+                            for inbox_id in inbox_ids {
+                                print!("  Assigning bot to inbox {}... ", inbox_id);
+                                match client.assign_agent_bot_to_inbox(inbox_id, bot_id).await {
+                                    Ok(()) => println!("[OK]"),
+                                    Err(e) => {
+                                        println!("[ERROR] {}", e);
+                                        errors += 1;
+                                    }
                                 }
                             }
                         }
+                        Err(e) => {
+                            println!("  [ERROR] Failed to list inboxes: {}", e);
+                            errors += 1;
+                        }
                     }
-                } else {
-                    println!(
-                        "  [WARN] CHATWOOT_INBOX_ID not set - cannot auto-assign bot to inbox"
-                    );
-                    warnings += 1;
                 }
             }
             Err(e) => {
@@ -400,29 +401,30 @@ async fn serve_command() -> Result<(), std::io::Error> {
                         webhook_url
                     );
 
-                    // Assign bot to inbox via Account API's set_agent_bot endpoint
-                    if let Ok(inbox_id_str) = env::var("CHATWOOT_INBOX_ID") {
-                        if let Ok(inbox_id) = inbox_id_str.parse::<u32>() {
-                            if let Ok(client) = chatwoot::ChatwootClient::from_env() {
-                                if let Err(e) =
-                                    client.assign_agent_bot_to_inbox(inbox_id, bot_id).await
-                                {
-                                    tracing::error!(
-                                        "Failed to assign agent bot to inbox {}: {}",
-                                        inbox_id,
-                                        e
-                                    );
+                    // Assign bot to all inboxes via Account API
+                    if let Ok(client) = chatwoot::ChatwootClient::from_env() {
+                        match client.list_inboxes().await {
+                            Ok(inbox_ids) => {
+                                for inbox_id in inbox_ids {
+                                    if let Err(e) =
+                                        client.assign_agent_bot_to_inbox(inbox_id, bot_id).await
+                                    {
+                                        tracing::error!(
+                                            "Failed to assign agent bot to inbox {}: {}",
+                                            inbox_id,
+                                            e
+                                        );
+                                    }
                                 }
-                            } else {
-                                tracing::warn!(
-                                    "CHATWOOT_API_TOKEN not set - cannot assign bot to inbox"
-                                );
                             }
-                        } else {
-                            tracing::warn!("CHATWOOT_INBOX_ID is not a valid number");
+                            Err(e) => {
+                                tracing::error!("Failed to list inboxes: {}", e);
+                            }
                         }
                     } else {
-                        tracing::warn!("CHATWOOT_INBOX_ID not set - agent bot not assigned to inbox. Set CHATWOOT_INBOX_ID to enable.");
+                        tracing::warn!(
+                            "CHATWOOT_API_TOKEN not set - cannot assign bot to inboxes"
+                        );
                     }
                 }
                 Err(e) => tracing::error!("Failed to configure Chatwoot agent bot: {}", e),
