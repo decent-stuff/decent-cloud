@@ -449,8 +449,15 @@ pub async fn chatwoot_webhook(
                 content.chars().take(50).collect::<String>()
             );
 
-            if let Err(e) =
-                handle_customer_message(&db, &chatwoot, email_service.as_ref(), conv.id as u64, contract_id, content).await
+            if let Err(e) = handle_customer_message(
+                &db,
+                &chatwoot,
+                email_service.as_ref(),
+                conv.id as u64,
+                contract_id,
+                content,
+            )
+            .await
             {
                 tracing::error!(
                     "Failed to handle customer message for conversation {}: {}",

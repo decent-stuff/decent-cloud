@@ -100,11 +100,19 @@ pub async fn handle_customer_message(
     let portal_slug = contract_info
         .as_ref()
         .and_then(|c| c.portal_slug.clone())
-        .or_else(|| std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG").ok().filter(|s| !s.is_empty()));
+        .or_else(|| {
+            std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG")
+                .ok()
+                .filter(|s| !s.is_empty())
+        });
 
     let portal_slug = match portal_slug {
         Some(slug) => {
-            if contract_info.as_ref().and_then(|c| c.portal_slug.as_ref()).is_none() {
+            if contract_info
+                .as_ref()
+                .and_then(|c| c.portal_slug.as_ref())
+                .is_none()
+            {
                 tracing::debug!(
                     "Using default portal '{}' for conversation {}",
                     slug,
@@ -205,15 +213,19 @@ pub async fn handle_customer_message(
             .update_conversation_status(conversation_id, "open")
             .await?;
 
-        // Notify provider about escalation
+        // Notify provider about escalation (if contract-specific)
+        // For general inquiries without contract, Chatwoot's native agent notifications handle it
         if let Some(info) = &contract_info {
-            let chatwoot_base_url =
-                std::env::var("CHATWOOT_BASE_URL").unwrap_or_else(|_| "https://chat.example.com".to_string());
+            let chatwoot_base_url = std::env::var("CHATWOOT_BASE_URL")
+                .unwrap_or_else(|_| "https://chat.example.com".to_string());
             let notification = SupportNotification::new(
                 info.provider_pubkey.clone(),
                 conversation_id as i64,
                 contract_id.unwrap_or("unknown").to_string(),
-                format!("Customer needs assistance: {}", truncate_message(message_content, 100)),
+                format!(
+                    "Customer needs assistance: {}",
+                    truncate_message(message_content, 100)
+                ),
                 &chatwoot_base_url,
             );
             if let Err(e) = dispatch_notification(db, email_service, &notification).await {

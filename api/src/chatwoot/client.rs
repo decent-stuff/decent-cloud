@@ -602,30 +602,32 @@ impl ChatwootClient {
         Ok(())
     }
 
-    /// Update conversation status.
+    /// Update conversation status via toggle_status endpoint.
+    /// When called by an AgentBot to change status from pending to open,
+    /// This triggers bot_handoff in Chatwoot which notifies all inbox agents.
     pub async fn update_conversation_status(
         &self,
         conversation_id: u64,
         status: &str,
     ) -> Result<()> {
         let url = format!(
-            "{}/api/v1/accounts/{}/conversations/{}",
+            "{}/api/v1/accounts/{}/conversations/{}/toggle_status",
             self.base_url, self.account_id, conversation_id
         );
 
         #[derive(Serialize)]
-        struct UpdateConversationRequest<'a> {
+        struct ToggleStatusRequest<'a> {
             status: &'a str,
         }
 
         let resp = self
             .client
-            .patch(&url)
+            .post(&url)
             .header("api_access_token", &self.api_token)
-            .json(&UpdateConversationRequest { status })
+            .json(&ToggleStatusRequest { status })
             .send()
             .await
-            .context("Failed to update conversation status request")?;
+            .context("Failed to toggle conversation status")?;
 
         if !resp.status().is_success() {
             let status_code = resp.status();
