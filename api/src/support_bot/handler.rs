@@ -9,48 +9,6 @@ use anyhow::Result;
 use email_utils::EmailService;
 use std::sync::Arc;
 
-/// Contract info needed for bot handling
-struct ContractInfo {
-    provider_pubkey: Vec<u8>,
-    portal_slug: Option<String>,
-}
-
-/// Get contract info (provider pubkey and portal slug) from contract_id
-async fn get_contract_info(db: &Database, contract_id: &str) -> Result<Option<ContractInfo>> {
-    let contract_id_bytes = match hex::decode(contract_id) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            tracing::warn!("Invalid contract_id hex '{}': {}", contract_id, e);
-            return Ok(None);
-        }
-    };
-
-    let contract = match db.get_contract(&contract_id_bytes).await? {
-        Some(c) => c,
-        None => {
-            tracing::warn!("Contract not found: {}", contract_id);
-            return Ok(None);
-        }
-    };
-
-    let provider_pubkey_bytes = match hex::decode(&contract.provider_pubkey) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            tracing::warn!("Invalid provider pubkey hex: {}", e);
-            return Ok(None);
-        }
-    };
-
-    let notification_config = db
-        .get_user_notification_config(&provider_pubkey_bytes)
-        .await?;
-
-    Ok(Some(ContractInfo {
-        provider_pubkey: provider_pubkey_bytes,
-        portal_slug: notification_config.and_then(|c| c.chatwoot_portal_slug),
-    }))
-}
-
 /// Truncate a message to max_len characters, adding "..." if truncated
 fn truncate_message(msg: &str, max_len: usize) -> String {
     if msg.len() <= max_len {
@@ -81,50 +39,19 @@ pub async fn handle_customer_message(
     chatwoot: &ChatwootClient,
     email_service: Option<&Arc<EmailService>>,
     conversation_id: u64,
-    contract_id: Option<&str>,
     message_content: &str,
 ) -> Result<()> {
     tracing::debug!(
-        "handle_customer_message: conversation={}, contract={:?}",
-        conversation_id,
-        contract_id
+        "handle_customer_message: conversation={}",
+        conversation_id
     );
 
-    // Get contract info (provider pubkey and portal slug)
-    let contract_info = match contract_id {
-        Some(cid) => get_contract_info(db, cid).await?,
-        None => None,
-    };
-
-    // Extract portal_slug, falling back to default
-    let portal_slug = contract_info
-        .as_ref()
-        .and_then(|c| c.portal_slug.clone())
-        .or_else(|| {
-            std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG")
-                .ok()
-                .filter(|s| !s.is_empty())
-        });
-
-    let portal_slug = match portal_slug {
-        Some(slug) => {
-            if contract_info
-                .as_ref()
-                .and_then(|c| c.portal_slug.as_ref())
-                .is_none()
-            {
-                tracing::debug!(
-                    "Using default portal '{}' for conversation {}",
-                    slug,
-                    conversation_id
-                );
-            }
-            slug
-        }
-        None => {
+    // Get portal_slug from environment (no contract lookup)
+    let portal_slug = match std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG") {
+        Ok(slug) if !slug.is_empty() => slug,
+        _ => {
             tracing::warn!(
-                "No portal slug available (contract: {:?}, no default configured), escalating conversation {}",
-                contract_id,
+                "CHATWOOT_DEFAULT_PORTAL_SLUG not set, escalating conversation {}",
                 conversation_id
             );
             chatwoot
@@ -213,15 +140,33 @@ pub async fn handle_customer_message(
             .update_conversation_status(conversation_id, "open")
             .await?;
 
-        // Notify provider about escalation (if contract-specific)
-        // For general inquiries without contract, Chatwoot's native agent notifications handle it
-        if let Some(info) = &contract_info {
-            let chatwoot_base_url = std::env::var("CHATWOOT_BASE_URL")
-                .unwrap_or_else(|_| "https://chat.example.com".to_string());
+        // Notify on escalation
+        let chatwoot_base_url = std::env::var("CHATWOOT_BASE_URL")
+            .unwrap_or_else(|_| "https://chat.example.com".to_string());
+
+        // On escalation, notify DEFAULT_ESCALATION_USER
+        let notify_pubkey = match std::env::var("DEFAULT_ESCALATION_USER") {
+            Ok(username) => match db.get_pubkey_by_username(&username).await {
+                Ok(Some(pubkey)) => Some(pubkey),
+                Ok(None) => {
+                    tracing::warn!("DEFAULT_ESCALATION_USER '{}' not found", username);
+                    None
+                }
+                Err(e) => {
+                    tracing::error!("Failed to lookup DEFAULT_ESCALATION_USER: {}", e);
+                    None
+                }
+            },
+            Err(_) => {
+                tracing::warn!("DEFAULT_ESCALATION_USER not set - no notification sent");
+                None
+            }
+        };
+
+        if let Some(pubkey) = notify_pubkey {
             let notification = SupportNotification::new(
-                info.provider_pubkey.clone(),
+                pubkey,
                 conversation_id as i64,
-                contract_id.unwrap_or("unknown").to_string(),
                 format!(
                     "Customer needs assistance: {}",
                     truncate_message(message_content, 100)
