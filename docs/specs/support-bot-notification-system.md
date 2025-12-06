@@ -93,17 +93,36 @@ Provider workflow:
 ## Chatwoot Setup
 
 1. Self-host Chatwoot (MIT, free)
-2. Create AgentBot via API:
+2. Create AgentBot via Platform API with `account_id`:
    ```
-   POST /api/v1/accounts/:id/agent_bots
+   POST /platform/api/v1/agent_bots
    {
-     "name": "Support Bot",
-     "outgoing_url": "https://our-api/webhook/chatwoot"
+     "name": "Decent Cloud Support Bot",
+     "outgoing_url": "https://our-api/api/v1/webhooks/chatwoot",
+     "account_id": 1
    }
    ```
-3. Attach bot to inbox (conversations start in "pending" with bot)
-4. Configure webhook for `conversation_status_changed` → Notification Bridge
-5. Each provider creates their Help Center portal
+   **CRITICAL**: Must include `account_id` - platform-level bots without account_id won't receive webhooks!
+
+3. Assign bot to inbox:
+   ```
+   PATCH /api/v1/accounts/:account_id/inboxes/:inbox_id
+   {
+     "agent_bot": <bot_id>
+   }
+   ```
+   **CRITICAL**: Bot must be assigned to inbox to receive events!
+
+4. Both steps are automated by `api-server serve` on startup (see `api/src/main.rs`)
+5. Each provider creates their Help Center portal with unique slug
+
+## Single Inbox, Multi-Provider Design
+
+- One Chatwoot inbox handles all customer conversations
+- Each conversation is tagged with `contract_id` (set by widget)
+- `contract_id` → lookup contract → get `provider_pubkey` → get `chatwoot_portal_slug`
+- Bot fetches articles from that provider's specific portal
+- Escalation notifications go to that provider's configured channels
 
 ## Database Schema (our side)
 
