@@ -8,7 +8,7 @@
 - [x] Remove `contract_id` from `SupportNotification` struct
 - [ ] Remove contract lookup logic from `handler.rs`
 - [ ] Update notification flow to use Chatwoot assignee
-- [ ] Update notification message templates (remove contract_id references)
+- [x] Update notification message templates (remove contract_id references)
 - [ ] Update tests to reflect new flow
 - [ ] Update AGENTS.md documentation
 
@@ -35,7 +35,7 @@ Update `api/src/support_bot/notifications.rs`:
 
 ### Step 3: Notification Templates - Remove contract_id references
 **Success:** Templates updated, no contract_id in messages
-**Status:** Pending
+**Status:** Completed
 
 Update:
 - `api/src/notifications/telegram.rs` - `format_notification()`
@@ -100,9 +100,12 @@ Update `api/src/support_bot/AGENTS.md` to reflect:
 - **Outcome:** Step 2 complete. The `SupportNotification` struct no longer contains `contract_id`, and all usages within notifications.rs are updated. Next steps will update the notification templates (Step 3) and handler/webhooks (Steps 4-5).
 
 ### Step 3
-- **Implementation:**
-- **Review:**
-- **Outcome:**
+- **Implementation:** Updated notification message templates in three files:
+  - `api/src/notifications/telegram.rs`: Updated `format_notification()` signature to remove `contract_id` parameter. Changed message template from "Contract: `{}`\nSummary: {}" to just "{}". Updated test `test_format_notification()` to remove contract_id argument and add assertion `!message.contains("Contract")`.
+  - `api/src/notifications/twilio.rs`: Updated `format_sms_notification()` signature to remove `contract_id` parameter. Changed message template from "Support alert for contract {}. {}." to "Support alert: {}." Updated test `test_format_sms_notification()` to remove contract_id argument and add assertion `!msg.contains("contract")`.
+  - `api/src/support_bot/notifications.rs`: Updated email template in `send_email_notification()` to remove "Contract ID: {}\n" line. Fixed calls to `format_notification()` and `format_sms_notification()` by removing the empty string `""` placeholder that was temporarily passed in Step 2, now passing only summary and chatwoot_link parameters.
+- **Review:** All three files compile successfully with `cargo check -p api --lib`. The signature changes are correct and all call sites in `notifications.rs` are now passing the correct number of arguments. Tests are updated to verify that contract references are absent from notification messages.
+- **Outcome:** Step 3 complete. All notification message templates (Telegram, SMS, Email) no longer reference contract_id. The temporary workaround from Step 2 (passing empty strings) has been removed, and all function signatures are clean and minimal.
 
 ### Step 4
 - **Implementation:**

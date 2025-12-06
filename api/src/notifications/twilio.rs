@@ -94,11 +94,8 @@ impl TwilioClient {
 }
 
 /// Format a notification message for SMS (shorter than Telegram/email).
-pub fn format_sms_notification(contract_id: &str, summary: &str) -> String {
-    format!(
-        "Support alert for contract {}. {}. Check Chatwoot for details.",
-        contract_id, summary
-    )
+pub fn format_sms_notification(summary: &str) -> String {
+    format!("Support alert: {}. Check Chatwoot for details.", summary)
 }
 
 #[cfg(test)]
@@ -184,9 +181,10 @@ mod tests {
 
     #[test]
     fn test_format_sms_notification() {
-        let msg = format_sms_notification("abc123", "Customer needs help");
-        assert!(msg.contains("abc123"));
+        let msg = format_sms_notification("Customer needs help");
         assert!(msg.contains("Customer needs help"));
+        assert!(msg.contains("Support alert"));
+        assert!(!msg.contains("contract"));
         assert!(msg.len() < 160); // SMS limit
     }
 }

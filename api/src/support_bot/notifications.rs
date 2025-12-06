@@ -121,12 +121,7 @@ async fn send_telegram_notification(
     }
 
     let telegram = TelegramClient::from_env()?;
-    // Note: format_notification still expects contract_id - will be updated in Step 3
-    let message = format_notification(
-        "",  // contract_id removed, will update template in Step 3
-        &notification.summary,
-        &notification.chatwoot_link,
-    );
+    let message = format_notification(&notification.summary, &notification.chatwoot_link);
 
     let sent_msg = telegram.send_message(chat_id, &message).await?;
 
@@ -166,14 +161,11 @@ async fn send_email_notification(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No email address on account"))?;
 
-    // Note: Email template still references contract_id - will be updated in Step 3
     let email_body = format!(
         "A customer conversation requires your attention.\n\n\
-        Contract ID: {}\n\
         Summary: {}\n\n\
         View conversation: {}\n\n\
         Please log in to Chatwoot to respond.",
-        "",  // contract_id removed, will update template in Step 3
         notification.summary,
         notification.chatwoot_link
     );
@@ -212,8 +204,7 @@ async fn send_sms_notification(
     }
 
     let twilio = TwilioClient::from_env()?;
-    // Note: format_sms_notification still expects contract_id - will be updated in Step 3
-    let message = format_sms_notification("", &notification.summary);  // contract_id removed
+    let message = format_sms_notification(&notification.summary);
     let sid = twilio.send_sms(phone, &message).await?;
 
     tracing::info!("SMS notification sent to {}, sid: {}", phone, sid);

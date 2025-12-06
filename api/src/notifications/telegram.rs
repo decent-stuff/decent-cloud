@@ -125,13 +125,12 @@ pub struct TelegramReplyToMessage {
 }
 
 /// Format a notification message for Telegram
-pub fn format_notification(contract_id: &str, summary: &str, chatwoot_link: &str) -> String {
+pub fn format_notification(summary: &str, chatwoot_link: &str) -> String {
     format!(
         "*Customer Support Notification*\n\n\
-        Contract: `{}`\n\
-        Summary: {}\n\n\
+        {}\n\n\
         [View in Chatwoot]({})",
-        contract_id, summary, chatwoot_link
+        summary, chatwoot_link
     )
 }
 
@@ -300,14 +299,13 @@ mod tests {
     #[test]
     fn test_format_notification() {
         let message = format_notification(
-            "contract_123",
             "Customer needs help with billing",
             "https://support.example.com/conversations/42",
         );
 
         assert!(message.contains("*Customer Support Notification*"));
-        assert!(message.contains("contract_123"));
         assert!(message.contains("Customer needs help with billing"));
         assert!(message.contains("https://support.example.com/conversations/42"));
+        assert!(!message.contains("Contract"));
     }
 }
