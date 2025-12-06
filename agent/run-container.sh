@@ -30,6 +30,7 @@ find_repo_root() {
 # Default values
 REPO_ROOT="$(find_repo_root)"
 COMPOSE_FILE="$REPO_ROOT/agent/docker-compose.yml"
+PROJECT_NAME="dc-agent"
 SERVICE_NAME="agent"
 TOOL=""
 COMMAND=""
@@ -171,13 +172,13 @@ build_image() {
     if [[ "$REBUILD" == "true" ]]; then
         log_info "Rebuilding Docker image with BuildKit..."
         # Enable BuildX for faster parallel builds
-        DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker-compose -f "$COMPOSE_FILE" build --pull
+        DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" build --pull
     fi
 }
 
 # Fix ownership of target-cache volume (one-time fix for existing volumes)
 fix_target_ownership() {
-    local volume_name="decent-cloud_target-cache"
+    local volume_name="${PROJECT_NAME}_target-cache"
     if docker volume inspect "$volume_name" >/dev/null 2>&1; then
         log_info "Fixing target directory ownership..."
         docker run --rm -v "$volume_name:/target" alpine chown -R 1000:1000 /target 2>/dev/null || true
@@ -188,7 +189,7 @@ fix_target_ownership() {
 run_cargo_sweep() {
     log_info "Running cargo-sweep on container target directory..."
     # Use docker-compose run to execute cargo-sweep, removing artifacts older than 7 days
-    DOCKER_GID="$(get_docker_gid)" docker-compose -f "$COMPOSE_FILE" run --rm "$SERVICE_NAME" \
+    DOCKER_GID="$(get_docker_gid)" docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" run --rm "$SERVICE_NAME" \
         cargo sweep --time 7 2>/dev/null || log_warning "cargo-sweep skipped (target dir may be empty)"
 }
 
@@ -205,10 +206,10 @@ run_tool() {
     # Set up the command based on mode and tool
     if [[ "$SHELL_MODE" == "true" ]]; then
         log_info "Starting shell in container..."
-        docker-compose -f "$COMPOSE_FILE" "${docker_args[@]}" exec "$SERVICE_NAME" bash
+        docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" "${docker_args[@]}" exec "$SERVICE_NAME" bash
     elif [[ -n "$COMMAND" ]]; then
         log_info "Running command in container: $COMMAND"
-        docker-compose -f "$COMPOSE_FILE" "${docker_args[@]}" exec "$SERVICE_NAME" bash -c "$COMMAND"
+        docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" "${docker_args[@]}" exec "$SERVICE_NAME" bash -c "$COMMAND"
     else
         # Set up tool-specific command
         case "$TOOL" in
@@ -231,7 +232,7 @@ run_tool() {
 
         # Use docker-compose run for interactive session instead of up
         # Export DOCKER_GID for socket access inside container
-        DOCKER_GID="$(get_docker_gid)" docker-compose -f "$COMPOSE_FILE" "${docker_args[@]}" run --rm "$SERVICE_NAME" $tool_command
+        DOCKER_GID="$(get_docker_gid)" docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" "${docker_args[@]}" run --rm "$SERVICE_NAME" $tool_command
     fi
 }
 
@@ -239,7 +240,7 @@ run_tool() {
 cleanup() {
     if [[ "$DETACH" == "true" ]]; then
         log_info "Stopping detached container..."
-        docker-compose -f "$COMPOSE_FILE" down
+        docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" down
     fi
 }
 
