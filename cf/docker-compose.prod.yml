@@ -206,6 +206,9 @@ services:
     image: decent-cloud-api:prod
     container_name: decent-cloud-prod-api-serve
     restart: unless-stopped
+    depends_on:
+      chatwoot-web:
+        condition: service_healthy
     command: ["api-server", "serve"]
     environment:
       - ENVIRONMENT=prod
