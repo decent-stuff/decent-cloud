@@ -502,7 +502,20 @@ Options:
 - **Outcome:** Migration applied cleanly (migration #34), sqlx prepare successful, cargo make passed
 
 ### Step 2: Extend ProviderProfile Struct
-- **Status:** Pending
+- **Status:** Completed
+- **Files:** `/code/api/src/database/providers.rs`, `.sqlx/*.json`
+- **Implementation:**
+  - Extended `ProviderProfile` struct with 10 new optional fields matching migration:
+    - support_email, support_hours, support_channels, regions, payment_methods
+    - refund_policy, sla_guarantee, unique_selling_points, common_issues
+    - onboarding_completed_at
+  - Updated all existing SELECT queries (3 queries) to include new fields:
+    - `get_active_providers()`, `get_provider_profile()`, `list_providers()`
+  - Created new `ProviderOnboarding` struct (TS-exported) for onboarding-specific data
+  - Added `get_provider_onboarding(&[u8]) -> Result<Option<ProviderOnboarding>>` method
+  - Added `update_provider_onboarding(&[u8], &ProviderOnboarding) -> Result<()>` method
+    - Automatically sets `onboarding_completed_at` to current timestamp
+- **Outcome:** All queries compile, sqlx prepare clean, cargo make passes (all tests green)
 
 ### Step 3: Add API Endpoints
 - **Status:** Pending

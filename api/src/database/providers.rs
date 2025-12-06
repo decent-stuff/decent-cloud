@@ -29,6 +29,27 @@ pub struct ProviderProfile {
     pub profile_version: String,
     #[ts(type = "number")]
     pub updated_at_ns: i64,
+    #[oai(skip_serializing_if_is_none)]
+    pub support_email: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub support_hours: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub support_channels: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub regions: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub payment_methods: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub refund_policy: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub sla_guarantee: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub unique_selling_points: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub common_issues: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | null")]
+    pub onboarding_completed_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -43,6 +64,33 @@ pub struct ProviderCheckIn {
 pub struct ProviderContact {
     pub contact_type: String,
     pub contact_value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
+pub struct ProviderOnboarding {
+    #[oai(skip_serializing_if_is_none)]
+    pub support_email: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub support_hours: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub support_channels: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub regions: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub payment_methods: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub refund_policy: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub sla_guarantee: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub unique_selling_points: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub common_issues: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | null")]
+    pub onboarding_completed_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
@@ -82,7 +130,7 @@ impl Database {
 
         let profiles = sqlx::query_as!(
             ProviderProfile,
-            r#"SELECT DISTINCT p.pubkey, p.name, p.description, p.website_url, p.logo_url, p.why_choose_us, p.api_version, p.profile_version, p.updated_at_ns FROM provider_profiles p
+            r#"SELECT DISTINCT p.pubkey, p.name, p.description, p.website_url, p.logo_url, p.why_choose_us, p.api_version, p.profile_version, p.updated_at_ns, p.support_email, p.support_hours, p.support_channels, p.regions, p.payment_methods, p.refund_policy, p.sla_guarantee, p.unique_selling_points, p.common_issues, p.onboarding_completed_at FROM provider_profiles p
              INNER JOIN provider_check_ins c ON p.pubkey = c.pubkey
              WHERE c.block_timestamp_ns > ?
              ORDER BY p.name"#,
@@ -98,7 +146,7 @@ impl Database {
     pub async fn get_provider_profile(&self, pubkey: &[u8]) -> Result<Option<ProviderProfile>> {
         let profile = sqlx::query_as!(
             ProviderProfile,
-            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns FROM provider_profiles WHERE pubkey = ?",
+            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles WHERE pubkey = ?",
             pubkey
         )
         .fetch_optional(&self.pool)
@@ -144,7 +192,7 @@ impl Database {
     pub async fn list_providers(&self, limit: i64, offset: i64) -> Result<Vec<ProviderProfile>> {
         let profiles = sqlx::query_as!(
             ProviderProfile,
-            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT ? OFFSET ?",
+            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT ? OFFSET ?",
             limit,
             offset
         )
@@ -162,6 +210,55 @@ impl Database {
             .await?;
 
         Ok(count)
+    }
+
+    /// Get provider onboarding data
+    pub async fn get_provider_onboarding(
+        &self,
+        pubkey: &[u8],
+    ) -> Result<Option<ProviderOnboarding>> {
+        let onboarding = sqlx::query_as!(
+            ProviderOnboarding,
+            "SELECT support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles WHERE pubkey = ?",
+            pubkey
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(onboarding)
+    }
+
+    /// Update provider onboarding data
+    pub async fn update_provider_onboarding(
+        &self,
+        pubkey: &[u8],
+        data: &ProviderOnboarding,
+    ) -> Result<()> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query!(
+            r#"UPDATE provider_profiles
+               SET support_email = ?, support_hours = ?, support_channels = ?,
+                   regions = ?, payment_methods = ?, refund_policy = ?,
+                   sla_guarantee = ?, unique_selling_points = ?, common_issues = ?,
+                   onboarding_completed_at = ?
+               WHERE pubkey = ?"#,
+            data.support_email,
+            data.support_hours,
+            data.support_channels,
+            data.regions,
+            data.payment_methods,
+            data.refund_policy,
+            data.sla_guarantee,
+            data.unique_selling_points,
+            data.common_issues,
+            now_ns,
+            pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     /// Get list of active validators (checked in recently, with or without profiles)

@@ -1,0 +1,128 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT ? OFFSET ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "pubkey",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "website_url",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "logo_url",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "why_choose_us",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_version",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "profile_version",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at_ns",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "support_email",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "support_hours",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "support_channels",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "regions",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "payment_methods",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "refund_policy",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "sla_guarantee",
+        "ordinal": 15,
+        "type_info": "Text"
+      },
+      {
+        "name": "unique_selling_points",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "common_issues",
+        "ordinal": 17,
+        "type_info": "Text"
+      },
+      {
+        "name": "onboarding_completed_at",
+        "ordinal": 18,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "768bccf0b33ee240b5fc42721fafe1611262d974988083aa2d7d3cdc33776c2f"
+}
