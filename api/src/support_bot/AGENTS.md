@@ -21,8 +21,8 @@ Customer message → Chatwoot Widget → Inbox → Agent Bot webhook
                             ┌───────────────────────────────────────┐
                             │ api/src/support_bot/handler.rs        │
                             │ handle_customer_message()             │
-                            │   1. Get portal_slug from env         │
-                            │   2. Fetch Help Center articles       │
+                            │   1. Discover all Help Center portals │
+                            │   2. Fetch articles from all portals  │
                             │   3. Semantic search for relevance    │
                             │   4. Generate answer via LLM          │
                             │   5. Respond OR escalate              │
@@ -49,7 +49,7 @@ Customer message → Chatwoot Widget → Inbox → Agent Bot webhook
 ## Key Design Decisions
 
 ### Simplified Support Bot
-- Bot uses a single Help Center portal configured via `CHATWOOT_DEFAULT_PORTAL_SLUG`
+- Bot automatically fetches articles from ALL Help Center portals
 - No contract or provider lookup required for bot operation
 - Escalations notify `DEFAULT_ESCALATION_USER` (configurable)
 - `contract_id` is still tracked in custom_attributes for analytics but not used by bot
@@ -78,7 +78,6 @@ Bot escalates when:
 | `CHATWOOT_PLATFORM_API_TOKEN` | Yes | Platform token for agent bot management |
 | `CHATWOOT_ACCOUNT_ID` | Yes | Account ID (usually `1`) |
 | `CHATWOOT_INBOX_ID` | Yes | Inbox to assign bot to |
-| `CHATWOOT_DEFAULT_PORTAL_SLUG` | Yes | Help Center portal slug (e.g., `my-app-help`) |
 | `DEFAULT_ESCALATION_USER` | No | Username to notify on escalation (e.g., `admin`) |
 | `API_PUBLIC_URL` | Yes | Public URL for webhook callbacks |
 | `LLM_API_KEY` | No | Anthropic API key (bot disabled if missing) |
@@ -105,8 +104,8 @@ Bot escalates when:
 
 ### Bot not responding
 1. Check `LLM_API_KEY` is set
-2. Check `CHATWOOT_DEFAULT_PORTAL_SLUG` is configured
-3. Check portal exists and has articles in Chatwoot
+2. Check Help Center portals exist and have articles in Chatwoot
+3. Review logs for portal discovery or article fetch errors
 
 ### Escalation not notifying
 1. Check `DEFAULT_ESCALATION_USER` is set and user exists
@@ -115,5 +114,5 @@ Bot escalates when:
 4. Review logs for notification dispatch errors
 
 ### Missing configuration warnings
-If `CHATWOOT_DEFAULT_PORTAL_SLUG` is not set, bot will escalate all conversations immediately.
+If no Help Center portals are found, bot will escalate all conversations immediately.
 If `DEFAULT_ESCALATION_USER` is not set, no notifications will be sent on escalation.

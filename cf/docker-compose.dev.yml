@@ -245,7 +245,6 @@ services:
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_API_URL=${LLM_API_URL:-}
       - LLM_API_MODEL=${LLM_API_MODEL:-}
-      - CHATWOOT_DEFAULT_PORTAL_SLUG=${CHATWOOT_DEFAULT_PORTAL_SLUG:-}
       # Agent Bot auto-registration (public URL for Chatwoot callbacks)
       - API_PUBLIC_URL=${API_PUBLIC_URL:-https://dev-api.decent-cloud.org}
     volumes:

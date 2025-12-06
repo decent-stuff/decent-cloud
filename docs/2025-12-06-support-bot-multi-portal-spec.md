@@ -155,7 +155,19 @@ Update `api/src/support_bot/AGENTS.md`:
 
 ### Step 4
 - **Files updated:**
-- **Outcome:**
+  - `/code/api/src/support_bot/AGENTS.md`:
+    - Updated flow diagram: "Get portal_slug from env" → "Discover all Help Center portals"
+    - Updated "Simplified Support Bot" section: "Bot uses a single Help Center portal configured via..." → "Bot automatically fetches articles from ALL Help Center portals"
+    - Removed `CHATWOOT_DEFAULT_PORTAL_SLUG` from env vars table
+    - Updated "Bot not responding" troubleshooting: "Check CHATWOOT_DEFAULT_PORTAL_SLUG is configured" → "Check Help Center portals exist and have articles"
+    - Updated "Missing configuration warnings": "If CHATWOOT_DEFAULT_PORTAL_SLUG is not set..." → "If no Help Center portals are found..."
+  - `/code/cf/.env.example`: Removed commented export line and explanation comment
+  - `/code/cf/.env.dev`: Removed `export CHATWOOT_DEFAULT_PORTAL_SLUG=platform-overview` line
+  - `/code/cf/.env.prod`: Removed `export CHATWOOT_DEFAULT_PORTAL_SLUG=platform-overview` line
+  - `/code/cf/docker-compose.dev.yml`: Removed `CHATWOOT_DEFAULT_PORTAL_SLUG` env var line
+  - `/code/cf/docker-compose.prod.yml`: Removed `CHATWOOT_DEFAULT_PORTAL_SLUG` env var line
+- **Verification:** `grep -r "CHATWOOT_DEFAULT_PORTAL_SLUG" /code` returns only references in spec files (this file and 2024-12-06 spec)
+- **Outcome:** ✅ All references removed from codebase
 
 ### Step 5
 - **Deployment:**
