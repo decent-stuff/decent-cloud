@@ -135,9 +135,23 @@ Update `api/src/support_bot/AGENTS.md`:
 - **Outcome:** ✅ Implementation complete, tests pass
 
 ### Step 3
-- **Implementation:**
+- **Implementation:** Updated `handle_customer_message()` in `/code/api/src/support_bot/handler.rs` (lines 37-139)
+  - Added `futures` crate dependency to workspace and api Cargo.toml
+  - Replaced `CHATWOOT_DEFAULT_PORTAL_SLUG` env var check with `chatwoot.list_portals()` call
+  - Fetch articles from all portals in parallel using `futures::future::join_all`
+  - Merge all successful results into single `Vec<HelpCenterArticle>` before search
+  - Handle edge cases:
+    - No portals exist: escalate with message "No Help Center portals configured"
+    - Failed to list portals: escalate with error message "I'm experiencing technical difficulties"
+    - All portal fetches fail: escalate with message "I don't have enough information"
+    - Some portal fetches fail: log warning with `tracing::warn!`, continue with successful ones
+  - Added `use futures::future::join_all` and `use crate::chatwoot::HelpCenterArticle` imports
 - **Review:**
-- **Outcome:**
+  - Code compiles with SQLX_OFFLINE=true
+  - All 416 support_bot and chatwoot tests pass (1 pre-existing test isolation issue unrelated to changes)
+  - Function signature unchanged
+  - Follows existing patterns (minimal, KISS, DRY)
+- **Outcome:** ✅ Implementation complete, ready to commit
 
 ### Step 4
 - **Files updated:**

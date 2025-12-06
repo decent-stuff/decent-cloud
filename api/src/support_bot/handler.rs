@@ -3,10 +3,11 @@
 use super::llm::{generate_answer, summarize_for_escalation, ArticleRef};
 use super::notifications::{dispatch_notification, SupportNotification};
 use super::search::search_articles_semantic;
-use crate::chatwoot::ChatwootClient;
+use crate::chatwoot::{ChatwootClient, HelpCenterArticle};
 use crate::database::Database;
 use anyhow::Result;
 use email_utils::EmailService;
+use futures::future::join_all;
 use std::sync::Arc;
 
 /// Truncate a message to max_len characters, adding "..." if truncated
@@ -43,33 +44,12 @@ pub async fn handle_customer_message(
 ) -> Result<()> {
     tracing::debug!("handle_customer_message: conversation={}", conversation_id);
 
-    // Get portal_slug from environment (no contract lookup)
-    let portal_slug = match std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG") {
-        Ok(slug) if !slug.is_empty() => slug,
-        _ => {
-            tracing::warn!(
-                "CHATWOOT_DEFAULT_PORTAL_SLUG not set, escalating conversation {}",
-                conversation_id
-            );
-            chatwoot
-                .update_conversation_status(conversation_id, "open")
-                .await?;
-            return Ok(());
-        }
-    };
-
-    tracing::debug!(
-        "Fetching help center articles from portal '{}' for conversation {}",
-        portal_slug,
-        conversation_id
-    );
-
-    // 3. Fetch articles from Help Center
-    let articles = match chatwoot.fetch_help_center_articles(&portal_slug).await {
-        Ok(articles) => articles,
+    // Fetch all portal slugs
+    let portal_slugs = match chatwoot.list_portals().await {
+        Ok(slugs) => slugs,
         Err(e) => {
             tracing::error!(
-                "Failed to fetch help center articles for conversation {}: {}",
+                "Failed to list portals for conversation {}: {}",
                 conversation_id,
                 e
             );
@@ -86,10 +66,58 @@ pub async fn handle_customer_message(
         }
     };
 
+    if portal_slugs.is_empty() {
+        tracing::warn!(
+            "No Help Center portals configured, escalating conversation {}",
+            conversation_id
+        );
+        chatwoot
+            .send_message(
+                conversation_id,
+                "No Help Center portals configured. Let me connect you with a human agent.",
+            )
+            .await?;
+        chatwoot
+            .update_conversation_status(conversation_id, "open")
+            .await?;
+        return Ok(());
+    }
+
+    tracing::debug!(
+        "Fetching help center articles from {} portals for conversation {}",
+        portal_slugs.len(),
+        conversation_id
+    );
+
+    // Fetch articles from all portals in parallel
+    let fetch_futures: Vec<_> = portal_slugs
+        .iter()
+        .map(|slug| chatwoot.fetch_help_center_articles(slug))
+        .collect();
+
+    let fetch_results = join_all(fetch_futures).await;
+
+    // Merge successful results, log failures
+    let mut articles: Vec<HelpCenterArticle> = Vec::new();
+    for (idx, result) in fetch_results.into_iter().enumerate() {
+        match result {
+            Ok(mut portal_articles) => {
+                articles.append(&mut portal_articles);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to fetch articles from portal '{}': {}",
+                    portal_slugs[idx],
+                    e
+                );
+            }
+        }
+    }
+
     if articles.is_empty() {
         tracing::warn!(
-            "No articles found in portal '{}', escalating conversation {}",
-            portal_slug,
+            "No articles found across {} portals, escalating conversation {}",
+            portal_slugs.len(),
             conversation_id
         );
         chatwoot
@@ -105,8 +133,9 @@ pub async fn handle_customer_message(
     }
 
     tracing::debug!(
-        "Found {} articles, searching for relevant content",
-        articles.len()
+        "Found {} articles across {} portals, searching for relevant content",
+        articles.len(),
+        portal_slugs.len()
     );
 
     // 4. Search articles (semantic if configured, else keyword)

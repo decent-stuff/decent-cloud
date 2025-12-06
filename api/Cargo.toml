@@ -29,6 +29,7 @@ dcc-common = { path = "../common" }
 dotenv.workspace = true
 email-utils = { path = "./email-utils" }
 ed25519-dalek.workspace = true
+futures.workspace = true
 hex.workspace = true
 hmac = "0.12"
 ic-agent.workspace = true

@@ -153,6 +153,7 @@ dependencies = [
  "dotenv",
  "ed25519-dalek",
  "email-utils",
+ "futures",
  "hex",
  "hmac",
  "ic-agent",
