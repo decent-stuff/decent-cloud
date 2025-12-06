@@ -9,7 +9,7 @@
 - [x] Remove contract lookup logic from `handler.rs`
 - [ ] Update notification flow to use Chatwoot assignee
 - [x] Update notification message templates (remove contract_id references)
-- [ ] Update tests to reflect new flow
+- [x] Update tests to reflect new flow
 - [ ] Update AGENTS.md documentation
 
 ### Nice-to-have
@@ -64,7 +64,7 @@ Update `api/src/openapi/webhooks.rs`:
 
 ### Step 6: Tests - Update all affected tests
 **Success:** All tests pass, no contract_id in test notifications
-**Status:** Pending
+**Status:** Completed
 
 Update tests in:
 - `api/src/support_bot/notifications.rs`
@@ -130,9 +130,13 @@ Update `api/src/support_bot/AGENTS.md` to reflect:
 - **Outcome:** Step 5 complete. The chatwoot_webhook handler no longer passes contract_id to the bot handler. The message_created flow is simplified and decoupled from contract logic. The bot can now handle all customer messages (general inquiries and contract-specific) uniformly without requiring contract context.
 
 ### Step 6
-- **Implementation:**
-- **Review:**
-- **Outcome:**
+- **Implementation:** Verified all notification-related tests after refactoring:
+  - Ran tests in `api/src/support_bot/notifications.rs`: 7 tests passed (test_support_notification_creation, test_support_notification_link_format, test_dispatch_notification_no_config, test_dispatch_notification_multi_channel, test_dispatch_notification_no_channels_enabled, test_dispatch_notification_telegram, test_dispatch_notification_email_no_service)
+  - Ran tests in `api/src/notifications/telegram.rs`: 9 tests passed (test_format_notification, test_send_message_response_deserialization_error, test_send_message_response_deserialization_success, test_telegram_client_is_configured, test_telegram_message_deserialization, test_send_message_request_serialization, test_telegram_update_deserialization, test_telegram_update_with_reply_deserialization, test_telegram_client_from_env)
+  - Ran tests in `api/src/notifications/twilio.rs`: 3 tests passed (test_format_sms_notification, test_twilio_client_is_configured, test_twilio_client_from_env)
+  - All tests updated in previous steps (Step 2 for notifications.rs, Step 3 for telegram.rs and twilio.rs) now correctly use `user_pubkey` instead of `provider_pubkey` and do not reference `contract_id`
+- **Review:** Ran `SQLX_OFFLINE=true cargo clippy --lib` - no warnings or errors related to our changes. All notification tests pass without modifications needed in this step (tests were already updated in Steps 2-3).
+- **Outcome:** Step 6 complete. All 19 notification-related tests pass successfully. No additional test updates were required as all tests had already been updated in previous steps to reflect the new architecture without contract_id.
 
 ### Step 7
 - **Implementation:**
