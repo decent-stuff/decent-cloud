@@ -1,0 +1,526 @@
+# Provider Help Center Onboarding
+
+**Status:** In Progress
+
+## Overview
+
+Enable turn-key Help Center population for providers through a structured onboarding form. Instead of crawling provider documentation (high complexity, legal risk, maintenance burden), providers complete a questionnaire during onboarding. The data is used to generate standardized help center articles that sync to their Chatwoot portal.
+
+## Problem
+
+- Providers won't write documentation (lazy)
+- Users need help center articles about each provider for support
+- Crawling docs is high-cost: legal risk, maintenance, LLM costs, variable quality
+- Need consistency across providers for comparison
+
+## Solution
+
+1. **Structured onboarding form** - Providers fill out ~15 min questionnaire
+2. **Store in `provider_profiles`** - Extend existing table with new columns
+3. **Generate markdown from template** - Consistent format across providers
+4. **Sync to provider's Chatwoot portal** - Using existing `sync-docs` infrastructure
+
+## Requirements
+
+### Must-have
+- [ ] Extend `provider_profiles` table with onboarding fields
+- [ ] Add onboarding form to provider dashboard
+- [ ] Generate help center article from provider data
+- [ ] Sync generated article to provider's Chatwoot portal
+- [ ] All tests pass, `cargo make` clean
+
+### Nice-to-have
+- [ ] Preview article before sync
+- [ ] Multi-language support (future)
+- [ ] Reminder for incomplete onboarding
+
+## Database Schema
+
+### Migration: 034_provider_onboarding.sql
+
+Extend `provider_profiles` table (no new 1:1 table per YAGNI):
+
+```sql
+-- Provider onboarding fields for Help Center article generation
+ALTER TABLE provider_profiles ADD COLUMN support_email TEXT;
+ALTER TABLE provider_profiles ADD COLUMN support_hours TEXT;  -- e.g., "24/7", "Mon-Fri 9-17 UTC"
+ALTER TABLE provider_profiles ADD COLUMN support_channels TEXT;  -- JSON array: ["email", "chat", "phone"]
+ALTER TABLE provider_profiles ADD COLUMN regions TEXT;  -- JSON array: ["US", "EU", "APAC"]
+ALTER TABLE provider_profiles ADD COLUMN payment_methods TEXT;  -- JSON array: ["crypto", "stripe", "paypal"]
+ALTER TABLE provider_profiles ADD COLUMN refund_policy TEXT;  -- "30-day", "14-day", "no-refunds", custom text
+ALTER TABLE provider_profiles ADD COLUMN sla_guarantee TEXT;  -- "99.9%", "99.99%", "none", custom text
+ALTER TABLE provider_profiles ADD COLUMN unique_selling_points TEXT;  -- JSON array of 3 bullet points
+ALTER TABLE provider_profiles ADD COLUMN common_issues TEXT;  -- JSON array of {question, answer} pairs
+ALTER TABLE provider_profiles ADD COLUMN onboarding_completed_at INTEGER;  -- timestamp when form completed
+```
+
+**Field rationale:**
+- `support_email` - Primary contact for escalation
+- `support_hours` - When users can expect response
+- `support_channels` - What channels are available (for article)
+- `regions` - Geographic coverage
+- `payment_methods` - What payment options accepted
+- `refund_policy` - User expectation setting
+- `sla_guarantee` - Uptime commitment
+- `unique_selling_points` - Differentiators (max 3)
+- `common_issues` - FAQ for self-service (optional)
+- `onboarding_completed_at` - Track completion
+
+## Article Template
+
+Generated markdown for each provider's help center:
+
+```markdown
+# {provider_name} on Decent Cloud
+
+## Overview
+
+{provider_name} is a cloud provider on the Decent Cloud marketplace offering services in {regions}.
+
+{description}
+
+{#if why_choose_us}
+### Why Choose {provider_name}?
+
+{why_choose_us}
+{/if}
+
+{#if unique_selling_points}
+**Key Differentiators:**
+{#each unique_selling_points as point}
+- {point}
+{/each}
+{/if}
+
+## Getting Started
+
+1. Browse the [Decent Cloud Marketplace](https://app.decent-cloud.org/dashboard/marketplace)
+2. Filter by provider: **{provider_name}**
+3. Select an offering that meets your needs
+4. Complete rental through the platform
+
+## Pricing & Payment
+
+{#if payment_methods}
+**Accepted Payment Methods:**
+{#each payment_methods as method}
+- {method_label(method)}
+{/each}
+{/if}
+
+{#if refund_policy}
+**Refund Policy:** {refund_policy}
+{/if}
+
+## Support
+
+{#if support_email}
+**Email:** {support_email}
+{/if}
+
+{#if support_hours}
+**Hours:** {support_hours}
+{/if}
+
+{#if support_channels}
+**Available Channels:** {support_channels.join(", ")}
+{/if}
+
+{#if sla_guarantee && sla_guarantee != "none"}
+**SLA Guarantee:** {sla_guarantee} uptime
+{/if}
+
+{#if common_issues && common_issues.length > 0}
+## FAQ
+
+{#each common_issues as issue}
+### {issue.question}
+
+{issue.answer}
+
+{/each}
+{/if}
+
+## Need Help?
+
+If you have questions about {provider_name}'s services, you can:
+1. Contact {provider_name} directly via the channels above
+2. Use the Decent Cloud support chat for platform-related questions
+
+---
+*This article is maintained by {provider_name}. Last updated: {updated_at}*
+```
+
+## API Endpoints
+
+### Update Provider Onboarding
+
+```
+PUT /api/v1/providers/{pubkey}/onboarding
+Authorization: Ed25519 signature
+
+{
+  "support_email": "support@example.com",
+  "support_hours": "24/7",
+  "support_channels": ["email", "chat"],
+  "regions": ["US", "EU"],
+  "payment_methods": ["crypto", "stripe"],
+  "refund_policy": "30-day money-back guarantee",
+  "sla_guarantee": "99.9%",
+  "unique_selling_points": [
+    "Low latency global network",
+    "Instant provisioning",
+    "24/7 human support"
+  ],
+  "common_issues": [
+    {
+      "question": "How do I access my server?",
+      "answer": "SSH credentials are sent to your email within 5 minutes of purchase."
+    }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "onboarding_completed_at": 1733500000000000000
+  }
+}
+```
+
+### Get Provider Onboarding Status
+
+```
+GET /api/v1/providers/{pubkey}/onboarding
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "support_email": "support@example.com",
+    "onboarding_completed_at": 1733500000000000000,
+    ...
+  }
+}
+```
+
+### Sync Provider Help Center
+
+```
+POST /api/v1/providers/{pubkey}/helpcenter/sync
+Authorization: Ed25519 signature
+```
+
+Generates article from template and syncs to provider's Chatwoot portal.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "article_id": 123,
+    "portal_slug": "provider-xyz",
+    "action": "created"  // or "updated"
+  }
+}
+```
+
+## Implementation Steps
+
+### Step 1: Database Migration
+**Success:** Migration applies cleanly, sqlx prepare works
+
+Create `api/migrations/034_provider_onboarding.sql` with ALTER TABLE statements.
+
+### Step 2: Extend ProviderProfile Struct
+**Success:** Struct compiles, tests pass
+
+Update `api/src/database/providers.rs`:
+- Add new fields to `ProviderProfile` struct
+- Update `get_provider_profile()` to include new fields
+- Add `update_provider_onboarding()` method
+- Add `get_provider_onboarding()` method
+
+### Step 3: Add API Endpoints
+**Success:** Endpoints work, return correct responses
+
+Add to `api/src/openapi/providers.rs`:
+- `PUT /providers/{pubkey}/onboarding` - authenticated
+- `GET /providers/{pubkey}/onboarding` - public
+- `POST /providers/{pubkey}/helpcenter/sync` - authenticated
+
+### Step 4: Article Generation
+**Success:** Generated markdown matches template
+
+Add `api/src/helpcenter/mod.rs`:
+- `generate_provider_article(profile: &ProviderProfile) -> String`
+- Template rendering with handlebars or simple string interpolation
+
+### Step 5: Sync to Chatwoot
+**Success:** Article appears in provider's portal
+
+Extend existing sync-docs:
+- `sync_provider_article(pubkey: &[u8]) -> Result<SyncResult>`
+- Use provider's `chatwoot_portal_slug` from `provider_notification_config`
+- Create if not exists, update if exists (match by slug `about-{provider-name}`)
+
+### Step 6: Frontend Form
+**Success:** Form submits, saves data, shows success
+
+Add to `website/src/routes/dashboard/provider/onboarding/+page.svelte`:
+- Form with all onboarding fields
+- Validation (required: support_email, support_hours, regions)
+- Submit to API
+- Show preview button (optional)
+- Sync to help center button
+
+### Step 7: Sidebar Navigation
+**Success:** Provider section shows for providers, onboarding status visible
+
+Update `website/src/lib/components/DashboardSidebar.svelte`:
+- Add Provider section with "My Offerings", "Help Center Setup", "Rental Requests"
+- Show section only for providers (has offerings or provider_profiles entry)
+- Add completion indicator on "Help Center Setup" link
+- Move "My Offerings" from main nav to Provider section
+
+Update account API response or add provider status check.
+
+### Step 8: Tests
+**Success:** All tests pass, cargo make clean
+
+- Unit tests for article generation
+- Unit tests for onboarding CRUD
+- Integration tests for sync flow
+- E2E test for onboarding form submission
+
+## Frontend Form Fields
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| Support Email | email | Yes | Valid email format |
+| Support Hours | select | Yes | Predefined options + custom |
+| Support Channels | multi-select | Yes | At least one |
+| Regions | multi-select | Yes | At least one |
+| Payment Methods | multi-select | Yes | At least one |
+| Refund Policy | select + text | No | - |
+| SLA Guarantee | select | No | - |
+| Unique Selling Points | 3x textarea | No | Max 200 chars each |
+| Common Issues | dynamic list | No | Max 10 items |
+
+### Predefined Options
+
+**Support Hours:**
+- 24/7
+- Business hours (Mon-Fri 9-17 UTC)
+- Business hours (Mon-Fri 9-17 US Eastern)
+- Custom: ___
+
+**Support Channels:**
+- Email
+- Live Chat
+- Phone
+- Ticket System
+- Discord
+- Telegram
+
+**Regions:**
+- North America
+- South America
+- Europe
+- Asia Pacific
+- Middle East
+- Africa
+- Global
+
+**Payment Methods:**
+- Cryptocurrency (BTC, ETH, etc.)
+- Credit Card (Stripe)
+- PayPal
+- Bank Transfer
+- ICP (Internet Computer)
+
+**Refund Policy:**
+- 30-day money-back guarantee
+- 14-day money-back guarantee
+- 7-day money-back guarantee
+- Pro-rated refunds only
+- No refunds
+- Custom: ___
+
+**SLA Guarantee:**
+- 99.99% (52 min/year downtime)
+- 99.9% (8.7 hours/year downtime)
+- 99.5% (1.8 days/year downtime)
+- 99% (3.6 days/year downtime)
+- No SLA guarantee
+
+## Sync Flow
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│ Provider fills  │ ──▶ │ Store in DB      │ ──▶ │ Generate MD     │
+│ onboarding form │     │ provider_profiles│     │ from template   │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                                                         │
+                                                         ▼
+                                                 ┌─────────────────┐
+                                                 │ Sync to their   │
+                                                 │ Chatwoot portal │
+                                                 │ (from notif cfg)│
+                                                 └─────────────────┘
+```
+
+## Dependencies
+
+- Existing `provider_profiles` table
+- Existing `provider_notification_config` table (has `chatwoot_portal_slug`)
+- Existing `ChatwootClient` with `create_article()`, `update_article()`, `list_articles()`
+- Existing `sync-docs` infrastructure
+
+## Notes
+
+- Each provider gets ONE help center article (about their company)
+- Article slug: `about-{provider-name-slug}` for idempotency
+- If `chatwoot_portal_slug` not set, sync fails with clear error
+- Onboarding is optional but encouraged (dashboard shows completion status)
+- Data can be updated anytime, triggers article re-sync
+
+## Sidebar / Navigation Changes
+
+### Current State
+
+The `DashboardSidebar.svelte` has these nav items:
+- Marketplace
+- Reputation
+- Validators
+- My Offerings
+- My Rentals
+- Support Dashboard (external link, authenticated only)
+- Admin (admin only)
+- Account
+
+There's also a `/dashboard/provider/requests` route but it's not in the sidebar.
+
+### Changes Required
+
+Add a **Provider** section to the sidebar (shown only for authenticated users who have offerings OR have completed provider registration):
+
+```typescript
+// In navItems or as separate providerItems
+const providerItems = $derived([
+  { href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
+  { href: "/dashboard/provider/onboarding", icon: "📝", label: "Help Center Setup" },
+  { href: "/dashboard/provider/requests", icon: "📥", label: "Rental Requests" },
+]);
+```
+
+### Sidebar Structure After Change
+
+```
+🛒 Marketplace
+⭐ Reputation
+✓  Validators
+📋 My Rentals
+
+── Provider ──────────
+📦 My Offerings
+📝 Help Center Setup    ← NEW (shows completion badge)
+📥 Rental Requests
+
+── Account ───────────
+⚙️ Account
+🎧 Support Dashboard ↗
+🚪 Logout
+```
+
+### Implementation Details
+
+1. **Move "My Offerings"** from main nav to Provider section
+2. **Add "Help Center Setup"** with onboarding completion indicator:
+   - Gray dot if incomplete
+   - Green checkmark if `onboarding_completed_at` is set
+3. **Add "Rental Requests"** (already exists at `/dashboard/provider/requests`)
+4. **Show Provider section** only if:
+   - User has at least one offering, OR
+   - User is a registered provider (has entry in `provider_profiles`)
+
+### Onboarding Completion Badge
+
+```svelte
+<a href="/dashboard/provider/onboarding" ...>
+  <span class="text-xl">📝</span>
+  <span class="font-medium">Help Center Setup</span>
+  {#if onboardingCompleted}
+    <span class="ml-auto text-green-400">✓</span>
+  {:else}
+    <span class="ml-auto w-2 h-2 rounded-full bg-yellow-400" title="Setup incomplete"></span>
+  {/if}
+</a>
+```
+
+### API for Sidebar State
+
+The sidebar needs to know:
+1. Is user a provider? (has offerings or `provider_profiles` entry)
+2. Is onboarding complete? (`onboarding_completed_at` is set)
+
+Options:
+- **A)** Extend existing `/api/v1/accounts/{id}` response with `isProvider` and `onboardingCompleted`
+- **B)** New lightweight endpoint `/api/v1/providers/{pubkey}/status` returning `{ isProvider, onboardingCompleted }`
+- **C)** Derive from existing data (check if offerings count > 0 from offerings API)
+
+**Recommended: Option A** - add fields to account response since sidebar already has access to `currentIdentity.account`.
+
+## Out of Scope
+
+- Crawling provider documentation
+- Multi-language articles (future)
+- Per-offering articles (future - would need different approach)
+- Automatic sync on profile update (manual trigger only for now)
+
+## Execution Log
+
+### Step 1: Database Migration
+- **Status:** Completed
+- **Files:** `/code/api/migrations/034_provider_onboarding.sql`
+- **Implementation:** Added 10 ALTER TABLE statements to extend provider_profiles with:
+  - support_email TEXT
+  - support_hours TEXT
+  - support_channels TEXT (JSON array)
+  - regions TEXT (JSON array)
+  - payment_methods TEXT (JSON array)
+  - refund_policy TEXT
+  - sla_guarantee TEXT
+  - unique_selling_points TEXT (JSON array)
+  - common_issues TEXT (JSON array of {question, answer})
+  - onboarding_completed_at INTEGER (timestamp)
+- **Outcome:** Migration applied cleanly (migration #34), sqlx prepare successful, cargo make passed
+
+### Step 2: Extend ProviderProfile Struct
+- **Status:** Pending
+
+### Step 3: Add API Endpoints
+- **Status:** Pending
+
+### Step 4: Article Generation
+- **Status:** Pending
+
+### Step 5: Sync to Chatwoot
+- **Status:** Pending
+
+### Step 6: Frontend Form
+- **Status:** Pending
+
+### Step 7: Sidebar Navigation
+- **Status:** Pending
+
+### Step 8: Tests
+- **Status:** Pending
+
+## Completion Summary
+(To be filled after implementation)
