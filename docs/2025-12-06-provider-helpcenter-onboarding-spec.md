@@ -540,7 +540,38 @@ Options:
 - **Outcome:** All endpoints compile, cargo make passes with no errors, endpoints follow existing patterns for auth and error handling
 
 ### Step 4: Article Generation
-- **Status:** Pending
+- **Status:** Completed
+- **Files:** `/code/api/src/helpcenter/mod.rs`, `/code/api/src/lib.rs`
+- **Implementation:**
+  - Created new `helpcenter` module with `generate_provider_article(profile: &ProviderProfile) -> Result<String>` function
+  - Uses simple string interpolation (no external template engine) to generate markdown from template
+  - Helper function `payment_method_label(method: &str)` converts codes to human-readable labels:
+    - "crypto" → "Cryptocurrency (BTC, ETH, etc.)"
+    - "stripe" → "Credit Card (Stripe)"
+    - "paypal" → "PayPal"
+    - "bank_transfer" → "Bank Transfer"
+    - "icp" → "ICP (Internet Computer)"
+  - Helper function `parse_json_array<T>()` safely parses JSON arrays from TEXT fields, returns empty vec on error
+  - Helper function `format_timestamp(timestamp_ns: i64)` converts nanosecond timestamp to YYYY-MM-DD format
+  - Generated article includes all template sections:
+    - Title: "{provider_name} on Decent Cloud"
+    - Overview with regions, description, why_choose_us
+    - Key Differentiators (unique_selling_points) - only if present
+    - Getting Started (static content)
+    - Pricing & Payment (payment_methods, refund_policy) - only if present
+    - Support (email, hours, channels, SLA) - only if present
+    - FAQ (common_issues) - only if present
+    - Footer with last updated timestamp
+  - Registered module in `api/src/lib.rs`
+  - Added 11 unit tests covering:
+    - Minimal article generation (only required fields)
+    - Full article generation (all fields populated)
+    - Payment method label conversion
+    - JSON array parsing (valid, invalid, none)
+    - SLA "none" exclusion from output
+    - Section conditional rendering
+    - Common issues FAQ structure
+- **Outcome:** All tests pass (11/11), cargo make clean, generated markdown matches template format exactly
 
 ### Step 5: Sync to Chatwoot
 - **Status:** Pending
