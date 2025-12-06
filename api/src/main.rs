@@ -17,6 +17,7 @@ mod request_logging;
 mod search;
 mod stripe_client;
 mod support_bot;
+mod sync_docs;
 mod sync_service;
 mod validation;
 
@@ -62,6 +63,16 @@ enum Commands {
     Sync,
     /// Check configuration and external service connectivity
     Doctor,
+    /// Sync documentation to Chatwoot Help Center
+    SyncDocs {
+        /// Portal slug to sync to
+        #[arg(long, default_value = "platform-overview")]
+        portal: String,
+
+        /// Dry run - show what would be synced without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -219,6 +230,18 @@ async fn main() -> Result<(), std::io::Error> {
         Commands::Serve => serve_command().await,
         Commands::Sync => sync_command().await,
         Commands::Doctor => doctor_command().await,
+        Commands::SyncDocs { portal, dry_run } => sync_docs_command(&portal, dry_run).await,
+    }
+}
+
+/// Sync documentation to Chatwoot Help Center
+async fn sync_docs_command(portal: &str, dry_run: bool) -> Result<(), std::io::Error> {
+    match sync_docs::sync_docs(portal, dry_run).await {
+        Ok(()) => Ok(()),
+        Err(e) => Err(std::io::Error::other(format!(
+            "Failed to sync documentation: {}",
+            e
+        ))),
     }
 }
 
