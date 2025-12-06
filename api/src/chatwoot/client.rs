@@ -48,8 +48,21 @@ pub struct PlatformUserResponse {
 #[derive(Debug, Serialize)]
 struct AddAccountUserRequest {
     user_id: i64,
-    role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    custom_role_id: Option<i64>,
 }
+
+/// Custom role name for support agents with Help Center access.
+const SUPPORT_AGENT_ROLE_NAME: &str = "Support Agent";
+
+/// Permissions for the Support Agent custom role.
+const SUPPORT_AGENT_PERMISSIONS: &[&str] = &[
+    "conversation_manage",
+    "contact_manage",
+    "knowledge_base_manage",
+];
 
 #[derive(Debug, Serialize)]
 struct UpdateUserPasswordRequest<'a> {
@@ -116,8 +129,9 @@ impl ChatwootPlatformClient {
             .context("Failed to parse platform user response")
     }
 
-    /// Add a user to an account as an agent.
-    pub async fn add_user_to_account(&self, user_id: i64) -> Result<()> {
+    /// Add a user to an account with the Support Agent custom role.
+    /// The custom_role_id should be obtained from `ensure_support_agent_role()`.
+    pub async fn add_user_to_account(&self, user_id: i64, custom_role_id: i64) -> Result<()> {
         let url = format!(
             "{}/platform/api/v1/accounts/{}/account_users",
             self.base_url, self.account_id
@@ -129,7 +143,8 @@ impl ChatwootPlatformClient {
             .header("api_access_token", &self.platform_token)
             .json(&AddAccountUserRequest {
                 user_id,
-                role: "agent".to_string(),
+                role: None,
+                custom_role_id: Some(custom_role_id),
             })
             .send()
             .await
@@ -142,6 +157,88 @@ impl ChatwootPlatformClient {
         }
 
         Ok(())
+    }
+
+    /// Ensure the Support Agent custom role exists, creating it if needed.
+    /// Returns the custom_role_id to use when adding users.
+    /// This role has conversation_manage, contact_manage, and knowledge_base_manage permissions.
+    pub async fn ensure_support_agent_role(&self, api_token: &str) -> Result<i64> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/custom_roles",
+            self.base_url, self.account_id
+        );
+
+        #[derive(Deserialize)]
+        struct CustomRole {
+            id: i64,
+            name: String,
+        }
+
+        // List existing custom roles
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", api_token)
+            .send()
+            .await
+            .context("Failed to list custom roles")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Chatwoot API error listing custom roles {}: {}",
+                status,
+                body
+            );
+        }
+
+        let roles: Vec<CustomRole> = resp.json().await.context("Failed to parse custom roles")?;
+
+        // Check if role already exists
+        if let Some(existing) = roles.iter().find(|r| r.name == SUPPORT_AGENT_ROLE_NAME) {
+            tracing::debug!("Support Agent role already exists with id={}", existing.id);
+            return Ok(existing.id);
+        }
+
+        // Create the role
+        #[derive(Serialize)]
+        struct CreateCustomRoleRequest<'a> {
+            name: &'a str,
+            description: &'a str,
+            permissions: &'a [&'a str],
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", api_token)
+            .json(&CreateCustomRoleRequest {
+                name: SUPPORT_AGENT_ROLE_NAME,
+                description: "Support agent with Help Center access",
+                permissions: SUPPORT_AGENT_PERMISSIONS,
+            })
+            .send()
+            .await
+            .context("Failed to create custom role")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Chatwoot API error creating custom role {}: {}",
+                status,
+                body
+            );
+        }
+
+        let created: CustomRole = resp.json().await.context("Failed to parse created role")?;
+        tracing::info!(
+            "Created Chatwoot custom role '{}' (id={})",
+            SUPPORT_AGENT_ROLE_NAME,
+            created.id
+        );
+        Ok(created.id)
     }
 
     /// Update a user's password.

@@ -43,6 +43,7 @@ pub fn generate_secure_password() -> String {
 /// Returns the generated password for display to the user.
 pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<String> {
     let client = ChatwootPlatformClient::from_env()?;
+    let api_token = std::env::var("CHATWOOT_API_TOKEN").context("CHATWOOT_API_TOKEN not set")?;
 
     // Get provider's account info for name and email
     let account = db
@@ -56,6 +57,12 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .email
         .as_ref()
         .context("Provider email required for Chatwoot agent")?;
+
+    // Ensure Support Agent custom role exists (has Help Center access)
+    let custom_role_id = client
+        .ensure_support_agent_role(&api_token)
+        .await
+        .context("Failed to ensure Support Agent role exists")?;
 
     // Generate password for the user
     let password = generate_secure_password();
@@ -72,8 +79,8 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .await
         .context("Failed to set Chatwoot user password")?;
 
-    // Add user to account as agent (ignore error if already added)
-    if let Err(e) = client.add_user_to_account(user.id).await {
+    // Add user to account with Support Agent role (ignore error if already added)
+    if let Err(e) = client.add_user_to_account(user.id, custom_role_id).await {
         // 422 typically means user is already in account
         let err_str = format!("{:#}", e);
         if !err_str.contains("422") {
