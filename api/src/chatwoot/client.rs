@@ -362,7 +362,8 @@ impl ChatwootClient {
     pub fn from_env() -> Result<Self> {
         let base_url = std::env::var("CHATWOOT_BASE_URL").context("CHATWOOT_BASE_URL not set")?;
         // Help Center API requires public domain (internal hostnames rejected)
-        let frontend_url = std::env::var("CHATWOOT_FRONTEND_URL").unwrap_or_else(|_| base_url.clone());
+        let frontend_url =
+            std::env::var("CHATWOOT_FRONTEND_URL").unwrap_or_else(|_| base_url.clone());
         let api_token =
             std::env::var("CHATWOOT_API_TOKEN").context("CHATWOOT_API_TOKEN not set")?;
         let account_id: u32 = std::env::var("CHATWOOT_ACCOUNT_ID")

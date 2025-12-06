@@ -1,13 +1,22 @@
 //! AI Bot webhook handler for answering customer questions
 
 use super::llm::{generate_answer, ArticleRef};
+use super::notifications::{dispatch_notification, SupportNotification};
 use super::search::search_articles_semantic;
 use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
 use anyhow::Result;
+use email_utils::EmailService;
+use std::sync::Arc;
 
-/// Get portal slug from contract's provider notification config
-async fn get_portal_slug_from_contract(db: &Database, contract_id: &str) -> Result<Option<String>> {
+/// Contract info needed for bot handling
+struct ContractInfo {
+    provider_pubkey: Vec<u8>,
+    portal_slug: Option<String>,
+}
+
+/// Get contract info (provider pubkey and portal slug) from contract_id
+async fn get_contract_info(db: &Database, contract_id: &str) -> Result<Option<ContractInfo>> {
     let contract_id_bytes = match hex::decode(contract_id) {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -36,7 +45,19 @@ async fn get_portal_slug_from_contract(db: &Database, contract_id: &str) -> Resu
         .get_user_notification_config(&provider_pubkey_bytes)
         .await?;
 
-    Ok(notification_config.and_then(|c| c.chatwoot_portal_slug))
+    Ok(Some(ContractInfo {
+        provider_pubkey: provider_pubkey_bytes,
+        portal_slug: notification_config.and_then(|c| c.chatwoot_portal_slug),
+    }))
+}
+
+/// Truncate a message to max_len characters, adding "..." if truncated
+fn truncate_message(msg: &str, max_len: usize) -> String {
+    if msg.len() <= max_len {
+        msg.to_string()
+    } else {
+        format!("{}...", &msg[..max_len.saturating_sub(3)])
+    }
 }
 
 /// Format bot response message with answer and sources
@@ -58,6 +79,7 @@ pub fn format_bot_message(answer: &str, sources: &[ArticleRef]) -> String {
 pub async fn handle_customer_message(
     db: &Database,
     chatwoot: &ChatwootClient,
+    email_service: Option<&Arc<EmailService>>,
     conversation_id: u64,
     contract_id: Option<&str>,
     message_content: &str,
@@ -68,38 +90,39 @@ pub async fn handle_customer_message(
         contract_id
     );
 
-    // Try to get portal_slug from contract's provider, fall back to default
-    let portal_slug = match contract_id {
-        Some(cid) => get_portal_slug_from_contract(db, cid).await?,
+    // Get contract info (provider pubkey and portal slug)
+    let contract_info = match contract_id {
+        Some(cid) => get_contract_info(db, cid).await?,
         None => None,
     };
 
-    // Use default portal if no contract-specific portal found
+    // Extract portal_slug, falling back to default
+    let portal_slug = contract_info
+        .as_ref()
+        .and_then(|c| c.portal_slug.clone())
+        .or_else(|| std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG").ok().filter(|s| !s.is_empty()));
+
     let portal_slug = match portal_slug {
-        Some(slug) => slug,
-        None => {
-            let default = std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG").ok();
-            match default {
-                Some(slug) if !slug.is_empty() => {
-                    tracing::debug!(
-                        "Using default portal '{}' for conversation {}",
-                        slug,
-                        conversation_id
-                    );
-                    slug
-                }
-                _ => {
-                    tracing::warn!(
-                        "No portal slug available (contract: {:?}, no default configured), escalating conversation {}",
-                        contract_id,
-                        conversation_id
-                    );
-                    chatwoot
-                        .update_conversation_status(conversation_id, "open")
-                        .await?;
-                    return Ok(());
-                }
+        Some(slug) => {
+            if contract_info.as_ref().and_then(|c| c.portal_slug.as_ref()).is_none() {
+                tracing::debug!(
+                    "Using default portal '{}' for conversation {}",
+                    slug,
+                    conversation_id
+                );
             }
+            slug
+        }
+        None => {
+            tracing::warn!(
+                "No portal slug available (contract: {:?}, no default configured), escalating conversation {}",
+                contract_id,
+                conversation_id
+            );
+            chatwoot
+                .update_conversation_status(conversation_id, "open")
+                .await?;
+            return Ok(());
         }
     };
 
@@ -172,9 +195,31 @@ pub async fn handle_customer_message(
             conversation_id,
             bot_response.confidence
         );
+        // Send escalation message if there's one
+        if !bot_response.answer.is_empty() {
+            chatwoot
+                .send_message(conversation_id, &bot_response.answer)
+                .await?;
+        }
         chatwoot
             .update_conversation_status(conversation_id, "open")
             .await?;
+
+        // Notify provider about escalation
+        if let Some(info) = &contract_info {
+            let chatwoot_base_url =
+                std::env::var("CHATWOOT_BASE_URL").unwrap_or_else(|_| "https://chat.example.com".to_string());
+            let notification = SupportNotification::new(
+                info.provider_pubkey.clone(),
+                conversation_id as i64,
+                contract_id.unwrap_or("unknown").to_string(),
+                format!("Customer needs assistance: {}", truncate_message(message_content, 100)),
+                &chatwoot_base_url,
+            );
+            if let Err(e) = dispatch_notification(db, email_service, &notification).await {
+                tracing::error!("Failed to dispatch escalation notification: {}", e);
+            }
+        }
     } else {
         let message = format_bot_message(&bot_response.answer, &bot_response.sources);
         chatwoot.send_message(conversation_id, &message).await?;
@@ -235,5 +280,20 @@ mod tests {
         let message = format_bot_message(answer, &sources);
 
         assert!(message.contains("human"));
+    }
+
+    #[test]
+    fn test_truncate_message_short() {
+        assert_eq!(truncate_message("hello", 10), "hello");
+    }
+
+    #[test]
+    fn test_truncate_message_exact() {
+        assert_eq!(truncate_message("hello", 5), "hello");
+    }
+
+    #[test]
+    fn test_truncate_message_long() {
+        assert_eq!(truncate_message("hello world", 8), "hello...");
     }
 }

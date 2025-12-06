@@ -7,6 +7,52 @@ use super::search::ScoredArticle;
 const MAX_ARTICLES_IN_PROMPT: usize = 3;
 const LOW_CONFIDENCE_THRESHOLD: f32 = 0.5;
 
+/// Common greeting patterns that the bot can handle directly
+const GREETING_PATTERNS: &[&str] = &[
+    "hello",
+    "hi",
+    "hey",
+    "greetings",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "howdy",
+    "hiya",
+    "yo",
+    "sup",
+    "what's up",
+    "whats up",
+];
+
+/// Patterns indicating thanks (can respond and close or continue)
+const THANKS_PATTERNS: &[&str] = &["thank", "thanks", "thx", "ty", "appreciate", "grateful"];
+
+/// Check if message is a simple greeting
+fn is_greeting(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    let cleaned: String = lower
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect();
+    let trimmed = cleaned.trim();
+
+    // Only match if it's a short message that IS the greeting (not just contains it)
+    if trimmed.len() > 30 {
+        return false;
+    }
+
+    // Check if it's exactly a greeting or starts with one
+    GREETING_PATTERNS
+        .iter()
+        .any(|g| trimmed == *g || trimmed.starts_with(&format!("{} ", g)))
+}
+
+/// Check if message is expressing thanks
+fn is_thanks(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    THANKS_PATTERNS.iter().any(|t| lower.contains(t))
+}
+
 #[derive(Debug, Clone)]
 pub struct BotResponse {
     pub answer: String,
@@ -57,7 +103,27 @@ pub async fn generate_answer(question: &str, articles: &[ScoredArticle]) -> Resu
         });
     }
 
-    // If no articles, escalate
+    // Handle simple greetings without needing knowledge base
+    if is_greeting(question) {
+        return Ok(BotResponse {
+            answer: "Hello! I'm here to help. What can I assist you with today?".to_string(),
+            sources: vec![],
+            confidence: 1.0,
+            should_escalate: false,
+        });
+    }
+
+    // Handle thanks
+    if is_thanks(question) && articles.is_empty() {
+        return Ok(BotResponse {
+            answer: "You're welcome! Is there anything else I can help you with?".to_string(),
+            sources: vec![],
+            confidence: 1.0,
+            should_escalate: false,
+        });
+    }
+
+    // If no articles and not a conversational message, escalate
     if articles.is_empty() {
         return Ok(BotResponse {
             answer: "I couldn't find relevant information. Let me connect you with a human agent."
@@ -297,5 +363,63 @@ mod tests {
         assert!(prompt.contains("Title 2"));
         assert!(prompt.contains("Title 3"));
         assert!(!prompt.contains("Title 4"));
+    }
+
+    #[test]
+    fn test_is_greeting_simple() {
+        assert!(is_greeting("hello"));
+        assert!(is_greeting("Hello!"));
+        assert!(is_greeting("hi"));
+        assert!(is_greeting("hey"));
+        assert!(is_greeting("hello..."));
+        assert!(is_greeting("Hi there"));
+        assert!(is_greeting("good morning"));
+    }
+
+    #[test]
+    fn test_is_greeting_not_greeting() {
+        assert!(!is_greeting("How do I reset my password?"));
+        assert!(!is_greeting("I need help with billing"));
+        assert!(!is_greeting("What are your hours?"));
+    }
+
+    #[test]
+    fn test_is_thanks() {
+        assert!(is_thanks("thank you"));
+        assert!(is_thanks("Thanks!"));
+        assert!(is_thanks("thx"));
+        assert!(is_thanks("I appreciate your help"));
+    }
+
+    #[tokio::test]
+    async fn test_greeting_responds_without_escalating() {
+        let articles = vec![];
+
+        let response = generate_answer("hello", &articles).await.unwrap();
+
+        assert!(!response.should_escalate);
+        assert_eq!(response.confidence, 1.0);
+        assert!(response.answer.contains("Hello"));
+    }
+
+    #[tokio::test]
+    async fn test_greeting_with_punctuation() {
+        let articles = vec![];
+
+        let response = generate_answer("hello...", &articles).await.unwrap();
+
+        assert!(!response.should_escalate);
+        assert_eq!(response.confidence, 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_thanks_responds_without_escalating() {
+        let articles = vec![];
+
+        let response = generate_answer("thank you!", &articles).await.unwrap();
+
+        assert!(!response.should_escalate);
+        assert_eq!(response.confidence, 1.0);
+        assert!(response.answer.contains("welcome"));
     }
 }
