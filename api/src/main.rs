@@ -285,29 +285,29 @@ async fn doctor_command() -> Result<(), std::io::Error> {
         }
     }
 
-    // Check Agent Bot configuration - uses Account API for bot CRUD
-    if let (Ok(public_url), Ok(client)) = (
+    // Check Agent Bot configuration - uses Platform API for bot CRUD, Account API for inbox assignment
+    if let (Ok(public_url), Ok(platform)) = (
         env::var("API_PUBLIC_URL"),
-        chatwoot::ChatwootClient::from_env(),
+        chatwoot::ChatwootPlatformClient::from_env(),
     ) {
         print!("  Checking Agent Bot... ");
         let webhook_url = format!(
             "{}/api/v1/webhooks/chatwoot",
             public_url.trim_end_matches('/')
         );
-        match client
+        match platform
             .configure_agent_bot("Decent Cloud Support Bot", &webhook_url)
             .await
         {
             Ok(bot_id) => {
                 println!("[OK] configured (id={})", bot_id);
 
-                // Try to auto-assign to inbox - requires Platform API
+                // Try to auto-assign to inbox - uses Account API's set_agent_bot endpoint
                 if let Ok(inbox_id_str) = env::var("CHATWOOT_INBOX_ID") {
                     if let Ok(inbox_id) = inbox_id_str.parse::<u32>() {
-                        if let Ok(platform) = chatwoot::ChatwootPlatformClient::from_env() {
+                        if let Ok(client) = chatwoot::ChatwootClient::from_env() {
                             print!("  Assigning bot to inbox {}... ", inbox_id);
-                            match platform.assign_agent_bot_to_inbox(inbox_id, bot_id).await {
+                            match client.assign_agent_bot_to_inbox(inbox_id, bot_id).await {
                                 Ok(()) => println!("[OK]"),
                                 Err(e) => {
                                     println!("[ERROR] {}", e);
@@ -377,17 +377,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     let ctx = setup_app_context().await?;
 
-    // Configure Chatwoot Agent Bot - uses Account API for bot CRUD
+    // Configure Chatwoot Agent Bot
+    // Step 1: Use Platform API for bot CRUD (requires CHATWOOT_PLATFORM_API_TOKEN)
+    // Step 2: Use Account API to assign bot to inbox (requires CHATWOOT_API_TOKEN)
     match (
         env::var("API_PUBLIC_URL"),
-        chatwoot::ChatwootClient::from_env(),
+        chatwoot::ChatwootPlatformClient::from_env(),
     ) {
-        (Ok(public_url), Ok(client)) => {
+        (Ok(public_url), Ok(platform)) => {
             let webhook_url = format!(
                 "{}/api/v1/webhooks/chatwoot",
                 public_url.trim_end_matches('/')
             );
-            match client
+            match platform
                 .configure_agent_bot("Decent Cloud Support Bot", &webhook_url)
                 .await
             {
@@ -398,12 +400,12 @@ async fn serve_command() -> Result<(), std::io::Error> {
                         webhook_url
                     );
 
-                    // Assign bot to inbox - requires Platform API
+                    // Assign bot to inbox via Account API's set_agent_bot endpoint
                     if let Ok(inbox_id_str) = env::var("CHATWOOT_INBOX_ID") {
                         if let Ok(inbox_id) = inbox_id_str.parse::<u32>() {
-                            if let Ok(platform) = chatwoot::ChatwootPlatformClient::from_env() {
+                            if let Ok(client) = chatwoot::ChatwootClient::from_env() {
                                 if let Err(e) =
-                                    platform.assign_agent_bot_to_inbox(inbox_id, bot_id).await
+                                    client.assign_agent_bot_to_inbox(inbox_id, bot_id).await
                                 {
                                     tracing::error!(
                                         "Failed to assign agent bot to inbox {}: {}",
@@ -412,7 +414,9 @@ async fn serve_command() -> Result<(), std::io::Error> {
                                     );
                                 }
                             } else {
-                                tracing::warn!("CHATWOOT_PLATFORM_API_TOKEN not set - cannot assign bot to inbox");
+                                tracing::warn!(
+                                    "CHATWOOT_API_TOKEN not set - cannot assign bot to inbox"
+                                );
                             }
                         } else {
                             tracing::warn!("CHATWOOT_INBOX_ID is not a valid number");
@@ -429,12 +433,12 @@ async fn serve_command() -> Result<(), std::io::Error> {
         }
         (Ok(_), Err(e)) => {
             tracing::warn!(
-                "Chatwoot Account API not configured - agent bot auto-setup disabled: {}",
+                "Chatwoot Platform API not configured - agent bot auto-setup disabled: {}",
                 e
             );
         }
         (Err(_), Err(_)) => {
-            tracing::info!("Chatwoot integration not configured (API_PUBLIC_URL and CHATWOOT_API_TOKEN not set)");
+            tracing::info!("Chatwoot integration not configured (API_PUBLIC_URL and CHATWOOT_PLATFORM_API_TOKEN not set)");
         }
     }
 

@@ -168,46 +168,116 @@ impl ChatwootPlatformClient {
         Ok(())
     }
 
-    /// Assign an agent bot to an inbox via Platform API.
-    pub async fn assign_agent_bot_to_inbox(&self, inbox_id: u32, agent_bot_id: i64) -> Result<()> {
-        let url = format!(
-            "{}/platform/api/v1/accounts/{}/inboxes/{}",
-            self.base_url, self.account_id, inbox_id
-        );
+    /// Configure an Agent Bot with the given webhook URL for this account.
+    /// Uses Platform API: /platform/api/v1/agent_bots
+    /// Creates the bot if it doesn't exist, or updates the outgoing_url if it does.
+    pub async fn configure_agent_bot(&self, name: &str, webhook_url: &str) -> Result<i64> {
+        let list_url = format!("{}/platform/api/v1/agent_bots", self.base_url);
 
-        #[derive(Serialize)]
-        struct UpdateInboxRequest {
-            agent_bot: i64,
+        #[derive(Deserialize)]
+        struct AgentBot {
+            id: i64,
+            name: String,
+            account_id: Option<u32>,
         }
 
         let resp = self
             .client
-            .patch(&url)
+            .get(&list_url)
             .header("api_access_token", &self.platform_token)
-            .json(&UpdateInboxRequest {
-                agent_bot: agent_bot_id,
-            })
             .send()
             .await
-            .context("Failed to update inbox with agent_bot")?;
+            .context("Failed to list agent bots")?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "Platform API error assigning agent bot to inbox {}: {}",
-                status,
-                body
-            );
+            anyhow::bail!("Platform API error listing agent bots {}: {}", status, body);
         }
 
-        tracing::info!(
-            "Assigned agent bot {} to inbox {} (account {})",
-            agent_bot_id,
-            inbox_id,
-            self.account_id
-        );
-        Ok(())
+        let bots: Vec<AgentBot> = resp.json().await.context("Failed to parse agent bots")?;
+
+        // Check if bot already exists for this account
+        if let Some(existing) = bots
+            .iter()
+            .find(|b| b.name == name && b.account_id == Some(self.account_id))
+        {
+            // Update existing bot
+            let update_url = format!(
+                "{}/platform/api/v1/agent_bots/{}",
+                self.base_url, existing.id
+            );
+
+            #[derive(Serialize)]
+            struct UpdateAgentBotRequest<'a> {
+                outgoing_url: &'a str,
+            }
+
+            let resp = self
+                .client
+                .patch(&update_url)
+                .header("api_access_token", &self.platform_token)
+                .json(&UpdateAgentBotRequest {
+                    outgoing_url: webhook_url,
+                })
+                .send()
+                .await
+                .context("Failed to update agent bot")?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                anyhow::bail!("Platform API error updating agent bot {}: {}", status, body);
+            }
+
+            tracing::info!(
+                "Updated Chatwoot agent bot '{}' (id={}) with URL {}",
+                name,
+                existing.id,
+                webhook_url
+            );
+            Ok(existing.id)
+        } else {
+            // Create new bot with account_id
+            #[derive(Serialize)]
+            struct CreateAgentBotRequest<'a> {
+                name: &'a str,
+                outgoing_url: &'a str,
+                account_id: u32,
+            }
+
+            let resp = self
+                .client
+                .post(&list_url)
+                .header("api_access_token", &self.platform_token)
+                .json(&CreateAgentBotRequest {
+                    name,
+                    outgoing_url: webhook_url,
+                    account_id: self.account_id,
+                })
+                .send()
+                .await
+                .context("Failed to create agent bot")?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                anyhow::bail!("Platform API error creating agent bot {}: {}", status, body);
+            }
+
+            let created: AgentBot = resp
+                .json()
+                .await
+                .context("Failed to parse created agent bot")?;
+            tracing::info!(
+                "Created Chatwoot agent bot '{}' (id={}, account={}) with URL {}",
+                name,
+                created.id,
+                self.account_id,
+                webhook_url
+            );
+            Ok(created.id)
+        }
     }
 }
 
@@ -315,111 +385,40 @@ impl ChatwootClient {
         }
     }
 
-    /// Configure an Agent Bot with the given webhook URL for this account.
-    /// Uses Account API: /api/v1/accounts/:account_id/agent_bots
-    /// Creates the bot if it doesn't exist, or updates the outgoing_url if it does.
-    pub async fn configure_agent_bot(&self, name: &str, webhook_url: &str) -> Result<i64> {
-        let list_url = format!(
-            "{}/api/v1/accounts/{}/agent_bots",
-            self.base_url, self.account_id
+    /// Assign an agent bot to an inbox via Account API.
+    /// Uses POST /api/v1/accounts/:account_id/inboxes/:inbox_id/set_agent_bot
+    pub async fn assign_agent_bot_to_inbox(&self, inbox_id: u32, agent_bot_id: i64) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/inboxes/{}/set_agent_bot",
+            self.base_url, self.account_id, inbox_id
         );
-
-        #[derive(Deserialize)]
-        struct AgentBot {
-            id: i64,
-            name: String,
-        }
 
         let resp = self
             .client
-            .get(&list_url)
+            .post(&url)
             .header("api_access_token", &self.api_token)
+            .json(&serde_json::json!({ "agent_bot": agent_bot_id }))
             .send()
             .await
-            .context("Failed to list agent bots")?;
+            .context("Failed to assign agent bot to inbox")?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Chatwoot API error listing agent bots {}: {}", status, body);
+            anyhow::bail!(
+                "Chatwoot API error assigning agent bot to inbox {}: {}",
+                status,
+                body
+            );
         }
 
-        let bots: Vec<AgentBot> = resp.json().await.context("Failed to parse agent bots")?;
-
-        if let Some(existing) = bots.iter().find(|b| b.name == name) {
-            // Update existing bot
-            let update_url = format!(
-                "{}/api/v1/accounts/{}/agent_bots/{}",
-                self.base_url, self.account_id, existing.id
-            );
-
-            #[derive(Serialize)]
-            struct UpdateAgentBotRequest<'a> {
-                outgoing_url: &'a str,
-            }
-
-            let resp = self
-                .client
-                .patch(&update_url)
-                .header("api_access_token", &self.api_token)
-                .json(&UpdateAgentBotRequest {
-                    outgoing_url: webhook_url,
-                })
-                .send()
-                .await
-                .context("Failed to update agent bot")?;
-
-            if !resp.status().is_success() {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                anyhow::bail!("Chatwoot API error updating agent bot {}: {}", status, body);
-            }
-
-            tracing::info!(
-                "Updated Chatwoot agent bot '{}' (id={}) with URL {}",
-                name,
-                existing.id,
-                webhook_url
-            );
-            Ok(existing.id)
-        } else {
-            // Create new bot (account_id is implicit via Account API)
-            #[derive(Serialize)]
-            struct CreateAgentBotRequest<'a> {
-                name: &'a str,
-                outgoing_url: &'a str,
-            }
-
-            let resp = self
-                .client
-                .post(&list_url)
-                .header("api_access_token", &self.api_token)
-                .json(&CreateAgentBotRequest {
-                    name,
-                    outgoing_url: webhook_url,
-                })
-                .send()
-                .await
-                .context("Failed to create agent bot")?;
-
-            if !resp.status().is_success() {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                anyhow::bail!("Chatwoot API error creating agent bot {}: {}", status, body);
-            }
-
-            let created: AgentBot = resp
-                .json()
-                .await
-                .context("Failed to parse created agent bot")?;
-            tracing::info!(
-                "Created Chatwoot agent bot '{}' (id={}) with URL {}",
-                name,
-                created.id,
-                webhook_url
-            );
-            Ok(created.id)
-        }
+        tracing::info!(
+            "Assigned agent bot {} to inbox {} (account {})",
+            agent_bot_id,
+            inbox_id,
+            self.account_id
+        );
+        Ok(())
     }
 
     /// Create or update a contact (customer).
