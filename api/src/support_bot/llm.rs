@@ -6,6 +6,7 @@ use super::search::ScoredArticle;
 
 const MAX_ARTICLES_IN_PROMPT: usize = 3;
 const LOW_CONFIDENCE_THRESHOLD: f32 = 0.5;
+const SUMMARIZE_MAX_TOKENS: u32 = 256;
 
 /// Common greeting patterns that the bot can handle directly
 const GREETING_PATTERNS: &[&str] = &[
@@ -138,7 +139,7 @@ pub async fn generate_answer(question: &str, articles: &[ScoredArticle]) -> Resu
     let prompt = build_prompt(question, articles);
 
     // Call LLM API
-    let answer = match call_llm_api(&prompt).await {
+    let answer = match call_llm_api(&prompt, 1024).await {
         Ok(text) => text,
         Err(e) => {
             tracing::error!("LLM API error: {}", e);
@@ -175,6 +176,64 @@ pub async fn generate_answer(question: &str, articles: &[ScoredArticle]) -> Resu
     })
 }
 
+/// Generate a concise summary of the conversation for human agent escalation.
+/// Returns a brief summary of the customer's request and key context.
+pub async fn summarize_for_escalation(
+    conversation_history: &[(String, String)], // (role, content) pairs
+    escalation_reason: &str,
+) -> Result<String> {
+    if conversation_history.is_empty() {
+        return Ok(format!("Escalation reason: {}", escalation_reason));
+    }
+
+    let mut prompt = String::from(
+        "Summarize this customer support conversation for a human agent in 2-3 sentences. \
+        Focus on: what the customer needs, any relevant context, and why they're being escalated.\n\n",
+    );
+
+    prompt.push_str("Conversation:\n");
+    for (role, content) in conversation_history {
+        let label = if role == "customer" {
+            "Customer"
+        } else {
+            "Bot"
+        };
+        prompt.push_str(&format!("{}: {}\n", label, content));
+    }
+
+    prompt.push_str(&format!(
+        "\nEscalation reason: {}\n\nSummary:",
+        escalation_reason
+    ));
+
+    match call_llm_api(&prompt, SUMMARIZE_MAX_TOKENS).await {
+        Ok(summary) => Ok(summary.trim().to_string()),
+        Err(e) => {
+            tracing::warn!("Failed to generate escalation summary: {}", e);
+            // Fallback: use last customer message
+            let last_customer_msg = conversation_history
+                .iter()
+                .rev()
+                .find(|(role, _)| role == "customer")
+                .map(|(_, content)| content.as_str())
+                .unwrap_or("No message available");
+            Ok(format!(
+                "Customer request: {}. Escalation reason: {}",
+                truncate(last_customer_msg, 150),
+                escalation_reason
+            ))
+        }
+    }
+}
+
+fn truncate(s: &str, max_len: usize) -> &str {
+    if s.len() <= max_len {
+        s
+    } else {
+        &s[..max_len]
+    }
+}
+
 fn build_prompt(question: &str, articles: &[ScoredArticle]) -> String {
     let mut prompt = String::from("You are a helpful customer support assistant. Answer the user's question based on the following knowledge base articles. Be concise and helpful.\n\n");
 
@@ -195,7 +254,7 @@ fn build_prompt(question: &str, articles: &[ScoredArticle]) -> String {
     prompt
 }
 
-async fn call_llm_api(prompt: &str) -> Result<String> {
+async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
     let api_key = std::env::var("LLM_API_KEY").context("LLM_API_KEY not set")?;
 
     let api_url = std::env::var("LLM_API_URL")
@@ -208,7 +267,7 @@ async fn call_llm_api(prompt: &str) -> Result<String> {
 
     let request = ClaudeRequest {
         model: api_model,
-        max_tokens: 1024,
+        max_tokens,
         messages: vec![ClaudeMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
@@ -421,5 +480,41 @@ mod tests {
         assert!(!response.should_escalate);
         assert_eq!(response.confidence, 1.0);
         assert!(response.answer.contains("welcome"));
+    }
+
+    #[tokio::test]
+    async fn test_summarize_empty_history() {
+        let history: Vec<(String, String)> = vec![];
+        let result = summarize_for_escalation(&history, "test reason")
+            .await
+            .unwrap();
+        assert_eq!(result, "Escalation reason: test reason");
+    }
+
+    #[tokio::test]
+    async fn test_summarize_fallback_on_api_error() {
+        // No LLM_API_KEY set, so API call will fail and fallback will be used
+        std::env::remove_var("LLM_API_KEY");
+
+        let history = vec![
+            ("customer".to_string(), "Hello, I need help".to_string()),
+            ("bot".to_string(), "Hi! How can I help?".to_string()),
+            ("customer".to_string(), "My account is locked".to_string()),
+        ];
+
+        let result = summarize_for_escalation(&history, "Low confidence")
+            .await
+            .unwrap();
+
+        // Should use fallback format with last customer message
+        assert!(result.contains("My account is locked"));
+        assert!(result.contains("Low confidence"));
+    }
+
+    #[test]
+    fn test_truncate() {
+        assert_eq!(truncate("hello", 10), "hello");
+        assert_eq!(truncate("hello world", 5), "hello");
+        assert_eq!(truncate("", 5), "");
     }
 }

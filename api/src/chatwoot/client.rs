@@ -637,4 +637,63 @@ impl ChatwootClient {
 
         Ok(())
     }
+
+    /// Fetch recent messages from a conversation for context.
+    /// Returns (role, content) pairs where role is "customer" or "bot".
+    pub async fn fetch_conversation_messages(
+        &self,
+        conversation_id: u64,
+    ) -> Result<Vec<(String, String)>> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/conversations/{}/messages",
+            self.base_url, self.account_id, conversation_id
+        );
+
+        #[derive(Deserialize)]
+        struct MessagesResponse {
+            payload: Vec<Message>,
+        }
+
+        #[derive(Deserialize)]
+        struct Message {
+            content: Option<String>,
+            message_type: i32, // 0 = incoming (customer), 1 = outgoing (bot/agent)
+        }
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to fetch conversation messages")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error {}: {}", status, body);
+        }
+
+        let response: MessagesResponse = resp
+            .json()
+            .await
+            .context("Failed to parse messages response")?;
+
+        Ok(response
+            .payload
+            .into_iter()
+            .filter_map(|m| {
+                let content = m.content?;
+                if content.trim().is_empty() {
+                    return None;
+                }
+                let role = if m.message_type == 0 {
+                    "customer"
+                } else {
+                    "bot"
+                };
+                Some((role.to_string(), content))
+            })
+            .collect())
+    }
 }

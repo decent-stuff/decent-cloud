@@ -1,6 +1,6 @@
 //! AI Bot webhook handler for answering customer questions
 
-use super::llm::{generate_answer, ArticleRef};
+use super::llm::{generate_answer, summarize_for_escalation, ArticleRef};
 use super::notifications::{dispatch_notification, SupportNotification};
 use super::search::search_articles_semantic;
 use crate::chatwoot::ChatwootClient;
@@ -161,13 +161,33 @@ pub async fn handle_customer_message(
         };
 
         if let Some(pubkey) = notify_pubkey {
+            // Fetch conversation history for summary
+            let conversation_history = chatwoot
+                .fetch_conversation_messages(conversation_id)
+                .await
+                .unwrap_or_default();
+
+            // Generate escalation summary
+            let escalation_reason = if bot_response.confidence == 0.0 {
+                "Customer requested human agent or no relevant information found"
+            } else {
+                "Low confidence in bot response"
+            };
+
+            let summary = summarize_for_escalation(&conversation_history, escalation_reason)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Failed to generate summary: {}", e);
+                    format!(
+                        "Customer needs assistance: {}",
+                        truncate_message(message_content, 100)
+                    )
+                });
+
             let notification = SupportNotification::new(
                 pubkey,
                 conversation_id as i64,
-                format!(
-                    "Customer needs assistance: {}",
-                    truncate_message(message_content, 100)
-                ),
+                summary,
                 &chatwoot_base_url,
             );
             if let Err(e) = dispatch_notification(db, email_service, &notification).await {
