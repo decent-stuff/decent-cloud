@@ -11,7 +11,7 @@
 - Enforce daily limits in notification sending logic:
   - Email: Unlimited
   - Telegram: 50/day free
-  - SMS: 5/day free
+  - SMS: 5/day free => consider using https://textbee.dev/
 - Check usage before sending, return error when limit exceeded
 - Frontend already shows usage vs limits
 
