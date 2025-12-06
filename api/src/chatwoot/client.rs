@@ -535,7 +535,8 @@ impl ChatwootClient {
         &self,
         portal_slug: &str,
     ) -> Result<Vec<HelpCenterArticle>> {
-        let url = format!("{}/hc/{}/en/articles", self.base_url, portal_slug);
+        // Use .json extension to get JSON response from public Help Center API
+        let url = format!("{}/hc/{}/en/articles.json", self.base_url, portal_slug);
 
         let resp = self
             .client
