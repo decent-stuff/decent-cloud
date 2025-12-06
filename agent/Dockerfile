@@ -25,14 +25,21 @@ RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install
 
 # Install deps
 RUN apt update && \
-    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3
+    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3 \
+    # Docker CLI for running docker commands inside the container
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources-docker.list \
+    && cat /etc/apt/sources-docker.list >> /etc/apt/sources.list.d/docker.list \
+    && apt update && apt install -y docker-ce-cli docker-compose-plugin
 
 # Install Node.js directly from NodeSource repository (simpler than NVM for Docker)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs
 
-# Install UV
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install pip
+RUN apt install -y python3-pip python3-venv
 
 RUN chown -R ubuntu:ubuntu $HOME /usr/local/cargo /usr/local/rustup
 
@@ -53,6 +60,9 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
 
 # Install cargo tools using binstall for faster installation
 RUN cargo binstall cargo-make cargo-nextest sqlx-cli ripgrep
+
+# Install UV for the ubuntu user
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Configure npm to use user-specific global directory and install Claude Code and Happy Coder
 RUN mkdir -p ~/.npm-global \

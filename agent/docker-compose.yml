@@ -5,6 +5,9 @@ services:
       dockerfile: agent/Dockerfile
     image: decent-cloud-claude:latest
     container_name: decent-cloud-claude-dev
+    # Run with docker group to access the socket
+    group_add:
+      - ${DOCKER_GID:-999}
     environment:
       # Development environment variables
       - RUST_LOG=info
@@ -21,6 +24,8 @@ services:
       - rustup-cache:/usr/local/rustup
       - cargo-cache:/home/ubuntu/.cargo
       - home-cache:/home/ubuntu/.cache
+      # Docker socket for running docker commands inside the container
+      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /code
     stdin_open: true
     tty: true

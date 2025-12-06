@@ -58,8 +58,9 @@ docker-compose up decent-cloud-claude
 ### Development Tools
 - **Rust** - Latest stable with wasm32 target
 - **Node.js 22** - With npm
-- **Python 3** - With UV package manager
+- **Python 3** - With pip, venv, and UV package manager
 - **Claude Code** - Installed globally via npm
+- **Docker CLI & Compose** - For running containers from within the container
 
 ### Project-Specific Tools
 - **Internet Computer SDK** - dfx for ICP development
@@ -88,9 +89,10 @@ docker-compose up decent-cloud-claude
 The setup uses several volumes for caching and persistence:
 
 - **`cargo-cache`** - Cargo registry cache
-- **`npm-cache`** - Node.js modules cache
-- **`uv-cache`** - Python package cache
-- **Project mount** - Your entire project directory at `/workspace`
+- **`rustup-cache`** - Rustup toolchain cache
+- **`home-cache`** - Home directory cache (npm, uv, etc.)
+- **Project mount** - Your entire project directory at `/code`
+- **Docker socket** - Mounted at `/var/run/docker.sock` for Docker-in-Docker access
 
 ## Troubleshooting
 

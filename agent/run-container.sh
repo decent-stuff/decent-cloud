@@ -161,6 +161,11 @@ check_requirements() {
     log_success "Requirements check passed"
 }
 
+# Get Docker group ID for socket access
+get_docker_gid() {
+    stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "999"
+}
+
 # Build or rebuild the image
 build_image() {
     if [[ "$REBUILD" == "true" ]]; then
@@ -208,7 +213,8 @@ run_tool() {
         log_warning "Press Ctrl+D to exit $TOOL"
 
         # Use docker-compose run for interactive session instead of up
-        docker-compose -f "$COMPOSE_FILE" "${docker_args[@]}" run --rm "$SERVICE_NAME" $tool_command
+        # Export DOCKER_GID for socket access inside container
+        DOCKER_GID="$(get_docker_gid)" docker-compose -f "$COMPOSE_FILE" "${docker_args[@]}" run --rm "$SERVICE_NAME" $tool_command
     fi
 }
 
