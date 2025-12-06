@@ -175,6 +175,14 @@ build_image() {
     fi
 }
 
+# Run cargo-sweep on the container's target directory to clean old artifacts
+run_cargo_sweep() {
+    log_info "Running cargo-sweep on container target directory..."
+    # Use docker-compose run to execute cargo-sweep, removing artifacts older than 7 days
+    DOCKER_GID="$(get_docker_gid)" docker-compose -f "$COMPOSE_FILE" run --rm "$SERVICE_NAME" \
+        cargo sweep --time 7 2>/dev/null || log_warning "cargo-sweep skipped (target dir may be empty)"
+}
+
 # Run the specified tool or custom command
 run_tool() {
     local docker_args=()
@@ -233,6 +241,7 @@ trap cleanup EXIT INT TERM
 main() {
     check_requirements
     build_image
+    run_cargo_sweep
     run_tool
 }
 

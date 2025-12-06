@@ -16,6 +16,8 @@ services:
     volumes:
       # Mount the entire repository directory to /code
       - ..:/code
+      # Use container-specific target/ dir to avoid conflicts with host builds
+      - target-cache:/code/target
       # Mount some other configuration from home directory
       - ${HOME}/.claude.json:/home/ubuntu/.claude.json
       - ${HOME}/.claude:/home/ubuntu/.claude
@@ -42,6 +44,8 @@ volumes:
   cargo-cache:
     driver: local
   home-cache:
+    driver: local
+  target-cache:
     driver: local
 
 networks:
