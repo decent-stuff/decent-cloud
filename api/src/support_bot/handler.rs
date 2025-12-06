@@ -4,7 +4,7 @@ use super::llm::{generate_answer, ArticleRef};
 use super::search::search_articles_semantic;
 use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// Get portal slug from contract's provider notification config
 async fn get_portal_slug_from_contract(db: &Database, contract_id: &str) -> Result<Option<String>> {
@@ -110,10 +110,26 @@ pub async fn handle_customer_message(
     );
 
     // 3. Fetch articles from Help Center
-    let articles = chatwoot
-        .fetch_help_center_articles(&portal_slug)
-        .await
-        .context("Failed to fetch help center articles")?;
+    let articles = match chatwoot.fetch_help_center_articles(&portal_slug).await {
+        Ok(articles) => articles,
+        Err(e) => {
+            tracing::error!(
+                "Failed to fetch help center articles for conversation {}: {}",
+                conversation_id,
+                e
+            );
+            chatwoot
+                .send_message(
+                    conversation_id,
+                    "I'm experiencing technical difficulties. Let me connect you with a human agent.",
+                )
+                .await?;
+            chatwoot
+                .update_conversation_status(conversation_id, "open")
+                .await?;
+            return Ok(());
+        }
+    };
 
     if articles.is_empty() {
         tracing::warn!(
@@ -121,6 +137,12 @@ pub async fn handle_customer_message(
             portal_slug,
             conversation_id
         );
+        chatwoot
+            .send_message(
+                conversation_id,
+                "I don't have enough information to help with that. Let me connect you with a human agent.",
+            )
+            .await?;
         chatwoot
             .update_conversation_status(conversation_id, "open")
             .await?;

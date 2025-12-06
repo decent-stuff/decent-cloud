@@ -297,6 +297,8 @@ impl ChatwootPlatformClient {
 pub struct ChatwootClient {
     client: Client,
     base_url: String,
+    /// Public URL for Help Center API (requires registered domain)
+    frontend_url: String,
     api_token: String,
     account_id: u32,
 }
@@ -359,6 +361,8 @@ impl ChatwootClient {
     /// Creates a new Chatwoot client from environment variables.
     pub fn from_env() -> Result<Self> {
         let base_url = std::env::var("CHATWOOT_BASE_URL").context("CHATWOOT_BASE_URL not set")?;
+        // Help Center API requires public domain (internal hostnames rejected)
+        let frontend_url = std::env::var("CHATWOOT_FRONTEND_URL").unwrap_or_else(|_| base_url.clone());
         let api_token =
             std::env::var("CHATWOOT_API_TOKEN").context("CHATWOOT_API_TOKEN not set")?;
         let account_id: u32 = std::env::var("CHATWOOT_ACCOUNT_ID")
@@ -369,6 +373,7 @@ impl ChatwootClient {
         Ok(Self {
             client: Client::new(),
             base_url,
+            frontend_url,
             api_token,
             account_id,
         })
@@ -380,6 +385,7 @@ impl ChatwootClient {
         Self {
             client: Client::new(),
             base_url: base_url.to_string(),
+            frontend_url: base_url.to_string(),
             api_token: api_token.to_string(),
             account_id,
         }
@@ -535,8 +541,8 @@ impl ChatwootClient {
         &self,
         portal_slug: &str,
     ) -> Result<Vec<HelpCenterArticle>> {
-        // Use .json extension to get JSON response from public Help Center API
-        let url = format!("{}/hc/{}/en/articles.json", self.base_url, portal_slug);
+        // Use frontend_url - Help Center API rejects internal hostnames
+        let url = format!("{}/hc/{}/en/articles.json", self.frontend_url, portal_slug);
 
         let resp = self
             .client
