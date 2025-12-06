@@ -166,8 +166,7 @@ async fn send_email_notification(
         Summary: {}\n\n\
         View conversation: {}\n\n\
         Please log in to Chatwoot to respond.",
-        notification.summary,
-        notification.chatwoot_link
+        notification.summary, notification.chatwoot_link
     );
 
     let from_addr =

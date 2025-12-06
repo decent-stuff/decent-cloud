@@ -41,10 +41,7 @@ pub async fn handle_customer_message(
     conversation_id: u64,
     message_content: &str,
 ) -> Result<()> {
-    tracing::debug!(
-        "handle_customer_message: conversation={}",
-        conversation_id
-    );
+    tracing::debug!("handle_customer_message: conversation={}", conversation_id);
 
     // Get portal_slug from environment (no contract lookup)
     let portal_slug = match std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG") {

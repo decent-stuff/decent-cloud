@@ -14,50 +14,46 @@ Customer message → Chatwoot Widget → Inbox → Agent Bot webhook
                             ┌───────────────────────────────────────┐
                             │ api/src/openapi/webhooks.rs           │
                             │ chatwoot_webhook() handler            │
-                            │   1. Extract contract_id from attrs   │
-                            │   2. Lookup contract → provider       │
-                            │   3. Get provider's portal_slug       │
+                            │   1. Receive message_created event    │
+                            │   2. Extract message content          │
                             └───────────────────────────────────────┘
                                                     ↓
                             ┌───────────────────────────────────────┐
                             │ api/src/support_bot/handler.rs        │
                             │ handle_customer_message()             │
-                            │   1. Fetch Help Center articles       │
-                            │   2. Semantic search for relevance    │
-                            │   3. Generate answer via LLM          │
-                            │   4. Respond OR escalate              │
+                            │   1. Get portal_slug from env         │
+                            │   2. Fetch Help Center articles       │
+                            │   3. Semantic search for relevance    │
+                            │   4. Generate answer via LLM          │
+                            │   5. Respond OR escalate              │
                             └───────────────────────────────────────┘
                                                     ↓
                     ┌───────────────────┴───────────────────┐
                     │                                       │
               [Confident]                            [Escalate]
               Bot replies                     Sets status="open"
-                                                    ↓
-                            ┌───────────────────────────────────────┐
-                            │ Chatwoot sends conversation_status_   │
-                            │ changed webhook                       │
-                            └───────────────────────────────────────┘
+                                              Notify DEFAULT_ESCALATION_USER
                                                     ↓
                             ┌───────────────────────────────────────┐
                             │ api/src/support_bot/notifications.rs  │
                             │ dispatch_notification()               │
-                            │   1. Lookup provider notification cfg │
+                            │   1. Lookup user notification config  │
                             │   2. Send via Telegram/Email/SMS      │
                             └───────────────────────────────────────┘
                                                     ↓
-                            Provider receives alert with Chatwoot link
-                            Provider replies in Chatwoot or Telegram
+                            DEFAULT_ESCALATION_USER receives alert
+                            User replies in Chatwoot
                             Customer sees response in widget
 ```
 
 ## Key Design Decisions
 
-### Single Inbox, Multi-Provider
-- One Chatwoot inbox handles ALL customer conversations
-- Each conversation is tagged with `contract_id` (set by widget)
-- `contract_id` → lookup contract → get `provider_pubkey`
-- Provider's `chatwoot_portal_slug` determines which Help Center to use
-- Provider's notification preferences determine escalation channel
+### Simplified Support Bot
+- Bot uses a single Help Center portal configured via `CHATWOOT_DEFAULT_PORTAL_SLUG`
+- No contract or provider lookup required for bot operation
+- Escalations notify `DEFAULT_ESCALATION_USER` (configurable)
+- `contract_id` is still tracked in custom_attributes for analytics but not used by bot
+- Notification preferences are stored per user and looked up by username or pubkey
 
 ### Agent Bot Configuration
 The agent bot MUST be:
@@ -82,6 +78,8 @@ Bot escalates when:
 | `CHATWOOT_PLATFORM_API_TOKEN` | Yes | Platform token for agent bot management |
 | `CHATWOOT_ACCOUNT_ID` | Yes | Account ID (usually `1`) |
 | `CHATWOOT_INBOX_ID` | Yes | Inbox to assign bot to |
+| `CHATWOOT_DEFAULT_PORTAL_SLUG` | Yes | Help Center portal slug (e.g., `my-app-help`) |
+| `DEFAULT_ESCALATION_USER` | No | Username to notify on escalation (e.g., `admin`) |
 | `API_PUBLIC_URL` | Yes | Public URL for webhook callbacks |
 | `LLM_API_KEY` | No | Anthropic API key (bot disabled if missing) |
 | `LLM_API_URL` | No | Custom LLM endpoint |
@@ -107,10 +105,15 @@ Bot escalates when:
 
 ### Bot not responding
 1. Check `LLM_API_KEY` is set
-2. Check provider has `chatwoot_portal_slug` configured
-3. Check portal has articles
+2. Check `CHATWOOT_DEFAULT_PORTAL_SLUG` is configured
+3. Check portal exists and has articles in Chatwoot
 
 ### Escalation not notifying
-1. Check provider notification config in DB
-2. Check `TELEGRAM_BOT_TOKEN` or `MAILCHANNELS_API_KEY` set
-3. Check provider's telegram_chat_id or email is configured
+1. Check `DEFAULT_ESCALATION_USER` is set and user exists
+2. Check user has notification config in DB (telegram_chat_id or email)
+3. Check `TELEGRAM_BOT_TOKEN` or `MAILCHANNELS_API_KEY` is set
+4. Review logs for notification dispatch errors
+
+### Missing configuration warnings
+If `CHATWOOT_DEFAULT_PORTAL_SLUG` is not set, bot will escalate all conversations immediately.
+If `DEFAULT_ESCALATION_USER` is not set, no notifications will be sent on escalation.
