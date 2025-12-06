@@ -7,9 +7,8 @@ use std::sync::Arc;
 /// Notification payload for support escalation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SupportNotification {
-    pub provider_pubkey: Vec<u8>,
+    pub user_pubkey: Vec<u8>,
     pub conversation_id: i64,
-    pub contract_id: String,
     pub summary: String,
     pub chatwoot_link: String,
 }
@@ -17,9 +16,8 @@ pub struct SupportNotification {
 impl SupportNotification {
     /// Create a notification from conversation details
     pub fn new(
-        provider_pubkey: Vec<u8>,
+        user_pubkey: Vec<u8>,
         conversation_id: i64,
-        contract_id: String,
         summary: String,
         chatwoot_base_url: &str,
     ) -> Self {
@@ -29,9 +27,8 @@ impl SupportNotification {
         );
 
         Self {
-            provider_pubkey,
+            user_pubkey,
             conversation_id,
-            contract_id,
             summary,
             chatwoot_link,
         }
@@ -48,7 +45,7 @@ pub async fn dispatch_notification(
 ) -> Result<()> {
     // Get user notification config
     let config = db
-        .get_user_notification_config(&notification.provider_pubkey)
+        .get_user_notification_config(&notification.user_pubkey)
         .await
         .context("Failed to get user notification config")?;
 
@@ -57,7 +54,7 @@ pub async fn dispatch_notification(
         None => {
             tracing::warn!(
                 "No notification config found for user (pubkey: {}), skipping notification",
-                hex::encode(&notification.provider_pubkey)
+                hex::encode(&notification.user_pubkey)
             );
             return Ok(());
         }
@@ -93,7 +90,7 @@ pub async fn dispatch_notification(
     if channels_sent.is_empty() && errors.is_empty() {
         tracing::warn!(
             "No notification channels enabled for user (pubkey: {})",
-            hex::encode(&notification.provider_pubkey)
+            hex::encode(&notification.user_pubkey)
         );
     } else {
         tracing::info!(
@@ -124,8 +121,9 @@ async fn send_telegram_notification(
     }
 
     let telegram = TelegramClient::from_env()?;
+    // Note: format_notification still expects contract_id - will be updated in Step 3
     let message = format_notification(
-        &notification.contract_id,
+        "",  // contract_id removed, will update template in Step 3
         &notification.summary,
         &notification.chatwoot_link,
     );
@@ -154,7 +152,7 @@ async fn send_email_notification(
 
     // Look up account email by pubkey
     let account_id = db
-        .get_account_id_by_public_key(&notification.provider_pubkey)
+        .get_account_id_by_public_key(&notification.user_pubkey)
         .await?
         .ok_or_else(|| anyhow::anyhow!("No account found for pubkey"))?;
 
@@ -168,13 +166,16 @@ async fn send_email_notification(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No email address on account"))?;
 
+    // Note: Email template still references contract_id - will be updated in Step 3
     let email_body = format!(
         "A customer conversation requires your attention.\n\n\
         Contract ID: {}\n\
         Summary: {}\n\n\
         View conversation: {}\n\n\
         Please log in to Chatwoot to respond.",
-        notification.contract_id, notification.summary, notification.chatwoot_link
+        "",  // contract_id removed, will update template in Step 3
+        notification.summary,
+        notification.chatwoot_link
     );
 
     let from_addr =
@@ -211,7 +212,8 @@ async fn send_sms_notification(
     }
 
     let twilio = TwilioClient::from_env()?;
-    let message = format_sms_notification(&notification.contract_id, &notification.summary);
+    // Note: format_sms_notification still expects contract_id - will be updated in Step 3
+    let message = format_sms_notification("", &notification.summary);  // contract_id removed
     let sid = twilio.send_sms(phone, &message).await?;
 
     tracing::info!("SMS notification sent to {}, sid: {}", phone, sid);
@@ -229,14 +231,12 @@ mod tests {
         let notification = SupportNotification::new(
             pubkey.clone(),
             42,
-            "contract_123".to_string(),
             "Customer needs human help".to_string(),
             "https://support.example.com",
         );
 
-        assert_eq!(notification.provider_pubkey, pubkey);
+        assert_eq!(notification.user_pubkey, pubkey);
         assert_eq!(notification.conversation_id, 42);
-        assert_eq!(notification.contract_id, "contract_123");
         assert_eq!(notification.summary, "Customer needs human help");
         assert_eq!(
             notification.chatwoot_link,
@@ -249,7 +249,6 @@ mod tests {
         let notification = SupportNotification::new(
             b"user".to_vec(),
             999,
-            "contract_xyz".to_string(),
             "Test".to_string(),
             "https://chat.example.org",
         );
@@ -268,7 +267,6 @@ mod tests {
         let notification = SupportNotification::new(
             pubkey.to_vec(),
             1,
-            "test_contract".to_string(),
             "Test notification".to_string(),
             "https://example.com",
         );
@@ -301,7 +299,6 @@ mod tests {
         let notification = SupportNotification::new(
             pubkey.to_vec(),
             1,
-            "test_contract".to_string(),
             "Test notification".to_string(),
             "https://example.com",
         );
@@ -340,7 +337,6 @@ mod tests {
         let notification = SupportNotification::new(
             pubkey.to_vec(),
             42,
-            "abc123".to_string(),
             "Customer escalated conversation".to_string(),
             "https://support.test.com",
         );
@@ -379,7 +375,6 @@ mod tests {
         let notification = SupportNotification::new(
             pubkey.to_vec(),
             1,
-            "contract_multi".to_string(),
             "Multi-channel test".to_string(),
             "https://example.com",
         );
@@ -412,7 +407,6 @@ mod tests {
         let notification = SupportNotification::new(
             pubkey.to_vec(),
             1,
-            "test".to_string(),
             "Test".to_string(),
             "https://example.com",
         );
