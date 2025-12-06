@@ -2,7 +2,6 @@ use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
 use crate::notifications::telegram::{TelegramClient, TelegramUpdate};
 use crate::support_bot::handler::handle_customer_message;
-use crate::support_bot::notifications::{dispatch_notification, SupportNotification};
 use anyhow::{Context, Result};
 use poem::{handler, web::Data, Body, Error as PoemError, Response};
 use serde::Deserialize;
@@ -255,95 +254,10 @@ pub async fn chatwoot_webhook(
         payload.id
     );
 
-    if payload.event == "conversation_status_changed" {
-        if let Some(conv) = payload.conversation {
-            // Check if status changed to "open" (human handoff)
-            if let Some(status) = conv.status {
-                if status == "open" {
-                    // Extract contract_id from custom_attributes
-                    let contract_id = conv
-                        .custom_attributes
-                        .as_ref()
-                        .and_then(|attrs| attrs.get("contract_id"))
-                        .and_then(|v| v.as_str());
+    // Notifications are sent directly by the bot handler on escalation.
+    // No need to handle conversation_status_changed here.
 
-                    if let Some(contract_id) = contract_id {
-                        // Lookup contract to get provider pubkey
-                        match hex::decode(contract_id) {
-                            Ok(contract_id_bytes) => {
-                                match db.get_contract(&contract_id_bytes).await {
-                                    Ok(Some(contract)) => {
-                                        // Decode provider pubkey from hex
-                                        match hex::decode(&contract.provider_pubkey) {
-                                            Ok(provider_pubkey_bytes) => {
-                                                // Get Chatwoot base URL for notification link
-                                                let chatwoot_url = std::env::var(
-                                                    "CHATWOOT_FRONTEND_URL",
-                                                )
-                                                .expect("CHATWOOT_FRONTEND_URL must be set");
-
-                                                let notification = SupportNotification::new(
-                                                    provider_pubkey_bytes,
-                                                    conv.id,
-                                                    contract_id.to_string(),
-                                                    "Customer conversation escalated to human support"
-                                                        .to_string(),
-                                                    &chatwoot_url,
-                                                );
-
-                                                if let Err(e) = dispatch_notification(
-                                                    &db,
-                                                    email_service.as_ref(),
-                                                    &notification,
-                                                )
-                                                .await
-                                                {
-                                                    tracing::error!(
-                                                        "Failed to dispatch notification for conversation {}: {}",
-                                                        conv.id,
-                                                        e
-                                                    );
-                                                    // Don't fail webhook - notification failure shouldn't block event processing
-                                                }
-                                            }
-                                            Err(e) => {
-                                                tracing::warn!(
-                                                    "Invalid provider_pubkey hex for conversation {}: {}",
-                                                    conv.id,
-                                                    e
-                                                );
-                                            }
-                                        }
-                                    }
-                                    Ok(None) => {
-                                        tracing::warn!(
-                                            "Contract not found for conversation {} (contract_id: {})",
-                                            conv.id,
-                                            contract_id
-                                        );
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            "Failed to lookup contract for conversation {}: {}",
-                                            conv.id,
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Invalid contract_id hex for conversation {}: {}",
-                                    conv.id,
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else if payload.event == "message_created" {
+    if payload.event == "message_created" {
         // For message_created, message fields are at top level with conversation nested
         let Some(conv) = payload.conversation else {
             tracing::warn!("message_created webhook missing conversation data");
@@ -358,13 +272,6 @@ pub async fn chatwoot_webhook(
                 .status(poem::http::StatusCode::OK)
                 .body(""));
         };
-
-        // Extract contract_id from custom_attributes (optional - general inquiries have no contract)
-        let contract_id = conv
-            .custom_attributes
-            .as_ref()
-            .and_then(|attrs| attrs.get("contract_id"))
-            .and_then(|v| v.as_str());
 
         // message_type can be int (0=incoming, 1=outgoing) or string
         let sender_type = match &payload.message_type {
@@ -383,11 +290,17 @@ pub async fn chatwoot_webhook(
         };
 
         tracing::info!(
-            "Processing Chatwoot message {} from {} (contract: {:?})",
+            "Processing Chatwoot message {} from {}",
             message_id,
-            sender_type,
-            contract_id
+            sender_type
         );
+
+        // Extract contract_id for response time tracking only (optional)
+        let contract_id = conv
+            .custom_attributes
+            .as_ref()
+            .and_then(|attrs| attrs.get("contract_id"))
+            .and_then(|v| v.as_str());
 
         // Track message for response time (only if contract_id is present)
         if let Some(cid) = contract_id {
@@ -454,7 +367,6 @@ pub async fn chatwoot_webhook(
                 &chatwoot,
                 email_service.as_ref(),
                 conv.id as u64,
-                contract_id,
                 content,
             )
             .await

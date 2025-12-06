@@ -55,7 +55,7 @@ Update `api/src/support_bot/handler.rs`:
 
 ### Step 5: Webhooks - Update chatwoot_webhook handler
 **Success:** webhooks.rs compiles, contract_id removed from message_created
-**Status:** Pending
+**Status:** Completed
 
 Update `api/src/openapi/webhooks.rs`:
 - Remove `contract_id` extraction from `message_created` handler
@@ -120,9 +120,14 @@ Update `api/src/support_bot/AGENTS.md` to reflect:
 - **Outcome:** Step 4 complete. The handler.rs file is fully simplified and no longer has any contract-related logic. All escalations now notify `DEFAULT_ESCALATION_USER` via the simplified notification flow. The function signature is cleaner with one less parameter. Next step will update webhooks.rs to remove contract_id extraction and update the call to handle_customer_message().
 
 ### Step 5
-- **Implementation:**
-- **Review:**
-- **Outcome:**
+- **Implementation:** Updated `api/src/openapi/webhooks.rs`:
+  - Reordered code in `message_created` handler: moved `contract_id` extraction AFTER `sender_type` determination and logging
+  - Updated comment above `contract_id` extraction to clarify it's only for "response time tracking" (analytics), not bot handling
+  - Removed `contract_id` from log message on line 292 (now logs only "Processing Chatwoot message {} from {}" without contract info)
+  - Removed `contract_id` parameter from `handle_customer_message()` call on line 365-371, changing from 6 parameters to 5 parameters: `handle_customer_message(&db, &chatwoot, email_service.as_ref(), conv.id as u64, content)`
+  - Kept response time tracking with `insert_chatwoot_message_event()` - still uses contract_id if present in custom_attributes, but this is optional analytics data
+- **Review:** Verified compilation with `SQLX_OFFLINE=true cargo check -p api`. File compiles successfully with only pre-existing warnings about unused imports and dead code in other modules (unrelated to this change). The bot handler flow is now completely independent of contract_id - it only uses conversation_id and message content. Response time tracking remains functional for conversations that have contract_id in custom_attributes.
+- **Outcome:** Step 5 complete. The chatwoot_webhook handler no longer passes contract_id to the bot handler. The message_created flow is simplified and decoupled from contract logic. The bot can now handle all customer messages (general inquiries and contract-specific) uniformly without requiring contract context.
 
 ### Step 6
 - **Implementation:**

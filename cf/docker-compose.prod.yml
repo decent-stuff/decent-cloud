@@ -238,7 +238,8 @@ services:
       - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID:-1}
       - CHATWOOT_HMAC_SECRET=${CHATWOOT_HMAC_SECRET}
       - CHATWOOT_INBOX_ID=${CHATWOOT_INBOX_ID:-1}
-      # Telegram notifications
+      # Notifications
+      - DEFAULT_ESCALATION_USER=${DEFAULT_ESCALATION_USER:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-DecentCloudBot}
       # AI Bot configuration
