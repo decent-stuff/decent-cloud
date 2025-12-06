@@ -149,6 +149,38 @@ services:
   # ============================================
   # Application Services
   # ============================================
+
+  # Configuration doctor - runs on deploy to check setup
+  api-doctor:
+    image: decent-cloud-api:prod
+    container_name: decent-cloud-prod-api-doctor
+    depends_on:
+      chatwoot-setup:
+        condition: service_completed_successfully
+    command: ["api-server", "doctor"]
+    environment:
+      - DATABASE_URL=sqlite:/data/ledger.db?mode=rwc
+      # Chatwoot integration
+      - CHATWOOT_BASE_URL=http://chatwoot-web:59102
+      - CHATWOOT_API_TOKEN=${CHATWOOT_API_TOKEN}
+      - CHATWOOT_PLATFORM_API_TOKEN=${CHATWOOT_PLATFORM_API_TOKEN}
+      - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID:-1}
+      - CHATWOOT_HMAC_SECRET=${CHATWOOT_HMAC_SECRET}
+      # Notifications
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - MAILCHANNELS_API_KEY=${MAILCHANNELS_API_KEY:-}
+      - DKIM_DOMAIN=${DKIM_DOMAIN:-}
+      - DKIM_SELECTOR=${DKIM_SELECTOR:-}
+      - DKIM_PRIVATE_KEY=${DKIM_PRIVATE_KEY:-}
+      # AI Bot
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      # Agent Bot webhook URL
+      - API_PUBLIC_URL=${API_PUBLIC_URL:-https://api.decent-cloud.org}
+    volumes:
+      - ../data/api-data-prod:/data
+    networks:
+      - decent-cloud-prod
+
   website:
     build:
       context: ..
@@ -205,6 +237,8 @@ services:
       - CHATWOOT_INBOX_ID=${CHATWOOT_INBOX_ID:-1}
       # Telegram notifications
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-DecentCloudBot}
+      # AI Bot configuration
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_API_URL=${LLM_API_URL:-}
       - LLM_API_MODEL=${LLM_API_MODEL:-}

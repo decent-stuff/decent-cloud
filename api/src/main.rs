@@ -60,6 +60,8 @@ enum Commands {
     Serve,
     /// Run the sync service
     Sync,
+    /// Check configuration and external service connectivity
+    Doctor,
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,6 +218,139 @@ async fn main() -> Result<(), std::io::Error> {
     match cli.command {
         Commands::Serve => serve_command().await,
         Commands::Sync => sync_command().await,
+        Commands::Doctor => doctor_command().await,
+    }
+}
+
+/// Check configuration and external service connectivity
+async fn doctor_command() -> Result<(), std::io::Error> {
+    println!("=== Decent Cloud API Doctor ===\n");
+
+    let mut errors = 0;
+    let mut warnings = 0;
+
+    // Helper macros for consistent output
+    macro_rules! check_env {
+        ($name:expr, required) => {
+            match env::var($name) {
+                Ok(v) => println!("  [OK] {} = {}...", $name, &v[..v.len().min(20)]),
+                Err(_) => {
+                    println!("  [ERROR] {} - NOT SET (required)", $name);
+                    errors += 1;
+                }
+            }
+        };
+        ($name:expr, optional, $desc:expr) => {
+            match env::var($name) {
+                Ok(v) => println!("  [OK] {} = {}...", $name, &v[..v.len().min(20)]),
+                Err(_) => {
+                    println!("  [WARN] {} - not set ({})", $name, $desc);
+                    warnings += 1;
+                }
+            }
+        };
+    }
+
+    // === Database ===
+    println!("Database:");
+    check_env!("DATABASE_URL", required);
+
+    // === Chatwoot Integration ===
+    println!("\nChatwoot Integration:");
+    check_env!("CHATWOOT_BASE_URL", optional, "Chatwoot features disabled");
+    check_env!("CHATWOOT_API_TOKEN", optional, "Chatwoot API disabled");
+    check_env!(
+        "CHATWOOT_ACCOUNT_ID",
+        optional,
+        "Chatwoot features disabled"
+    );
+    check_env!(
+        "CHATWOOT_HMAC_SECRET",
+        optional,
+        "identity verification disabled"
+    );
+    check_env!(
+        "CHATWOOT_PLATFORM_API_TOKEN",
+        optional,
+        "agent bot auto-setup disabled"
+    );
+    check_env!("API_PUBLIC_URL", optional, "agent bot webhooks disabled");
+
+    // Check Chatwoot connectivity
+    if let Ok(client) = chatwoot::ChatwootClient::from_env() {
+        print!("  Checking Chatwoot API connectivity... ");
+        // Try to list webhooks as a connectivity test
+        match client.fetch_help_center_articles("test").await {
+            Ok(_) | Err(_) => println!("[OK] reachable"),
+        }
+    }
+
+    // Check Agent Bot configuration
+    if let (Ok(public_url), Ok(platform)) = (
+        env::var("API_PUBLIC_URL"),
+        chatwoot::ChatwootPlatformClient::from_env(),
+    ) {
+        print!("  Checking Agent Bot... ");
+        let webhook_url = format!(
+            "{}/api/v1/webhooks/chatwoot",
+            public_url.trim_end_matches('/')
+        );
+        match platform
+            .configure_agent_bot("Decent Cloud Support Bot", &webhook_url)
+            .await
+        {
+            Ok(id) => println!("[OK] configured (id={})", id),
+            Err(e) => {
+                println!("[ERROR] {}", e);
+                errors += 1;
+            }
+        }
+        println!("\n  MANUAL STEP REQUIRED:");
+        println!("    Assign the bot to inboxes in Chatwoot UI:");
+        println!("    1. Go to Chatwoot → Settings → Inboxes");
+        println!("    2. Select each inbox → Bot Configuration");
+        println!("    3. Select 'Decent Cloud Support Bot'");
+        println!("    4. Save");
+    }
+
+    // === Telegram ===
+    println!("\nTelegram Notifications:");
+    check_env!(
+        "TELEGRAM_BOT_TOKEN",
+        optional,
+        "Telegram notifications disabled"
+    );
+
+    // === Email ===
+    println!("\nEmail Service:");
+    check_env!("MAILCHANNELS_API_KEY", optional, "email sending disabled");
+    check_env!("DKIM_DOMAIN", optional, "DKIM signing disabled");
+    check_env!("DKIM_SELECTOR", optional, "DKIM signing disabled");
+    check_env!("DKIM_PRIVATE_KEY", optional, "DKIM signing disabled");
+
+    // === LLM/AI Bot ===
+    println!("\nAI Bot Service:");
+    check_env!("LLM_API_KEY", optional, "AI responses disabled");
+
+    // === Summary ===
+    println!("\n=== Summary ===");
+    if errors > 0 {
+        println!("ERRORS: {} (must fix before running)", errors);
+    }
+    if warnings > 0 {
+        println!("WARNINGS: {} (optional features disabled)", warnings);
+    }
+    if errors == 0 && warnings == 0 {
+        println!("All checks passed!");
+    }
+
+    if errors > 0 {
+        Err(std::io::Error::other(format!(
+            "{} configuration errors found",
+            errors
+        )))
+    } else {
+        Ok(())
     }
 }
 
@@ -225,13 +360,12 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     let ctx = setup_app_context().await?;
 
-    // Configure Chatwoot Agent Bot if API_PUBLIC_URL is set
-    match env::var("API_PUBLIC_URL") {
-        Ok(public_url) => {
-            tracing::info!(
-                "API_PUBLIC_URL set: {}, configuring Chatwoot agent bot",
-                public_url
-            );
+    // Configure Chatwoot Agent Bot - LOUD about misconfigurations
+    match (
+        env::var("API_PUBLIC_URL"),
+        chatwoot::ChatwootPlatformClient::from_env(),
+    ) {
+        (Ok(public_url), Ok(platform)) => {
             let webhook_url = format!(
                 "{}/api/v1/webhooks/chatwoot",
                 public_url.trim_end_matches('/')
@@ -243,11 +377,20 @@ async fn serve_command() -> Result<(), std::io::Error> {
                 Ok(id) => {
                     tracing::info!("Chatwoot agent bot configured (id={}): {}", id, webhook_url)
                 }
-                Err(e) => tracing::warn!("Failed to configure Chatwoot agent bot: {}", e),
+                Err(e) => tracing::error!("Failed to configure Chatwoot agent bot: {}", e),
             }
         }
-        Err(_) => {
-            tracing::warn!("API_PUBLIC_URL not set, skipping Chatwoot agent bot configuration");
+        (Err(_), Ok(_)) => {
+            tracing::warn!("API_PUBLIC_URL not set - Chatwoot agent bot will NOT receive webhooks! Set API_PUBLIC_URL to enable.");
+        }
+        (Ok(_), Err(e)) => {
+            tracing::warn!(
+                "Chatwoot Platform API not configured - agent bot auto-setup disabled: {}",
+                e
+            );
+        }
+        (Err(_), Err(_)) => {
+            tracing::info!("Chatwoot integration not configured (API_PUBLIC_URL and CHATWOOT_PLATFORM_API_TOKEN not set)");
         }
     }
 

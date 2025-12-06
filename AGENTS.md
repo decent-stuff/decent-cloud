@@ -4,6 +4,7 @@
 - You ALWAYS adjust and extend the existing code rather than writing new code. Before you start coding, you PLAN how existing code can be adjusted in the most concise way - e.g. adding an argument to a function or a field in a struct.
 - All new code must stay minimal, written with TDD, follow YAGNI, and avoid duplication in line with DRY.
 - Code must FAIL FAST and provide enough details upon failure for troubleshooting. NEVER silently ignore failures. NEVER silently ignore return results. Highly avoid fallbacks for errors.
+- BE LOUD ABOUT MISCONFIGURATIONS: When optional features are disabled due to missing config, always log a clear warning explaining what's missing and what won't work. Use `tracing::warn!` with actionable messages like "X not set - Y will NOT work! Set X to enable." Never silently skip functionality.
 - DO NOT ACCEPT duplicating existing code. DRY whenever possible.
 - Every part of execution, every function, must be covered by at least one unit test.
 - WRITE NEW UNIT TESTS that cover both the positive and negative path of the new functionality.
@@ -42,6 +43,16 @@ ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses!
 - When FULLY done and clippy and tests are completely clean (fix if not!), run `cargo make` and fix ANY warnings or errors
 - Check `git diff` changes and confirm made changes are minimal and aligned with project rules. Reduce changes if possible to make them minimal!
 - Commit changes if the functionality is FULLY implemented and `cargo make` passes
+
+# Automation and Configuration Checks
+
+- AUTOMATE EVERYTHING POSSIBLE: When adding integrations with external services, always implement automatic setup/configuration where APIs allow it. Manual steps should be last resort.
+- For any manual configuration steps that cannot be automated, add checks to `api-server doctor` subcommand that:
+  1. Verifies the configuration is correct
+  2. Provides clear instructions on how to fix if misconfigured
+  3. Returns non-zero exit code if critical config is missing
+- When adding new features requiring external config, update `api-server doctor` to check for it.
+- Document any manual setup steps in the `doctor` output, not just in markdown docs.
 
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
