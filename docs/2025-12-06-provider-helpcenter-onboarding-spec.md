@@ -518,7 +518,26 @@ Options:
 - **Outcome:** All queries compile, sqlx prepare clean, cargo make passes (all tests green)
 
 ### Step 3: Add API Endpoints
-- **Status:** Pending
+- **Status:** Completed
+- **Files:** `/code/api/src/openapi/providers.rs`, `/code/api/src/openapi/common.rs`
+- **Implementation:**
+  - Added `OnboardingUpdateResponse` struct to common.rs (contains onboarding_completed_at timestamp)
+  - Added `HelpcenterSyncResponse` struct to common.rs (contains message field)
+  - Added `GET /providers/{pubkey}/onboarding` endpoint (PUBLIC):
+    - Uses `decode_pubkey()` to validate pubkey format
+    - Calls `db.get_provider_onboarding()` to fetch data
+    - Returns `ProviderOnboarding` struct with all onboarding fields
+    - Returns error if provider not found
+  - Added `PUT /providers/{pubkey}/onboarding` endpoint (AUTHENTICATED):
+    - Uses `decode_pubkey()` to validate pubkey
+    - Uses `check_authorization()` to verify caller owns the pubkey
+    - Calls `db.update_provider_onboarding()` to save data
+    - Returns `OnboardingUpdateResponse` with current timestamp
+    - Timestamp set in database method, returned in response for client confirmation
+  - Added `POST /providers/{pubkey}/helpcenter/sync` endpoint stub (AUTHENTICATED):
+    - Uses `decode_pubkey()` and `check_authorization()` for validation
+    - Returns placeholder success message (full implementation in Step 5)
+- **Outcome:** All endpoints compile, cargo make passes with no errors, endpoints follow existing patterns for auth and error handling
 
 ### Step 4: Article Generation
 - **Status:** Pending

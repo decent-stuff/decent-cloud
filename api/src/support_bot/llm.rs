@@ -290,7 +290,10 @@ async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
         anyhow::bail!("LLM API error {}: {}", status, body);
     }
 
-    let body = resp.text().await.context("Failed to read LLM response body")?;
+    let body = resp
+        .text()
+        .await
+        .context("Failed to read LLM response body")?;
 
     let response: ClaudeResponse = serde_json::from_str(&body).with_context(|| {
         format!(

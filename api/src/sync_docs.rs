@@ -41,6 +41,16 @@ const DOCS_TO_SYNC: &[DocFile] = &[
         slug: "mining-validation",
         title: "Mining and Validation Guide",
     },
+    DocFile {
+        path: "docs/faq-general.md",
+        slug: "faq-general",
+        title: "FAQ - General",
+    },
+    DocFile {
+        path: "docs/faq-technical.md",
+        slug: "faq-technical",
+        title: "FAQ - Technical & Security",
+    },
 ];
 
 /// Sync documentation files to Chatwoot Help Center.
@@ -107,7 +117,13 @@ pub async fn sync_docs(portal_slug: &str, dry_run: bool) -> Result<()> {
                     author_id,
                 )
                 .await
-                .with_context(|| format!("Failed to create article {}", doc.slug))?;
+                .with_context(|| {
+                    format!(
+                        "Failed to create article {} (content size: {} bytes)",
+                        doc.slug,
+                        cleaned_content.len()
+                    )
+                })?;
             println!("Created: {} (id={})", doc.slug, article_id);
         }
     }

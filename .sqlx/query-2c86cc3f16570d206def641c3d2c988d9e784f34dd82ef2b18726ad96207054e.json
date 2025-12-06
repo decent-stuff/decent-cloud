@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ? WHERE contract_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "2c86cc3f16570d206def641c3d2c988d9e784f34dd82ef2b18726ad96207054e"
+}

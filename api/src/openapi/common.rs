@@ -380,6 +380,26 @@ pub struct TestNotificationResponse {
     pub message: String,
 }
 
+/// Response from updating provider onboarding
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingUpdateResponse {
+    /// Timestamp when onboarding was completed
+    #[serde(rename = "onboarding_completed_at")]
+    #[oai(rename = "onboarding_completed_at")]
+    pub onboarding_completed_at: i64,
+}
+
+/// Response from syncing provider help center
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct HelpcenterSyncResponse {
+    /// Success message
+    pub message: String,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints

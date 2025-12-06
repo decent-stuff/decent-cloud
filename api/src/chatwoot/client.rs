@@ -806,10 +806,14 @@ impl ChatwootClient {
             .await
             .context("Failed to create article")?;
 
-        if !resp.status().is_success() {
-            let status = resp.status();
+        let status = resp.status();
+        if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Chatwoot API error creating article {}: {}", status, body);
+            anyhow::bail!(
+                "Chatwoot API error creating article (status {}): {}",
+                status,
+                body
+            );
         }
 
         // Response is wrapped in "payload" field
@@ -822,10 +826,13 @@ impl ChatwootClient {
             payload: ArticlePayload,
         }
 
-        let response: CreateArticleResponse = resp
-            .json()
+        let body = resp
+            .text()
             .await
-            .context("Failed to parse create article response")?;
+            .context("Failed to read create article response body")?;
+
+        let response: CreateArticleResponse = serde_json::from_str(&body)
+            .with_context(|| format!("Failed to parse create article response: {}", body))?;
 
         Ok(response.payload.id)
     }

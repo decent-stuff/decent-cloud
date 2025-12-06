@@ -239,7 +239,7 @@ async fn sync_docs_command(portal: &str, dry_run: bool) -> Result<(), std::io::E
     match sync_docs::sync_docs(portal, dry_run).await {
         Ok(()) => Ok(()),
         Err(e) => Err(std::io::Error::other(format!(
-            "Failed to sync documentation: {}",
+            "Failed to sync documentation: {:?}",
             e
         ))),
     }

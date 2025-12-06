@@ -1,9 +1,10 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags,
     BulkUpdateStatusRequest, CsvImportError, CsvImportResult, DuplicateOfferingRequest,
-    NotificationConfigResponse, NotificationUsageResponse, ProvisioningStatusRequest,
-    RentalResponseRequest, ResponseMetricsResponse, ResponseTimeDistributionResponse,
-    TestNotificationRequest, TestNotificationResponse, UpdateNotificationConfigRequest,
+    HelpcenterSyncResponse, NotificationConfigResponse, NotificationUsageResponse,
+    OnboardingUpdateResponse, ProvisioningStatusRequest, RentalResponseRequest,
+    ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
+    TestNotificationResponse, UpdateNotificationConfigRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
@@ -1222,5 +1223,148 @@ impl ProvidersApi {
                 error: None,
             }),
         }
+    }
+
+    /// Get provider onboarding data
+    ///
+    /// Returns onboarding information for a specific provider (public endpoint)
+    #[oai(
+        path = "/providers/:pubkey/onboarding",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_onboarding(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<crate::database::providers::ProviderOnboarding>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        match db.get_provider_onboarding(&pubkey_bytes).await {
+            Ok(Some(onboarding)) => Json(ApiResponse {
+                success: true,
+                data: Some(onboarding),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Provider onboarding data not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update provider onboarding data
+    ///
+    /// Updates onboarding information for a provider (requires authentication)
+    #[oai(
+        path = "/providers/:pubkey/onboarding",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn update_provider_onboarding(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        onboarding: Json<crate::database::providers::ProviderOnboarding>,
+    ) -> Json<ApiResponse<OnboardingUpdateResponse>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db
+            .update_provider_onboarding(&pubkey_bytes, &onboarding.0)
+            .await
+        {
+            Ok(_) => {
+                let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(OnboardingUpdateResponse {
+                        onboarding_completed_at: timestamp,
+                    }),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Sync provider help center article
+    ///
+    /// Generates and syncs help center article to provider's Chatwoot portal (requires authentication)
+    #[oai(
+        path = "/providers/:pubkey/helpcenter/sync",
+        method = "post",
+        tag = "ApiTags::Providers"
+    )]
+    async fn sync_provider_helpcenter(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<HelpcenterSyncResponse>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Stub implementation - full implementation in Step 5
+        Json(ApiResponse {
+            success: true,
+            data: Some(HelpcenterSyncResponse {
+                message: "Help center sync endpoint ready (full implementation pending)"
+                    .to_string(),
+            }),
+            error: None,
+        })
     }
 }

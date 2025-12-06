@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO token_approvals (owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns) VALUES ('bob', 'alice', 500, NULL, 1000)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "3e17eb64e9cdff2e6905cb0796ac8aaba9ffcd64fe40497de9b4d3db6bdcfbc6"
+}
