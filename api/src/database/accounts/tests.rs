@@ -1443,3 +1443,44 @@ async fn test_resend_verification_rate_limit() {
     let elapsed = now - time;
     assert!(elapsed < 60);
 }
+
+#[tokio::test]
+async fn test_get_account_by_chatwoot_user_id() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db
+        .create_account("chatwoot_user", &[50u8; 32], "chatwoot@example.com")
+        .await
+        .unwrap();
+
+    // Set Chatwoot user ID
+    let chatwoot_user_id = 12345i64;
+    db.set_chatwoot_user_id(&account.id, chatwoot_user_id)
+        .await
+        .unwrap();
+
+    // Fetch by Chatwoot user ID
+    let fetched = db
+        .get_account_by_chatwoot_user_id(chatwoot_user_id)
+        .await
+        .unwrap();
+
+    assert!(fetched.is_some());
+    let fetched = fetched.unwrap();
+    assert_eq!(fetched.id, account.id);
+    assert_eq!(fetched.username, "chatwoot_user");
+    assert_eq!(fetched.chatwoot_user_id, Some(chatwoot_user_id));
+}
+
+#[tokio::test]
+async fn test_get_account_by_chatwoot_user_id_not_found() {
+    let db = create_test_db().await;
+
+    let result = db.get_account_by_chatwoot_user_id(99999).await.unwrap();
+
+    assert!(
+        result.is_none(),
+        "Should return None for nonexistent Chatwoot user ID"
+    );
+}

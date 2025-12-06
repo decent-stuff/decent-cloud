@@ -326,6 +326,17 @@ impl Database {
         }
     }
 
+    /// Get primary (first active) public key for a username. Used for notifications.
+    pub async fn get_pubkey_by_username(&self, username: &str) -> Result<Option<Vec<u8>>> {
+        let account = self.get_account_by_username(username).await?;
+        let Some(account) = account else {
+            return Ok(None);
+        };
+
+        let keys = self.get_active_account_keys(&account.id).await?;
+        Ok(keys.first().map(|k| k.public_key.clone()))
+    }
+
     /// Get all public keys for an account
     pub async fn get_account_keys(&self, account_id: &[u8]) -> Result<Vec<AccountPublicKey>> {
         let keys = sqlx::query_as::<_, AccountPublicKey>(
@@ -711,6 +722,22 @@ impl Database {
              FROM accounts WHERE email = ?",
         )
         .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(account)
+    }
+
+    /// Get account by Chatwoot user ID
+    pub async fn get_account_by_chatwoot_user_id(
+        &self,
+        chatwoot_user_id: i64,
+    ) -> Result<Option<Account>> {
+        let account = sqlx::query_as::<_, Account>(
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
+             FROM accounts WHERE chatwoot_user_id = ?",
+        )
+        .bind(chatwoot_user_id)
         .fetch_optional(&self.pool)
         .await?;
 
