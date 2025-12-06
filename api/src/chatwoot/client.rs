@@ -705,6 +705,136 @@ impl ChatwootClient {
         Ok(response.payload)
     }
 
+    /// List all articles in a portal (for sync operations).
+    /// Returns articles with id, title, slug for matching.
+    pub async fn list_articles(&self, portal_slug: &str) -> Result<Vec<HelpCenterArticle>> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/portals/{}/articles",
+            self.base_url, self.account_id, portal_slug
+        );
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to list articles")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error listing articles {}: {}", status, body);
+        }
+
+        let response: ListHelpCenterArticlesResponse =
+            resp.json().await.context("Failed to parse articles")?;
+
+        Ok(response.payload)
+    }
+
+    /// Create a new Help Center article.
+    pub async fn create_article(
+        &self,
+        portal_slug: &str,
+        title: &str,
+        slug: &str,
+        content: &str,
+        description: &str,
+    ) -> Result<i64> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/portals/{}/articles",
+            self.base_url, self.account_id, portal_slug
+        );
+
+        #[derive(Serialize)]
+        struct CreateArticleRequest<'a> {
+            title: &'a str,
+            slug: &'a str,
+            content: &'a str,
+            description: &'a str,
+            status: i32,
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&CreateArticleRequest {
+                title,
+                slug,
+                content,
+                description,
+                status: 1, // 1 = published
+            })
+            .send()
+            .await
+            .context("Failed to create article")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error creating article {}: {}", status, body);
+        }
+
+        #[derive(Deserialize)]
+        struct CreateArticleResponse {
+            id: i64,
+        }
+
+        let response: CreateArticleResponse = resp
+            .json()
+            .await
+            .context("Failed to parse create article response")?;
+
+        Ok(response.id)
+    }
+
+    /// Update an existing Help Center article.
+    pub async fn update_article(
+        &self,
+        portal_slug: &str,
+        article_id: i64,
+        title: &str,
+        content: &str,
+        description: &str,
+    ) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/portals/{}/articles/{}",
+            self.base_url, self.account_id, portal_slug, article_id
+        );
+
+        #[derive(Serialize)]
+        struct UpdateArticleRequest<'a> {
+            title: &'a str,
+            content: &'a str,
+            description: &'a str,
+            status: i32,
+        }
+
+        let resp = self
+            .client
+            .patch(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&UpdateArticleRequest {
+                title,
+                content,
+                description,
+                status: 1, // 1 = published
+            })
+            .send()
+            .await
+            .context("Failed to update article")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error updating article {}: {}", status, body);
+        }
+
+        Ok(())
+    }
+
     /// Send a message to a conversation.
     pub async fn send_message(&self, conversation_id: u64, content: &str) -> Result<()> {
         let url = format!(
