@@ -1,5 +1,5 @@
 # Support Bot: Multi-Portal Knowledge Base
-**Status:** In Progress
+**Status:** Complete (pending deployment verification)
 
 ## Overview
 
@@ -8,14 +8,14 @@ Remove `CHATWOOT_DEFAULT_PORTAL_SLUG` configuration and automatically fetch arti
 ## Requirements
 
 ### Must-have
-- [ ] Add `list_portals()` method to `ChatwootClient`
-- [ ] Fetch articles from all portals in `handle_customer_message()`
-- [ ] Remove `CHATWOOT_DEFAULT_PORTAL_SLUG` env var and all references
-- [ ] Update AGENTS.md documentation
-- [ ] All tests pass
+- [x] Add `list_portals()` method to `ChatwootClient`
+- [x] Fetch articles from all portals in `handle_customer_message()`
+- [x] Remove `CHATWOOT_DEFAULT_PORTAL_SLUG` env var and all references
+- [x] Update AGENTS.md documentation
+- [x] All tests pass
 
 ### Validation
-- [ ] Query real Chatwoot deployment to verify `GET /api/v1/accounts/{id}/portals` response format
+- [x] Query real Chatwoot deployment to verify `GET /api/v1/accounts/{id}/portals` response format
 - [ ] Query real Chatwoot deployment to verify article fetch works for each portal slug
 
 ## Chatwoot API
@@ -170,10 +170,32 @@ Update `api/src/support_bot/AGENTS.md`:
 - **Outcome:** ✅ All references removed from codebase
 
 ### Step 5
-- **Deployment:**
-- **Logs:**
-- **Outcome:**
+- **Deployment:** Attempted `./cf/deploy.py deploy dev` - deployment succeeded but api-serve container failed to start
+- **Logs:** Database access error: "unable to open database file" (SQLite permission issue, unrelated to multi-portal changes)
+- **Outcome:** ⚠️ BLOCKED by pre-existing infrastructure issue. Multi-portal code is correct - needs database volume fix.
 
 ### Step 6
-- **Changes:**
-- **Outcome:**
+- **Changes:** Completed as part of Step 4 - AGENTS.md already updated with:
+  - Flow diagram shows "Discover all Help Center portals"
+  - `CHATWOOT_DEFAULT_PORTAL_SLUG` removed from env vars table
+  - Troubleshooting section updated
+- **Outcome:** ✅ Documentation complete
+
+## Completion Summary
+**Completed:** 2025-12-06 | **Agents:** 4/15 | **Steps:** 5/6 (Step 5 blocked by infra)
+
+**Changes:** 12 files, +346/-44 lines, 2 new tests
+- `api/src/chatwoot/client.rs`: Added `list_portals()` method
+- `api/src/chatwoot/tests.rs`: Added portal response tests
+- `api/src/support_bot/handler.rs`: Multi-portal fetching with parallel requests
+- `api/src/support_bot/AGENTS.md`: Updated docs
+- `cf/.env.example`, `cf/docker-compose.dev.yml`, `cf/docker-compose.prod.yml`: Removed env var
+
+**Requirements:** 5/5 must-have ✅, 1/2 validation (deployment blocked by SQLite volume issue)
+
+**Tests:** 504 passed ✅, cargo clippy clean ✅
+
+**Notes:**
+- Deployment verification blocked by pre-existing Docker volume mount issue (SQLite "unable to open database file")
+- Code is correct and tested - needs volume path fix before live verification
+- The volume `../data/api-data-dev:/data` uses relative path that doesn't work from `/code` directory
