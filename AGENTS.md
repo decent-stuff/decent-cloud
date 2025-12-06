@@ -46,6 +46,7 @@ ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses!
 After completing any feature or fix, verify ALL of the following before committing:
 
 1. **Run locally**: Build a local debug binary and run it with all required environment variables against any REAL services (e.g. Chatwoot) to ensure that code behaves as expected and fix any issues you might encounter, even if unrelated to your changes.
+1a. **Verify endpoints and payloads**: Run http(s) requests against real endpoints if possible (e.g. dev Chatwoot instance) to verify endpoints and payload formats *before* writing code. This is required if task requires interaction with other services.
 2. **UI/Navigation**: If the feature is user-facing, update UI components and sidebar/navigation menus as needed
 3. **Test Coverage**: Ensure solid but non-overlapping test coverage - each test must assert meaningful behavior unique to that test
 4. **E2E Tests**: Add end-to-end tests for user-facing features where appropriate

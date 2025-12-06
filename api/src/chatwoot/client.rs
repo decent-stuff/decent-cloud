@@ -427,6 +427,48 @@ impl ChatwootClient {
         Ok(response.payload.into_iter().map(|i| i.id).collect())
     }
 
+    /// List all Help Center portal slugs in the account.
+    /// Excludes archived portals.
+    pub async fn list_portals(&self) -> Result<Vec<String>> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/portals",
+            self.base_url, self.account_id
+        );
+
+        #[derive(Deserialize)]
+        struct PortalsResponse {
+            payload: Vec<Portal>,
+        }
+
+        #[derive(Deserialize)]
+        struct Portal {
+            slug: String,
+            archived: bool,
+        }
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to list portals")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error listing portals {}: {}", status, body);
+        }
+
+        let response: PortalsResponse = resp.json().await.context("Failed to parse portals")?;
+        Ok(response
+            .payload
+            .into_iter()
+            .filter(|p| !p.archived)
+            .map(|p| p.slug)
+            .collect())
+    }
+
     /// Assign an agent bot to an inbox via Account API.
     /// Uses POST /api/v1/accounts/:account_id/inboxes/:inbox_id/set_agent_bot
     pub async fn assign_agent_bot_to_inbox(&self, inbox_id: u32, agent_bot_id: i64) -> Result<()> {

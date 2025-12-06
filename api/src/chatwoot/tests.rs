@@ -118,6 +118,62 @@ fn test_platform_client_is_configured() {
 }
 
 // =============================================================================
+// Portals tests
+// =============================================================================
+
+#[test]
+fn test_portals_response_deserialize() {
+    let json = r#"{
+        "payload": [
+            {
+                "id": 1,
+                "slug": "platform-overview",
+                "archived": false,
+                "name": "Platform Overview"
+            },
+            {
+                "id": 2,
+                "slug": "old-portal",
+                "archived": true,
+                "name": "Old Portal"
+            }
+        ]
+    }"#;
+
+    #[derive(serde::Deserialize)]
+    struct PortalsResponse {
+        payload: Vec<Portal>,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[allow(dead_code)]
+    struct Portal {
+        slug: String,
+        archived: bool,
+    }
+
+    let response: PortalsResponse = serde_json::from_str(json).unwrap();
+    assert_eq!(response.payload.len(), 2);
+    assert_eq!(response.payload[0].slug, "platform-overview");
+    assert!(!response.payload[0].archived);
+    assert_eq!(response.payload[1].slug, "old-portal");
+    assert!(response.payload[1].archived);
+}
+
+#[test]
+fn test_portals_response_empty() {
+    let json = r#"{"payload": []}"#;
+
+    #[derive(serde::Deserialize)]
+    struct PortalsResponse {
+        payload: Vec<serde_json::Value>,
+    }
+
+    let response: PortalsResponse = serde_json::from_str(json).unwrap();
+    assert_eq!(response.payload.len(), 0);
+}
+
+// =============================================================================
 // Help Center tests
 // =============================================================================
 
