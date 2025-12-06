@@ -6,6 +6,39 @@ use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
 use anyhow::{Context, Result};
 
+/// Get portal slug from contract's provider notification config
+async fn get_portal_slug_from_contract(db: &Database, contract_id: &str) -> Result<Option<String>> {
+    let contract_id_bytes = match hex::decode(contract_id) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            tracing::warn!("Invalid contract_id hex '{}': {}", contract_id, e);
+            return Ok(None);
+        }
+    };
+
+    let contract = match db.get_contract(&contract_id_bytes).await? {
+        Some(c) => c,
+        None => {
+            tracing::warn!("Contract not found: {}", contract_id);
+            return Ok(None);
+        }
+    };
+
+    let provider_pubkey_bytes = match hex::decode(&contract.provider_pubkey) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            tracing::warn!("Invalid provider pubkey hex: {}", e);
+            return Ok(None);
+        }
+    };
+
+    let notification_config = db
+        .get_user_notification_config(&provider_pubkey_bytes)
+        .await?;
+
+    Ok(notification_config.and_then(|c| c.chatwoot_portal_slug))
+}
+
 /// Format bot response message with answer and sources
 pub fn format_bot_message(answer: &str, sources: &[ArticleRef]) -> String {
     let mut message = answer.to_string();
@@ -26,39 +59,55 @@ pub async fn handle_customer_message(
     db: &Database,
     chatwoot: &ChatwootClient,
     conversation_id: u64,
-    contract_id: &str,
+    contract_id: Option<&str>,
     message_content: &str,
 ) -> Result<()> {
-    // 1. Get contract to find provider pubkey
-    let contract_id_bytes = hex::decode(contract_id).context("Invalid contract_id hex")?;
-    let contract = db
-        .get_contract(&contract_id_bytes)
-        .await?
-        .context("Contract not found")?;
+    tracing::debug!(
+        "handle_customer_message: conversation={}, contract={:?}",
+        conversation_id,
+        contract_id
+    );
 
-    let provider_pubkey_bytes =
-        hex::decode(&contract.provider_pubkey).context("Invalid provider pubkey hex")?;
-
-    // 2. Get user notification config to find portal slug
-    let notification_config = db
-        .get_user_notification_config(&provider_pubkey_bytes)
-        .await?;
-
-    let portal_slug = match notification_config {
-        Some(config) => config.chatwoot_portal_slug,
+    // Try to get portal_slug from contract's provider, fall back to default
+    let portal_slug = match contract_id {
+        Some(cid) => get_portal_slug_from_contract(db, cid).await?,
         None => None,
     };
 
-    let Some(portal_slug) = portal_slug else {
-        tracing::warn!(
-            "No portal slug configured for provider {}, escalating",
-            contract.provider_pubkey
-        );
-        chatwoot
-            .update_conversation_status(conversation_id, "open")
-            .await?;
-        return Ok(());
+    // Use default portal if no contract-specific portal found
+    let portal_slug = match portal_slug {
+        Some(slug) => slug,
+        None => {
+            let default = std::env::var("CHATWOOT_DEFAULT_PORTAL_SLUG").ok();
+            match default {
+                Some(slug) if !slug.is_empty() => {
+                    tracing::debug!(
+                        "Using default portal '{}' for conversation {}",
+                        slug,
+                        conversation_id
+                    );
+                    slug
+                }
+                _ => {
+                    tracing::warn!(
+                        "No portal slug available (contract: {:?}, no default configured), escalating conversation {}",
+                        contract_id,
+                        conversation_id
+                    );
+                    chatwoot
+                        .update_conversation_status(conversation_id, "open")
+                        .await?;
+                    return Ok(());
+                }
+            }
+        }
     };
+
+    tracing::debug!(
+        "Fetching help center articles from portal '{}' for conversation {}",
+        portal_slug,
+        conversation_id
+    );
 
     // 3. Fetch articles from Help Center
     let articles = chatwoot
@@ -67,15 +116,29 @@ pub async fn handle_customer_message(
         .context("Failed to fetch help center articles")?;
 
     if articles.is_empty() {
-        tracing::warn!("No articles found in portal {}, escalating", portal_slug);
+        tracing::warn!(
+            "No articles found in portal '{}', escalating conversation {}",
+            portal_slug,
+            conversation_id
+        );
         chatwoot
             .update_conversation_status(conversation_id, "open")
             .await?;
         return Ok(());
     }
 
+    tracing::debug!(
+        "Found {} articles, searching for relevant content",
+        articles.len()
+    );
+
     // 4. Search articles (semantic if configured, else keyword)
     let scored_articles = search_articles_semantic(message_content, &articles).await;
+
+    tracing::debug!(
+        "Found {} relevant articles, generating AI response",
+        scored_articles.len()
+    );
 
     // 5. Generate answer
     let bot_response = generate_answer(message_content, &scored_articles).await?;

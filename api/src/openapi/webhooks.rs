@@ -242,7 +242,12 @@ pub async fn chatwoot_webhook(
         )
     })?;
 
-    tracing::info!("Received Chatwoot webhook: {}", payload.event);
+    tracing::info!(
+        "Received Chatwoot webhook: {} (conversation: {:?}, message: {:?})",
+        payload.event,
+        payload.conversation.as_ref().map(|c| c.id),
+        payload.message.as_ref().map(|m| m.id)
+    );
 
     if payload.event == "conversation_status_changed" {
         if let Some(conv) = payload.conversation {
@@ -334,28 +339,40 @@ pub async fn chatwoot_webhook(
         }
     } else if payload.event == "message_created" {
         if let (Some(conv), Some(msg)) = (payload.conversation, payload.message) {
-            // Extract contract_id from custom_attributes
+            // Extract contract_id from custom_attributes (optional - general inquiries have no contract)
             let contract_id = conv
                 .custom_attributes
                 .as_ref()
                 .and_then(|attrs| attrs.get("contract_id"))
                 .and_then(|v| v.as_str());
 
-            if let Some(contract_id) = contract_id {
-                let sender_type = match msg.message_type.as_str() {
-                    "incoming" => "customer",
-                    "outgoing" => "provider",
-                    _ => {
-                        return Ok(Response::builder()
-                            .status(poem::http::StatusCode::OK)
-                            .body(""))
-                    }
-                };
+            let sender_type = match msg.message_type.as_str() {
+                "incoming" => "customer",
+                "outgoing" => "provider",
+                _ => {
+                    tracing::debug!(
+                        "Ignoring Chatwoot message {} with type '{}' (not incoming/outgoing)",
+                        msg.id,
+                        msg.message_type
+                    );
+                    return Ok(Response::builder()
+                        .status(poem::http::StatusCode::OK)
+                        .body(""));
+                }
+            };
 
-                // Track message for response time
+            tracing::info!(
+                "Processing Chatwoot message {} from {} (contract: {:?})",
+                msg.id,
+                sender_type,
+                contract_id
+            );
+
+            // Track message for response time (only if contract_id is present)
+            if let Some(cid) = contract_id {
                 if let Err(e) = db
                     .insert_chatwoot_message_event(
-                        contract_id,
+                        cid,
                         conv.id,
                         msg.id,
                         sender_type,
@@ -366,40 +383,57 @@ pub async fn chatwoot_webhook(
                     tracing::warn!("Failed to insert Chatwoot message event: {}", e);
                     // Don't fail webhook - event may be duplicate
                 }
+            }
 
-                // If this is an incoming customer message, trigger bot response
-                if sender_type == "customer" {
-                    if let Some(content) = msg.content {
-                        if !content.trim().is_empty() {
-                            // Try to create Chatwoot client and handle message
-                            match ChatwootClient::from_env() {
-                                Ok(chatwoot) => {
-                                    if let Err(e) = handle_customer_message(
-                                        &db,
-                                        &chatwoot,
-                                        conv.id as u64,
-                                        contract_id,
-                                        &content,
-                                    )
-                                    .await
-                                    {
-                                        tracing::error!(
-                                            "Failed to handle customer message for conversation {}: {}",
-                                            conv.id,
-                                            e
-                                        );
-                                        // Don't fail webhook - log error and continue
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "Chatwoot client not configured, skipping bot response: {}",
-                                        e
-                                    );
-                                }
-                            }
-                        }
+            // If this is an incoming customer message, trigger bot response
+            if sender_type == "customer" {
+                let Some(content) = msg.content else {
+                    tracing::debug!("Chatwoot message {} has no content, skipping bot", msg.id);
+                    return Ok(Response::builder()
+                        .status(poem::http::StatusCode::OK)
+                        .body(""));
+                };
+
+                if content.trim().is_empty() {
+                    tracing::debug!(
+                        "Chatwoot message {} has empty content, skipping bot",
+                        msg.id
+                    );
+                    return Ok(Response::builder()
+                        .status(poem::http::StatusCode::OK)
+                        .body(""));
+                }
+
+                // Try to create Chatwoot client and handle message
+                let chatwoot = match ChatwootClient::from_env() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Chatwoot client not configured, skipping bot response: {}",
+                            e
+                        );
+                        return Ok(Response::builder()
+                            .status(poem::http::StatusCode::OK)
+                            .body(""));
                     }
+                };
+
+                tracing::info!(
+                    "Invoking AI bot for conversation {} (message: '{}...')",
+                    conv.id,
+                    content.chars().take(50).collect::<String>()
+                );
+
+                if let Err(e) =
+                    handle_customer_message(&db, &chatwoot, conv.id as u64, contract_id, &content)
+                        .await
+                {
+                    tracing::error!(
+                        "Failed to handle customer message for conversation {}: {}",
+                        conv.id,
+                        e
+                    );
+                    // Don't fail webhook - log error and continue
                 }
             }
         }

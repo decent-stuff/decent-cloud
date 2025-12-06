@@ -422,9 +422,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
                             }
                         }
                     } else {
-                        tracing::warn!(
-                            "CHATWOOT_API_TOKEN not set - cannot assign bot to inboxes"
-                        );
+                        tracing::warn!("CHATWOOT_API_TOKEN not set - cannot assign bot to inboxes");
                     }
                 }
                 Err(e) => tracing::error!("Failed to configure Chatwoot agent bot: {}", e),
