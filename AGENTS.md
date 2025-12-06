@@ -45,18 +45,19 @@ ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses!
 
 After completing any feature or fix, verify ALL of the following before committing:
 
-1. **UI/Navigation**: If the feature is user-facing, update UI components and sidebar/navigation menus as needed
-2. **Test Coverage**: Ensure solid but non-overlapping test coverage - each test must assert meaningful behavior unique to that test
-3. **E2E Tests**: Add end-to-end tests for user-facing features where appropriate
-4. **Zombie Code Removal**: Search for and remove any:
+1. **Run locally**: Build a local debug binary and run it with all required environment variables against any REAL services (e.g. Chatwoot) to ensure that code behaves as expected and fix any issues you might encounter, even if unrelated to your changes.
+2. **UI/Navigation**: If the feature is user-facing, update UI components and sidebar/navigation menus as needed
+3. **Test Coverage**: Ensure solid but non-overlapping test coverage - each test must assert meaningful behavior unique to that test
+4. **E2E Tests**: Add end-to-end tests for user-facing features where appropriate
+5. **Zombie Code Removal**: Search for and remove any:
    - Unused functions, structs, or modules
    - Deprecated code paths
    - Legacy comments (e.g., `// TODO: remove`, `// old implementation`)
    - Orphaned imports
    - Dead feature flags
-5. **Clean Build**: Run `cargo make` and fix ANY warnings or errors
-6. **Minimal Diff**: Check `git diff` and confirm changes are minimal and aligned with project rules. Reduce if possible!
-7. **Commit**: Only commit when functionality is FULLY implemented and `cargo make` passes
+6. **Clean Build**: Run `cargo make` and fix ANY warnings or errors
+8. **Minimal Diff**: Check `git diff` and confirm changes are minimal and aligned with project rules. Reduce if possible!
+9. **Commit**: Only commit when functionality is FULLY implemented and `cargo make` passes
 
 # Automation and Configuration Checks
 
@@ -67,6 +68,18 @@ After completing any feature or fix, verify ALL of the following before committi
   3. Returns non-zero exit code if critical config is missing
 - When adding new features requiring external config, update `api-server doctor` to check for it.
 - Document any manual setup steps in the `doctor` output, not just in markdown docs.
+
+# Third-Party Source Code
+
+Source code for third-party packages (e.g., Chatwoot) may be available in `third_party/` directory. When debugging integration issues with external services, check this directory for implementation details and API contracts.
+
+# Deployment and Verification
+
+After fully completing implementation (all tests pass, `cargo make` clean):
+1. Deploy to dev environment: `./cf/deploy.py deploy dev`
+2. Check logs: `./cf/deploy.py logs dev api-server`
+3. Verify the feature works as expected in logs
+4. Fix any errors found in logs before considering the task complete
 
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
