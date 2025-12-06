@@ -1,5 +1,7 @@
+use crate::chatwoot::ChatwootClient;
 use crate::database::providers::ProviderProfile;
-use anyhow::{Context, Result};
+use crate::database::types::Database;
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -177,6 +179,119 @@ pub fn generate_provider_article(profile: &ProviderProfile) -> Result<String> {
     Ok(article)
 }
 
+/// Result of syncing a provider article to Chatwoot
+#[derive(Debug)]
+pub struct SyncResult {
+    pub article_id: i64,
+    pub portal_slug: String,
+    pub action: String,
+}
+
+/// Generate article slug from provider name
+fn generate_article_slug(provider_name: &str) -> String {
+    let slug = provider_name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    format!("about-{}", slug)
+}
+
+/// Extract description from article content (first paragraph, max 200 chars)
+fn extract_description(content: &str) -> String {
+    content
+        .lines()
+        .skip_while(|l| l.starts_with('#') || l.trim().is_empty())
+        .take_while(|l| !l.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(200)
+        .collect()
+}
+
+/// Sync a provider's article to their Chatwoot portal
+pub async fn sync_provider_article(
+    db: &Database,
+    chatwoot: &ChatwootClient,
+    pubkey: &[u8],
+) -> Result<SyncResult> {
+    // Get provider profile
+    let profile = db
+        .get_provider_profile(pubkey)
+        .await?
+        .ok_or_else(|| anyhow!("Provider profile not found"))?;
+
+    // Get provider's chatwoot_portal_slug from notification config
+    let notification_config = db
+        .get_user_notification_config(pubkey)
+        .await?
+        .ok_or_else(|| anyhow!("No notification config found for provider"))?;
+
+    let portal_slug = notification_config
+        .chatwoot_portal_slug
+        .ok_or_else(|| anyhow!("No Chatwoot portal configured for this provider"))?;
+
+    // Generate article content
+    let article_content = generate_provider_article(&profile)?;
+    let article_slug = generate_article_slug(&profile.name);
+    let article_title = format!("{} on Decent Cloud", profile.name);
+    let description = extract_description(&article_content);
+
+    // Get author_id for article creation
+    let author_id = chatwoot
+        .get_profile()
+        .await
+        .context("Failed to get Chatwoot profile for author_id")?;
+
+    // Check if article already exists
+    let existing_articles = chatwoot
+        .list_articles(&portal_slug)
+        .await
+        .context("Failed to list existing articles")?;
+
+    let existing_article = existing_articles.iter().find(|a| a.slug == article_slug);
+
+    let (article_id, action) = if let Some(existing) = existing_article {
+        // Update existing article
+        chatwoot
+            .update_article(
+                &portal_slug,
+                existing.id,
+                &article_title,
+                &article_content,
+                &description,
+            )
+            .await
+            .context("Failed to update article in Chatwoot")?;
+        (existing.id, "updated".to_string())
+    } else {
+        // Create new article
+        let id = chatwoot
+            .create_article(
+                &portal_slug,
+                &article_title,
+                &article_slug,
+                &article_content,
+                &description,
+                author_id,
+            )
+            .await
+            .context("Failed to create article in Chatwoot")?;
+        (id, "created".to_string())
+    };
+
+    Ok(SyncResult {
+        article_id,
+        portal_slug,
+        action,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,5 +465,44 @@ mod tests {
         assert!(article.contains("A1"));
         assert!(article.contains("### Q2?"));
         assert!(article.contains("A2"));
+    }
+
+    #[test]
+    fn test_generate_article_slug() {
+        assert_eq!(generate_article_slug("TestProvider"), "about-testprovider");
+        assert_eq!(
+            generate_article_slug("My Cloud Provider"),
+            "about-my-cloud-provider"
+        );
+        assert_eq!(generate_article_slug("Provider-123"), "about-provider-123");
+        assert_eq!(
+            generate_article_slug("Provider___Test"),
+            "about-provider-test"
+        );
+    }
+
+    #[test]
+    fn test_extract_description() {
+        let content = r#"# Title
+
+This is the first paragraph.
+It has multiple lines.
+
+This is the second paragraph."#;
+
+        let result = extract_description(content);
+        assert_eq!(
+            result,
+            "This is the first paragraph. It has multiple lines."
+        );
+    }
+
+    #[test]
+    fn test_extract_description_truncates() {
+        let long_text = "a".repeat(300);
+        let content = format!("# Title\n\n{}", long_text);
+
+        let result = extract_description(&content);
+        assert_eq!(result.len(), 200);
     }
 }

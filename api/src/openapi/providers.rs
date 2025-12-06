@@ -1357,14 +1357,34 @@ impl ProvidersApi {
             });
         }
 
-        // Stub implementation - full implementation in Step 5
-        Json(ApiResponse {
-            success: true,
-            data: Some(HelpcenterSyncResponse {
-                message: "Help center sync endpoint ready (full implementation pending)"
-                    .to_string(),
+        // Create Chatwoot client
+        let chatwoot = match crate::chatwoot::ChatwootClient::from_env() {
+            Ok(client) => client,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Chatwoot client initialization failed: {}", e)),
+                });
+            }
+        };
+
+        // Sync article to Chatwoot
+        match crate::helpcenter::sync_provider_article(&db, &chatwoot, &pubkey_bytes).await {
+            Ok(result) => Json(ApiResponse {
+                success: true,
+                data: Some(HelpcenterSyncResponse {
+                    article_id: result.article_id,
+                    portal_slug: result.portal_slug,
+                    action: result.action,
+                }),
+                error: None,
             }),
-            error: None,
-        })
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
     }
 }

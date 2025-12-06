@@ -396,8 +396,12 @@ pub struct OnboardingUpdateResponse {
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct HelpcenterSyncResponse {
-    /// Success message
-    pub message: String,
+    /// Article ID in Chatwoot
+    pub article_id: i64,
+    /// Portal slug where article was synced
+    pub portal_slug: String,
+    /// Action performed: "created" or "updated"
+    pub action: String,
 }
 
 #[derive(poem_openapi::Tags)]
