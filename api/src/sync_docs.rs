@@ -1,6 +1,6 @@
+use crate::chatwoot::{ChatwootClient, HelpCenterArticle};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
-use crate::chatwoot::{ChatwootClient, HelpCenterArticle};
 
 /// Documentation file to sync to Help Center.
 struct DocFile {
@@ -48,6 +48,13 @@ pub async fn sync_docs(portal_slug: &str, dry_run: bool) -> Result<()> {
     let chatwoot = ChatwootClient::from_env()?;
 
     println!("Syncing documentation to portal '{}'...", portal_slug);
+
+    // Get author_id from current user's profile (required for creating articles)
+    let author_id = chatwoot
+        .get_profile()
+        .await
+        .context("Failed to get profile for author_id")?;
+    println!("Using author_id: {}", author_id);
 
     // Get existing articles for idempotency
     let existing = chatwoot.list_articles(portal_slug).await?;
@@ -97,6 +104,7 @@ pub async fn sync_docs(portal_slug: &str, dry_run: bool) -> Result<()> {
                     doc.slug,
                     &cleaned_content,
                     &description,
+                    author_id,
                 )
                 .await
                 .with_context(|| format!("Failed to create article {}", doc.slug))?;
@@ -107,7 +115,10 @@ pub async fn sync_docs(portal_slug: &str, dry_run: bool) -> Result<()> {
     if dry_run {
         println!("\nDry run complete. No changes were made.");
     } else {
-        println!("\nSync complete! {} documents processed.", DOCS_TO_SYNC.len());
+        println!(
+            "\nSync complete! {} documents processed.",
+            DOCS_TO_SYNC.len()
+        );
     }
 
     Ok(())

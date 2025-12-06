@@ -705,6 +705,37 @@ impl ChatwootClient {
         Ok(response.payload)
     }
 
+    /// Get the current user's profile (to obtain author_id for article creation).
+    pub async fn get_profile(&self) -> Result<i64> {
+        let url = format!("{}/api/v1/profile", self.base_url);
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to get profile")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error getting profile {}: {}", status, body);
+        }
+
+        #[derive(Deserialize)]
+        struct ProfileResponse {
+            id: i64,
+        }
+
+        let response: ProfileResponse = resp
+            .json()
+            .await
+            .context("Failed to parse profile response")?;
+
+        Ok(response.id)
+    }
+
     /// List all articles in a portal (for sync operations).
     /// Returns articles with id, title, slug for matching.
     pub async fn list_articles(&self, portal_slug: &str) -> Result<Vec<HelpCenterArticle>> {
@@ -734,6 +765,7 @@ impl ChatwootClient {
     }
 
     /// Create a new Help Center article.
+    /// `author_id` is required - use the ID of the user who owns the API token.
     pub async fn create_article(
         &self,
         portal_slug: &str,
@@ -741,6 +773,7 @@ impl ChatwootClient {
         slug: &str,
         content: &str,
         description: &str,
+        author_id: i64,
     ) -> Result<i64> {
         let url = format!(
             "{}/api/v1/accounts/{}/portals/{}/articles",
@@ -754,6 +787,7 @@ impl ChatwootClient {
             content: &'a str,
             description: &'a str,
             status: i32,
+            author_id: i64,
         }
 
         let resp = self
@@ -766,6 +800,7 @@ impl ChatwootClient {
                 content,
                 description,
                 status: 1, // 1 = published
+                author_id,
             })
             .send()
             .await
@@ -777,9 +812,14 @@ impl ChatwootClient {
             anyhow::bail!("Chatwoot API error creating article {}: {}", status, body);
         }
 
+        // Response is wrapped in "payload" field
+        #[derive(Deserialize)]
+        struct ArticlePayload {
+            id: i64,
+        }
         #[derive(Deserialize)]
         struct CreateArticleResponse {
-            id: i64,
+            payload: ArticlePayload,
         }
 
         let response: CreateArticleResponse = resp
@@ -787,7 +827,7 @@ impl ChatwootClient {
             .await
             .context("Failed to parse create article response")?;
 
-        Ok(response.id)
+        Ok(response.payload.id)
     }
 
     /// Update an existing Help Center article.

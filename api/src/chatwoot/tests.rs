@@ -224,3 +224,121 @@ fn test_help_center_article_clone_and_eq() {
     };
     assert_ne!(article1, article3);
 }
+
+// =============================================================================
+// Article Management tests
+// =============================================================================
+
+#[test]
+fn test_articles_list_response_deserialize() {
+    let json = r#"{
+        "payload": [
+            {
+                "id": 123,
+                "title": "Getting Started",
+                "slug": "getting-started",
+                "content": "Article content here"
+            },
+            {
+                "id": 456,
+                "title": "User Guide",
+                "slug": "user-guide",
+                "content": "Guide content"
+            }
+        ]
+    }"#;
+
+    #[derive(serde::Deserialize)]
+    struct ListHelpCenterArticlesResponse {
+        payload: Vec<crate::chatwoot::HelpCenterArticle>,
+    }
+
+    let response: ListHelpCenterArticlesResponse = serde_json::from_str(json).unwrap();
+    assert_eq!(response.payload.len(), 2);
+    assert_eq!(response.payload[0].id, 123);
+    assert_eq!(response.payload[0].title, "Getting Started");
+    assert_eq!(response.payload[0].slug, "getting-started");
+    assert_eq!(response.payload[1].id, 456);
+}
+
+#[test]
+fn test_create_article_request_serialize() {
+    #[derive(serde::Serialize)]
+    struct CreateArticleRequest<'a> {
+        title: &'a str,
+        slug: &'a str,
+        content: &'a str,
+        description: &'a str,
+        status: i32,
+        author_id: i64,
+    }
+
+    let request = CreateArticleRequest {
+        title: "Test Article",
+        slug: "test-article",
+        content: "Article content",
+        description: "Brief description",
+        status: 1,
+        author_id: 42,
+    };
+
+    let json = serde_json::to_string(&request).unwrap();
+    assert!(json.contains(r#""title":"Test Article""#));
+    assert!(json.contains(r#""slug":"test-article""#));
+    assert!(json.contains(r#""author_id":42"#));
+    assert!(json.contains(r#""status":1"#));
+}
+
+#[test]
+fn test_create_article_response_deserialize() {
+    // API wraps response in "payload" field
+    let json = r#"{"payload": {"id": 789, "title": "Test", "slug": "test", "content": "..."}}"#;
+
+    #[derive(serde::Deserialize)]
+    struct ArticlePayload {
+        id: i64,
+    }
+    #[derive(serde::Deserialize)]
+    struct CreateArticleResponse {
+        payload: ArticlePayload,
+    }
+
+    let response: CreateArticleResponse = serde_json::from_str(json).unwrap();
+    assert_eq!(response.payload.id, 789);
+}
+
+#[test]
+fn test_update_article_request_serialize() {
+    #[derive(serde::Serialize)]
+    struct UpdateArticleRequest<'a> {
+        title: &'a str,
+        content: &'a str,
+        description: &'a str,
+        status: i32,
+    }
+
+    let request = UpdateArticleRequest {
+        title: "Updated Title",
+        content: "Updated content",
+        description: "Updated description",
+        status: 1,
+    };
+
+    let json = serde_json::to_string(&request).unwrap();
+    assert!(json.contains(r#""title":"Updated Title""#));
+    // Should not contain slug field for updates
+    assert!(!json.contains("slug"));
+}
+
+#[test]
+fn test_profile_response_deserialize() {
+    let json = r#"{"id": 42, "name": "Test User", "email": "test@example.com"}"#;
+
+    #[derive(serde::Deserialize)]
+    struct ProfileResponse {
+        id: i64,
+    }
+
+    let response: ProfileResponse = serde_json::from_str(json).unwrap();
+    assert_eq!(response.id, 42);
+}
