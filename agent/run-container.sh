@@ -175,6 +175,15 @@ build_image() {
     fi
 }
 
+# Fix ownership of target-cache volume (one-time fix for existing volumes)
+fix_target_ownership() {
+    local volume_name="decent-cloud_target-cache"
+    if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+        log_info "Fixing target directory ownership..."
+        docker run --rm -v "$volume_name:/target" alpine chown -R 1000:1000 /target 2>/dev/null || true
+    fi
+}
+
 # Run cargo-sweep on the container's target directory to clean old artifacts
 run_cargo_sweep() {
     log_info "Running cargo-sweep on container target directory..."
@@ -241,6 +250,7 @@ trap cleanup EXIT INT TERM
 main() {
     check_requirements
     build_image
+    fix_target_ownership
     run_cargo_sweep
     run_tool
 }
