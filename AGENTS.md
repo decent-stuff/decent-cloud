@@ -40,9 +40,23 @@ When you discover ANY of the following issues, you MUST:
 **Example:** If tests fail because endpoint A shadows endpoint B with the same path, do NOT update tests to match endpoint A's response format. Instead, flag that two endpoints conflict and ask which one should be kept or how they should be differentiated.
 
 ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses! No unnecessary complexity - this is a monorepo. Change all that's needed to end up with clean code and clean architecture.
-- When FULLY done and clippy and tests are completely clean (fix if not!), run `cargo make` and fix ANY warnings or errors
-- Check `git diff` changes and confirm made changes are minimal and aligned with project rules. Reduce changes if possible to make them minimal!
-- Commit changes if the functionality is FULLY implemented and `cargo make` passes
+
+# Post-Change Checklist
+
+After completing any feature or fix, verify ALL of the following before committing:
+
+1. **UI/Navigation**: If the feature is user-facing, update UI components and sidebar/navigation menus as needed
+2. **Test Coverage**: Ensure solid but non-overlapping test coverage - each test must assert meaningful behavior unique to that test
+3. **E2E Tests**: Add end-to-end tests for user-facing features where appropriate
+4. **Zombie Code Removal**: Search for and remove any:
+   - Unused functions, structs, or modules
+   - Deprecated code paths
+   - Legacy comments (e.g., `// TODO: remove`, `// old implementation`)
+   - Orphaned imports
+   - Dead feature flags
+5. **Clean Build**: Run `cargo make` and fix ANY warnings or errors
+6. **Minimal Diff**: Check `git diff` and confirm changes are minimal and aligned with project rules. Reduce if possible!
+7. **Commit**: Only commit when functionality is FULLY implemented and `cargo make` passes
 
 # Automation and Configuration Checks
 
