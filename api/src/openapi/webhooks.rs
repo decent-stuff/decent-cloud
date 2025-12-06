@@ -280,8 +280,12 @@ pub async fn chatwoot_webhook(
                                                     &chatwoot_url,
                                                 );
 
-                                                if let Err(e) =
-                                                    dispatch_notification(&db, email_service.as_ref(), &notification).await
+                                                if let Err(e) = dispatch_notification(
+                                                    &db,
+                                                    email_service.as_ref(),
+                                                    &notification,
+                                                )
+                                                .await
                                                 {
                                                     tracing::error!(
                                                         "Failed to dispatch notification for conversation {}: {}",

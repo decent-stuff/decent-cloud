@@ -225,6 +225,32 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     let ctx = setup_app_context().await?;
 
+    // Configure Chatwoot Agent Bot if API_PUBLIC_URL is set
+    match env::var("API_PUBLIC_URL") {
+        Ok(public_url) => {
+            tracing::info!(
+                "API_PUBLIC_URL set: {}, configuring Chatwoot agent bot",
+                public_url
+            );
+            let webhook_url = format!(
+                "{}/api/v1/webhooks/chatwoot",
+                public_url.trim_end_matches('/')
+            );
+            match platform
+                .configure_agent_bot("Decent Cloud Support Bot", &webhook_url)
+                .await
+            {
+                Ok(id) => {
+                    tracing::info!("Chatwoot agent bot configured (id={}): {}", id, webhook_url)
+                }
+                Err(e) => tracing::warn!("Failed to configure Chatwoot agent bot: {}", e),
+            }
+        }
+        Err(_) => {
+            tracing::warn!("API_PUBLIC_URL not set, skipping Chatwoot agent bot configuration");
+        }
+    }
+
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
     // Set up OpenAPI service with Swagger UI

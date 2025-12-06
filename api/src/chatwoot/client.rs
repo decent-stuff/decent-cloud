@@ -159,6 +159,123 @@ impl ChatwootPlatformClient {
 
         Ok(())
     }
+
+    /// Configure a platform-level Agent Bot with the given webhook URL.
+    /// Creates the bot if it doesn't exist, or updates the outgoing_url if it does.
+    pub async fn configure_agent_bot(&self, name: &str, webhook_url: &str) -> Result<i64> {
+        // List existing agent bots
+        let list_url = format!("{}/platform/api/v1/agent_bots", self.base_url);
+
+        #[derive(Deserialize)]
+        struct AgentBot {
+            id: i64,
+            name: String,
+        }
+
+        let resp = self
+            .client
+            .get(&list_url)
+            .header("api_access_token", &self.platform_token)
+            .send()
+            .await
+            .context("Failed to list agent bots")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Chatwoot Platform API error listing agent bots {}: {}",
+                status,
+                body
+            );
+        }
+
+        let bots: Vec<AgentBot> = resp.json().await.context("Failed to parse agent bots")?;
+
+        // Check if bot already exists
+        if let Some(existing) = bots.iter().find(|b| b.name == name) {
+            // Update existing bot
+            let update_url = format!(
+                "{}/platform/api/v1/agent_bots/{}",
+                self.base_url, existing.id
+            );
+
+            #[derive(Serialize)]
+            struct UpdateAgentBotRequest<'a> {
+                outgoing_url: &'a str,
+            }
+
+            let resp = self
+                .client
+                .patch(&update_url)
+                .header("api_access_token", &self.platform_token)
+                .json(&UpdateAgentBotRequest {
+                    outgoing_url: webhook_url,
+                })
+                .send()
+                .await
+                .context("Failed to update agent bot")?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                anyhow::bail!(
+                    "Chatwoot Platform API error updating agent bot {}: {}",
+                    status,
+                    body
+                );
+            }
+
+            tracing::info!(
+                "Updated Chatwoot agent bot '{}' (id={}) with URL {}",
+                name,
+                existing.id,
+                webhook_url
+            );
+            Ok(existing.id)
+        } else {
+            // Create new bot
+            #[derive(Serialize)]
+            struct CreateAgentBotRequest<'a> {
+                name: &'a str,
+                outgoing_url: &'a str,
+            }
+
+            let resp = self
+                .client
+                .post(&list_url)
+                .header("api_access_token", &self.platform_token)
+                .json(&CreateAgentBotRequest {
+                    name,
+                    outgoing_url: webhook_url,
+                })
+                .send()
+                .await
+                .context("Failed to create agent bot")?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                anyhow::bail!(
+                    "Chatwoot Platform API error creating agent bot {}: {}",
+                    status,
+                    body
+                );
+            }
+
+            let created: AgentBot = resp
+                .json()
+                .await
+                .context("Failed to parse created agent bot")?;
+            tracing::info!(
+                "Created Chatwoot agent bot '{}' (id={}) with URL {}",
+                name,
+                created.id,
+                webhook_url
+            );
+            Ok(created.id)
+        }
+    }
 }
 
 // =============================================================================

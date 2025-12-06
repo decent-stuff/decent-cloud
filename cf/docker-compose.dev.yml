@@ -131,7 +131,7 @@ services:
       POSTGRES_USERNAME: chatwoot_dev
       POSTGRES_PASSWORD: ${CHATWOOT_POSTGRES_PASSWORD:-chatwoot_dev_password}
       REDIS_URL: redis://chatwoot-redis:6379
-      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-2}
+      CHATWOOT_ACCOUNT_ID: ${CHATWOOT_ACCOUNT_ID:-1}
     command: >
       bundle exec rails runner "
         account_id = ENV['CHATWOOT_ACCOUNT_ID'].to_i
@@ -204,9 +204,13 @@ services:
       - CHATWOOT_INBOX_ID=${CHATWOOT_INBOX_ID:-1}
       # Telegram notifications
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-DecentCloudDevBot}
+      # AI Bot configuration
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_API_URL=${LLM_API_URL:-}
       - LLM_API_MODEL=${LLM_API_MODEL:-}
+      # Agent Bot auto-registration (public URL for Chatwoot callbacks)
+      - API_PUBLIC_URL=${API_PUBLIC_URL:-https://dev-api.decent-cloud.org}
     volumes:
       - ../data/api-data-dev:/data
     ports:

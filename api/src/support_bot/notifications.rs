@@ -148,8 +148,9 @@ async fn send_email_notification(
     email_service: Option<&Arc<EmailService>>,
     notification: &SupportNotification,
 ) -> Result<()> {
-    let email_svc = email_service
-        .ok_or_else(|| anyhow::anyhow!("Email service not configured (missing MAILCHANNELS_API_KEY)"))?;
+    let email_svc = email_service.ok_or_else(|| {
+        anyhow::anyhow!("Email service not configured (missing MAILCHANNELS_API_KEY)")
+    })?;
 
     // Look up account email by pubkey
     let account_id = db
