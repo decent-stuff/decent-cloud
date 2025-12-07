@@ -1357,6 +1357,53 @@ impl ProvidersApi {
             });
         }
 
+        // Get provider profile
+        let profile = match db.get_provider_profile(&pubkey_bytes).await {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Provider profile not found".to_string()),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get provider profile: {}", e)),
+                });
+            }
+        };
+
+        // Get notification config for portal_slug
+        let portal_slug = match db.get_user_notification_config(&pubkey_bytes).await {
+            Ok(Some(config)) => match config.chatwoot_portal_slug {
+                Some(slug) => slug,
+                None => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("No Chatwoot portal configured for this provider".to_string()),
+                    });
+                }
+            },
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("No notification config found for provider".to_string()),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get notification config: {}", e)),
+                });
+            }
+        };
+
         // Create Chatwoot client
         let chatwoot = match crate::chatwoot::ChatwootClient::from_env() {
             Ok(client) => client,
@@ -1369,22 +1416,123 @@ impl ProvidersApi {
             }
         };
 
-        // Sync article to Chatwoot
-        match crate::helpcenter::sync_provider_article(&db, &chatwoot, &pubkey_bytes).await {
-            Ok(result) => Json(ApiResponse {
-                success: true,
-                data: Some(HelpcenterSyncResponse {
-                    article_id: result.article_id,
-                    portal_slug: result.portal_slug,
-                    action: result.action,
-                }),
-                error: None,
+        // Generate article content
+        let article_content = match crate::helpcenter::generate_provider_article(&profile) {
+            Ok(content) => content,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to generate article: {}", e)),
+                });
+            }
+        };
+
+        // Generate article slug and title
+        let article_slug = format!(
+            "about-{}",
+            profile
+                .name
+                .to_lowercase()
+                .chars()
+                .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                .collect::<String>()
+                .split('-')
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join("-")
+        );
+        let article_title = format!("{} on Decent Cloud", profile.name);
+
+        // Extract description (first paragraph, max 200 chars)
+        let description: String = article_content
+            .lines()
+            .skip_while(|l| l.starts_with('#') || l.trim().is_empty())
+            .take_while(|l| !l.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(200)
+            .collect();
+
+        // Get author_id for article creation
+        let author_id = match chatwoot.get_profile().await {
+            Ok(id) => id,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get Chatwoot profile: {}", e)),
+                });
+            }
+        };
+
+        // Check if article already exists
+        let existing_articles = match chatwoot.list_articles(&portal_slug).await {
+            Ok(articles) => articles,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to list articles: {}", e)),
+                });
+            }
+        };
+
+        let existing_article = existing_articles.iter().find(|a| a.slug == article_slug);
+
+        // Create or update article
+        let (article_id, action) = if let Some(existing) = existing_article {
+            match chatwoot
+                .update_article(
+                    &portal_slug,
+                    existing.id,
+                    &article_title,
+                    &article_content,
+                    &description,
+                )
+                .await
+            {
+                Ok(_) => (existing.id, "updated".to_string()),
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Failed to update article: {}", e)),
+                    });
+                }
+            }
+        } else {
+            match chatwoot
+                .create_article(
+                    &portal_slug,
+                    &article_title,
+                    &article_slug,
+                    &article_content,
+                    &description,
+                    author_id,
+                )
+                .await
+            {
+                Ok(id) => (id, "created".to_string()),
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Failed to create article: {}", e)),
+                    });
+                }
+            }
+        };
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(HelpcenterSyncResponse {
+                article_id,
+                portal_slug,
+                action,
             }),
-            Err(e) => Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(e.to_string()),
-            }),
-        }
+            error: None,
+        })
     }
 }

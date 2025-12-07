@@ -17,7 +17,6 @@ pub mod types;
 pub mod users;
 
 // Re-export main types
-pub use chatwoot::{ProviderResponseMetrics, ResponseTimeDistribution, SlaBreach};
 pub use notification_config::UserNotificationConfig;
 pub use types::{Database, LedgerEntryData};
 
