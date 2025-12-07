@@ -132,12 +132,12 @@ pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice
     // Buyer details (from contract or placeholder)
     let buyer_name = Some(contract.requester_contact.clone());
     let buyer_address: Option<String> = None;
-    let buyer_vat_id: Option<String> = None;
+    let buyer_vat_id = contract.customer_tax_id.clone();
 
-    // Amounts
+    // Amounts - use tax from contract if available (from Stripe Tax or manual entry)
     let subtotal_e9s = contract.payment_amount_e9s;
-    let vat_rate_percent = 0; // TODO: Stripe Tax integration in Step 4
-    let vat_amount_e9s = 0;
+    let vat_rate_percent = contract.tax_rate_percent.unwrap_or(0.0) as i64;
+    let vat_amount_e9s = contract.tax_amount_e9s.unwrap_or(0);
     let total_e9s = subtotal_e9s + vat_amount_e9s;
 
     // Insert invoice record
