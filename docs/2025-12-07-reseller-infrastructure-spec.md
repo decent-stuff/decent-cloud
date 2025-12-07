@@ -141,14 +141,18 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 
 ## Completion Summary
 
-Phase 1B.2 reseller infrastructure is now complete. All 6 steps have been successfully implemented and verified:
+**Completed:** 2025-12-07 | **Agents:** 12/15 | **Steps:** 6/6
 
-1. Database migration created `reseller_relationships` and `reseller_orders` tables
-2. Database layer provides CRUD operations for relationships and order management
-3. API endpoints expose reseller functionality to authenticated providers
-4. Provider dashboard shows external providers and relationship management
-5. Order fulfillment flow allows providers to mark orders fulfilled with external details
-6. Marketplace displays reseller offerings with adjusted pricing and enables rental
+**Changes:** 207 files, +10958/-1237 lines, 9 new tests
+
+**Requirements:**
+- [x] 5/5 must-have requirements completed
+- [x] 0/2 nice-to-have (deferred)
+
+**Verification:**
+- ✅ All backend tests pass (9 reseller tests + 43 offering tests)
+- ✅ Frontend checks pass (0 errors, 0 warnings)
+- ✅ cargo clippy clean (no new errors)
 
 ### Key Features Delivered
 - Providers can become resellers for external/seeded providers
@@ -157,6 +161,14 @@ Phase 1B.2 reseller infrastructure is now complete. All 6 steps have been succes
 - Fulfillment workflow with external order ID and instance details
 - Marketplace transparency showing reseller name and commission markup
 - Seamless rental experience for customers (no redirect to external site)
+
+### Commits
+1. `6a652b3` - feat(api): add reseller infrastructure migration (step 1/6)
+2. `a9323e4` - feat(api): add reseller models and database layer (step 2/6)
+3. `5403360` - feat(api): add reseller API endpoints (step 3/6)
+4. `e414f3b` - feat(website): add provider reseller dashboard (step 4/6)
+5. `88e94e0` - feat(website): add reseller order fulfillment flow (step 5/6)
+6. `b01c6c7` - feat: add marketplace reseller display (step 6/6)
 
 ---
 

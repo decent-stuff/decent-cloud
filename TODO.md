@@ -25,17 +25,6 @@
 
 ## ICPay Integration
 
-**Spec:** [2025-12-05-icpay-escrow-payments-spec.md](docs/2025-12-05-icpay-escrow-payments-spec.md)
-**Status:** COMPLETE (with manual payout limitation)
-
-### Implemented
-- ✅ Frontend wallet integration (SDK + widget)
-- ✅ Backend payment verification
-- ✅ Webhook handler with HMAC-SHA256 signature verification
-- ✅ Prorated refunds on cancellation
-- ✅ Daily payment release tracking (PaymentReleaseService)
-- ✅ Admin endpoints for viewing pending releases
-
 ### Manual Payout Requirement
 **ICPay does NOT have a programmatic payout API.** Provider payouts must be done manually:
 1. View pending releases: `GET /api/v1/admin/payment-releases`
