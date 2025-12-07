@@ -44,6 +44,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/033_remove_messaging.sql"),
         include_str!("../../migrations/034_provider_onboarding.sql"),
         include_str!("../../migrations/035_external_providers.sql"),
+        include_str!("../../migrations/036_reseller_infrastructure.sql"),
     ];
 
     for migration in &migrations {

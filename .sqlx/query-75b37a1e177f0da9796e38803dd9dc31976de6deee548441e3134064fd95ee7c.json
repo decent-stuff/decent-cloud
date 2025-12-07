@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE reseller_orders SET external_order_id = ?, external_order_details = ?, status = 'fulfilled', fulfilled_at_ns = ? WHERE contract_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "75b37a1e177f0da9796e38803dd9dc31976de6deee548441e3134064fd95ee7c"
+}

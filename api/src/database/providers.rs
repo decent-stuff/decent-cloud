@@ -122,6 +122,25 @@ pub struct Validator {
     pub registered_at_ns: i64,
 }
 
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalProvider {
+    pub pubkey: String,
+    pub name: String,
+    pub domain: String,
+    pub website_url: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub logo_url: Option<String>,
+    pub data_source: String,
+    #[ts(type = "number")]
+    pub offerings_count: i64,
+    #[ts(type = "number")]
+    pub created_at_ns: i64,
+}
+
 impl Database {
     /// Get list of active providers (checked in recently)
     pub async fn get_active_providers(&self, days: i64) -> Result<Vec<ProviderProfile>> {
@@ -299,6 +318,43 @@ impl Database {
         .await?;
 
         Ok(validators)
+    }
+
+    /// List external providers with offering counts
+    pub async fn list_external_providers(&self) -> Result<Vec<ExternalProvider>> {
+        let rows = sqlx::query!(
+            r#"SELECT
+                ep.pubkey,
+                ep.name,
+                ep.domain,
+                ep.website_url,
+                ep.logo_url,
+                ep.data_source,
+                ep.created_at_ns,
+                CAST(COUNT(po.id) AS INTEGER) as "offerings_count!: i64"
+            FROM external_providers ep
+            LEFT JOIN provider_offerings po ON ep.pubkey = po.pubkey AND po.offering_source = 'seeded'
+            GROUP BY ep.pubkey
+            ORDER BY ep.name"#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let providers = rows
+            .into_iter()
+            .map(|row| ExternalProvider {
+                pubkey: hex::encode(&row.pubkey),
+                name: row.name,
+                domain: row.domain,
+                website_url: row.website_url,
+                logo_url: row.logo_url,
+                data_source: row.data_source,
+                offerings_count: row.offerings_count,
+                created_at_ns: row.created_at_ns,
+            })
+            .collect();
+
+        Ok(providers)
     }
 
     /// Create or update an external provider

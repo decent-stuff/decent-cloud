@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                ep.pubkey,\n                ep.name,\n                ep.domain,\n                ep.website_url,\n                ep.logo_url,\n                ep.data_source,\n                ep.created_at_ns,\n                COUNT(po.id) as offerings_count\n            FROM external_providers ep\n            LEFT JOIN provider_offerings po ON ep.pubkey = po.pubkey AND po.offering_source = 'seeded'\n            GROUP BY ep.pubkey\n            ORDER BY ep.name",
+  "describe": {
+    "columns": [
+      {
+        "name": "pubkey",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "domain",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "website_url",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "logo_url",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "data_source",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "offerings_count",
+        "ordinal": 7,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d4c2dd8d6fa8f7704bcab0c29d4ae79490d08f40acd3632156cf1c0794a62e45"
+}

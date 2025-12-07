@@ -5,6 +5,7 @@ pub mod common;
 pub mod contracts;
 pub mod offerings;
 pub mod providers;
+pub mod resellers;
 pub mod stats;
 pub mod system;
 pub mod transfers;
@@ -18,6 +19,7 @@ pub use chatwoot::ChatwootApi;
 pub use contracts::ContractsApi;
 pub use offerings::OfferingsApi;
 pub use providers::ProvidersApi;
+pub use resellers::ResellersApi;
 pub use stats::StatsApi;
 pub use system::SystemApi;
 pub use transfers::TransfersApi;
@@ -40,5 +42,6 @@ pub fn create_combined_api() -> impl OpenApi {
         UsersApi,
         TransfersApi,
         StatsApi,
+        ResellersApi,
     )
 }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE reseller_relationships SET commission_percent = ?, updated_at_ns = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "3c663b89169b01b7463a17ae182fe6daf416a5db3cb2dce4a494a557c91bfca0"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_sign_requests SET last_release_at_ns = ?, total_released_e9s = ? WHERE contract_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "629836aac70834e464d5b9c545cd4aa705e5aab977797e5afca74d3c9f163c46"
+}

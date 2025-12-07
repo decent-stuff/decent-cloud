@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE reseller_relationships SET commission_percent = ?, status = ?, updated_at_ns = ? WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "72a20ecf05c3039941975b7403406bd7fd46a7a58711958d5bd856dc5bef656b"
+}

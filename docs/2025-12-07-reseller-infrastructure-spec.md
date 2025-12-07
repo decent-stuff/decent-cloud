@@ -11,7 +11,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 ### Must-have
 - [x] Database migration for `reseller_relationships` and `reseller_orders` tables
 - [x] Reseller models and database CRUD operations
-- [ ] Reseller API endpoints: list external providers, create/update relationships, list orders, fulfill order
+- [x] Reseller API endpoints: list external providers, create/update relationships, list orders, fulfill order
 - [ ] Provider dashboard "Reseller" section with external providers list
 - [ ] Order fulfillment flow in dashboard
 - [ ] Marketplace shows reseller offerings with commission markup
@@ -32,7 +32,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 
 ### Step 3: Reseller API Endpoints
 **Success:** `/api/v1/reseller/*` endpoints working with tests
-**Status:** Pending
+**Status:** Complete
 
 ### Step 4: Provider Dashboard Reseller Section
 **Success:** Provider can view external providers, set commission, see orders
@@ -70,10 +70,20 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - **Outcome:** Complete - Reseller database layer is functional and tested. Note: SQLx offline mode preparation deferred due to migration sync issues (not blocking for this step)
 
 ### Step 3
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created `/code/api/src/openapi/resellers.rs` with 7 API endpoints:
+  - `GET /reseller/external-providers` - List available external providers
+  - `POST /reseller/relationships` - Create reseller relationship
+  - `PUT /reseller/relationships/:pubkey` - Update commission/status
+  - `DELETE /reseller/relationships/:pubkey` - Delete relationship
+  - `GET /reseller/relationships` - List provider's relationships
+  - `GET /reseller/orders` - List orders (with status filter)
+  - `POST /reseller/orders/:contract_id/fulfill` - Fulfill order
+  - Created response types: `ResellerRelationshipResponse`, `ResellerOrderResponse` with hex-encoded pubkeys
+  - Added request types in `common.rs`: `CreateResellerRelationshipRequest`, `UpdateResellerRelationshipRequest`, `FulfillResellerOrderRequest`
+  - Registered API in `openapi.rs`
+- **Review:** Fixed SQLx type inference issues with `as "column!"` syntax. Added test migration to test_helpers.rs. All endpoints require provider authentication.
+- **Verification:** 9/9 reseller tests pass, cargo clippy clean (no new errors)
+- **Outcome:** Complete - All reseller API endpoints functional
 
 ### Step 4
 - **Implementation:** (pending)

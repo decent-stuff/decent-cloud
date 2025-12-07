@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO reseller_orders (contract_id, reseller_pubkey, external_provider_pubkey, offering_id, base_price_e9s, commission_e9s, total_paid_e9s, status, created_at_ns)\n               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)\n               RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3577e7abdab8f9db1acfe0ba84e01d2ae7ec7e6438224a00c56905a2f48cf2aa"
+}

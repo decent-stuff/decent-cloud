@@ -1,0 +1,15 @@
+# Output files (regenerated)
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# uv
+uv.lock
+
+# IDE
+.idea/
+.vscode/

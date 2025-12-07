@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "contact_type",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "contact_value",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "88a10b13951cd0b01f7489d97c8561c90f4a4e97722c693f0d71382191dd2208"
+}

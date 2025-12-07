@@ -83,27 +83,40 @@ impl Database {
 
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
-        // Get current values
-        let current = sqlx::query!(
-            "SELECT commission_percent, status FROM reseller_relationships WHERE id = ?",
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Reseller relationship not found"))?;
-
-        let new_commission = commission_percent.unwrap_or(current.commission_percent);
-        let new_status = status.unwrap_or(&current.status);
-
-        sqlx::query!(
-            "UPDATE reseller_relationships SET commission_percent = ?, status = ?, updated_at_ns = ? WHERE id = ?",
-            new_commission,
-            new_status,
-            updated_at_ns,
-            id
-        )
-        .execute(&self.pool)
-        .await?;
+        // Build dynamic update query based on provided fields
+        if let Some(pct) = commission_percent {
+            if let Some(st) = status {
+                sqlx::query!(
+                    "UPDATE reseller_relationships SET commission_percent = ?, status = ?, updated_at_ns = ? WHERE id = ?",
+                    pct,
+                    st,
+                    updated_at_ns,
+                    id
+                )
+                .execute(&self.pool)
+                .await?;
+            } else {
+                sqlx::query!(
+                    "UPDATE reseller_relationships SET commission_percent = ?, updated_at_ns = ? WHERE id = ?",
+                    pct,
+                    updated_at_ns,
+                    id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+        } else if let Some(st) = status {
+            sqlx::query!(
+                "UPDATE reseller_relationships SET status = ?, updated_at_ns = ? WHERE id = ?",
+                st,
+                updated_at_ns,
+                id
+            )
+            .execute(&self.pool)
+            .await?;
+        } else {
+            anyhow::bail!("At least one of commission_percent or status must be provided");
+        }
 
         Ok(())
     }
@@ -112,13 +125,103 @@ impl Database {
     pub async fn get_reseller_relationship(&self, id: i64) -> Result<Option<ResellerRelationship>> {
         let relationship = sqlx::query_as!(
             ResellerRelationship,
-            "SELECT id, reseller_pubkey, external_provider_pubkey, commission_percent, status, created_at_ns, updated_at_ns FROM reseller_relationships WHERE id = ?",
+            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE id = ?"#,
             id
         )
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(relationship)
+    }
+
+    /// Get a reseller relationship by reseller and external provider pubkeys
+    pub async fn get_reseller_relationship_by_pubkeys(
+        &self,
+        reseller_pubkey: &[u8],
+        external_provider_pubkey: &[u8],
+    ) -> Result<Option<ResellerRelationship>> {
+        let relationship = sqlx::query_as!(
+            ResellerRelationship,
+            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?"#,
+            reseller_pubkey,
+            external_provider_pubkey
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(relationship)
+    }
+
+    /// Update a reseller relationship by reseller and external provider pubkeys
+    pub async fn update_reseller_relationship_by_pubkeys(
+        &self,
+        reseller_pubkey: &[u8],
+        external_provider_pubkey: &[u8],
+        commission_percent: Option<i64>,
+        status: Option<&str>,
+    ) -> Result<()> {
+        // Validate commission_percent if provided
+        if let Some(pct) = commission_percent {
+            if !(0..=50).contains(&pct) {
+                anyhow::bail!(
+                    "commission_percent must be between 0 and 50, got {}",
+                    pct
+                );
+            }
+        }
+
+        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        // Get current values
+        let current = sqlx::query!(
+            "SELECT commission_percent, status FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+            reseller_pubkey,
+            external_provider_pubkey
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Reseller relationship not found"))?;
+
+        let new_commission = commission_percent.unwrap_or(current.commission_percent);
+        let new_status = status.unwrap_or(&current.status);
+
+        let result = sqlx::query!(
+            "UPDATE reseller_relationships SET commission_percent = ?, status = ?, updated_at_ns = ? WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+            new_commission,
+            new_status,
+            updated_at_ns,
+            reseller_pubkey,
+            external_provider_pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("Reseller relationship not found");
+        }
+
+        Ok(())
+    }
+
+    /// Delete a reseller relationship by reseller and external provider pubkeys
+    pub async fn delete_reseller_relationship_by_pubkeys(
+        &self,
+        reseller_pubkey: &[u8],
+        external_provider_pubkey: &[u8],
+    ) -> Result<()> {
+        let result = sqlx::query!(
+            "DELETE FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+            reseller_pubkey,
+            external_provider_pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("Reseller relationship not found");
+        }
+
+        Ok(())
     }
 
     /// List all reseller relationships for a given provider (as reseller)
@@ -128,7 +231,7 @@ impl Database {
     ) -> Result<Vec<ResellerRelationship>> {
         let relationships = sqlx::query_as!(
             ResellerRelationship,
-            "SELECT id, reseller_pubkey, external_provider_pubkey, commission_percent, status, created_at_ns, updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = ? ORDER BY created_at_ns DESC",
+            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -186,7 +289,7 @@ impl Database {
     pub async fn get_reseller_order(&self, contract_id: &[u8]) -> Result<Option<ResellerOrder>> {
         let order = sqlx::query_as!(
             ResellerOrder,
-            "SELECT id, contract_id, reseller_pubkey, external_provider_pubkey, offering_id, base_price_e9s, commission_e9s, total_paid_e9s, external_order_id, external_order_details, status, created_at_ns, fulfilled_at_ns FROM reseller_orders WHERE contract_id = ?",
+            r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status as "status!", created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE contract_id = ?"#,
             contract_id
         )
         .fetch_optional(&self.pool)
@@ -195,7 +298,7 @@ impl Database {
         Ok(order)
     }
 
-    /// List reseller orders for a provider with optional status filter
+    /// List reseller orders for a provider as reseller (orders they placed) with optional status filter
     pub async fn list_reseller_orders_for_provider(
         &self,
         pubkey: &[u8],
@@ -204,7 +307,7 @@ impl Database {
         let orders = if let Some(status) = status_filter {
             sqlx::query_as!(
                 ResellerOrder,
-                "SELECT id, contract_id, reseller_pubkey, external_provider_pubkey, offering_id, base_price_e9s, commission_e9s, total_paid_e9s, external_order_id, external_order_details, status, created_at_ns, fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = ? AND status = ? ORDER BY created_at_ns DESC",
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = ? AND status = ? ORDER BY created_at_ns DESC"#,
                 pubkey,
                 status
             )
@@ -213,7 +316,35 @@ impl Database {
         } else {
             sqlx::query_as!(
                 ResellerOrder,
-                "SELECT id, contract_id, reseller_pubkey, external_provider_pubkey, offering_id, base_price_e9s, commission_e9s, total_paid_e9s, external_order_id, external_order_details, status, created_at_ns, fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = ? ORDER BY created_at_ns DESC",
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = ? ORDER BY created_at_ns DESC"#,
+                pubkey
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(orders)
+    }
+
+    /// List reseller orders for an external provider (orders they need to fulfill) with optional status filter
+    pub async fn list_reseller_orders_for_external_provider(
+        &self,
+        pubkey: &[u8],
+        status_filter: Option<&str>,
+    ) -> Result<Vec<ResellerOrder>> {
+        let orders = if let Some(status) = status_filter {
+            sqlx::query_as!(
+                ResellerOrder,
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = ? AND status = ? ORDER BY created_at_ns DESC"#,
+                pubkey,
+                status
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                ResellerOrder,
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = ? ORDER BY created_at_ns DESC"#,
                 pubkey
             )
             .fetch_all(&self.pool)

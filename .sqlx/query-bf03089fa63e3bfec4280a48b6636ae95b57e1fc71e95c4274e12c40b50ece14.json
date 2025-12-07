@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "bf03089fa63e3bfec4280a48b6636ae95b57e1fc71e95c4274e12c40b50ece14"
+}

@@ -1,0 +1,92 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as \"offering_id!\", base_price_e9s as \"base_price_e9s!\", commission_e9s as \"commission_e9s!\", total_paid_e9s as \"total_paid_e9s!\", external_order_id, external_order_details, status as \"status!\", created_at_ns as \"created_at_ns!\", fulfilled_at_ns FROM reseller_orders WHERE contract_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "contract_id",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "reseller_pubkey",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "external_provider_pubkey",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "offering_id!",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "base_price_e9s!",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "commission_e9s!",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "total_paid_e9s!",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "external_order_id",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "external_order_details",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at_ns!",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "fulfilled_at_ns",
+        "ordinal": 12,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "e27aa73018d596e0d4b32352899aca300a38c055b3fa84e51ab1b5d7acacda2d"
+}

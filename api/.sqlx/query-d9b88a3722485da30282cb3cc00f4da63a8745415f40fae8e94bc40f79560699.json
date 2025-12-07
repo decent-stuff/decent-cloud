@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO account_public_keys\n               (id, account_id, public_key, is_active, added_at)\n               VALUES (?, ?, ?, 1, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "d9b88a3722485da30282cb3cc00f4da63a8745415f40fae8e94bc40f79560699"
+}

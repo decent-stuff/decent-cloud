@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'cancelled'",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b44e5a752a05b54de902bd20cf2f940ff24de79fd77b33808b45d72100dae0e2"
+}

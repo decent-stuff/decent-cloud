@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE reseller_relationships SET status = ?, updated_at_ns = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "f901066bdaa5b1b572afa881286e153f4c4059c4d04a338f92e674ad516aa589"
+}

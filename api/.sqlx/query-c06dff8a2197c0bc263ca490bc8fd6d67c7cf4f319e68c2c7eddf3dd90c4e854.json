@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO notification_usage (provider_id, channel, date, count)\n               VALUES (?, ?, ?, 1)\n               ON CONFLICT(provider_id, channel, date) DO UPDATE SET count = count + 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "c06dff8a2197c0bc263ca490bc8fd6d67c7cf4f319e68c2c7eddf3dd90c4e854"
+}

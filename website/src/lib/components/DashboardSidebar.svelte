@@ -36,9 +36,7 @@
 	const providerItems = [
 		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
 		{ href: "/dashboard/provider/requests", icon: "📥", label: "Rental Requests" },
-		{ href: "/dashboard/provider/onboarding", icon: "📝", label: "Help Center Setup" },
-		{ href: "/dashboard/account/notifications", icon: "🔔", label: "Notifications" },
-		{ href: "/dashboard/account/support", icon: "🎫", label: "Support Portal" },
+		{ href: "/dashboard/provider/support", icon: "🎧", label: "Support Center" },
 	];
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
@@ -184,14 +182,10 @@
 				>
 					<span class="text-lg">{item.icon}</span>
 					<span class="font-medium text-sm">{item.label}</span>
-					{#if item.label === "Help Center Setup" && hasOfferings}
-						{#if onboardingCompleted}
-							<span class="ml-auto text-green-400 text-xs" title="Setup complete">✓</span>
-						{:else}
-							<span class="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-400" title="Setup incomplete"></span>
-						{/if}
+					{#if item.label === "Support Center" && hasOfferings && !onboardingCompleted}
+						<span class="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-400" title="Setup incomplete"></span>
 					{/if}
-					</a>
+				</a>
 			{/each}
 
 			{#if CHATWOOT_BASE_URL}

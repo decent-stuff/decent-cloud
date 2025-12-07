@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM telegram_message_tracking WHERE created_at < ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "21bf20040c3be5349dc9463ca6a751f883a50adbe2e8754c3cf9017f09dabf9e"
+}

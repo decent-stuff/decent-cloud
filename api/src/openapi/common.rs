@@ -404,6 +404,31 @@ pub struct HelpcenterSyncResponse {
     pub action: String,
 }
 
+// Request types for reseller operations
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct CreateResellerRelationshipRequest {
+    pub external_provider_pubkey: String,
+    pub commission_percent: i64,
+}
+
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateResellerRelationshipRequest {
+    pub commission_percent: Option<i64>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct FulfillResellerOrderRequest {
+    pub external_order_id: String,
+    pub external_order_details: Option<String>,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints
@@ -428,4 +453,6 @@ pub enum ApiTags {
     Stats,
     /// Chatwoot integration endpoints
     Chatwoot,
+    /// Reseller operations endpoints
+    Resellers,
 }
