@@ -1181,7 +1181,7 @@ impl ProvidersApi {
                 success: true,
                 data: Some(TestNotificationResponse {
                     sent: false,
-                    message: e.to_string(),
+                    message: format!("{:#}", e), // Full error chain
                 }),
                 error: None,
             }),
@@ -1218,7 +1218,7 @@ impl ProvidersApi {
                 success: true,
                 data: Some(TestNotificationResponse {
                     sent: false,
-                    message: e.to_string(),
+                    message: format!("{:#}", e), // Full error chain
                 }),
                 error: None,
             }),

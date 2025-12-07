@@ -98,16 +98,15 @@ async fn send_test_sms(phone: &Option<String>) -> Result<String> {
     }
 
     let provider = get_sms_provider().ok_or_else(|| anyhow::anyhow!("SMS provider init failed"))?;
+    let provider_name = provider.name();
     let msg_id = provider
         .send_sms(phone, "This is a test notification from DecentCloud.")
         .await
-        .context("Failed to send SMS")?;
+        .with_context(|| format!("Failed to send SMS via {}", provider_name))?;
 
     Ok(format!(
         "SMS test sent via {} to {} (id: {})",
-        provider.name(),
-        phone,
-        msg_id
+        provider_name, phone, msg_id
     ))
 }
 
