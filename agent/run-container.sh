@@ -138,6 +138,28 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Generate unique project name
+if [[ -n "$AGENT_NAME" ]]; then
+    PROJECT_NAME="dc-agent-$AGENT_NAME"
+else
+    # Auto-generate sequential number using flock for safe concurrent access
+    LOCK_DIR="/tmp/dc-agent-locks"
+    mkdir -p "$LOCK_DIR"
+    for i in {1..99}; do
+        LOCK_FILE="$LOCK_DIR/$i.lock"
+        exec {fd}>"$LOCK_FILE"
+        if flock -n "$fd"; then
+            # Keep lock held for duration of script (fd stays open)
+            PROJECT_NAME="dc-agent-$i"
+            break
+        fi
+    done
+    if [[ -z "$PROJECT_NAME" ]]; then
+        log_error "No available agent slots (1-99 all in use)"
+        exit 1
+    fi
+fi
+
 # Check requirements
 check_requirements() {
     log_info "Checking requirements..."
@@ -161,7 +183,6 @@ check_requirements() {
         exit 1
     fi
 
-    log_success "Requirements check passed"
 }
 
 # Get Docker group ID for socket access
