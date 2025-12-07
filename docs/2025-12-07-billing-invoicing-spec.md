@@ -129,16 +129,64 @@
 - **Outcome:** Implementation complete, tests passing. Receipt email infrastructure ready for use. Blocked on pre-existing compilation errors in reseller/provider code
 
 ### Step 2
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:**
+  - Created Typst template `api/templates/invoice.typ`:
+    - Uses `@preview/invoice-maker:1.1.0` package
+    - Parses JSON from `sys.inputs.data`
+    - Maps invoice data to invoice-maker format (biller, recipient, items)
+  - Created migration `039_invoices.sql`:
+    - `invoices` table with invoice_number, contract_id, seller/buyer details, amounts, pdf_blob
+    - `invoice_sequence` table for atomic sequential numbering per year (INV-YYYY-NNNNNN)
+    - Indexes on contract_id, invoice_number, created_at_ns
+  - Created `api/src/invoices.rs` module (~480 lines):
+    - `get_next_invoice_number()` - atomic sequential numbering with year rollover
+    - `create_invoice()` - creates invoice record (idempotent per contract)
+    - `generate_invoice_pdf()` - calls Typst CLI via `tokio::process::Command`
+    - `get_invoice_pdf()` - returns cached PDF or generates on-demand
+    - `get_invoice_metadata()` - returns invoice JSON
+  - Created `api/src/openapi/invoices.rs` API endpoints:
+    - `GET /api/v1/contracts/{id}/invoice` - returns PDF binary
+    - `GET /api/v1/contracts/{id}/invoice/metadata` - returns invoice JSON
+    - Auth: requester or provider only
+  - Added 4 unit tests: sequential numbering, year rollover, invoice creation, metadata retrieval
+- **Review:**
+  - Uses existing patterns (sqlx::query for offline mode compatibility)
+  - Typst CLI invocation is clean with proper error handling
+  - Invoice numbers are atomic and sequential per year
+  - PDF caching in database avoids regeneration
+  - DRY: Reuses contract data, minimal code
+- **Verification:**
+  - All 4 invoice tests pass
+  - `cargo make` passes cleanly
+- **Outcome:** SUCCESS - PDF invoice generation with Typst working
 
 ### Step 3
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:**
+  - Added `downloadContractInvoice()` function to `website/src/lib/services/api.ts`:
+    - Calls `GET /api/v1/contracts/{contractId}/invoice` with auth headers
+    - Handles PDF binary response using `response.blob()`
+    - Creates download link and triggers browser download
+    - Follows existing pattern from `downloadOfferingsCSV()` (lines 490-503)
+  - Updated `website/src/routes/dashboard/rentals/+page.svelte`:
+    - Added "Download Invoice" button for contracts with `payment_status === 'succeeded'`
+    - Button appears next to status badge and cancel button
+    - Shows loading state while downloading (spinning indicator + "Downloading...")
+    - Uses existing auth pattern (`signRequest()` with Ed25519 signature)
+    - Error handling with error state display
+  - Files changed:
+    - `/code/website/src/lib/services/api.ts` (+30 lines)
+    - `/code/website/src/routes/dashboard/rentals/+page.svelte` (+42 lines)
+- **Review:**
+  - Used existing download pattern (blob + URL.createObjectURL)
+  - Followed existing auth pattern (signRequest + headers)
+  - Minimal changes: extended existing components
+  - No new files created
+  - Button only shows for paid contracts (payment_status === 'succeeded')
+  - Graceful error handling with user feedback
+- **Verification:**
+  - `npm run check` - 0 errors, 0 warnings
+  - `npm run build` - SUCCESS (built in 15.90s)
+- **Outcome:** SUCCESS - Invoice download button added to rentals page, follows all existing patterns, builds cleanly
 
 ### Step 4
 - **Implementation:** (pending)

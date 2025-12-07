@@ -1105,3 +1105,35 @@ export async function fulfillResellerOrder(
 		throw new Error(payload.error ?? 'Failed to fulfill reseller order');
 	}
 }
+
+// ============ Invoice Endpoints ============
+
+export async function downloadContractInvoice(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/invoice`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers: {
+			...headers,
+			'Accept': 'application/pdf'
+		}
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to download invoice: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const blob = await response.blob();
+	const downloadUrl = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.setAttribute('href', downloadUrl);
+	link.setAttribute('download', `invoice-${contractId}.pdf`);
+	link.style.visibility = 'hidden';
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+	URL.revokeObjectURL(downloadUrl);
+}

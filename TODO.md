@@ -18,16 +18,6 @@
 
 ---
 
-## Notification System - Deferred Items
-
-### Paid Notification Tiers
-- Define pricing for additional notifications beyond free tier
-- Integrate with payment system (Stripe/ICPay)
-- Track paid quota separately from free tier
-- Consider monthly subscription vs pay-per-notification
-
----
-
 ## Billing & Invoicing
 
 **Spec:** [2025-12-07-billing-invoicing-spec.md](docs/2025-12-07-billing-invoicing-spec.md)
@@ -133,3 +123,13 @@ In-progress: see docs/2025-12-04-support-bot-notification-system-spec.md
 - "Would you rent from this provider again?" Y/N
 - Binary signals harder to game than star ratings
 - Requires: Post-contract feedback workflow
+
+---
+
+## Notification System - Deferred Items
+
+### Paid Notification Tiers
+- Define pricing for additional notifications beyond free tier
+- Integrate with payment system (Stripe/ICPay)
+- Track paid quota separately from free tier
+- Consider monthly subscription vs pay-per-notification

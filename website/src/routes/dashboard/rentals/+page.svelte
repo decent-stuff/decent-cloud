@@ -5,6 +5,7 @@
 	import {
 		getUserContracts,
 		cancelRentalRequest,
+		downloadContractInvoice,
 		type Contract,
 		hexEncode,
 	} from "$lib/services/api";
@@ -21,6 +22,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let cancellingContractId = $state<string | null>(null);
+	let downloadingInvoiceContractId = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
 
@@ -117,6 +119,31 @@
 			console.error("Error cancelling rental request:", e);
 		} finally {
 			cancellingContractId = null;
+		}
+	}
+
+	async function handleDownloadInvoice(contractId: string) {
+		try {
+			downloadingInvoiceContractId = contractId;
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				error = "You must be authenticated to download invoices";
+				return;
+			}
+
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/contracts/${contractId}/invoice`,
+			);
+
+			await downloadContractInvoice(contractId, headers);
+		} catch (e) {
+			error =
+				e instanceof Error ? e.message : "Failed to download invoice";
+			console.error("Error downloading invoice:", e);
+		} finally {
+			downloadingInvoiceContractId = null;
 		}
 	}
 
@@ -227,6 +254,31 @@
 									>
 										Cancel
 									</button>
+								{/if}
+								<!-- Download Invoice button for paid contracts -->
+								{#if contract.payment_status === "succeeded" && downloadingInvoiceContractId !== contract.contract_id}
+									<button
+										onclick={() =>
+											handleDownloadInvoice(
+												contract.contract_id,
+											)}
+										class="px-2 py-1 text-xs bg-blue-600/80 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+										title="Download invoice PDF"
+									>
+										<span>&#8595;</span>
+										Invoice
+									</button>
+								{/if}
+								<!-- Invoice download state -->
+								{#if downloadingInvoiceContractId === contract.contract_id}
+									<div
+										class="flex items-center gap-1 text-xs text-blue-400"
+									>
+										<div
+											class="animate-spin rounded-full h-3 w-3 border-t border-b border-blue-400"
+										></div>
+										Downloading...
+									</div>
 								{/if}
 								<!-- Cancellation state -->
 								{#if cancellingContractId === contract.contract_id}
