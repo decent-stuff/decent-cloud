@@ -142,15 +142,22 @@ impl std::fmt::Debug for TextBeeClient {
 
 #[derive(Debug, Deserialize)]
 struct TextBeeResponse {
-    success: bool,
     #[serde(default)]
-    message: Option<String>,
+    data: Option<TextBeeData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TextBeeData {
+    #[serde(default)]
+    id: Option<String>,
 }
 
 impl TextBeeClient {
     pub fn from_env() -> Result<Self> {
         let api_url = std::env::var("TEXTBEE_API_URL")
-            .unwrap_or_else(|_| "https://api.textbee.dev".to_string());
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "https://api.textbee.dev".to_string());
         Ok(Self {
             client: Client::new(),
             api_url,
@@ -194,20 +201,15 @@ impl SmsProvider for TextBeeClient {
             anyhow::bail!("TextBee API error {}: {}", status, msg);
         }
 
-        let response: TextBeeResponse = resp
-            .json()
-            .await
-            .context("Failed to parse TextBee response")?;
+        // Parse response to extract message ID if available
+        let response: TextBeeResponse = resp.json().await.unwrap_or(TextBeeResponse { data: None });
 
-        if !response.success {
-            anyhow::bail!(
-                "TextBee failed: {}",
-                response.message.unwrap_or_else(|| "Unknown".into())
-            );
-        }
+        let msg_id = response
+            .data
+            .and_then(|d| d.id)
+            .unwrap_or_else(|| format!("textbee-{}", chrono::Utc::now().timestamp()));
 
-        // TextBee doesn't return a message ID, use device_id + timestamp
-        Ok(format!("textbee-{}", chrono::Utc::now().timestamp()))
+        Ok(msg_id)
     }
 
     fn name(&self) -> &'static str {
