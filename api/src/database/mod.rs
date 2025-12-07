@@ -9,6 +9,7 @@ pub mod offerings;
 pub mod providers;
 pub mod recovery;
 pub mod reputation;
+pub mod reseller;
 pub mod rewards;
 pub mod stats;
 pub mod telegram_tracking;

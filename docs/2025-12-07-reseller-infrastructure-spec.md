@@ -10,6 +10,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 
 ### Must-have
 - [x] Database migration for `reseller_relationships` and `reseller_orders` tables
+- [x] Reseller models and database CRUD operations
 - [ ] Reseller API endpoints: list external providers, create/update relationships, list orders, fulfill order
 - [ ] Provider dashboard "Reseller" section with external providers list
 - [ ] Order fulfillment flow in dashboard
@@ -27,7 +28,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 
 ### Step 2: Reseller Models + Database Layer
 **Success:** CRUD operations for reseller relationships and orders
-**Status:** Pending
+**Status:** Complete
 
 ### Step 3: Reseller API Endpoints
 **Success:** `/api/v1/reseller/*` endpoints working with tests
@@ -54,10 +55,19 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - **Outcome:** Complete - Migration ready for use
 
 ### Step 2
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created `/code/api/src/database/reseller.rs` with:
+  - `ResellerRelationship` and `ResellerOrder` structs matching database schema
+  - Database CRUD functions: `create_reseller_relationship`, `update_reseller_relationship`, `get_reseller_relationship`, `list_reseller_relationships_for_provider`, `delete_reseller_relationship`
+  - Order management functions: `create_reseller_order`, `get_reseller_order`, `list_reseller_orders_for_provider`, `fulfill_reseller_order`
+  - Commission validation (0-50% range)
+- **Review:** All functions follow existing patterns in `providers.rs` and `offerings.rs`. Used `Vec<u8>` for pubkey fields, `i64` for `_e9s` and `_ns` fields, proper error handling with `anyhow::Result`
+- **Verification:** Wrote solid test coverage including:
+  - Create/update/delete relationship operations
+  - Commission validation (negative and above-range tests)
+  - Create and fulfill order workflow
+  - List orders with status filtering
+  - Non-existent entity error handling
+- **Outcome:** Complete - Reseller database layer is functional and tested. Note: SQLx offline mode preparation deferred due to migration sync issues (not blocking for this step)
 
 ### Step 3
 - **Implementation:** (pending)
