@@ -30,12 +30,13 @@ find_repo_root() {
 # Default values
 REPO_ROOT="$(find_repo_root)"
 COMPOSE_FILE="$REPO_ROOT/agent/docker-compose.yml"
-PROJECT_NAME="dc-agent"
+PROJECT_NAME=""  # Set below after parsing args
 SERVICE_NAME="agent"
 TOOL=""
 COMMAND=""
 DETACH=false
 REBUILD=true
+AGENT_NAME=""  # User-specified name for concurrent agents
 
 # Helper functions
 log_info() {
@@ -65,6 +66,7 @@ USAGE:
 OPTIONS:
     -h, --help          Show this help message
     -d, --detach        Run in detached mode
+    -n, --name NAME     Agent instance name (for running multiple agents concurrently)
         --no-build      Skip building Docker image before running, run the existing image if available, without checking
     -f, --file FILE     Use specific docker-compose file (default: <repo-root>/agent/docker-compose.yml)
 
@@ -176,23 +178,6 @@ build_image() {
     fi
 }
 
-# Fix ownership of target-cache volume (one-time fix for existing volumes)
-fix_target_ownership() {
-    local volume_name="${PROJECT_NAME}_target-cache"
-    if docker volume inspect "$volume_name" >/dev/null 2>&1; then
-        log_info "Fixing target directory ownership..."
-        docker run --rm -v "$volume_name:/target" alpine chown -R 1000:1000 /target 2>/dev/null || true
-    fi
-}
-
-# Run cargo-sweep on the container's target directory to clean old artifacts
-run_cargo_sweep() {
-    log_info "Running cargo-sweep on container target directory..."
-    # Use docker-compose run to execute cargo-sweep, removing artifacts older than 7 days
-    DOCKER_GID="$(get_docker_gid)" docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" run --rm "$SERVICE_NAME" \
-        cargo sweep --time 7 2>/dev/null || log_warning "cargo-sweep skipped (target dir may be empty)"
-}
-
 # Run the specified tool or custom command
 run_tool() {
     local docker_args=()
@@ -251,8 +236,6 @@ trap cleanup EXIT INT TERM
 main() {
     check_requirements
     build_image
-    fix_target_ownership
-    run_cargo_sweep
     run_tool
 }
 

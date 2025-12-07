@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_profiles\n               SET chatwoot_inbox_id = ?, chatwoot_team_id = ?, chatwoot_portal_slug = ?\n               WHERE pubkey = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "158e07fd2a0d3395a6d068e3cc5bb3fe1049e155b36d184f57e34800cd9983fe"
+}

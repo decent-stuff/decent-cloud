@@ -166,7 +166,9 @@ pub async fn stripe_webhook(
                         }
 
                         // Send payment receipt
-                        match api::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes).await {
+                        match crate::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes)
+                            .await
+                        {
                             Ok(receipt_num) => {
                                 tracing::info!(
                                     "Sent receipt #{} for contract {} after Stripe payment",
@@ -591,7 +593,9 @@ pub async fn icpay_webhook(
                         }
 
                         // Send payment receipt
-                        match api::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes).await {
+                        match crate::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes)
+                            .await
+                        {
                             Ok(receipt_num) => {
                                 tracing::info!(
                                     "Sent receipt #{} for contract {} after ICPay payment",

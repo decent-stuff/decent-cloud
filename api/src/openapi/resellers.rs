@@ -1,7 +1,6 @@
 use super::common::{
-    check_authorization, decode_pubkey, ApiResponse, ApiTags,
-    CreateResellerRelationshipRequest, FulfillResellerOrderRequest,
-    UpdateResellerRelationshipRequest,
+    check_authorization, decode_pubkey, ApiResponse, ApiTags, CreateResellerRelationshipRequest,
+    FulfillResellerOrderRequest, UpdateResellerRelationshipRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::providers::ExternalProvider;
@@ -138,7 +137,9 @@ impl ResellersApi {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Only registered providers can create reseller relationships".to_string()),
+                    error: Some(
+                        "Only registered providers can create reseller relationships".to_string(),
+                    ),
                 });
             }
             Err(e) => {
@@ -299,11 +300,7 @@ impl ResellersApi {
     /// Returns orders that need fulfillment by the authenticated provider.
     /// Supports optional status filtering (pending, fulfilled, failed).
     /// Requires provider authentication.
-    #[oai(
-        path = "/reseller/orders",
-        method = "get",
-        tag = "ApiTags::Resellers"
-    )]
+    #[oai(path = "/reseller/orders", method = "get", tag = "ApiTags::Resellers")]
     async fn list_reseller_orders(
         &self,
         db: Data<&Arc<Database>>,

@@ -450,6 +450,57 @@ impl Database {
         }
         Ok(())
     }
+
+    /// Store Chatwoot resources created for a provider during onboarding.
+    pub async fn set_provider_chatwoot_resources(
+        &self,
+        pubkey: &[u8],
+        inbox_id: u32,
+        team_id: u32,
+        portal_slug: &str,
+    ) -> Result<()> {
+        let inbox_id = inbox_id as i64;
+        let team_id = team_id as i64;
+        sqlx::query!(
+            r#"UPDATE provider_profiles
+               SET chatwoot_inbox_id = ?, chatwoot_team_id = ?, chatwoot_portal_slug = ?
+               WHERE pubkey = ?"#,
+            inbox_id,
+            team_id,
+            portal_slug,
+            pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get Chatwoot resources for a provider.
+    /// Returns (inbox_id, team_id, portal_slug) if set.
+    pub async fn get_provider_chatwoot_resources(
+        &self,
+        pubkey: &[u8],
+    ) -> Result<Option<(u32, u32, String)>> {
+        let row = sqlx::query!(
+            r#"SELECT chatwoot_inbox_id, chatwoot_team_id, chatwoot_portal_slug
+               FROM provider_profiles WHERE pubkey = ?"#,
+            pubkey
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.and_then(|r| {
+            match (
+                r.chatwoot_inbox_id,
+                r.chatwoot_team_id,
+                r.chatwoot_portal_slug,
+            ) {
+                (Some(inbox), Some(team), Some(slug)) => Some((inbox as u32, team as u32, slug)),
+                _ => None,
+            }
+        }))
+    }
 }
 
 #[cfg(test)]

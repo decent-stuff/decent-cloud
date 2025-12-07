@@ -441,6 +441,29 @@ pub struct ConversationResponse {
     pub id: u64,
 }
 
+/// Response from creating an inbox.
+#[derive(Debug, Deserialize)]
+pub struct InboxResponse {
+    pub id: u32,
+    pub name: String,
+    pub channel_type: String,
+}
+
+/// Response from creating a team.
+#[derive(Debug, Deserialize)]
+pub struct TeamResponse {
+    pub id: u32,
+    pub name: String,
+}
+
+/// Response from creating a portal.
+#[derive(Debug, Deserialize)]
+pub struct PortalResponse {
+    pub id: i64,
+    pub name: String,
+    pub slug: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct ListHelpCenterArticlesResponse {
     payload: Vec<HelpCenterArticle>,
@@ -522,6 +545,171 @@ impl ChatwootClient {
 
         let response: InboxesResponse = resp.json().await.context("Failed to parse inboxes")?;
         Ok(response.payload.into_iter().map(|i| i.id).collect())
+    }
+
+    /// Create an API channel inbox for a provider.
+    /// Returns (inbox_id, webhook_url) for the provider to receive messages.
+    pub async fn create_inbox(&self, name: &str) -> Result<InboxResponse> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/inboxes",
+            self.base_url, self.account_id
+        );
+
+        #[derive(Serialize)]
+        struct CreateInboxRequest<'a> {
+            name: &'a str,
+            channel: ChannelConfig,
+        }
+
+        #[derive(Serialize)]
+        struct ChannelConfig {
+            r#type: &'static str,
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&CreateInboxRequest {
+                name,
+                channel: ChannelConfig { r#type: "api" },
+            })
+            .send()
+            .await
+            .context("Failed to create inbox")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error creating inbox {}: {}", status, body);
+        }
+
+        resp.json().await.context("Failed to parse inbox response")
+    }
+
+    /// Create a team for a provider.
+    pub async fn create_team(&self, name: &str, description: &str) -> Result<TeamResponse> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/teams",
+            self.base_url, self.account_id
+        );
+
+        // Chatwoot expects nested `team` object
+        #[derive(Serialize)]
+        struct TeamData<'a> {
+            name: &'a str,
+            description: &'a str,
+            allow_auto_assign: bool,
+        }
+
+        #[derive(Serialize)]
+        struct CreateTeamRequest<'a> {
+            team: TeamData<'a>,
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&CreateTeamRequest {
+                team: TeamData {
+                    name,
+                    description,
+                    allow_auto_assign: true,
+                },
+            })
+            .send()
+            .await
+            .context("Failed to create team")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Chatwoot API error creating team (status {}): {}",
+                status,
+                body
+            );
+        }
+
+        resp.json().await.context("Failed to parse team response")
+    }
+
+    /// Add agents to a team.
+    pub async fn add_agents_to_team(&self, team_id: u32, user_ids: &[i64]) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/teams/{}/team_members",
+            self.base_url, self.account_id, team_id
+        );
+
+        #[derive(Serialize)]
+        struct AddAgentsRequest<'a> {
+            user_ids: &'a [i64],
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&AddAgentsRequest { user_ids })
+            .send()
+            .await
+            .context("Failed to add agents to team")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Chatwoot API error adding agents to team {}: {}",
+                status,
+                body
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Create a Help Center portal for a provider.
+    pub async fn create_portal(&self, name: &str, slug: &str) -> Result<PortalResponse> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/portals",
+            self.base_url, self.account_id
+        );
+
+        // Chatwoot expects nested `portal` object
+        #[derive(Serialize)]
+        struct PortalData<'a> {
+            name: &'a str,
+            slug: &'a str,
+        }
+
+        #[derive(Serialize)]
+        struct CreatePortalRequest<'a> {
+            portal: PortalData<'a>,
+        }
+
+        let resp = self
+            .client
+            .post(&url)
+            .header("api_access_token", &self.api_token)
+            .json(&CreatePortalRequest {
+                portal: PortalData { name, slug },
+            })
+            .send()
+            .await
+            .context("Failed to create portal")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Chatwoot API error creating portal (status {}): {}",
+                status,
+                body
+            );
+        }
+
+        resp.json().await.context("Failed to parse portal response")
     }
 
     /// List all Help Center portal slugs in the account.

@@ -16,7 +16,8 @@ services:
     volumes:
       # Mount the entire repository directory to /code
       - ..:/code
-      # Use container-specific target/ dir to avoid conflicts with host builds
+      # Use container-local target/ dir to avoid conflicts between concurrent agents
+      # Volume name includes project name (-p flag) so each agent gets its own
       - target-cache:/code/target
       # Mount some other configuration from home directory
       - ${HOME}/.claude.json:/home/ubuntu/.claude.json

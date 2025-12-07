@@ -1,6 +1,7 @@
 //! Chatwoot integration hooks for provider and contract lifecycle events.
 
-use super::{ChatwootClient, ChatwootPlatformClient};
+use super::ChatwootClient;
+use super::ChatwootPlatformClient;
 use crate::database::Database;
 use anyhow::{Context, Result};
 use rand::Rng;
@@ -37,12 +38,50 @@ pub fn generate_secure_password() -> String {
     password.into_iter().collect()
 }
 
+/// Generate a URL-safe slug from a provider name.
+fn generate_portal_slug(name: &str, pubkey: &[u8]) -> String {
+    // Take first 8 chars of pubkey hex for uniqueness
+    let pubkey_suffix = hex::encode(&pubkey[..4]);
+    let base = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>();
+    // Remove consecutive dashes and trim
+    let mut prev_dash = false;
+    let cleaned: String = base
+        .chars()
+        .filter(|&c| {
+            if c == '-' {
+                if prev_dash {
+                    return false;
+                }
+                prev_dash = true;
+            } else {
+                prev_dash = false;
+            }
+            true
+        })
+        .collect();
+    let trimmed = cleaned.trim_matches('-');
+    // Limit length and append pubkey suffix
+    let max_base = 40;
+    let truncated = if trimmed.len() > max_base {
+        &trimmed[..max_base]
+    } else {
+        trimmed
+    };
+    format!("{}-{}", truncated, pubkey_suffix)
+}
+
 /// Create or link a Chatwoot agent for a provider using Platform API.
+/// Also creates dedicated inbox, team, and Help Center portal.
 /// If user exists in Chatwoot, links them. If not, creates new user.
 /// Stores user_id in database for future password resets.
 /// Returns the generated password for display to the user.
 pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<String> {
-    let client = ChatwootPlatformClient::from_env()?;
+    let platform_client = ChatwootPlatformClient::from_env()?;
+    let account_client = ChatwootClient::from_env()?;
     let api_token = std::env::var("CHATWOOT_API_TOKEN").context("CHATWOOT_API_TOKEN not set")?;
 
     // Get provider's account info for name and email
@@ -59,7 +98,7 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .context("Provider email required for Chatwoot agent")?;
 
     // Ensure Support Agent custom role exists (has Help Center access)
-    let custom_role_id = client
+    let custom_role_id = platform_client
         .ensure_support_agent_role(&api_token)
         .await
         .context("Failed to ensure Support Agent role exists")?;
@@ -68,19 +107,22 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
     let password = generate_secure_password();
 
     // Create or find user via Platform API (Chatwoot handles find-or-create internally)
-    let user = client
+    let user = platform_client
         .create_user(email, name, &password)
         .await
         .context("Failed to create Chatwoot user")?;
 
     // Always update password to ensure it's set (create doesn't update existing user's password)
-    client
+    platform_client
         .update_user_password(user.id, &password)
         .await
         .context("Failed to set Chatwoot user password")?;
 
     // Add user to account with Support Agent role (ignore error if already added)
-    if let Err(e) = client.add_user_to_account(user.id, custom_role_id).await {
+    if let Err(e) = platform_client
+        .add_user_to_account(user.id, custom_role_id)
+        .await
+    {
         // 422 typically means user is already in account
         let err_str = format!("{:#}", e);
         if !err_str.contains("422") {
@@ -95,11 +137,84 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .await
         .context("Failed to store Chatwoot user ID")?;
 
+    // Create dedicated inbox for the provider
+    let inbox_name = format!("{} Support", name);
+    let inbox = account_client
+        .create_inbox(&inbox_name)
+        .await
+        .context("Failed to create Chatwoot inbox for provider")?;
     tracing::info!(
-        "Linked Chatwoot agent for provider {} (email: {}, user_id: {})",
+        "Created Chatwoot inbox '{}' (id={}) for provider {}",
+        inbox.name,
+        inbox.id,
+        hex::encode(pubkey)
+    );
+
+    // Create dedicated team for the provider
+    let team_name = format!("{} Team", name);
+    let team_desc = format!("Support team for {}", name);
+    let team = account_client
+        .create_team(&team_name, &team_desc)
+        .await
+        .context("Failed to create Chatwoot team for provider")?;
+    tracing::info!(
+        "Created Chatwoot team '{}' (id={}) for provider {}",
+        team.name,
+        team.id,
+        hex::encode(pubkey)
+    );
+
+    // Add the provider agent to their team
+    account_client
+        .add_agents_to_team(team.id, &[user.id])
+        .await
+        .context("Failed to add provider agent to team")?;
+
+    // Create dedicated Help Center portal
+    // Note: Portal creation may fail due to Chatwoot server-side issues (v4.8.0 bug).
+    // We continue without portal if it fails, logging a warning.
+    let portal_slug = generate_portal_slug(name, pubkey);
+    let portal_name = format!("{} Help Center", name);
+    let portal_result = account_client
+        .create_portal(&portal_name, &portal_slug)
+        .await;
+
+    let final_portal_slug = match portal_result {
+        Ok(portal) => {
+            tracing::info!(
+                "Created Chatwoot portal '{}' (slug={}) for provider {}",
+                portal.name,
+                portal.slug,
+                hex::encode(pubkey)
+            );
+            portal.slug
+        }
+        Err(e) => {
+            // Portal creation failed - this is a known Chatwoot v4.8.0 issue
+            // Log warning but continue with onboarding
+            tracing::warn!(
+                "Failed to create Chatwoot portal for provider {} (error: {:#}). \
+                 Provider will need to create portal manually via Chatwoot UI.",
+                hex::encode(pubkey),
+                e
+            );
+            portal_slug // Use intended slug for DB record
+        }
+    };
+
+    // Store Chatwoot resource IDs in database
+    db.set_provider_chatwoot_resources(pubkey, inbox.id, team.id, &final_portal_slug)
+        .await
+        .context("Failed to store Chatwoot resource IDs")?;
+
+    tracing::info!(
+        "Completed Chatwoot onboarding for provider {} (email: {}, user_id: {}, inbox: {}, team: {}, portal: {})",
         hex::encode(pubkey),
         email,
-        user.id
+        user.id,
+        inbox.id,
+        team.id,
+        final_portal_slug
     );
 
     Ok(password)
@@ -183,5 +298,29 @@ mod tests {
         let p1 = generate_secure_password();
         let p2 = generate_secure_password();
         assert_ne!(p1, p2);
+    }
+
+    #[test]
+    fn test_generate_portal_slug_basic() {
+        let pubkey = [0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a];
+        let slug = generate_portal_slug("Acme Hosting", &pubkey);
+        assert_eq!(slug, "acme-hosting-abcdef12");
+    }
+
+    #[test]
+    fn test_generate_portal_slug_special_chars() {
+        let pubkey = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+        let slug = generate_portal_slug("Provider #1 (Best!)", &pubkey);
+        assert_eq!(slug, "provider-1-best-11223344");
+    }
+
+    #[test]
+    fn test_generate_portal_slug_long_name() {
+        let pubkey = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11];
+        let long_name = "A".repeat(100);
+        let slug = generate_portal_slug(&long_name, &pubkey);
+        // 40 chars base + dash + 8 hex chars = 49 chars max
+        assert!(slug.len() <= 49);
+        assert!(slug.ends_with("-aabbccdd"));
     }
 }

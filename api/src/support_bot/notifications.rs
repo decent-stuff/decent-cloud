@@ -35,8 +35,13 @@ impl SupportNotification {
     }
 }
 
+/// Free tier daily limits
+pub const TELEGRAM_DAILY_LIMIT: i64 = 50;
+pub const SMS_DAILY_LIMIT: i64 = 5;
+
 /// Dispatch a support notification to the user based on their notification preferences.
 /// Sends to ALL enabled channels (telegram, email, sms).
+/// Enforces daily rate limits: Telegram (50/day), SMS (5/day), Email (unlimited).
 /// Returns Ok(()) if at least one notification was sent, Err if all failed.
 pub async fn dispatch_notification(
     db: &Database,
@@ -60,30 +65,65 @@ pub async fn dispatch_notification(
         }
     };
 
+    let provider_id = hex::encode(&notification.user_pubkey);
     let mut channels_sent = Vec::new();
     let mut errors = Vec::new();
 
-    // Send to Telegram if enabled
+    // Send to Telegram if enabled (limit: 50/day)
     if config.notify_telegram {
-        match send_telegram_notification(db, notification, &config).await {
-            Ok(()) => channels_sent.push("telegram"),
-            Err(e) => errors.push(format!("telegram: {}", e)),
+        let usage = db
+            .get_notification_usage(&provider_id, "telegram")
+            .await
+            .unwrap_or(0);
+        if usage >= TELEGRAM_DAILY_LIMIT {
+            errors.push(format!(
+                "telegram: daily limit ({}) exceeded",
+                TELEGRAM_DAILY_LIMIT
+            ));
+        } else {
+            match send_telegram_notification(db, notification, &config).await {
+                Ok(()) => {
+                    db.increment_notification_usage(&provider_id, "telegram")
+                        .await
+                        .ok();
+                    channels_sent.push("telegram");
+                }
+                Err(e) => errors.push(format!("telegram: {}", e)),
+            }
         }
     }
 
-    // Send to Email if enabled
+    // Send to Email if enabled (unlimited)
     if config.notify_email {
         match send_email_notification(db, email_service, notification).await {
-            Ok(()) => channels_sent.push("email"),
+            Ok(()) => {
+                db.increment_notification_usage(&provider_id, "email")
+                    .await
+                    .ok();
+                channels_sent.push("email");
+            }
             Err(e) => errors.push(format!("email: {}", e)),
         }
     }
 
-    // Send to SMS if enabled
+    // Send to SMS if enabled (limit: 5/day)
     if config.notify_sms {
-        match send_sms_notification(notification, &config).await {
-            Ok(()) => channels_sent.push("sms"),
-            Err(e) => errors.push(format!("sms: {}", e)),
+        let usage = db
+            .get_notification_usage(&provider_id, "sms")
+            .await
+            .unwrap_or(0);
+        if usage >= SMS_DAILY_LIMIT {
+            errors.push(format!("sms: daily limit ({}) exceeded", SMS_DAILY_LIMIT));
+        } else {
+            match send_sms_notification(notification, &config).await {
+                Ok(()) => {
+                    db.increment_notification_usage(&provider_id, "sms")
+                        .await
+                        .ok();
+                    channels_sent.push("sms");
+                }
+                Err(e) => errors.push(format!("sms: {}", e)),
+            }
         }
     }
 
@@ -407,5 +447,114 @@ mod tests {
         // Should succeed (logs warning about no channels)
         let result = dispatch_notification(&db, None, &notification).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_telegram_exceeded() {
+        let db = setup_test_db().await;
+        let pubkey = b"test_rate_limit_tg";
+        let provider_id = hex::encode(pubkey);
+
+        // Set up telegram notification config
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
+            chatwoot_portal_slug: None,
+            notify_telegram: true,
+            notify_email: false,
+            notify_sms: false,
+            telegram_chat_id: Some("123456".to_string()),
+            notify_phone: None,
+            notify_email_address: None,
+        };
+        db.set_user_notification_config(pubkey, &config)
+            .await
+            .unwrap();
+
+        // Exhaust the daily limit by incrementing usage to 50
+        for _ in 0..TELEGRAM_DAILY_LIMIT {
+            db.increment_notification_usage(&provider_id, "telegram")
+                .await
+                .unwrap();
+        }
+
+        // Verify limit is reached
+        let usage = db
+            .get_notification_usage(&provider_id, "telegram")
+            .await
+            .unwrap();
+        assert_eq!(usage, TELEGRAM_DAILY_LIMIT);
+
+        let notification = SupportNotification::new(
+            pubkey.to_vec(),
+            1,
+            "Rate limit test".to_string(),
+            "https://example.com",
+        );
+
+        // dispatch_notification should succeed but not send (limit exceeded)
+        // The error is logged, not returned
+        let result = dispatch_notification(&db, None, &notification).await;
+        assert!(result.is_ok());
+
+        // Usage should NOT have incremented (notification was blocked)
+        let usage_after = db
+            .get_notification_usage(&provider_id, "telegram")
+            .await
+            .unwrap();
+        assert_eq!(usage_after, TELEGRAM_DAILY_LIMIT);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_sms_exceeded() {
+        let db = setup_test_db().await;
+        let pubkey = b"test_rate_limit_sms";
+        let provider_id = hex::encode(pubkey);
+
+        // Set up SMS notification config
+        let config = crate::database::notification_config::UserNotificationConfig {
+            user_pubkey: pubkey.to_vec(),
+            chatwoot_portal_slug: None,
+            notify_telegram: false,
+            notify_email: false,
+            notify_sms: true,
+            telegram_chat_id: None,
+            notify_phone: Some("+1234567890".to_string()),
+            notify_email_address: None,
+        };
+        db.set_user_notification_config(pubkey, &config)
+            .await
+            .unwrap();
+
+        // Exhaust the daily limit by incrementing usage to 5
+        for _ in 0..SMS_DAILY_LIMIT {
+            db.increment_notification_usage(&provider_id, "sms")
+                .await
+                .unwrap();
+        }
+
+        // Verify limit is reached
+        let usage = db
+            .get_notification_usage(&provider_id, "sms")
+            .await
+            .unwrap();
+        assert_eq!(usage, SMS_DAILY_LIMIT);
+
+        let notification = SupportNotification::new(
+            pubkey.to_vec(),
+            1,
+            "SMS rate limit test".to_string(),
+            "https://example.com",
+        );
+
+        // dispatch_notification should succeed but not send (limit exceeded)
+        let result = dispatch_notification(&db, None, &notification).await;
+        assert!(result.is_ok());
+
+        // Usage should NOT have incremented (notification was blocked)
+        let usage_after = db
+            .get_notification_usage(&provider_id, "sms")
+            .await
+            .unwrap();
+        assert_eq!(usage_after, SMS_DAILY_LIMIT);
     }
 }

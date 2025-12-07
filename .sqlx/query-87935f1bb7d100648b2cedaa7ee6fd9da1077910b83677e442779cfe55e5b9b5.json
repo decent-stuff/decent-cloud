@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_sign_requests SET receipt_number = ?, receipt_sent_at_ns = ? WHERE contract_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "87935f1bb7d100648b2cedaa7ee6fd9da1077910b83677e442779cfe55e5b9b5"
+}

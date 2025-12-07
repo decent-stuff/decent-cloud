@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT chatwoot_inbox_id, chatwoot_team_id, chatwoot_portal_slug\n               FROM provider_profiles WHERE pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "chatwoot_inbox_id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "chatwoot_team_id",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "chatwoot_portal_slug",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "32ceceb62eee6c5aef292b6ac3b9eda12c40174ad916ab3c40db29aac9f6e341"
+}
