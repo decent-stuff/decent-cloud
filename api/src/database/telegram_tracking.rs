@@ -53,12 +53,10 @@ impl Database {
     pub async fn cleanup_telegram_tracking(&self, days_old: i64) -> Result<u64> {
         let cutoff = chrono::Utc::now().timestamp() - (days_old * 24 * 60 * 60);
 
-        let result = sqlx::query!(
-            r#"DELETE FROM telegram_message_tracking WHERE created_at < ?"#,
-            cutoff
-        )
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query(r#"DELETE FROM telegram_message_tracking WHERE created_at < ?"#)
+            .bind(cutoff)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected())
     }
