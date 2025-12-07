@@ -22,13 +22,13 @@ The marketplace offers a wide variety of cloud resources:
 
 ### How is Decent Cloud different from traditional cloud providers?
 
-| Aspect | Decent Cloud | AWS/Azure/GCP |
-|--------|--------------|---------------|
-| Vendor Lock-in | None | High |
-| Pricing | Transparent, competitive | Complex, opaque |
-| Trust Model | Transaction-based reputation | Brand-based |
-| Governance | Community DAO | Corporate |
-| Data Ownership | Complete user control | Provider terms apply |
+| Aspect         | Decent Cloud                 | AWS/Azure/GCP        |
+|----------------|------------------------------|----------------------|
+| Vendor Lock-in | None                         | High                 |
+| Pricing        | Transparent, competitive     | Complex, opaque      |
+| Trust Model    | Transaction-based reputation | Brand-based          |
+| Governance     | Community DAO                | Corporate            |
+| Data Ownership | Complete user control        | Provider terms apply |
 
 ### Who runs Decent Cloud?
 
@@ -49,7 +49,7 @@ Decent Cloud uses the Internet Computer (ICP) blockchain to store its immutable 
 ### Is Decent Cloud live and usable today?
 
 Yes. The platform is in production with:
-- Web interface at `app.decent-cloud.org/dashboard`
+- Web interface at `decent-cloud.org/dashboard`
 - API running at `api.decent-cloud.org`
 - CLI tools available for Linux, macOS, and Windows
 - Active providers offering resources
@@ -64,7 +64,7 @@ No. You can browse all offerings, view provider trust scores, and compare prices
 
 ### How do I create an account?
 
-1. Visit `app.decent-cloud.org/dashboard`
+1. Visit `decent-cloud.org/dashboard`
 2. Click on any offering and select "Rent Resource"
 3. Choose "Create Account"
 4. Select your preferred login method:

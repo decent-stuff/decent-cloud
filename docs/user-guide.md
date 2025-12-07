@@ -12,7 +12,7 @@ Decent Cloud offers two interfaces:
 - Browse marketplace without an account
 - Visual resource management
 - Easy account creation
-- Visit [app.decent-cloud.org/dashboard](https://app.decent-cloud.org/dashboard)
+- Visit [decent-cloud.org/dashboard](https://decent-cloud.org/dashboard)
 
 **CLI** (For advanced users and automation)
 - Complete [installation](installation.md)
@@ -25,7 +25,7 @@ Decent Cloud offers two interfaces:
 
 You can explore the platform without creating an account:
 
-1. Visit the [Dashboard](https://app.decent-cloud.org/dashboard)
+1. Visit the [Dashboard](https://decent-cloud.org/dashboard)
 2. Browse available offerings in the marketplace
 3. View provider reputation and validator information
 4. Explore public user profiles
@@ -202,5 +202,3 @@ dc user balance --identity my-user
 For platform-specific support:
 - 📝 [Open an Issue](https://github.com/decent-stuff/decent-cloud/issues)
 - 💬 [Join Discussions](https://github.com/orgs/decent-stuff/discussions)
-
-

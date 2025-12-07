@@ -87,7 +87,7 @@ pub fn generate_provider_article(profile: &ProviderProfile) -> Result<String> {
 
     // Getting Started (static)
     article.push_str("## Getting Started\n\n");
-    article.push_str("1. Browse the [Decent Cloud Marketplace](https://app.decent-cloud.org/dashboard/marketplace)\n");
+    article.push_str("1. Browse the [Decent Cloud Marketplace](https://decent-cloud.org/dashboard/marketplace)\n");
     article.push_str(&format!("2. Filter by provider: **{}**\n", provider_name));
     article.push_str("3. Select an offering that meets your needs\n");
     article.push_str("4. Complete rental through the platform\n\n");

@@ -96,7 +96,7 @@ Generated markdown for each provider's help center:
 
 ## Getting Started
 
-1. Browse the [Decent Cloud Marketplace](https://app.decent-cloud.org/dashboard/marketplace)
+1. Browse the [Decent Cloud Marketplace](https://decent-cloud.org/dashboard/marketplace)
 2. Filter by provider: **{provider_name}**
 3. Select an offering that meets your needs
 4. Complete rental through the platform
@@ -302,17 +302,17 @@ Update account API response or add provider status check.
 
 ## Frontend Form Fields
 
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| Support Email | email | Yes | Valid email format |
-| Support Hours | select | Yes | Predefined options + custom |
-| Support Channels | multi-select | Yes | At least one |
-| Regions | multi-select | Yes | At least one |
-| Payment Methods | multi-select | Yes | At least one |
-| Refund Policy | select + text | No | - |
-| SLA Guarantee | select | No | - |
-| Unique Selling Points | 3x textarea | No | Max 200 chars each |
-| Common Issues | dynamic list | No | Max 10 items |
+| Field                 | Type          | Required | Validation                  |
+|-----------------------|---------------|----------|-----------------------------|
+| Support Email         | email         | Yes      | Valid email format          |
+| Support Hours         | select        | Yes      | Predefined options + custom |
+| Support Channels      | multi-select  | Yes      | At least one                |
+| Regions               | multi-select  | Yes      | At least one                |
+| Payment Methods       | multi-select  | Yes      | At least one                |
+| Refund Policy         | select + text | No       | -                           |
+| SLA Guarantee         | select        | No       | -                           |
+| Unique Selling Points | 3x textarea   | No       | Max 200 chars each          |
+| Common Issues         | dynamic list  | No       | Max 10 items                |
 
 ### Predefined Options
 

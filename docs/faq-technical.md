@@ -307,7 +307,7 @@ If you didn't set up email recovery and don't have your seed phrase: Unfortunate
 ### Official Links
 
 - **Website**: `https://decent-cloud.org/`
-- **Dashboard**: `https://app.decent-cloud.org/dashboard`
+- **Dashboard**: `https://decent-cloud.org/dashboard`
 - **API**: `https://api.decent-cloud.org`
 - **GitHub**: `https://github.com/decent-stuff/decent-cloud`
 - **Discussions**: `https://github.com/orgs/decent-stuff/discussions`

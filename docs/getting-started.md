@@ -15,7 +15,7 @@ Decent Cloud offers two ways to interact with the platform:
 - Non-technical users
 
 **Get started:**
-1. Visit [app.decent-cloud.org/dashboard](https://app.decent-cloud.org/dashboard)
+1. Visit [decent-cloud.org/dashboard](https://decent-cloud.org/dashboard)
 2. Browse available offerings without creating an account
 3. Create an account when ready to rent resources
 4. See the [Web Interface Guide](web-interface-guide.md) for details
@@ -34,7 +34,7 @@ Decent Cloud offers two ways to interact with the platform:
 ## Quick Start (Web Interface)
 
 1. **Browse the Marketplace**
-   - Visit [app.decent-cloud.org/dashboard/marketplace](https://app.decent-cloud.org/dashboard/marketplace)
+   - Visit [decent-cloud.org/dashboard/marketplace](https://decent-cloud.org/dashboard/marketplace)
    - No account required to browse
 
 2. **Find a Resource**

@@ -39,7 +39,7 @@ Trust verified through transparent track records, regular health checks, and pro
 
 Browse and rent resources without installing anything:
 
-1. **Visit** [app.decent-cloud.org/dashboard](https://app.decent-cloud.org/dashboard)
+1. **Visit** [decent-cloud.org/dashboard](https://decent-cloud.org/dashboard)
 2. **Browse** the marketplace - no account required
 3. **Create account** when ready to rent resources
 
