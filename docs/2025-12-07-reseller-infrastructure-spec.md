@@ -13,7 +13,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - [x] Reseller models and database CRUD operations
 - [x] Reseller API endpoints: list external providers, create/update relationships, list orders, fulfill order
 - [x] Provider dashboard "Reseller" section with external providers list
-- [ ] Order fulfillment flow in dashboard
+- [x] Order fulfillment flow in dashboard
 - [ ] Marketplace shows reseller offerings with commission markup
 
 ### Nice-to-have
@@ -40,7 +40,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 
 ### Step 5: Order Fulfillment Flow
 **Success:** Provider can mark order as fulfilled with external order details
-**Status:** Pending
+**Status:** Complete
 
 ### Step 6: Marketplace Reseller Display
 **Success:** Offerings with resellers show reseller badge + commission price
@@ -106,10 +106,22 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - **Outcome:** Complete - Providers can now view external providers, create reseller relationships with commission settings, and manage existing relationships
 
 ### Step 5
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Added order fulfillment flow to reseller dashboard:
+  - Added `fulfillResellerOrder()` API function in `/code/website/src/lib/services/api.ts` with `FulfillResellerOrderParams` interface
+  - Added "Reseller Orders" section to `/code/website/src/routes/dashboard/provider/reseller/+page.svelte` showing:
+    - List of orders with offering name, base price, commission breakdown, total price
+    - Status filter dropdown (pending/fulfilled/all)
+    - "Fulfill Order" button for pending orders
+    - "View Details" button for fulfilled orders
+  - Created fulfill order modal with:
+    - External order ID input (required)
+    - Instance details textarea for JSON data (optional)
+    - Submit button that calls API and refreshes order list
+    - View-only mode for fulfilled orders showing external order details
+  - Added helper functions: `loadOrders()`, `openFulfillModal()`, `closeFulfillModal()`, `handleFulfillOrder()`, `handleStatusFilterChange()`, `formatPrice()`, `formatDate()`
+- **Review:** UI follows existing dashboard patterns, proper error handling, fetches offering details to show names, status badges for order states, responsive modal design
+- **Verification:** `npm run check` passes with 0 errors and 0 warnings
+- **Outcome:** Complete - Resellers can now view and fulfill pending orders with external provider details
 
 ### Step 6
 - **Implementation:** (pending)

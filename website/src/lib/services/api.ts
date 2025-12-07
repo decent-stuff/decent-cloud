@@ -1076,3 +1076,32 @@ export async function getResellerOrders(
 
 	return payload.data ?? [];
 }
+
+export interface FulfillResellerOrderParams {
+	external_order_id: string;
+	external_order_details?: string;
+}
+
+export async function fulfillResellerOrder(
+	contract_id: string,
+	params: FulfillResellerOrderParams,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/reseller/orders/${contract_id}/fulfill`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to fulfill reseller order: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<void>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fulfill reseller order');
+	}
+}
