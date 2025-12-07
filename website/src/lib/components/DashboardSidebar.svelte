@@ -36,6 +36,7 @@
 	const providerItems = [
 		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
 		{ href: "/dashboard/provider/requests", icon: "📥", label: "Rental Requests" },
+		{ href: "/dashboard/provider/reseller", icon: "💼", label: "Reseller" },
 		{ href: "/dashboard/provider/support", icon: "🎧", label: "Support Center" },
 	];
 

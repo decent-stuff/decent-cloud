@@ -12,7 +12,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - [x] Database migration for `reseller_relationships` and `reseller_orders` tables
 - [x] Reseller models and database CRUD operations
 - [x] Reseller API endpoints: list external providers, create/update relationships, list orders, fulfill order
-- [ ] Provider dashboard "Reseller" section with external providers list
+- [x] Provider dashboard "Reseller" section with external providers list
 - [ ] Order fulfillment flow in dashboard
 - [ ] Marketplace shows reseller offerings with commission markup
 
@@ -36,7 +36,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 
 ### Step 4: Provider Dashboard Reseller Section
 **Success:** Provider can view external providers, set commission, see orders
-**Status:** Pending
+**Status:** Complete
 
 ### Step 5: Order Fulfillment Flow
 **Success:** Provider can mark order as fulfilled with external order details
@@ -86,10 +86,24 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - **Outcome:** Complete - All reseller API endpoints functional
 
 ### Step 4
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created provider reseller dashboard with:
+  - Added reseller API functions to `/code/website/src/lib/services/api.ts`:
+    - `getExternalProviders()` - List external providers available for reselling
+    - `getResellerRelationships()` - List current reseller relationships
+    - `createResellerRelationship()` - Create new reseller relationship with commission
+    - `updateResellerRelationship()` - Update commission or status
+    - `deleteResellerRelationship()` - Remove reseller relationship
+    - `getResellerOrders()` - List reseller orders (for Step 5)
+  - Created `/code/website/src/routes/dashboard/provider/reseller/+page.svelte`:
+    - List all external providers with offerings count
+    - "Become Reseller" button with commission input (0-50%)
+    - List current reseller relationships with edit/delete actions
+    - Inline editing of commission percentage
+    - Proper authentication and error handling
+  - Added "Reseller" menu item to DashboardSidebar.svelte under Provider section
+- **Review:** Follows existing patterns from requests page, uses proper authentication, validates commission range (0-50%), uses same UI styling as other dashboard pages
+- **Verification:** `npm run check` passes with 0 errors and 0 warnings
+- **Outcome:** Complete - Providers can now view external providers, create reseller relationships with commission settings, and manage existing relationships
 
 ### Step 5
 - **Implementation:** (pending)

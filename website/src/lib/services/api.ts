@@ -891,3 +891,188 @@ export async function syncProviderHelpcenter(
 
 	return payload.data;
 }
+
+// ============ Reseller Endpoints ============
+
+export interface ExternalProvider {
+	pubkey: string;
+	name: string;
+	domain: string;
+	website_url: string;
+	logo_url?: string;
+	data_source: string;
+	offerings_count: number;
+}
+
+export interface ResellerRelationship {
+	id: number;
+	reseller_pubkey: string;
+	external_provider_pubkey: string;
+	commission_percent: number;
+	status: string;
+	created_at_ns: number;
+	updated_at_ns?: number;
+}
+
+export interface ResellerOrder {
+	id: number;
+	contract_id: string;
+	reseller_pubkey: string;
+	external_provider_pubkey: string;
+	offering_id: number;
+	base_price_e9s: number;
+	commission_e9s: number;
+	total_paid_e9s: number;
+	external_order_id?: string;
+	external_order_details?: string;
+	status: string;
+	created_at_ns: number;
+	fulfilled_at_ns?: number;
+}
+
+export async function getExternalProviders(): Promise<ExternalProvider[]> {
+	const url = `${API_BASE_URL}/api/v1/reseller/external-providers`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch external providers: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ExternalProvider[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch external providers');
+	}
+
+	return payload.data ?? [];
+}
+
+export async function getResellerRelationships(headers: SignedRequestHeaders): Promise<ResellerRelationship[]> {
+	const url = `${API_BASE_URL}/api/v1/reseller/relationships`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch reseller relationships: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ResellerRelationship[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch reseller relationships');
+	}
+
+	return payload.data ?? [];
+}
+
+export interface CreateResellerRelationshipParams {
+	external_provider_pubkey: string;
+	commission_percent: number;
+}
+
+export async function createResellerRelationship(
+	params: CreateResellerRelationshipParams,
+	headers: SignedRequestHeaders
+): Promise<ResellerRelationship> {
+	const url = `${API_BASE_URL}/api/v1/reseller/relationships`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to create reseller relationship: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ResellerRelationship>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to create reseller relationship');
+	}
+
+	if (!payload.data) {
+		throw new Error('Create reseller relationship response did not include data');
+	}
+
+	return payload.data;
+}
+
+export interface UpdateResellerRelationshipParams {
+	commission_percent?: number;
+	status?: string;
+}
+
+export async function updateResellerRelationship(
+	external_provider_pubkey: string,
+	params: UpdateResellerRelationshipParams,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/reseller/relationships/${external_provider_pubkey}`;
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to update reseller relationship: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<void>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update reseller relationship');
+	}
+}
+
+export async function deleteResellerRelationship(
+	external_provider_pubkey: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/reseller/relationships/${external_provider_pubkey}`;
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to delete reseller relationship: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<void>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to delete reseller relationship');
+	}
+}
+
+export async function getResellerOrders(
+	headers: SignedRequestHeaders,
+	status?: string
+): Promise<ResellerOrder[]> {
+	const url = status
+		? `${API_BASE_URL}/api/v1/reseller/orders?status=${encodeURIComponent(status)}`
+		: `${API_BASE_URL}/api/v1/reseller/orders`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch reseller orders: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ResellerOrder[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch reseller orders');
+	}
+
+	return payload.data ?? [];
+}
