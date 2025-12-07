@@ -4,10 +4,11 @@ services:
       context: ..
       dockerfile: agent/Dockerfile
     image: decent-cloud-claude:latest
-    container_name: decent-cloud-claude-dev
     # Run with docker group to access the socket
     group_add:
       - ${DOCKER_GID:-999}
+    user: "0:0"  # Start as root to fix volume permissions
+    entrypoint: ["/tini", "--", "/home/ubuntu/entrypoint.sh"]
     environment:
       # Development environment variables
       - RUST_LOG=info

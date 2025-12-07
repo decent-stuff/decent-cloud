@@ -25,7 +25,7 @@ RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install
 
 # Install deps
 RUN apt update && \
-    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3 curl \
+    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3 curl gosu \
     # Docker CLI for running docker commands inside the container
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
@@ -79,5 +79,10 @@ RUN chmod +x $HOME/.git-hooks/commit-msg \
     && git config --global core.hooksPath $HOME/.git-hooks \
     && git config --global init.defaultBranch main
 
-# Set entrypoint to use tini for proper signal handling
+# Copy entrypoint script (runs as root, fixes perms, drops to ubuntu)
+USER root
+COPY agent/entrypoint.sh $HOME/entrypoint.sh
+RUN chmod +x $HOME/entrypoint.sh
+
+# Default entrypoint uses tini for signal handling (compose overrides with entrypoint.sh)
 ENTRYPOINT ["/tini", "--"]
