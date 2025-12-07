@@ -164,6 +164,25 @@ pub async fn stripe_webhook(
                                 // Don't fail the webhook - payment status is already updated
                             }
                         }
+
+                        // Send payment receipt
+                        match api::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes).await {
+                            Ok(receipt_num) => {
+                                tracing::info!(
+                                    "Sent receipt #{} for contract {} after Stripe payment",
+                                    receipt_num,
+                                    &contract.contract_id
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to send receipt for contract {}: {}",
+                                    &contract.contract_id,
+                                    e
+                                );
+                                // Don't fail the webhook - payment was successful
+                            }
+                        }
                     }
                 }
             } else {
@@ -568,6 +587,25 @@ pub async fn icpay_webhook(
                                     e
                                 );
                                 // Don't fail the webhook - payment status is already updated
+                            }
+                        }
+
+                        // Send payment receipt
+                        match api::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes).await {
+                            Ok(receipt_num) => {
+                                tracing::info!(
+                                    "Sent receipt #{} for contract {} after ICPay payment",
+                                    receipt_num,
+                                    contract_id_hex
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to send receipt for contract {}: {}",
+                                    contract_id_hex,
+                                    e
+                                );
+                                // Don't fail the webhook - payment was successful
                             }
                         }
                     }

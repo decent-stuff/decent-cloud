@@ -74,10 +74,7 @@ impl Database {
         // Validate commission_percent if provided
         if let Some(pct) = commission_percent {
             if !(0..=50).contains(&pct) {
-                anyhow::bail!(
-                    "commission_percent must be between 0 and 50, got {}",
-                    pct
-                );
+                anyhow::bail!("commission_percent must be between 0 and 50, got {}", pct);
             }
         }
 
@@ -163,10 +160,7 @@ impl Database {
         // Validate commission_percent if provided
         if let Some(pct) = commission_percent {
             if !(0..=50).contains(&pct) {
-                anyhow::bail!(
-                    "commission_percent must be between 0 and 50, got {}",
-                    pct
-                );
+                anyhow::bail!("commission_percent must be between 0 and 50, got {}", pct);
             }
         }
 
@@ -185,7 +179,7 @@ impl Database {
         let new_commission = commission_percent.unwrap_or(current.commission_percent);
         let new_status = status.unwrap_or(&current.status);
 
-        let result = sqlx::query!(
+        let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
             "UPDATE reseller_relationships SET commission_percent = ?, status = ?, updated_at_ns = ? WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
             new_commission,
             new_status,
@@ -209,7 +203,7 @@ impl Database {
         reseller_pubkey: &[u8],
         external_provider_pubkey: &[u8],
     ) -> Result<()> {
-        let result = sqlx::query!(
+        let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
             "DELETE FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
             reseller_pubkey,
             external_provider_pubkey
@@ -242,9 +236,10 @@ impl Database {
 
     /// Delete a reseller relationship
     pub async fn delete_reseller_relationship(&self, id: i64) -> Result<()> {
-        let result = sqlx::query!("DELETE FROM reseller_relationships WHERE id = ?", id)
-            .execute(&self.pool)
-            .await?;
+        let result: sqlx::sqlite::SqliteQueryResult =
+            sqlx::query!("DELETE FROM reseller_relationships WHERE id = ?", id)
+                .execute(&self.pool)
+                .await?;
 
         if result.rows_affected() == 0 {
             anyhow::bail!("Reseller relationship not found");
@@ -363,7 +358,7 @@ impl Database {
     ) -> Result<()> {
         let fulfilled_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
-        let result = sqlx::query!(
+        let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
             "UPDATE reseller_orders SET external_order_id = ?, external_order_details = ?, status = 'fulfilled', fulfilled_at_ns = ? WHERE contract_id = ?",
             external_order_id,
             external_order_details,
@@ -562,9 +557,13 @@ mod tests {
         .unwrap();
 
         // Fulfill order
-        db.fulfill_reseller_order(&contract_id, "ext-order-123", r#"{"instance_id": "i-abc123"}"#)
-            .await
-            .unwrap();
+        db.fulfill_reseller_order(
+            &contract_id,
+            "ext-order-123",
+            r#"{"instance_id": "i-abc123"}"#,
+        )
+        .await
+        .unwrap();
 
         let order = db.get_reseller_order(&contract_id).await.unwrap().unwrap();
         assert_eq!(order.status, "fulfilled");
