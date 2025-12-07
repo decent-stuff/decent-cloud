@@ -41,11 +41,9 @@
 		currentPath = p.url.pathname;
 	});
 
-	const tabs = [
-		{ href: "/dashboard/account/security", label: "Security", icon: "🔐" },
-		{ href: "/dashboard/account/profile", label: "Public Profile", icon: "👤" },
-		{ href: "/dashboard/account/support", label: "Support Portal", icon: "🎫" },
-		{ href: "/dashboard/account/notifications", label: "Notifications", icon: "🔔" },
+	const settingsTabs = [
+		{ href: "/dashboard/account/security", label: "Security", icon: "🔐", description: "Manage devices and authentication keys" },
+		{ href: "/dashboard/account/profile", label: "Public Profile", icon: "👤", description: "Edit your public profile information" },
 	];
 
 	const quickAccessLinks = $derived([
@@ -60,12 +58,6 @@
 			label: "My Rentals",
 			icon: "🔑",
 			description: "Manage your active and past rental contracts",
-		},
-		{
-			href: "/dashboard/provider/requests",
-			label: "Provider Requests",
-			icon: "🤝",
-			description: "View and respond to rental requests",
 		},
 	]);
 </script>
@@ -175,7 +167,7 @@
 		>
 			<h2 class="text-xl font-semibold text-white mb-4">Settings</h2>
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-				{#each tabs as tab}
+				{#each settingsTabs as tab}
 					<a
 						href={tab.href}
 						class="flex items-center gap-4 p-6 bg-white/5 rounded-lg border border-white/20 hover:bg-white/10 hover:border-blue-500/50 transition-all group"
@@ -187,17 +179,7 @@
 							>
 								{tab.label}
 							</h3>
-							<p class="text-white/60 text-sm">
-								{#if tab.label === "Security"}
-									Manage devices and authentication keys
-								{:else if tab.label === "Public Profile"}
-									Edit your public profile information
-								{:else if tab.label === "Support Portal"}
-									Access and reset support portal credentials
-								{:else if tab.label === "Notifications"}
-									Configure escalation alerts
-								{/if}
-							</p>
+							<p class="text-white/60 text-sm">{tab.description}</p>
 						</div>
 					</a>
 				{/each}

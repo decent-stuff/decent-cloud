@@ -20,25 +20,29 @@
 	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || '1';
 	const supportDashboardUrl = `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`;
 
-	const navItems = $derived([
+	// Browse section - discovery and exploration
+	const browseItems = [
 		{ href: "/dashboard/marketplace", icon: "🛒", label: "Marketplace" },
-		{
-			href: "/dashboard/reputation",
-			icon: "⭐",
-			label: "Reputation",
-		},
+		{ href: "/dashboard/reputation", icon: "⭐", label: "Reputation" },
 		{ href: "/dashboard/validators", icon: "✓", label: "Validators" },
-		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
-	]);
+	];
 
-	const providerItems = $derived([
+	// My Activity section - user's rentals (customer perspective)
+	const activityItems = [
+		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
+	];
+
+	// Provider section - for users who provide services
+	const providerItems = [
 		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
-		{ href: "/dashboard/provider/onboarding", icon: "📝", label: "Help Center Setup" },
 		{ href: "/dashboard/provider/requests", icon: "📥", label: "Rental Requests" },
-	]);
+		{ href: "/dashboard/provider/onboarding", icon: "📝", label: "Help Center Setup" },
+		{ href: "/dashboard/account/notifications", icon: "🔔", label: "Notifications" },
+		{ href: "/dashboard/account/support", icon: "🎫", label: "Support Portal" },
+	];
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
-	const isProvider = $derived(offeringsCount > 0);
+	const hasOfferings = $derived(offeringsCount > 0);
 	const onboardingCompleted = $derived(onboardingData?.onboarding_completed_at !== undefined);
 
 	page.subscribe((p) => {
@@ -125,90 +129,101 @@
 	</div>
 
 	<!-- Navigation -->
-	<nav class="flex-1 p-4 space-y-2">
-		{#each navItems as item}
+	<nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+		<!-- Browse section -->
+		<div class="pb-1 px-3">
+			<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">Browse</div>
+		</div>
+		{#each browseItems as item}
 			{@const isActive =
 				currentPath === item.href ||
-				(item.label === "Reputation" &&
-					currentPath.startsWith("/dashboard/reputation"))}
+				(item.label === "Reputation" && currentPath.startsWith("/dashboard/reputation"))}
 			<a
 				href={item.href}
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {isActive
+				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
 					? 'bg-blue-600 text-white'
 					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
 			>
-				<span class="text-xl">{item.icon}</span>
-				<span class="font-medium">{item.label}</span>
+				<span class="text-lg">{item.icon}</span>
+				<span class="font-medium text-sm">{item.label}</span>
 			</a>
 		{/each}
 
-		{#if isProvider}
-			<!-- Provider section divider -->
-			<div class="pt-4 pb-2 px-4">
-				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">
-					Provider
-				</div>
+		{#if isAuthenticated}
+			<!-- My Activity section -->
+			<div class="pt-4 pb-1 px-3">
+				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">My Activity</div>
 			</div>
-
-			{#each providerItems as item}
-				{@const isActive =
-					currentPath === item.href ||
-					currentPath.startsWith(item.href)}
+			{#each activityItems as item}
+				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
 				<a
 					href={item.href}
 					onclick={closeSidebar}
-					class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {isActive
+					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
 						? 'bg-blue-600 text-white'
 						: 'text-white/70 hover:bg-white/10 hover:text-white'}"
 				>
-					<span class="text-xl">{item.icon}</span>
-					<span class="font-medium">{item.label}</span>
-					{#if item.label === "Help Center Setup"}
-						{#if onboardingCompleted}
-							<span class="ml-auto text-green-400" title="Onboarding completed">✓</span>
-						{:else}
-							<span class="ml-auto w-2 h-2 rounded-full bg-yellow-400" title="Setup incomplete"></span>
-						{/if}
-					{/if}
+					<span class="text-lg">{item.icon}</span>
+					<span class="font-medium text-sm">{item.label}</span>
 				</a>
 			{/each}
+
+			<!-- Provider section - always visible for authenticated users -->
+			<div class="pt-4 pb-1 px-3">
+				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">Provider</div>
+			</div>
+			{#each providerItems as item}
+				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+				<a
+					href={item.href}
+					onclick={closeSidebar}
+					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
+						? 'bg-blue-600 text-white'
+						: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+				>
+					<span class="text-lg">{item.icon}</span>
+					<span class="font-medium text-sm">{item.label}</span>
+					{#if item.label === "Help Center Setup" && hasOfferings}
+						{#if onboardingCompleted}
+							<span class="ml-auto text-green-400 text-xs" title="Setup complete">✓</span>
+						{:else}
+							<span class="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-400" title="Setup incomplete"></span>
+						{/if}
+					{/if}
+					</a>
+			{/each}
+
+			{#if CHATWOOT_BASE_URL}
+				<a
+					href={supportDashboardUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					onclick={closeSidebar}
+					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-white/70 hover:bg-white/10 hover:text-white"
+					title="Open Chatwoot support dashboard"
+				>
+					<span class="text-lg">🎧</span>
+					<span class="font-medium text-sm">Support Dashboard</span>
+					<span class="text-xs opacity-50">↗</span>
+				</a>
+			{/if}
 		{/if}
 
 		{#if isAdmin}
-			<!-- Admin section divider -->
-			<div class="pt-4 pb-2 px-4">
-				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">
-					Admin
-				</div>
+			<!-- Admin section -->
+			<div class="pt-4 pb-1 px-3">
+				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">Admin</div>
 			</div>
-
 			<a
 				href="/dashboard/admin"
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath.startsWith(
-					'/dashboard/admin',
-				)
+				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {currentPath.startsWith('/dashboard/admin')
 					? 'bg-blue-600 text-white'
 					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
 			>
-				<span class="text-xl">🔧</span>
-				<span class="font-medium">Admin</span>
-			</a>
-		{/if}
-
-		{#if isAuthenticated && CHATWOOT_BASE_URL}
-			<a
-				href={supportDashboardUrl}
-				target="_blank"
-				rel="noopener noreferrer"
-				onclick={closeSidebar}
-				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-white/70 hover:bg-white/10 hover:text-white"
-				title="Open support dashboard (for providers)"
-			>
-				<span class="text-xl">🎧</span>
-				<span class="font-medium">Support Dashboard</span>
-				<span class="text-xs opacity-50">↗</span>
+				<span class="text-lg">🔧</span>
+				<span class="font-medium text-sm">Admin</span>
 			</a>
 		{/if}
 	</nav>
