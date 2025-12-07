@@ -1,8 +1,8 @@
 //! Test notification functionality for verifying channel configuration.
 
 use crate::database::Database;
+use crate::notifications::sms::{get_sms_provider, is_sms_configured};
 use crate::notifications::telegram::TelegramClient;
-use crate::notifications::twilio::TwilioClient;
 use anyhow::{bail, Context, Result};
 use email_utils::EmailService;
 use std::sync::Arc;
@@ -93,17 +93,22 @@ async fn send_test_sms(phone: &Option<String>) -> Result<String> {
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No phone number configured"))?;
 
-    if !TwilioClient::is_configured() {
-        bail!("SMS not configured on server (Twilio credentials missing)");
+    if !is_sms_configured() {
+        bail!("SMS not configured on server (no provider credentials)");
     }
 
-    let twilio = TwilioClient::from_env()?;
-    let sid = twilio
+    let provider = get_sms_provider().ok_or_else(|| anyhow::anyhow!("SMS provider init failed"))?;
+    let msg_id = provider
         .send_sms(phone, "This is a test notification from DecentCloud.")
         .await
         .context("Failed to send SMS")?;
 
-    Ok(format!("SMS test sent to {} (sid: {})", phone, sid))
+    Ok(format!(
+        "SMS test sent via {} to {} (id: {})",
+        provider.name(),
+        phone,
+        msg_id
+    ))
 }
 
 /// Send a test escalation notification to all enabled channels.

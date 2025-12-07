@@ -101,8 +101,10 @@ pub fn format_sms_notification(summary: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_twilio_client_is_configured() {
         let orig_sid = std::env::var("TWILIO_ACCOUNT_SID").ok();
         let orig_token = std::env::var("TWILIO_AUTH_TOKEN").ok();
@@ -142,6 +144,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_twilio_client_from_env() {
         let orig_sid = std::env::var("TWILIO_ACCOUNT_SID").ok();
         let orig_token = std::env::var("TWILIO_AUTH_TOKEN").ok();

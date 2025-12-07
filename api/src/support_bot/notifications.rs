@@ -191,22 +191,25 @@ async fn send_sms_notification(
     notification: &SupportNotification,
     config: &crate::database::UserNotificationConfig,
 ) -> Result<()> {
-    use crate::notifications::twilio::{format_sms_notification, TwilioClient};
+    use crate::notifications::sms::{format_sms_notification, get_sms_provider};
 
     let phone = config
         .notify_phone
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No phone number configured"))?;
 
-    if !TwilioClient::is_configured() {
-        anyhow::bail!("Twilio not configured");
-    }
+    let provider =
+        get_sms_provider().ok_or_else(|| anyhow::anyhow!("No SMS provider configured"))?;
 
-    let twilio = TwilioClient::from_env()?;
     let message = format_sms_notification(&notification.summary);
-    let sid = twilio.send_sms(phone, &message).await?;
+    let msg_id = provider.send_sms(phone, &message).await?;
 
-    tracing::info!("SMS notification sent to {}, sid: {}", phone, sid);
+    tracing::info!(
+        "SMS notification sent via {} to {}, id: {}",
+        provider.name(),
+        phone,
+        msg_id
+    );
     Ok(())
 }
 

@@ -57,3 +57,4 @@ uuid.workspace = true
 
 [dev-dependencies]
 mockito = "1.7"
+serial_test = "3"
