@@ -2,6 +2,7 @@ pub mod chatwoot;
 pub mod database;
 pub mod helpcenter;
 mod icpay_client;
+pub mod invoices;
 pub mod notifications;
 pub mod payment_release_service;
 pub mod receipts;

@@ -20,14 +20,6 @@
 
 ## Notification System - Deferred Items
 
-### Rate Limiting (Free Tier)
-- Enforce daily limits in notification sending logic:
-  - Email: Unlimited
-  - Telegram: 50/day free
-  - SMS: 5/day free => consider using https://textbee.dev/
-- Check usage before sending, return error when limit exceeded
-- Frontend already shows usage vs limits
-
 ### Paid Notification Tiers
 - Define pricing for additional notifications beyond free tier
 - Integrate with payment system (Stripe/ICPay)

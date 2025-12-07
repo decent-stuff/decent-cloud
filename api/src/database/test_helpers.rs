@@ -47,6 +47,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/036_reseller_infrastructure.sql"),
         include_str!("../../migrations/037_chatwoot_provider_resources.sql"),
         include_str!("../../migrations/038_receipt_tracking.sql"),
+        include_str!("../../migrations/039_invoices.sql"),
     ];
 
     for migration in &migrations {

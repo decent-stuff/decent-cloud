@@ -6,6 +6,7 @@ mod email_processor;
 mod email_service;
 mod helpcenter;
 mod icpay_client;
+mod invoices;
 mod ledger_client;
 mod ledger_path;
 mod metadata_cache;

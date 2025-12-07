@@ -3,6 +3,7 @@ pub mod admin;
 pub mod chatwoot;
 pub mod common;
 pub mod contracts;
+pub mod invoices;
 pub mod offerings;
 pub mod providers;
 pub mod resellers;
@@ -17,6 +18,7 @@ pub use accounts::AccountsApi;
 pub use admin::AdminApi;
 pub use chatwoot::ChatwootApi;
 pub use contracts::ContractsApi;
+pub use invoices::InvoicesApi;
 pub use offerings::OfferingsApi;
 pub use providers::ProvidersApi;
 pub use resellers::ResellersApi;
@@ -39,6 +41,7 @@ pub fn create_combined_api() -> impl OpenApi {
         ValidatorsApi,
         OfferingsApi,
         ContractsApi,
+        InvoicesApi,
         UsersApi,
         TransfersApi,
         StatsApi,
