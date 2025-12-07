@@ -7,6 +7,7 @@ use super::common::{
     TestNotificationResponse, UpdateNotificationConfigRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
+use crate::database::email::EmailType;
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
@@ -416,31 +417,11 @@ impl ProvidersApi {
         params.id = None;
         params.pubkey = hex::encode(&pubkey_bytes);
 
-        // Check if this is provider's first offering (for Chatwoot agent creation)
-        let is_first_offering = match db.get_provider_offerings(&pubkey_bytes).await {
-            Ok(offerings) => offerings.is_empty(),
-            Err(_) => false, // Assume not first if check fails
-        };
-
         match db.create_offering(&pubkey_bytes, params).await {
             Ok(id) => {
-                // Create Chatwoot agent for new providers (first offering)
-                if is_first_offering && crate::chatwoot::integration::is_configured() {
-                    if let Err(e) =
-                        crate::chatwoot::integration::create_provider_agent(&db, &pubkey_bytes)
-                            .await
-                    {
-                        tracing::error!("Failed to create Chatwoot agent for provider: {}", e);
-                        return Json(ApiResponse {
-                            success: false,
-                            data: None,
-                            error: Some(format!(
-                                "Offering created but Chatwoot agent creation failed: {}",
-                                e
-                            )),
-                        });
-                    }
-                }
+                // Note: Chatwoot resources (inbox/team/portal) are created when
+                // provider completes onboarding setup, not on offering creation.
+                // See update_provider_onboarding for the onboarding flow.
 
                 Json(ApiResponse {
                     success: true,
@@ -1307,6 +1288,91 @@ impl ProvidersApi {
             .await
         {
             Ok(_) => {
+                // Create Chatwoot resources if not already created
+                if crate::chatwoot::integration::is_configured() {
+                    // Check if resources already exist
+                    let has_resources = db
+                        .get_provider_chatwoot_resources(&pubkey_bytes)
+                        .await
+                        .ok()
+                        .flatten()
+                        .is_some();
+
+                    if !has_resources {
+                        match crate::chatwoot::integration::create_provider_agent(
+                            &db,
+                            &pubkey_bytes,
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                // Send support portal welcome email
+                                if let Ok(Some(account)) =
+                                    db.get_account_with_keys_by_public_key(&pubkey_bytes).await
+                                {
+                                    if let Some(email) = &account.email {
+                                        let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
+                                            .unwrap_or_else(|_| {
+                                                "https://support.decent-cloud.org".to_string()
+                                            });
+                                        let name = account
+                                            .display_name
+                                            .as_deref()
+                                            .unwrap_or(&account.username);
+
+                                        db.queue_email_safe(
+                                            Some(email),
+                                            "noreply@decent-cloud.org",
+                                            "Your Provider Support Portal is Ready",
+                                            &format!(
+                                                r#"Hello {},
+
+Congratulations on completing your Decent Cloud provider setup! Your support portal has been created with dedicated resources:
+
+- A private inbox for customer support tickets
+- A team workspace for your support agents
+- A Help Center portal for your knowledge base articles
+
+SUPPORT PORTAL ACCESS
+---------------------
+Web: {}
+
+MOBILE APP
+----------
+iOS: https://apps.apple.com/app/chatwoot/id1495796682
+Android: https://play.google.com/store/apps/details?id=com.chatwoot.app
+
+Server URL: {}
+
+You will receive a separate email from the support system to set your password.
+
+Best regards,
+The Decent Cloud Team"#,
+                                                name, support_url, support_url
+                                            ),
+                                            false,
+                                            EmailType::General,
+                                        )
+                                        .await;
+                                    }
+                                }
+                                tracing::info!(
+                                    "Created Chatwoot resources for provider {}",
+                                    hex::encode(&pubkey_bytes)
+                                );
+                            }
+                            Err(e) => {
+                                // Log error but don't fail the onboarding update
+                                tracing::error!(
+                                    "Failed to create Chatwoot resources for provider {}: {}",
+                                    hex::encode(&pubkey_bytes),
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+
                 let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
                 Json(ApiResponse {
                     success: true,
