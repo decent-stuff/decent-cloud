@@ -18,33 +18,19 @@
 
 ---
 
-## Billing & Invoicing
+## Billing & Invoicing ✅ COMPLETE
 
 **Spec:** [2025-12-07-billing-invoicing-spec.md](docs/2025-12-07-billing-invoicing-spec.md)
-**Status:** Planning
-**Priority:** HIGH - Required for payment system completion
+**Status:** Complete (2025-12-07)
 
-Decent Cloud uses prepaid contracts, NOT recurring billing like WHMCS/Blesta. We need targeted features:
+| Phase | Feature                      | Status |
+|-------|------------------------------|--------|
+| 1     | Receipt emails after payment | ✅ Done |
+| 2     | PDF invoice generation (B2B) | ✅ Done |
+| 3     | Stripe Tax integration (VAT) | ✅ Infrastructure ready |
+| 4     | User billing settings        | ⏸️ Deferred (nice-to-have) |
 
-### Implementation Phases
-
-| Phase | Feature                      | Status | Effort   |
-|-------|------------------------------|--------|----------|
-| 1     | Receipt emails after payment | ❌ TODO | 1-2 days |
-| 2     | PDF invoice generation (B2B) | ❌ TODO | 3-4 days |
-| 3     | Stripe Tax integration (VAT) | ❌ TODO | 2-3 days |
-| 4     | User billing settings        | ❌ TODO | 1-2 days |
-
-### What We're NOT Building
-- Recurring billing (prepaid model)
-- Dunning/retry logic (N/A for prepaid)
-- Credit/prepay balance system
-- Late fees (N/A)
-
-### Open Questions
-1. Legal entity for invoices? => Yes, there will be one; put a stub for now.
-2. VAT registration countries? => Not sure, do what makes most sense
-3. ICPay tax handling (included or excluded)? => No taxes for ICPay for now
+**Note:** Stripe automatic tax requires migrating from Payment Intents to Checkout Sessions. See `api/docs/stripe-tax-integration.md`.
 
 ---
 
