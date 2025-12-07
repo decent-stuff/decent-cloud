@@ -359,11 +359,11 @@
 						id="support-hours"
 						bind:value={supportHours}
 						required
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
+						class="w-full px-4 py-3 bg-gray-900 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
 					>
-						<option value="">Select support hours...</option>
+						<option value="" class="bg-gray-900 text-white">Select support hours...</option>
 						{#each supportHoursOptions as option}
-							<option value={option}>{option === 'custom' ? 'Custom...' : option}</option>
+							<option value={option} class="bg-gray-900 text-white">{option === 'custom' ? 'Custom...' : option}</option>
 						{/each}
 					</select>
 					{#if supportHours === 'custom'}
@@ -446,11 +446,11 @@
 					<select
 						id="refund-policy"
 						bind:value={refundPolicy}
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
+						class="w-full px-4 py-3 bg-gray-900 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
 					>
-						<option value="">Select refund policy...</option>
+						<option value="" class="bg-gray-900 text-white">Select refund policy...</option>
 						{#each refundPolicyOptions as option}
-							<option value={option}>{option === 'custom' ? 'Custom...' : option}</option>
+							<option value={option} class="bg-gray-900 text-white">{option === 'custom' ? 'Custom...' : option}</option>
 						{/each}
 					</select>
 					{#if refundPolicy === 'custom'}
@@ -469,11 +469,11 @@
 					<select
 						id="sla-guarantee"
 						bind:value={slaGuarantee}
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
+						class="w-full px-4 py-3 bg-gray-900 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
 					>
-						<option value="">Select SLA guarantee...</option>
+						<option value="" class="bg-gray-900 text-white">Select SLA guarantee...</option>
 						{#each slaGuaranteeOptions as option}
-							<option value={option}>{option}</option>
+							<option value={option} class="bg-gray-900 text-white">{option}</option>
 						{/each}
 					</select>
 				</div>

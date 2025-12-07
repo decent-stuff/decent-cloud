@@ -273,6 +273,8 @@ async fn test_create_offering_success() {
         trust_score: None,
         has_critical_flags: None,
         is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
     };
 
     let offering_id = db.create_offering(&pubkey, params).await.unwrap();
@@ -366,6 +368,8 @@ async fn test_create_offering_duplicate_id() {
         trust_score: None,
         has_critical_flags: None,
         is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
     };
 
     // First creation should succeed
@@ -429,6 +433,8 @@ async fn test_create_offering_missing_required_fields() {
         trust_score: None,
         has_critical_flags: None,
         is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
     };
 
     let result = db.create_offering(&pubkey, params).await;
@@ -491,6 +497,8 @@ async fn test_update_offering_success() {
         trust_score: None,
         has_critical_flags: None,
         is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -562,6 +570,8 @@ async fn test_update_offering_unauthorized() {
         trust_score: None,
         has_critical_flags: None,
         is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
     };
 
     let result = db.update_offering(&pubkey2, db_id, params).await;
@@ -1178,4 +1188,125 @@ async fn test_search_offerings_dsl_pagination() {
     assert_eq!(page2.len(), 2);
     assert_eq!(page2[0].monthly_price, 10.0);
     assert_eq!(page2[1].monthly_price, 15.0);
+}
+
+#[tokio::test]
+async fn test_import_seeded_offerings_csv() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,datacenter_country,datacenter_city,unmetered_bandwidth
+seeded-1,Seeded Server,From scraper,https://example.com/product,USD,100.0,0.0,public,dedicated,,monthly,in_stock,US,New York,false";
+
+    let (success_count, errors) = db
+        .import_seeded_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .unwrap();
+
+    assert_eq!(success_count, 1, "errors: {:?}", errors);
+    assert_eq!(errors.len(), 0);
+
+    // Verify offering has offering_source='seeded'
+    let off = sqlx::query_scalar!(
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        "seeded-1"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    let offering = db.get_offering(off).await.unwrap().unwrap();
+    assert_eq!(offering.offering_source, Some("seeded".to_string()));
+
+    // Verify external_checkout_url was copied from product_page_url
+    assert_eq!(
+        offering.external_checkout_url,
+        Some("https://example.com/product".to_string())
+    );
+    assert_eq!(
+        offering.product_page_url,
+        Some("https://example.com/product".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_import_seeded_offerings_csv_with_external_checkout_url() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // CSV with explicit external_checkout_url should not be overridden
+    let csv_data = "offering_id,offer_name,description,product_page_url,external_checkout_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,datacenter_country,datacenter_city,unmetered_bandwidth
+seeded-2,Seeded Server 2,From scraper,https://example.com/info,https://example.com/checkout,USD,100.0,0.0,public,dedicated,,monthly,in_stock,US,New York,false";
+
+    let (success_count, errors) = db
+        .import_seeded_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .unwrap();
+
+    assert_eq!(success_count, 1, "errors: {:?}", errors);
+    assert_eq!(errors.len(), 0);
+
+    let off = sqlx::query_scalar!(
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        "seeded-2"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    let offering = db.get_offering(off).await.unwrap().unwrap();
+    assert_eq!(offering.offering_source, Some("seeded".to_string()));
+
+    // Verify external_checkout_url kept explicit value
+    assert_eq!(
+        offering.external_checkout_url,
+        Some("https://example.com/checkout".to_string())
+    );
+    assert_eq!(
+        offering.product_page_url,
+        Some("https://example.com/info".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_import_seeded_offerings_csv_upsert() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // Initial import
+    let csv_data = "offering_id,offer_name,currency,monthly_price,setup_fee,visibility,product_type,billing_interval,stock_status,datacenter_country,datacenter_city,unmetered_bandwidth,product_page_url
+seeded-3,Original,USD,100.0,0.0,public,compute,monthly,in_stock,US,NYC,false,https://example.com/old";
+
+    let (success_count, _) = db
+        .import_seeded_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .unwrap();
+    assert_eq!(success_count, 1);
+
+    // Upsert with updated data
+    let csv_data_updated = "offering_id,offer_name,currency,monthly_price,setup_fee,visibility,product_type,billing_interval,stock_status,datacenter_country,datacenter_city,unmetered_bandwidth,product_page_url
+seeded-3,Updated,USD,200.0,10.0,public,compute,monthly,in_stock,US,LA,false,https://example.com/new";
+
+    let (success_count, errors) = db
+        .import_seeded_offerings_csv(&pubkey, csv_data_updated, true)
+        .await
+        .unwrap();
+
+    assert_eq!(success_count, 1);
+    assert_eq!(errors.len(), 0);
+
+    // Verify update
+    let off = sqlx::query_scalar!(
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        "seeded-3"
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    let offering = db.get_offering(off).await.unwrap().unwrap();
+    assert_eq!(offering.offer_name, "Updated");
+    assert_eq!(offering.monthly_price, 200.0);
+    assert_eq!(offering.offering_source, Some("seeded".to_string()));
+    assert_eq!(
+        offering.external_checkout_url,
+        Some("https://example.com/new".to_string())
+    );
 }

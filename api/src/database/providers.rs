@@ -301,6 +301,38 @@ impl Database {
         Ok(validators)
     }
 
+    /// Create or update an external provider
+    pub async fn create_or_update_external_provider(
+        &self,
+        pubkey: &[u8],
+        name: &str,
+        domain: &str,
+        website_url: &str,
+        data_source: &str,
+    ) -> Result<()> {
+        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        sqlx::query!(
+            r#"INSERT INTO external_providers (pubkey, name, domain, website_url, data_source, created_at_ns)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(pubkey) DO UPDATE SET
+                   name = excluded.name,
+                   domain = excluded.domain,
+                   website_url = excluded.website_url,
+                   data_source = excluded.data_source"#,
+            pubkey,
+            name,
+            domain,
+            website_url,
+            data_source,
+            created_at_ns
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     // Provider registrations
     pub(crate) async fn insert_provider_registrations(
         &self,

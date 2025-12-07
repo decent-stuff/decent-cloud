@@ -42,24 +42,19 @@
 	});
 
 	const settingsTabs = [
-		{ href: "/dashboard/account/security", label: "Security", icon: "🔐", description: "Manage devices and authentication keys" },
-		{ href: "/dashboard/account/profile", label: "Public Profile", icon: "👤", description: "Edit your public profile information" },
+		{
+			href: "/dashboard/account/security",
+			label: "Security",
+			icon: "🔐",
+			description: "Manage devices and authentication keys",
+		},
+		{
+			href: "/dashboard/account/profile",
+			label: "Public Profile",
+			icon: "👤",
+			description: "Edit your public profile information",
+		},
 	];
-
-	const quickAccessLinks = $derived([
-		{
-			href: myPubkey ? `/dashboard/reputation/${myPubkey}` : "/dashboard/reputation",
-			label: "My Reputation",
-			icon: "⭐",
-			description: "View your reputation score and activity history",
-		},
-		{
-			href: "/dashboard/rentals",
-			label: "My Rentals",
-			icon: "🔑",
-			description: "Manage your active and past rental contracts",
-		},
-	]);
 </script>
 
 <div class="space-y-8">
@@ -72,12 +67,15 @@
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div
+			class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center"
+		>
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🔐</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
 				<p class="text-white/70">
-					Create an account or login to access your account settings, manage security, and edit your public profile.
+					Create an account or login to access your account settings,
+					manage security, and edit your public profile.
 				</p>
 				<button
 					onclick={handleLogin}
@@ -134,33 +132,6 @@
 			</div>
 		</div>
 
-		<!-- Quick Access Links -->
-		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
-		>
-			<h2 class="text-xl font-semibold text-white mb-4">Quick Access</h2>
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-				{#each quickAccessLinks as link}
-					<a
-						href={link.href}
-						class="flex flex-col gap-3 p-6 bg-white/5 rounded-lg border border-white/20 hover:bg-white/10 hover:border-blue-500/50 transition-all group"
-					>
-						<span class="text-4xl">{link.icon}</span>
-						<div>
-							<h3
-								class="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors mb-1"
-							>
-								{link.label}
-							</h3>
-							<p class="text-white/60 text-sm">
-								{link.description}
-							</p>
-						</div>
-					</a>
-				{/each}
-			</div>
-		</div>
-
 		<!-- Settings -->
 		<div
 			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
@@ -179,7 +150,9 @@
 							>
 								{tab.label}
 							</h3>
-							<p class="text-white/60 text-sm">{tab.description}</p>
+							<p class="text-white/60 text-sm">
+								{tab.description}
+							</p>
 						</div>
 					</a>
 				{/each}

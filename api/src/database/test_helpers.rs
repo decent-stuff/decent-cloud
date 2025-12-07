@@ -41,6 +41,9 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/030_icpay_escrow.sql"),
         include_str!("../../migrations/031_notification_usage.sql"),
         include_str!("../../migrations/032_user_notification_config.sql"),
+        include_str!("../../migrations/033_remove_messaging.sql"),
+        include_str!("../../migrations/034_provider_onboarding.sql"),
+        include_str!("../../migrations/035_external_providers.sql"),
     ];
 
     for migration in &migrations {

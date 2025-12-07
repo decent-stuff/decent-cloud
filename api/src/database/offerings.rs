@@ -74,6 +74,12 @@ pub struct Offering {
     #[ts(type = "boolean")]
     #[sqlx(default)]
     pub is_example: bool,
+    // Source of offering data: 'provider' (normal) or 'seeded' (scraped/curated)
+    #[ts(type = "string | undefined")]
+    #[sqlx(default)]
+    pub offering_source: Option<String>,
+    // External checkout URL for seeded offerings
+    pub external_checkout_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -94,7 +100,7 @@ impl Database {
     ) -> Result<Vec<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let mut query = String::from(
-            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey WHERE LOWER(o.visibility) = 'public'"
+            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey WHERE LOWER(o.visibility) = 'public'"
         );
 
         if params.product_type.is_some() {
@@ -141,7 +147,8 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
+               offering_source, external_checkout_url
                FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#
         )
         .bind(example_provider_pubkey)
@@ -163,7 +170,8 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
+               offering_source, external_checkout_url
                FROM provider_offerings WHERE id = ?"#)
                 .bind(example_provider_pubkey)
                 .bind(offering_id)
@@ -185,7 +193,8 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
+               offering_source, external_checkout_url
                FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey_hex)
@@ -208,7 +217,8 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
+               offering_source, external_checkout_url
                FROM provider_offerings WHERE pubkey = ? AND product_type = ? ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey_hex)
@@ -257,7 +267,7 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("SQL build error: {}", e))?;
 
         // Base SELECT with same fields as search_offerings
-        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey";
+        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey";
 
         // Build WHERE clause: base filters + DSL filters
         let where_clause = if dsl_where.is_empty() {
@@ -368,6 +378,8 @@ impl Database {
             trust_score: _,
             has_critical_flags: _,
             is_example: _,
+            offering_source,
+            external_checkout_url,
         } = params;
 
         let mut tx = self.pool.begin().await?;
@@ -402,7 +414,8 @@ impl Database {
                 uplink_speed, traffic, datacenter_country, datacenter_city,
                 datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
                 gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours,
-                payment_methods, features, operating_systems, created_at_ns
+                payment_methods, features, operating_systems, offering_source,
+                external_checkout_url, created_at_ns
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
@@ -413,7 +426,8 @@ impl Database {
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?, ?
+                ?, ?, ?, ?,
+                ?, ?
             )
             RETURNING id"#,
             pubkey,
@@ -457,6 +471,8 @@ impl Database {
             payment_methods,
             features,
             operating_systems,
+            offering_source,
+            external_checkout_url,
             created_at_ns
         )
         .fetch_one(&mut *tx)
@@ -539,6 +555,8 @@ impl Database {
             trust_score: _,
             has_critical_flags: _,
             is_example: _,
+            offering_source,
+            external_checkout_url,
         } = params;
 
         sqlx::query!(
@@ -553,7 +571,8 @@ impl Database {
                 datacenter_city = ?, datacenter_latitude = ?, datacenter_longitude = ?,
                 control_panel = ?, gpu_name = ?, gpu_count = ?, gpu_memory_gb = ?,
                 min_contract_hours = ?, max_contract_hours = ?,
-                payment_methods = ?, features = ?, operating_systems = ?
+                payment_methods = ?, features = ?, operating_systems = ?,
+                offering_source = ?, external_checkout_url = ?
             WHERE id = ?"#,
             offering_id,
             offer_name,
@@ -595,6 +614,8 @@ impl Database {
             payment_methods,
             features,
             operating_systems,
+            offering_source,
+            external_checkout_url,
             offering_db_id
         )
         .execute(&mut *tx)
@@ -707,6 +728,8 @@ impl Database {
             trust_score: None,
             has_critical_flags: None,
             is_example: false,
+            offering_source: source.offering_source,
+            external_checkout_url: source.external_checkout_url,
         };
 
         self.create_offering(pubkey, params).await
@@ -779,6 +802,30 @@ impl Database {
         csv_data: &str,
         upsert: bool,
     ) -> Result<(usize, Vec<(usize, String)>)> {
+        self.import_offerings_csv_internal(pubkey, csv_data, upsert, None)
+            .await
+    }
+
+    /// Import seeded offerings from CSV data with offering_source='seeded'
+    /// Returns (success_count, errors) where errors is Vec<(row_number, error_message)>
+    pub async fn import_seeded_offerings_csv(
+        &self,
+        pubkey: &[u8],
+        csv_data: &str,
+        upsert: bool,
+    ) -> Result<(usize, Vec<(usize, String)>)> {
+        self.import_offerings_csv_internal(pubkey, csv_data, upsert, Some("seeded"))
+            .await
+    }
+
+    /// Internal CSV import with optional offering_source override
+    async fn import_offerings_csv_internal(
+        &self,
+        pubkey: &[u8],
+        csv_data: &str,
+        upsert: bool,
+        offering_source_override: Option<&str>,
+    ) -> Result<(usize, Vec<(usize, String)>)> {
         let mut reader = csv::Reader::from_reader(csv_data.as_bytes());
         let mut success_count = 0;
         let mut errors = Vec::new();
@@ -797,7 +844,16 @@ impl Database {
             match result {
                 Ok(record) => {
                     match Self::parse_csv_record(&record, &col_map) {
-                        Ok(params) => {
+                        Ok(mut params) => {
+                            // Override offering_source if specified
+                            if let Some(source) = offering_source_override {
+                                params.offering_source = Some(source.to_string());
+                                // For seeded offerings, copy product_page_url to external_checkout_url
+                                if source == "seeded" && params.external_checkout_url.is_none() {
+                                    params.external_checkout_url = params.product_page_url.clone();
+                                }
+                            }
+
                             let result: Result<()> = if upsert {
                                 // Try to find existing offering by offering_id
                                 let existing_offering_id = &params.offering_id;
@@ -956,6 +1012,8 @@ impl Database {
             trust_score: None,
             has_critical_flags: None,
             is_example: false,
+            offering_source: get_opt_str("offering_source"),
+            external_checkout_url: get_opt_str("external_checkout_url"),
         })
     }
 }

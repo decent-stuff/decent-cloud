@@ -104,7 +104,9 @@
 				operating_systems: offering.operating_systems || undefined,
 				trust_score: undefined,
 				has_critical_flags: undefined,
-				is_example: offering.is_example
+				is_example: offering.is_example,
+				offering_source: offering.offering_source || undefined,
+				external_checkout_url: offering.external_checkout_url || undefined
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed

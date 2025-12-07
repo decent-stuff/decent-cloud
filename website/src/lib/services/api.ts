@@ -823,8 +823,9 @@ export async function getProviderOnboarding(pubkey: string): Promise<ProviderOnb
 
 	const payload = (await response.json()) as ApiResponse<ProviderOnboarding>;
 
-	if (!payload.success) {
-		throw new Error(payload.error ?? 'Failed to get provider onboarding');
+	// No onboarding data yet is not an error - return null to show empty form
+	if (!payload.success && !payload.data) {
+		return null;
 	}
 
 	return payload.data ?? null;

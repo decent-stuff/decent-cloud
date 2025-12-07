@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name, domain, website_url, data_source FROM external_providers WHERE pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "domain",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "website_url",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "data_source",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6d5bb84ac3f1ba0e677bd2332d405a0e81528bd62d84510c17c98bbe7f2c25b6"
+}
