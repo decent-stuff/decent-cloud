@@ -4,12 +4,17 @@
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import { onMount, onDestroy } from "svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
+	import { getProviderOfferings, getProviderOnboarding, hexEncode } from "$lib/services/api";
+	import type { ProviderOnboarding } from "$lib/services/api";
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
 	let currentPath = $state("");
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let unsubscribeIdentity: (() => void) | null = null;
+	let offeringsCount = $state(0);
+	let onboardingData = $state<ProviderOnboarding | null>(null);
+	let providerDataLoading = $state(false);
 
 	const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
 	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || '1';
@@ -23,19 +28,55 @@
 			label: "Reputation",
 		},
 		{ href: "/dashboard/validators", icon: "✓", label: "Validators" },
-		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
 		{ href: "/dashboard/rentals", icon: "📋", label: "My Rentals" },
 	]);
 
+	const providerItems = $derived([
+		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
+		{ href: "/dashboard/provider/onboarding", icon: "📝", label: "Help Center Setup" },
+		{ href: "/dashboard/provider/requests", icon: "📥", label: "Rental Requests" },
+	]);
+
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
+	const isProvider = $derived(offeringsCount > 0);
+	const onboardingCompleted = $derived(onboardingData?.onboarding_completed_at !== undefined);
 
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
 	});
 
+	async function loadProviderData() {
+		if (!currentIdentity?.publicKeyBytes || providerDataLoading) {
+			return;
+		}
+
+		try {
+			providerDataLoading = true;
+			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+
+			const [offerings, onboarding] = await Promise.all([
+				getProviderOfferings(pubkeyHex).catch(() => []),
+				getProviderOnboarding(pubkeyHex).catch(() => null),
+			]);
+
+			offeringsCount = offerings.length;
+			onboardingData = onboarding;
+		} catch (err) {
+			console.error("Failed to load provider data:", err);
+		} finally {
+			providerDataLoading = false;
+		}
+	}
+
 	onMount(() => {
 		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
+			if (value?.publicKeyBytes) {
+				loadProviderData();
+			} else {
+				offeringsCount = 0;
+				onboardingData = null;
+			}
 		});
 	});
 
@@ -102,7 +143,46 @@
 			</a>
 		{/each}
 
+		{#if isProvider}
+			<!-- Provider section divider -->
+			<div class="pt-4 pb-2 px-4">
+				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">
+					Provider
+				</div>
+			</div>
+
+			{#each providerItems as item}
+				{@const isActive =
+					currentPath === item.href ||
+					currentPath.startsWith(item.href)}
+				<a
+					href={item.href}
+					onclick={closeSidebar}
+					class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {isActive
+						? 'bg-blue-600 text-white'
+						: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+				>
+					<span class="text-xl">{item.icon}</span>
+					<span class="font-medium">{item.label}</span>
+					{#if item.label === "Help Center Setup"}
+						{#if onboardingCompleted}
+							<span class="ml-auto text-green-400" title="Onboarding completed">✓</span>
+						{:else}
+							<span class="ml-auto w-2 h-2 rounded-full bg-yellow-400" title="Setup incomplete"></span>
+						{/if}
+					{/if}
+				</a>
+			{/each}
+		{/if}
+
 		{#if isAdmin}
+			<!-- Admin section divider -->
+			<div class="pt-4 pb-2 px-4">
+				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">
+					Admin
+				</div>
+			</div>
+
 			<a
 				href="/dashboard/admin"
 				onclick={closeSidebar}

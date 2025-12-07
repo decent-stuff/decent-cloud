@@ -638,7 +638,31 @@ Options:
 - **Outcome:** Form renders correctly, all TypeScript checks pass (0 errors, 0 warnings), clean implementation following existing codebase patterns
 
 ### Step 7: Sidebar Navigation
-- **Status:** Pending
+- **Status:** Completed
+- **Files:** `/code/website/src/lib/components/DashboardSidebar.svelte`
+- **Implementation:**
+  - Reorganized navigation structure per spec requirements:
+    - Main nav: Kept Marketplace, Reputation, Validators, My Rentals
+    - Removed "My Offerings" from main nav (moved to Provider section)
+  - Created new "Provider" section (conditionally visible):
+    - Section divider with "PROVIDER" label
+    - "My Offerings" link (moved from main nav)
+    - "Help Center Setup" link to `/dashboard/provider/onboarding` with status indicator
+    - "Rental Requests" link to `/dashboard/provider/requests`
+  - Provider section visibility:
+    - Shows when `isProvider` is true (derived from `offeringsCount > 0`)
+    - Uses existing API functions: `getProviderOfferings()` and `getProviderOnboarding()`
+    - Loads data on mount when user is authenticated
+  - Help Center Setup completion indicator:
+    - Green checkmark (✓) if `onboarding_completed_at` is set
+    - Yellow dot if incomplete
+    - Both have hover tooltips for clarity
+  - Data loading approach (Option C from spec):
+    - Fetches offerings count and onboarding status in parallel on auth
+    - Uses existing API endpoints (no backend changes needed)
+    - Handles errors gracefully (falls back to empty state)
+  - Added section divider for Admin section as well for consistency
+- **Outcome:** Navigation reorganized successfully, Provider section shows only for providers with offerings, completion status indicator works correctly, TypeScript checks pass (0 errors, 0 warnings), follows existing sidebar patterns and styling
 
 ### Step 8: Tests
 - **Status:** Pending
