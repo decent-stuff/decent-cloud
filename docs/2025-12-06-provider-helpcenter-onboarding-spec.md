@@ -1,6 +1,8 @@
 # Provider Help Center Onboarding
 
-**Status:** In Progress
+**Status:** Completed
+
+**Completed:** 2025-12-07
 
 ## Overview
 
@@ -23,11 +25,11 @@ Enable turn-key Help Center population for providers through a structured onboar
 ## Requirements
 
 ### Must-have
-- [ ] Extend `provider_profiles` table with onboarding fields
-- [ ] Add onboarding form to provider dashboard
-- [ ] Generate help center article from provider data
-- [ ] Sync generated article to provider's Chatwoot portal
-- [ ] All tests pass, `cargo make` clean
+- [x] Extend `provider_profiles` table with onboarding fields
+- [x] Add onboarding form to provider dashboard
+- [x] Generate help center article from provider data
+- [x] Sync generated article to provider's Chatwoot portal
+- [x] All tests pass, `cargo make` clean
 
 ### Nice-to-have
 - [ ] Preview article before sync
@@ -665,7 +667,63 @@ Options:
 - **Outcome:** Navigation reorganized successfully, Provider section shows only for providers with offerings, completion status indicator works correctly, TypeScript checks pass (0 errors, 0 warnings), follows existing sidebar patterns and styling
 
 ### Step 8: Tests
-- **Status:** Pending
+- **Status:** Completed
+- **Implementation:** All tests passing with SQLX_OFFLINE=true mode
+  - 13 helpcenter module tests (article generation, slug creation, JSON parsing, etc.)
+  - All 436 unit tests passing
+  - Frontend TypeScript checks passing (0 errors, 0 warnings)
 
 ## Completion Summary
-(To be filled after implementation)
+
+**Date Completed:** 2025-12-07
+
+**Implementation Stats:**
+- **Commits:** 9 (8 steps + orchestration commits)
+- **Files Changed:** 29
+- **Lines Added:** 3,409
+- **Lines Deleted:** 222
+- **Net Change:** +3,187 lines
+- **Tests Added:** 13 (helpcenter module)
+- **Total Tests Passing:** 436
+
+**Requirements Checklist:**
+- [x] Database migration (034_provider_onboarding.sql) - 10 new fields
+- [x] Extended ProviderProfile struct with onboarding fields
+- [x] API endpoints: GET/PUT /providers/:pubkey/onboarding
+- [x] API endpoint: POST /providers/:pubkey/helpcenter/sync
+- [x] Article generation from template (helpcenter module)
+- [x] Chatwoot sync integration (create/update articles)
+- [x] Frontend onboarding form with all fields
+- [x] Sidebar navigation with Provider section
+- [x] Help Center Setup completion indicator
+- [x] All tests pass (cargo test: 436/436, npm check: 0 errors)
+
+**Key Files Modified:**
+- Backend:
+  - `/code/api/migrations/034_provider_onboarding.sql`
+  - `/code/api/src/database/providers.rs`
+  - `/code/api/src/openapi/providers.rs`
+  - `/code/api/src/openapi/common.rs`
+  - `/code/api/src/helpcenter/mod.rs` (new)
+  - `/code/api/src/lib.rs`
+  - `/code/api/src/chatwoot/client.rs`
+- Frontend:
+  - `/code/website/src/routes/dashboard/provider/onboarding/+page.svelte` (new)
+  - `/code/website/src/lib/services/api.ts`
+  - `/code/website/src/lib/components/DashboardSidebar.svelte`
+  - `/code/website/src/lib/types/generated/*.ts`
+
+**Architecture Decisions:**
+- Extended existing `provider_profiles` table (YAGNI - no new 1:1 table)
+- Simple string interpolation for templates (no external template engine)
+- JSON arrays stored as TEXT fields (SQLite compatible)
+- Onboarding completion timestamp set automatically on update
+- Help center sync uses existing ChatwootClient methods
+- Article slug format: `about-{provider-name-slug}` for idempotency
+- Offline sqlx mode for CI/CD compatibility
+
+**Known Limitations:**
+- Preview feature not implemented (nice-to-have)
+- Multi-language support deferred to future
+- No automated reminders for incomplete onboarding
+- Requires Chatwoot portal to be configured before sync
