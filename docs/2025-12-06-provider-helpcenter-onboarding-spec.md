@@ -605,7 +605,37 @@ Options:
 - **Outcome:** Implementation compiles cleanly (no helpcenter-specific errors). Pre-existing sqlx database preparation errors prevent full test suite from running, but helpcenter module code is syntactically correct and follows all existing patterns. Sync function properly integrates with existing ChatwootClient methods (list_articles, create_article, update_article, get_profile) following pattern from sync_docs.rs. Endpoint returns correct response format matching spec.
 
 ### Step 6: Frontend Form
-- **Status:** Pending
+- **Status:** Completed
+- **Files:** `/code/website/src/lib/services/api.ts`, `/code/website/src/routes/dashboard/provider/onboarding/+page.svelte`
+- **Implementation:**
+  - Extended `api.ts` with three new functions:
+    - `getProviderOnboarding(pubkey)`: Fetches existing onboarding data (returns null if not found)
+    - `updateProviderOnboarding(pubkey, data, headers)`: Saves onboarding data with Ed25519 signature
+    - `syncProviderHelpcenter(pubkey, headers)`: Triggers help center article sync
+  - Added `ProviderOnboarding` type import and export from generated types
+  - Created full onboarding form at `/dashboard/provider/onboarding/+page.svelte`:
+    - **Form fields** (all from spec):
+      - Support Email (required, email input with validation)
+      - Support Hours (select with 3 predefined options + custom text input)
+      - Support Channels (multi-select checkboxes: Email, Chat, Phone, Ticket, Discord, Telegram)
+      - Regions (multi-select checkboxes: 7 regions including Global)
+      - Payment Methods (multi-select checkboxes: 5 options including Crypto, Stripe, PayPal, Bank Transfer, ICP)
+      - Refund Policy (select with 5 predefined options + custom text input)
+      - SLA Guarantee (select with 5 options including "No SLA guarantee")
+      - Unique Selling Points (3 textarea inputs, max 200 chars each with live counter)
+      - Common Issues (dynamic list with Add/Remove buttons, max 10 items, question/answer pairs)
+    - **Features**:
+      - Loads existing data on mount via `getProviderOnboarding()`
+      - Handles custom values for Support Hours and Refund Policy (switches to custom input when "custom" selected)
+      - JSON array serialization for multi-select fields (channels, regions, payment methods, USPs, issues)
+      - Form validation: required fields, email format, character limits, at least one selection for multi-selects
+      - Submit handler with Ed25519 signature using `signRequest()` and `updateProviderOnboarding()`
+      - "Sync to Help Center" button that calls `syncProviderHelpcenter()` after save
+      - Success/error message display (auto-dismiss after 5 seconds)
+      - Loading states for initial load, save operation, and sync operation
+      - Follows existing dashboard patterns (same styling, layout, message formatting as marketplace page)
+    - **Accessibility**: Proper `for`/`id` associations on inputs, semantic HTML structure
+- **Outcome:** Form renders correctly, all TypeScript checks pass (0 errors, 0 warnings), clean implementation following existing codebase patterns
 
 ### Step 7: Sidebar Navigation
 - **Status:** Pending

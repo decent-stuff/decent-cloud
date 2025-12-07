@@ -9,6 +9,7 @@ import type { UserSocial } from '$lib/types/generated/UserSocial';
 import type { UserPublicKey } from '$lib/types/generated/UserPublicKey';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 import type { ProviderTrustMetrics as ProviderTrustMetricsRaw } from '$lib/types/generated/ProviderTrustMetrics';
+import type { ProviderOnboarding as ProviderOnboardingRaw } from '$lib/types/generated/ProviderOnboarding';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
 type NullToUndefined<T> = T extends null ? undefined : T;
@@ -23,6 +24,7 @@ export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey: string 
 export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey: string };
 export type PlatformStats = ConvertNullToUndefined<PlatformOverview>;
 export type ProviderTrustMetrics = ConvertNullToUndefined<ProviderTrustMetricsRaw>;
+export type ProviderOnboarding = ConvertNullToUndefined<ProviderOnboardingRaw>;
 
 // Generic API response wrapper
 export interface ApiResponse<T> {
@@ -802,6 +804,88 @@ export async function cancelRentalRequest(
 
 	if (!payload.data) {
 		throw new Error('Cancel rental request response did not include confirmation message');
+	}
+
+	return payload.data;
+}
+
+export async function getProviderOnboarding(pubkey: string): Promise<ProviderOnboarding | null> {
+	const pubkeyHex = normalizePubkey(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/onboarding`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		if (response.status === 404) {
+			return null;
+		}
+		throw new Error(`Failed to fetch provider onboarding: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderOnboarding>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to get provider onboarding');
+	}
+
+	return payload.data ?? null;
+}
+
+export async function updateProviderOnboarding(
+	pubkey: string | number[],
+	data: Partial<ProviderOnboarding>,
+	headers: Record<string, string>
+): Promise<{ onboarding_completed_at: number }> {
+	const pubkeyHex = normalizePubkey(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/onboarding`;
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers: {
+			'Content-Type': 'application/json',
+			...headers
+		},
+		body: JSON.stringify(data)
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to update provider onboarding: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<{ onboarding_completed_at: number }>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update provider onboarding');
+	}
+
+	if (!payload.data) {
+		throw new Error('Update onboarding response did not include data');
+	}
+
+	return payload.data;
+}
+
+export async function syncProviderHelpcenter(
+	pubkey: string | number[],
+	headers: Record<string, string>
+): Promise<{ article_id: number; portal_slug: string; action: string }> {
+	const pubkeyHex = normalizePubkey(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/helpcenter/sync`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to sync help center: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<{ article_id: number; portal_slug: string; action: string }>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to sync help center');
+	}
+
+	if (!payload.data) {
+		throw new Error('Sync help center response did not include data');
 	}
 
 	return payload.data;
