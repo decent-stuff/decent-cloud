@@ -22,7 +22,6 @@
 
 	// Help Center state
 	let savingOnboarding = $state(false);
-	let supportEmail = $state('');
 	let supportHours = $state('');
 	let customSupportHours = $state('');
 	let supportChannels = $state<string[]>([]);
@@ -89,7 +88,6 @@
 		const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
 		const data = await getProviderOnboarding(pubkeyHex).catch(() => null);
 		if (data) {
-			supportEmail = data.support_email || '';
 			supportHours = data.support_hours || '';
 			if (supportHours && !supportHoursOptions.slice(0, -1).includes(supportHours)) {
 				customSupportHours = supportHours;
@@ -145,7 +143,10 @@
 		if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes) return;
 		const finalSupportHours = supportHours === 'custom' ? customSupportHours : supportHours;
 		const finalRefundPolicy = refundPolicy === 'custom' ? customRefundPolicy : refundPolicy;
-		if (!supportEmail?.includes('@') || !finalSupportHours || supportChannels.length === 0 || regions.length === 0 || paymentMethods.length === 0) {
+		if (!accountEmail?.includes('@')) {
+			error = 'Please add an email address in your Account settings first'; return;
+		}
+		if (!finalSupportHours || supportChannels.length === 0 || regions.length === 0 || paymentMethods.length === 0) {
 			error = 'Please fill in all required fields'; return;
 		}
 		savingOnboarding = true; error = null; success = null;
@@ -155,7 +156,7 @@
 			const usps = [usp1, usp2, usp3].filter((u) => u.trim());
 			const filteredIssues = commonIssues.filter((i) => i.question.trim() && i.answer.trim());
 			const onboardingData: Partial<ProviderOnboarding> = {
-				support_email: supportEmail, support_hours: finalSupportHours, support_channels: JSON.stringify(supportChannels),
+				support_email: accountEmail, support_hours: finalSupportHours, support_channels: JSON.stringify(supportChannels),
 				regions: JSON.stringify(regions), payment_methods: JSON.stringify(paymentMethods),
 				refund_policy: finalRefundPolicy || undefined, sla_guarantee: slaGuarantee || undefined,
 				unique_selling_points: usps.length > 0 ? JSON.stringify(usps) : undefined,
@@ -213,8 +214,8 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Support Center</h1>
-		<p class="text-white/60">Manage your help center, notifications, and portal access</p>
+		<h1 class="text-4xl font-bold text-white mb-2">Provider Setup</h1>
+		<p class="text-white/60">Configure your provider profile, help center, notifications, and portal access</p>
 	</div>
 
 	{#if error}<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">{error}</div>{/if}
@@ -223,9 +224,9 @@
 
 	{#if !isAuthenticated}
 		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
-			<span class="text-6xl">🎧</span>
+			<span class="text-6xl">⚙️</span>
 			<h2 class="text-2xl font-bold text-white mt-4">Login Required</h2>
-			<p class="text-white/70 mt-2">Login to configure your support center.</p>
+			<p class="text-white/70 mt-2">Login to configure your provider profile.</p>
 			<button onclick={handleLogin} class="mt-4 px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all">
 				Login / Create Account
 			</button>
@@ -241,8 +242,14 @@
 
 				<div class="grid md:grid-cols-2 gap-6">
 					<div>
-						<label for="support-email" class="block text-white/80 mb-2">Support Email <span class="text-red-400">*</span></label>
-						<input id="support-email" type="email" bind:value={supportEmail} required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" placeholder="support@example.com" />
+						<span class="block text-white/80 mb-2">Support Email <span class="text-red-400">*</span></span>
+						{#if accountEmail}
+							<div class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white/80">{accountEmail}</div>
+							<p class="text-white/50 text-xs mt-1">Using your account email. <a href="/dashboard/account/profile" class="text-blue-400 hover:underline">Change in Profile</a></p>
+						{:else}
+							<div class="w-full px-4 py-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-300">No email set</div>
+							<p class="text-yellow-400/80 text-sm mt-1">Please <a href="/dashboard/account/profile" class="underline">add your email</a> in Account settings first</p>
+						{/if}
 					</div>
 					<div>
 						<label for="support-hours" class="block text-white/80 mb-2">Support Hours <span class="text-red-400">*</span></label>

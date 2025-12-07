@@ -33,11 +33,12 @@
 	];
 
 	// Provider section - for users who provide services
-	const providerItems = [
-		{ href: "/dashboard/offerings", icon: "📦", label: "My Offerings" },
+	// Items visible before onboarding
+	const providerSetupItem = { href: "/dashboard/provider/support", icon: "⚙️", label: "Provider Setup" };
+	// Items visible only after onboarding is complete
+	const providerOnboardedItems = [
 		{ href: "/dashboard/provider/requests", icon: "📥", label: "Rental Requests" },
 		{ href: "/dashboard/provider/reseller", icon: "💼", label: "Reseller" },
-		{ href: "/dashboard/provider/support", icon: "🎧", label: "Support Center" },
 	];
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
@@ -172,36 +173,63 @@
 			<div class="pt-4 pb-1 px-3">
 				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">Provider</div>
 			</div>
-			{#each providerItems as item}
-				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
-				<a
-					href={item.href}
-					onclick={closeSidebar}
-					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
-						? 'bg-blue-600 text-white'
-						: 'text-white/70 hover:bg-white/10 hover:text-white'}"
-				>
-					<span class="text-lg">{item.icon}</span>
-					<span class="font-medium text-sm">{item.label}</span>
-					{#if item.label === "Support Center" && hasOfferings && !onboardingCompleted}
-						<span class="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-400" title="Setup incomplete"></span>
-					{/if}
-				</a>
-			{/each}
+			<!-- My Offerings - always visible -->
+			{@const offeringsActive = currentPath === "/dashboard/offerings" || currentPath.startsWith("/dashboard/offerings")}
+			<a
+				href="/dashboard/offerings"
+				onclick={closeSidebar}
+				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {offeringsActive
+					? 'bg-blue-600 text-white'
+					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+			>
+				<span class="text-lg">📦</span>
+				<span class="font-medium text-sm">My Offerings</span>
+			</a>
+			<!-- Provider Setup - always visible, with indicator if incomplete -->
+			{@const setupActive = currentPath === providerSetupItem.href || currentPath.startsWith(providerSetupItem.href)}
+			<a
+				href={providerSetupItem.href}
+				onclick={closeSidebar}
+				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {setupActive
+					? 'bg-blue-600 text-white'
+					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+			>
+				<span class="text-lg">{providerSetupItem.icon}</span>
+				<span class="font-medium text-sm">{providerSetupItem.label}</span>
+				{#if hasOfferings && !onboardingCompleted}
+					<span class="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-400" title="Setup incomplete"></span>
+				{/if}
+			</a>
+			<!-- Items only visible after onboarding is complete -->
+			{#if onboardingCompleted}
+				{#each providerOnboardedItems as item}
+					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+					<a
+						href={item.href}
+						onclick={closeSidebar}
+						class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
+							? 'bg-blue-600 text-white'
+							: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+					>
+						<span class="text-lg">{item.icon}</span>
+						<span class="font-medium text-sm">{item.label}</span>
+					</a>
+				{/each}
 
-			{#if CHATWOOT_BASE_URL}
-				<a
-					href={supportDashboardUrl}
-					target="_blank"
-					rel="noopener noreferrer"
-					onclick={closeSidebar}
-					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-white/70 hover:bg-white/10 hover:text-white"
-					title="Open Chatwoot support dashboard"
-				>
-					<span class="text-lg">🎧</span>
-					<span class="font-medium text-sm">Support Dashboard</span>
-					<span class="text-xs opacity-50">↗</span>
-				</a>
+				{#if CHATWOOT_BASE_URL}
+					<a
+						href={supportDashboardUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						onclick={closeSidebar}
+						class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-white/70 hover:bg-white/10 hover:text-white"
+						title="Open Chatwoot support dashboard"
+					>
+						<span class="text-lg">🎧</span>
+						<span class="font-medium text-sm">Support Dashboard</span>
+						<span class="text-xs opacity-50">↗</span>
+					</a>
+				{/if}
 			{/if}
 		{/if}
 
