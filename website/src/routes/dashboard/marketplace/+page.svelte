@@ -172,8 +172,25 @@
 	}
 
 	function formatPrice(offering: Offering): string {
+		// If offering has a reseller, calculate price with commission
+		if (offering.reseller_commission_percent && offering.monthly_price) {
+			const basePrice = offering.monthly_price;
+			const commission = basePrice * (offering.reseller_commission_percent / 100);
+			const totalPrice = basePrice + commission;
+			return `${totalPrice.toFixed(2)} ${offering.currency}`;
+		}
 		if (offering.monthly_price) return `${offering.monthly_price.toFixed(2)} ${offering.currency}`;
 		return "On request";
+	}
+
+	function hasReseller(offering: Offering): boolean {
+		return !!(offering.reseller_name && offering.reseller_commission_percent);
+	}
+
+	function getResellerBadgeText(offering: Offering): string {
+		if (!offering.reseller_name) return "";
+		const commission = offering.reseller_commission_percent || 0;
+		return `Via ${offering.reseller_name} (+${commission}%)`;
 	}
 
 	function formatSpecs(offering: Offering): string {
@@ -428,7 +445,9 @@
 											{#if offering.trust_score !== undefined}
 												<TrustBadge score={offering.trust_score} hasFlags={offering.has_critical_flags ?? false} compact={true} />
 											{/if}
-											{#if offering.offering_source === 'seeded'}
+											{#if hasReseller(offering)}
+												<span class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">{getResellerBadgeText(offering)}</span>
+											{:else if offering.offering_source === 'seeded'}
 												<span class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded">External</span>
 											{:else if offering.is_example}
 												<span class="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded">Demo</span>
@@ -447,7 +466,12 @@
 									<td class="py-3 pr-4 text-white/80">{formatLocation(offering)}</td>
 									<td class="py-3 pr-4 font-medium text-white">{formatPrice(offering)}</td>
 									<td class="py-3">
-										{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
+										{#if hasReseller(offering)}
+											<button
+												onclick={(e) => handleRentClick(e, offering)}
+												class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium whitespace-nowrap"
+											>Rent</button>
+										{:else if offering.offering_source === 'seeded' && offering.external_checkout_url}
 											<a
 												href={offering.external_checkout_url}
 												target="_blank"
@@ -530,7 +554,9 @@
 								<div>
 									<div class="flex items-center gap-2">
 										<span class="font-medium text-white">{offering.offer_name}</span>
-										{#if offering.offering_source === 'seeded'}
+										{#if hasReseller(offering)}
+											<span class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">{getResellerBadgeText(offering)}</span>
+										{:else if offering.offering_source === 'seeded'}
 											<span class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded">External</span>
 										{:else if offering.is_example}
 											<span class="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded">Demo</span>
@@ -548,7 +574,12 @@
 									<div class="text-white font-medium">{formatPrice(offering)}</div>
 									<div class="text-xs text-white/50">{formatLocation(offering)}</div>
 								</div>
-								{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
+								{#if hasReseller(offering)}
+									<button
+										onclick={(e) => handleRentClick(e, offering)}
+										class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium"
+									>Rent</button>
+								{:else if offering.offering_source === 'seeded' && offering.external_checkout_url}
 									<a
 										href={offering.external_checkout_url}
 										target="_blank"

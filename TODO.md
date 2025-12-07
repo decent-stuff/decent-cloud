@@ -48,6 +48,30 @@ See spec for research details. Requires: platform wallet key management decision
 
 ---
 
+## Provider Provisioning Agent
+
+**Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
+**Status:** Draft (pending payment system completion)
+**Priority:** HIGH - Critical for automated cloud platform
+
+Software that providers run to automatically provision services when contracts are accepted. Transforms Decent Cloud from "marketplace with manual fulfillment" to "automated cloud platform."
+
+**Prerequisite:** Payments fully working (Stripe + ICPay)
+
+### Key Components
+- Polling-based agent daemon (`dc-agent`)
+- Provisioner plugins: Hetzner, Proxmox, Docker, Manual
+- Health check reporting → feeds into reputation
+- Credential encryption (user's pubkey)
+
+### Implementation Order
+1. API extensions (provisioning endpoints)
+2. Agent MVP with manual provisioner
+3. Hetzner Cloud provisioner
+4. Health check + reputation integration
+
+---
+
 ## Provider Trust & Reliability System
 
 ### External Benchmarking Integration

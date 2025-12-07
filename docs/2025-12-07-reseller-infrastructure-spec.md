@@ -1,6 +1,6 @@
 # Phase 1B.2: Reseller Infrastructure
 
-**Status:** In Progress
+**Status:** Complete
 
 ## Overview
 
@@ -14,7 +14,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - [x] Reseller API endpoints: list external providers, create/update relationships, list orders, fulfill order
 - [x] Provider dashboard "Reseller" section with external providers list
 - [x] Order fulfillment flow in dashboard
-- [ ] Marketplace shows reseller offerings with commission markup
+- [x] Marketplace shows reseller offerings with commission markup
 
 ### Nice-to-have
 - [ ] Reseller earnings summary/stats
@@ -44,7 +44,7 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 
 ### Step 6: Marketplace Reseller Display
 **Success:** Offerings with resellers show reseller badge + commission price
-**Status:** Pending
+**Status:** Complete
 
 ## Execution Log
 
@@ -124,13 +124,39 @@ Enable onboarded providers to act as resellers for seeded (external) offerings. 
 - **Outcome:** Complete - Resellers can now view and fulfill pending orders with external provider details
 
 ### Step 6
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Verification:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Updated marketplace to display reseller information:
+  - Added `reseller_name` and `reseller_commission_percent` fields to `Offering` struct in `/code/api/src/database/offerings.rs`
+  - Updated all offering queries (`search_offerings`, `search_offerings_dsl`, `get_provider_offerings`, `get_offering`, `get_example_offerings`, `get_example_offerings_by_type`) to LEFT JOIN with `reseller_relationships` and `provider_profiles` tables
+  - Modified `/code/website/src/routes/dashboard/marketplace/+page.svelte`:
+    - Added `hasReseller()` helper function to check if offering has active reseller
+    - Added `getResellerBadgeText()` to format reseller badge with commission
+    - Updated `formatPrice()` to calculate total price including commission markup for reseller offerings
+    - Updated desktop and mobile UI to show "Via [Reseller Name] (+X%)" badge for offerings with active reseller
+    - Changed button from "Visit Provider" to "Rent" for reseller offerings (enables normal contract flow)
+    - External offerings without reseller still show "External" badge and "Visit Provider" button
+  - Fixed `/code/website/src/lib/components/QuickEditOfferingDialog.svelte` to include new fields
+- **Review:** Follows existing patterns, LEFT JOIN ensures offerings without resellers still display correctly, commission calculation happens client-side for price display
+- **Verification:** All backend tests pass (43 offering tests), frontend checks pass with 0 errors/warnings
+- **Outcome:** Complete - Marketplace now correctly displays reseller offerings with commission markup and enables rental through platform
 
 ## Completion Summary
-(Filled in Phase 4)
+
+Phase 1B.2 reseller infrastructure is now complete. All 6 steps have been successfully implemented and verified:
+
+1. Database migration created `reseller_relationships` and `reseller_orders` tables
+2. Database layer provides CRUD operations for relationships and order management
+3. API endpoints expose reseller functionality to authenticated providers
+4. Provider dashboard shows external providers and relationship management
+5. Order fulfillment flow allows providers to mark orders fulfilled with external details
+6. Marketplace displays reseller offerings with adjusted pricing and enables rental
+
+### Key Features Delivered
+- Providers can become resellers for external/seeded providers
+- Commission-based pricing (0-50%) configurable per relationship
+- Order tracking from customer → reseller → external provider
+- Fulfillment workflow with external order ID and instance details
+- Marketplace transparency showing reseller name and commission markup
+- Seamless rental experience for customers (no redirect to external site)
 
 ---
 

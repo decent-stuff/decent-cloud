@@ -106,7 +106,9 @@
 				has_critical_flags: undefined,
 				is_example: offering.is_example,
 				offering_source: offering.offering_source || undefined,
-				external_checkout_url: offering.external_checkout_url || undefined
+				external_checkout_url: offering.external_checkout_url || undefined,
+				reseller_name: undefined,
+				reseller_commission_percent: undefined
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed
