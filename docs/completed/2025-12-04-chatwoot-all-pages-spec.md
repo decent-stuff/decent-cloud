@@ -5,8 +5,8 @@
 ## Requirements
 
 ### Must-have
-- [ ] Add VITE_CHATWOOT_WEBSITE_TOKEN and VITE_CHATWOOT_BASE_URL to deploy.py website build
-- [ ] Move ChatwootWidget from dashboard layout to root layout (all pages)
+- [x] Add VITE_CHATWOOT_WEBSITE_TOKEN and VITE_CHATWOOT_BASE_URL to deploy.py website build
+- [x] Move ChatwootWidget from dashboard layout to root layout (all pages)
 
 ### Nice-to-have
 - None

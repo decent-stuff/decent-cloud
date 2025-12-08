@@ -1,5 +1,9 @@
+When a new provider onboards, we should immediately give them some things in Chatwoot: dedicated inbox, dedicated team (to which they can add agents), and dedicated Knowledge Base (portal in Help
+Center). Ensure you test against real chatwoot deployment if the APIs are aligned with expectations (our code).
 
 ## Architectural Issues Requiring Review
+
+- if wrapping errors, make sure to include / print the real error with `{:#?}` or similar. Fix everywhere in the api server!
 
 ### SQLX Type Inference Errors (Pre-existing from migration 037)
 **Files affected:**
@@ -23,12 +27,19 @@
 **Spec:** [2025-12-07-billing-invoicing-spec.md](docs/2025-12-07-billing-invoicing-spec.md)
 **Status:** Complete (2025-12-07)
 
-| Phase | Feature                      | Status |
-|-------|------------------------------|--------|
-| 1     | Receipt emails after payment | ✅ Done |
-| 2     | PDF invoice generation (B2B) | ✅ Done |
-| 3     | Stripe Tax integration (VAT) | ✅ Infrastructure ready |
+| Phase | Feature                      | Status                     |
+|-------|------------------------------|----------------------------|
+| 1     | Receipt emails after payment | ✅ Done                     |
+| 2     | PDF invoice generation (B2B) | ✅ Done                     |
+| 3     | Stripe Tax integration (VAT) | ✅ Infrastructure ready     |
 | 4     | User billing settings        | ⏸️ Deferred (nice-to-have) |
+
+**Compliance Gaps & Tax Analysis:** See [spec](docs/2025-12-07-billing-invoicing-spec.md#compliance-gaps--tax-analysis) for:
+- Current compliance status
+- Environment variables for EU compliance (`INVOICE_SELLER_*`)
+- Stripe Tax cost analysis (~0.5% per transaction)
+- Manual VAT lookup alternative
+- Prepaid vs postpaid payment model analysis
 
 **Note:** Stripe automatic tax requires migrating from Payment Intents to Checkout Sessions. See `api/docs/stripe-tax-integration.md`.
 

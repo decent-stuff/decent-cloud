@@ -391,3 +391,157 @@ ALTER TABLE contract_sign_requests ADD COLUMN reverse_charge INTEGER DEFAULT 0;
 3. **ICPay tax:** "Tax not included" disclaimer (per TODO.md)
 4. **Invoice language:** English only
 5. **Retention:** Store indefinitely in database
+
+---
+
+## Compliance Gaps & Tax Analysis
+
+### Current State
+
+**Implemented:**
+- ✅ Sequential invoice numbering (INV-YYYY-NNNNNN)
+- ✅ Tax columns on contracts (amount, rate, type, jurisdiction)
+- ✅ Buyer VAT ID storage (customer_tax_id)
+- ✅ Seller details configurable via environment variables
+- ✅ Invoice PDF generation with tax breakdown when data present
+
+**Environment Variables (required for EU compliance):**
+```bash
+INVOICE_SELLER_NAME="Your Company Name Ltd"
+INVOICE_SELLER_ADDRESS="123 Street, City, Country"
+INVOICE_SELLER_VAT_ID="EU123456789"  # Optional until VAT registered
+```
+
+### Compliance Gaps
+
+| Gap | EU Requirement | Current State | Fix Complexity | Priority |
+|-----|----------------|---------------|----------------|----------|
+| Seller address | Full address required | Placeholder if env var not set | ⚪ Config | HIGH |
+| Buyer address | Required for B2B | Not collected | 🟡 Medium | MEDIUM |
+| VAT calculation | Auto-calculate per country | Manual only | 🔴 Complex | MEDIUM |
+| VAT ID validation | VIES API verification | Not implemented | 🟡 Medium | LOW |
+| Reverse charge | B2B cross-border | Schema ready, logic TBD | 🟡 Medium | LOW |
+
+### Tax Calculation Options
+
+#### Option A: Stripe Tax (Recommended for Stripe payments)
+
+**How it works:**
+- Stripe automatically calculates tax based on customer location
+- Tax rate determined by IP geolocation or shipping address
+- Handles all EU countries, US states, and 40+ jurisdictions
+
+**Pricing (as of Dec 2024):**
+- 0.5% of transaction volume OR $0.50/transaction (whichever higher)
+- Only charged in jurisdictions where you're registered
+- No charge for jurisdictions where you're not registered
+
+**Cost Analysis for Marketplace Model:**
+
+| Monthly Volume | Avg Transaction | Tax Jurisdictions | Stripe Tax Cost |
+|---------------|-----------------|-------------------|-----------------|
+| $10,000 | $50 | 5 EU countries | ~$50/month |
+| $50,000 | $100 | 10 countries | ~$250/month |
+| $200,000 | $200 | 15 countries | ~$1,000/month |
+
+**Limitation:** Requires migrating from Payment Intents to Checkout Sessions (documented in api/docs/stripe-tax-integration.md).
+
+**Who pays?**
+- Platform absorbs as cost of doing business, OR
+- Pass through to buyer as "Tax" line item (standard practice)
+
+#### Option B: Manual VAT Lookup Table
+
+**How it works:**
+- Store VAT rates per country in database
+- Look up rate based on buyer's country (from billing address or IP)
+- Calculate tax manually at checkout
+
+**Implementation:**
+```sql
+CREATE TABLE vat_rates (
+    country_code TEXT PRIMARY KEY,
+    standard_rate REAL NOT NULL,
+    reduced_rate REAL,
+    updated_at INTEGER NOT NULL
+);
+```
+
+**Pros:**
+- No per-transaction cost
+- Full control over tax logic
+
+**Cons:**
+- Must maintain rate table (rates change ~yearly)
+- No automatic jurisdiction handling
+- Must implement reverse charge logic manually
+- No VIES integration for B2B validation
+
+**Complexity:** Medium (200-400 lines of code)
+
+#### Option C: Third-Party Tax API
+
+**Providers:**
+- TaxJar (Stripe subsidiary): Enterprise pricing, opaque
+- Avalara: Enterprise-focused, $10k+/year
+- Vertex: Enterprise only
+
+**Verdict:** Not cost-effective for startups. Stripe Tax is simpler.
+
+### EU VAT Rates Reference (2024)
+
+| Country | Standard Rate | Reduced Rate |
+|---------|---------------|--------------|
+| Germany | 19% | 7% |
+| France | 20% | 5.5% |
+| Netherlands | 21% | 9% |
+| Spain | 21% | 10% |
+| Italy | 22% | 10% |
+| Poland | 23% | 8% |
+| Belgium | 21% | 6% |
+| Sweden | 25% | 12% |
+| Austria | 20% | 10% |
+| Ireland | 23% | 13.5% |
+| Denmark | 25% | - |
+| Finland | 24% | 14% |
+| Portugal | 23% | 13% |
+| Greece | 24% | 13% |
+| Czech Republic | 21% | 15% |
+| Hungary | 27% | 18% |
+| Luxembourg | 17% | 8% |
+
+### Payment Model: Prepaid vs Postpaid
+
+**Current:** Prepaid (payment required before contract starts)
+
+**Stripe Guarantees for Postpaid:**
+- Payment Intents with `capture_method=manual`: Authorize now, capture later
+- Can hold funds for up to 7 days (standard) or 31 days (extended)
+- Card authentication (3DS) happens at authorization time
+
+**Postpaid Benefits:**
+- Better UX (try before you pay)
+- Enables usage-based billing
+
+**Postpaid Risks:**
+- Authorization can expire
+- Card details may change
+- Higher dispute rate potential
+
+**Recommendation:** Stay prepaid for MVP. Postpaid adds complexity without clear benefit for fixed-price VPS rentals.
+
+### Recommended Implementation Order
+
+1. **Now:** Set environment variables for seller details (zero code)
+2. **Soon:** Add buyer address collection in checkout flow (~100 lines)
+3. **Later:** Migrate to Stripe Checkout Sessions for automatic tax (~200 lines)
+4. **Optional:** VIES VAT ID validation (~50 lines)
+
+### ICPay Considerations
+
+ICPay (crypto) payments cannot use Stripe Tax. Options:
+- Show "Tax not included - buyer responsible for local tax obligations" disclaimer
+- Manually calculate tax based on buyer's declared country (less reliable)
+- Require buyer to provide billing address for tax calculation
+
+Current implementation shows disclaimer on invoices.
