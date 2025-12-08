@@ -50,8 +50,8 @@ impl StripeClient {
             .parse::<Currency>()
             .context("Invalid currency code")?;
 
-        let frontend_url = std::env::var("FRONTEND_URL")
-            .unwrap_or_else(|_| "http://localhost:59010".to_string());
+        let frontend_url =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
 
         let success_url = format!(
             "{}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
@@ -81,9 +81,8 @@ impl StripeClient {
             enabled: true,
             liability: None,
         });
-        params.tax_id_collection = Some(stripe::CreateCheckoutSessionTaxIdCollection {
-            enabled: true,
-        });
+        params.tax_id_collection =
+            Some(stripe::CreateCheckoutSessionTaxIdCollection { enabled: true });
         params.success_url = Some(&success_url);
         params.cancel_url = Some(&cancel_url);
         params.metadata = Some(
@@ -277,8 +276,8 @@ mod tests {
     fn test_checkout_session_defaults_frontend_url() {
         // Test default when FRONTEND_URL not set
         std::env::remove_var("FRONTEND_URL");
-        let url = std::env::var("FRONTEND_URL")
-            .unwrap_or_else(|_| "http://localhost:59010".to_string());
+        let url =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
         assert_eq!(url, "http://localhost:59010");
     }
 }

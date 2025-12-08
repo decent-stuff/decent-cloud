@@ -104,11 +104,7 @@ async fn send_test_email(
     Ok(format!("Email test sent to {}", to_email))
 }
 
-async fn send_test_sms(
-    db: &Database,
-    provider_id: &str,
-    phone: &Option<String>,
-) -> Result<String> {
+async fn send_test_sms(db: &Database, provider_id: &str, phone: &Option<String>) -> Result<String> {
     let phone = phone
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No phone number configured"))?;
