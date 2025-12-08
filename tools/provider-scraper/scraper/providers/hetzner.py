@@ -19,6 +19,13 @@ class HetznerScraper(BaseScraper):
     provider_website = "https://www.hetzner.com"
     docs_base_url = "https://docs.hetzner.com"
 
+    # Q&A generation sources (docs.hetzner.cloud is accessible, docs.hetzner.com is blocked)
+    changelog_url = "https://docs.hetzner.cloud/changelog"
+    faq_urls = [
+        "https://docs.hetzner.cloud/",  # API overview
+        "https://docs.hetzner.cloud/reference/cloud",  # Cloud API reference
+    ]
+
     API_BASE = "https://api.hetzner.cloud/v1"
 
     async def scrape_offerings(self) -> list[Offering]:

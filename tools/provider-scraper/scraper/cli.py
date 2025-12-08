@@ -24,7 +24,9 @@ async def run_scraper(
     skip_offerings: bool = False,
     skip_docs: bool = False,
     keep_local: bool = False,
-) -> tuple[int, int, bool]:
+    generate_qa: bool = False,
+    force_qa: bool = False,
+) -> tuple[int, int, int, bool]:
     """Run single scraper and return counts.
 
     Args:
@@ -33,9 +35,11 @@ async def run_scraper(
         skip_offerings: If True, continue on offerings failure
         skip_docs: If True, continue on docs failure
         keep_local: If True, keep local docs/ directory for troubleshooting
+        generate_qa: If True, generate Q&A content using LLM
+        force_qa: If True, force Q&A regeneration even if no changes detected
 
     Returns:
-        Tuple of (offerings_count, docs_count, success)
+        Tuple of (offerings_count, docs_count, qa_count, success)
     """
     print(f"\n=== Scraping {name} ===")
     scraper_cls = SCRAPERS[name]
@@ -51,19 +55,40 @@ async def run_scraper(
 
         # Count offerings from CSV
         offerings_count = 0
+        offerings = []
         if csv_path and csv_path.exists():
             with csv_path.open() as f:
                 offerings_count = sum(1 for _ in f) - 1  # subtract header
 
+            # Re-scrape offerings for Q&A generation (already cached by API)
+            if generate_qa:
+                offerings = await scraper.scrape_offerings()
+
         print(f"  Offerings: {offerings_count}")
         print(f"  Docs: {docs_count} new/changed")
 
-        return offerings_count, docs_count, True
+        # Generate Q&A if requested
+        qa_count = 0
+        if generate_qa and offerings:
+            try:
+                qa_path = await scraper.generate_qa(offerings, force=force_qa)
+                if qa_path and qa_path.exists():
+                    import json
+                    qa_data = json.loads(qa_path.read_text())
+                    qa_count = len(qa_data)
+                    print(f"  Q&A: {qa_count} pairs generated")
+                else:
+                    print("  Q&A: skipped (no changes)")
+            except Exception as e:
+                logger.warning(f"Q&A generation failed: {e}")
+                print(f"  Q&A: failed ({e})")
+
+        return offerings_count, docs_count, qa_count, True
 
     except Exception as e:
         logger.error(f"Failed to scrape {name}: {e}")
         print(f"  ERROR: {e}")
-        return 0, 0, False
+        return 0, 0, 0, False
 
 
 def print_usage() -> None:
@@ -77,6 +102,8 @@ def print_usage() -> None:
     print("  --skip-docs         Continue if docs scrape fails")
     print("  --skip-failures     Continue on any failure (same as --skip-offerings --skip-docs)")
     print("  --keep-local        Keep local docs/ directory (don't delete after zipping)")
+    print("  --generate-qa       Generate Q&A content using LLM (requires ANTHROPIC_API_KEY)")
+    print("  --force-qa          Force Q&A regeneration even if no changes detected")
     print()
     print("Commands:")
     print("  setup    Install Playwright browsers (run once after install)")
@@ -87,7 +114,10 @@ def print_usage() -> None:
         print(f"  {name}")
     print()
     print("Environment variables:")
-    print("  HETZNER_API_TOKEN   Required for Hetzner (create at console.hetzner.cloud)")
+    print("  HETZNER_API_TOKEN    Required for Hetzner (create at console.hetzner.cloud)")
+    print("  ANTHROPIC_API_KEY    Required for Q&A generation")
+    print("  ANTHROPIC_BASE_URL   Optional custom API base URL")
+    print("  ANTHROPIC_MODEL      Optional model override (default: claude-sonnet-4-20250514)")
     print()
     print("Examples:")
     print("  uv run python3 -m scraper.cli setup              # Install browsers (first time)")
@@ -95,6 +125,7 @@ def print_usage() -> None:
     print("  uv run python3 -m scraper.cli hetzner            # Scrape Hetzner only")
     print("  uv run python3 -m scraper.cli --skip-docs ovh    # Skip docs failures for OVH")
     print("  uv run python3 -m scraper.cli --keep-local ovh   # Keep docs/ for troubleshooting")
+    print("  uv run python3 -m scraper.cli --generate-qa hetzner  # Generate Q&A for Hetzner")
 
 
 def run_setup() -> None:
@@ -113,16 +144,18 @@ def run_setup() -> None:
         sys.exit(1)
 
 
-def parse_args(args: list[str]) -> tuple[list[str], bool, bool, bool]:
+def parse_args(args: list[str]) -> tuple[list[str], bool, bool, bool, bool, bool]:
     """Parse command line arguments.
 
     Returns:
-        Tuple of (providers, skip_offerings, skip_docs, keep_local)
+        Tuple of (providers, skip_offerings, skip_docs, keep_local, generate_qa, force_qa)
     """
     providers = []
     skip_offerings = False
     skip_docs = False
     keep_local = False
+    generate_qa = False
+    force_qa = False
 
     for arg in args:
         if arg == "--skip-offerings":
@@ -134,10 +167,15 @@ def parse_args(args: list[str]) -> tuple[list[str], bool, bool, bool]:
             skip_docs = True
         elif arg == "--keep-local":
             keep_local = True
+        elif arg == "--generate-qa":
+            generate_qa = True
+        elif arg == "--force-qa":
+            force_qa = True
+            generate_qa = True  # --force-qa implies --generate-qa
         elif not arg.startswith("-"):
             providers.append(arg)
 
-    return providers, skip_offerings, skip_docs, keep_local
+    return providers, skip_offerings, skip_docs, keep_local, generate_qa, force_qa
 
 
 async def main() -> None:
@@ -156,7 +194,9 @@ async def main() -> None:
     output_base = Path(__file__).parent.parent / "output"
 
     # Parse arguments
-    providers, skip_offerings, skip_docs, keep_local = parse_args(sys.argv[1:])
+    providers, skip_offerings, skip_docs, keep_local, generate_qa, force_qa = parse_args(
+        sys.argv[1:]
+    )
 
     # Default to all providers if none specified
     if not providers:
@@ -174,20 +214,25 @@ async def main() -> None:
     # Run scrapers
     total_offerings = 0
     total_docs = 0
+    total_qa = 0
     failed_providers = []
 
     for provider in providers:
-        offerings_count, docs_count, success = await run_scraper(
-            provider, output_base, skip_offerings, skip_docs, keep_local
+        offerings_count, docs_count, qa_count, success = await run_scraper(
+            provider, output_base, skip_offerings, skip_docs, keep_local, generate_qa, force_qa
         )
         total_offerings += offerings_count
         total_docs += docs_count
+        total_qa += qa_count
         if not success:
             failed_providers.append(provider)
 
     # Print summary
     print("\n=== Summary ===")
-    print(f"Total: {total_offerings} offerings, {total_docs} docs")
+    summary = f"Total: {total_offerings} offerings, {total_docs} docs"
+    if generate_qa:
+        summary += f", {total_qa} Q&A pairs"
+    print(summary)
 
     if failed_providers:
         print(f"Failed: {', '.join(failed_providers)}")

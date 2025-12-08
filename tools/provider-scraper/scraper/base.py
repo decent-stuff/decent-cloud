@@ -1,9 +1,11 @@
 """Base scraper class for provider scrapers."""
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import httpx
 from crawl4ai import AsyncWebCrawler
 
 from scraper.crawler import DEFAULT_BROWSER_CONFIG, create_crawl_config
@@ -26,6 +28,10 @@ class BaseScraper(ABC):
     provider_name: str
     provider_website: str
     docs_base_url: str | None = None  # Optional: base URL for docs discovery
+
+    # Optional: URLs for Q&A generation (alternative to docs crawling)
+    faq_urls: list[str] = []  # Specific pages to fetch for Q&A context
+    changelog_url: str | None = None  # URL to check for updates (uses ETag)
 
     def __init__(self, output_dir: Path | None = None) -> None:
         """Initialize the scraper with an output directory."""
@@ -251,3 +257,151 @@ class BaseScraper(ABC):
         self.archive.finalize(keep_local=keep_local)
 
         return csv_path, docs_count
+
+    # --- Q&A Generation Methods ---
+
+    def _metadata_path(self) -> Path:
+        """Path to metadata JSON file for change detection."""
+        return self.output_dir / "metadata.json"
+
+    def _load_metadata(self) -> dict[str, str]:
+        """Load stored metadata (ETags, timestamps)."""
+        path = self._metadata_path()
+        if path.exists():
+            try:
+                return json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {}
+
+    def _save_metadata(self, metadata: dict[str, str]) -> None:
+        """Save metadata for change detection."""
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._metadata_path().write_text(json.dumps(metadata, indent=2))
+
+    async def check_for_changes(self) -> bool:
+        """Check if content has changed since last scrape.
+
+        Uses ETag from changelog_url if available.
+
+        Returns:
+            True if changes detected or no previous metadata exists.
+        """
+        if not self.changelog_url:
+            logger.debug(f"No changelog_url for {self.provider_name}, assuming changed")
+            return True
+
+        metadata = self._load_metadata()
+        stored_etag = metadata.get("changelog_etag")
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.head(self.changelog_url)
+                current_etag = response.headers.get("etag")
+
+                if not current_etag:
+                    logger.debug(f"No ETag from {self.changelog_url}, assuming changed")
+                    return True
+
+                if current_etag != stored_etag:
+                    logger.info(f"ETag changed for {self.provider_name}: {stored_etag} -> {current_etag}")
+                    return True
+
+                logger.info(f"No changes detected for {self.provider_name} (ETag: {current_etag})")
+                return False
+
+        except httpx.HTTPError as e:
+            logger.warning(f"Failed to check changelog: {e}, assuming changed")
+            return True
+
+    async def fetch_faq_content(self) -> str:
+        """Fetch content from faq_urls for Q&A generation context.
+
+        Returns:
+            Combined markdown content from all FAQ URLs.
+        """
+        if not self.faq_urls:
+            return ""
+
+        contents: list[str] = []
+        config = create_crawl_config()
+
+        async with AsyncWebCrawler(config=DEFAULT_BROWSER_CONFIG) as crawler:
+            for url in self.faq_urls:
+                try:
+                    logger.debug(f"Fetching FAQ content from {url}")
+                    result = await crawler.arun(url=url, config=config)
+
+                    if not result.success:
+                        logger.warning(f"Failed to fetch {url}: {result.error_message}")
+                        continue
+
+                    # Prefer fit_markdown, fall back to raw
+                    content = result.markdown.fit_markdown or result.markdown.raw_markdown or ""
+                    if content.strip():
+                        contents.append(f"## Source: {url}\n\n{content}")
+
+                except Exception as e:
+                    logger.warning(f"Error fetching {url}: {e}")
+
+        return "\n\n---\n\n".join(contents)
+
+    async def generate_qa(
+        self,
+        offerings: list[Offering],
+        force: bool = False,
+    ) -> Path | None:
+        """Generate Q&A content using LLM.
+
+        Args:
+            offerings: List of offerings for context.
+            force: If True, regenerate even if no changes detected.
+
+        Returns:
+            Path to generated qa.json file, or None if skipped.
+        """
+        from scraper.qa_generator import QAGenerator, QAGeneratorError
+
+        # Check for changes unless forced
+        if not force:
+            has_changes = await self.check_for_changes()
+            if not has_changes:
+                logger.info(f"Skipping Q&A generation for {self.provider_name} (no changes)")
+                return None
+
+        # Fetch FAQ content
+        docs_content = await self.fetch_faq_content()
+
+        # Generate Q&A
+        try:
+            generator = QAGenerator()
+            qa_pairs = generator.generate_qa(
+                provider_name=self.provider_name,
+                provider_website=self.provider_website,
+                offerings=offerings,
+                docs_content=docs_content,
+            )
+        except QAGeneratorError as e:
+            logger.error(f"Q&A generation failed: {e}")
+            raise
+
+        # Save Q&A
+        qa_path = self.output_dir / "qa.json"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        qa_path.write_text(json.dumps(qa_pairs, indent=2))
+        logger.info(f"Wrote {len(qa_pairs)} Q&A pairs to {qa_path}")
+
+        # Update metadata with current ETag
+        if self.changelog_url:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.head(self.changelog_url)
+                    etag = response.headers.get("etag")
+                    if etag:
+                        metadata = self._load_metadata()
+                        metadata["changelog_etag"] = etag
+                        self._save_metadata(metadata)
+            except httpx.HTTPError:
+                pass
+
+        return qa_path
