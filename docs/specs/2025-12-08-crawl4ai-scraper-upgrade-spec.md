@@ -137,9 +137,44 @@ output/
 - **Outcome:** SUCCESS - URL discovery module implemented, reviewed, refactored for quality
 
 ### Step 3
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created `/code/tools/provider-scraper/scraper/storage.py` with:
+  - `CacheEntry` dataclass - filename, etag, content_hash, crawled_at fields
+  - `DocsArchive.__init__(output_dir)` - Creates output directory, initializes zip_path/cache_path, loads cache
+  - `DocsArchive._load_cache()` - Loads cache.json, returns empty dict if not exists, raises on invalid JSON
+  - `DocsArchive._save_cache()` - Saves cache to cache.json with proper serialization
+  - `DocsArchive._content_hash(content)` - Computes SHA256 hash, returns first 16 chars
+  - `DocsArchive._safe_filename(url, topic)` - Generates safe filename from URL/topic, extracts path segment from URL, replaces special chars with hyphens, collapses multiple hyphens, strips leading/trailing hyphens, falls back to "index" for empty path, falls back to "page" if sanitization results in empty string
+  - `DocsArchive.has_changed(url, etag, content)` - Returns True for new URLs, uses ETag comparison when available on both sides, falls back to content hash comparison
+  - `DocsArchive.write(url, content, topic, etag)` - Writes markdown to ZIP (reads all, updates, writes all due to ZIP format limitation), updates cache, saves cache to disk, returns filename
+  - `DocsArchive.read(url)` - Reads markdown from ZIP by URL lookup in cache, returns None if not found or ZIP missing
+- **Tests:** Created `/code/tools/provider-scraper/tests/test_storage.py` with 37 unit tests covering:
+  - Initialization: directory creation (1 test), path initialization (1 test), empty cache (1 test)
+  - Cache load/save: JSON serialization (3 tests) - save format, load existing, invalid JSON raises
+  - Content hashing: 16 char length (1 test), consistency (1 test), different content (1 test)
+  - Safe filename: topic usage (1 test), URL extraction (1 test), special char replacement (1 test), hyphen collapsing (1 test), hyphen stripping (1 test), empty path fallback (1 test), special-chars-only topic fallback (1 test), alphanumeric preservation (1 test)
+  - Change detection: new URL (1 test), ETag match (1 test), ETag mismatch (1 test), content hash fallback (1 test), content hash mismatch (1 test), ETag priority over content hash (1 test)
+  - Write operations: ZIP creation (1 test), content storage (1 test), cache update (1 test), cache persistence (1 test), file update (1 test), preserve other files (1 test)
+  - Read operations: missing URL (1 test), missing ZIP (1 test), existing content (1 test), missing file in ZIP (1 test), multiple files (1 test)
+  - Integration: write-read roundtrip (1 test), incremental crawl simulation (1 test), cache persistence across instances (1 test)
+- **Files Changed:**
+  - Created: `/code/tools/provider-scraper/scraper/storage.py` (228 lines)
+  - Created: `/code/tools/provider-scraper/tests/test_storage.py` (297 lines)
+- **Test Results:** All 37 tests passed in 0.53s
+- **Implementation Notes:**
+  - ZIP format doesn't support in-place updates, so write() reads all files, updates the target, and writes a new ZIP
+  - ETag comparison takes priority over content hash when available on both sides
+  - Content hash uses first 16 chars of SHA256 for cache.json compactness
+  - Logging added at debug/info/warning/error levels for observability
+  - Safe filename generation extracts path segment (parts[3:]) to avoid using domain as filename
+- **Review Findings:**
+  - ✅ KISS/MINIMAL: Clean, focused implementation (228 lines) - no unnecessary complexity
+  - ✅ DRY: No duplication found in codebase - content hashing and filename sanitization are unique to storage module
+  - ✅ Tests comprehensive: Both positive and negative paths covered (37 tests total)
+  - ✅ Follows codebase patterns: Matches crawler.py and discovery.py style (docstrings, type hints, logging, imports)
+  - ⚠️ **INITIAL**: Missing test for edge case where topic contains only special characters (triggers "page" fallback)
+  - ✅ **FIXED**: Added `test_safe_filename_handles_topic_with_only_special_chars` test to cover edge case (37 tests total now)
+  - ✅ No architectural issues: Single responsibility, clear API, proper error handling, no silent failures
+- **Outcome:** SUCCESS - ZIP storage and cache module implemented, reviewed, and tested with complete edge case coverage
 
 ### Step 4
 - **Implementation:** (pending)
