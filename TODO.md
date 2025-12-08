@@ -1,34 +1,4 @@
-## Billing & Invoicing ✅ COMPLETE
-
-**Spec:** [2025-12-07-billing-invoicing-spec.md](docs/2025-12-07-billing-invoicing-spec.md)
-**Status:** Complete (2025-12-07)
-
-| Phase | Feature                      | Status                     |
-|-------|------------------------------|----------------------------|
-| 1     | Receipt emails after payment | ✅ Done                     |
-| 2     | PDF invoice generation (B2B) | ✅ Done                     |
-| 3     | Stripe Tax integration (VAT) | ✅ Infrastructure ready     |
-| 4     | User billing settings        | ⏸️ Deferred (nice-to-have) |
-
-**Compliance Gaps & Tax Analysis:** See [spec](docs/2025-12-07-billing-invoicing-spec.md#compliance-gaps--tax-analysis) for:
-- Current compliance status
-- Environment variables for EU compliance (`INVOICE_SELLER_*`)
-- Stripe Tax cost analysis (~0.5% per transaction)
-- Manual VAT lookup alternative
-- Prepaid vs postpaid payment model analysis
-
-**Note:** Stripe automatic tax requires migrating from Payment Intents to Checkout Sessions. See `api/docs/stripe-tax-integration.md`.
-
-### Compliance Gaps
-
-| Gap                  | Requirement               | Fix                                 | Priority |
-|----------------------|---------------------------|-------------------------------------|----------|
-| Buyer address        | Required for B2B invoices | ✅ Done (checkout flow + invoices)  | DONE     |
-| VAT auto-calculation | Per-country rates         | Migrate to Stripe Checkout Sessions | MEDIUM   |
-| VAT ID validation    | VIES API verification     | ~50 lines, optional                 | LOW      |
-| Reverse charge       | B2B cross-border          | Schema ready, logic TBD             | LOW      |
-
----
+# TODO
 
 ## ICPay Integration
 

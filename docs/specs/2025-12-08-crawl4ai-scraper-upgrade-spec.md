@@ -215,9 +215,54 @@ output/
 - **Outcome:** SUCCESS - Async base class implemented, reviewed, and tested with full Crawl4AI integration. Ready for Step 5.
 
 ### Step 5
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Migrated all three provider scrapers to async architecture:
+  - **Hetzner** (`/code/tools/provider-scraper/scraper/providers/hetzner.py`):
+    - Removed imports: `MarkdownDoc`, `html_to_markdown` (no longer needed)
+    - Added `docs_base_url = "https://docs.hetzner.com"` class attribute
+    - Changed `scrape_offerings()` to `async def scrape_offerings(self) -> list[Offering]:`
+    - Removed old `scrape_docs()` override (base class handles it now)
+    - Updated `main()` to async with `asyncio.run()`
+    - Updated return value to `(csv_path, docs_count)` instead of `(csv_path, list[md_paths])`
+    - All 114 offerings generation logic intact (6 locations × 19 plans)
+  - **Contabo** (`/code/tools/provider-scraper/scraper/providers/contabo.py`):
+    - Removed imports: `MarkdownDoc`, `html_to_markdown` (no longer needed)
+    - Changed `scrape_offerings()` to `async def scrape_offerings(self) -> list[Offering]:`
+    - Removed old `scrape_docs()` override (base class handles it now)
+    - Updated `main()` to async with `asyncio.run()`
+    - Updated return value to `(csv_path, docs_count)` instead of `(csv_path, list[md_paths])`
+    - All 99 offerings generation logic intact (9 locations × 11 plans)
+  - **OVH** (`/code/tools/provider-scraper/scraper/providers/ovh.py`):
+    - Removed imports: `MarkdownDoc`, `html_to_markdown` (no longer needed)
+    - Changed `scrape_offerings()` to `async def scrape_offerings(self) -> list[Offering]:`
+    - Removed old `scrape_docs()` override (base class handles it now)
+    - Updated `main()` to async with `asyncio.run()`
+    - Updated return value to `(csv_path, docs_count)` instead of `(csv_path, list[md_paths])`
+    - All 132 offerings generation logic intact (11 locations × 12 plans)
+- **Tests:** All existing tests (130 tests total) pass without modification. Pytest asyncio_mode=auto handles async methods automatically. Verified async execution with manual test: all 3 providers successfully scrape offerings (345 total).
+- **Files Changed:**
+  - Modified: `/code/tools/provider-scraper/scraper/providers/hetzner.py` (135 lines, was 176 lines - removed old scrape_docs, async migration)
+  - Modified: `/code/tools/provider-scraper/scraper/providers/contabo.py` (132 lines, was 161 lines - removed old scrape_docs, async migration)
+  - Modified: `/code/tools/provider-scraper/scraper/providers/ovh.py` (124 lines, was 152 lines - removed old scrape_docs, async migration)
+- **Review Findings (Initial Implementation):**
+  - ✅ KISS/MINIMAL: Changes are minimal - only async migration, no refactoring of business logic
+  - ✅ DRY: Removed duplicate scrape_docs implementations (36 lines in Hetzner, 24 in Contabo, 24 in OVH) - base class handles it now
+  - ✅ No duplication: All hardcoded plan/location data preserved as-is (source of truth for offerings)
+  - ✅ Tests pass: All 130 tests pass in 1.62s (pytest-asyncio handles async methods automatically)
+  - ✅ Functionality verified: Manual test confirms all 3 providers work (Hetzner: 114, Contabo: 99, OVH: 132 offerings)
+  - ✅ Follows codebase patterns: Matches base.py async style (async def, asyncio.run)
+  - ✅ No architectural issues: Clean async migration, no breaking changes to offering logic
+  - ✅ Imports cleaned: Removed unused `MarkdownDoc` and `html_to_markdown` imports (markdown.py will be removed in Step 7)
+- **Orchestrator Review (Step 5):**
+  - ✅ **KISS/MINIMAL**: Perfect - only async migration, no over-engineering or unnecessary changes
+  - ✅ **DRY**: Excellent - old scrape_docs() methods completely removed from all 3 providers (84 lines eliminated)
+  - ✅ **Tests**: All 130 tests pass cleanly in 1.61s (2 warnings from crawl4ai's Pydantic v2 migration, not our code)
+  - ✅ **Codebase Patterns**: Follows base.py async patterns perfectly - async def, asyncio.run(), return tuple
+  - ✅ **File Size Reduction**: Hetzner 176→135 (-41), Contabo 161→132 (-29), OVH 152→124 (-28) lines (98 lines total reduction)
+  - ✅ **No Duplication**: Verified via grep - no remaining MarkdownDoc/html_to_markdown imports in providers
+  - ✅ **Functionality**: Confirmed all 3 providers generate correct offerings (345 total: H=114, C=99, O=132)
+  - ✅ **Simpler**: Cannot be simplified further - minimal changes, only what's required for async migration
+  - ✅ **No Issues**: Clean implementation, ready for Step 6
+- **Outcome:** SUCCESS - All three providers migrated to async architecture, orchestrator review complete, tests pass, functionality verified. Ready for Step 6 (CLI update).
 
 ### Step 6
 - **Implementation:** (pending)

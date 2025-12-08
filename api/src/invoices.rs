@@ -77,6 +77,77 @@ struct InvoiceItem {
     price: f64,
 }
 
+/// Parse freeform buyer address into structured address fields.
+/// Expected format (from UI placeholder):
+///   Company Name (already in buyer_name)
+///   Street Address
+///   City, Postal Code
+///   Country
+/// Falls back gracefully if format doesn't match.
+fn parse_buyer_address(address: Option<&str>) -> InvoiceAddress {
+    let Some(addr) = address.filter(|s| !s.trim().is_empty()) else {
+        return InvoiceAddress {
+            street: String::new(),
+            city: String::new(),
+            postal_code: String::new(),
+            country: String::new(),
+        };
+    };
+
+    let lines: Vec<&str> = addr.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+
+    match lines.len() {
+        0 => InvoiceAddress {
+            street: String::new(),
+            city: String::new(),
+            postal_code: String::new(),
+            country: String::new(),
+        },
+        1 => InvoiceAddress {
+            street: lines[0].to_string(),
+            city: String::new(),
+            postal_code: String::new(),
+            country: String::new(),
+        },
+        2 => InvoiceAddress {
+            street: lines[0].to_string(),
+            city: String::new(),
+            postal_code: String::new(),
+            country: lines[1].to_string(),
+        },
+        3 => {
+            // street, city+postal, country
+            let (city, postal) = parse_city_postal(lines[1]);
+            InvoiceAddress {
+                street: lines[0].to_string(),
+                city,
+                postal_code: postal,
+                country: lines[2].to_string(),
+            }
+        }
+        _ => {
+            // 4+ lines: join first lines as street, then city+postal, country
+            let street = lines[..lines.len() - 2].join(", ");
+            let (city, postal) = parse_city_postal(lines[lines.len() - 2]);
+            InvoiceAddress {
+                street,
+                city,
+                postal_code: postal,
+                country: lines[lines.len() - 1].to_string(),
+            }
+        }
+    }
+}
+
+/// Parse "City, Postal Code" or just "City" into (city, postal_code)
+fn parse_city_postal(s: &str) -> (String, String) {
+    if let Some((city, postal)) = s.split_once(',') {
+        (city.trim().to_string(), postal.trim().to_string())
+    } else {
+        (s.to_string(), String::new())
+    }
+}
+
 /// Get next invoice number atomically, format: INV-YYYY-NNNNNN
 async fn get_next_invoice_number(db: &Database) -> Result<String> {
     let current_year = chrono::Utc::now().year();
@@ -279,12 +350,7 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
                 .buyer_name
                 .clone()
                 .unwrap_or_else(|| "Customer".to_string()),
-            address: InvoiceAddress {
-                street: "".to_string(),
-                city: "".to_string(),
-                postal_code: "".to_string(),
-                country: invoice.buyer_address.clone().unwrap_or_default(),
-            },
+            address: parse_buyer_address(invoice.buyer_address.as_deref()),
             vat_id: invoice.buyer_vat_id.clone(),
         },
         items: vec![InvoiceItem {
@@ -505,5 +571,63 @@ mod tests {
         assert!(metadata.invoice_number.starts_with("INV-"));
         assert_eq!(metadata.currency, "EUR");
         assert_eq!(metadata.total_e9s, 50_000_000_000);
+    }
+
+    #[test]
+    fn test_parse_buyer_address_none() {
+        let addr = parse_buyer_address(None);
+        assert_eq!(addr.street, "");
+        assert_eq!(addr.city, "");
+        assert_eq!(addr.postal_code, "");
+        assert_eq!(addr.country, "");
+    }
+
+    #[test]
+    fn test_parse_buyer_address_empty() {
+        let addr = parse_buyer_address(Some("   "));
+        assert_eq!(addr.street, "");
+        assert_eq!(addr.country, "");
+    }
+
+    #[test]
+    fn test_parse_buyer_address_single_line() {
+        let addr = parse_buyer_address(Some("123 Main St"));
+        assert_eq!(addr.street, "123 Main St");
+        assert_eq!(addr.city, "");
+        assert_eq!(addr.country, "");
+    }
+
+    #[test]
+    fn test_parse_buyer_address_two_lines() {
+        let addr = parse_buyer_address(Some("123 Main St\nGermany"));
+        assert_eq!(addr.street, "123 Main St");
+        assert_eq!(addr.country, "Germany");
+    }
+
+    #[test]
+    fn test_parse_buyer_address_three_lines() {
+        let addr = parse_buyer_address(Some("123 Main St\nBerlin, 10115\nGermany"));
+        assert_eq!(addr.street, "123 Main St");
+        assert_eq!(addr.city, "Berlin");
+        assert_eq!(addr.postal_code, "10115");
+        assert_eq!(addr.country, "Germany");
+    }
+
+    #[test]
+    fn test_parse_buyer_address_four_lines() {
+        let addr = parse_buyer_address(Some("Acme Corp\n123 Main St\nBerlin, 10115\nGermany"));
+        assert_eq!(addr.street, "Acme Corp, 123 Main St");
+        assert_eq!(addr.city, "Berlin");
+        assert_eq!(addr.postal_code, "10115");
+        assert_eq!(addr.country, "Germany");
+    }
+
+    #[test]
+    fn test_parse_buyer_address_trims_whitespace() {
+        let addr = parse_buyer_address(Some("  123 Main St  \n  Berlin, 10115  \n  Germany  "));
+        assert_eq!(addr.street, "123 Main St");
+        assert_eq!(addr.city, "Berlin");
+        assert_eq!(addr.postal_code, "10115");
+        assert_eq!(addr.country, "Germany");
     }
 }
