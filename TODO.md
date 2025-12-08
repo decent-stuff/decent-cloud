@@ -23,7 +23,7 @@
 
 | Gap                  | Requirement               | Fix                                 | Priority |
 |----------------------|---------------------------|-------------------------------------|----------|
-| Buyer address        | Required for B2B invoices | Add to checkout flow                | MEDIUM   |
+| Buyer address        | Required for B2B invoices | ✅ Done (checkout flow + invoices)  | DONE     |
 | VAT auto-calculation | Per-country rates         | Migrate to Stripe Checkout Sessions | MEDIUM   |
 | VAT ID validation    | VIES API verification     | ~50 lines, optional                 | LOW      |
 | Reverse charge       | B2B cross-border          | Schema ready, logic TBD             | LOW      |
@@ -38,21 +38,21 @@
 2. Create payouts in icpay.org dashboard (Payouts section)
 3. Mark as paid: `POST /api/v1/admin/payouts`
 
-### Automated periodic Payouts
+### Future: Automated Payouts
 To automate payouts, implement direct ICRC-1 transfers from platform wallet using `ic-agent`.
-See spec for research details. Requires: platform wallet key management decision.
+See [completed spec](docs/completed/2025-12-05-icpay-escrow-payments-spec.md#future-work-automated-provider-payouts) for research details. Requires: platform wallet key management decision.
 
 ---
 
 ## Provider Provisioning Agent
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
-**Status:** Draft (pending payment system completion)
+**Status:** Ready to implement
 **Priority:** HIGH - Critical for automated cloud platform
 
 Software that providers run to automatically provision services when contracts are accepted. Transforms Decent Cloud from "marketplace with manual fulfillment" to "automated cloud platform."
 
-**Prerequisite:** Payments fully working (Stripe + ICPay)
+**Prerequisite:** ✅ Payments fully working (Stripe + ICPay complete)
 
 ### Key Components
 - Polling-based agent daemon (`dc-agent`)
