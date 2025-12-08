@@ -37,7 +37,11 @@ impl VatApi {
     /// The VIES (VAT Information Exchange System) is provided by the European Commission
     /// and may be slow or temporarily unavailable. This endpoint will return an error
     /// if the VIES service is unreachable.
-    #[oai(path = "/api/v1/vat/validate", method = "post", tag = "ApiTags::System")]
+    #[oai(
+        path = "/api/v1/vat/validate",
+        method = "post",
+        tag = "ApiTags::System"
+    )]
     async fn validate_vat(&self, request: Json<ValidateVatRequest>) -> Json<ValidateVatResponse> {
         let result = crate::vies::validate_vat_id(&request.country_code, &request.vat_number).await;
 

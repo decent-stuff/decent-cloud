@@ -50,7 +50,10 @@ pub async fn validate_vat_id(country_code: &str, vat_number: &str) -> Result<Vie
         return Err(anyhow::anyhow!("VIES API error ({}): {}", status, body));
     }
 
-    let body = response.text().await.context("Failed to read VIES response body")?;
+    let body = response
+        .text()
+        .await
+        .context("Failed to read VIES response body")?;
     parse_vies_response(&body)
 }
 
@@ -65,7 +68,11 @@ fn parse_vies_response(xml: &str) -> Result<ViesResponse> {
     // Extract address (optional)
     let address = extract_xml_value(xml, "address");
 
-    Ok(ViesResponse { valid, name, address })
+    Ok(ViesResponse {
+        valid,
+        name,
+        address,
+    })
 }
 
 /// Extracts value from XML tag
@@ -107,7 +114,10 @@ mod tests {
         let result = parse_vies_response(xml).unwrap();
         assert_eq!(result.valid, true);
         assert_eq!(result.name, Some("Example GmbH".to_string()));
-        assert_eq!(result.address, Some("Musterstrasse 1, 12345 Berlin".to_string()));
+        assert_eq!(
+            result.address,
+            Some("Musterstrasse 1, 12345 Berlin".to_string())
+        );
     }
 
     #[test]
@@ -157,7 +167,10 @@ mod tests {
     #[test]
     fn test_extract_xml_value() {
         let xml = "<root><name>Test Company</name><other>value</other></root>";
-        assert_eq!(extract_xml_value(xml, "name"), Some("Test Company".to_string()));
+        assert_eq!(
+            extract_xml_value(xml, "name"),
+            Some("Test Company".to_string())
+        );
         assert_eq!(extract_xml_value(xml, "other"), Some("value".to_string()));
         assert_eq!(extract_xml_value(xml, "missing"), None);
     }

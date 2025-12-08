@@ -2032,11 +2032,7 @@ impl AccountsApi {
     /// Get billing settings
     ///
     /// Returns saved billing information for the authenticated user
-    #[oai(
-        path = "/accounts/billing",
-        method = "get",
-        tag = "ApiTags::Accounts"
-    )]
+    #[oai(path = "/accounts/billing", method = "get", tag = "ApiTags::Accounts")]
     async fn get_billing_settings(
         &self,
         db: Data<&Arc<Database>>,
@@ -2079,11 +2075,7 @@ impl AccountsApi {
     /// Update billing settings
     ///
     /// Updates saved billing information for the authenticated user
-    #[oai(
-        path = "/accounts/billing",
-        method = "put",
-        tag = "ApiTags::Accounts"
-    )]
+    #[oai(path = "/accounts/billing", method = "put", tag = "ApiTags::Accounts")]
     async fn update_billing_settings(
         &self,
         db: Data<&Arc<Database>>,

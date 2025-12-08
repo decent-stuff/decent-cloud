@@ -247,21 +247,38 @@ impl Database {
         Ok(onboarding)
     }
 
-    /// Update provider onboarding data
+    /// Update or create provider onboarding data (upsert).
+    /// If the provider profile doesn't exist, creates one with the given name.
     pub async fn update_provider_onboarding(
         &self,
         pubkey: &[u8],
         data: &ProviderOnboarding,
+        provider_name: &str,
     ) -> Result<()> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         sqlx::query!(
-            r#"UPDATE provider_profiles
-               SET support_email = ?, support_hours = ?, support_channels = ?,
-                   regions = ?, payment_methods = ?, refund_policy = ?,
-                   sla_guarantee = ?, unique_selling_points = ?, common_issues = ?,
-                   onboarding_completed_at = ?
-               WHERE pubkey = ?"#,
+            r#"INSERT INTO provider_profiles (
+                   pubkey, name, api_version, profile_version, updated_at_ns,
+                   support_email, support_hours, support_channels, regions,
+                   payment_methods, refund_policy, sla_guarantee,
+                   unique_selling_points, common_issues, onboarding_completed_at
+               ) VALUES (?, ?, 'v1', '1.0', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(pubkey) DO UPDATE SET
+                   support_email = excluded.support_email,
+                   support_hours = excluded.support_hours,
+                   support_channels = excluded.support_channels,
+                   regions = excluded.regions,
+                   payment_methods = excluded.payment_methods,
+                   refund_policy = excluded.refund_policy,
+                   sla_guarantee = excluded.sla_guarantee,
+                   unique_selling_points = excluded.unique_selling_points,
+                   common_issues = excluded.common_issues,
+                   onboarding_completed_at = excluded.onboarding_completed_at,
+                   updated_at_ns = excluded.updated_at_ns"#,
+            pubkey,
+            provider_name,
+            now_ns,
             data.support_email,
             data.support_hours,
             data.support_channels,
@@ -271,8 +288,7 @@ impl Database {
             data.sla_guarantee,
             data.unique_selling_points,
             data.common_issues,
-            now_ns,
-            pubkey
+            now_ns
         )
         .execute(&self.pool)
         .await?;

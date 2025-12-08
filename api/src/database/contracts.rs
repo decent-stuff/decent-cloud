@@ -691,14 +691,16 @@ impl Database {
         checkout_session_id: &str,
         tax_amount_e9s: Option<i64>,
         customer_tax_id: Option<&str>,
+        reverse_charge: bool,
     ) -> Result<()> {
         sqlx::query(
-            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ?, payment_status = ?, tax_amount_e9s = ?, customer_tax_id = ? WHERE contract_id = ?"
+            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ?, payment_status = ?, tax_amount_e9s = ?, customer_tax_id = ?, reverse_charge = ? WHERE contract_id = ?"
         )
         .bind(checkout_session_id)
         .bind("succeeded")
         .bind(tax_amount_e9s)
         .bind(customer_tax_id)
+        .bind(if reverse_charge { 1 } else { 0 })
         .bind(contract_id)
         .execute(&self.pool)
         .await?;

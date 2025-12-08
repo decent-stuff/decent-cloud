@@ -1283,8 +1283,29 @@ impl ProvidersApi {
             });
         }
 
+        // Get provider name from account (for new providers)
+        let provider_name = match db.get_account_with_keys_by_public_key(&pubkey_bytes).await {
+            Ok(Some(account)) => account
+                .display_name
+                .unwrap_or_else(|| account.username.clone()),
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get account: {}", e)),
+                });
+            }
+        };
+
         match db
-            .update_provider_onboarding(&pubkey_bytes, &onboarding.0)
+            .update_provider_onboarding(&pubkey_bytes, &onboarding.0, &provider_name)
             .await
         {
             Ok(_) => {

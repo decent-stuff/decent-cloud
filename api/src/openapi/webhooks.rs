@@ -189,10 +189,7 @@ pub async fn stripe_webhook(
             })?;
 
             // Extract tax information
-            let tax_amount_cents = session
-                .total_details
-                .as_ref()
-                .and_then(|td| td.amount_tax);
+            let tax_amount_cents = session.total_details.as_ref().and_then(|td| td.amount_tax);
 
             let tax_amount_e9s = tax_amount_cents.map(|cents| cents * 10_000_000);
 
@@ -203,6 +200,10 @@ pub async fn stripe_webhook(
                 .and_then(|ids| ids.first())
                 .map(|tax_id| format!("{}: {}", tax_id.tax_type, tax_id.value));
 
+            // Detect reverse charge: 0% VAT with valid EU VAT ID
+            // Stripe Tax automatically applies reverse charge for B2B cross-border EU
+            let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+
             // Update contract with tax info and set payment status to succeeded
             if let Err(e) = db
                 .update_checkout_session_payment(
@@ -210,6 +211,7 @@ pub async fn stripe_webhook(
                     &session.id,
                     tax_amount_e9s,
                     customer_tax_id.as_deref(),
+                    reverse_charge,
                 )
                 .await
             {
@@ -233,11 +235,7 @@ pub async fn stripe_webhook(
                     );
                 }
                 Err(e) => {
-                    tracing::warn!(
-                        "Failed to auto-accept contract {}: {}",
-                        contract_id_hex,
-                        e
-                    );
+                    tracing::warn!("Failed to auto-accept contract {}: {}", contract_id_hex, e);
                     // Don't fail the webhook - payment status is already updated
                 }
             }
@@ -263,8 +261,8 @@ pub async fn stripe_webhook(
         }
         "payment_intent.succeeded" => {
             // Parse payment intent from event data
-            let payment_intent: StripePaymentIntent =
-                serde_json::from_value(event.data.object).map_err(|e| {
+            let payment_intent: StripePaymentIntent = serde_json::from_value(event.data.object)
+                .map_err(|e| {
                     tracing::error!("Failed to parse payment intent: {:#}", e);
                     PoemError::from_string(
                         format!("Invalid payment intent data: {}", e),
@@ -339,8 +337,8 @@ pub async fn stripe_webhook(
         }
         "payment_intent.payment_failed" => {
             // Parse payment intent from event data
-            let payment_intent: StripePaymentIntent =
-                serde_json::from_value(event.data.object).map_err(|e| {
+            let payment_intent: StripePaymentIntent = serde_json::from_value(event.data.object)
+                .map_err(|e| {
                     tracing::error!("Failed to parse payment intent: {:#}", e);
                     PoemError::from_string(
                         format!("Invalid payment intent data: {}", e),
@@ -1340,5 +1338,87 @@ mod tests {
         let cents: i64 = 250;
         let e9s = cents * 10_000_000;
         assert_eq!(e9s, 2_500_000_000);
+    }
+
+    #[test]
+    fn test_reverse_charge_detection_with_vat_id_and_zero_tax() {
+        // Reverse charge applies when: VAT ID present AND tax amount is 0
+        let customer_tax_id = Some("eu_vat: DE123456789".to_string());
+        let tax_amount_cents = Some(0);
+
+        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+
+        assert!(
+            reverse_charge,
+            "Reverse charge should be true with VAT ID and 0 tax"
+        );
+    }
+
+    #[test]
+    fn test_reverse_charge_detection_without_vat_id() {
+        // No reverse charge if VAT ID is missing
+        let customer_tax_id: Option<String> = None;
+        let tax_amount_cents = Some(0);
+
+        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+
+        assert!(
+            !reverse_charge,
+            "Reverse charge should be false without VAT ID"
+        );
+    }
+
+    #[test]
+    fn test_reverse_charge_detection_with_vat_id_and_nonzero_tax() {
+        // No reverse charge if tax is applied (domestic transaction)
+        let customer_tax_id = Some("eu_vat: FR12345678901".to_string());
+        let tax_amount_cents = Some(250); // 19% VAT on €13.16
+
+        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+
+        assert!(
+            !reverse_charge,
+            "Reverse charge should be false with VAT ID but non-zero tax"
+        );
+    }
+
+    #[test]
+    fn test_checkout_session_with_reverse_charge() {
+        // Full session with reverse charge scenario
+        let json = r#"{
+            "id": "cs_test_reverse_charge",
+            "metadata": {
+                "contract_id": "abc123def456"
+            },
+            "total_details": {
+                "amount_tax": 0
+            },
+            "customer_details": {
+                "tax_ids": [
+                    {
+                        "type": "eu_vat",
+                        "value": "DE123456789"
+                    }
+                ]
+            }
+        }"#;
+
+        let session: StripeCheckoutSession = serde_json::from_str(json).unwrap();
+        assert_eq!(session.id, "cs_test_reverse_charge");
+
+        let tax_amount = session.total_details.as_ref().and_then(|td| td.amount_tax);
+        let has_vat_id = session
+            .customer_details
+            .as_ref()
+            .and_then(|cd| cd.tax_ids.as_ref())
+            .map(|ids| !ids.is_empty())
+            .unwrap_or(false);
+
+        assert_eq!(tax_amount, Some(0));
+        assert!(has_vat_id);
+
+        // This would trigger reverse charge
+        let reverse_charge = has_vat_id && tax_amount.unwrap_or(1) == 0;
+        assert!(reverse_charge);
     }
 }
