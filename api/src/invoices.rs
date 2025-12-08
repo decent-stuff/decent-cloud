@@ -94,7 +94,11 @@ fn parse_buyer_address(address: Option<&str>) -> InvoiceAddress {
         };
     };
 
-    let lines: Vec<&str> = addr.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let lines: Vec<&str> = addr
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
 
     match lines.len() {
         0 => InvoiceAddress {
