@@ -1,7 +1,7 @@
 use super::types::Database;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Row};
 
 /// Account record from database
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -27,6 +27,10 @@ pub struct Account {
     pub is_admin: i64,
     // Chatwoot Platform API user ID for support portal management
     pub chatwoot_user_id: Option<i64>,
+    // Billing settings (nullable)
+    pub billing_address: Option<String>,
+    pub billing_vat_id: Option<String>,
+    pub billing_country_code: Option<String>,
 }
 
 /// Account public key record
@@ -116,6 +120,19 @@ impl From<Account> for AccountProfile {
             profile_updated_at: account.profile_updated_at,
         }
     }
+}
+
+/// Billing settings for an account
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct BillingSettings {
+    #[oai(skip_serializing_if_is_none)]
+    pub billing_address: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub billing_vat_id: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub billing_country_code: Option<String>,
 }
 
 impl Database {
@@ -266,7 +283,7 @@ impl Database {
     /// Get account by ID
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
              FROM accounts WHERE id = ?",
         )
         .bind(account_id)
@@ -279,7 +296,7 @@ impl Database {
     /// Get account by username (case-insensitive search)
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
              FROM accounts WHERE LOWER(username) = LOWER(?)",
         )
         .bind(username)
@@ -718,7 +735,7 @@ impl Database {
     /// Get account by email
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
              FROM accounts WHERE email = ?",
         )
         .bind(email)
@@ -734,7 +751,7 @@ impl Database {
         chatwoot_user_id: i64,
     ) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
              FROM accounts WHERE chatwoot_user_id = ?",
         )
         .bind(chatwoot_user_id)
@@ -870,7 +887,7 @@ impl Database {
     #[allow(dead_code)]
     pub async fn list_admins(&self) -> Result<Vec<Account>> {
         let admins = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
              FROM accounts WHERE is_admin = 1 ORDER BY username ASC"
         )
         .fetch_all(&self.pool)
@@ -930,6 +947,48 @@ impl Database {
         .await?;
 
         Ok(result.flatten())
+    }
+
+    /// Get billing settings for an account
+    pub async fn get_billing_settings(&self, account_id: &[u8]) -> Result<BillingSettings> {
+        let row = sqlx::query(
+            "SELECT billing_address, billing_vat_id, billing_country_code
+             FROM accounts WHERE id = ?",
+        )
+        .bind(account_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(BillingSettings {
+            billing_address: row.get("billing_address"),
+            billing_vat_id: row.get("billing_vat_id"),
+            billing_country_code: row.get("billing_country_code"),
+        })
+    }
+
+    /// Update billing settings for an account
+    pub async fn update_billing_settings(
+        &self,
+        account_id: &[u8],
+        settings: &BillingSettings,
+    ) -> Result<()> {
+        let result = sqlx::query(
+            "UPDATE accounts
+             SET billing_address = ?, billing_vat_id = ?, billing_country_code = ?
+             WHERE id = ?",
+        )
+        .bind(&settings.billing_address)
+        .bind(&settings.billing_vat_id)
+        .bind(&settings.billing_country_code)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            bail!("Account not found");
+        }
+
+        Ok(())
     }
 }
 

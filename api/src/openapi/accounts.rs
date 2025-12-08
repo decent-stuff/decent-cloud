@@ -2028,4 +2028,109 @@ impl AccountsApi {
             error: None,
         })
     }
+
+    /// Get billing settings
+    ///
+    /// Returns saved billing information for the authenticated user
+    #[oai(
+        path = "/accounts/billing",
+        method = "get",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn get_billing_settings(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<crate::database::accounts::BillingSettings>> {
+        // Get account by authenticated user's public key
+        let account_id = match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Get billing settings
+        match db.get_billing_settings(&account_id).await {
+            Ok(settings) => Json(ApiResponse {
+                success: true,
+                data: Some(settings),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update billing settings
+    ///
+    /// Updates saved billing information for the authenticated user
+    #[oai(
+        path = "/accounts/billing",
+        method = "put",
+        tag = "ApiTags::Accounts"
+    )]
+    async fn update_billing_settings(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        req: Json<crate::database::accounts::BillingSettings>,
+    ) -> Json<ApiResponse<crate::database::accounts::BillingSettings>> {
+        // Get account by authenticated user's public key
+        let account_id = match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Authenticated key not found or not active".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Update billing settings
+        match db.update_billing_settings(&account_id, &req.0).await {
+            Ok(_) => {
+                // Fetch updated settings
+                match db.get_billing_settings(&account_id).await {
+                    Ok(settings) => Json(ApiResponse {
+                        success: true,
+                        data: Some(settings),
+                        error: None,
+                    }),
+                    Err(e) => Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(e.to_string()),
+                    }),
+                }
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
 }
