@@ -3,7 +3,6 @@
 from typing import TypedDict
 
 from scraper.base import BaseScraper
-from scraper.markdown import MarkdownDoc, html_to_markdown
 from scraper.models import Offering
 
 
@@ -73,7 +72,7 @@ class ContaboScraper(BaseScraper):
     provider_name = "Contabo"
     provider_website = "https://contabo.com"
 
-    def scrape_offerings(self) -> list[Offering]:
+    async def scrape_offerings(self) -> list[Offering]:
         """Generate offerings from Contabo plans."""
         offerings: list[Offering] = []
 
@@ -115,46 +114,19 @@ class ContaboScraper(BaseScraper):
 
         return offerings
 
-    def scrape_docs(self) -> list[MarkdownDoc]:
-        """Scrape Contabo documentation pages."""
-        docs: list[MarkdownDoc] = []
 
-        doc_urls = [
-            ("https://contabo.com/en/vps/", "VPS Overview"),
-            ("https://contabo.com/en/vds/", "VDS Overview"),
-            ("https://contabo.com/en/about-us/", "About Contabo"),
-        ]
-
-        for url, topic in doc_urls:
-            try:
-                html = self.fetch(url)
-                doc = html_to_markdown(
-                    html,
-                    source_url=url,
-                    provider=self.provider_name,
-                    topic=topic,
-                )
-                docs.append(doc)
-            except Exception as e:
-                print(f"Failed to fetch {url}: {e}")
-
-        return docs
-
-
-def main() -> None:
+async def main() -> None:
     """Run the Contabo scraper."""
     from pathlib import Path
 
     output_dir = Path(__file__).parent.parent.parent / "output" / "contabo"
 
-    with ContaboScraper(output_dir) as scraper:
-        csv_path, md_paths = scraper.run()
-        print(f"CSV written to: {csv_path}")
-        print(f"Markdown files: {len(md_paths)}")
-        for path in md_paths:
-            size = path.stat().st_size
-            print(f"  - {path.name} ({size} bytes)")
+    scraper = ContaboScraper(output_dir)
+    csv_path, docs_count = await scraper.run()
+    print(f"CSV written to: {csv_path}")
+    print(f"Docs written: {docs_count}")
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())

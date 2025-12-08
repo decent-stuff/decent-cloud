@@ -3,7 +3,6 @@
 from typing import TypedDict
 
 from scraper.base import BaseScraper
-from scraper.markdown import MarkdownDoc, html_to_markdown
 from scraper.models import Offering
 
 
@@ -77,8 +76,9 @@ class HetznerScraper(BaseScraper):
 
     provider_name = "Hetzner"
     provider_website = "https://www.hetzner.com"
+    docs_base_url = "https://docs.hetzner.com"
 
-    def scrape_offerings(self) -> list[Offering]:
+    async def scrape_offerings(self) -> list[Offering]:
         """Generate offerings from Hetzner Cloud plans."""
         offerings: list[Offering] = []
 
@@ -117,59 +117,19 @@ class HetznerScraper(BaseScraper):
 
         return offerings
 
-    def scrape_docs(self) -> list[MarkdownDoc]:
-        """Scrape Hetzner documentation pages."""
-        docs: list[MarkdownDoc] = []
 
-        # Fetch main cloud page
-        try:
-            html = self.fetch("https://www.hetzner.com/cloud/")
-            doc = html_to_markdown(
-                html,
-                source_url="https://www.hetzner.com/cloud/",
-                provider=self.provider_name,
-                topic="Cloud VPS Overview",
-            )
-            docs.append(doc)
-        except Exception as e:
-            print(f"Failed to fetch cloud page: {e}")
-
-        # Fetch FAQ/support pages
-        faq_urls = [
-            ("https://docs.hetzner.com/cloud/", "Cloud Documentation"),
-            ("https://www.hetzner.com/cloud#pricing", "Cloud Pricing"),
-        ]
-
-        for url, topic in faq_urls:
-            try:
-                html = self.fetch(url)
-                doc = html_to_markdown(
-                    html,
-                    source_url=url,
-                    provider=self.provider_name,
-                    topic=topic,
-                )
-                docs.append(doc)
-            except Exception as e:
-                print(f"Failed to fetch {url}: {e}")
-
-        return docs
-
-
-def main() -> None:
+async def main() -> None:
     """Run the Hetzner scraper."""
     from pathlib import Path
 
     output_dir = Path(__file__).parent.parent.parent / "output" / "hetzner"
 
-    with HetznerScraper(output_dir) as scraper:
-        csv_path, md_paths = scraper.run()
-        print(f"CSV written to: {csv_path}")
-        print(f"Markdown files: {len(md_paths)}")
-        for path in md_paths:
-            size = path.stat().st_size
-            print(f"  - {path.name} ({size} bytes)")
+    scraper = HetznerScraper(output_dir)
+    csv_path, docs_count = await scraper.run()
+    print(f"CSV written to: {csv_path}")
+    print(f"Docs written: {docs_count}")
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())

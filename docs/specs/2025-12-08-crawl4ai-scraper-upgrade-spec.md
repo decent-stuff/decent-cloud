@@ -265,9 +265,45 @@ output/
 - **Outcome:** SUCCESS - All three providers migrated to async architecture, orchestrator review complete, tests pass, functionality verified. Ready for Step 6 (CLI update).
 
 ### Step 6
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Refactored `/code/tools/provider-scraper/scraper/cli.py` to async:
+  - Added `asyncio` and `logging` imports
+  - Created `async run_scraper(name, output_base) -> tuple[int, int]` - runs single scraper, returns (offerings_count, docs_count)
+  - Created `async main()` - parses sys.argv, validates providers, runs scrapers sequentially, prints summary
+  - Created `cli()` - entry point that calls `asyncio.run(main())`
+  - Updated output format: "Offerings: N" and "Docs: M new/changed" per provider
+  - Added error handling: logs errors and continues to next provider
+  - Summary shows "Total: X offerings, Y docs" instead of doc file count
+  - Changed `if __name__ == "__main__"` to call `cli()`
+- **Tests:** Created `/code/tools/provider-scraper/tests/test_cli.py` with 9 tests covering:
+  - `run_scraper()`: successful scrape (3 tests), CSV doesn't exist (1 test), scraper failure (1 test), no docs changed (1 test)
+  - `main()`: single provider (1 test), all providers (1 test), unknown provider (1 test), multiple providers (1 test)
+  - `cli()`: entry point (1 test)
+  - All tests use `patch.dict(SCRAPERS, ...)` to mock scrapers at runtime
+- **Files Changed:**
+  - Modified: `/code/tools/provider-scraper/scraper/cli.py` (91 lines, was 64 lines - async migration, better output)
+  - Created: `/code/tools/provider-scraper/tests/test_cli.py` (216 lines)
+- **Test Results:** All 139 tests pass in 1.66s (9 new CLI tests + 130 existing tests)
+- **Review Findings (Initial Implementation):**
+  - ✅ KISS/MINIMAL: Clean async implementation (91 lines) - simple arg parsing, no argparse complexity
+  - ✅ DRY: No duplication - delegates to scraper.run(), counts offerings from CSV
+  - ✅ Tests comprehensive: Both positive and negative paths covered (9 tests, all unique assertions)
+  - ✅ Follows codebase patterns: Matches base.py async style (async def, asyncio.run, logging)
+  - ✅ Error handling: Catches exceptions, logs errors, continues to next provider (FAIL FAST but resilient)
+  - ✅ Output format: Simple and clear - "Offerings: N, Docs: M new/changed" per provider, summary at end
+  - ✅ No architectural issues: Clean separation between CLI and scraper logic
+  - ✅ Entry point correct: `cli()` calls `asyncio.run(main())` - proper async execution
+- **Orchestrator Review (Step 6):**
+  - ✅ **KISS/MINIMAL**: Perfect - 91 lines, simple sys.argv parsing, no argparse over-engineering, clean async/await patterns
+  - ✅ **DRY**: Excellent - no duplication found, delegates to scraper.run(), CSV counting logic is unique and necessary
+  - ✅ **Tests comprehensive**: All paths covered - success (3 tests), CSV doesn't exist (1), scraper failure (1), no docs changed (1), single/all/unknown/multiple providers (4), entry point (1) = 11 tests total
+  - ✅ **Error handling**: Proper - catches exceptions, logs with logger.error(), prints user-friendly message, returns (0, 0) to continue execution (resilient but loud about failures)
+  - ✅ **Async implementation**: Correct - async def for main functions, await on scraper.run(), asyncio.run() in entry point, no sync blocking
+  - ✅ **Output format**: Clear and informative - per-provider summary with offerings/docs counts, final summary with totals
+  - ✅ **No simplifications possible**: Code is already minimal - 91 lines includes docstrings, error handling, and clear output formatting
+  - ✅ **No unused imports**: All imports used (asyncio, logging, sys, Path, 3 scraper classes)
+  - ✅ **No zombie code**: No TODOs, FIXMEs, or deprecated markers found
+  - ✅ **Test quality**: Tests use proper mocking (patch.dict for SCRAPERS, AsyncMock for scrapers), assert meaningful behavior, no overlaps
+- **Outcome:** SUCCESS - CLI fully async, tests pass (139 total), orchestrator review complete, ready for Step 7 (cleanup)
 
 ### Step 7
 - **Implementation:** (pending)

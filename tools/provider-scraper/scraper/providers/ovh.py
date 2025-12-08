@@ -3,7 +3,6 @@
 from typing import TypedDict
 
 from scraper.base import BaseScraper
-from scraper.markdown import MarkdownDoc, html_to_markdown
 from scraper.models import Offering
 
 
@@ -72,7 +71,7 @@ class OvhScraper(BaseScraper):
     provider_name = "OVH"
     provider_website = "https://www.ovhcloud.com"
 
-    def scrape_offerings(self) -> list[Offering]:
+    async def scrape_offerings(self) -> list[Offering]:
         """Generate offerings from OVH plans."""
         offerings: list[Offering] = []
 
@@ -107,45 +106,19 @@ class OvhScraper(BaseScraper):
 
         return offerings
 
-    def scrape_docs(self) -> list[MarkdownDoc]:
-        """Scrape OVH documentation pages."""
-        docs: list[MarkdownDoc] = []
 
-        doc_urls = [
-            ("https://www.ovhcloud.com/en/vps/", "VPS Overview"),
-            ("https://www.ovhcloud.com/en/bare-metal/", "Dedicated Servers Overview"),
-        ]
-
-        for url, topic in doc_urls:
-            try:
-                html = self.fetch(url)
-                doc = html_to_markdown(
-                    html,
-                    source_url=url,
-                    provider=self.provider_name,
-                    topic=topic,
-                )
-                docs.append(doc)
-            except Exception as e:
-                print(f"Failed to fetch {url}: {e}")
-
-        return docs
-
-
-def main() -> None:
+async def main() -> None:
     """Run the OVH scraper."""
     from pathlib import Path
 
     output_dir = Path(__file__).parent.parent.parent / "output" / "ovh"
 
-    with OvhScraper(output_dir) as scraper:
-        csv_path, md_paths = scraper.run()
-        print(f"CSV written to: {csv_path}")
-        print(f"Markdown files: {len(md_paths)}")
-        for path in md_paths:
-            size = path.stat().st_size
-            print(f"  - {path.name} ({size} bytes)")
+    scraper = OvhScraper(output_dir)
+    csv_path, docs_count = await scraper.run()
+    print(f"CSV written to: {csv_path}")
+    print(f"Docs written: {docs_count}")
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
