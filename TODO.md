@@ -19,7 +19,7 @@
 
 **Note:** Stripe automatic tax requires migrating from Payment Intents to Checkout Sessions. See `api/docs/stripe-tax-integration.md`.
 
-### Compliance Gaps (Future Work)
+### Compliance Gaps
 
 | Gap                  | Requirement               | Fix                                 | Priority |
 |----------------------|---------------------------|-------------------------------------|----------|
@@ -38,7 +38,7 @@
 2. Create payouts in icpay.org dashboard (Payouts section)
 3. Mark as paid: `POST /api/v1/admin/payouts`
 
-### Future: Automated Payouts
+### Automated periodic Payouts
 To automate payouts, implement direct ICRC-1 transfers from platform wallet using `ic-agent`.
 See spec for research details. Requires: platform wallet key management decision.
 
