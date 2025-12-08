@@ -39,6 +39,17 @@ interface ApiResponse<T> {
 }
 
 /**
+ * Check if an error is a network connectivity error (API server unreachable)
+ */
+function isNetworkError(error: unknown): boolean {
+	if (error instanceof TypeError) {
+		const msg = error.message.toLowerCase();
+		return msg.includes('failed to fetch') || msg.includes('network');
+	}
+	return false;
+}
+
+/**
  * Register a new account with username and initial public key
  */
 export async function registerAccount(
@@ -62,11 +73,21 @@ export async function registerAccount(
 		requestBody
 	);
 
-	const response = await fetch(`${API_BASE_URL}/api/v1/accounts`, {
-		method: 'POST',
-		headers: headers as HeadersInit,
-		body
-	});
+	let response: Response;
+	try {
+		response = await fetch(`${API_BASE_URL}/api/v1/accounts`, {
+			method: 'POST',
+			headers: headers as HeadersInit,
+			body
+		});
+	} catch (error) {
+		if (isNetworkError(error)) {
+			throw new Error(
+				`Cannot connect to API server at ${API_BASE_URL}. Please ensure the backend is running.`
+			);
+		}
+		throw error;
+	}
 
 	if (!response.ok) {
 		const text = await response.text().catch(() => '');
@@ -128,9 +149,19 @@ export async function getAccount(username: string): Promise<AccountWithKeys | nu
  * Returns account if key is registered, null if not found
  */
 export async function getAccountByPublicKey(publicKey: string): Promise<AccountWithKeys | null> {
-	const response = await fetch(`${API_BASE_URL}/api/v1/accounts?publicKey=${publicKey}`, {
-		method: 'GET'
-	});
+	let response: Response;
+	try {
+		response = await fetch(`${API_BASE_URL}/api/v1/accounts?publicKey=${publicKey}`, {
+			method: 'GET'
+		});
+	} catch (error) {
+		if (isNetworkError(error)) {
+			throw new Error(
+				`Cannot connect to API server at ${API_BASE_URL}. Please ensure the backend is running.`
+			);
+		}
+		throw error;
+	}
 
 	if (response.status === 404) {
 		return null; // Key not found in any account
