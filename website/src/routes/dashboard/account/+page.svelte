@@ -54,6 +54,12 @@
 			icon: "👤",
 			description: "Edit your public profile information",
 		},
+		{
+			href: "/dashboard/account/billing",
+			label: "Billing",
+			icon: "💳",
+			description: "Billing address and VAT settings for invoices",
+		},
 	];
 </script>
 

@@ -1109,6 +1109,91 @@ export async function fulfillResellerOrder(
 	}
 }
 
+// ============ Billing Settings Endpoints ============
+
+export interface BillingSettings {
+	billingAddress?: string;
+	billingVatId?: string;
+	billingCountryCode?: string;
+}
+
+export async function getBillingSettings(headers: SignedRequestHeaders): Promise<BillingSettings> {
+	const url = `${API_BASE_URL}/api/v1/accounts/billing`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch billing settings: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<BillingSettings>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch billing settings');
+	}
+
+	return payload.data ?? {};
+}
+
+export async function updateBillingSettings(
+	settings: BillingSettings,
+	headers: SignedRequestHeaders
+): Promise<BillingSettings> {
+	const url = `${API_BASE_URL}/api/v1/accounts/billing`;
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify(settings)
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to update billing settings: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<BillingSettings>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update billing settings');
+	}
+
+	return payload.data ?? {};
+}
+
+// ============ VAT Validation Endpoints ============
+
+export interface VatValidationResult {
+	valid: boolean;
+	name?: string;
+	address?: string;
+	error?: string;
+}
+
+export async function validateVatId(countryCode: string, vatNumber: string): Promise<VatValidationResult> {
+	const url = `${API_BASE_URL}/api/v1/vat/validate`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ country_code: countryCode, vat_number: vatNumber })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `VAT validation failed: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<VatValidationResult>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'VAT validation failed');
+	}
+
+	return payload.data ?? { valid: false };
+}
+
 // ============ Invoice Endpoints ============
 
 export async function downloadContractInvoice(

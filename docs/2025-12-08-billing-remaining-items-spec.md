@@ -352,7 +352,41 @@
   - PUT /api/v1/accounts/billing endpoint working (auth required)
   - Database schema updated with billing columns
   - All existing account tests pass
-  - Ready for frontend integration (nice-to-have, not required for MVP)
+
+### Step 6b: Frontend Billing Settings UI
+- **Implementation:**
+  - Added billing API functions to `/code/website/src/lib/services/api.ts`:
+    - `BillingSettings` interface with billingAddress, billingVatId, billingCountryCode
+    - `getBillingSettings(headers)` - fetches user's saved billing info
+    - `updateBillingSettings(settings, headers)` - updates billing info
+    - `validateVatId(countryCode, vatNumber)` - validates EU VAT IDs via VIES
+  - Created `/code/website/src/routes/dashboard/account/billing/+page.svelte`:
+    - Billing address textarea with multiline support
+    - EU country dropdown with all 27 EU member states + "Other (non-EU)"
+    - VAT ID input with inline "Verify" button for VIES validation
+    - Save button with loading states and success/error feedback
+    - Info section explaining VAT and reverse charge
+  - Updated `/code/website/src/routes/dashboard/account/+page.svelte`:
+    - Added "Billing" tab to account settings navigation
+  - Created E2E tests in `/code/website/tests/e2e/billing-settings.spec.ts`:
+    - Display billing settings page
+    - Navigate from account page
+    - Save billing address
+    - Save VAT settings
+    - Persist settings on reload
+    - EU country dropdown options
+    - VAT verify button states
+
+- **Verification:**
+  - `npm run check` - passed
+  - `npm run build` - passed
+  - `cargo make` - 1218 tests pass
+
+- **Outcome:**
+  - SUCCESS: Frontend billing settings UI complete
+  - Full CRUD for billing address, country, VAT ID
+  - VIES validation integrated with verify button
+  - E2E tests cover main user flows
 
 ## Completion Summary
 **Completed:** 2025-12-08 | **Agents:** 6/15 | **Steps:** 6/6
@@ -370,12 +404,12 @@
   - ✓ VAT ID validation via VIES API
   - ✓ Reverse charge logic for B2B EU
   - ✓ Frontend Checkout redirect
-- 1/2 nice-to-have
-  - ✓ User billing settings API (backend only)
-  - ○ Frontend billing settings UI (deferred)
+- 2/2 nice-to-have ✓
+  - ✓ User billing settings API (backend)
+  - ✓ Frontend billing settings UI
 
-**Tests:** 591 pass ✓
-**cargo make:** Clean (API tests pass) ✓
+**Tests:** 1218 pass ✓
+**cargo make:** Clean ✓
 
 **Key Deliverables:**
 1. **Stripe Checkout Sessions** - Replaced Payment Intents with Checkout Sessions for automatic tax
@@ -388,7 +422,8 @@
 - Frontend now redirects to Stripe Checkout instead of embedded card form
 - Stripe Tax requires Dashboard configuration to work (documented)
 - VIES API can be slow/unavailable - errors handled gracefully
-- User billing settings backend ready, frontend integration deferred
+- User billing settings complete with full frontend UI at /dashboard/account/billing
+- E2E tests added for billing settings page
 
 ## Technical Notes
 
