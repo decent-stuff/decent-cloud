@@ -61,30 +61,20 @@ Integrate with or scrape external sources for additional trust signals:
 
 ---
 
-## Billing & Invoicing - Remaining Items
+## Billing & Invoicing - ✅ COMPLETE
 
-**Spec:** [2025-12-07-billing-invoicing-spec.md](docs/completed/2025-12-07-billing-invoicing-spec.md)
-**Completed:** Receipt emails, PDF invoice generation, buyer address collection, tax tracking schema
+**Spec:** [2025-12-08-billing-remaining-items-spec.md](docs/2025-12-08-billing-remaining-items-spec.md)
+**Completed:** 2025-12-08
 
-### Stripe Tax Auto-Calculation
-- Current flow uses Payment Intents; `automatic_tax` requires Checkout Sessions
-- Migration path documented in `api/docs/stripe-tax-integration.md`
-- **Effort:** Medium - requires frontend refactor (redirect to Stripe Checkout instead of embedded Elements)
+All billing features implemented:
+- ✅ Stripe Checkout Sessions with automatic_tax
+- ✅ VAT ID validation via VIES API (`POST /api/v1/vat/validate`)
+- ✅ Reverse charge logic for B2B EU transactions
+- ✅ User billing settings API (`GET/PUT /api/v1/accounts/billing`)
+- ✅ Frontend redirects to Stripe Checkout
 
-### VAT ID Validation (VIES API)
-- Validate EU VAT IDs via VIES API before applying reverse charge
-- ~50 lines of code
-- **Priority:** LOW - optional nice-to-have
-
-### Reverse Charge Logic
-- Schema ready (`reverse_charge` column exists)
-- Business logic for B2B cross-border EU transactions not implemented
-- **Priority:** LOW - depends on VAT ID validation
-
-### User Billing Settings
-- Allow users to save billing address/VAT ID in their profile
-- Auto-populate on checkout
-- **Priority:** LOW - deferred nice-to-have
+**Remaining (nice-to-have):**
+- Frontend billing settings UI (backend API ready)
 
 ---
 
