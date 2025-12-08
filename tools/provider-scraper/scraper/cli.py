@@ -23,6 +23,7 @@ async def run_scraper(
     output_base: Path,
     skip_offerings: bool = False,
     skip_docs: bool = False,
+    keep_local: bool = False,
 ) -> tuple[int, int, bool]:
     """Run single scraper and return counts.
 
@@ -31,6 +32,7 @@ async def run_scraper(
         output_base: Base output directory
         skip_offerings: If True, continue on offerings failure
         skip_docs: If True, continue on docs failure
+        keep_local: If True, keep local docs/ directory for troubleshooting
 
     Returns:
         Tuple of (offerings_count, docs_count, success)
@@ -44,6 +46,7 @@ async def run_scraper(
         csv_path, docs_count = await scraper.run(
             skip_offerings=skip_offerings,
             skip_docs=skip_docs,
+            keep_local=keep_local,
         )
 
         # Count offerings from CSV
@@ -73,6 +76,7 @@ def print_usage() -> None:
     print("  --skip-offerings    Continue if offerings scrape fails")
     print("  --skip-docs         Continue if docs scrape fails")
     print("  --skip-failures     Continue on any failure (same as --skip-offerings --skip-docs)")
+    print("  --keep-local        Keep local docs/ directory (don't delete after zipping)")
     print()
     print("Commands:")
     print("  setup    Install Playwright browsers (run once after install)")
@@ -90,6 +94,7 @@ def print_usage() -> None:
     print("  uv run python3 -m scraper.cli                    # Scrape all providers")
     print("  uv run python3 -m scraper.cli hetzner            # Scrape Hetzner only")
     print("  uv run python3 -m scraper.cli --skip-docs ovh    # Skip docs failures for OVH")
+    print("  uv run python3 -m scraper.cli --keep-local ovh   # Keep docs/ for troubleshooting")
 
 
 def run_setup() -> None:
@@ -108,15 +113,16 @@ def run_setup() -> None:
         sys.exit(1)
 
 
-def parse_args(args: list[str]) -> tuple[list[str], bool, bool]:
+def parse_args(args: list[str]) -> tuple[list[str], bool, bool, bool]:
     """Parse command line arguments.
 
     Returns:
-        Tuple of (providers, skip_offerings, skip_docs)
+        Tuple of (providers, skip_offerings, skip_docs, keep_local)
     """
     providers = []
     skip_offerings = False
     skip_docs = False
+    keep_local = False
 
     for arg in args:
         if arg == "--skip-offerings":
@@ -126,10 +132,12 @@ def parse_args(args: list[str]) -> tuple[list[str], bool, bool]:
         elif arg == "--skip-failures":
             skip_offerings = True
             skip_docs = True
+        elif arg == "--keep-local":
+            keep_local = True
         elif not arg.startswith("-"):
             providers.append(arg)
 
-    return providers, skip_offerings, skip_docs
+    return providers, skip_offerings, skip_docs, keep_local
 
 
 async def main() -> None:
@@ -148,7 +156,7 @@ async def main() -> None:
     output_base = Path(__file__).parent.parent / "output"
 
     # Parse arguments
-    providers, skip_offerings, skip_docs = parse_args(sys.argv[1:])
+    providers, skip_offerings, skip_docs, keep_local = parse_args(sys.argv[1:])
 
     # Default to all providers if none specified
     if not providers:
@@ -170,7 +178,7 @@ async def main() -> None:
 
     for provider in providers:
         offerings_count, docs_count, success = await run_scraper(
-            provider, output_base, skip_offerings, skip_docs
+            provider, output_base, skip_offerings, skip_docs, keep_local
         )
         total_offerings += offerings_count
         total_docs += docs_count

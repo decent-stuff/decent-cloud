@@ -230,10 +230,12 @@ class TestScrapeDocs:
 
     @pytest.mark.asyncio
     async def test_scrape_docs_crawls_and_writes_changed_content(self, scraper):
+        # fit_markdown must be >= 100 chars to be used (otherwise falls back to raw)
+        fit_content = "# Test Content\n\n" + "This is substantial test content. " * 5
         mock_result = Mock()
         mock_result.success = True
         mock_result.error_message = None
-        mock_result.markdown.fit_markdown = "# Test Content"
+        mock_result.markdown.fit_markdown = fit_content
         mock_result.markdown.raw_markdown = "# Raw Content"
         mock_result.metadata = {"title": "Test Page", "etag": "abc123"}
 
@@ -257,17 +259,20 @@ class TestScrapeDocs:
             scraper.archive.has_changed.assert_called_once()
             scraper.archive.write.assert_called_once_with(
                 "https://docs.test.com/page1",
-                "# Test Content",
+                fit_content,
                 "Test Page",
                 "abc123",
             )
 
     @pytest.mark.asyncio
     async def test_scrape_docs_skips_unchanged_content(self, scraper):
+        # fit_markdown must be >= 100 chars to be used
+        fit_content = "# Test Content\n\n" + "This is substantial test content. " * 5
         mock_result = Mock()
         mock_result.success = True
         mock_result.error_message = None
-        mock_result.markdown.fit_markdown = "# Test Content"
+        mock_result.markdown.fit_markdown = fit_content
+        mock_result.markdown.raw_markdown = "# Raw Content"
         mock_result.metadata = {"title": "Test Page"}
 
         with (

@@ -4,9 +4,9 @@ from crawl4ai import BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
-# Default thresholds
-DEFAULT_PRUNING_THRESHOLD = 0.48
-DEFAULT_WORD_THRESHOLD = 10
+# Default thresholds - lower pruning = more content retained
+DEFAULT_PRUNING_THRESHOLD = 0.3  # Was 0.48, too aggressive
+DEFAULT_WORD_THRESHOLD = 5  # Was 10, allow shorter blocks
 
 DEFAULT_BROWSER_CONFIG = BrowserConfig(
     browser_type="chromium",

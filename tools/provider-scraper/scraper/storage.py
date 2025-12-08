@@ -1,9 +1,13 @@
-"""ZIP archive storage with ETag/content-hash caching for incremental crawls."""
+"""ZIP archive storage with ETag/content-hash caching for incremental crawls.
+
+Uses local directory during scraping for efficiency, zips only when finalized.
+"""
 
 import hashlib
 import json
 import logging
 import re
+import shutil
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,18 +27,42 @@ class CacheEntry:
 
 
 class DocsArchive:
-    """Manages markdown docs in a ZIP archive with incremental caching."""
+    """Manages markdown docs with local dir during scraping, ZIP on finalize."""
 
     def __init__(self, output_dir: Path):
-        """Initialize with output directory. Creates docs.zip and cache.json."""
+        """Initialize with output directory. Unpacks existing ZIP to local docs/ dir."""
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.zip_path = self.output_dir / "docs.zip"
         self.cache_path = self.output_dir / "cache.json"
+        self.docs_dir = self.output_dir / "docs"
 
         self._cache: dict[str, CacheEntry] = self._load_cache()
+
+        # Unpack existing ZIP to local dir for incremental updates
+        self._unpack_zip()
+
         logger.debug(f"Initialized DocsArchive at {output_dir} with {len(self._cache)} cached entries")
+
+    def _unpack_zip(self) -> None:
+        """Unpack existing ZIP to docs/ directory if it exists."""
+        if not self.zip_path.exists():
+            self.docs_dir.mkdir(parents=True, exist_ok=True)
+            return
+
+        # Clear existing docs dir and unpack fresh
+        if self.docs_dir.exists():
+            shutil.rmtree(self.docs_dir)
+        self.docs_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with zipfile.ZipFile(self.zip_path, "r") as zf:
+                zf.extractall(self.docs_dir)
+            logger.debug(f"Unpacked {len(list(self.docs_dir.iterdir()))} files from {self.zip_path}")
+        except zipfile.BadZipFile as e:
+            logger.warning(f"Corrupted ZIP at {self.zip_path}, starting fresh: {e}")
+            # Keep empty docs dir
 
     def _load_cache(self) -> dict[str, CacheEntry]:
         """Load cache.json, return empty dict if not exists."""
@@ -151,7 +179,7 @@ class DocsArchive:
         return changed
 
     def write(self, url: str, content: str, topic: str, etag: str | None = None) -> str:
-        """Write markdown to ZIP, update cache. Returns filename.
+        """Write markdown to local docs/ dir, update cache. Returns filename.
 
         Args:
             url: The URL being crawled.
@@ -160,7 +188,7 @@ class DocsArchive:
             etag: Optional ETag from HTTP response.
 
         Returns:
-            The filename used in the ZIP archive.
+            The filename used.
         """
         filename = self._safe_filename(url, topic)
         content_hash = self._content_hash(content)
@@ -174,29 +202,46 @@ class DocsArchive:
             crawled_at=crawled_at,
         )
 
-        # Write to ZIP - we need to read all, update, write all since ZIP doesn't support in-place updates
-        existing_files = {}
-        if self.zip_path.exists():
-            with zipfile.ZipFile(self.zip_path, "r") as zf:
-                for name in zf.namelist():
-                    existing_files[name] = zf.read(name)
-
-        # Update or add new file
-        existing_files[filename] = content.encode("utf-8")
-
-        # Write all files to new ZIP
-        with zipfile.ZipFile(self.zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name, data in existing_files.items():
-                zf.writestr(name, data)
+        # Write directly to local dir (fast!)
+        file_path = self.docs_dir / filename
+        file_path.write_text(content, encoding="utf-8")
 
         # Save cache
         self._save_cache()
 
-        logger.info(f"Wrote {filename} to {self.zip_path} (URL: {url})")
+        logger.info(f"Wrote {filename} to {self.docs_dir} (URL: {url})")
         return filename
 
+    def finalize(self, keep_local: bool = False) -> None:
+        """Create ZIP from docs/ dir and optionally clean up local files.
+
+        Args:
+            keep_local: If True, keep the docs/ directory for troubleshooting.
+        """
+        if not self.docs_dir.exists():
+            logger.warning(f"No docs directory to finalize at {self.docs_dir}")
+            return
+
+        files = list(self.docs_dir.iterdir())
+        if not files:
+            logger.warning(f"No files in docs directory {self.docs_dir}")
+            return
+
+        # Create ZIP from docs/ contents
+        with zipfile.ZipFile(self.zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file_path in files:
+                if file_path.is_file():
+                    zf.write(file_path, file_path.name)
+
+        logger.info(f"Created {self.zip_path} with {len(files)} files")
+
+        # Clean up local dir unless keep_local
+        if not keep_local:
+            shutil.rmtree(self.docs_dir)
+            logger.debug(f"Removed local docs directory {self.docs_dir}")
+
     def read(self, url: str) -> str | None:
-        """Read markdown from ZIP by URL. Returns None if not found.
+        """Read markdown by URL. Tries local docs/ dir first, then ZIP.
 
         Args:
             url: The URL to look up.
@@ -210,8 +255,15 @@ class DocsArchive:
 
         filename = self._cache[url].filename
 
+        # Try local dir first (during scraping)
+        local_path = self.docs_dir / filename
+        if local_path.exists():
+            logger.debug(f"Read {filename} from local dir")
+            return local_path.read_text(encoding="utf-8")
+
+        # Fall back to ZIP (after finalize)
         if not self.zip_path.exists():
-            logger.warning(f"ZIP archive not found: {self.zip_path}")
+            logger.warning(f"Neither local file nor ZIP found for: {url}")
             return None
 
         try:

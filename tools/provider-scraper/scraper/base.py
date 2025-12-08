@@ -136,10 +136,19 @@ class BaseScraper(ABC):
                         error_count += 1
                         continue
 
-                    # Extract content - prefer fit_markdown over raw
-                    content = result.markdown.fit_markdown or result.markdown.raw_markdown
-                    if not content:
-                        logger.warning(f"No markdown content for {url}")
+                    # Extract content - prefer fit_markdown, fall back to raw
+                    fit_md = result.markdown.fit_markdown or ""
+                    raw_md = result.markdown.raw_markdown or ""
+
+                    # Use fit if it has substantial content, else fall back to raw
+                    # (fit can be empty if pruning was too aggressive)
+                    if len(fit_md.strip()) >= 100:
+                        content = fit_md
+                    elif raw_md.strip():
+                        content = raw_md
+                        logger.debug(f"Using raw markdown for {url} (fit was too short: {len(fit_md)} chars)")
+                    else:
+                        logger.warning(f"No markdown content for {url} (fit={len(fit_md)}, raw={len(raw_md)})")
                         error_count += 1
                         continue
 
@@ -193,12 +202,18 @@ class BaseScraper(ABC):
 
         return "index"
 
-    async def run(self, skip_offerings: bool = False, skip_docs: bool = False) -> tuple[Path | None, int]:
+    async def run(
+        self,
+        skip_offerings: bool = False,
+        skip_docs: bool = False,
+        keep_local: bool = False,
+    ) -> tuple[Path | None, int]:
         """Run the full scraping process and write output files.
 
         Args:
             skip_offerings: If True, skip offerings scraping on failure.
             skip_docs: If True, skip docs scraping on failure.
+            keep_local: If True, keep local docs/ directory for troubleshooting.
 
         Returns:
             Tuple of (csv_path, docs_count). csv_path is None if offerings skipped.
@@ -231,5 +246,8 @@ class BaseScraper(ABC):
                 logger.warning(f"Docs scrape failed (skipped): {e}")
             else:
                 raise
+
+        # Finalize: create ZIP from local docs
+        self.archive.finalize(keep_local=keep_local)
 
         return csv_path, docs_count

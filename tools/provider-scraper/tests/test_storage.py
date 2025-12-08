@@ -254,26 +254,24 @@ class TestHasChanged:
 
 
 class TestWrite:
-    """Tests for writing to ZIP archive."""
+    """Tests for writing to local docs/ dir (ZIP created on finalize)."""
 
-    def test_write_creates_zip_file(self, archive):
-        """Verify write creates ZIP file if not exists."""
-        assert not archive.zip_path.exists()
+    def test_write_creates_local_file(self, archive):
+        """Verify write creates file in local docs/ directory."""
+        assert not (archive.docs_dir / "test-page.md").exists()
 
         archive.write("https://example.com/page", "# Test", "test-page")
-        assert archive.zip_path.exists()
+        assert (archive.docs_dir / "test-page.md").exists()
 
-    def test_write_adds_content_to_zip(self, archive):
-        """Verify write adds markdown content to ZIP with correct filename."""
+    def test_write_adds_content_to_local_dir(self, archive):
+        """Verify write adds markdown content to local dir with correct filename."""
         content = "# Test Page\n\nTest content"
         filename = archive.write("https://example.com/page", content, "test-page")
 
         assert filename == "test-page.md"
-
-        with zipfile.ZipFile(archive.zip_path, "r") as zf:
-            assert "test-page.md" in zf.namelist()
-            stored_content = zf.read("test-page.md").decode("utf-8")
-            assert stored_content == content
+        local_path = archive.docs_dir / "test-page.md"
+        assert local_path.exists()
+        assert local_path.read_text(encoding="utf-8") == content
 
     def test_write_updates_cache(self, archive):
         """Verify write updates cache with correct entry."""
@@ -301,21 +299,19 @@ class TestWrite:
 
         assert "https://example.com/page" in data
 
-    def test_write_updates_existing_file_in_zip(self, archive):
-        """Verify write updates existing file in ZIP."""
+    def test_write_updates_existing_file_in_local_dir(self, archive):
+        """Verify write updates existing file in local docs/ dir."""
         # Write initial content
         archive.write("https://example.com/page", "# Version 1", "test-page")
 
         # Update content
         archive.write("https://example.com/page", "# Version 2", "test-page")
 
-        # Verify only one file in ZIP with updated content
-        with zipfile.ZipFile(archive.zip_path, "r") as zf:
-            assert zf.namelist() == ["test-page.md"]
-            content = zf.read("test-page.md").decode("utf-8")
-            assert content == "# Version 2"
+        # Verify file has updated content
+        local_path = archive.docs_dir / "test-page.md"
+        assert local_path.read_text(encoding="utf-8") == "# Version 2"
 
-    def test_write_preserves_other_files_in_zip(self, archive):
+    def test_write_preserves_other_files_in_local_dir(self, archive):
         """Verify write preserves other files when updating one file."""
         # Write multiple files
         archive.write("https://example.com/page1", "# Page 1", "page1")
@@ -325,27 +321,68 @@ class TestWrite:
         # Update one file
         archive.write("https://example.com/page2", "# Page 2 Updated", "page2")
 
-        # Verify all files exist
-        with zipfile.ZipFile(archive.zip_path, "r") as zf:
-            filenames = sorted(zf.namelist())
-            assert filenames == ["page1.md", "page2.md", "page3.md"]
+        # Verify all files exist in local dir
+        files = sorted(f.name for f in archive.docs_dir.iterdir())
+        assert files == ["page1.md", "page2.md", "page3.md"]
 
-            # Verify content
+        # Verify content
+        assert (archive.docs_dir / "page1.md").read_text(encoding="utf-8") == "# Page 1"
+        assert (archive.docs_dir / "page2.md").read_text(encoding="utf-8") == "# Page 2 Updated"
+        assert (archive.docs_dir / "page3.md").read_text(encoding="utf-8") == "# Page 3"
+
+
+class TestFinalize:
+    """Tests for finalize method (creates ZIP from local docs/)."""
+
+    def test_finalize_creates_zip_from_local_dir(self, archive):
+        """Verify finalize creates ZIP from local docs/ dir."""
+        archive.write("https://example.com/page1", "# Page 1", "page1")
+        archive.write("https://example.com/page2", "# Page 2", "page2")
+
+        archive.finalize()
+
+        assert archive.zip_path.exists()
+        with zipfile.ZipFile(archive.zip_path, "r") as zf:
+            assert sorted(zf.namelist()) == ["page1.md", "page2.md"]
             assert zf.read("page1.md").decode("utf-8") == "# Page 1"
-            assert zf.read("page2.md").decode("utf-8") == "# Page 2 Updated"
-            assert zf.read("page3.md").decode("utf-8") == "# Page 3"
+
+    def test_finalize_removes_local_dir_by_default(self, archive):
+        """Verify finalize removes local docs/ dir by default."""
+        archive.write("https://example.com/page", "# Test", "test")
+        assert archive.docs_dir.exists()
+
+        archive.finalize(keep_local=False)
+
+        assert not archive.docs_dir.exists()
+
+    def test_finalize_keeps_local_dir_when_requested(self, archive):
+        """Verify finalize keeps local docs/ dir when keep_local=True."""
+        archive.write("https://example.com/page", "# Test", "test")
+
+        archive.finalize(keep_local=True)
+
+        assert archive.docs_dir.exists()
+        assert (archive.docs_dir / "test.md").exists()
+
+    def test_finalize_handles_empty_docs_dir(self, archive):
+        """Verify finalize handles empty docs/ dir gracefully."""
+        assert archive.docs_dir.exists()  # Created on init
+
+        archive.finalize()  # Should not raise
+
+        assert not archive.zip_path.exists()  # No files to zip
 
 
 class TestRead:
-    """Tests for reading from ZIP archive."""
+    """Tests for reading from local dir or ZIP archive."""
 
     def test_read_returns_none_for_missing_url(self, archive):
         """Verify read returns None for URL not in cache."""
         assert archive.read("https://example.com/missing") is None
 
-    def test_read_returns_none_when_zip_not_exists(self, archive):
-        """Verify read returns None when ZIP file doesn't exist."""
-        # Add entry to cache but no ZIP
+    def test_read_returns_none_when_neither_local_nor_zip_exists(self, archive):
+        """Verify read returns None when neither local file nor ZIP exists."""
+        # Add entry to cache but no file
         archive._cache = {
             "https://example.com/page": CacheEntry(
                 filename="page.md",
@@ -354,6 +391,10 @@ class TestRead:
                 crawled_at="2025-12-08T12:00:00Z",
             )
         }
+        # Remove docs dir content (file doesn't exist)
+        import shutil
+        shutil.rmtree(archive.docs_dir)
+        archive.docs_dir.mkdir()
 
         assert archive.read("https://example.com/page") is None
 
