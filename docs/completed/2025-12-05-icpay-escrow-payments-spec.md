@@ -1,8 +1,8 @@
 # ICPay Escrow & Prorated Payments Spec
 
 **Date**: 2025-12-05
-**Status**: PLANNING
-**Depends on**: [2025-12-03-icpay-integration-spec.md](2025-12-03-icpay-integration-spec.md)
+**Status**: COMPLETE
+**Depends on**: [2025-12-03-icpay-integration-spec.md](completed/2025-12-03-icpay-integration-spec.md)
 
 ---
 
@@ -18,22 +18,23 @@ Complete the ICPay integration with escrow-style payment handling:
 
 ## Current State Analysis
 
-### What's Implemented
+### Implementation Status (Updated 2025-12-05)
 | Component | Status | Notes |
 |-----------|--------|-------|
 | PaymentMethod::ICPay enum | ✅ Done | common/src/payment_method.rs |
 | SDK initialization (frontend) | ✅ Done | website/src/lib/utils/icpay.ts |
-| `createPaymentUsd()` call | ⚠️ Broken | Missing `actorProvider`, `connectedWallet` |
-| Backend payment verification | ❌ Stub | Returns `Ok(true)` always |
+| Wallet integration | ✅ Done | Using @ic-pay/icpay-widget with walletSelect |
+| Backend payment verification | ✅ Done | Real API calls via get_payments_by_metadata() |
 | Prorated refund calculation | ✅ Done | `calculate_prorated_refund()` exists |
 | Stripe refund integration | ✅ Done | `stripe_client.create_refund()` |
-| ICPay refund integration | ❌ Missing | No HTTP calls to ICPay API |
-| Webhooks | ❌ Missing | No receiver endpoint |
-| Periodic payment release | ❌ Missing | No scheduled job |
+| ICPay refund integration | ✅ Done | `icpay_client.create_refund()` |
+| Webhooks | ✅ Done | POST /api/v1/webhooks/icpay with signature verification |
+| Periodic payment release | ✅ Done | PaymentReleaseService background job |
+| Provider payout endpoints | ✅ Done | Admin endpoints for viewing/processing payouts |
 
-### What's Broken
-1. **Frontend wallet integration**: `createPaymentUsd()` requires `actorProvider` and `connectedWallet` to sign transfers
-2. **Backend verification**: `IcpayClient::verify_payment_by_metadata()` is a stub
+### Known Limitations
+1. **ICPay payout API**: Not available - payouts are dashboard-only (icpay.org → Payouts)
+2. **Automated payouts**: Require direct ICRC-1 transfers (future work, see bottom of spec)
 
 ---
 
