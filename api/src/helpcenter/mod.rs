@@ -226,15 +226,15 @@ pub async fn sync_provider_article(
         .await?
         .ok_or_else(|| anyhow!("Provider profile not found"))?;
 
-    // Get provider's chatwoot_portal_slug from notification config
-    let notification_config = db
-        .get_user_notification_config(pubkey)
+    // Get provider's Chatwoot resources (created during onboarding)
+    let (_inbox_id, _team_id, portal_slug) = db
+        .get_provider_chatwoot_resources(pubkey)
         .await?
-        .ok_or_else(|| anyhow!("No notification config found for provider"))?;
-
-    let portal_slug = notification_config
-        .chatwoot_portal_slug
-        .ok_or_else(|| anyhow!("No Chatwoot portal configured for this provider"))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "No Chatwoot portal configured for this provider. Complete provider setup first."
+            )
+        })?;
 
     // Generate article content
     let article_content = generate_provider_article(&profile)?;

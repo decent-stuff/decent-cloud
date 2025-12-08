@@ -1021,7 +1021,6 @@ impl ProvidersApi {
             Ok(Some(config)) => Json(ApiResponse {
                 success: true,
                 data: Some(NotificationConfigResponse {
-                    chatwoot_portal_slug: config.chatwoot_portal_slug,
                     notify_telegram: config.notify_telegram,
                     notify_email: config.notify_email,
                     notify_sms: config.notify_sms,
@@ -1034,7 +1033,6 @@ impl ProvidersApi {
             Ok(None) => Json(ApiResponse {
                 success: true,
                 data: Some(NotificationConfigResponse {
-                    chatwoot_portal_slug: None,
                     notify_telegram: false,
                     notify_email: false,
                     notify_sms: false,
@@ -1068,7 +1066,7 @@ impl ProvidersApi {
     ) -> Json<ApiResponse<String>> {
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: auth.pubkey.clone(),
-            chatwoot_portal_slug: req.chatwoot_portal_slug.clone(),
+            chatwoot_portal_slug: None, // Deprecated, portal slug stored in provider_profiles
             notify_telegram: req.notify_telegram,
             notify_email: req.notify_email,
             notify_sms: req.notify_sms,
@@ -1463,30 +1461,21 @@ The Decent Cloud Team"#,
             }
         };
 
-        // Get notification config for portal_slug
-        let portal_slug = match db.get_user_notification_config(&pubkey_bytes).await {
-            Ok(Some(config)) => match config.chatwoot_portal_slug {
-                Some(slug) => slug,
-                None => {
-                    return Json(ApiResponse {
-                        success: false,
-                        data: None,
-                        error: Some("No Chatwoot portal configured for this provider".to_string()),
-                    });
-                }
-            },
+        // Get Chatwoot resources (created during provider setup)
+        let portal_slug = match db.get_provider_chatwoot_resources(&pubkey_bytes).await {
+            Ok(Some((_inbox_id, _team_id, slug))) => slug,
             Ok(None) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("No notification config found for provider".to_string()),
+                    error: Some("No Chatwoot portal configured for this provider. Complete provider setup first.".to_string()),
                 });
             }
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Failed to get notification config: {}", e)),
+                    error: Some(format!("Failed to get Chatwoot resources: {}", e)),
                 });
             }
         };

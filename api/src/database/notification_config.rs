@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct UserNotificationConfig {
     pub user_pubkey: Vec<u8>,
+    // Note: chatwoot_portal_slug column exists in DB but is unused.
+    // Portal slug is stored in provider_profiles.chatwoot_portal_slug instead.
+    #[serde(skip)]
     pub chatwoot_portal_slug: Option<String>,
     pub notify_telegram: bool,
     pub notify_email: bool,
@@ -45,6 +48,8 @@ impl Database {
     ) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
 
+        // Note: chatwoot_portal_slug is deprecated and always set to NULL
+        let null_slug: Option<String> = None;
         sqlx::query!(
             r#"INSERT INTO user_notification_config
                (user_pubkey, chatwoot_portal_slug, notify_telegram, notify_email, notify_sms,
@@ -60,7 +65,7 @@ impl Database {
                    notify_email_address = excluded.notify_email_address,
                    updated_at = excluded.updated_at"#,
             pubkey,
-            config.chatwoot_portal_slug,
+            null_slug,
             config.notify_telegram,
             config.notify_email,
             config.notify_sms,
@@ -143,7 +148,7 @@ mod tests {
 
         let config = super::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: Some("test-portal".to_string()),
+            chatwoot_portal_slug: None, // Deprecated field
             notify_telegram: true,
             notify_email: true,
             notify_sms: false,
@@ -164,10 +169,6 @@ mod tests {
             .expect("Config should exist");
 
         assert_eq!(retrieved.user_pubkey, pubkey);
-        assert_eq!(
-            retrieved.chatwoot_portal_slug,
-            Some("test-portal".to_string())
-        );
         assert!(retrieved.notify_telegram);
         assert!(retrieved.notify_email);
         assert!(!retrieved.notify_sms);
@@ -187,7 +188,7 @@ mod tests {
         // Initial config - telegram only
         let initial_config = super::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: Some("initial-portal".to_string()),
+            chatwoot_portal_slug: None,
             notify_telegram: true,
             notify_email: false,
             notify_sms: false,
@@ -203,7 +204,7 @@ mod tests {
         // Update config - switch to SMS + email
         let updated_config = super::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: Some("updated-portal".to_string()),
+            chatwoot_portal_slug: None,
             notify_telegram: false,
             notify_email: true,
             notify_sms: true,
@@ -223,10 +224,6 @@ mod tests {
             .unwrap()
             .expect("Config should exist");
 
-        assert_eq!(
-            retrieved.chatwoot_portal_slug,
-            Some("updated-portal".to_string())
-        );
         assert!(!retrieved.notify_telegram);
         assert!(retrieved.notify_email);
         assert!(retrieved.notify_sms);

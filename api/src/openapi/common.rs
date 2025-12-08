@@ -325,8 +325,6 @@ pub struct AdminProcessPayoutRequest {
 #[serde(rename_all = "camelCase")]
 #[oai(skip_serializing_if_is_none)]
 pub struct NotificationConfigResponse {
-    #[oai(skip_serializing_if_is_none)]
-    pub chatwoot_portal_slug: Option<String>,
     pub notify_telegram: bool,
     pub notify_email: bool,
     pub notify_sms: bool,
@@ -342,7 +340,6 @@ pub struct NotificationConfigResponse {
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateNotificationConfigRequest {
-    pub chatwoot_portal_slug: Option<String>,
     pub notify_telegram: bool,
     pub notify_email: bool,
     pub notify_sms: bool,
