@@ -8,7 +8,7 @@ import httpx
 from crawl4ai import AsyncWebCrawler
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 
-from scraper.crawler import DEFAULT_BROWSER_CONFIG, create_crawl_config
+from scraper.crawler import DEFAULT_BROWSER_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -209,19 +209,24 @@ async def discover_via_crawl(
     Returns:
         List of discovered URLs.
     """
-    strategy = BFSDeepCrawlStrategy(
-        max_depth=max_depth,
-        max_pages=max_pages,
+    from crawl4ai import CrawlerRunConfig
+
+    # Deep crawl strategy is passed via CrawlerRunConfig
+    config = CrawlerRunConfig(
+        deep_crawl_strategy=BFSDeepCrawlStrategy(
+            max_depth=max_depth,
+            max_pages=max_pages,
+            include_external=False,
+        ),
+        verbose=False,
     )
 
-    config = create_crawl_config()
-
     async with AsyncWebCrawler(config=DEFAULT_BROWSER_CONFIG) as crawler:
-        results = await crawler.deep_crawl(
-            base_url=base_url,
-            strategy=strategy,
-            config=config,
-        )
+        results = await crawler.arun(url=base_url, config=config)
+
+    # Results can be a single result or list depending on deep crawl
+    if not isinstance(results, list):
+        results = [results]
 
     # Extract URLs from results
     urls = []
@@ -229,4 +234,5 @@ async def discover_via_crawl(
         if result.url:
             urls.append(result.url)
 
+    logger.info(f"Deep crawl discovered {len(urls)} URLs from {base_url}")
     return urls

@@ -18,7 +18,10 @@ dev = [
 ]
 
 [project.scripts]
-scrape = "scraper.cli:main"
+scrape = "scraper.cli:cli"
+
+[tool.setuptools]
+packages = ["scraper", "scraper.providers"]
 
 [tool.ruff]
 target-version = "py311"
