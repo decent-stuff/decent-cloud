@@ -4,7 +4,11 @@
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import { onMount, onDestroy } from "svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
-	import { getProviderOfferings, getProviderOnboarding, hexEncode } from "$lib/services/api";
+	import {
+		getProviderOfferings,
+		getProviderOnboarding,
+		hexEncode,
+	} from "$lib/services/api";
 	import type { ProviderOnboarding } from "$lib/services/api";
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
@@ -16,8 +20,10 @@
 	let onboardingData = $state<ProviderOnboarding | null>(null);
 	let providerDataLoading = $state(false);
 
-	const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
-	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || '1';
+	const CHATWOOT_BASE_URL =
+		import.meta.env.VITE_CHATWOOT_BASE_URL ||
+		"https://support.decent-cloud.org";
+	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || "1";
 	const supportDashboardUrl = `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`;
 
 	// Browse section - discovery and exploration
@@ -34,16 +40,26 @@
 
 	// Provider section - for users who provide services
 	// Items visible before onboarding
-	const providerSetupItem = { href: "/dashboard/provider/support", icon: "⚙️", label: "Provider Setup" };
+	const providerSetupItem = {
+		href: "/dashboard/provider/support",
+		icon: "⚙️",
+		label: "Provider Setup",
+	};
 	// Items visible only after onboarding is complete
 	const providerOnboardedItems = [
-		{ href: "/dashboard/provider/requests", icon: "📥", label: "Rental Requests" },
+		{
+			href: "/dashboard/provider/requests",
+			icon: "📥",
+			label: "Rental Requests",
+		},
 		{ href: "/dashboard/provider/reseller", icon: "💼", label: "Reseller" },
 	];
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
 	const hasOfferings = $derived(offeringsCount > 0);
-	const onboardingCompleted = $derived(onboardingData?.onboarding_completed_at !== undefined);
+	const onboardingCompleted = $derived(
+		onboardingData?.onboarding_completed_at !== undefined,
+	);
 
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
@@ -132,12 +148,17 @@
 	<nav class="flex-1 p-4 space-y-1 overflow-y-auto">
 		<!-- Browse section -->
 		<div class="pb-1 px-3">
-			<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">Browse</div>
+			<div
+				class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+			>
+				Browse
+			</div>
 		</div>
 		{#each browseItems as item}
 			{@const isActive =
 				currentPath === item.href ||
-				(item.label === "Reputation" && currentPath.startsWith("/dashboard/reputation"))}
+				(item.label === "Reputation" &&
+					currentPath.startsWith("/dashboard/reputation"))}
 			<a
 				href={item.href}
 				onclick={closeSidebar}
@@ -153,10 +174,16 @@
 		{#if isAuthenticated}
 			<!-- My Activity section -->
 			<div class="pt-4 pb-1 px-3">
-				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">My Activity</div>
+				<div
+					class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+				>
+					My Activity
+				</div>
 			</div>
 			{#each activityItems as item}
-				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+				{@const isActive =
+					currentPath === item.href ||
+					currentPath.startsWith(item.href)}
 				<a
 					href={item.href}
 					onclick={closeSidebar}
@@ -171,22 +198,16 @@
 
 			<!-- Provider section - always visible for authenticated users -->
 			<div class="pt-4 pb-1 px-3">
-				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">Provider</div>
+				<div
+					class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+				>
+					Provider
+				</div>
 			</div>
-			<!-- My Offerings - always visible -->
-			{@const offeringsActive = currentPath === "/dashboard/offerings" || currentPath.startsWith("/dashboard/offerings")}
-			<a
-				href="/dashboard/offerings"
-				onclick={closeSidebar}
-				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {offeringsActive
-					? 'bg-blue-600 text-white'
-					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
-			>
-				<span class="text-lg">📦</span>
-				<span class="font-medium text-sm">My Offerings</span>
-			</a>
 			<!-- Provider Setup - always visible, with indicator if incomplete -->
-			{@const setupActive = currentPath === providerSetupItem.href || currentPath.startsWith(providerSetupItem.href)}
+			{@const setupActive =
+				currentPath === providerSetupItem.href ||
+				currentPath.startsWith(providerSetupItem.href)}
 			<a
 				href={providerSetupItem.href}
 				onclick={closeSidebar}
@@ -195,15 +216,37 @@
 					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
 			>
 				<span class="text-lg">{providerSetupItem.icon}</span>
-				<span class="font-medium text-sm">{providerSetupItem.label}</span>
+				<span class="font-medium text-sm"
+					>{providerSetupItem.label}</span
+				>
 				{#if hasOfferings && !onboardingCompleted}
-					<span class="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-400" title="Setup incomplete"></span>
+					<span
+						class="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-400"
+						title="Setup incomplete"
+					></span>
 				{/if}
 			</a>
 			<!-- Items only visible after onboarding is complete -->
 			{#if onboardingCompleted}
+				<!-- My Offerings -->
+				{@const offeringsActive =
+					currentPath === "/dashboard/offerings" ||
+					currentPath.startsWith("/dashboard/offerings")}
+				<a
+					href="/dashboard/offerings"
+					onclick={closeSidebar}
+					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {offeringsActive
+						? 'bg-blue-600 text-white'
+						: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+				>
+					<span class="text-lg">📦</span>
+					<span class="font-medium text-sm">My Offerings</span>
+				</a>
+
 				{#each providerOnboardedItems as item}
-					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+					{@const isActive =
+						currentPath === item.href ||
+						currentPath.startsWith(item.href)}
 					<a
 						href={item.href}
 						onclick={closeSidebar}
@@ -226,7 +269,9 @@
 						title="Open Chatwoot support dashboard"
 					>
 						<span class="text-lg">🎧</span>
-						<span class="font-medium text-sm">Support Dashboard</span>
+						<span class="font-medium text-sm"
+							>Support Dashboard</span
+						>
 						<span class="text-xs opacity-50">↗</span>
 					</a>
 				{/if}
@@ -236,12 +281,18 @@
 		{#if isAdmin}
 			<!-- Admin section -->
 			<div class="pt-4 pb-1 px-3">
-				<div class="text-xs font-semibold text-white/40 uppercase tracking-wider">Admin</div>
+				<div
+					class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+				>
+					Admin
+				</div>
 			</div>
 			<a
 				href="/dashboard/admin"
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {currentPath.startsWith('/dashboard/admin')
+				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {currentPath.startsWith(
+					'/dashboard/admin',
+				)
 					? 'bg-blue-600 text-white'
 					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
 			>

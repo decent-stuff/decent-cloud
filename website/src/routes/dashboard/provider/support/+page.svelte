@@ -176,7 +176,13 @@
 	async function handleTestChannel(channel: 'telegram' | 'email' | 'sms') {
 		if (!currentIdentity?.identity) return;
 		testingChannel = channel; testResult = null;
-		try { testResult = await testNotificationChannel(currentIdentity.identity, channel); }
+		try {
+			testResult = await testNotificationChannel(currentIdentity.identity, channel);
+			// Refresh usage counts after successful send
+			if (testResult.sent) {
+				usage = await getNotificationUsage(currentIdentity.identity).catch(() => null);
+			}
+		}
 		catch (e) { testResult = { sent: false, message: e instanceof Error ? e.message : 'Test failed' }; }
 		finally { testingChannel = null; }
 	}

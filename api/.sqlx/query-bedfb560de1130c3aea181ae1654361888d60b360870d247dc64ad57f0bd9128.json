@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                CASE\n                    WHEN AVG(duration_hours) > 0 THEN\n                        AVG(CAST(\n                            CASE\n                                WHEN status = 'completed' AND end_timestamp_ns IS NOT NULL AND start_timestamp_ns IS NOT NULL THEN\n                                    (end_timestamp_ns - start_timestamp_ns) / 3600000000000.0\n                                WHEN status = 'cancelled' AND status_updated_at_ns IS NOT NULL AND start_timestamp_ns IS NOT NULL THEN\n                                    (status_updated_at_ns - start_timestamp_ns) / 3600000000000.0\n                                ELSE NULL\n                            END AS REAL\n                        )) / AVG(duration_hours)\n                    ELSE NULL\n                END as \"ratio: f64\"\n            FROM contract_sign_requests\n            WHERE provider_pubkey = ?\n            AND status IN ('completed', 'cancelled')\n            AND duration_hours IS NOT NULL\n            AND duration_hours > 0",
+  "describe": {
+    "columns": [
+      {
+        "name": "ratio: f64",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "bedfb560de1130c3aea181ae1654361888d60b360870d247dc64ad57f0bd9128"
+}

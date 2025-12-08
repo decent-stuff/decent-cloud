@@ -8,6 +8,7 @@ use email_utils::EmailService;
 use std::sync::Arc;
 
 /// Send a test notification to a specific channel.
+/// Increments usage count on successful send.
 pub async fn send_test_notification(
     db: &Database,
     email_service: Option<&Arc<EmailService>>,
@@ -19,15 +20,21 @@ pub async fn send_test_notification(
         .await?
         .ok_or_else(|| anyhow::anyhow!("No notification config found"))?;
 
+    let provider_id = hex::encode(pubkey);
+
     match channel {
-        "telegram" => send_test_telegram(&config.telegram_chat_id).await,
-        "email" => send_test_email(db, email_service, pubkey).await,
-        "sms" => send_test_sms(&config.notify_phone).await,
+        "telegram" => send_test_telegram(db, &provider_id, &config.telegram_chat_id).await,
+        "email" => send_test_email(db, email_service, pubkey, &provider_id).await,
+        "sms" => send_test_sms(db, &provider_id, &config.notify_phone).await,
         _ => bail!("Invalid channel: {}. Use telegram, email, or sms", channel),
     }
 }
 
-async fn send_test_telegram(chat_id: &Option<String>) -> Result<String> {
+async fn send_test_telegram(
+    db: &Database,
+    provider_id: &str,
+    chat_id: &Option<String>,
+) -> Result<String> {
     let chat_id = chat_id
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No Telegram chat ID configured"))?;
@@ -42,6 +49,10 @@ async fn send_test_telegram(chat_id: &Option<String>) -> Result<String> {
         .await
         .context("Failed to send Telegram message")?;
 
+    db.increment_notification_usage(provider_id, "telegram")
+        .await
+        .ok();
+
     Ok(format!(
         "Telegram test sent (message_id: {})",
         msg.message_id
@@ -52,6 +63,7 @@ async fn send_test_email(
     db: &Database,
     email_service: Option<&Arc<EmailService>>,
     pubkey: &[u8],
+    provider_id: &str,
 ) -> Result<String> {
     let email_svc = email_service.ok_or_else(|| {
         anyhow::anyhow!("Email service not configured (missing MAILCHANNELS_API_KEY)")
@@ -85,10 +97,18 @@ async fn send_test_email(
         .await
         .context("Failed to send email")?;
 
+    db.increment_notification_usage(provider_id, "email")
+        .await
+        .ok();
+
     Ok(format!("Email test sent to {}", to_email))
 }
 
-async fn send_test_sms(phone: &Option<String>) -> Result<String> {
+async fn send_test_sms(
+    db: &Database,
+    provider_id: &str,
+    phone: &Option<String>,
+) -> Result<String> {
     let phone = phone
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No phone number configured"))?;
@@ -97,12 +117,17 @@ async fn send_test_sms(phone: &Option<String>) -> Result<String> {
         bail!("SMS not configured on server (no provider credentials)");
     }
 
-    let provider = get_sms_provider().ok_or_else(|| anyhow::anyhow!("SMS provider init failed"))?;
-    let provider_name = provider.name();
-    let msg_id = provider
+    let sms_provider =
+        get_sms_provider().ok_or_else(|| anyhow::anyhow!("SMS provider init failed"))?;
+    let provider_name = sms_provider.name();
+    let msg_id = sms_provider
         .send_sms(phone, "This is a test notification from DecentCloud.")
         .await
         .with_context(|| format!("Failed to send SMS via {}", provider_name))?;
+
+    db.increment_notification_usage(provider_id, "sms")
+        .await
+        .ok();
 
     Ok(format!(
         "SMS test sent via {} to {} (id: {})",
@@ -112,6 +137,7 @@ async fn send_test_sms(phone: &Option<String>) -> Result<String> {
 
 /// Send a test escalation notification to all enabled channels.
 /// Returns detailed results for each channel.
+/// Increments usage count for each successful send.
 pub async fn send_test_escalation(
     db: &Database,
     email_service: Option<&Arc<EmailService>>,
@@ -122,24 +148,25 @@ pub async fn send_test_escalation(
         .await?
         .ok_or_else(|| anyhow::anyhow!("No notification config found"))?;
 
+    let provider_id = hex::encode(pubkey);
     let mut results = Vec::new();
 
     if config.notify_telegram {
-        match send_test_telegram(&config.telegram_chat_id).await {
+        match send_test_telegram(db, &provider_id, &config.telegram_chat_id).await {
             Ok(msg) => results.push(format!("Telegram: {}", msg)),
             Err(e) => results.push(format!("Telegram: FAILED - {}", e)),
         }
     }
 
     if config.notify_email {
-        match send_test_email(db, email_service, pubkey).await {
+        match send_test_email(db, email_service, pubkey, &provider_id).await {
             Ok(msg) => results.push(format!("Email: {}", msg)),
             Err(e) => results.push(format!("Email: FAILED - {}", e)),
         }
     }
 
     if config.notify_sms {
-        match send_test_sms(&config.notify_phone).await {
+        match send_test_sms(db, &provider_id, &config.notify_phone).await {
             Ok(msg) => results.push(format!("SMS: {}", msg)),
             Err(e) => results.push(format!("SMS: FAILED - {}", e)),
         }
@@ -193,7 +220,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_test_telegram_no_chat_id() {
-        let result = send_test_telegram(&None).await;
+        let db = setup_test_db().await;
+        let result = send_test_telegram(&db, "test_provider", &None).await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -203,7 +231,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_test_sms_no_phone() {
-        let result = send_test_sms(&None).await;
+        let db = setup_test_db().await;
+        let result = send_test_sms(&db, "test_provider", &None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No phone number"));
     }
@@ -211,7 +240,7 @@ mod tests {
     #[tokio::test]
     async fn test_send_test_email_no_service() {
         let db = setup_test_db().await;
-        let result = send_test_email(&db, None, b"test").await;
+        let result = send_test_email(&db, None, b"test", "test_provider").await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()

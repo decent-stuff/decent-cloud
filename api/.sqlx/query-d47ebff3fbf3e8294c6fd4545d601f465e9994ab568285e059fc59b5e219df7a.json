@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('active', 'provisioned')",
+  "describe": {
+    "columns": [
+      {
+        "name": "COALESCE(SUM(payment_amount_e9s), 0)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d47ebff3fbf3e8294c6fd4545d601f465e9994ab568285e059fc59b5e219df7a"
+}

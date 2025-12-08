@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = ?, user_notified_retry = 0, user_notified_gave_up = 0 WHERE status = 'failed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "acb2a3d93a74b46b7faa85f8e1777bbaf54dbcced57b40fb4e9a7b38801e7664"
+}

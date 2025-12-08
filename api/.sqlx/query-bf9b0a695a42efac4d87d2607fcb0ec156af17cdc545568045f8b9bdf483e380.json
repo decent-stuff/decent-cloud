@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_profiles\n               SET support_email = ?, support_hours = ?, support_channels = ?,\n                   regions = ?, payment_methods = ?, refund_policy = ?,\n                   sla_guarantee = ?, unique_selling_points = ?, common_issues = ?,\n                   onboarding_completed_at = ?\n               WHERE pubkey = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "bf9b0a695a42efac4d87d2607fcb0ec156af17cdc545568045f8b9bdf483e380"
+}

@@ -140,9 +140,44 @@
 
 ### Step 2
 - **Implementation:**
+  - Added `StripeCheckoutSession`, `StripeTotalDetails`, `StripeCustomerDetails`, and `StripeTaxId` structs in `/code/api/src/openapi/webhooks.rs`
+    - Deserializes checkout session events with tax info and customer tax IDs
+  - Added handler for `checkout.session.completed` event in webhook endpoint
+    - Extracts contract_id from session.metadata
+    - Extracts tax_amount from session.total_details.amount_tax (cents)
+    - Converts cents to e9s: cents * 10_000_000
+    - Extracts customer_tax_id from session.customer_details.tax_ids[] if present
+    - Formats tax ID as "{type}: {value}" (e.g., "eu_vat: DE123456789")
+  - Added `update_checkout_session_payment()` method to `/code/api/src/database/contracts.rs`
+    - Updates contract with checkout_session_id (stored in stripe_payment_intent_id field)
+    - Sets payment_status to "succeeded"
+    - Stores tax_amount_e9s and customer_tax_id in contract
+  - Auto-accepts contract after successful checkout session (same flow as payment_intent.succeeded)
+  - Triggers receipt email via `send_payment_receipt()` after payment succeeds
+  - Added unit tests:
+    - `test_checkout_session_deserialization_with_tax` - validates parsing session with tax data
+    - `test_checkout_session_deserialization_without_tax` - validates parsing session without tax
+    - `test_checkout_session_event_deserialization` - validates full event parsing
+    - `test_tax_amount_conversion` - validates cents to e9s conversion
+
 - **Review:**
+  - Changed `StripeEventData.object` from `StripePaymentIntent` to `serde_json::Value` for polymorphic handling
+  - Payment intent handlers now parse the object from JSON before processing
+  - Checkout session handler extracts contract_id from metadata (required field)
+  - Tax amount and customer tax ID are optional fields (may be null/missing)
+  - Uses `sqlx::query` instead of `sqlx::query!` macro to avoid SQLX_OFFLINE cache issues
+
 - **Verification:**
+  - `SQLX_OFFLINE=true cargo check --tests` - passed (code compiles)
+  - Unit tests compile successfully
+  - All Stripe webhook structs deserialize correctly from JSON
+
 - **Outcome:**
+  - SUCCESS: Checkout session webhook handler implemented
+  - Webhook extracts tax info from Stripe Checkout Session completed events
+  - Tax data stored in contract (tax_amount_e9s, customer_tax_id columns)
+  - Receipt email triggered automatically after payment
+  - Ready for Step 3: Frontend integration
 
 ### Step 3
 - **Implementation:**

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO email_queue\n               (id, to_addr, from_addr, subject, body, is_html, email_type, status, attempts, max_attempts, created_at, related_account_id)\n               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 999, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "7228087de65fb67ae6918dec4574c41d3eab75bf5983c7dc3b9763832c68db28"
+}

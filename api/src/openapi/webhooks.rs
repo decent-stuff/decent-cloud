@@ -16,12 +16,37 @@ struct StripeEvent {
 
 #[derive(Debug, Deserialize)]
 struct StripeEventData {
-    object: StripePaymentIntent,
+    object: serde_json::Value, // Can be PaymentIntent or CheckoutSession
 }
 
 #[derive(Debug, Deserialize)]
 struct StripePaymentIntent {
     id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeCheckoutSession {
+    id: String,
+    metadata: Option<serde_json::Value>,
+    total_details: Option<StripeTotalDetails>,
+    customer_details: Option<StripeCustomerDetails>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeTotalDetails {
+    amount_tax: Option<i64>, // Tax amount in cents
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeCustomerDetails {
+    tax_ids: Option<Vec<StripeTaxId>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeTaxId {
+    #[serde(rename = "type")]
+    tax_type: String,
+    value: String,
 }
 
 /// Verify Stripe webhook signature
@@ -128,8 +153,126 @@ pub async fn stripe_webhook(
 
     // Handle event types
     match event.event_type.as_str() {
+        "checkout.session.completed" => {
+            // Parse checkout session from event data
+            let session: StripeCheckoutSession = serde_json::from_value(event.data.object)
+                .map_err(|e| {
+                    tracing::error!("Failed to parse checkout session: {:#}", e);
+                    PoemError::from_string(
+                        format!("Invalid session data: {}", e),
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            tracing::info!("Checkout session completed: {}", session.id);
+
+            // Extract contract_id from metadata
+            let contract_id_hex = session
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("contract_id"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    tracing::error!("Missing contract_id in session metadata");
+                    PoemError::from_string(
+                        "Missing contract_id in metadata",
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            let contract_id_bytes = hex::decode(contract_id_hex).map_err(|e| {
+                tracing::error!("Invalid contract_id hex: {:#}", e);
+                PoemError::from_string(
+                    format!("Invalid contract_id: {}", e),
+                    poem::http::StatusCode::BAD_REQUEST,
+                )
+            })?;
+
+            // Extract tax information
+            let tax_amount_cents = session
+                .total_details
+                .as_ref()
+                .and_then(|td| td.amount_tax);
+
+            let tax_amount_e9s = tax_amount_cents.map(|cents| cents * 10_000_000);
+
+            let customer_tax_id = session
+                .customer_details
+                .as_ref()
+                .and_then(|cd| cd.tax_ids.as_ref())
+                .and_then(|ids| ids.first())
+                .map(|tax_id| format!("{}: {}", tax_id.tax_type, tax_id.value));
+
+            // Update contract with tax info and set payment status to succeeded
+            if let Err(e) = db
+                .update_checkout_session_payment(
+                    &contract_id_bytes,
+                    &session.id,
+                    tax_amount_e9s,
+                    customer_tax_id.as_deref(),
+                )
+                .await
+            {
+                tracing::error!(
+                    "Failed to update checkout session payment for contract {}: {}",
+                    contract_id_hex,
+                    e
+                );
+                return Err(PoemError::from_string(
+                    format!("Database error: {}", e),
+                    poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                ));
+            }
+
+            // Auto-accept contract for Stripe Checkout payments
+            match db.accept_contract(&contract_id_bytes).await {
+                Ok(_) => {
+                    tracing::info!(
+                        "Auto-accepted contract {} after successful Stripe Checkout payment",
+                        contract_id_hex
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to auto-accept contract {}: {}",
+                        contract_id_hex,
+                        e
+                    );
+                    // Don't fail the webhook - payment status is already updated
+                }
+            }
+
+            // Send payment receipt
+            match crate::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes).await {
+                Ok(receipt_num) => {
+                    tracing::info!(
+                        "Sent receipt #{} for contract {} after Stripe Checkout payment",
+                        receipt_num,
+                        contract_id_hex
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to send receipt for contract {}: {}",
+                        contract_id_hex,
+                        e
+                    );
+                    // Don't fail the webhook - payment was successful
+                }
+            }
+        }
         "payment_intent.succeeded" => {
-            let payment_intent_id = &event.data.object.id;
+            // Parse payment intent from event data
+            let payment_intent: StripePaymentIntent =
+                serde_json::from_value(event.data.object).map_err(|e| {
+                    tracing::error!("Failed to parse payment intent: {:#}", e);
+                    PoemError::from_string(
+                        format!("Invalid payment intent data: {}", e),
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            let payment_intent_id = &payment_intent.id;
             tracing::info!("Payment succeeded: {}", payment_intent_id);
 
             // Update payment status to succeeded
@@ -195,7 +338,17 @@ pub async fn stripe_webhook(
             }
         }
         "payment_intent.payment_failed" => {
-            let payment_intent_id = &event.data.object.id;
+            // Parse payment intent from event data
+            let payment_intent: StripePaymentIntent =
+                serde_json::from_value(event.data.object).map_err(|e| {
+                    tracing::error!("Failed to parse payment intent: {:#}", e);
+                    PoemError::from_string(
+                        format!("Invalid payment intent data: {}", e),
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            let payment_intent_id = &payment_intent.id;
             tracing::warn!("Payment failed: {}", payment_intent_id);
 
             db.update_payment_status(payment_intent_id, "failed")
@@ -1064,5 +1217,128 @@ mod tests {
         let event: IcpayWebhookEvent = serde_json::from_str(json).unwrap();
         assert_eq!(event.event_type, "payment.failed");
         assert!(event.data.object.metadata.is_none());
+    }
+
+    // Stripe checkout session webhook tests
+    #[test]
+    fn test_checkout_session_deserialization_with_tax() {
+        let json = r#"{
+            "id": "cs_test_123",
+            "metadata": {
+                "contract_id": "abc123def456"
+            },
+            "total_details": {
+                "amount_tax": 250
+            },
+            "customer_details": {
+                "tax_ids": [
+                    {
+                        "type": "eu_vat",
+                        "value": "DE123456789"
+                    }
+                ]
+            }
+        }"#;
+
+        let session: StripeCheckoutSession = serde_json::from_str(json).unwrap();
+        assert_eq!(session.id, "cs_test_123");
+        assert!(session.metadata.is_some());
+        assert!(session.total_details.is_some());
+        assert_eq!(session.total_details.unwrap().amount_tax, Some(250));
+        assert!(session.customer_details.is_some());
+        let tax_ids = session.customer_details.unwrap().tax_ids.unwrap();
+        assert_eq!(tax_ids.len(), 1);
+        assert_eq!(tax_ids[0].tax_type, "eu_vat");
+        assert_eq!(tax_ids[0].value, "DE123456789");
+    }
+
+    #[test]
+    fn test_checkout_session_deserialization_without_tax() {
+        let json = r#"{
+            "id": "cs_test_456",
+            "metadata": {
+                "contract_id": "789abc012def"
+            },
+            "total_details": {
+                "amount_tax": null
+            },
+            "customer_details": {
+                "tax_ids": null
+            }
+        }"#;
+
+        let session: StripeCheckoutSession = serde_json::from_str(json).unwrap();
+        assert_eq!(session.id, "cs_test_456");
+        assert!(session.metadata.is_some());
+        assert!(session.total_details.is_some());
+        assert_eq!(session.total_details.unwrap().amount_tax, None);
+        assert!(session.customer_details.is_some());
+        assert!(session.customer_details.unwrap().tax_ids.is_none());
+    }
+
+    #[test]
+    fn test_checkout_session_event_deserialization() {
+        let json = r#"{
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "id": "cs_test_789",
+                    "metadata": {
+                        "contract_id": "abc123"
+                    },
+                    "total_details": {
+                        "amount_tax": 150
+                    },
+                    "customer_details": {
+                        "tax_ids": [
+                            {
+                                "type": "eu_vat",
+                                "value": "FR12345678901"
+                            }
+                        ]
+                    }
+                }
+            }
+        }"#;
+
+        let event: StripeEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.event_type, "checkout.session.completed");
+
+        let session: StripeCheckoutSession = serde_json::from_value(event.data.object).unwrap();
+        assert_eq!(session.id, "cs_test_789");
+
+        let contract_id = session
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("contract_id"))
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(contract_id, "abc123");
+
+        let tax_amount = session
+            .total_details
+            .as_ref()
+            .and_then(|td| td.amount_tax)
+            .unwrap();
+        assert_eq!(tax_amount, 150);
+
+        let tax_id = session
+            .customer_details
+            .as_ref()
+            .and_then(|cd| cd.tax_ids.as_ref())
+            .and_then(|ids| ids.first())
+            .unwrap();
+        assert_eq!(tax_id.tax_type, "eu_vat");
+        assert_eq!(tax_id.value, "FR12345678901");
+    }
+
+    #[test]
+    fn test_tax_amount_conversion() {
+        // Test that cents are correctly converted to e9s
+        // 250 cents = $2.50
+        // e9s = cents * 10_000_000
+        let cents: i64 = 250;
+        let e9s = cents * 10_000_000;
+        assert_eq!(e9s, 2_500_000_000);
     }
 }

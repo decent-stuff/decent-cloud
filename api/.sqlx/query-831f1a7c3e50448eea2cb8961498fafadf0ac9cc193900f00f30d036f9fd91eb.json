@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'completed'",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "831f1a7c3e50448eea2cb8961498fafadf0ac9cc193900f00f30d036f9fd91eb"
+}

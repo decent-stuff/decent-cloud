@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE chatwoot_message_events SET sla_breached = 1 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "1027abf9feeab08328f4929d6cbd8576a8314268d91d7c4b773360beef5a3bd0"
+}

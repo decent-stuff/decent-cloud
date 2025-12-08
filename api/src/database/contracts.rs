@@ -684,6 +684,28 @@ impl Database {
         Ok(())
     }
 
+    /// Update contract with checkout session payment details (includes tax info)
+    pub async fn update_checkout_session_payment(
+        &self,
+        contract_id: &[u8],
+        checkout_session_id: &str,
+        tax_amount_e9s: Option<i64>,
+        customer_tax_id: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ?, payment_status = ?, tax_amount_e9s = ?, customer_tax_id = ? WHERE contract_id = ?"
+        )
+        .bind(checkout_session_id)
+        .bind("succeeded")
+        .bind(tax_amount_e9s)
+        .bind(customer_tax_id)
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Accept a contract (auto-acceptance for successful Stripe payments)
     pub async fn accept_contract(&self, contract_id: &[u8]) -> Result<()> {
         // Get contract to verify it exists

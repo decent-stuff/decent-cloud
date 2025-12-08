@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                cm.id as \"id!\",\n                cm.contract_id as \"contract_id!\",\n                cm.chatwoot_conversation_id as \"conversation_id!\",\n                c.provider_pubkey as \"provider_pubkey!\",\n                cm.created_at as \"created_at!\"\n            FROM chatwoot_message_events cm\n            JOIN contract_sign_requests c ON hex(c.contract_id) = cm.contract_id\n            LEFT JOIN provider_sla_config sla ON sla.provider_pubkey = c.provider_pubkey\n            WHERE cm.sender_type = 'customer'\n              AND cm.sla_breached = 0\n              AND cm.sla_alert_sent = 0\n              AND NOT EXISTS (\n                  SELECT 1 FROM chatwoot_message_events response\n                  WHERE response.chatwoot_conversation_id = cm.chatwoot_conversation_id\n                    AND response.sender_type = 'provider'\n                    AND response.created_at > cm.created_at\n              )\n              AND (? - cm.created_at) > COALESCE(sla.response_time_seconds, 14400)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "contract_id!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "conversation_id!",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "provider_pubkey!",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at!",
+        "ordinal": 4,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b76d6560fe85d26258b4d6c37185bca4fda12062405278aef46df7a7fc41a025"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM (\n                SELECT requester_pubkey FROM contract_sign_requests\n                WHERE provider_pubkey = ?\n                GROUP BY requester_pubkey\n                HAVING COUNT(*) > 1\n            )",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2520ef111cd240d55efcc041c99860f35b080af217417534473c002d43842782"
+}

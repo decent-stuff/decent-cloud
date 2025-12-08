@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO telegram_message_tracking\n               (telegram_message_id, conversation_id, provider_chat_id, created_at)\n               VALUES (?, ?, ?, ?)\n               ON CONFLICT(telegram_message_id) DO UPDATE SET\n                   conversation_id = excluded.conversation_id,\n                   provider_chat_id = excluded.provider_chat_id,\n                   created_at = excluded.created_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "ecaebea64563292fa440e8a9957a9465231118f59476a5c9318046892aa796f6"
+}
