@@ -47,16 +47,16 @@ impl EmailProcessor {
 
     async fn run_all_processors(&self) {
         if let Err(e) = self.process_expired_emails().await {
-            tracing::error!("Expired email processing failed: {}", e);
+            tracing::error!("Expired email processing failed: {:#}", e);
         }
         if let Err(e) = self.process_batch().await {
-            tracing::error!("Email processing failed: {}", e);
+            tracing::error!("Email processing failed: {:#}", e);
         }
         if let Err(e) = self.process_user_notifications().await {
-            tracing::error!("User notification processing failed: {}", e);
+            tracing::error!("User notification processing failed: {:#}", e);
         }
         if let Err(e) = self.process_sla_breaches().await {
-            tracing::error!("SLA breach processing failed: {}", e);
+            tracing::error!("SLA breach processing failed: {:#}", e);
         }
     }
 

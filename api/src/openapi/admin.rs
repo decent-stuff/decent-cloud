@@ -105,7 +105,7 @@ impl AdminApi {
                     )
                     .await
                 {
-                    tracing::warn!("Failed to insert admin audit record: {}", e);
+                    tracing::warn!("Failed to insert admin audit record: {:#}", e);
                 }
 
                 // Fetch updated key
@@ -216,7 +216,7 @@ impl AdminApi {
                     )
                     .await
                 {
-                    tracing::warn!("Failed to insert admin audit record: {}", e);
+                    tracing::warn!("Failed to insert admin audit record: {:#}", e);
                 }
 
                 Json(ApiResponse {
@@ -698,14 +698,14 @@ impl AdminApi {
                     Ok(id) => id,
                     Err(e) => {
                         // Log error but don't fail - mark with generated ID
-                        tracing::error!("Failed to create ICPay payout: {}", e);
+                        tracing::error!("Failed to create ICPay payout: {:#}", e);
                         format!("pending_{}", uuid::Uuid::new_v4())
                     }
                 }
             }
             Err(e) => {
                 // ICPay client not configured - mark as pending
-                tracing::warn!("ICPay client not configured: {}", e);
+                tracing::warn!("ICPay client not configured: {:#}", e);
                 format!("pending_{}", uuid::Uuid::new_v4())
             }
         };

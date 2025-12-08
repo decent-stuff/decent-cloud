@@ -72,7 +72,7 @@ impl InvoicesApi {
         match get_invoice_pdf(&db, &contract_id).await {
             Ok(pdf_bytes) => PoemResponse::new(InvoicePdfResponse::Ok(Binary(pdf_bytes))),
             Err(e) => {
-                tracing::error!("Failed to generate invoice PDF: {}", e);
+                tracing::error!("Failed to generate invoice PDF: {:#}", e);
                 PoemResponse::new(InvoicePdfResponse::InternalError(Json(ApiResponse {
                     success: false,
                     data: None,
@@ -146,7 +146,7 @@ impl InvoicesApi {
                 error: None,
             }),
             Err(e) => {
-                tracing::error!("Failed to get invoice metadata: {}", e);
+                tracing::error!("Failed to get invoice metadata: {:#}", e);
                 Json(ApiResponse {
                     success: false,
                     data: None,

@@ -179,7 +179,7 @@ pub async fn handle_customer_message(
                     None
                 }
                 Err(e) => {
-                    tracing::error!("Failed to lookup DEFAULT_ESCALATION_USER: {}", e);
+                    tracing::error!("Failed to lookup DEFAULT_ESCALATION_USER: {:#}", e);
                     None
                 }
             },
@@ -206,7 +206,7 @@ pub async fn handle_customer_message(
             let summary = summarize_for_escalation(&conversation_history, escalation_reason)
                 .await
                 .unwrap_or_else(|e| {
-                    tracing::warn!("Failed to generate summary: {}", e);
+                    tracing::warn!("Failed to generate summary: {:#}", e);
                     format!(
                         "Customer needs assistance: {}",
                         truncate_message(message_content, 100)
@@ -220,7 +220,7 @@ pub async fn handle_customer_message(
                 &chatwoot_base_url,
             );
             if let Err(e) = dispatch_notification(db, email_service, &notification).await {
-                tracing::error!("Failed to dispatch escalation notification: {}", e);
+                tracing::error!("Failed to dispatch escalation notification: {:#}", e);
             }
         }
     } else {

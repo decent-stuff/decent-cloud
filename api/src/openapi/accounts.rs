@@ -220,7 +220,7 @@ impl AccountsApi {
                     )
                     .await
                 {
-                    tracing::warn!("Failed to insert audit record: {}", e);
+                    tracing::warn!("Failed to insert audit record: {:#}", e);
                 }
 
                 // Create email verification token
@@ -261,7 +261,7 @@ impl AccountsApi {
                         .await;
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to create verification token: {}", e);
+                        tracing::warn!("Failed to create verification token: {:#}", e);
                     }
                 }
 
@@ -954,7 +954,7 @@ impl AccountsApi {
         let token = match db.create_email_verification_token(&account.id, email).await {
             Ok(t) => t,
             Err(e) => {
-                tracing::error!("Failed to create verification token: {}", e);
+                tracing::error!("Failed to create verification token: {:#}", e);
                 // Still return success as the email was updated
                 return match db.get_account_with_keys(&username.0).await {
                     Ok(Some(acc)) => Json(ApiResponse {
@@ -1717,7 +1717,7 @@ impl AccountsApi {
             Ok(t) => t,
             Err(e) => {
                 // Don't reveal whether email exists for security
-                tracing::warn!("Recovery token creation failed for {}: {}", req.email, e);
+                tracing::warn!("Recovery token creation failed for {}: {:#}", req.email, e);
                 return Json(ApiResponse {
                     success: true,
                     data: Some(

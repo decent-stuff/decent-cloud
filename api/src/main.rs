@@ -101,7 +101,7 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
             Arc::new(db)
         }
         Err(e) => {
-            tracing::error!("Failed to initialize database at {}: {}", database_url, e);
+            tracing::error!("Failed to initialize database at {}: {:#}", database_url, e);
             return Err(std::io::Error::other(format!(
                 "Database initialization failed: {}",
                 e
@@ -436,7 +436,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
                                         client.assign_agent_bot_to_inbox(inbox_id, bot_id).await
                                     {
                                         tracing::error!(
-                                            "Failed to assign agent bot to inbox {}: {}",
+                                            "Failed to assign agent bot to inbox {}: {:#}",
                                             inbox_id,
                                             e
                                         );
@@ -444,14 +444,14 @@ async fn serve_command() -> Result<(), std::io::Error> {
                                 }
                             }
                             Err(e) => {
-                                tracing::error!("Failed to list inboxes: {}", e);
+                                tracing::error!("Failed to list inboxes: {:#}", e);
                             }
                         }
                     } else {
                         tracing::warn!("CHATWOOT_API_TOKEN not set - cannot assign bot to inboxes");
                     }
                 }
-                Err(e) => tracing::error!("Failed to configure Chatwoot agent bot: {}", e),
+                Err(e) => tracing::error!("Failed to configure Chatwoot agent bot: {:#}", e),
             }
         }
         (Err(_), Ok(_)) => {

@@ -545,7 +545,7 @@ impl Database {
 
         // Update last login timestamp (best-effort, don't fail if this fails)
         if let Err(e) = self.update_last_login_by_public_key(public_key).await {
-            tracing::warn!("Failed to update last_login_at: {}", e);
+            tracing::warn!("Failed to update last_login_at: {:#}", e);
         }
 
         let account = match self.get_account(&account_id).await? {

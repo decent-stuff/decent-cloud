@@ -142,7 +142,7 @@ pub async fn generate_answer(question: &str, articles: &[ScoredArticle]) -> Resu
     let answer = match call_llm_api(&prompt, 1024).await {
         Ok(text) => text,
         Err(e) => {
-            tracing::error!("LLM API error: {}", e);
+            tracing::error!("LLM API error: {:#}", e);
             return Ok(BotResponse {
                 answer: "I'm having trouble processing your question. Let me connect you with a human agent.".to_string(),
                 sources: vec![],
@@ -209,7 +209,7 @@ pub async fn summarize_for_escalation(
     match call_llm_api(&prompt, SUMMARIZE_MAX_TOKENS).await {
         Ok(summary) => Ok(summary.trim().to_string()),
         Err(e) => {
-            tracing::warn!("Failed to generate escalation summary: {}", e);
+            tracing::warn!("Failed to generate escalation summary: {:#}", e);
             // Fallback: use last customer message
             let last_customer_msg = conversation_history
                 .iter()

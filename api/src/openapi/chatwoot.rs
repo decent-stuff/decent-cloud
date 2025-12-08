@@ -104,7 +104,7 @@ impl ChatwootApi {
         let chatwoot_user_id = match db.get_chatwoot_user_id_by_public_key(&user.pubkey).await {
             Ok(id) => id,
             Err(e) => {
-                tracing::error!("Failed to get chatwoot_user_id: {}", e);
+                tracing::error!("Failed to get chatwoot_user_id: {:#}", e);
                 return Json(ApiResponse {
                     success: false,
                     data: None,
@@ -118,7 +118,7 @@ impl ChatwootApi {
             Ok(Some(acc)) => acc.email,
             Ok(None) => None,
             Err(e) => {
-                tracing::error!("Failed to get account: {}", e);
+                tracing::error!("Failed to get account: {:#}", e);
                 return Json(ApiResponse {
                     success: false,
                     data: None,
@@ -173,7 +173,7 @@ impl ChatwootApi {
             }
             Ok(None) => {} // No account, proceed with creation
             Err(e) => {
-                tracing::error!("Failed to check chatwoot_user_id: {}", e);
+                tracing::error!("Failed to check chatwoot_user_id: {:#}", e);
                 return Json(ApiResponse {
                     success: false,
                     data: None,
@@ -245,7 +245,7 @@ impl ChatwootApi {
                 })
             }
             Err(e) => {
-                tracing::error!("Failed to get chatwoot_user_id: {}", e);
+                tracing::error!("Failed to get chatwoot_user_id: {:#}", e);
                 return Json(ApiResponse {
                     success: false,
                     data: None,
@@ -265,7 +265,7 @@ impl ChatwootApi {
                 })
             }
             Err(e) => {
-                tracing::error!("Failed to get account: {}", e);
+                tracing::error!("Failed to get account: {:#}", e);
                 return Json(ApiResponse {
                     success: false,
                     data: None,
@@ -278,7 +278,7 @@ impl ChatwootApi {
         let client = match ChatwootPlatformClient::from_env() {
             Ok(c) => c,
             Err(e) => {
-                tracing::error!("Failed to create Chatwoot client: {}", e);
+                tracing::error!("Failed to create Chatwoot client: {:#}", e);
                 return Json(ApiResponse {
                     success: false,
                     data: None,

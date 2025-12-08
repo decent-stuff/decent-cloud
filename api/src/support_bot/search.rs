@@ -128,7 +128,11 @@ pub async fn search_articles_semantic(
                 }
             }
             Err(e) => {
-                tracing::warn!("Failed to get embedding for article {}: {}", article.id, e);
+                tracing::warn!(
+                    "Failed to get embedding for article {}: {:#}",
+                    article.id,
+                    e
+                );
                 // Skip this article
             }
         }

@@ -1364,7 +1364,7 @@ The Decent Cloud Team"#,
                             Err(e) => {
                                 // Log error but don't fail the onboarding update
                                 tracing::error!(
-                                    "Failed to create Chatwoot resources for provider {}: {}",
+                                    "Failed to create Chatwoot resources for provider {}: {:#}",
                                     hex::encode(&pubkey_bytes),
                                     e
                                 );

@@ -22,13 +22,13 @@ impl PaymentReleaseService {
 
         // Run initial release immediately on startup
         if let Err(e) = self.process_releases_once().await {
-            tracing::error!("Initial payment release processing failed: {}", e);
+            tracing::error!("Initial payment release processing failed: {:#}", e);
         }
 
         loop {
             interval.tick().await;
             if let Err(e) = self.process_releases_once().await {
-                tracing::error!("Payment release processing failed: {}", e);
+                tracing::error!("Payment release processing failed: {:#}", e);
             }
         }
     }

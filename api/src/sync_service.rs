@@ -38,13 +38,13 @@ impl SyncService {
 
         // Run initial sync immediately on startup
         if let Err(e) = self.sync_once().await {
-            tracing::error!("Initial sync failed: {}", e);
+            tracing::error!("Initial sync failed: {:#}", e);
         }
 
         loop {
             interval.tick().await;
             if let Err(e) = self.sync_once().await {
-                tracing::error!("Sync failed: {}", e);
+                tracing::error!("Sync failed: {:#}", e);
             }
         }
     }

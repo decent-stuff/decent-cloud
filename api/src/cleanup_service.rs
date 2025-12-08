@@ -24,13 +24,13 @@ impl CleanupService {
 
         // Run initial cleanup immediately on startup
         if let Err(e) = self.cleanup_once().await {
-            tracing::error!("Initial cleanup failed: {}", e);
+            tracing::error!("Initial cleanup failed: {:#}", e);
         }
 
         loop {
             interval.tick().await;
             if let Err(e) = self.cleanup_once().await {
-                tracing::error!("Cleanup failed: {}", e);
+                tracing::error!("Cleanup failed: {:#}", e);
             }
         }
     }

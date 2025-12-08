@@ -112,7 +112,7 @@ pub async fn stripe_webhook(
 
     // Verify signature
     verify_signature(&payload, signature, &webhook_secret).map_err(|e| {
-        tracing::error!("Webhook signature verification failed: {}", e);
+        tracing::error!("Webhook signature verification failed: {:#}", e);
         PoemError::from_string("Invalid signature", poem::http::StatusCode::UNAUTHORIZED)
     })?;
 
@@ -136,7 +136,7 @@ pub async fn stripe_webhook(
             db.update_payment_status(payment_intent_id, "succeeded")
                 .await
                 .map_err(|e| {
-                    tracing::error!("Failed to update payment status to succeeded: {}", e);
+                    tracing::error!("Failed to update payment status to succeeded: {:#}", e);
                     PoemError::from_string(
                         format!("Database error: {}", e),
                         poem::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -201,7 +201,7 @@ pub async fn stripe_webhook(
             db.update_payment_status(payment_intent_id, "failed")
                 .await
                 .map_err(|e| {
-                    tracing::error!("Failed to update payment status to failed: {}", e);
+                    tracing::error!("Failed to update payment status to failed: {:#}", e);
                     PoemError::from_string(
                         format!("Database error: {}", e),
                         poem::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -261,7 +261,7 @@ pub async fn chatwoot_webhook(
     }
 
     let payload: ChatwootWebhookPayload = serde_json::from_slice(&body_bytes).map_err(|e| {
-        tracing::error!("Failed to parse Chatwoot webhook: {}", e);
+        tracing::error!("Failed to parse Chatwoot webhook: {:#}", e);
         PoemError::from_string(
             format!("Invalid JSON: {}", e),
             poem::http::StatusCode::BAD_REQUEST,
@@ -336,7 +336,7 @@ pub async fn chatwoot_webhook(
                 .insert_chatwoot_message_event(cid, conv.id, message_id, sender_type, created_at)
                 .await
             {
-                tracing::warn!("Failed to insert Chatwoot message event: {}", e);
+                tracing::warn!("Failed to insert Chatwoot message event: {:#}", e);
                 // Don't fail webhook - event may be duplicate
             }
         }
@@ -526,7 +526,7 @@ pub async fn icpay_webhook(
 
     // Verify signature
     verify_icpay_signature(&payload, signature, &webhook_secret).map_err(|e| {
-        tracing::error!("ICPay webhook signature verification failed: {}", e);
+        tracing::error!("ICPay webhook signature verification failed: {:#}", e);
         PoemError::from_string("Invalid signature", poem::http::StatusCode::UNAUTHORIZED)
     })?;
 
@@ -614,7 +614,10 @@ pub async fn icpay_webhook(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Invalid contract_id hex in ICPay webhook metadata: {}", e);
+                        tracing::warn!(
+                            "Invalid contract_id hex in ICPay webhook metadata: {:#}",
+                            e
+                        );
                     }
                 }
             } else {
@@ -657,7 +660,10 @@ pub async fn icpay_webhook(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Invalid contract_id hex in ICPay webhook metadata: {}", e);
+                        tracing::warn!(
+                            "Invalid contract_id hex in ICPay webhook metadata: {:#}",
+                            e
+                        );
                     }
                 }
             }
@@ -709,7 +715,7 @@ pub async fn telegram_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                 tracing::info!("Received /start command from chat_id: {}", chat_id);
 
                 let telegram = TelegramClient::from_env().map_err(|e| {
-                    tracing::error!("TELEGRAM_BOT_TOKEN not configured: {}", e);
+                    tracing::error!("TELEGRAM_BOT_TOKEN not configured: {:#}", e);
                     PoemError::from_string(
                         "Telegram not configured",
                         poem::http::StatusCode::SERVICE_UNAVAILABLE,
@@ -728,7 +734,7 @@ pub async fn telegram_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                     .send_message(&chat_id, &response_text)
                     .await
                     .map_err(|e| {
-                        tracing::error!("Failed to send /start response: {}", e);
+                        tracing::error!("Failed to send /start response: {:#}", e);
                         PoemError::from_string(
                             format!("Failed to send response: {}", e),
                             poem::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -748,7 +754,7 @@ pub async fn telegram_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                 .lookup_telegram_conversation(reply_to.message_id)
                 .await
                 .map_err(|e| {
-                    tracing::error!("Failed to lookup Telegram conversation: {}", e);
+                    tracing::error!("Failed to lookup Telegram conversation: {:#}", e);
                     PoemError::from_string(
                         "Database error",
                         poem::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -782,7 +788,7 @@ pub async fn telegram_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Re
                                 );
                             }
                             Err(e) => {
-                                tracing::error!("Chatwoot client not configured: {}", e);
+                                tracing::error!("Chatwoot client not configured: {:#}", e);
                                 return Err(PoemError::from_string(
                                     "Chatwoot not configured",
                                     poem::http::StatusCode::INTERNAL_SERVER_ERROR,

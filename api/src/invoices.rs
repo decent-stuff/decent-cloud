@@ -249,7 +249,10 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
         Some("VAT not applicable - seller not registered for VAT.".to_string())
     } else if contract.payment_method == "icpay" {
         // Crypto payment - tax handling differs
-        Some("Paid via cryptocurrency. Buyer responsible for any applicable tax obligations.".to_string())
+        Some(
+            "Paid via cryptocurrency. Buyer responsible for any applicable tax obligations."
+                .to_string(),
+        )
     } else {
         None
     };

@@ -81,7 +81,7 @@ impl MetadataCache {
         loop {
             interval.tick().await;
             if let Err(e) = self.refresh().await {
-                tracing::error!("Metadata refresh failed: {}", e);
+                tracing::error!("Metadata refresh failed: {:#}", e);
             }
         }
     }

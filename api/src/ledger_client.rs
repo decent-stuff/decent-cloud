@@ -67,7 +67,7 @@ impl LedgerClient {
             // Refresh root key on retries (especially important for local development)
             if attempt > 0 {
                 if let Err(e) = self.agent.fetch_root_key().await {
-                    tracing::warn!("Failed to refresh root key on retry {}: {}", attempt, e);
+                    tracing::warn!("Failed to refresh root key on retry {}: {:#}", attempt, e);
                 }
             }
 
