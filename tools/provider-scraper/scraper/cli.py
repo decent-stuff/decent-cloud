@@ -18,15 +18,22 @@ SCRAPERS = {
 logger = logging.getLogger(__name__)
 
 
-async def run_scraper(name: str, output_base: Path) -> tuple[int, int]:
+async def run_scraper(
+    name: str,
+    output_base: Path,
+    skip_offerings: bool = False,
+    skip_docs: bool = False,
+) -> tuple[int, int, bool]:
     """Run single scraper and return counts.
 
     Args:
         name: Provider name (e.g., "hetzner")
         output_base: Base output directory
+        skip_offerings: If True, continue on offerings failure
+        skip_docs: If True, continue on docs failure
 
     Returns:
-        Tuple of (offerings_count, docs_count)
+        Tuple of (offerings_count, docs_count, success)
     """
     print(f"\n=== Scraping {name} ===")
     scraper_cls = SCRAPERS[name]
@@ -34,30 +41,38 @@ async def run_scraper(name: str, output_base: Path) -> tuple[int, int]:
 
     try:
         scraper = scraper_cls(output_dir=output_dir)
-        csv_path, docs_count = await scraper.run()
+        csv_path, docs_count = await scraper.run(
+            skip_offerings=skip_offerings,
+            skip_docs=skip_docs,
+        )
 
         # Count offerings from CSV
         offerings_count = 0
-        if csv_path.exists():
+        if csv_path and csv_path.exists():
             with csv_path.open() as f:
                 offerings_count = sum(1 for _ in f) - 1  # subtract header
 
         print(f"  Offerings: {offerings_count}")
         print(f"  Docs: {docs_count} new/changed")
 
-        return offerings_count, docs_count
+        return offerings_count, docs_count, True
 
     except Exception as e:
         logger.error(f"Failed to scrape {name}: {e}")
         print(f"  ERROR: {e}")
-        return 0, 0
+        return 0, 0, False
 
 
 def print_usage() -> None:
     """Print usage information."""
-    print("Usage: uv run python3 -m scraper.cli [COMMAND|PROVIDER...]")
+    print("Usage: uv run python3 -m scraper.cli [OPTIONS] [PROVIDER...]")
     print()
     print("Scrape hosting provider offerings and documentation.")
+    print()
+    print("Options:")
+    print("  --skip-offerings    Continue if offerings scrape fails")
+    print("  --skip-docs         Continue if docs scrape fails")
+    print("  --skip-failures     Continue on any failure (same as --skip-offerings --skip-docs)")
     print()
     print("Commands:")
     print("  setup    Install Playwright browsers (run once after install)")
@@ -67,10 +82,14 @@ def print_usage() -> None:
     for name in SCRAPERS:
         print(f"  {name}")
     print()
+    print("Environment variables:")
+    print("  HETZNER_API_TOKEN   Required for Hetzner (create at console.hetzner.cloud)")
+    print()
     print("Examples:")
-    print("  uv run python3 -m scraper.cli setup     # Install browsers (first time)")
-    print("  uv run python3 -m scraper.cli           # Scrape all providers")
-    print("  uv run python3 -m scraper.cli hetzner   # Scrape Hetzner only")
+    print("  uv run python3 -m scraper.cli setup              # Install browsers (first time)")
+    print("  uv run python3 -m scraper.cli                    # Scrape all providers")
+    print("  uv run python3 -m scraper.cli hetzner            # Scrape Hetzner only")
+    print("  uv run python3 -m scraper.cli --skip-docs ovh    # Skip docs failures for OVH")
 
 
 def run_setup() -> None:
@@ -89,6 +108,30 @@ def run_setup() -> None:
         sys.exit(1)
 
 
+def parse_args(args: list[str]) -> tuple[list[str], bool, bool]:
+    """Parse command line arguments.
+
+    Returns:
+        Tuple of (providers, skip_offerings, skip_docs)
+    """
+    providers = []
+    skip_offerings = False
+    skip_docs = False
+
+    for arg in args:
+        if arg == "--skip-offerings":
+            skip_offerings = True
+        elif arg == "--skip-docs":
+            skip_docs = True
+        elif arg == "--skip-failures":
+            skip_offerings = True
+            skip_docs = True
+        elif not arg.startswith("-"):
+            providers.append(arg)
+
+    return providers, skip_offerings, skip_docs
+
+
 async def main() -> None:
     """Run one or all scrapers and print summary."""
     # Handle commands
@@ -104,8 +147,12 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     output_base = Path(__file__).parent.parent / "output"
 
-    # Get provider from args or run all
-    providers = sys.argv[1:] if len(sys.argv) > 1 else list(SCRAPERS.keys())
+    # Parse arguments
+    providers, skip_offerings, skip_docs = parse_args(sys.argv[1:])
+
+    # Default to all providers if none specified
+    if not providers:
+        providers = list(SCRAPERS.keys())
 
     # Validate providers
     for provider in providers:
@@ -119,15 +166,24 @@ async def main() -> None:
     # Run scrapers
     total_offerings = 0
     total_docs = 0
+    failed_providers = []
 
     for provider in providers:
-        offerings_count, docs_count = await run_scraper(provider, output_base)
+        offerings_count, docs_count, success = await run_scraper(
+            provider, output_base, skip_offerings, skip_docs
+        )
         total_offerings += offerings_count
         total_docs += docs_count
+        if not success:
+            failed_providers.append(provider)
 
     # Print summary
     print("\n=== Summary ===")
     print(f"Total: {total_offerings} offerings, {total_docs} docs")
+
+    if failed_providers:
+        print(f"Failed: {', '.join(failed_providers)}")
+        sys.exit(1)
 
 
 def cli() -> None:

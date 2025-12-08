@@ -1,119 +1,162 @@
-"""Hetzner Cloud scraper."""
+"""Hetzner Cloud scraper using live API data."""
 
-from typing import TypedDict
+import os
+
+import httpx
 
 from scraper.base import BaseScraper
 from scraper.models import Offering
 
 
-class HetznerPlan(TypedDict):
-    """Type for Hetzner plan data."""
-
-    id: str
-    name: str
-    vcpu: int
-    ram: int
-    ssd: int
-    price_eur: float
-    type: str
-
-
-class HetznerLocation(TypedDict):
-    """Type for Hetzner location data."""
-
-    code: str
-    city: str
-    country: str
-    traffic_tb: int
-
-
-# Hetzner Cloud server plans with current pricing (EUR)
-# Data from https://www.hetzner.com/cloud/ as of Dec 2025
-# CAX = ARM (Ampere), CX = Shared Intel/AMD, CPX = Shared Performance, CCX = Dedicated
-
-HETZNER_PLANS: list[HetznerPlan] = [
-    # Shared vCPU - Cost Optimized (CX series - Intel/AMD)
-    {"id": "cx22", "name": "CX22", "vcpu": 2, "ram": 4, "ssd": 40, "price_eur": 3.79, "type": "shared"},
-    {"id": "cx32", "name": "CX32", "vcpu": 4, "ram": 8, "ssd": 80, "price_eur": 7.59, "type": "shared"},
-    {"id": "cx42", "name": "CX42", "vcpu": 8, "ram": 16, "ssd": 160, "price_eur": 14.99, "type": "shared"},
-    {"id": "cx52", "name": "CX52", "vcpu": 16, "ram": 32, "ssd": 320, "price_eur": 29.99, "type": "shared"},
-    # Shared vCPU - ARM (CAX series - Ampere)
-    {"id": "cax11", "name": "CAX11", "vcpu": 2, "ram": 4, "ssd": 40, "price_eur": 3.79, "type": "shared"},
-    {"id": "cax21", "name": "CAX21", "vcpu": 4, "ram": 8, "ssd": 80, "price_eur": 6.49, "type": "shared"},
-    {"id": "cax31", "name": "CAX31", "vcpu": 8, "ram": 16, "ssd": 160, "price_eur": 12.49, "type": "shared"},
-    {"id": "cax41", "name": "CAX41", "vcpu": 16, "ram": 32, "ssd": 320, "price_eur": 24.49, "type": "shared"},
-    # Shared vCPU - Performance (CPX series)
-    {"id": "cpx11", "name": "CPX11", "vcpu": 2, "ram": 2, "ssd": 40, "price_eur": 4.99, "type": "shared"},
-    {"id": "cpx21", "name": "CPX21", "vcpu": 3, "ram": 4, "ssd": 80, "price_eur": 9.49, "type": "shared"},
-    {"id": "cpx31", "name": "CPX31", "vcpu": 4, "ram": 8, "ssd": 160, "price_eur": 16.49, "type": "shared"},
-    {"id": "cpx41", "name": "CPX41", "vcpu": 8, "ram": 16, "ssd": 240, "price_eur": 30.49, "type": "shared"},
-    {"id": "cpx51", "name": "CPX51", "vcpu": 16, "ram": 32, "ssd": 360, "price_eur": 60.49, "type": "shared"},
-    # Dedicated vCPU (CCX series)
-    {"id": "ccx13", "name": "CCX13", "vcpu": 2, "ram": 8, "ssd": 80, "price_eur": 12.49, "type": "dedicated"},
-    {"id": "ccx23", "name": "CCX23", "vcpu": 4, "ram": 16, "ssd": 160, "price_eur": 24.49, "type": "dedicated"},
-    {"id": "ccx33", "name": "CCX33", "vcpu": 8, "ram": 32, "ssd": 240, "price_eur": 48.49, "type": "dedicated"},
-    {"id": "ccx43", "name": "CCX43", "vcpu": 16, "ram": 64, "ssd": 360, "price_eur": 96.49, "type": "dedicated"},
-    {"id": "ccx53", "name": "CCX53", "vcpu": 32, "ram": 128, "ssd": 600, "price_eur": 192.49, "type": "dedicated"},
-    {"id": "ccx63", "name": "CCX63", "vcpu": 48, "ram": 192, "ssd": 960, "price_eur": 288.49, "type": "dedicated"},
-]
-
-# Hetzner datacenter locations
-HETZNER_LOCATIONS: list[HetznerLocation] = [
-    {"code": "nbg1", "city": "Nuremberg", "country": "DE", "traffic_tb": 20},
-    {"code": "fsn1", "city": "Falkenstein", "country": "DE", "traffic_tb": 20},
-    {"code": "hel1", "city": "Helsinki", "country": "FI", "traffic_tb": 20},
-    {"code": "ash", "city": "Ashburn", "country": "US", "traffic_tb": 1},
-    {"code": "hil", "city": "Hillsboro", "country": "US", "traffic_tb": 1},
-    {"code": "sin", "city": "Singapore", "country": "SG", "traffic_tb": 1},
-]
-
-# EUR to USD conversion (approximate)
-EUR_TO_USD = 1.10
+class HetznerScrapeError(Exception):
+    """Raised when Hetzner scraping fails."""
 
 
 class HetznerScraper(BaseScraper):
-    """Scraper for Hetzner Cloud offerings."""
+    """Scraper for Hetzner Cloud offerings using the Hetzner Cloud API."""
 
     provider_name = "Hetzner"
     provider_website = "https://www.hetzner.com"
     docs_base_url = "https://docs.hetzner.com"
 
-    async def scrape_offerings(self) -> list[Offering]:
-        """Generate offerings from Hetzner Cloud plans."""
-        offerings: list[Offering] = []
+    API_BASE = "https://api.hetzner.cloud/v1"
 
-        for plan in HETZNER_PLANS:
-            for loc in HETZNER_LOCATIONS:
-                # Price adjustment for US/SG locations (about 20% higher)
-                price_multiplier = 1.2 if loc["country"] in ("US", "SG") else 1.0
-                price_eur = plan["price_eur"] * price_multiplier
-                price_usd = price_eur * EUR_TO_USD
+    async def scrape_offerings(self) -> list[Offering]:
+        """Fetch offerings from Hetzner Cloud API.
+
+        Requires HETZNER_API_TOKEN environment variable.
+
+        Raises:
+            HetznerScrapeError: If API token is missing or API request fails.
+        """
+        api_token = os.environ.get("HETZNER_API_TOKEN")
+        if not api_token:
+            raise HetznerScrapeError(
+                "HETZNER_API_TOKEN environment variable is required. "
+                "Create one at https://console.hetzner.cloud/ → Security → API Tokens"
+            )
+
+        headers = {"Authorization": f"Bearer {api_token}"}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Fetch server types
+            server_types = await self._fetch_server_types(client, headers)
+            # Fetch locations
+            locations = await self._fetch_locations(client, headers)
+
+        return self._build_offerings(server_types, locations)
+
+    async def _fetch_server_types(
+        self, client: httpx.AsyncClient, headers: dict
+    ) -> list[dict]:
+        """Fetch all server types from API."""
+        all_types = []
+        page = 1
+
+        while True:
+            response = await client.get(
+                f"{self.API_BASE}/server_types",
+                headers=headers,
+                params={"page": page, "per_page": 50},
+            )
+
+            if response.status_code == 401:
+                raise HetznerScrapeError("Invalid HETZNER_API_TOKEN - authentication failed")
+            if response.status_code == 429:
+                raise HetznerScrapeError("Rate limited by Hetzner API - try again later")
+            if response.status_code != 200:
+                raise HetznerScrapeError(
+                    f"Hetzner API error: {response.status_code} - {response.text}"
+                )
+
+            data = response.json()
+            all_types.extend(data.get("server_types", []))
+
+            # Check pagination
+            meta = data.get("meta", {}).get("pagination", {})
+            if page >= meta.get("last_page", 1):
+                break
+            page += 1
+
+        if not all_types:
+            raise HetznerScrapeError("No server types returned from Hetzner API")
+
+        return all_types
+
+    async def _fetch_locations(
+        self, client: httpx.AsyncClient, headers: dict
+    ) -> list[dict]:
+        """Fetch all locations from API."""
+        response = await client.get(f"{self.API_BASE}/locations", headers=headers)
+
+        if response.status_code != 200:
+            raise HetznerScrapeError(
+                f"Failed to fetch locations: {response.status_code} - {response.text}"
+            )
+
+        data = response.json()
+        locations = data.get("locations", [])
+
+        if not locations:
+            raise HetznerScrapeError("No locations returned from Hetzner API")
+
+        return locations
+
+    def _build_offerings(
+        self, server_types: list[dict], locations: list[dict]
+    ) -> list[Offering]:
+        """Build Offering objects from API data."""
+        offerings = []
+        location_map = {loc["name"]: loc for loc in locations}
+
+        for st in server_types:
+            if st.get("deprecated"):
+                continue
+
+            for price_info in st.get("prices", []):
+                loc_name = price_info.get("location")
+                loc = location_map.get(loc_name, {})
+
+                # Parse monthly price (gross)
+                price_monthly = price_info.get("price_monthly", {})
+                price_str = price_monthly.get("gross", "0")
+                try:
+                    price = float(price_str)
+                except ValueError:
+                    price = 0.0
+
+                # Determine product type
+                cpu_type = st.get("cpu_type", "shared")
+                product_type = "dedicated" if cpu_type == "dedicated" else "compute"
 
                 offering = Offering(
-                    offering_id=f"hetzner-{plan['id']}-{loc['code']}",
-                    offer_name=f"Hetzner Cloud {plan['name']} - {loc['city']}",
-                    description=f"Hetzner Cloud {plan['name']} VPS in {loc['city']}, {loc['country']}",
+                    offering_id=f"hetzner-{st['name']}-{loc_name}",
+                    offer_name=f"Hetzner Cloud {st['name']} - {loc.get('city', loc_name)}",
+                    description=st.get("description", ""),
                     product_page_url="https://www.hetzner.com/cloud",
-                    currency="USD",
-                    monthly_price=round(price_usd, 2),
+                    currency="EUR",
+                    monthly_price=price,
                     setup_fee=0.0,
                     visibility="public",
-                    product_type="compute" if plan["type"] == "shared" else "dedicated",
+                    product_type=product_type,
                     virtualization_type="kvm",
                     billing_interval="monthly",
                     stock_status="in_stock",
-                    datacenter_country=loc["country"],
-                    datacenter_city=loc["city"],
-                    processor_cores=plan["vcpu"],
-                    memory_amount=plan["ram"],
-                    total_ssd_capacity=plan["ssd"],
-                    traffic=loc["traffic_tb"] * 1000,  # Convert TB to GB
-                    uplink_speed=1000,  # 1 Gbps
+                    datacenter_country=loc.get("country", ""),
+                    datacenter_city=loc.get("city", ""),
+                    processor_cores=st.get("cores"),
+                    memory_amount=int(st.get("memory", 0)),
+                    total_ssd_capacity=st.get("disk"),
+                    uplink_speed=1000,  # 1 Gbps standard
+                    traffic=st.get("included_traffic", 0) // (1024 * 1024 * 1024),  # bytes to GB
                     unmetered_bandwidth=False,
                     features="IPv4,IPv6,Snapshots,Backups,Firewall",
                     operating_systems="Ubuntu,Debian,Fedora,Rocky,AlmaLinux,CentOS",
                 )
                 offerings.append(offering)
+
+        if not offerings:
+            raise HetznerScrapeError("No offerings could be built from API data")
 
         return offerings
 

@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
-from scraper.base import BaseScraper
+from scraper.base import BaseScraper, DocsScrapeError
 from scraper.models import Offering
 
 
@@ -108,8 +108,8 @@ class TestDocURLDiscovery:
     async def test_discover_doc_urls_uses_sitemap_when_available(self, scraper):
         with patch("scraper.base.discover_sitemap", new_callable=AsyncMock) as mock_sitemap:
             mock_sitemap.return_value = [
-                "https://docs.test.com/docs/page1",
-                "https://docs.test.com/help/page2",
+                "https://docs.test.com/page1",
+                "https://docs.test.com/page2",
             ]
 
             urls = await scraper.discover_doc_urls()
@@ -125,8 +125,8 @@ class TestDocURLDiscovery:
         ):
             mock_sitemap.return_value = None  # No sitemap
             mock_crawl.return_value = [
-                "https://docs.test.com/docs/page1",
-                "https://docs.test.com/help/page2",
+                "https://docs.test.com/page1",
+                "https://docs.test.com/page2",
             ]
 
             urls = await scraper.discover_doc_urls()
@@ -139,46 +139,38 @@ class TestDocURLDiscovery:
 class TestFilterDocURLs:
     """Test URL filtering logic."""
 
-    def test_filter_doc_urls_keeps_docs_pattern(self, scraper):
+    def test_filter_doc_urls_keeps_urls_from_docs_base(self, scraper):
+        """Filter keeps URLs that start with docs_base_url."""
         urls = [
-            "https://test.com/docs/getting-started",
-            "https://test.com/blog/post",
-            "https://test.com/docs/api",
+            "https://docs.test.com/getting-started",
+            "https://other.com/blog/post",
+            "https://docs.test.com/api",
         ]
         filtered = scraper._filter_doc_urls(urls)
         assert len(filtered) == 2
-        assert "https://test.com/docs/getting-started" in filtered
-        assert "https://test.com/docs/api" in filtered
+        assert "https://docs.test.com/getting-started" in filtered
+        assert "https://docs.test.com/api" in filtered
 
-    def test_filter_doc_urls_keeps_help_pattern(self, scraper):
+    def test_filter_doc_urls_removes_external_urls(self, scraper):
+        """Filter removes URLs not from docs_base_url domain."""
         urls = [
-            "https://test.com/help/contact",
-            "https://test.com/products",
+            "https://docs.test.com/page",
+            "https://external.com/help/page",
+            "https://test.com/docs/api",  # Different subdomain
         ]
         filtered = scraper._filter_doc_urls(urls)
         assert len(filtered) == 1
-        assert "https://test.com/help/contact" in filtered
+        assert "https://docs.test.com/page" in filtered
 
-    def test_filter_doc_urls_keeps_multiple_patterns(self, scraper):
+    def test_filter_doc_urls_deduplicates(self, scraper):
+        """Filter removes duplicate URLs."""
         urls = [
-            "https://test.com/docs/guide",
-            "https://test.com/help/faq",
-            "https://test.com/support/contact",
-            "https://test.com/tutorial/intro",
-            "https://test.com/knowledge/base",
-            "https://test.com/blog/news",
+            "https://docs.test.com/page",
+            "https://docs.test.com/page",
+            "https://docs.test.com/page/",  # Trailing slash variant
         ]
         filtered = scraper._filter_doc_urls(urls)
-        assert len(filtered) == 5
-        assert "https://test.com/blog/news" not in filtered
-
-    def test_filter_doc_urls_case_insensitive(self, scraper):
-        urls = [
-            "https://test.com/Docs/Guide",
-            "https://test.com/HELP/FAQ",
-        ]
-        filtered = scraper._filter_doc_urls(urls)
-        assert len(filtered) == 2
+        assert len(filtered) == 1
 
     def test_filter_doc_urls_empty_list(self, scraper):
         filtered = scraper._filter_doc_urls([])
@@ -228,18 +220,19 @@ class TestScrapeDocs:
     """Test documentation scraping."""
 
     @pytest.mark.asyncio
-    async def test_scrape_docs_returns_zero_when_no_urls(self, scraper):
+    async def test_scrape_docs_raises_when_no_urls(self, scraper):
+        """scrape_docs raises DocsScrapeError when no URLs found."""
         with patch.object(scraper, "discover_doc_urls", new_callable=AsyncMock) as mock_discover:
             mock_discover.return_value = []
 
-            count = await scraper.scrape_docs()
-
-            assert count == 0
+            with pytest.raises(DocsScrapeError, match="No doc URLs found"):
+                await scraper.scrape_docs()
 
     @pytest.mark.asyncio
     async def test_scrape_docs_crawls_and_writes_changed_content(self, scraper):
         mock_result = Mock()
         mock_result.success = True
+        mock_result.error_message = None
         mock_result.markdown.fit_markdown = "# Test Content"
         mock_result.markdown.raw_markdown = "# Raw Content"
         mock_result.metadata = {"title": "Test Page", "etag": "abc123"}
@@ -273,6 +266,7 @@ class TestScrapeDocs:
     async def test_scrape_docs_skips_unchanged_content(self, scraper):
         mock_result = Mock()
         mock_result.success = True
+        mock_result.error_message = None
         mock_result.markdown.fit_markdown = "# Test Content"
         mock_result.metadata = {"title": "Test Page"}
 
@@ -297,7 +291,8 @@ class TestScrapeDocs:
             scraper.archive.write.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_scrape_docs_handles_failed_crawl(self, scraper):
+    async def test_scrape_docs_raises_when_all_pages_fail(self, scraper):
+        """scrape_docs raises DocsScrapeError when all pages fail."""
         mock_result = Mock()
         mock_result.success = False
         mock_result.error_message = "Connection timeout"
@@ -314,15 +309,15 @@ class TestScrapeDocs:
 
             scraper.archive.write = Mock()
 
-            count = await scraper.scrape_docs()
-
-            assert count == 0
-            scraper.archive.write.assert_not_called()
+            with pytest.raises(DocsScrapeError, match="All 1 doc pages failed"):
+                await scraper.scrape_docs()
 
     @pytest.mark.asyncio
-    async def test_scrape_docs_handles_no_markdown_content(self, scraper):
+    async def test_scrape_docs_raises_when_no_markdown_content(self, scraper):
+        """scrape_docs raises when all pages have no content."""
         mock_result = Mock()
         mock_result.success = True
+        mock_result.error_message = None
         mock_result.markdown.fit_markdown = None
         mock_result.markdown.raw_markdown = None
 
@@ -338,15 +333,14 @@ class TestScrapeDocs:
 
             scraper.archive.write = Mock()
 
-            count = await scraper.scrape_docs()
-
-            assert count == 0
-            scraper.archive.write.assert_not_called()
+            with pytest.raises(DocsScrapeError, match="All 1 doc pages failed"):
+                await scraper.scrape_docs()
 
     @pytest.mark.asyncio
     async def test_scrape_docs_uses_raw_markdown_when_no_fit_markdown(self, scraper):
         mock_result = Mock()
         mock_result.success = True
+        mock_result.error_message = None
         mock_result.markdown.fit_markdown = None
         mock_result.markdown.raw_markdown = "# Raw Content"
         mock_result.metadata = {"title": "Test Page"}
@@ -375,7 +369,8 @@ class TestScrapeDocs:
             )
 
     @pytest.mark.asyncio
-    async def test_scrape_docs_handles_crawl_exception(self, scraper):
+    async def test_scrape_docs_continues_after_single_exception(self, scraper):
+        """scrape_docs continues processing after exception on single page."""
         with (
             patch.object(scraper, "discover_doc_urls", new_callable=AsyncMock) as mock_discover,
             patch("scraper.base.AsyncWebCrawler") as mock_crawler_class,
@@ -389,6 +384,7 @@ class TestScrapeDocs:
             # First URL throws, second succeeds
             mock_result = Mock()
             mock_result.success = True
+            mock_result.error_message = None
             mock_result.markdown.fit_markdown = "# Content"
             mock_result.metadata = {"title": "Page 2"}
 
@@ -451,3 +447,43 @@ class TestRun:
             assert len(lines) == 2  # Header + 1 offering
             assert lines[0].startswith("offering_id,offer_name")
             assert "test-1" in lines[1]
+
+    @pytest.mark.asyncio
+    async def test_run_skip_offerings_on_failure(self, scraper):
+        """Test run with skip_offerings=True continues on failure."""
+        with (
+            patch.object(scraper, "scrape_offerings", new_callable=AsyncMock) as mock_offerings,
+            patch.object(scraper, "scrape_docs", new_callable=AsyncMock) as mock_docs,
+        ):
+            mock_offerings.side_effect = RuntimeError("API error")
+            mock_docs.return_value = 3
+
+            csv_path, docs_count = await scraper.run(skip_offerings=True)
+
+            assert csv_path is None
+            assert docs_count == 3
+
+    @pytest.mark.asyncio
+    async def test_run_skip_docs_on_failure(self, scraper):
+        """Test run with skip_docs=True continues on failure."""
+        with (
+            patch.object(scraper, "scrape_offerings", new_callable=AsyncMock) as mock_offerings,
+            patch.object(scraper, "scrape_docs", new_callable=AsyncMock) as mock_docs,
+        ):
+            mock_offerings.return_value = [
+                Offering(
+                    offering_id="test-1",
+                    offer_name="Server",
+                    currency="USD",
+                    monthly_price=10.0,
+                    product_type="compute",
+                    datacenter_country="US",
+                    datacenter_city="NYC",
+                )
+            ]
+            mock_docs.side_effect = RuntimeError("Docs error")
+
+            csv_path, docs_count = await scraper.run(skip_docs=True)
+
+            assert csv_path is not None
+            assert docs_count == 0

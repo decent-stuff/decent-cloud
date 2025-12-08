@@ -12,6 +12,11 @@ from scraper.crawler import DEFAULT_BROWSER_CONFIG
 
 logger = logging.getLogger(__name__)
 
+
+class DiscoveryError(Exception):
+    """Raised when URL discovery fails."""
+
+
 # Common sitemap locations to try
 SITEMAP_PATHS = [
     "/sitemap.xml",
@@ -67,13 +72,23 @@ async def discover_sitemap(base_url: str) -> list[str] | None:
 
     Returns:
         List of URLs from sitemap(s), or None if no sitemap found.
+
+    Raises:
+        DiscoveryError: If rate limited (429) or server error (5xx).
     """
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         for path in SITEMAP_PATHS:
             sitemap_url = urljoin(base_url, path)
 
             # Fetch sitemap content
-            content = await _fetch_sitemap_content(client, sitemap_url, path)
+            content, status = await _fetch_sitemap_content(client, sitemap_url, path)
+
+            # Check for rate limiting or server errors
+            if status == 429:
+                raise DiscoveryError(f"Rate limited while fetching sitemap from {base_url}")
+            if status and status >= 500:
+                raise DiscoveryError(f"Server error ({status}) while fetching sitemap from {base_url}")
+
             if not content:
                 continue
 
@@ -97,7 +112,7 @@ async def discover_sitemap(base_url: str) -> list[str] | None:
 
 async def _fetch_sitemap_content(
     client: httpx.AsyncClient, sitemap_url: str, path: str
-) -> str | None:
+) -> tuple[str | None, int | None]:
     """Fetch sitemap content from URL.
 
     Args:
@@ -106,40 +121,61 @@ async def _fetch_sitemap_content(
         path: Original path (used for robots.txt detection).
 
     Returns:
-        Sitemap XML content, or None if fetch failed.
+        Tuple of (content, status_code). Content is None if fetch failed.
     """
     try:
         response = await client.get(sitemap_url)
+
+        # Return status for rate limit/error detection
+        if response.status_code == 429:
+            return None, 429
+        if response.status_code >= 500:
+            return None, response.status_code
         if response.status_code != 200:
             logger.debug(f"Sitemap not found at {sitemap_url} (status: {response.status_code})")
-            return None
+            return None, response.status_code
 
         content = response.text
+
+        # Check if we got an error page instead of XML
+        if "429" in content[:500] or "Too Many Requests" in content[:500]:
+            logger.warning(f"Rate limit page returned for {sitemap_url}")
+            return None, 429
 
         # Special handling for robots.txt
         if path == "/robots.txt":
             sitemap_urls = _extract_sitemaps_from_robots(content)
             if not sitemap_urls:
                 logger.debug(f"No sitemap URLs found in robots.txt at {sitemap_url}")
-                return None
+                return None, None
 
             # Fetch first sitemap from robots.txt
             first_sitemap_url = sitemap_urls[0]
             logger.debug(f"Found sitemap URL in robots.txt: {first_sitemap_url}")
             response = await client.get(first_sitemap_url)
+
+            if response.status_code == 429:
+                return None, 429
+            if response.status_code >= 500:
+                return None, response.status_code
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch sitemap from robots.txt: {first_sitemap_url} (status: {response.status_code})")
-                return None
+                return None, response.status_code
+
             content = response.text
 
-        return content
+            # Check for rate limit in response body
+            if "429" in content[:500] or "Too Many Requests" in content[:500]:
+                return None, 429
+
+        return content, 200
 
     except httpx.HTTPError as e:
         logger.debug(f"HTTP error fetching {sitemap_url}: {e}")
-        return None
+        return None, None
     except Exception as e:
         logger.warning(f"Unexpected error fetching {sitemap_url}: {e}")
-        return None
+        return None, None
 
 
 async def _fetch_child_sitemaps(
@@ -153,20 +189,33 @@ async def _fetch_child_sitemaps(
 
     Returns:
         Combined list of URLs from all child sitemaps, or None if all fetches failed.
+
+    Raises:
+        DiscoveryError: If rate limited.
     """
     all_urls = []
 
     for child_sitemap_url in sitemap_urls:
         try:
             response = await client.get(child_sitemap_url)
+
+            if response.status_code == 429:
+                raise DiscoveryError(f"Rate limited while fetching child sitemap: {child_sitemap_url}")
+
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch child sitemap: {child_sitemap_url} (status: {response.status_code})")
                 continue
+
+            # Check for rate limit in body
+            if "429" in response.text[:500] or "Too Many Requests" in response.text[:500]:
+                raise DiscoveryError(f"Rate limited while fetching child sitemap: {child_sitemap_url}")
 
             child_urls = parse_sitemap_xml(response.text)
             all_urls.extend(child_urls)
             logger.debug(f"Fetched {len(child_urls)} URLs from {child_sitemap_url}")
 
+        except DiscoveryError:
+            raise
         except httpx.HTTPError as e:
             logger.warning(f"HTTP error fetching child sitemap {child_sitemap_url}: {e}")
         except Exception as e:
@@ -208,6 +257,9 @@ async def discover_via_crawl(
 
     Returns:
         List of discovered URLs.
+
+    Raises:
+        DiscoveryError: If crawl completely fails.
     """
     from crawl4ai import CrawlerRunConfig
 
@@ -221,18 +273,30 @@ async def discover_via_crawl(
         verbose=False,
     )
 
-    async with AsyncWebCrawler(config=DEFAULT_BROWSER_CONFIG) as crawler:
-        results = await crawler.arun(url=base_url, config=config)
+    try:
+        async with AsyncWebCrawler(config=DEFAULT_BROWSER_CONFIG) as crawler:
+            results = await crawler.arun(url=base_url, config=config)
+    except Exception as e:
+        raise DiscoveryError(f"Deep crawl failed for {base_url}: {e}") from e
 
     # Results can be a single result or list depending on deep crawl
     if not isinstance(results, list):
         results = [results]
+
+    # Check for errors in results
+    for result in results:
+        if result.error_message:
+            if "429" in result.error_message or "rate" in result.error_message.lower():
+                raise DiscoveryError(f"Rate limited during deep crawl of {base_url}")
 
     # Extract URLs from results
     urls = []
     for result in results:
         if result.url:
             urls.append(result.url)
+
+    if not urls:
+        raise DiscoveryError(f"Deep crawl returned no URLs for {base_url}")
 
     logger.info(f"Deep crawl discovered {len(urls)} URLs from {base_url}")
     return urls

@@ -31,10 +31,11 @@ class TestRunScraper:
 
         with patch("scraper.cli.SCRAPERS") as mock_scrapers:
             mock_scrapers.__getitem__ = MagicMock(return_value=MagicMock(return_value=mock_scraper))
-            offerings_count, docs_count = await run_scraper("hetzner", temp_output_base)
+            offerings_count, docs_count, success = await run_scraper("hetzner", temp_output_base)
 
         assert offerings_count == 3
         assert docs_count == 5
+        assert success is True
 
         captured = capsys.readouterr()
         assert "=== Scraping hetzner ===" in captured.out
@@ -51,10 +52,11 @@ class TestRunScraper:
 
         with patch("scraper.cli.SCRAPERS") as mock_scrapers:
             mock_scrapers.__getitem__ = MagicMock(return_value=MagicMock(return_value=mock_scraper))
-            offerings_count, docs_count = await run_scraper("hetzner", temp_output_base)
+            offerings_count, docs_count, success = await run_scraper("hetzner", temp_output_base)
 
         assert offerings_count == 0  # CSV doesn't exist
         assert docs_count == 3
+        assert success is True
 
         captured = capsys.readouterr()
         assert "Offerings: 0" in captured.out
@@ -68,10 +70,11 @@ class TestRunScraper:
 
         with patch("scraper.cli.SCRAPERS") as mock_scrapers:
             mock_scrapers.__getitem__ = MagicMock(return_value=MagicMock(return_value=mock_scraper))
-            offerings_count, docs_count = await run_scraper("hetzner", temp_output_base)
+            offerings_count, docs_count, success = await run_scraper("hetzner", temp_output_base)
 
         assert offerings_count == 0
         assert docs_count == 0
+        assert success is False
 
         captured = capsys.readouterr()
         assert "ERROR: Network error" in captured.out
@@ -88,10 +91,11 @@ class TestRunScraper:
 
         with patch("scraper.cli.SCRAPERS") as mock_scrapers:
             mock_scrapers.__getitem__ = MagicMock(return_value=MagicMock(return_value=mock_scraper))
-            offerings_count, docs_count = await run_scraper("contabo", temp_output_base)
+            offerings_count, docs_count, success = await run_scraper("contabo", temp_output_base)
 
         assert offerings_count == 1
         assert docs_count == 0
+        assert success is True
 
         captured = capsys.readouterr()
         assert "Docs: 0 new/changed" in captured.out
