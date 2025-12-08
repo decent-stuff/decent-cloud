@@ -17,7 +17,7 @@ See [completed spec](docs/completed/2025-12-05-icpay-escrow-payments-spec.md#fut
 ## Provider Provisioning Agent
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
-**Status:** Ready to implement
+**Status:** Ready to implement, large feature, needs /orchestrate
 **Priority:** HIGH - Critical for automated cloud platform
 
 Software that providers run to automatically provision services when contracts are accepted. Transforms Decent Cloud from "marketplace with manual fulfillment" to "automated cloud platform."
