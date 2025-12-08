@@ -1,27 +1,3 @@
-When a new provider onboards, we should immediately give them some things in Chatwoot: dedicated inbox, dedicated team (to which they can add agents), and dedicated Knowledge Base (portal in Help
-Center). Ensure you test against real chatwoot deployment if the APIs are aligned with expectations (our code).
-
-## Architectural Issues Requiring Review
-
-- if wrapping errors, make sure to include / print the real error with `{:#?}` or similar. Fix everywhere in the api server!
-
-### SQLX Type Inference Errors (Pre-existing from migration 037)
-**Files affected:**
-- api/src/database/reseller.rs (line 170)
-- api/src/database/providers.rs (line 485)
-
-**Issue:** SQLX compile-time macros failing with type inference errors after migration 037 (chatwoot_provider_resources).
-
-**Temporary Fix Applied:** Added explicit type annotations to reseller.rs sqlx::query! calls that use `.rows_affected()`.
-
-**Remaining Errors:**
-1. `api/src/database/reseller.rs:170` - `current` variable in update_reseller_relationship
-2. `api/src/database/providers.rs:485` - `row` variable in provider lookup
-
-**Action Required:** These need proper fix with SQLX offline mode regeneration or code restructuring
-
----
-
 ## Billing & Invoicing ✅ COMPLETE
 
 **Spec:** [2025-12-07-billing-invoicing-spec.md](docs/2025-12-07-billing-invoicing-spec.md)
@@ -42,6 +18,15 @@ Center). Ensure you test against real chatwoot deployment if the APIs are aligne
 - Prepaid vs postpaid payment model analysis
 
 **Note:** Stripe automatic tax requires migrating from Payment Intents to Checkout Sessions. See `api/docs/stripe-tax-integration.md`.
+
+### Compliance Gaps (Future Work)
+
+| Gap                  | Requirement               | Fix                                 | Priority |
+|----------------------|---------------------------|-------------------------------------|----------|
+| Buyer address        | Required for B2B invoices | Add to checkout flow                | MEDIUM   |
+| VAT auto-calculation | Per-country rates         | Migrate to Stripe Checkout Sessions | MEDIUM   |
+| VAT ID validation    | VIES API verification     | ~50 lines, optional                 | LOW      |
+| Reverse charge       | B2B cross-border          | Schema ready, logic TBD             | LOW      |
 
 ---
 
@@ -91,23 +76,6 @@ Integrate with or scrape external sources for additional trust signals:
 - https://www.vpsbenchmarks.com/ - VPS performance benchmarks
 - Price comparison vs market average ("15% below market" or "30% above")
 - Cross-reference provider claims with independent verification
-
-### In-Contract Communication & Tracking
-
-**Stack:** Chatwoot (MIT, self-hosted) + custom AgentBot + notification bridge.
-See [Support Bot & Notification System spec](docs/specs/support-bot-notification-system.md).
-In-progress: see docs/2025-12-04-support-bot-notification-system-spec.md
-
-**Chatwoot provides:**
-- Ticketing/messaging between users and providers
-- Help Center (native KB for provider FAQs)
-- Response time tracking, CSAT surveys
-- Multi-channel (web, email, Telegram, WhatsApp)
-- Webhooks for bot integration and escalation
-
-**We build:**
-- AI Bot (~200 lines): answers from Help Center articles, cites sources
-- Notification Bridge (~150 lines): alerts providers via Telegram/SMS on escalation
 
 ### Service Quality Verification
 - Automated health checks on provisioned services

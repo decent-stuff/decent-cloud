@@ -1,5 +1,5 @@
 # Currency Tracking and Display Fix
-**Status:** In Progress
+**Status:** Complete
 **Date:** 2025-11-29
 
 ## Problem Statement
@@ -21,11 +21,11 @@ This causes:
 ## Requirements
 
 ### Must-have
-- [ ] Change DEFAULT from `'usd'` to `'???'` to make errors obvious
-- [ ] Verify contract creation correctly passes offering.currency
-- [ ] Update any existing contracts with wrong currency from offering data
-- [ ] Test that new contracts get correct currency from offerings
-- [ ] Verify UI displays currency correctly across all views
+- [x] Change DEFAULT from `'usd'` to `'???'` to make errors obvious
+- [x] Verify contract creation correctly passes offering.currency
+- [x] Update any existing contracts with wrong currency from offering data
+- [x] Test that new contracts get correct currency from offerings
+- [x] Verify UI displays currency correctly across all views
 
 ### Nice-to-have
 - [ ] Add database constraint to prevent invalid currency codes (except '???')
@@ -35,19 +35,19 @@ This causes:
 
 ### Step 1: Fix migration default value
 **Success:** Migration uses '???' as DEFAULT instead of 'usd'
-**Status:** Pending
+**Status:** Complete
 
 ### Step 2: Create data migration to fix existing contracts
 **Success:** All existing contracts have correct currency from their offering
-**Status:** Pending
+**Status:** Complete
 
 ### Step 3: Verify contract creation logic
 **Success:** New contracts correctly inherit currency from offerings
-**Status:** Pending
+**Status:** Complete
 
 ### Step 4: Test end-to-end currency flow
 **Success:** E2E tests pass showing correct currency from offering → contract → UI
-**Status:** Pending
+**Status:** Complete
 
 ## Execution Log
 

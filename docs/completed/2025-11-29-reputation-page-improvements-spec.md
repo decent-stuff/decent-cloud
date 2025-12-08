@@ -23,17 +23,17 @@ The reputation page doesn't clearly show critical rental behavior patterns that 
 
 ### Must-have
 - [x] Expose `status_updated_at_ns` in Contract struct and API
-- [ ] Calculate actual runtime duration (time from created_at_ns to status_updated_at_ns for cancelled/completed)
-- [ ] Add early cancellation metrics to reputation page (% cancelled within 1h, 24h, 7d, 180d)
-- [ ] Create NEW migration 017 to drop DEFAULT from contract_sign_requests.currency
-- [ ] Remove formatBalance 'dct' default - return error if currency missing
-- [ ] Update all formatBalance callsites to handle missing currency explicitly
-- [ ] Verify all INSERT statements provide explicit currency value
-- [ ] Show actual runtime prominently in rental cards
-- [ ] Add summary stats showing cancellation patterns
+- [x] Calculate actual runtime duration (time from created_at_ns to status_updated_at_ns for cancelled/completed)
+- [x] Add early cancellation metrics to reputation page (% cancelled within 1h, 24h, 7d, 180d)
+- [x] Create NEW migration 017 to drop DEFAULT from contract_sign_requests.currency
+- [x] Remove formatBalance 'dct' default - return error if currency missing
+- [x] Update all formatBalance callsites to handle missing currency explicitly
+- [x] Verify all INSERT statements provide explicit currency value
+- [x] Show actual runtime prominently in rental cards
+- [x] Add summary stats showing cancellation patterns
 
 ### Nice-to-have
-- [ ] Visual indicators for concerning patterns (e.g., >50% cancelled within 1h)
+- [x] Visual indicators for concerning patterns (e.g., >50% cancelled within 1h)
 - [ ] Success rate metric (% completed vs cancelled)
 - [ ] Average contract duration for completed rentals
 
