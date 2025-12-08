@@ -48,6 +48,8 @@ struct InvoiceData {
     items: Vec<InvoiceItem>,
     vat: i64,
     currency: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,10 +126,20 @@ pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice
     let invoice_number = get_next_invoice_number(db).await?;
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
-    // Seller details (placeholder - TODO: make configurable)
-    let seller_name = "Decent Cloud Ltd".to_string();
-    let seller_address = "Address TBD".to_string();
-    let seller_vat_id: Option<String> = None;
+    // Seller details from environment (required for compliant invoices)
+    let seller_name =
+        std::env::var("INVOICE_SELLER_NAME").unwrap_or_else(|_| "Decent Cloud Ltd".to_string());
+    let seller_address =
+        std::env::var("INVOICE_SELLER_ADDRESS").unwrap_or_else(|_| "Address TBD".to_string());
+    let seller_vat_id = std::env::var("INVOICE_SELLER_VAT_ID").ok();
+
+    // Warn if seller details not configured (invoices won't be EU-compliant)
+    if std::env::var("INVOICE_SELLER_ADDRESS").is_err() {
+        tracing::warn!(
+            "INVOICE_SELLER_ADDRESS not set - invoices will NOT be EU VAT compliant! \
+             Set INVOICE_SELLER_NAME, INVOICE_SELLER_ADDRESS, and INVOICE_SELLER_VAT_ID for compliance."
+        );
+    }
 
     // Buyer details (from contract or placeholder)
     let buyer_name = Some(contract.requester_contact.clone());
@@ -231,6 +243,17 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     // Convert e9s to decimal
     let price = invoice.subtotal_e9s as f64 / 1_000_000_000.0;
 
+    // Determine invoice note based on VAT status and payment method
+    let note = if invoice.seller_vat_id.is_none() && invoice.vat_rate_percent == 0 {
+        // Seller not VAT registered
+        Some("VAT not applicable - seller not registered for VAT.".to_string())
+    } else if contract.payment_method == "icpay" {
+        // Crypto payment - tax handling differs
+        Some("Paid via cryptocurrency. Buyer responsible for any applicable tax obligations.".to_string())
+    } else {
+        None
+    };
+
     // Build invoice data
     let invoice_data = InvoiceData {
         language: "en".to_string(),
@@ -269,6 +292,7 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
         }],
         vat: invoice.vat_rate_percent,
         currency: invoice.currency.clone(),
+        note,
     };
 
     // Serialize to JSON

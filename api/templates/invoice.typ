@@ -43,3 +43,11 @@
   vat: invoice_data.vat,
   currency: invoice_data.currency,
 )
+
+// Add note if provided (e.g., VAT exemption notice)
+#if "note" in invoice_data and invoice_data.note != none {
+  v(1em)
+  line(length: 100%, stroke: 0.5pt + gray)
+  v(0.5em)
+  text(size: 9pt, fill: rgb("#555"))[#invoice_data.note]
+}
