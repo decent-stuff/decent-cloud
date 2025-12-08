@@ -61,8 +61,8 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
 # Install cargo tools using binstall for faster installation
 RUN cargo binstall cargo-make cargo-nextest sqlx-cli ripgrep cargo-sweep
 
-# Install UV for the ubuntu user
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# Install UV to .local/bin (not .cargo/bin which gets shadowed by cargo-cache volume)
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh
 
 # Configure npm to use user-specific global directory and install Claude Code and Happy Coder
 RUN mkdir -p ~/.npm-global \
