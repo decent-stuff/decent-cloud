@@ -141,9 +141,9 @@ pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice
         );
     }
 
-    // Buyer details (from contract or placeholder)
+    // Buyer details (from contract)
     let buyer_name = Some(contract.requester_contact.clone());
-    let buyer_address: Option<String> = None;
+    let buyer_address = contract.buyer_address.clone();
     let buyer_vat_id = contract.customer_tax_id.clone();
 
     // Amounts - use tax from contract if available (from Stripe Tax or manual entry)

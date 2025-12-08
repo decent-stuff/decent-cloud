@@ -90,6 +90,9 @@ pub struct Contract {
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
     pub reverse_charge: Option<i64>,
+    /// Buyer address for B2B invoices
+    #[oai(skip_serializing_if_is_none)]
+    pub buyer_address: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -149,6 +152,9 @@ pub struct RentalRequestParams {
     pub duration_hours: Option<i64>,
     #[oai(skip_serializing_if_is_none)]
     pub payment_method: Option<String>,
+    /// Buyer address for B2B invoices (street, city, postal code, country)
+    #[oai(skip_serializing_if_is_none)]
+    pub buyer_address: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
@@ -178,7 +184,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -197,7 +203,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -216,7 +222,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -235,7 +241,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -257,7 +263,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
                FROM contract_sign_requests WHERE stripe_payment_intent_id = ?"#,
             payment_intent_id
         )
@@ -304,7 +310,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -443,8 +449,8 @@ impl Database {
                 requester_contact, provider_pubkey, offering_id,
                 payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                 duration_hours, original_duration_hours, request_memo,
-                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, buyer_address
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             contract_id,
             requester_pubkey,
             ssh_pubkey,
@@ -463,7 +469,8 @@ impl Database {
             stripe_payment_intent_id,
             stripe_customer_id,
             payment_status,
-            offering.currency
+            offering.currency,
+            params.buyer_address
         )
         .execute(&self.pool)
         .await?;
@@ -1112,7 +1119,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
                FROM contract_sign_requests
                WHERE payment_method = 'icpay'
                AND payment_status = 'succeeded'
