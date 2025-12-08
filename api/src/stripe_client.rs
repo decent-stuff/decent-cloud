@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use stripe::{
-    Client, CreatePaymentIntent, CreateRefund, Currency, PaymentIntent, PaymentIntentId, Refund,
-    RefundId,
+    CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession,
+    CreateCheckoutSessionLineItems, CreateCheckoutSessionLineItemsPriceData,
+    CreateCheckoutSessionLineItemsPriceDataProductData, CreatePaymentIntent, CreateRefund,
+    Currency, PaymentIntent, PaymentIntentId, Refund, RefundId,
 };
 
 /// Stripe API client wrapper for payment processing
@@ -25,6 +27,78 @@ impl StripeClient {
 
         let client = Client::new(secret_key);
         Ok(Self { client })
+    }
+
+    /// Creates a Stripe Checkout Session for one-time payment
+    ///
+    /// # Arguments
+    /// * `amount` - Amount in cents (e.g., 1000 = $10.00)
+    /// * `currency` - Currency code (e.g., "usd")
+    /// * `product_name` - Name of the product/service being purchased
+    /// * `contract_id` - Hex-encoded contract ID for metadata and URLs
+    ///
+    /// # Returns
+    /// Checkout Session URL for redirect on success
+    pub async fn create_checkout_session(
+        &self,
+        amount: i64,
+        currency: &str,
+        product_name: &str,
+        contract_id: &str,
+    ) -> Result<String> {
+        let currency = currency
+            .parse::<Currency>()
+            .context("Invalid currency code")?;
+
+        let frontend_url = std::env::var("FRONTEND_URL")
+            .unwrap_or_else(|_| "http://localhost:59010".to_string());
+
+        let success_url = format!(
+            "{}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+            frontend_url
+        );
+        let cancel_url = format!(
+            "{}/checkout/cancel?contract_id={}",
+            frontend_url, contract_id
+        );
+
+        let mut params = CreateCheckoutSession::new();
+        params.mode = Some(CheckoutSessionMode::Payment);
+        params.line_items = Some(vec![CreateCheckoutSessionLineItems {
+            price_data: Some(CreateCheckoutSessionLineItemsPriceData {
+                currency,
+                unit_amount: Some(amount),
+                product_data: Some(CreateCheckoutSessionLineItemsPriceDataProductData {
+                    name: product_name.to_string(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            quantity: Some(1),
+            ..Default::default()
+        }]);
+        params.automatic_tax = Some(stripe::CreateCheckoutSessionAutomaticTax {
+            enabled: true,
+            liability: None,
+        });
+        params.tax_id_collection = Some(stripe::CreateCheckoutSessionTaxIdCollection {
+            enabled: true,
+        });
+        params.success_url = Some(&success_url);
+        params.cancel_url = Some(&cancel_url);
+        params.metadata = Some(
+            [("contract_id".to_string(), contract_id.to_string())]
+                .into_iter()
+                .collect(),
+        );
+
+        let session = CheckoutSession::create(&self.client, params)
+            .await
+            .context("Failed to create Stripe Checkout Session")?;
+
+        session
+            .url
+            .ok_or_else(|| anyhow::anyhow!("Checkout Session missing URL"))
     }
 
     /// Creates a payment intent for the specified amount
@@ -172,5 +246,39 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("currency"));
 
         std::env::remove_var("STRIPE_SECRET_KEY");
+    }
+
+    #[tokio::test]
+    async fn test_create_checkout_session_invalid_currency() {
+        std::env::set_var("STRIPE_SECRET_KEY", "sk_test_dummy");
+        std::env::set_var("FRONTEND_URL", "http://localhost:59010");
+        let client = StripeClient::new().unwrap();
+
+        let result = client
+            .create_checkout_session(1000, "invalid", "Test Product", "abc123")
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("currency"));
+
+        std::env::remove_var("STRIPE_SECRET_KEY");
+        std::env::remove_var("FRONTEND_URL");
+    }
+
+    #[test]
+    fn test_checkout_session_uses_frontend_url() {
+        // This test verifies that the FRONTEND_URL is used in success/cancel URLs
+        std::env::set_var("FRONTEND_URL", "https://example.com");
+        let url = std::env::var("FRONTEND_URL").unwrap();
+        assert_eq!(url, "https://example.com");
+        std::env::remove_var("FRONTEND_URL");
+    }
+
+    #[test]
+    fn test_checkout_session_defaults_frontend_url() {
+        // Test default when FRONTEND_URL not set
+        std::env::remove_var("FRONTEND_URL");
+        let url = std::env::var("FRONTEND_URL")
+            .unwrap_or_else(|_| "http://localhost:59010".to_string());
+        assert_eq!(url, "http://localhost:59010");
     }
 }

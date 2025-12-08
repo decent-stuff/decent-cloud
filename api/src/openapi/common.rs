@@ -137,6 +137,8 @@ pub struct RentalRequestResponse {
     pub message: String,
     #[oai(skip_serializing_if_is_none)]
     pub client_secret: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub checkout_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Object)]

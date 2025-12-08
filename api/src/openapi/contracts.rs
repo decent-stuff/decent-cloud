@@ -10,11 +10,12 @@ use std::sync::Arc;
 
 pub struct ContractsApi;
 
-/// Helper function to create Stripe payment intent and update contract
-async fn create_stripe_payment_intent(
+/// Helper function to create Stripe checkout session and update contract
+async fn create_stripe_checkout_session(
     db: &Database,
     contract_id: &[u8],
     currency: &str,
+    product_name: &str,
 ) -> Result<String, String> {
     let contract = db
         .get_contract(contract_id)
@@ -35,16 +36,18 @@ async fn create_stripe_payment_intent(
 
     // Convert e9s to cents (divide by 10^7)
     let amount_cents = contract.payment_amount_e9s / 10_000_000;
-    let (payment_intent_id, client_secret) = stripe_client
-        .create_payment_intent(amount_cents, &currency.to_lowercase())
+    let contract_id_hex = hex::encode(contract_id);
+    let checkout_url = stripe_client
+        .create_checkout_session(
+            amount_cents,
+            &currency.to_lowercase(),
+            product_name,
+            &contract_id_hex,
+        )
         .await
-        .map_err(|e| format!("Failed to create Stripe payment intent: {}", e))?;
+        .map_err(|e| format!("Failed to create Stripe checkout session: {}", e))?;
 
-    db.update_stripe_payment_intent(contract_id, &payment_intent_id)
-        .await
-        .map_err(|e| format!("Failed to store Stripe payment intent: {}", e))?;
-
-    Ok(client_secret)
+    Ok(checkout_url)
 }
 
 #[OpenApi]
@@ -192,10 +195,16 @@ impl ContractsApi {
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
-                let client_secret = if payment_method.to_lowercase() == "stripe" {
-                    match create_stripe_payment_intent(&db, &contract_id, &offering.currency).await
+                let checkout_url = if payment_method.to_lowercase() == "stripe" {
+                    match create_stripe_checkout_session(
+                        &db,
+                        &contract_id,
+                        &offering.currency,
+                        &offering.offer_name,
+                    )
+                    .await
                     {
-                        Ok(secret) => Some(secret),
+                        Ok(url) => Some(url),
                         Err(e) => {
                             return Json(ApiResponse {
                                 success: false,
@@ -237,7 +246,8 @@ impl ContractsApi {
                     data: Some(RentalRequestResponse {
                         contract_id: hex::encode(&contract_id),
                         message: "Rental request created successfully".to_string(),
-                        client_secret,
+                        client_secret: None,
+                        checkout_url,
                     }),
                     error: None,
                 })
