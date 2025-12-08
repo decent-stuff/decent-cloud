@@ -53,8 +53,54 @@ async def run_scraper(name: str, output_base: Path) -> tuple[int, int]:
         return 0, 0
 
 
+def print_usage() -> None:
+    """Print usage information."""
+    print("Usage: uv run python3 -m scraper.cli [COMMAND|PROVIDER...]")
+    print()
+    print("Scrape hosting provider offerings and documentation.")
+    print()
+    print("Commands:")
+    print("  setup    Install Playwright browsers (run once after install)")
+    print("  help     Show this help message")
+    print()
+    print("Providers:")
+    for name in SCRAPERS:
+        print(f"  {name}")
+    print()
+    print("Examples:")
+    print("  uv run python3 -m scraper.cli setup     # Install browsers (first time)")
+    print("  uv run python3 -m scraper.cli           # Scrape all providers")
+    print("  uv run python3 -m scraper.cli hetzner   # Scrape Hetzner only")
+
+
+def run_setup() -> None:
+    """Install Playwright browsers required by Crawl4AI."""
+    import subprocess
+
+    print("Installing Playwright browsers...")
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=False,
+    )
+    if result.returncode == 0:
+        print("\nSetup complete! You can now run: uv run python3 -m scraper.cli")
+    else:
+        print("\nSetup failed. Try running manually: playwright install chromium")
+        sys.exit(1)
+
+
 async def main() -> None:
     """Run one or all scrapers and print summary."""
+    # Handle commands
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1]
+        if cmd in ("-h", "--help", "help"):
+            print_usage()
+            return
+        if cmd == "setup":
+            run_setup()
+            return
+
     logging.basicConfig(level=logging.INFO)
     output_base = Path(__file__).parent.parent / "output"
 
@@ -66,6 +112,8 @@ async def main() -> None:
         if provider not in SCRAPERS:
             print(f"Unknown provider: {provider}")
             print(f"Available: {', '.join(SCRAPERS.keys())}")
+            print()
+            print("Run with -h for help.")
             sys.exit(1)
 
     # Run scrapers

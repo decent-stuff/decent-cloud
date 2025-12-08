@@ -2,35 +2,39 @@
 
 Scrapes hosting provider offerings and documentation for catalog seeding. Uses Crawl4AI for professional-grade web crawling with intelligent caching.
 
-## Setup
+## Quick Start
 
 ```bash
 cd tools/provider-scraper
 
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# First time: install Playwright browsers
+uv run python3 -m scraper.cli setup
 
-# Install dependencies
-pip install -e .
+# Scrape all providers
+uv run python3 -m scraper.cli
 
-# Install Playwright browsers (required by Crawl4AI)
-playwright install chromium
+# Scrape specific provider
+uv run python3 -m scraper.cli hetzner
 ```
 
 ## Usage
 
-```bash
-# Scrape all providers
-scrape
+```
+Usage: uv run python3 -m scraper.cli [COMMAND|PROVIDER...]
 
-# Scrape specific provider
-scrape hetzner
-scrape contabo
-scrape ovh
+Commands:
+  setup    Install Playwright browsers (run once after install)
+  help     Show help message
 
-# Or run directly
-python -m scraper.cli hetzner
+Providers:
+  hetzner
+  contabo
+  ovh
+
+Examples:
+  uv run python3 -m scraper.cli setup     # Install browsers (first time)
+  uv run python3 -m scraper.cli           # Scrape all providers
+  uv run python3 -m scraper.cli hetzner   # Scrape Hetzner only
 ```
 
 ## Output
@@ -50,17 +54,14 @@ output/
 ## Development
 
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
 # Run tests
-pytest
+uv run pytest
 
-# Run linter
-ruff check .
+# Lint
+uv run ruff check .
 
 # Type check
-pyright
+uv run pyright
 ```
 
 ## Architecture

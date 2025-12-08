@@ -20,6 +20,14 @@ dev = [
 [project.scripts]
 scrape = "scraper.cli:cli"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "pyright>=1.1",
+]
+
 [tool.setuptools]
 packages = ["scraper", "scraper.providers"]
 
