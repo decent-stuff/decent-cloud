@@ -12,6 +12,7 @@ pub mod system;
 pub mod transfers;
 pub mod users;
 pub mod validators;
+pub mod vat;
 pub mod webhooks;
 
 pub use accounts::AccountsApi;
@@ -27,6 +28,7 @@ pub use system::SystemApi;
 pub use transfers::TransfersApi;
 pub use users::UsersApi;
 pub use validators::ValidatorsApi;
+pub use vat::VatApi;
 
 use poem_openapi::OpenApi;
 
@@ -46,5 +48,6 @@ pub fn create_combined_api() -> impl OpenApi {
         TransfersApi,
         StatsApi,
         ResellersApi,
+        VatApi,
     )
 }

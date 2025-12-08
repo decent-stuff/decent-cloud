@@ -23,6 +23,7 @@ mod support_bot;
 mod sync_docs;
 mod sync_service;
 mod validation;
+mod vies;
 
 use candid::Principal;
 use clap::{Parser, Subcommand};

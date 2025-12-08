@@ -228,9 +228,53 @@
 
 ### Step 4
 - **Implementation:**
+  - Created `/code/api/src/vies.rs` module (189 lines)
+    - `validate_vat_id(country_code, vat_number)` async function
+    - Uses VIES SOAP API: `https://ec.europa.eu/taxation_customs/vies/services/checkVatService`
+    - Sends SOAP XML request with country code and VAT number
+    - Parses XML response to extract valid, name, and address fields
+    - Returns `ViesResponse { valid, name, address }`
+    - Handles VIES API errors gracefully with descriptive error messages
+  - Created `/code/api/src/openapi/vat.rs` module (103 lines)
+    - `VatApi` struct with OpenAPI endpoint
+    - `POST /api/v1/vat/validate` public endpoint (no auth required)
+    - Request: `ValidateVatRequest { country_code, vat_number }`
+    - Response: `ValidateVatResponse { valid, name, address, error }`
+    - Error handling: Returns error message in response if VIES service fails
+  - Added vies module to `/code/api/src/lib.rs` and `/code/api/src/main.rs`
+  - Added vat module to `/code/api/src/openapi.rs` and combined API
+  - Unit tests:
+    - `test_parse_vies_response_valid` - validates parsing valid VAT ID response
+    - `test_parse_vies_response_invalid` - validates parsing invalid VAT ID response
+    - `test_parse_vies_response_empty_fields` - validates handling empty name/address
+    - `test_extract_xml_value` - validates XML value extraction
+    - `test_extract_xml_value_empty` - validates empty value handling
+    - `test_extract_xml_value_dashes` - validates "---" placeholder handling
+    - `test_validate_vat_request_deserialization` - validates request parsing
+    - `test_validate_vat_response_serialization` - validates response serialization
+    - `test_validate_vat_error_response` - validates error response format
+
 - **Review:**
+  - SOAP API integration uses standard reqwest HTTP client (same pattern as IcpayClient)
+  - XML parsing uses simple string operations (no heavy dependencies)
+  - Handles VIES edge cases: empty fields, "---" placeholders, missing values
+  - Public endpoint does not require authentication (frontend can validate before checkout)
+  - Error responses include descriptive messages for troubleshooting
+  - Module follows existing codebase patterns (similar to icpay_client.rs)
+
 - **Verification:**
+  - `SQLX_OFFLINE=true cargo check` - passed (code compiles successfully)
+  - `SQLX_OFFLINE=true cargo test vies` - all 6 vies module tests passed
+  - `SQLX_OFFLINE=true cargo test openapi::vat` - all 3 vat API tests passed
+  - Total: 9 tests passing
+  - No warnings related to new code
+
 - **Outcome:**
+  - SUCCESS: VIES VAT ID validation implemented
+  - POST /api/v1/vat/validate endpoint working
+  - SOAP API integration tested with mocked responses
+  - XML parsing robust and handles edge cases
+  - Ready for Step 5: Reverse Charge Logic
 
 ### Step 5
 - **Implementation:**
