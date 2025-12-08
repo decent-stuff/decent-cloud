@@ -54,7 +54,7 @@ output/
 
 ### Step 1: Core Crawler Module (`scraper/crawler.py`)
 **Success:** Module exists with `create_crawl_config()`, `create_markdown_generator()`, and `DEFAULT_BROWSER_CONFIG`. Unit tests pass.
-**Status:** Pending
+**Status:** Complete
 
 ### Step 2: URL Discovery Module (`scraper/discovery.py`)
 **Success:** `discover_sitemap()` and `discover_via_crawl()` functions work. Sitemap XML parsing handles both index and urlset formats. Unit tests pass.
@@ -83,9 +83,25 @@ output/
 ## Execution Log
 
 ### Step 1
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Created `/code/tools/provider-scraper/scraper/crawler.py` with:
+  - `DEFAULT_BROWSER_CONFIG` - BrowserConfig(browser_type="chromium", headless=True, verbose=False)
+  - `DEFAULT_PRUNING_THRESHOLD = 0.48`, `DEFAULT_WORD_THRESHOLD = 10` - Shared constants (DRY)
+  - `create_markdown_generator(threshold, min_word_threshold)` - Returns DefaultMarkdownGenerator with PruningContentFilter
+  - `create_crawl_config(cache_mode, excluded_tags, ...)` - Returns CrawlerRunConfig with sensible defaults
+- **Tests:** Created `/code/tools/provider-scraper/tests/test_crawler.py` with 24 unit tests covering:
+  - DEFAULT_BROWSER_CONFIG validation (4 tests)
+  - create_markdown_generator() with default/custom thresholds (6 tests)
+  - create_crawl_config() with all parameters (12 tests)
+  - Integration tests combining components (2 tests)
+- **Dependencies:** Updated `/code/tools/provider-scraper/pyproject.toml` to add `crawl4ai>=0.4.0`
+- **Test Results:** All 24 tests passed successfully in 1.28s (2 warnings from crawl4ai's Pydantic v2 migration, not our code)
+- **Review Findings:**
+  - ✅ KISS/MINIMAL: Very clean, 72 lines total (was 65 before DRY refactor)
+  - ✅ DRY: Extracted DEFAULT_PRUNING_THRESHOLD and DEFAULT_WORD_THRESHOLD to eliminate duplication
+  - ✅ Tests comprehensive: Both positive/negative paths covered (no error conditions in factory functions)
+  - ✅ Follows codebase patterns: Matches models.py style (type hints, Pydantic, docstrings)
+  - ✅ Simplified: Added min_word_threshold parameter to create_markdown_generator() for consistency
+- **Outcome:** SUCCESS - Core crawler module implemented with full test coverage and reviewed for quality
 
 ### Step 2
 - **Implementation:** (pending)
