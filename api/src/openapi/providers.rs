@@ -7,7 +7,6 @@ use super::common::{
     TestNotificationResponse, UpdateNotificationConfigRequest,
 };
 use crate::auth::ApiAuthenticatedUser;
-use crate::database::email::EmailType;
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
@@ -668,7 +667,7 @@ impl ProvidersApi {
                 let mut csv_writer = csv::Writer::from_writer(vec![]);
 
                 // Write header
-                let _ = csv_writer.write_record([
+                if let Err(e) = csv_writer.write_record([
                     "offering_id",
                     "offer_name",
                     "description",
@@ -709,11 +708,16 @@ impl ProvidersApi {
                     "payment_methods",
                     "features",
                     "operating_systems",
-                ]);
+                ]) {
+                    return poem_openapi::payload::PlainText(format!(
+                        "CSV header write error: {}",
+                        e
+                    ));
+                }
 
                 // Write data rows
                 for offering in offerings {
-                    let _ = csv_writer.write_record([
+                    if let Err(e) = csv_writer.write_record([
                         &offering.offering_id,
                         &offering.offer_name,
                         &offering.description.unwrap_or_default(),
@@ -784,7 +788,12 @@ impl ProvidersApi {
                         &offering.payment_methods.unwrap_or_default(),
                         &offering.features.unwrap_or_default(),
                         &offering.operating_systems.unwrap_or_default(),
-                    ]);
+                    ]) {
+                        return poem_openapi::payload::PlainText(format!(
+                            "CSV row write error for offering {}: {}",
+                            offering.offering_id, e
+                        ));
+                    }
                 }
 
                 match csv_writer.into_inner() {
@@ -1066,7 +1075,6 @@ impl ProvidersApi {
     ) -> Json<ApiResponse<String>> {
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: auth.pubkey.clone(),
-            chatwoot_portal_slug: None, // Deprecated, portal slug stored in provider_profiles
             notify_telegram: req.notify_telegram,
             notify_email: req.notify_email,
             notify_sms: req.notify_sms,
@@ -1307,91 +1315,7 @@ impl ProvidersApi {
             .await
         {
             Ok(_) => {
-                // Create Chatwoot resources if not already created
-                if crate::chatwoot::integration::is_configured() {
-                    // Check if resources already exist
-                    let has_resources = db
-                        .get_provider_chatwoot_resources(&pubkey_bytes)
-                        .await
-                        .ok()
-                        .flatten()
-                        .is_some();
-
-                    if !has_resources {
-                        match crate::chatwoot::integration::create_provider_agent(
-                            &db,
-                            &pubkey_bytes,
-                        )
-                        .await
-                        {
-                            Ok(_) => {
-                                // Send support portal welcome email
-                                if let Ok(Some(account)) =
-                                    db.get_account_with_keys_by_public_key(&pubkey_bytes).await
-                                {
-                                    if let Some(email) = &account.email {
-                                        let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
-                                            .unwrap_or_else(|_| {
-                                                "https://support.decent-cloud.org".to_string()
-                                            });
-                                        let name = account
-                                            .display_name
-                                            .as_deref()
-                                            .unwrap_or(&account.username);
-
-                                        db.queue_email_safe(
-                                            Some(email),
-                                            "noreply@decent-cloud.org",
-                                            "Your Provider Support Portal is Ready",
-                                            &format!(
-                                                r#"Hello {},
-
-Congratulations on completing your Decent Cloud provider setup! Your support portal has been created with dedicated resources:
-
-- A private inbox for customer support tickets
-- A team workspace for your support agents
-- A Help Center portal for your knowledge base articles
-
-SUPPORT PORTAL ACCESS
----------------------
-Web: {}
-
-MOBILE APP
-----------
-iOS: https://apps.apple.com/app/chatwoot/id1495796682
-Android: https://play.google.com/store/apps/details?id=com.chatwoot.app
-
-Server URL: {}
-
-You will receive a separate email from the support system to set your password.
-
-Best regards,
-The Decent Cloud Team"#,
-                                                name, support_url, support_url
-                                            ),
-                                            false,
-                                            EmailType::General,
-                                        )
-                                        .await;
-                                    }
-                                }
-                                tracing::info!(
-                                    "Created Chatwoot resources for provider {}",
-                                    hex::encode(&pubkey_bytes)
-                                );
-                            }
-                            Err(e) => {
-                                // Log error but don't fail the onboarding update
-                                tracing::error!(
-                                    "Failed to create Chatwoot resources for provider {}: {:#}",
-                                    hex::encode(&pubkey_bytes),
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
-
+                // Note: Chatwoot resources are created lazily when sync_provider_helpcenter is called
                 let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
                 Json(ApiResponse {
                     success: true,
@@ -1411,7 +1335,8 @@ The Decent Cloud Team"#,
 
     /// Sync provider help center article
     ///
-    /// Generates and syncs help center article to provider's Chatwoot portal (requires authentication)
+    /// Generates and syncs help center article to provider's Chatwoot portal (requires authentication).
+    /// Auto-creates Chatwoot resources (inbox, team, portal) if they don't exist yet.
     #[oai(
         path = "/providers/:pubkey/helpcenter/sync",
         method = "post",
@@ -1442,45 +1367,6 @@ The Decent Cloud Team"#,
             });
         }
 
-        // Get provider profile
-        let profile = match db.get_provider_profile(&pubkey_bytes).await {
-            Ok(Some(p)) => p,
-            Ok(None) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some("Provider profile not found".to_string()),
-                });
-            }
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Failed to get provider profile: {}", e)),
-                });
-            }
-        };
-
-        // Get Chatwoot resources (created during provider setup)
-        let portal_slug = match db.get_provider_chatwoot_resources(&pubkey_bytes).await {
-            Ok(Some((_inbox_id, _team_id, slug))) => slug,
-            Ok(None) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some("No Chatwoot portal configured for this provider. Complete provider setup first.".to_string()),
-                });
-            }
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Failed to get Chatwoot resources: {}", e)),
-                });
-            }
-        };
-
-        // Create Chatwoot client
         let chatwoot = match crate::chatwoot::ChatwootClient::from_env() {
             Ok(client) => client,
             Err(e) => {
@@ -1492,123 +1378,21 @@ The Decent Cloud Team"#,
             }
         };
 
-        // Generate article content
-        let article_content = match crate::helpcenter::generate_provider_article(&profile) {
-            Ok(content) => content,
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Failed to generate article: {}", e)),
-                });
-            }
-        };
-
-        // Generate article slug and title
-        let article_slug = format!(
-            "about-{}",
-            profile
-                .name
-                .to_lowercase()
-                .chars()
-                .map(|c| if c.is_alphanumeric() { c } else { '-' })
-                .collect::<String>()
-                .split('-')
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<_>>()
-                .join("-")
-        );
-        let article_title = format!("{} on Decent Cloud", profile.name);
-
-        // Extract description (first paragraph, max 200 chars)
-        let description: String = article_content
-            .lines()
-            .skip_while(|l| l.starts_with('#') || l.trim().is_empty())
-            .take_while(|l| !l.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join(" ")
-            .chars()
-            .take(200)
-            .collect();
-
-        // Get author_id for article creation
-        let author_id = match chatwoot.get_profile().await {
-            Ok(id) => id,
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Failed to get Chatwoot profile: {}", e)),
-                });
-            }
-        };
-
-        // Check if article already exists
-        let existing_articles = match chatwoot.list_articles(&portal_slug).await {
-            Ok(articles) => articles,
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Failed to list articles: {}", e)),
-                });
-            }
-        };
-
-        let existing_article = existing_articles.iter().find(|a| a.slug == article_slug);
-
-        // Create or update article
-        let (article_id, action) = if let Some(existing) = existing_article {
-            match chatwoot
-                .update_article(
-                    &portal_slug,
-                    existing.id,
-                    &article_title,
-                    &article_content,
-                    &description,
-                )
-                .await
-            {
-                Ok(_) => (existing.id, "updated".to_string()),
-                Err(e) => {
-                    return Json(ApiResponse {
-                        success: false,
-                        data: None,
-                        error: Some(format!("Failed to update article: {}", e)),
-                    });
-                }
-            }
-        } else {
-            match chatwoot
-                .create_article(
-                    &portal_slug,
-                    &article_title,
-                    &article_slug,
-                    &article_content,
-                    &description,
-                    author_id,
-                )
-                .await
-            {
-                Ok(id) => (id, "created".to_string()),
-                Err(e) => {
-                    return Json(ApiResponse {
-                        success: false,
-                        data: None,
-                        error: Some(format!("Failed to create article: {}", e)),
-                    });
-                }
-            }
-        };
-
-        Json(ApiResponse {
-            success: true,
-            data: Some(HelpcenterSyncResponse {
-                article_id,
-                portal_slug,
-                action,
+        match crate::helpcenter::sync_provider_article(&db, &chatwoot, &pubkey_bytes).await {
+            Ok(result) => Json(ApiResponse {
+                success: true,
+                data: Some(HelpcenterSyncResponse {
+                    article_id: result.article_id,
+                    portal_slug: result.portal_slug,
+                    action: result.action,
+                }),
+                error: None,
             }),
-            error: None,
-        })
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("{:#}", e)),
+            }),
+        }
     }
 }

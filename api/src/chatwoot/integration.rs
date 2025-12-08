@@ -2,6 +2,7 @@
 
 use super::ChatwootClient;
 use super::ChatwootPlatformClient;
+use crate::database::email::EmailType;
 use crate::database::Database;
 use anyhow::{Context, Result};
 use rand::Rng;
@@ -171,39 +172,21 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .context("Failed to add provider agent to team")?;
 
     // Create dedicated Help Center portal
-    // Note: Portal creation may fail due to Chatwoot server-side issues (v4.8.0 bug).
-    // We continue without portal if it fails, logging a warning.
     let portal_slug = generate_portal_slug(name, pubkey);
     let portal_name = format!("{} Help Center", name);
-    let portal_result = account_client
+    let portal = account_client
         .create_portal(&portal_name, &portal_slug)
-        .await;
-
-    let final_portal_slug = match portal_result {
-        Ok(portal) => {
-            tracing::info!(
-                "Created Chatwoot portal '{}' (slug={}) for provider {}",
-                portal.name,
-                portal.slug,
-                hex::encode(pubkey)
-            );
-            portal.slug
-        }
-        Err(e) => {
-            // Portal creation failed - this is a known Chatwoot v4.8.0 issue
-            // Log warning but continue with onboarding
-            tracing::warn!(
-                "Failed to create Chatwoot portal for provider {} (error: {:#}). \
-                 Provider will need to create portal manually via Chatwoot UI.",
-                hex::encode(pubkey),
-                e
-            );
-            portal_slug // Use intended slug for DB record
-        }
-    };
+        .await
+        .context("Failed to create Chatwoot portal")?;
+    tracing::info!(
+        "Created Chatwoot portal '{}' (slug={}) for provider {}",
+        portal.name,
+        portal.slug,
+        hex::encode(pubkey)
+    );
 
     // Store Chatwoot resource IDs in database
-    db.set_provider_chatwoot_resources(pubkey, inbox.id, team.id, &final_portal_slug)
+    db.set_provider_chatwoot_resources(pubkey, inbox.id, team.id, &portal.slug)
         .await
         .context("Failed to store Chatwoot resource IDs")?;
 
@@ -214,8 +197,45 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         user.id,
         inbox.id,
         team.id,
-        final_portal_slug
+        portal.slug
     );
+
+    // Send welcome email
+    let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
+        .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+    db.queue_email_safe(
+        Some(email),
+        "noreply@decent-cloud.org",
+        "Your Provider Support Portal is Ready",
+        &format!(
+            r#"Hello {name},
+
+Your Decent Cloud provider support portal has been created with dedicated resources:
+
+- A private inbox for customer support tickets
+- A team workspace for your support agents
+- A Help Center portal for your knowledge base articles
+
+SUPPORT PORTAL ACCESS
+---------------------
+Web: {support_url}
+
+MOBILE APP
+----------
+iOS: https://apps.apple.com/app/chatwoot/id1495796682
+Android: https://play.google.com/store/apps/details?id=com.chatwoot.app
+
+Server URL: {support_url}
+
+You will receive a separate email from the support system to set your password.
+
+Best regards,
+The Decent Cloud Team"#
+        ),
+        false,
+        EmailType::General,
+    )
+    .await;
 
     Ok(password)
 }

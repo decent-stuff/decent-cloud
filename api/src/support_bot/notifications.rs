@@ -317,7 +317,6 @@ mod tests {
         // Set telegram notification config (no FK constraint anymore)
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: None,
             notify_telegram: true,
             notify_email: false,
             notify_sms: false,
@@ -355,7 +354,6 @@ mod tests {
         // Set email notification config
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: None,
             notify_telegram: false,
             notify_email: true,
             notify_sms: false,
@@ -393,7 +391,6 @@ mod tests {
         // Enable email + telegram (both will fail: no token, no email service)
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: None,
             notify_telegram: true,
             notify_email: true,
             notify_sms: false,
@@ -425,7 +422,6 @@ mod tests {
         // Config exists but no channels enabled
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: None,
             notify_telegram: false,
             notify_email: false,
             notify_sms: false,
@@ -458,7 +454,6 @@ mod tests {
         // Set up telegram notification config
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: None,
             notify_telegram: true,
             notify_email: false,
             notify_sms: false,
@@ -513,7 +508,6 @@ mod tests {
         // Set up SMS notification config
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: None,
             notify_telegram: false,
             notify_email: false,
             notify_sms: true,

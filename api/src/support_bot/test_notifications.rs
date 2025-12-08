@@ -197,7 +197,6 @@ mod tests {
         let pubkey = b"test_user";
         let config = crate::database::notification_config::UserNotificationConfig {
             user_pubkey: pubkey.to_vec(),
-            chatwoot_portal_slug: None,
             notify_telegram: true,
             notify_email: false,
             notify_sms: false,

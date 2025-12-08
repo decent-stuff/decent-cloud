@@ -214,7 +214,8 @@ fn extract_description(content: &str) -> String {
         .collect()
 }
 
-/// Sync a provider's article to their Chatwoot portal
+/// Sync a provider's article to their Chatwoot portal.
+/// Auto-creates Chatwoot resources (inbox, team, portal) if missing.
 pub async fn sync_provider_article(
     db: &Database,
     chatwoot: &ChatwootClient,
@@ -226,15 +227,25 @@ pub async fn sync_provider_article(
         .await?
         .ok_or_else(|| anyhow!("Provider profile not found"))?;
 
-    // Get provider's Chatwoot resources (created during onboarding)
-    let (_inbox_id, _team_id, portal_slug) = db
-        .get_provider_chatwoot_resources(pubkey)
-        .await?
-        .ok_or_else(|| {
-            anyhow!(
-                "No Chatwoot portal configured for this provider. Complete provider setup first."
-            )
-        })?;
+    // Get or create Chatwoot resources
+    let portal_slug = match db.get_provider_chatwoot_resources(pubkey).await? {
+        Some((_inbox_id, _team_id, slug)) => slug,
+        None => {
+            // Resources don't exist - create them
+            tracing::info!(
+                "Creating missing Chatwoot resources for provider {}",
+                hex::encode(pubkey)
+            );
+            crate::chatwoot::integration::create_provider_agent(db, pubkey)
+                .await
+                .context("Failed to create Chatwoot resources")?;
+            // Re-fetch the newly created portal slug
+            db.get_provider_chatwoot_resources(pubkey)
+                .await?
+                .map(|(_, _, slug)| slug)
+                .ok_or_else(|| anyhow!("Chatwoot resources created but portal slug not found"))?
+        }
+    };
 
     // Generate article content
     let article_content = generate_provider_article(&profile)?;
