@@ -17,16 +17,32 @@ class HetznerScraper(BaseScraper):
 
     provider_name = "Hetzner"
     provider_website = "https://www.hetzner.com"
-    docs_base_url = "https://docs.hetzner.com"
+    # Use docs.hetzner.cloud (accessible) instead of docs.hetzner.com (blocked with 429)
+    docs_base_url = "https://docs.hetzner.cloud"
 
-    # Q&A generation sources (docs.hetzner.cloud is accessible, docs.hetzner.com is blocked)
+    # Q&A generation sources
     changelog_url = "https://docs.hetzner.cloud/changelog"
     faq_urls = [
         "https://docs.hetzner.cloud/",  # API overview
         "https://docs.hetzner.cloud/reference/cloud",  # Cloud API reference
     ]
+    # GitHub tutorials repo (most reliable source, no bot protection)
+    github_docs_repo = "hetzneronline/community-content"
+    github_docs_path = "tutorials"
 
     API_BASE = "https://api.hetzner.cloud/v1"
+
+    # Explicit doc URLs (docs.hetzner.cloud is a React SPA, no sitemap, deep crawl fails)
+    # Only include pages with distinct content (some paths redirect to overview page)
+    DOC_URLS = [
+        "https://docs.hetzner.cloud/",  # API overview
+        "https://docs.hetzner.cloud/reference/cloud",  # Cloud API reference
+        "https://docs.hetzner.cloud/changelog",  # Changelog with updates
+    ]
+
+    async def discover_doc_urls(self) -> list[str]:
+        """Return hardcoded doc URLs since docs.hetzner.cloud is a React SPA with no sitemap."""
+        return self.DOC_URLS
 
     async def scrape_offerings(self) -> list[Offering]:
         """Fetch offerings from Hetzner Cloud API.
@@ -53,9 +69,7 @@ class HetznerScraper(BaseScraper):
 
         return self._build_offerings(server_types, locations)
 
-    async def _fetch_server_types(
-        self, client: httpx.AsyncClient, headers: dict
-    ) -> list[dict]:
+    async def _fetch_server_types(self, client: httpx.AsyncClient, headers: dict) -> list[dict]:
         """Fetch all server types from API."""
         all_types = []
         page = 1
@@ -90,9 +104,7 @@ class HetznerScraper(BaseScraper):
 
         return all_types
 
-    async def _fetch_locations(
-        self, client: httpx.AsyncClient, headers: dict
-    ) -> list[dict]:
+    async def _fetch_locations(self, client: httpx.AsyncClient, headers: dict) -> list[dict]:
         """Fetch all locations from API."""
         response = await client.get(f"{self.API_BASE}/locations", headers=headers)
 
@@ -109,9 +121,7 @@ class HetznerScraper(BaseScraper):
 
         return locations
 
-    def _build_offerings(
-        self, server_types: list[dict], locations: list[dict]
-    ) -> list[Offering]:
+    def _build_offerings(self, server_types: list[dict], locations: list[dict]) -> list[Offering]:
         """Build Offering objects from API data."""
         offerings = []
         location_map = {loc["name"]: loc for loc in locations}
@@ -182,4 +192,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

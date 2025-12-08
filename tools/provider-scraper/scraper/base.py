@@ -32,6 +32,8 @@ class BaseScraper(ABC):
     # Optional: URLs for Q&A generation (alternative to docs crawling)
     faq_urls: list[str] = []  # Specific pages to fetch for Q&A context
     changelog_url: str | None = None  # URL to check for updates (uses ETag)
+    github_docs_repo: str | None = None  # GitHub repo with markdown docs (e.g., "owner/repo")
+    github_docs_path: str = "tutorials"  # Path within repo to fetch docs from
 
     def __init__(self, output_dir: Path | None = None) -> None:
         """Initialize the scraper with an output directory."""
@@ -314,35 +316,107 @@ class BaseScraper(ABC):
             logger.warning(f"Failed to check changelog: {e}, assuming changed")
             return True
 
-    async def fetch_faq_content(self) -> str:
-        """Fetch content from faq_urls for Q&A generation context.
+    async def fetch_github_docs(self, max_files: int = 30) -> str:
+        """Fetch markdown docs from GitHub repository.
+
+        Args:
+            max_files: Maximum number of markdown files to fetch.
 
         Returns:
-            Combined markdown content from all FAQ URLs.
+            Combined markdown content from GitHub docs.
         """
-        if not self.faq_urls:
+        if not self.github_docs_repo:
             return ""
 
         contents: list[str] = []
-        config = create_crawl_config()
+        api_url = f"https://api.github.com/repos/{self.github_docs_repo}/contents/{self.github_docs_path}"
 
-        async with AsyncWebCrawler(config=DEFAULT_BROWSER_CONFIG) as crawler:
-            for url in self.faq_urls:
-                try:
-                    logger.debug(f"Fetching FAQ content from {url}")
-                    result = await crawler.arun(url=url, config=config)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # List directory contents
+            try:
+                response = await client.get(api_url)
+                if response.status_code != 200:
+                    logger.warning(f"Failed to list GitHub docs: {response.status_code}")
+                    return ""
 
-                    if not result.success:
-                        logger.warning(f"Failed to fetch {url}: {result.error_message}")
-                        continue
+                items = response.json()
+                if not isinstance(items, list):
+                    logger.warning(f"Unexpected GitHub API response: {type(items)}")
+                    return ""
 
-                    # Prefer fit_markdown, fall back to raw
-                    content = result.markdown.fit_markdown or result.markdown.raw_markdown or ""
-                    if content.strip():
-                        contents.append(f"## Source: {url}\n\n{content}")
+            except httpx.HTTPError as e:
+                logger.warning(f"GitHub API error: {e}")
+                return ""
 
-                except Exception as e:
-                    logger.warning(f"Error fetching {url}: {e}")
+            # Fetch markdown files (look for .md files or directories with 01.en.md)
+            fetched = 0
+            for item in items:
+                if fetched >= max_files:
+                    break
+
+                if item.get("type") == "dir":
+                    # Check for tutorial format: {name}/01.en.md
+                    md_url = f"https://raw.githubusercontent.com/{self.github_docs_repo}/master/{self.github_docs_path}/{item['name']}/01.en.md"
+                    try:
+                        md_response = await client.get(md_url)
+                        if md_response.status_code == 200:
+                            content = md_response.text
+                            if content.strip():
+                                contents.append(f"## Tutorial: {item['name']}\n\n{content[:4000]}")
+                                fetched += 1
+                                logger.debug(f"Fetched GitHub doc: {item['name']}")
+                    except httpx.HTTPError:
+                        pass
+
+                elif item.get("name", "").endswith(".md"):
+                    # Direct markdown file
+                    try:
+                        md_response = await client.get(item["download_url"])
+                        if md_response.status_code == 200:
+                            content = md_response.text
+                            if content.strip():
+                                contents.append(f"## Doc: {item['name']}\n\n{content[:4000]}")
+                                fetched += 1
+                    except httpx.HTTPError:
+                        pass
+
+            logger.info(f"Fetched {fetched} docs from GitHub repo {self.github_docs_repo}")
+
+        return "\n\n---\n\n".join(contents)
+
+    async def fetch_faq_content(self) -> str:
+        """Fetch content from faq_urls and github_docs_repo for Q&A generation.
+
+        Returns:
+            Combined markdown content from all sources.
+        """
+        contents: list[str] = []
+
+        # Fetch from GitHub docs (most reliable, no bot protection)
+        github_content = await self.fetch_github_docs()
+        if github_content:
+            contents.append(github_content)
+
+        # Fetch from FAQ URLs using Crawl4AI
+        if self.faq_urls:
+            config = create_crawl_config()
+            async with AsyncWebCrawler(config=DEFAULT_BROWSER_CONFIG) as crawler:
+                for url in self.faq_urls:
+                    try:
+                        logger.debug(f"Fetching FAQ content from {url}")
+                        result = await crawler.arun(url=url, config=config)
+
+                        if not result.success:
+                            logger.warning(f"Failed to fetch {url}: {result.error_message}")
+                            continue
+
+                        # Prefer fit_markdown, fall back to raw
+                        content = result.markdown.fit_markdown or result.markdown.raw_markdown or ""
+                        if content.strip():
+                            contents.append(f"## Source: {url}\n\n{content}")
+
+                    except Exception as e:
+                        logger.warning(f"Error fetching {url}: {e}")
 
         return "\n\n---\n\n".join(contents)
 
