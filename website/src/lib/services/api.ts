@@ -598,6 +598,7 @@ export interface RentalRequestResponse {
 	contractId: string;
 	message: string;
 	clientSecret?: string;
+	checkoutUrl?: string;
 }
 
 export interface ProviderRentalResponseParams {

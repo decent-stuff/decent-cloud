@@ -7,12 +7,7 @@
 	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
-	import {
-		loadStripe,
-		type Stripe,
-		type StripeElements,
-		type StripeCardElement,
-	} from "@stripe/stripe-js";
+	import { loadStripe, type Stripe } from "@stripe/stripe-js";
 	import { onMount, onDestroy } from "svelte";
 	import { isStripeSupportedCurrency } from "$lib/utils/stripe-currencies";
 	import { getIcpay, getWalletSelect, isIcpayConfigured } from "$lib/utils/icpay";
@@ -35,9 +30,6 @@
 	let error = $state<string | null>(null);
 	let paymentMethod = $state<"icpay" | "stripe">("icpay");
 	let stripe: Stripe | null = null;
-	let elements: StripeElements | null = null;
-	let cardElement: StripeCardElement | null = null;
-	let cardMountPoint = $state<HTMLDivElement | undefined>();
 	let walletConnected = $state(false);
 	let pendingContractId = $state<string | null>(null);
 	let icpayEventUnsubscribe: (() => void) | null = null;
@@ -68,39 +60,6 @@
 		}
 	});
 
-	$effect(() => {
-		// Track cardMountPoint changes to ensure element mounts when DOM is ready
-		const mountPoint = cardMountPoint;
-
-		if (
-			paymentMethod === "stripe" &&
-			stripe &&
-			mountPoint &&
-			!cardElement
-		) {
-			elements = stripe.elements();
-			cardElement = elements.create("card", {
-				style: {
-					base: {
-						color: "#fff",
-						fontFamily: "system-ui, sans-serif",
-						fontSize: "16px",
-						"::placeholder": {
-							color: "rgba(255, 255, 255, 0.5)",
-						},
-					},
-					invalid: {
-						color: "#ef4444",
-					},
-				},
-			});
-			cardElement.mount(mountPoint);
-		} else if (paymentMethod === "icpay" && cardElement) {
-			cardElement.unmount();
-			cardElement = null;
-			elements = null;
-		}
-	});
 
 	function calculatePrice(): string {
 		if (!offering) return "0.00";
@@ -139,30 +98,6 @@
 		onSuccess(pendingContractId);
 	}
 
-	function formatPaymentError(stripeError: any): string {
-		const code = stripeError.code;
-		const message = stripeError.message;
-
-		switch (code) {
-			case "card_declined":
-				return "Your card was declined. Please check your card details or try a different card.";
-			case "insufficient_funds":
-				return "Insufficient funds. Please use a different payment method.";
-			case "expired_card":
-				return "Your card has expired. Please use a different card.";
-			case "incorrect_cvc":
-				return "Incorrect security code (CVC). Please check and try again.";
-			case "processing_error":
-				return "A processing error occurred. Please try again in a moment.";
-			case "incorrect_number":
-				return "Invalid card number. Please check and try again.";
-			default:
-				return (
-					message ||
-					"Payment failed. Please check your card details and try again."
-				);
-		}
-	}
 
 	async function handleSubmit() {
 		if (!offering) return;
@@ -170,11 +105,6 @@
 		const signingIdentityInfo = await authStore.getSigningIdentity();
 		if (!signingIdentityInfo) {
 			error = "You must be logged in to rent resources";
-			return;
-		}
-
-		if (paymentMethod === "stripe" && !cardElement) {
-			error = "Card information is required for Stripe payment";
 			return;
 		}
 
@@ -243,30 +173,19 @@
 				}
 			}
 
-			// If Stripe payment, confirm with card element
-			if (
-				paymentMethod === "stripe" &&
-				response.clientSecret &&
-				cardElement &&
-				stripe
-			) {
-				processingPayment = true;
-
-				const { error: stripeError } = await stripe.confirmCardPayment(
-					response.clientSecret,
-					{ payment_method: { card: cardElement } },
-				);
-
-				processingPayment = false;
-
-				if (stripeError) {
-					error = formatPaymentError(stripeError);
-					console.error("Stripe payment error:", stripeError);
-					loading = false;
-					return;
-				}
+			// If Stripe payment, redirect to Checkout
+			if (paymentMethod === "stripe" && response.checkoutUrl) {
+				// Redirect to Stripe Checkout
+				window.location.href = response.checkoutUrl;
+				return;
 			}
 
+			// For ICPay, success is handled via event listener
+			if (paymentMethod === "icpay") {
+				return;
+			}
+
+			// Fallback for other payment methods
 			onSuccess(response.contractId);
 		} catch (e) {
 			error =
@@ -504,23 +423,16 @@
 					</div>
 				{/if}
 
-				<!-- Stripe Card Element -->
+				<!-- Stripe Payment Info -->
 				{#if paymentMethod === "stripe"}
-					<fieldset>
-						<legend
-							class="block text-sm font-medium text-white mb-2"
-						>
-							Card Information
-						</legend>
-						<div
-							bind:this={cardMountPoint}
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg focus-within:border-blue-400 transition-colors"
-						></div>
-						<p class="text-xs text-white/50 mt-1">
-							Your card will be charged after the provider accepts
-							your request
+					<div class="bg-white/5 rounded-lg p-4 border border-white/10">
+						<h3 class="text-sm font-semibold text-white/70 mb-2">
+							Credit Card Payment via Stripe
+						</h3>
+						<p class="text-sm text-white/60">
+							You will be redirected to Stripe's secure checkout page to complete your payment. Tax will be calculated automatically based on your location.
 						</p>
-					</fieldset>
+					</div>
 				{/if}
 
 				<!-- SSH Key -->

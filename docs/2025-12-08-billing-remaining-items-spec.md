@@ -181,9 +181,50 @@
 
 ### Step 3
 - **Implementation:**
+  - Updated `RentalRequestResponse` type in `/code/website/src/lib/services/api.ts`
+    - Added `checkoutUrl?: string` field to response interface
+  - Updated `RentalRequestDialog.svelte` in `/code/website/src/lib/components/RentalRequestDialog.svelte`
+    - Removed Stripe Elements imports (`StripeElements`, `StripeCardElement`)
+    - Removed `elements`, `cardElement`, and `cardMountPoint` state variables
+    - Removed `$effect()` block that mounted/unmounted card element
+    - Removed `formatPaymentError()` function (no longer needed)
+    - Removed card element validation from `handleSubmit()`
+    - Removed `confirmCardPayment()` call - replaced with redirect
+    - Added redirect logic: `if (response.checkoutUrl) window.location.href = response.checkoutUrl`
+    - Replaced card input section with info message about Stripe Checkout redirect
+    - Updated UI to show "You will be redirected to Stripe's secure checkout page"
+  - Created `/code/website/src/routes/checkout/success/+page.svelte`
+    - Success page shown after Stripe Checkout completion
+    - Reads `session_id` from URL query parameter
+    - Shows success message with green checkmark icon
+    - Auto-redirects to contracts page after 5 seconds
+    - Provides manual "View My Contracts" button
+  - Created `/code/website/src/routes/checkout/cancel/+page.svelte`
+    - Cancel page shown if user cancels on Stripe Checkout
+    - Reads `contract_id` from URL query parameter
+    - Shows warning message explaining payment was cancelled
+    - Provides "Browse Marketplace" and "View My Contracts" buttons
+
 - **Review:**
+  - Stripe Elements completely removed from rental dialog
+  - Flow now: User clicks Pay → API returns checkoutUrl → window.location redirect → Stripe hosted page
+  - ICPay flow unchanged and working as before
+  - Success/cancel pages follow existing design patterns (gradient backgrounds, rounded cards)
+  - Both pages are minimal, clear, and user-friendly
+
 - **Verification:**
+  - `npm run check` - passed (0 errors, 0 warnings)
+  - `npm run build` - passed (build completed successfully in 11.56s)
+  - TypeScript types properly updated
+  - All Svelte components compile without errors
+
 - **Outcome:**
+  - SUCCESS: Frontend now uses Stripe Checkout redirect flow
+  - Stripe Elements code completely removed
+  - Success and cancel pages created and functional
+  - TypeScript compilation clean
+  - Build successful
+  - Ready for Step 4: VIES API integration
 
 ### Step 4
 - **Implementation:**
