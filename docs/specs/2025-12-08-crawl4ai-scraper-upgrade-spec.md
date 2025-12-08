@@ -177,9 +177,42 @@ output/
 - **Outcome:** SUCCESS - ZIP storage and cache module implemented, reviewed, and tested with complete edge case coverage
 
 ### Step 4
-- **Implementation:** (pending)
-- **Review:** (pending)
-- **Outcome:** (pending)
+- **Implementation:** Refactored `/code/tools/provider-scraper/scraper/base.py` to async with Crawl4AI integration:
+  - Removed `httpx.Client` and context manager methods - now async-based
+  - Added `docs_base_url` class attribute (optional, defaults to `provider_website`)
+  - Integrated `DocsArchive` from storage.py - initialized in `__init__`
+  - Changed `scrape_offerings()` to async abstract method
+  - Added `discover_doc_urls()` - tries sitemap first, falls back to deep crawl (max_depth=2, max_pages=50)
+  - Added `_filter_doc_urls()` - filters to docs/help/support/guide/faq/tutorial/knowledge patterns, subclass-overridable
+  - Added `scrape_docs()` - crawls URLs, checks `archive.has_changed()`, extracts `fit_markdown` or `raw_markdown`, saves to ZIP with ETag/hash
+  - Added `_extract_topic()` - extracts topic from page title (< 100 chars) or URL path segment
+  - Changed `run()` to async - returns `(csv_path, docs_count)` instead of `(csv_path, list[md_paths])`
+  - Removed old `scrape_docs()` abstract method (was returning `list[MarkdownDoc]`)
+  - Uses `AsyncWebCrawler` with `DEFAULT_BROWSER_CONFIG` and `create_crawl_config()`
+  - Logging at info/debug/warning/error levels for observability
+- **Tests:** Created `/code/tools/provider-scraper/tests/test_base.py` with 28 unit tests covering:
+  - Initialization: custom/default output dir (2 tests), provider_id generation (2 tests)
+  - Doc URL discovery: docs_base_url usage (1 test), provider_website fallback (1 test), sitemap first (1 test), deep crawl fallback (1 test)
+  - URL filtering: docs/help patterns (2 tests), multiple patterns (1 test), case insensitive (1 test), empty list (1 test)
+  - Topic extraction: title usage (1 test), URL fallback (1 test), long title handling (1 test), root URL handling (1 test), path segment extraction (1 test)
+  - Abstract method enforcement: scrape_offerings abstract (1 test)
+  - Docs scraping: no URLs (1 test), crawl and write (1 test), skip unchanged (1 test), failed crawl (1 test), no markdown (1 test), raw markdown fallback (1 test), exception handling (1 test)
+  - Full workflow: run() method (2 tests) - CSV writing and docs scraping
+- **Files Changed:**
+  - Modified: `/code/tools/provider-scraper/scraper/base.py` (173 lines, was 85 lines - removed old httpx sync code, added async Crawl4AI integration)
+  - Created: `/code/tools/provider-scraper/tests/test_base.py` (421 lines)
+- **Test Results:** All 28 tests passed in 1.26s (2 warnings from crawl4ai's Pydantic v2 migration, not our code). Full suite: 130 tests passed in 1.84s.
+- **Review Findings:**
+  - ✅ KISS/MINIMAL: Clean async implementation (173 lines) - all methods focused and single-purpose, no unnecessary complexity
+  - ✅ DRY: No duplication - delegates to crawler.py, discovery.py, storage.py modules, all imports used
+  - ✅ Tests comprehensive: Both positive and negative paths covered (28 tests, all unique assertions, no overlaps)
+  - ✅ Follows codebase patterns: Matches crawler/discovery/storage style (docstrings, type hints, logging, error handling)
+  - ✅ FAIL FAST: Proper logging at all failure points, errors logged with context, continues after errors to maximize crawl completion
+  - ✅ Async migration complete: All sync httpx code removed, AsyncWebCrawler used, abstract method signature changed to async
+  - ✅ No architectural issues: Clear separation of concerns, base class delegates to specialized modules
+  - ✅ Integration correct: Uses crawler.py (DEFAULT_BROWSER_CONFIG, create_crawl_config), discovery.py (discover_sitemap, discover_via_crawl), storage.py (DocsArchive)
+  - ✅ No simplifications needed: Code is already minimal and follows YAGNI/KISS principles
+- **Outcome:** SUCCESS - Async base class implemented, reviewed, and tested with full Crawl4AI integration. Ready for Step 5.
 
 ### Step 5
 - **Implementation:** (pending)
