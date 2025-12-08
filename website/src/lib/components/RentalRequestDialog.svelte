@@ -27,6 +27,7 @@
 
 	let sshKey = $state("");
 	let contactMethod = $state("");
+	let buyerAddress = $state("");
 	let durationHours = $state(720); // Default: 30 days
 	let memo = $state("");
 	let loading = $state(false);
@@ -199,6 +200,7 @@
 				request_memo: memo || undefined,
 				duration_hours: durationHours,
 				payment_method: paymentMethod,
+				buyer_address: buyerAddress || undefined,
 			};
 
 			const signed = await signRequest(
@@ -564,6 +566,28 @@
 					<p class="text-xs text-white/50 mt-1">
 						How the provider should reach you (e.g.,
 						email:you@example.com)
+					</p>
+				</div>
+
+				<!-- Billing Address (for B2B invoices) -->
+				<div>
+					<label
+						for="buyer-address"
+						class="block text-sm font-medium text-white mb-2"
+					>
+						Billing Address <span class="text-white/50"
+							>(optional, for invoices)</span
+						>
+					</label>
+					<textarea
+						id="buyer-address"
+						bind:value={buyerAddress}
+						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
+						rows="3"
+						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors"
+					></textarea>
+					<p class="text-xs text-white/50 mt-1">
+						Required for B2B invoices with VAT
 					</p>
 				</div>
 

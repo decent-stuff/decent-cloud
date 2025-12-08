@@ -590,6 +590,8 @@ export interface RentalRequestParams {
 	request_memo?: string;
 	duration_hours?: number;
 	payment_method?: string;
+	/** Buyer address for B2B invoices (street, city, postal code, country) */
+	buyer_address?: string;
 }
 
 export interface RentalRequestResponse {
