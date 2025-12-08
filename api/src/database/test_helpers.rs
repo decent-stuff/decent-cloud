@@ -50,6 +50,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/039_invoices.sql"),
         include_str!("../../migrations/040_tax_tracking.sql"),
         include_str!("../../migrations/041_buyer_address.sql"),
+        include_str!("../../migrations/042_billing_settings.sql"),
     ];
 
     for migration in &migrations {
