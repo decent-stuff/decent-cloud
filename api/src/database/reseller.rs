@@ -378,7 +378,6 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use super::Database;
     use crate::database::test_helpers::setup_test_db;
 
     #[tokio::test]
@@ -516,9 +515,9 @@ mod tests {
                 &reseller_pubkey,
                 &external_provider_pubkey,
                 100,
-                1000_000_000,
+                1_000_000_000,
                 150_000_000,
-                1150_000_000,
+                1_150_000_000,
             )
             .await
             .unwrap();
@@ -530,9 +529,9 @@ mod tests {
         assert_eq!(order.contract_id, contract_id);
         assert_eq!(order.reseller_pubkey, reseller_pubkey);
         assert_eq!(order.offering_id, 100);
-        assert_eq!(order.base_price_e9s, 1000_000_000);
+        assert_eq!(order.base_price_e9s, 1_000_000_000);
         assert_eq!(order.commission_e9s, 150_000_000);
-        assert_eq!(order.total_paid_e9s, 1150_000_000);
+        assert_eq!(order.total_paid_e9s, 1_150_000_000);
         assert_eq!(order.status, "pending");
         assert!(order.external_order_id.is_none());
     }
@@ -549,9 +548,9 @@ mod tests {
             &reseller_pubkey,
             &external_provider_pubkey,
             100,
-            1000_000_000,
+            1_000_000_000,
             150_000_000,
-            1150_000_000,
+            1_150_000_000,
         )
         .await
         .unwrap();
@@ -588,9 +587,9 @@ mod tests {
             &reseller_pubkey,
             &external_provider_pubkey,
             100,
-            1000_000_000,
+            1_000_000_000,
             150_000_000,
-            1150_000_000,
+            1_150_000_000,
         )
         .await
         .unwrap();
@@ -600,9 +599,9 @@ mod tests {
             &reseller_pubkey,
             &external_provider_pubkey,
             101,
-            2000_000_000,
+            2_000_000_000,
             300_000_000,
-            2300_000_000,
+            2_300_000_000,
         )
         .await
         .unwrap();
