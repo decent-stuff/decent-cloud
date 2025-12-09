@@ -59,7 +59,7 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
 # Install cargo tools using binstall for faster installation
-RUN cargo binstall cargo-make cargo-nextest sqlx-cli ripgrep cargo-sweep
+RUN cargo binstall cargo-make cargo-nextest sqlx-cli ripgrep cargo-sweep typst-cli
 
 # Install UV to .local/bin (not .cargo/bin which gets shadowed by cargo-cache volume)
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh

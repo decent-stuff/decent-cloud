@@ -6,11 +6,13 @@ FROM --platform=linux/amd64 debian:trixie-slim
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-# Install runtime dependencies
+# Install runtime dependencies and Typst CLI (for invoice PDF generation)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
     sqlite3 \
+    xz-utils \
+    && curl -L https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJ -C /usr/local/bin --strip-components=1 typst-x86_64-unknown-linux-musl/typst \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with configurable UID/GID for volume compatibility
