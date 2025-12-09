@@ -2,8 +2,8 @@ use anyhow::Result;
 use stripe::{
     CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession,
     CreateCheckoutSessionLineItems, CreateCheckoutSessionLineItemsPriceData,
-    CreateCheckoutSessionLineItemsPriceDataProductData, CreatePaymentIntent, CreateRefund,
-    Currency, PaymentIntent, PaymentIntentId, Refund, RefundId,
+    CreateCheckoutSessionLineItemsPriceDataProductData, CreateRefund, Currency, PaymentIntentId,
+    Refund,
 };
 
 /// Stripe API client wrapper for payment processing
@@ -101,54 +101,6 @@ impl StripeClient {
             .ok_or_else(|| anyhow::anyhow!("Checkout Session missing URL"))
     }
 
-    /// Creates a payment intent for the specified amount
-    ///
-    /// # Arguments
-    /// * `amount` - Amount in cents (e.g., 1000 = $10.00)
-    /// * `currency` - Currency code (e.g., "usd")
-    ///
-    /// # Returns
-    /// Tuple of (PaymentIntent ID, client_secret) on success
-    pub async fn create_payment_intent(
-        &self,
-        amount: i64,
-        currency: &str,
-    ) -> Result<(String, String)> {
-        let currency = currency.parse::<Currency>()?;
-
-        let mut params = CreatePaymentIntent::new(amount, currency);
-        params.automatic_payment_methods =
-            Some(stripe::CreatePaymentIntentAutomaticPaymentMethods {
-                enabled: true,
-                allow_redirects: Some(
-                    stripe::CreatePaymentIntentAutomaticPaymentMethodsAllowRedirects::Never,
-                ),
-            });
-
-        let payment_intent = PaymentIntent::create(&self.client, params).await?;
-
-        let client_secret = payment_intent
-            .client_secret
-            .ok_or_else(|| anyhow::anyhow!("PaymentIntent missing client_secret"))?;
-
-        Ok((payment_intent.id.to_string(), client_secret))
-    }
-
-    /// Verifies a payment intent status
-    ///
-    /// # Arguments
-    /// * `payment_intent_id` - The PaymentIntent ID to verify
-    ///
-    /// # Returns
-    /// True if payment succeeded, false otherwise
-    #[allow(dead_code)]
-    pub async fn verify_payment_intent(&self, payment_intent_id: &str) -> Result<bool> {
-        let id: PaymentIntentId = payment_intent_id.parse()?;
-        let payment_intent = PaymentIntent::retrieve(&self.client, &id, &[]).await?;
-
-        Ok(payment_intent.status == stripe::PaymentIntentStatus::Succeeded)
-    }
-
     /// Creates a refund for a payment intent
     ///
     /// # Arguments
@@ -174,22 +126,6 @@ impl StripeClient {
         let refund = Refund::create(&self.client, params).await?;
 
         Ok(refund.id.to_string())
-    }
-
-    /// Verifies a refund exists
-    ///
-    /// # Arguments
-    /// * `refund_id` - The Refund ID to verify
-    ///
-    /// # Returns
-    /// True if refund exists, false otherwise
-    #[allow(dead_code)]
-    pub async fn verify_refund(&self, refund_id: &str) -> Result<bool> {
-        let id: RefundId = refund_id.parse()?;
-        let _refund = Refund::retrieve(&self.client, &id, &[]).await?;
-
-        // Refund retrieved successfully, it exists
-        Ok(true)
     }
 }
 
@@ -219,18 +155,6 @@ mod tests {
         assert!(result.is_ok());
 
         // Clean up
-        std::env::remove_var("STRIPE_SECRET_KEY");
-    }
-
-    #[tokio::test]
-    async fn test_create_payment_intent_invalid_currency() {
-        std::env::set_var("STRIPE_SECRET_KEY", "sk_test_dummy");
-        let client = StripeClient::new().unwrap();
-
-        let result = client.create_payment_intent(1000, "invalid").await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("currency"));
-
         std::env::remove_var("STRIPE_SECRET_KEY");
     }
 

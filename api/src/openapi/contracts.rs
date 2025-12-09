@@ -31,8 +31,7 @@ async fn create_stripe_checkout_session(
         ));
     }
 
-    let stripe_client =
-        crate::stripe_client::StripeClient::new().map_err(|e| e.to_string())?;
+    let stripe_client = crate::stripe_client::StripeClient::new().map_err(|e| e.to_string())?;
 
     // Convert e9s to cents (divide by 10^7)
     let amount_cents = contract.payment_amount_e9s / 10_000_000;

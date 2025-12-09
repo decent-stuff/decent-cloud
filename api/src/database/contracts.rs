@@ -251,28 +251,6 @@ impl Database {
         Ok(contract)
     }
 
-    /// Get contract by Stripe payment intent ID
-    pub async fn get_contract_by_payment_intent(
-        &self,
-        payment_intent_id: &str,
-    ) -> Result<Option<Contract>> {
-        let contract = sqlx::query_as!(
-            Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
-               FROM contract_sign_requests WHERE stripe_payment_intent_id = ?"#,
-            payment_intent_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(contract)
-    }
-
     /// Get contract reply
     #[allow(dead_code)]
     pub async fn get_contract_reply(&self, contract_id: &[u8]) -> Result<Option<ContractReply>> {
@@ -665,23 +643,6 @@ impl Database {
         .await?;
 
         Ok(extensions)
-    }
-
-    /// Update payment status for a contract by Stripe payment_intent_id
-    pub async fn update_payment_status(
-        &self,
-        stripe_payment_intent_id: &str,
-        new_status: &str,
-    ) -> Result<()> {
-        sqlx::query!(
-            "UPDATE contract_sign_requests SET payment_status = ? WHERE stripe_payment_intent_id = ?",
-            new_status,
-            stripe_payment_intent_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
     }
 
     /// Update contract with checkout session payment details (includes tax info)
