@@ -3,6 +3,7 @@ use crate::database::Database;
 use crate::notifications::telegram::{TelegramClient, TelegramUpdate};
 use crate::support_bot::handler::handle_customer_message;
 use anyhow::{Context, Result};
+use email_utils::EmailService;
 use poem::{handler, web::Data, Body, Error as PoemError, Response};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -97,6 +98,7 @@ fn verify_signature(payload: &str, signature: &str, secret: &str) -> Result<()> 
 #[handler]
 pub async fn stripe_webhook(
     db: Data<&Arc<Database>>,
+    email_service: Data<&Option<Arc<EmailService>>>,
     body: Body,
     req: &poem::Request,
 ) -> Result<Response, PoemError> {
@@ -233,8 +235,14 @@ pub async fn stripe_webhook(
                 contract_id_hex
             );
 
-            // Send payment receipt
-            match crate::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes).await {
+            // Send payment receipt with invoice attachment
+            match crate::receipts::send_payment_receipt(
+                db.as_ref(),
+                &contract_id_bytes,
+                email_service.as_ref(),
+            )
+            .await
+            {
                 Ok(receipt_num) => {
                     tracing::info!(
                         "Sent receipt #{} for contract {} after Stripe Checkout payment",
@@ -534,6 +542,7 @@ fn verify_icpay_signature(payload: &str, signature: &str, secret: &str) -> Resul
 #[handler]
 pub async fn icpay_webhook(
     db: Data<&Arc<Database>>,
+    email_service: Data<&Option<Arc<EmailService>>>,
     body: Body,
     req: &poem::Request,
 ) -> Result<Response, PoemError> {
@@ -629,9 +638,13 @@ pub async fn icpay_webhook(
                             contract_id_hex
                         );
 
-                        // Send payment receipt
-                        match crate::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes)
-                            .await
+                        // Send payment receipt with invoice attachment
+                        match crate::receipts::send_payment_receipt(
+                            db.as_ref(),
+                            &contract_id_bytes,
+                            email_service.as_ref(),
+                        )
+                        .await
                         {
                             Ok(receipt_num) => {
                                 tracing::info!(

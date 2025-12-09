@@ -1,7 +1,19 @@
 use anyhow::{bail, Context, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 
 const MAILCHANNELS_API_URL: &str = "https://api.mailchannels.net/tx/v1/send";
+
+/// Email attachment
+#[derive(Debug, Clone)]
+pub struct EmailAttachment {
+    /// MIME type (e.g., "application/pdf")
+    pub content_type: String,
+    /// Filename shown to recipient
+    pub filename: String,
+    /// Raw file content (will be base64 encoded for API)
+    pub content: Vec<u8>,
+}
 
 /// Check if email domain is a test domain per RFC 2606 (reserved for testing/documentation).
 /// Returns true for domains that should NOT receive real emails.
@@ -66,11 +78,21 @@ struct EmailContent {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct ApiAttachment {
+    #[serde(rename = "type")]
+    content_type: String,
+    filename: String,
+    content: String, // Base64 encoded
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct EmailRequest {
     personalizations: Vec<EmailPersonalization>,
     from: EmailAddress,
     subject: String,
     content: Vec<EmailContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachments: Option<Vec<ApiAttachment>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -87,6 +109,7 @@ struct EmailParams<'a> {
     subject: &'a str,
     body: &'a str,
     is_html: bool,
+    attachments: Option<&'a [EmailAttachment]>,
 }
 
 pub struct EmailService {
@@ -120,6 +143,17 @@ impl EmailService {
             "text/plain"
         };
 
+        let api_attachments = params.attachments.map(|attachments| {
+            attachments
+                .iter()
+                .map(|a| ApiAttachment {
+                    content_type: a.content_type.clone(),
+                    filename: a.filename.clone(),
+                    content: BASE64.encode(&a.content),
+                })
+                .collect()
+        });
+
         let request = EmailRequest {
             personalizations: vec![EmailPersonalization {
                 to: vec![EmailAddress {
@@ -139,6 +173,7 @@ impl EmailService {
                 content_type: content_type.to_string(),
                 value: params.body.to_string(),
             }],
+            attachments: api_attachments,
         };
 
         let response = self
@@ -184,6 +219,20 @@ impl EmailService {
         body: &str,
         is_html: bool,
     ) -> Result<()> {
+        self.send_email_with_attachments(from_addr, to_addr, subject, body, is_html, None)
+            .await
+    }
+
+    /// Send email with optional attachments
+    pub async fn send_email_with_attachments(
+        &self,
+        from_addr: &str,
+        to_addr: &str,
+        subject: impl Into<String>,
+        body: &str,
+        is_html: bool,
+        attachments: Option<&[EmailAttachment]>,
+    ) -> Result<()> {
         let (to_email, to_name) =
             parse_email_address(to_addr).context("Failed to parse recipient address")?;
 
@@ -204,6 +253,7 @@ impl EmailService {
             subject: &subject,
             body,
             is_html,
+            attachments,
         })
         .await
     }

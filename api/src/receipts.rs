@@ -1,10 +1,19 @@
 use crate::database::email::EmailType;
 use crate::database::Database;
+use crate::invoices;
 use anyhow::{Context, Result};
+use email_utils::{EmailAttachment, EmailService};
+use std::sync::Arc;
 
 /// Send payment receipt email after successful payment
-/// Returns the receipt number assigned
-pub async fn send_payment_receipt(db: &Database, contract_id: &[u8]) -> Result<i64> {
+/// If email_service is provided, sends directly with invoice PDF attached.
+/// Otherwise, queues plain text receipt for reliable delivery.
+/// Returns the receipt number assigned.
+pub async fn send_payment_receipt(
+    db: &Database,
+    contract_id: &[u8],
+    email_service: Option<&Arc<EmailService>>,
+) -> Result<i64> {
     // Get contract details
     let contract_hex = hex::encode(contract_id);
     let contract = db
@@ -71,6 +80,39 @@ pub async fn send_payment_receipt(db: &Database, contract_id: &[u8]) -> Result<i
     let offering_name = format!("Offering {}", contract.offering_id);
     let provider_name = "Provider"; // Will fetch from provider_profiles table
 
+    // Try to generate invoice PDF if email service is available
+    let invoice_pdf = if email_service.is_some() {
+        match invoices::get_invoice_pdf(db, contract_id).await {
+            Ok(pdf) => Some(pdf),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to generate invoice PDF for contract {}, will send receipt without attachment: {}",
+                    contract_hex,
+                    e
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Get invoice number for the email body
+    let invoice_number = match invoices::get_invoice_metadata(db, contract_id).await {
+        Ok(inv) => Some(inv.invoice_number),
+        Err(_) => None,
+    };
+
+    // Adjust footer based on whether invoice is attached
+    let footer = if invoice_pdf.is_some() {
+        format!(
+            "Your tax invoice ({}) is attached to this email.",
+            invoice_number.as_deref().unwrap_or("N/A")
+        )
+    } else {
+        "For a tax invoice, visit your dashboard or contact support.".to_string()
+    };
+
     let body = format!(
         r#"Receipt #{receipt_number}
 Date: {receipt_date}
@@ -95,8 +137,7 @@ Contract ID:     {contract_id}
 View your rentals: https://decent-cloud.org/dashboard/rentals
 
 ───────────────────────────────────
-This is a payment receipt, not a tax invoice.
-For a tax invoice, visit your dashboard or contact support.
+{footer}
 
 Decent Cloud
 "#,
@@ -112,19 +153,44 @@ Decent Cloud
         start_date = start_date,
         end_date = end_date,
         contract_id = contract_hex,
+        footer = footer,
     );
 
-    // Queue email to requester's contact email
-    db.queue_email(
-        &contract.requester_contact,
-        "noreply@decent-cloud.org",
-        &subject,
-        &body,
-        false,
-        EmailType::General,
-    )
-    .await
-    .context("Failed to queue receipt email")?;
+    let from_addr = "noreply@decent-cloud.org";
+
+    // Send with attachment if we have both email service and PDF
+    if let (Some(service), Some(pdf)) = (email_service, invoice_pdf) {
+        let invoice_num = invoice_number.as_deref().unwrap_or("invoice");
+        let attachment = EmailAttachment {
+            content_type: "application/pdf".to_string(),
+            filename: format!("{}.pdf", invoice_num),
+            content: pdf,
+        };
+
+        service
+            .send_email_with_attachments(
+                from_addr,
+                &contract.requester_contact,
+                &subject,
+                &body,
+                false,
+                Some(&[attachment]),
+            )
+            .await
+            .context("Failed to send receipt email with invoice")?;
+    } else {
+        // Fall back to queuing plain text receipt
+        db.queue_email(
+            &contract.requester_contact,
+            from_addr,
+            &subject,
+            &body,
+            false,
+            EmailType::General,
+        )
+        .await
+        .context("Failed to queue receipt email")?;
+    }
 
     tracing::info!(
         "Receipt #{} sent to {} for contract {}",
