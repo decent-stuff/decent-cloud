@@ -377,7 +377,7 @@ impl ContractsApi {
 
     /// Get contract extensions
     ///
-    /// Returns extension history for a contract
+    /// Returns extension history for a contract. User must be the requester or provider.
     #[oai(
         path = "/contracts/:id/extensions",
         method = "get",
@@ -386,6 +386,7 @@ impl ContractsApi {
     async fn get_contract_extensions(
         &self,
         db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractExtension>>> {
         let contract_id = match hex::decode(&id.0) {
@@ -398,6 +399,34 @@ impl ContractsApi {
                 })
             }
         };
+
+        // Authorization: verify user is a party to this contract
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey && contract.provider_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: you are not a party to this contract".into()),
+            });
+        }
 
         match db.get_contract_extensions(&contract_id).await {
             Ok(extensions) => Json(ApiResponse {

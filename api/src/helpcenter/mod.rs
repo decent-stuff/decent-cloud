@@ -33,8 +33,7 @@ fn payment_method_label(method: &str) -> &str {
 
 /// Generate formatted timestamp for article footer
 fn format_timestamp(timestamp_ns: i64) -> String {
-    let dt =
-        DateTime::from_timestamp(timestamp_ns / 1_000_000_000, 0).unwrap_or_else(|| Utc::now());
+    let dt = DateTime::from_timestamp(timestamp_ns / 1_000_000_000, 0).unwrap_or_else(Utc::now);
     dt.format("%Y-%m-%d").to_string()
 }
 
@@ -82,7 +81,7 @@ pub fn generate_provider_article(profile: &ProviderProfile) -> Result<String> {
         for point in usps {
             article.push_str(&format!("- {}\n", point));
         }
-        article.push_str("\n");
+        article.push('\n');
     }
 
     // Getting Started (static)
@@ -104,7 +103,7 @@ pub fn generate_provider_article(profile: &ProviderProfile) -> Result<String> {
             for method in payment_methods {
                 article.push_str(&format!("- {}\n", payment_method_label(&method)));
             }
-            article.push_str("\n");
+            article.push('\n');
         }
 
         if let Some(refund) = &profile.refund_policy {
