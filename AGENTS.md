@@ -56,9 +56,9 @@ After completing any feature or fix, verify ALL of the following before committi
    - Legacy comments (e.g., `// TODO: remove`, `// old implementation`)
    - Orphaned imports
    - Dead feature flags
-6. **Clean Build**: Run `cargo make` and fix ANY warnings or errors
-8. **Minimal Diff**: Check `git diff` and confirm changes are minimal and aligned with project rules. Reduce if possible!
-9. **Commit**: Only commit when functionality is FULLY implemented and `cargo make` passes
+6. **Clean Build**: Run `cargo cargo clippy --tests` and `cargo nextest run` in the project you changed and fix ANY warnings or errors
+7. **Minimal Diff**: Check `git diff` and confirm changes are minimal and aligned with project rules. Reduce if possible!
+8. **Commit**: Only commit when functionality is FULLY implemented and cargo clippy is clean and cargo nextest run passes without warnings or errors
 
 # Automation and Configuration Checks
 
@@ -73,14 +73,6 @@ After completing any feature or fix, verify ALL of the following before committi
 # Third-Party Source Code
 
 Source code for third-party packages (e.g., Chatwoot) may be available in `third_party/` directory. When debugging integration issues with external services, check this directory for implementation details and API contracts.
-
-# Deployment and Verification
-
-After fully completing implementation (all tests pass, `cargo make` clean):
-1. Deploy to dev environment: `./cf/deploy.py deploy dev`
-2. Check logs: `./cf/deploy.py logs dev api-server`
-3. Verify the feature works as expected in logs
-4. Fix any errors found in logs before considering the task complete
 
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
