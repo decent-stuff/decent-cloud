@@ -14,7 +14,7 @@
 	let successMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let showAuthModal = $state(false);
-	let expandedRow = $state<string | null>(null);
+	let expandedRow = $state<number | null>(null);
 	let sortDir = $state<"asc" | "desc">("asc");
 	let showFilters = $state(false);
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -28,6 +28,7 @@
 	let minCores = $state<number | undefined>(undefined);
 	let unmeteredOnly = $state(false);
 	let minTrust = $state<number | undefined>(undefined);
+	let showDemoOfferings = $state(true);
 
 	// Derived: unique countries and cities from offerings
 	let countries = $derived([...new Set(offerings.map(o => o.datacenter_country).filter(Boolean))].sort());
@@ -73,6 +74,11 @@
 		if (minTrust !== undefined) {
 			const threshold = minTrust;
 			result = result.filter(o => (o.trust_score ?? 0) >= threshold);
+		}
+
+		// Hide demo offerings if toggle is off (non-demo always shown)
+		if (!showDemoOfferings) {
+			result = result.filter(o => !o.is_example);
 		}
 
 		// Sort by price
@@ -135,6 +141,7 @@
 		minCores = undefined;
 		unmeteredOnly = false;
 		minTrust = undefined;
+		showDemoOfferings = true;
 		searchQuery = "";
 		fetchOfferings();
 	}
@@ -148,7 +155,8 @@
 		selectedOffering = offering;
 	}
 
-	function toggleRow(id: string) {
+	function toggleRow(id: number | undefined) {
+		if (id === undefined) return;
 		expandedRow = expandedRow === id ? null : id;
 	}
 
@@ -387,6 +395,18 @@
 						<span class="text-sm text-white/80 group-hover:text-white">Unmetered bandwidth only</span>
 					</label>
 				</div>
+
+				<!-- Show Demo Offerings Filter -->
+				<div>
+					<label class="flex items-center gap-2 cursor-pointer group">
+						<input
+							type="checkbox"
+							bind:checked={showDemoOfferings}
+							class="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
+						/>
+						<span class="text-sm text-white/80 group-hover:text-white">Show demo offerings</span>
+					</label>
+				</div>
 				</div>
 			</div>
 		</aside>
@@ -433,11 +453,11 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each filteredOfferings as offering (offering.offering_id)}
-								{@const isExpanded = expandedRow === offering.offering_id}
+							{#each filteredOfferings as offering (offering.id)}
+								{@const isExpanded = expandedRow === offering.id}
 								<tr
 									class="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
-									onclick={() => toggleRow(offering.offering_id)}
+									onclick={() => toggleRow(offering.id)}
 								>
 									<td class="py-3 pr-4">
 										<div class="flex items-center gap-2">
@@ -542,13 +562,13 @@
 
 				<!-- Mobile Cards -->
 				<div class="md:hidden space-y-3">
-					{#each filteredOfferings as offering (offering.offering_id)}
+					{#each filteredOfferings as offering (offering.id)}
 						<div
 							role="button"
 							tabindex="0"
 							class="bg-white/5 rounded-lg p-4 border border-white/10"
-							onclick={() => toggleRow(offering.offering_id)}
-							onkeydown={(e) => e.key === 'Enter' && toggleRow(offering.offering_id)}
+							onclick={() => toggleRow(offering.id)}
+							onkeydown={(e) => e.key === 'Enter' && toggleRow(offering.id)}
 						>
 							<div class="flex items-start justify-between mb-2">
 								<div>
@@ -595,7 +615,7 @@
 									>Rent</button>
 								{/if}
 							</div>
-							{#if expandedRow === offering.offering_id}
+							{#if expandedRow === offering.id}
 								<div class="mt-3 pt-3 border-t border-white/10 text-sm space-y-2">
 									<div class="text-white/70">{offering.description || "No description"}</div>
 									<div class="grid grid-cols-2 gap-2 text-xs">
