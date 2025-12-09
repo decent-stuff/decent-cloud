@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use stripe::{
     CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession,
     CreateCheckoutSessionLineItems, CreateCheckoutSessionLineItemsPriceData,
@@ -22,8 +22,7 @@ impl std::fmt::Debug for StripeClient {
 impl StripeClient {
     /// Creates a new Stripe client using the API key from environment
     pub fn new() -> Result<Self> {
-        let secret_key = std::env::var("STRIPE_SECRET_KEY")
-            .context("STRIPE_SECRET_KEY environment variable not set")?;
+        let secret_key = std::env::var("STRIPE_SECRET_KEY")?;
 
         let client = Client::new(secret_key);
         Ok(Self { client })
@@ -46,9 +45,7 @@ impl StripeClient {
         product_name: &str,
         contract_id: &str,
     ) -> Result<String> {
-        let currency = currency
-            .parse::<Currency>()
-            .context("Invalid currency code")?;
+        let currency = currency.parse::<Currency>()?;
 
         let frontend_url =
             std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
@@ -77,12 +74,18 @@ impl StripeClient {
             quantity: Some(1),
             ..Default::default()
         }]);
-        params.automatic_tax = Some(stripe::CreateCheckoutSessionAutomaticTax {
-            enabled: true,
-            liability: None,
-        });
-        params.tax_id_collection =
-            Some(stripe::CreateCheckoutSessionTaxIdCollection { enabled: true });
+        // Automatic tax requires origin address configured in Stripe dashboard
+        // https://dashboard.stripe.com/settings/tax
+        if std::env::var("STRIPE_AUTOMATIC_TAX").is_ok() {
+            params.automatic_tax = Some(stripe::CreateCheckoutSessionAutomaticTax {
+                enabled: true,
+                liability: None,
+            });
+            params.tax_id_collection =
+                Some(stripe::CreateCheckoutSessionTaxIdCollection { enabled: true });
+        } else {
+            tracing::warn!("STRIPE_AUTOMATIC_TAX not set - automatic tax calculation disabled. Set STRIPE_AUTOMATIC_TAX=true and configure origin address at https://dashboard.stripe.com/settings/tax to enable.");
+        }
         params.success_url = Some(&success_url);
         params.cancel_url = Some(&cancel_url);
         params.metadata = Some(
@@ -91,9 +94,7 @@ impl StripeClient {
                 .collect(),
         );
 
-        let session = CheckoutSession::create(&self.client, params)
-            .await
-            .context("Failed to create Stripe Checkout Session")?;
+        let session = CheckoutSession::create(&self.client, params).await?;
 
         session
             .url
@@ -113,9 +114,7 @@ impl StripeClient {
         amount: i64,
         currency: &str,
     ) -> Result<(String, String)> {
-        let currency = currency
-            .parse::<Currency>()
-            .context("Invalid currency code")?;
+        let currency = currency.parse::<Currency>()?;
 
         let mut params = CreatePaymentIntent::new(amount, currency);
         params.automatic_payment_methods =
@@ -126,9 +125,7 @@ impl StripeClient {
                 ),
             });
 
-        let payment_intent = PaymentIntent::create(&self.client, params)
-            .await
-            .context("Failed to create Stripe PaymentIntent")?;
+        let payment_intent = PaymentIntent::create(&self.client, params).await?;
 
         let client_secret = payment_intent
             .client_secret
@@ -146,12 +143,8 @@ impl StripeClient {
     /// True if payment succeeded, false otherwise
     #[allow(dead_code)]
     pub async fn verify_payment_intent(&self, payment_intent_id: &str) -> Result<bool> {
-        let id: PaymentIntentId = payment_intent_id
-            .parse()
-            .context("Invalid PaymentIntent ID format")?;
-        let payment_intent = PaymentIntent::retrieve(&self.client, &id, &[])
-            .await
-            .context("Failed to retrieve PaymentIntent")?;
+        let id: PaymentIntentId = payment_intent_id.parse()?;
+        let payment_intent = PaymentIntent::retrieve(&self.client, &id, &[]).await?;
 
         Ok(payment_intent.status == stripe::PaymentIntentStatus::Succeeded)
     }
@@ -169,9 +162,7 @@ impl StripeClient {
         payment_intent_id: &str,
         amount: Option<i64>,
     ) -> Result<String> {
-        let intent_id: PaymentIntentId = payment_intent_id
-            .parse()
-            .context("Invalid PaymentIntent ID format")?;
+        let intent_id: PaymentIntentId = payment_intent_id.parse()?;
 
         let mut params = CreateRefund::new();
         params.payment_intent = Some(intent_id);
@@ -180,9 +171,7 @@ impl StripeClient {
             params.amount = Some(amt);
         }
 
-        let refund = Refund::create(&self.client, params)
-            .await
-            .context("Failed to create Stripe refund")?;
+        let refund = Refund::create(&self.client, params).await?;
 
         Ok(refund.id.to_string())
     }
@@ -196,10 +185,8 @@ impl StripeClient {
     /// True if refund exists, false otherwise
     #[allow(dead_code)]
     pub async fn verify_refund(&self, refund_id: &str) -> Result<bool> {
-        let id: RefundId = refund_id.parse().context("Invalid Refund ID format")?;
-        let _refund = Refund::retrieve(&self.client, &id, &[])
-            .await
-            .context("Failed to retrieve Refund")?;
+        let id: RefundId = refund_id.parse()?;
+        let _refund = Refund::retrieve(&self.client, &id, &[]).await?;
 
         // Refund retrieved successfully, it exists
         Ok(true)
