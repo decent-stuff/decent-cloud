@@ -1,14 +1,5 @@
 # TODO
 
-## UI/UX Improvements
-
-### Offering Visibility Toggle
-Current blue eye icon for "public" vs gray slashed eye for "private" is unclear.
-**Improvement:** Use green "Public" and red "Private" badges instead of icon-only toggle.
-Location: `website/src/routes/dashboard/offerings/+page.svelte` lines 326-343
-
----
-
 ## Provider Provisioning Agent
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
@@ -115,6 +106,25 @@ All billing features implemented:
 - Track paid quota separately from free tier
 - Consider monthly subscription vs pay-per-notification
 
+## Rentals Deep-Linking
+
+**Priority:** LOW - Nice to have
+**Effort:** Small
+
+Add support for direct links to specific contracts on the rentals page (e.g., `/dashboard/rentals?contract=abc123` or `/dashboard/rentals/[contract_id]`).
+
+**Use cases:**
+- Email receipts can link directly to the purchased contract
+- Bookmarking specific contracts
+- Support links when discussing specific rentals
+
+**Implementation:**
+- Read `contract_id` from URL params on rentals page
+- Auto-scroll to and highlight the matching contract
+- Or: Create a separate `/dashboard/rentals/[contract_id]` route for contract detail view
+
+---
+
 ## ICPay Integration
 
 ### Manual Payout Requirement
@@ -126,3 +136,58 @@ All billing features implemented:
 ### Future: Automated Payouts
 To automate payouts, implement direct ICRC-1 transfers from platform wallet using `ic-agent`.
 See [completed spec](docs/completed/2025-12-05-icpay-escrow-payments-spec.md#future-work-automated-provider-payouts) for research details. Requires: platform wallet key management decision.
+
+---
+
+## Rental State Machine Review (2025-12-09)
+
+### Current State Flow
+```
+requested → accepted → provisioning → provisioned → active
+    ↓          ↓           ↓
+ rejected   cancelled   cancelled
+```
+
+Payment status runs parallel: `pending → succeeded/failed → refunded`
+
+### Improvement: Remove Auto-Accept on Payment
+
+**Status:** Ready to implement
+**Priority:** MEDIUM - Improves provider control
+
+Currently, Stripe/ICPay webhooks auto-accept contracts on payment success. This bypasses provider review.
+
+**Proposed change:**
+1. Remove `accept_contract()` call from webhook handlers
+2. Keep contract in `requested` status after payment succeeds
+3. Provider explicitly accepts/rejects via existing endpoints
+4. If rejected, automatic refund (already implemented)
+
+**Benefits:**
+- Providers can verify capacity before accepting
+- Suspicious requests can be rejected
+- Aligns with marketplace best practices (provider approval)
+
+**Files to modify:**
+- `/code/api/src/openapi/webhooks.rs` - Remove auto-accept calls (~lines 230, 633)
+
+### Other Findings from State Machine Audit
+
+**Low Priority Issues:**
+
+1. **"active" status never assigned** - Contracts stay "provisioned" forever. Both states treated identically in queries. Consider consolidating to single state or adding explicit transition.
+
+2. **No centralized state transition validator** - Each endpoint manually checks valid transitions. Risk of invalid transitions if new endpoints added. Consider creating `validate_transition(old, new) -> bool` function.
+
+3. **Float arithmetic for payment calculation** - Uses `(price * hours / 720.0) * 1e9`. Consider integer-only math to avoid precision loss. Location: `contracts.rs:391-392`
+
+4. **ICPay webhook race condition** - Frontend sets `icpay_transaction_id`, webhook sets `icpay_payment_id`. If webhook arrives first, potential data conflict. Low risk in practice.
+
+5. **No contract archival** - Old completed/cancelled contracts stay in DB indefinitely. Consider cleanup job for contracts older than N years.
+
+**Already Good:**
+- ✅ Clean separation of contract status vs payment status
+- ✅ Prorated refund calculation is solid
+- ✅ Status change history tracked for audit
+- ✅ Transaction boundaries for atomic updates
+- ✅ Stripe refunds work correctly
