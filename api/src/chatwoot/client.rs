@@ -795,8 +795,9 @@ impl ChatwootClient {
 
         let teams: Vec<TeamResponse> = resp.json().await.context("Failed to parse teams")?;
 
-        // Check if team already exists
-        if let Some(existing) = teams.into_iter().find(|t| t.name == name) {
+        // Check if team already exists (case-insensitive - Chatwoot lowercases names)
+        let name_lower = name.to_lowercase();
+        if let Some(existing) = teams.into_iter().find(|t| t.name.to_lowercase() == name_lower) {
             tracing::debug!("Team '{}' already exists with id={}", name, existing.id);
             return Ok(existing);
         }
