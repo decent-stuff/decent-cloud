@@ -138,48 +138,48 @@ pub async fn create_provider_agent(db: &Database, pubkey: &[u8]) -> Result<Strin
         .await
         .context("Failed to store Chatwoot user ID")?;
 
-    // Create dedicated inbox for the provider
+    // Find or create dedicated inbox for the provider (idempotent)
     let inbox_name = format!("{} Support", name);
     let inbox = account_client
-        .create_inbox(&inbox_name)
+        .find_or_create_inbox(&inbox_name)
         .await
-        .context("Failed to create Chatwoot inbox for provider")?;
+        .context("Failed to find or create Chatwoot inbox for provider")?;
     tracing::info!(
-        "Created Chatwoot inbox '{}' (id={}) for provider {}",
+        "Using Chatwoot inbox '{}' (id={}) for provider {}",
         inbox.name,
         inbox.id,
         hex::encode(pubkey)
     );
 
-    // Create dedicated team for the provider
+    // Find or create dedicated team for the provider (idempotent)
     let team_name = format!("{} Team", name);
     let team_desc = format!("Support team for {}", name);
     let team = account_client
-        .create_team(&team_name, &team_desc)
+        .find_or_create_team(&team_name, &team_desc)
         .await
-        .context("Failed to create Chatwoot team for provider")?;
+        .context("Failed to find or create Chatwoot team for provider")?;
     tracing::info!(
-        "Created Chatwoot team '{}' (id={}) for provider {}",
+        "Using Chatwoot team '{}' (id={}) for provider {}",
         team.name,
         team.id,
         hex::encode(pubkey)
     );
 
-    // Add the provider agent to their team
+    // Add the provider agent to their team (idempotent - Chatwoot ignores duplicates)
     account_client
         .add_agents_to_team(team.id, &[user.id])
         .await
         .context("Failed to add provider agent to team")?;
 
-    // Create dedicated Help Center portal
+    // Find or create dedicated Help Center portal (idempotent)
     let portal_slug = generate_portal_slug(name, pubkey);
     let portal_name = format!("{} Help Center", name);
     let portal = account_client
-        .create_portal(&portal_name, &portal_slug)
+        .find_or_create_portal(&portal_name, &portal_slug)
         .await
-        .context("Failed to create Chatwoot portal")?;
+        .context("Failed to find or create Chatwoot portal")?;
     tracing::info!(
-        "Created Chatwoot portal '{}' (slug={}) for provider {}",
+        "Using Chatwoot portal '{}' (slug={}) for provider {}",
         portal.name,
         portal.slug,
         hex::encode(pubkey)

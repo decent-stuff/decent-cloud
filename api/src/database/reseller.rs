@@ -249,6 +249,7 @@ impl Database {
     }
 
     /// Create a new reseller order
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_reseller_order(
         &self,
         contract_id: &[u8],

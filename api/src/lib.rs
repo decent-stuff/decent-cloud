@@ -9,4 +9,3 @@ pub mod receipts;
 mod search;
 mod stripe_client;
 pub mod support_bot;
-mod vies;

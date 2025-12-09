@@ -44,9 +44,9 @@ pub async fn handle_customer_message(
 ) -> Result<()> {
     tracing::debug!("handle_customer_message: conversation={}", conversation_id);
 
-    // Fetch all portal slugs
-    let portal_slugs = match chatwoot.list_portals().await {
-        Ok(slugs) => slugs,
+    // Fetch all portals
+    let portals = match chatwoot.list_portals().await {
+        Ok(portals) => portals,
         Err(e) => {
             tracing::error!(
                 "Failed to list portals for conversation {}: {}",
@@ -66,7 +66,7 @@ pub async fn handle_customer_message(
         }
     };
 
-    if portal_slugs.is_empty() {
+    if portals.is_empty() {
         tracing::warn!(
             "No Help Center portals configured, escalating conversation {}",
             conversation_id
@@ -85,14 +85,14 @@ pub async fn handle_customer_message(
 
     tracing::debug!(
         "Fetching help center articles from {} portals for conversation {}",
-        portal_slugs.len(),
+        portals.len(),
         conversation_id
     );
 
     // Fetch articles from all portals in parallel
-    let fetch_futures: Vec<_> = portal_slugs
+    let fetch_futures: Vec<_> = portals
         .iter()
-        .map(|slug| chatwoot.fetch_help_center_articles(slug))
+        .map(|portal| chatwoot.fetch_help_center_articles(&portal.slug))
         .collect();
 
     let fetch_results = join_all(fetch_futures).await;
@@ -107,7 +107,7 @@ pub async fn handle_customer_message(
             Err(e) => {
                 tracing::warn!(
                     "Failed to fetch articles from portal '{}': {}",
-                    portal_slugs[idx],
+                    portals[idx].slug,
                     e
                 );
             }
@@ -117,7 +117,7 @@ pub async fn handle_customer_message(
     if articles.is_empty() {
         tracing::warn!(
             "No articles found across {} portals, escalating conversation {}",
-            portal_slugs.len(),
+            portals.len(),
             conversation_id
         );
         chatwoot
@@ -135,7 +135,7 @@ pub async fn handle_customer_message(
     tracing::debug!(
         "Found {} articles across {} portals, searching for relevant content",
         articles.len(),
-        portal_slugs.len()
+        portals.len()
     );
 
     // 4. Search articles (semantic if configured, else keyword)
