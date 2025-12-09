@@ -638,17 +638,27 @@ impl ChatwootClient {
     }
 
     /// Create a Help Center portal for a provider.
+    /// Uses `frontend_url` as the custom domain for the portal.
     pub async fn create_portal(&self, name: &str, slug: &str) -> Result<PortalResponse> {
         let url = format!(
             "{}/api/v1/accounts/{}/portals",
             self.base_url, self.account_id
         );
 
+        // Extract domain from frontend_url (e.g., "https://support.decent-cloud.org" -> "support.decent-cloud.org")
+        // Chatwoot has a bug where it always calls URI.parse on custom_domain even when nil
+        let custom_domain = self
+            .frontend_url
+            .strip_prefix("https://")
+            .or_else(|| self.frontend_url.strip_prefix("http://"))
+            .unwrap_or(&self.frontend_url);
+
         // Chatwoot expects nested `portal` object
         #[derive(Serialize)]
         struct PortalData<'a> {
             name: &'a str,
             slug: &'a str,
+            custom_domain: &'a str,
         }
 
         #[derive(Serialize)]
@@ -661,7 +671,11 @@ impl ChatwootClient {
             .post(&url)
             .header("api_access_token", &self.api_token)
             .json(&CreatePortalRequest {
-                portal: PortalData { name, slug },
+                portal: PortalData {
+                    name,
+                    slug,
+                    custom_domain,
+                },
             })
             .send()
             .await
