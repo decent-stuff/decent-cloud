@@ -137,7 +137,7 @@ async fn test_search_offerings_excludes_private() {
         .unwrap();
 
     // Should return public offerings (including examples), not the private one
-    assert!(results.len() >= 1);
+    assert!(!results.is_empty());
     assert!(results.iter().any(|o| o.offering_id == "off-1"));
     assert!(results
         .iter()
@@ -1133,7 +1133,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
 
     // Test < operator (1 test offering with 4 cores + example offerings with cores < 8)
     let results = db.search_offerings_dsl("cores:<8", 10, 0).await.unwrap();
-    assert!(results.len() >= 1);
+    assert!(!results.is_empty());
     assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) < 8));
 }
 
@@ -1161,7 +1161,7 @@ async fn test_search_offerings_dsl_excludes_private() {
         .search_offerings_dsl("type:compute", 100, 0)
         .await
         .unwrap();
-    assert!(results.len() >= 1);
+    assert!(!results.is_empty());
     assert!(results
         .iter()
         .all(|o| o.visibility.to_lowercase() == "public"));

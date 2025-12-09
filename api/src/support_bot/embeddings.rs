@@ -133,6 +133,7 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
 /// Clear the embedding cache (for testing)
 #[cfg(test)]
+#[allow(dead_code)] // Test utility function
 pub fn clear_cache() {
     let mut cache = EMBEDDING_CACHE.write().unwrap();
     *cache = None;

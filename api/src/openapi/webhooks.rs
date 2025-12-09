@@ -21,11 +21,6 @@ struct StripeEventData {
 }
 
 #[derive(Debug, Deserialize)]
-struct StripePaymentIntent {
-    id: String,
-}
-
-#[derive(Debug, Deserialize)]
 struct StripeCheckoutSession {
     id: String,
     metadata: Option<serde_json::Value>,
@@ -293,6 +288,7 @@ struct ChatwootWebhookPayload {
 #[derive(Debug, Deserialize)]
 struct ChatwootConversation {
     id: i64,
+    #[allow(dead_code)] // Part of API response, kept for future use
     status: Option<String>,
     custom_attributes: Option<serde_json::Value>,
 }
@@ -1243,9 +1239,9 @@ mod tests {
     fn test_reverse_charge_detection_with_vat_id_and_zero_tax() {
         // Reverse charge applies when: VAT ID present AND tax amount is 0
         let customer_tax_id = Some("eu_vat: DE123456789".to_string());
-        let tax_amount_cents = Some(0);
+        let tax_amount_cents: Option<i64> = Some(0);
 
-        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents == Some(0);
 
         assert!(
             reverse_charge,
@@ -1257,9 +1253,9 @@ mod tests {
     fn test_reverse_charge_detection_without_vat_id() {
         // No reverse charge if VAT ID is missing
         let customer_tax_id: Option<String> = None;
-        let tax_amount_cents = Some(0);
+        let tax_amount_cents: Option<i64> = Some(0);
 
-        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents == Some(0);
 
         assert!(
             !reverse_charge,
@@ -1271,9 +1267,9 @@ mod tests {
     fn test_reverse_charge_detection_with_vat_id_and_nonzero_tax() {
         // No reverse charge if tax is applied (domestic transaction)
         let customer_tax_id = Some("eu_vat: FR12345678901".to_string());
-        let tax_amount_cents = Some(250); // 19% VAT on €13.16
+        let tax_amount_cents: Option<i64> = Some(250); // 19% VAT on €13.16
 
-        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents == Some(0);
 
         assert!(
             !reverse_charge,

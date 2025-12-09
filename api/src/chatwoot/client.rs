@@ -42,6 +42,7 @@ struct CreatePlatformUserRequest<'a> {
 #[derive(Debug, Deserialize)]
 pub struct PlatformUserResponse {
     pub id: i64,
+    #[allow(dead_code)]
     pub email: String,
 }
 
@@ -413,7 +414,9 @@ impl std::fmt::Debug for ChatwootClient {
 #[derive(Debug, Deserialize)]
 pub struct InboxResponse {
     pub id: u32,
+    #[allow(dead_code)]
     pub name: String,
+    #[allow(dead_code)]
     pub channel_type: String,
 }
 
@@ -427,6 +430,7 @@ pub struct TeamResponse {
 /// Response from creating a portal.
 #[derive(Debug, Deserialize)]
 pub struct PortalResponse {
+    #[allow(dead_code)]
     pub id: i64,
     pub name: String,
     pub slug: String,
@@ -466,18 +470,6 @@ impl ChatwootClient {
             api_token,
             account_id,
         })
-    }
-
-    /// Creates a new Chatwoot client with explicit configuration.
-    #[cfg(test)]
-    pub fn new(base_url: &str, api_token: &str, account_id: u32) -> Self {
-        Self {
-            client: Client::new(),
-            base_url: base_url.to_string(),
-            frontend_url: base_url.to_string(),
-            api_token: api_token.to_string(),
-            account_id,
-        }
     }
 
     /// List all inboxes in the account.

@@ -7,8 +7,9 @@ pub struct IcpayClient {
     client: reqwest::Client,
 }
 
-/// ICPay payment object
+/// ICPay payment object (used for payment verification API)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Prepared for payment verification feature
 pub struct IcpayPayment {
     pub id: String,
     pub status: String, // pending, completed, failed, canceled, refunded, mismatched
@@ -67,6 +68,7 @@ impl IcpayClient {
     ///
     /// # Returns
     /// Vector of payments with matching metadata
+    #[allow(dead_code)] // Prepared for payment verification feature
     pub async fn get_payments_by_metadata(
         &self,
         metadata: serde_json::Value,
@@ -146,6 +148,7 @@ impl IcpayClient {
     ///
     /// # Returns
     /// True if a completed payment with matching metadata exists, false otherwise
+    #[allow(dead_code)] // Prepared for payment verification feature
     pub async fn verify_payment_by_metadata(&self, contract_id: &str) -> Result<bool> {
         let payments = self
             .get_payments_by_metadata(serde_json::json!({ "contractId": contract_id }))

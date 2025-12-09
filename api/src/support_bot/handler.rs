@@ -92,7 +92,7 @@ pub async fn handle_customer_message(
     // Fetch articles from all portals in parallel
     let fetch_futures: Vec<_> = portals
         .iter()
-        .map(|portal| chatwoot.fetch_help_center_articles(&portal.slug))
+        .map(|slug| chatwoot.fetch_help_center_articles(slug))
         .collect();
 
     let fetch_results = join_all(fetch_futures).await;

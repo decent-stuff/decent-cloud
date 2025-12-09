@@ -58,7 +58,7 @@ async fn insert_stripe_contract_with_timestamps(
     let created_at_ns: i64 = 0;
 
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'usd')",
         params.contract_id,
         params.requester_pubkey,
         ssh_pubkey,
@@ -1086,7 +1086,7 @@ fn test_calculate_prorated_refund_half_used() {
     );
 
     // Should be approximately 50% (500M e9s)
-    assert!(refund >= 499_000_000 && refund <= 501_000_000);
+    assert!((499_000_000..=501_000_000).contains(&refund));
 }
 
 #[test]
@@ -1138,7 +1138,7 @@ fn test_calculate_prorated_refund_90_percent_remaining() {
     );
 
     // Should be approximately 90% (900M e9s)
-    assert!(refund >= 899_000_000 && refund <= 901_000_000);
+    assert!((899_000_000..=901_000_000).contains(&refund));
 }
 
 #[tokio::test]
@@ -1190,8 +1190,8 @@ async fn test_cancel_contract_stripe_payment_without_client() {
     insert_stripe_contract_with_timestamps(
         &db,
         StripeContractParams {
-            contract_id,
-            requester_pubkey: requester_pk,
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
             provider_pubkey: provider_pk,
             offering_id: "off-1".to_string(),
             payment_intent_id: "pi_test_123".to_string(),

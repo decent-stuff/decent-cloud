@@ -452,8 +452,8 @@ mod tests {
         );
 
         // Should be continuous sequence (no gaps)
-        for i in 0..numbers.len() {
-            assert_eq!(numbers[i], (i + 1) as i64);
+        for (i, &number) in numbers.iter().enumerate() {
+            assert_eq!(number, (i + 1) as i64);
         }
     }
 

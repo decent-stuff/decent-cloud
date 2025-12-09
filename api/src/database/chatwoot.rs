@@ -6,6 +6,7 @@ use anyhow::Result;
 pub struct SlaBreach {
     pub message_id: i64,
     pub contract_id: String,
+    #[allow(dead_code)]
     pub conversation_id: i64,
     pub provider_pubkey: Vec<u8>,
     pub created_at: i64,

@@ -132,6 +132,7 @@ impl Database {
     }
 
     /// Get a reseller relationship by reseller and external provider pubkeys
+    #[allow(dead_code)] // Prepared for reseller API feature
     pub async fn get_reseller_relationship_by_pubkeys(
         &self,
         reseller_pubkey: &[u8],
@@ -323,6 +324,7 @@ impl Database {
     }
 
     /// List reseller orders for an external provider (orders they need to fulfill) with optional status filter
+    #[allow(dead_code)] // Prepared for reseller API feature
     pub async fn list_reseller_orders_for_external_provider(
         &self,
         pubkey: &[u8],

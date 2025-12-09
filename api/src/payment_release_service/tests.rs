@@ -25,7 +25,7 @@ fn test_release_calculation_one_day_out_of_thirty() {
     let payment_amount_e9s = 720;
     let start_ns = 0;
     let end_ns = 30 * 24 * 3600 * 1_000_000_000i64;
-    let current_ns = 1 * 24 * 3600 * 1_000_000_000i64;
+    let current_ns = 24 * 3600 * 1_000_000_000i64;
     let last_release_ns = start_ns;
 
     let period_duration_ns = current_ns - last_release_ns;

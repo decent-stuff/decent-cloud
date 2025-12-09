@@ -112,7 +112,7 @@ mod tests {
 </soap:Envelope>"#;
 
         let result = parse_vies_response(xml).unwrap();
-        assert_eq!(result.valid, true);
+        assert!(result.valid);
         assert_eq!(result.name, Some("Example GmbH".to_string()));
         assert_eq!(
             result.address,
@@ -137,7 +137,7 @@ mod tests {
 </soap:Envelope>"#;
 
         let result = parse_vies_response(xml).unwrap();
-        assert_eq!(result.valid, false);
+        assert!(!result.valid);
         assert_eq!(result.name, None);
         assert_eq!(result.address, None);
     }
@@ -159,7 +159,7 @@ mod tests {
 </soap:Envelope>"#;
 
         let result = parse_vies_response(xml).unwrap();
-        assert_eq!(result.valid, true);
+        assert!(result.valid);
         assert_eq!(result.name, None);
         assert_eq!(result.address, None);
     }

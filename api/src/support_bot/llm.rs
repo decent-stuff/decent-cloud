@@ -65,6 +65,7 @@ pub struct BotResponse {
 #[derive(Debug, Clone)]
 pub struct ArticleRef {
     pub title: String,
+    #[allow(dead_code)] // Kept for potential use in article links
     pub slug: String,
 }
 
