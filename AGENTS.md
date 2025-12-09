@@ -9,7 +9,7 @@
 - Every part of execution, every function, must be covered by at least one unit test.
 - WRITE NEW UNIT TESTS that cover both the positive and negative path of the new functionality.
 - Tests that you write MUST ASSERT MEANINGFUL BEHAVIOR and MAY NOT overlap coverage with other tests (check for overlaps!).
-- Prefer running crate-local `cargo clippy` and `cargo nextest run` that you are building.
+- Prefer running crate-local `cargo clippy --tests` and `cargo nextest run` that you are building.
 - You must fix any warnings or errors before moving on to the next step.
 - WHENEVER you fix any issue you MUST check the rest of the codebase to see if the same or similar issue exists elsewhere and FIX ALL INSTANCES.
 - You must strictly adhere to MINIMAL, YAGNI, KISS, DRY, YAGNI, POLA principles. If you can't - STOP and ask the user how to proceed
@@ -56,7 +56,7 @@ After completing any feature or fix, verify ALL of the following before committi
    - Legacy comments (e.g., `// TODO: remove`, `// old implementation`)
    - Orphaned imports
    - Dead feature flags
-6. **Clean Build**: Run `cargo cargo clippy --tests` and `cargo nextest run` in the project you changed and fix ANY warnings or errors
+6. **Clean Build**: Run `cargo clippy --tests` and `cargo nextest run` in the project you changed and fix ANY warnings or errors
 7. **Minimal Diff**: Check `git diff` and confirm changes are minimal and aligned with project rules. Reduce if possible!
 8. **Commit**: Only commit when functionality is FULLY implemented and cargo clippy is clean and cargo nextest run passes without warnings or errors
 
@@ -72,7 +72,7 @@ After completing any feature or fix, verify ALL of the following before committi
 
 # Third-Party Source Code
 
-Source code for third-party packages (e.g., Chatwoot) may be available in `third_party/` directory. When debugging integration issues with external services, check this directory for implementation details and API contracts.
+Source code for third-party packages (e.g., Chatwoot) are available in `third_party/` directory. When debugging integration issues with external services, check this directory for implementation details and API contracts.
 
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
