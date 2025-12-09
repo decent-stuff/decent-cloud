@@ -40,6 +40,9 @@ RUN mkdir -p /data /identity && \
     chown -R appuser:appuser /usr/local/bin/api-server /usr/local/bin/dc /usr/local/bin/validator-entrypoint.sh /migrations /data /identity && \
     chmod +x /usr/local/bin/validator-entrypoint.sh
 
+# Set Typst cache directory for package downloads (uses mounted /data volume)
+ENV XDG_CACHE_HOME=/data
+
 # Switch to non-root user
 USER appuser
 

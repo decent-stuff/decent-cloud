@@ -371,25 +371,33 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
         note,
     };
 
-    // Serialize to JSON
-    let json_data = serde_json::to_string(&invoice_data)?;
-
-    // Create temp directory for Typst output
+    // Create temp directory for Typst files
     let temp_dir = tempfile::tempdir()?;
     let output_path = temp_dir.path().join("invoice.pdf");
 
-    // Get template path (relative to workspace root)
-    let template_path = std::env::current_dir()?.join("api/templates/invoice.typ");
+    // Write JSON data to file (avoids command-line length limits)
+    let json_path = temp_dir.path().join("data.json");
+    let json_data = serde_json::to_string(&invoice_data)?;
+    tokio::fs::write(&json_path, &json_data)
+        .await
+        .context("Failed to write invoice data")?;
 
-    if !template_path.exists() {
-        anyhow::bail!("Invoice template not found at {:?}", template_path);
+    // Write embedded template to temp file (template is compiled into binary)
+    const INVOICE_TEMPLATE: &str = include_str!("../templates/invoice.typ");
+    let template_path = temp_dir.path().join("invoice.typ");
+    tokio::fs::write(&template_path, INVOICE_TEMPLATE)
+        .await
+        .context("Failed to write invoice template")?;
+
+    // Run Typst CLI - set cache dir if not already set (for package downloads)
+    let mut cmd = tokio::process::Command::new("typst");
+    if std::env::var("XDG_CACHE_HOME").is_err() {
+        cmd.env("XDG_CACHE_HOME", temp_dir.path());
     }
-
-    // Run Typst CLI
-    let output = tokio::process::Command::new("typst")
+    let output = cmd
         .arg("compile")
         .arg("--input")
-        .arg(format!("data={}", json_data))
+        .arg("data_file=data.json") // Relative to template in same temp dir
         .arg(&template_path)
         .arg(&output_path)
         .output()

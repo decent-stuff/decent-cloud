@@ -1,7 +1,7 @@
 #import "@preview/invoice-maker:1.1.0": *
 
-// Parse JSON data from sys.inputs.data
-#let invoice_data = json(sys.inputs.data)
+// Parse JSON data from file path passed via --input data_file=path
+#let invoice_data = json(sys.inputs.data_file)
 
 // Build invoice using invoice-maker package
 #invoice(
