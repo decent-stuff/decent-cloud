@@ -1,16 +1,11 @@
 # TODO
 
-## ICPay Integration
+## UI/UX Improvements
 
-### Manual Payout Requirement
-**ICPay does NOT have a programmatic payout API.** Provider payouts must be done manually:
-1. View pending releases: `GET /api/v1/admin/payment-releases`
-2. Create payouts in icpay.org dashboard (Payouts section)
-3. Mark as paid: `POST /api/v1/admin/payouts`
-
-### Future: Automated Payouts
-To automate payouts, implement direct ICRC-1 transfers from platform wallet using `ic-agent`.
-See [completed spec](docs/completed/2025-12-05-icpay-escrow-payments-spec.md#future-work-automated-provider-payouts) for research details. Requires: platform wallet key management decision.
+### Offering Visibility Toggle
+Current blue eye icon for "public" vs gray slashed eye for "private" is unclear.
+**Improvement:** Use green "Public" and red "Private" badges instead of icon-only toggle.
+Location: `website/src/routes/dashboard/offerings/+page.svelte` lines 326-343
 
 ---
 
@@ -61,6 +56,40 @@ Integrate with or scrape external sources for additional trust signals:
 
 ---
 
+## Contract-Specific Customer-Provider Messaging
+
+**Status:** Backend infrastructure exists (SLA tracking, message events), but no usable UI.
+**Priority:** MEDIUM - Improves customer experience and enables SLA enforcement
+
+### Motivation
+When customers rent services, they need a way to communicate with providers about that specific contract (questions, issues, configuration). Currently:
+- Backend can create Chatwoot conversations with `contract_id` metadata
+- Message events are tracked for SLA response time calculation
+- Provider response metrics are exposed via API (`/providers/:pubkey/metrics`)
+- BUT: No frontend UI for customers to access these conversations
+
+### What Exists (Backend)
+- `chatwoot_message_events` table tracks messages per contract
+- SLA breach detection in `email_processor.rs`
+- Provider response time metrics calculation
+- Webhook handler extracts `contract_id` from conversation custom_attributes
+
+### What's Missing (Frontend)
+- "Contact Provider" button on rentals page that opens contract-specific chat
+- Provider inbox/dashboard showing contract conversations
+- Link between Chatwoot conversation and contract in UI
+
+### Implementation Approach
+1. Add "Contact Provider" button to `/dashboard/rentals` for each contract
+2. Button opens Chatwoot widget pre-configured with contract context
+3. Or: Embed mini-chat directly in contract details view
+4. Provider sees conversations tagged by contract in their Chatwoot inbox
+
+### Alternative: Remove SLA Tracking
+If contract-specific messaging isn't needed, the SLA tracking infrastructure (`chatwoot_message_events`, response metrics) could be removed to simplify the codebase.
+
+---
+
 ## Billing & Invoicing - ✅ COMPLETE
 
 **Spec:** [2025-12-08-billing-remaining-items-spec.md](docs/2025-12-08-billing-remaining-items-spec.md)
@@ -78,10 +107,22 @@ All billing features implemented:
 
 ---
 
-## Notification System - Deferred Items
+## Notification System
 
 ### Paid Notification Tiers
 - Define pricing for additional notifications beyond free tier
 - Integrate with payment system (Stripe/ICPay)
 - Track paid quota separately from free tier
 - Consider monthly subscription vs pay-per-notification
+
+## ICPay Integration
+
+### Manual Payout Requirement
+**ICPay does NOT have a programmatic payout API.** Provider payouts must be done manually:
+1. View pending releases: `GET /api/v1/admin/payment-releases`
+2. Create payouts in icpay.org dashboard (Payouts section)
+3. Mark as paid: `POST /api/v1/admin/payouts`
+
+### Future: Automated Payouts
+To automate payouts, implement direct ICRC-1 transfers from platform wallet using `ic-agent`.
+See [completed spec](docs/completed/2025-12-05-icpay-escrow-payments-spec.md#future-work-automated-provider-payouts) for research details. Requires: platform wallet key management decision.
