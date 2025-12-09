@@ -107,7 +107,7 @@ pub async fn handle_customer_message(
             Err(e) => {
                 tracing::warn!(
                     "Failed to fetch articles from portal '{}': {}",
-                    portals[idx].slug,
+                    portals[idx],
                     e
                 );
             }

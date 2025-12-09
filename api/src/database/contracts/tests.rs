@@ -32,19 +32,23 @@ async fn insert_contract_request(
     .unwrap();
 }
 
-async fn insert_stripe_contract_with_timestamps(
-    db: &Database,
-    contract_id: &[u8],
-    requester_pubkey: &[u8],
-    provider_pubkey: &[u8],
-    offering_id: &str,
-    payment_intent_id: &str,
-    payment_status: &str,
+struct StripeContractParams {
+    contract_id: Vec<u8>,
+    requester_pubkey: Vec<u8>,
+    provider_pubkey: Vec<u8>,
+    offering_id: String,
+    payment_intent_id: String,
+    payment_status: String,
     payment_amount_e9s: i64,
     start_timestamp_ns: i64,
     end_timestamp_ns: i64,
+}
+
+async fn insert_stripe_contract_with_timestamps(
+    db: &Database,
+    params: StripeContractParams,
 ) {
-    let stripe_payment_intent_id: Option<&str> = Some(payment_intent_id);
+    let stripe_payment_intent_id: Option<&str> = Some(&params.payment_intent_id);
     let stripe_customer_id: Option<&str> = None;
     let payment_method: &str = "stripe";
     let status: &str = "requested";
@@ -54,23 +58,23 @@ async fn insert_stripe_contract_with_timestamps(
     let created_at_ns: i64 = 0;
 
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'usd')",
-        contract_id,
-        requester_pubkey,
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'usd')",
+        params.contract_id,
+        params.requester_pubkey,
         ssh_pubkey,
         contact,
-        provider_pubkey,
-        offering_id,
-        payment_amount_e9s,
-        start_timestamp_ns,
-        end_timestamp_ns,
+        params.provider_pubkey,
+        params.offering_id,
+        params.payment_amount_e9s,
+        params.start_timestamp_ns,
+        params.end_timestamp_ns,
         memo,
         created_at_ns,
         status,
         payment_method,
         stripe_payment_intent_id,
         stripe_customer_id,
-        payment_status
+        params.payment_status
     )
     .execute(&db.pool)
     .await
@@ -1185,15 +1189,17 @@ async fn test_cancel_contract_stripe_payment_without_client() {
     let end_ns = now_ns + 10_000_000_000; // Ends in 10 seconds
     insert_stripe_contract_with_timestamps(
         &db,
-        &contract_id,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        "pi_test_123",
-        "succeeded",
-        1000000000,
-        start_ns,
-        end_ns,
+        StripeContractParams {
+            contract_id,
+            requester_pubkey: requester_pk,
+            provider_pubkey: provider_pk,
+            offering_id: "off-1".to_string(),
+            payment_intent_id: "pi_test_123".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1000000000,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
     )
     .await;
 

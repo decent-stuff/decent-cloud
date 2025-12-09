@@ -736,6 +736,144 @@ impl ChatwootClient {
             .collect())
     }
 
+    /// Find or create an API channel inbox for a provider (idempotent).
+    /// Returns existing inbox if one with the same name exists.
+    pub async fn find_or_create_inbox(&self, name: &str) -> Result<InboxResponse> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/inboxes",
+            self.base_url, self.account_id
+        );
+
+        // First, list existing inboxes to check for duplicates
+        #[derive(Deserialize)]
+        struct InboxesResponse {
+            payload: Vec<InboxResponse>,
+        }
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to list inboxes")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error listing inboxes {}: {}", status, body);
+        }
+
+        let response: InboxesResponse = resp.json().await.context("Failed to parse inboxes")?;
+        if let Some(existing) = response.payload.into_iter().find(|i| i.name == name) {
+            tracing::debug!("Inbox '{}' already exists with id={}", name, existing.id);
+            return Ok(existing);
+        }
+
+        // Create new inbox
+        self.create_inbox(name).await
+    }
+
+    /// Find or create a team for a provider (idempotent).
+    /// Returns existing team if one with the same name exists.
+    pub async fn find_or_create_team(
+        &self,
+        name: &str,
+        description: &str,
+    ) -> Result<TeamResponse> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/teams",
+            self.base_url, self.account_id
+        );
+
+        // First, list existing teams to check for duplicates
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to list teams")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error listing teams {}: {}", status, body);
+        }
+
+        let teams: Vec<TeamResponse> = resp.json().await.context("Failed to parse teams")?;
+
+        // Check if team already exists
+        if let Some(existing) = teams.into_iter().find(|t| t.name == name) {
+            tracing::debug!("Team '{}' already exists with id={}", name, existing.id);
+            return Ok(existing);
+        }
+
+        // Create new team
+        self.create_team(name, description).await
+    }
+
+    /// Find or create a Help Center portal for a provider (idempotent).
+    /// Returns existing portal if one with the same slug exists.
+    pub async fn find_or_create_portal(
+        &self,
+        name: &str,
+        slug: &str,
+    ) -> Result<PortalResponse> {
+        let url = format!(
+            "{}/api/v1/accounts/{}/portals",
+            self.base_url, self.account_id
+        );
+
+        // First, list existing portals to check for duplicates
+        #[derive(Deserialize)]
+        struct PortalsResponse {
+            payload: Vec<PortalListItem>,
+        }
+
+        #[derive(Deserialize)]
+        struct PortalListItem {
+            id: i64,
+            name: String,
+            slug: String,
+            archived: bool,
+        }
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("api_access_token", &self.api_token)
+            .send()
+            .await
+            .context("Failed to list portals")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Chatwoot API error listing portals {}: {}", status, body);
+        }
+
+        let response: PortalsResponse = resp.json().await.context("Failed to parse portals")?;
+
+        // Check if portal already exists (by slug, not archived)
+        if let Some(existing) = response
+            .payload
+            .into_iter()
+            .filter(|p| !p.archived)
+            .find(|p| p.slug == slug)
+        {
+            tracing::debug!("Portal '{}' already exists with id={}", slug, existing.id);
+            return Ok(PortalResponse {
+                id: existing.id,
+                name: existing.name,
+                slug: existing.slug,
+            });
+        }
+
+        // Create new portal
+        self.create_portal(name, slug).await
+    }
+
     /// Assign an agent bot to an inbox via Account API.
     /// Uses POST /api/v1/accounts/:account_id/inboxes/:inbox_id/set_agent_bot
     pub async fn assign_agent_bot_to_inbox(&self, inbox_id: u32, agent_bot_id: i64) -> Result<()> {
