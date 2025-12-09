@@ -179,7 +179,7 @@
 		<div class="flex gap-2">
 			<select
 				bind:value={newKey.type}
-				class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
+				class="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 			>
 				<option value="ssh-ed25519">SSH Ed25519</option>
 				<option value="ssh-rsa">SSH RSA</option>

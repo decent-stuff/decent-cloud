@@ -259,7 +259,7 @@
 					</div>
 					<div>
 						<label for="support-hours" class="block text-white/80 mb-2">Support Hours <span class="text-red-400">*</span></label>
-						<select id="support-hours" bind:value={supportHours} required class="w-full px-4 py-3 bg-gray-900 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
+						<select id="support-hours" bind:value={supportHours} required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
 							<option value="">Select...</option>
 							{#each supportHoursOptions as opt}<option value={opt}>{opt === 'custom' ? 'Custom...' : opt}</option>{/each}
 						</select>
@@ -291,7 +291,7 @@
 				<div class="grid md:grid-cols-2 gap-6">
 					<div>
 						<label for="refund-policy" class="block text-white/80 mb-2">Refund Policy</label>
-						<select id="refund-policy" bind:value={refundPolicy} class="w-full px-4 py-3 bg-gray-900 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
+						<select id="refund-policy" bind:value={refundPolicy} class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
 							<option value="">Select...</option>
 							{#each refundPolicyOptions as opt}<option value={opt}>{opt === 'custom' ? 'Custom...' : opt}</option>{/each}
 						</select>
@@ -299,7 +299,7 @@
 					</div>
 					<div>
 						<label for="sla-guarantee" class="block text-white/80 mb-2">SLA Guarantee</label>
-						<select id="sla-guarantee" bind:value={slaGuarantee} class="w-full px-4 py-3 bg-gray-900 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
+						<select id="sla-guarantee" bind:value={slaGuarantee} class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
 							<option value="">Select...</option>
 							{#each slaGuaranteeOptions as opt}<option value={opt}>{opt}</option>{/each}
 						</select>

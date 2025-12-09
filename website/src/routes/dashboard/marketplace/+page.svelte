@@ -336,11 +336,11 @@
 					<select
 						bind:value={selectedCountry}
 						onchange={() => { selectedCity = ""; handleFilterChange(); }}
-						class="w-full px-2 py-1.5 text-sm bg-slate-800 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+						class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
 					>
-						<option value="" class="bg-slate-800">All countries</option>
+						<option value="">All countries</option>
 						{#each countries as country}
-							<option value={country} class="bg-slate-800">{country}</option>
+							<option value={country}>{country}</option>
 						{/each}
 					</select>
 				</div>
@@ -350,11 +350,11 @@
 					<div class="text-white/60 text-xs uppercase tracking-wide mb-2">City</div>
 					<select
 						bind:value={selectedCity}
-						class="w-full px-2 py-1.5 text-sm bg-slate-800 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+						class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
 					>
-						<option value="" class="bg-slate-800">All cities</option>
+						<option value="">All cities</option>
 						{#each cities() as city}
-							<option value={city} class="bg-slate-800">{city}</option>
+							<option value={city}>{city}</option>
 						{/each}
 					</select>
 				</div>
