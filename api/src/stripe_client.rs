@@ -1,7 +1,7 @@
 use anyhow::Result;
 use stripe::{
-    CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession,
-    CreateCheckoutSessionLineItems, CreateCheckoutSessionLineItemsPriceData,
+    CheckoutSession, CheckoutSessionId, CheckoutSessionMode, CheckoutSessionPaymentStatus, Client,
+    CreateCheckoutSession, CreateCheckoutSessionLineItems, CreateCheckoutSessionLineItemsPriceData,
     CreateCheckoutSessionLineItemsPriceDataProductData, CreateRefund, Currency, PaymentIntentId,
     Refund,
 };
@@ -127,6 +127,69 @@ impl StripeClient {
 
         Ok(refund.id.to_string())
     }
+
+    /// Retrieves a checkout session and returns payment details if paid
+    ///
+    /// # Arguments
+    /// * `session_id` - The Checkout Session ID (cs_...)
+    ///
+    /// # Returns
+    /// Some((contract_id, tax_amount_cents, customer_tax_id, reverse_charge)) if paid, None otherwise
+    pub async fn retrieve_checkout_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<CheckoutSessionResult>> {
+        let session_id: CheckoutSessionId = session_id.parse()?;
+        let session = CheckoutSession::retrieve(&self.client, &session_id, &[]).await?;
+
+        // Only return result if payment is complete
+        if session.payment_status != CheckoutSessionPaymentStatus::Paid {
+            return Ok(None);
+        }
+
+        let contract_id = session
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("contract_id"))
+            .cloned();
+
+        let Some(contract_id) = contract_id else {
+            return Err(anyhow::anyhow!("Session missing contract_id metadata"));
+        };
+
+        let tax_amount_cents = session.total_details.as_ref().map(|td| td.amount_tax);
+        let customer_tax_id = session
+            .customer_details
+            .as_ref()
+            .and_then(|cd| cd.tax_ids.as_ref())
+            .and_then(|ids| ids.first())
+            .map(|tax_id| {
+                format!(
+                    "{:?}: {}",
+                    tax_id.type_,
+                    tax_id.value.as_deref().unwrap_or("")
+                )
+            });
+
+        let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
+
+        Ok(Some(CheckoutSessionResult {
+            contract_id,
+            session_id: session.id.to_string(),
+            tax_amount_cents,
+            customer_tax_id,
+            reverse_charge,
+        }))
+    }
+}
+
+/// Result from retrieving a paid checkout session
+pub struct CheckoutSessionResult {
+    pub contract_id: String,
+    pub session_id: String,
+    pub tax_amount_cents: Option<i64>,
+    pub customer_tax_id: Option<String>,
+    pub reverse_charge: bool,
 }
 
 #[cfg(test)]

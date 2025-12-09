@@ -812,6 +812,37 @@ export async function cancelRentalRequest(
 	return payload.data;
 }
 
+export interface VerifyCheckoutResponse {
+	contractId: string;
+	paymentStatus: string;
+}
+
+export async function verifyCheckoutSession(sessionId: string): Promise<VerifyCheckoutResponse> {
+	const url = `${API_BASE_URL}/api/v1/contracts/verify-checkout`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ sessionId })
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to verify checkout: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<VerifyCheckoutResponse>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Payment not yet completed');
+	}
+
+	if (!payload.data) {
+		throw new Error('Verify checkout response did not include data');
+	}
+
+	return payload.data;
+}
+
 export async function getProviderOnboarding(pubkey: string): Promise<ProviderOnboarding | null> {
 	const pubkeyHex = normalizePubkey(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/onboarding`;
@@ -870,7 +901,7 @@ export async function updateProviderOnboarding(
 export async function syncProviderHelpcenter(
 	pubkey: string | number[],
 	headers: Record<string, string>
-): Promise<{ article_id: number; portal_slug: string; action: string }> {
+): Promise<{ articleUrl: string; action: string }> {
 	const pubkeyHex = normalizePubkey(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/helpcenter/sync`;
 	const response = await fetch(url, {
@@ -882,7 +913,7 @@ export async function syncProviderHelpcenter(
 		throw new Error(`Failed to sync help center: ${response.status} ${response.statusText}`);
 	}
 
-	const payload = (await response.json()) as ApiResponse<{ article_id: number; portal_slug: string; action: string }>;
+	const payload = (await response.json()) as ApiResponse<{ articleUrl: string; action: string }>;
 
 	if (!payload.success) {
 		throw new Error(payload.error ?? 'Failed to sync help center');

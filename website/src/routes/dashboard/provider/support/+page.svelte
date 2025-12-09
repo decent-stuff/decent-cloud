@@ -19,6 +19,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let success = $state<string | null>(null);
+	let articleUrl = $state<string | null>(null);
 
 	// Help Center state
 	let savingOnboarding = $state(false);
@@ -168,8 +169,9 @@
 			const syncPath = `/api/v1/providers/${pubkeyHex}/helpcenter/sync`;
 			const syncSigned = await signRequest(currentIdentity.identity, 'POST', syncPath);
 			const result = await syncProviderHelpcenter(pubkeyHex, syncSigned.headers);
-			success = `Help center ${result.action}! Article ID: ${result.article_id}`;
-		} catch (e) { error = e instanceof Error ? e.message : 'Save failed'; } finally { savingOnboarding = false; }
+			success = `Help center ${result.action}!`;
+			articleUrl = result.articleUrl;
+		} catch (e) { error = e instanceof Error ? e.message : 'Save failed'; articleUrl = null; } finally { savingOnboarding = false; }
 	}
 
 	// Notification handlers
@@ -225,7 +227,7 @@
 	</div>
 
 	{#if error}<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">{error}</div>{/if}
-	{#if success}<div class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-400">{success}</div>{/if}
+	{#if success}<div class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-400">{success}{#if articleUrl} <a href={articleUrl} target="_blank" rel="noopener" class="underline hover:text-green-200">View article →</a>{/if}</div>{/if}
 	{#if testResult}<div class="p-4 rounded-lg {testResult.sent ? 'bg-green-500/20 text-green-200' : 'bg-yellow-500/20 text-yellow-200'}"><strong>{testResult.sent ? 'Sent' : 'Failed'}:</strong> {testResult.message}</div>{/if}
 
 	{#if !isAuthenticated}

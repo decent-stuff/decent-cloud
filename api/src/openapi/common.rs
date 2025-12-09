@@ -188,6 +188,21 @@ pub struct UpdateIcpayTransactionRequest {
     pub transaction_id: String,
 }
 
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyCheckoutSessionRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyCheckoutSessionResponse {
+    pub contract_id: String,
+    pub payment_status: String,
+}
+
 // Request types for accounts
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

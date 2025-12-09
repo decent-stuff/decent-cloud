@@ -1,6 +1,7 @@
 use super::common::{
     default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
     ExtendContractResponse, RentalRequestResponse, UpdateIcpayTransactionRequest,
+    VerifyCheckoutSessionRequest, VerifyCheckoutSessionResponse,
 };
 use crate::auth::{AdminAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
@@ -247,7 +248,6 @@ impl ContractsApi {
                     data: Some(RentalRequestResponse {
                         contract_id: hex::encode(&contract_id),
                         message: "Rental request created successfully".to_string(),
-                        client_secret: None,
                         checkout_url,
                     }),
                     error: None,
@@ -521,5 +521,102 @@ impl ContractsApi {
                 error: Some(e.to_string()),
             }),
         }
+    }
+
+    /// Verify Stripe checkout session and sync payment status
+    ///
+    /// Verifies a Stripe checkout session is paid and updates the contract.
+    /// This is a fallback for when webhooks fail or are delayed.
+    #[oai(
+        path = "/contracts/verify-checkout",
+        method = "post",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn verify_checkout_session(
+        &self,
+        db: Data<&Arc<Database>>,
+        req: Json<VerifyCheckoutSessionRequest>,
+    ) -> Json<ApiResponse<VerifyCheckoutSessionResponse>> {
+        let stripe_client = match crate::stripe_client::StripeClient::new() {
+            Ok(c) => c,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Stripe not configured: {}", e)),
+                })
+            }
+        };
+
+        // Retrieve session from Stripe
+        let session_result = match stripe_client
+            .retrieve_checkout_session(&req.session_id)
+            .await
+        {
+            Ok(Some(result)) => result,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Payment not yet completed".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to retrieve session: {}", e)),
+                })
+            }
+        };
+
+        let contract_id_bytes = match hex::decode(&session_result.contract_id) {
+            Ok(id) => id,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid contract_id in session: {}", e)),
+                })
+            }
+        };
+
+        // Update contract payment status (idempotent - safe to call multiple times)
+        let tax_amount_e9s = session_result.tax_amount_cents.map(|c| c * 10_000_000);
+        if let Err(e) = db
+            .update_checkout_session_payment(
+                &contract_id_bytes,
+                &session_result.session_id,
+                tax_amount_e9s,
+                session_result.customer_tax_id.as_deref(),
+                session_result.reverse_charge,
+            )
+            .await
+        {
+            tracing::error!(
+                "Failed to update payment status for contract {}: {}",
+                session_result.contract_id,
+                e
+            );
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to update payment status: {}", e)),
+            });
+        }
+
+        tracing::info!(
+            "Payment verified via session lookup for contract {}",
+            session_result.contract_id
+        );
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(VerifyCheckoutSessionResponse {
+                contract_id: session_result.contract_id,
+                payment_status: "succeeded".to_string(),
+            }),
+            error: None,
+        })
     }
 }

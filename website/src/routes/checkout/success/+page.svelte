@@ -2,18 +2,35 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { verifyCheckoutSession } from '$lib/services/api';
 
-	let loading = $state(true);
+	let verifying = $state(true);
+	let verified = $state(false);
+	let error = $state<string | null>(null);
 	let sessionId = $state<string | null>(null);
 
-	onMount(() => {
+	onMount(async () => {
 		sessionId = $page.url.searchParams.get('session_id');
 
 		if (!sessionId) {
-			console.error('No session_id in URL');
+			error = 'No session_id in URL';
+			verifying = false;
+			return;
 		}
 
-		loading = false;
+		// Verify the checkout session with our backend
+		// This syncs payment status even if webhook was delayed/failed
+		try {
+			await verifyCheckoutSession(sessionId);
+			verified = true;
+		} catch (e) {
+			// Verification failed - payment might still be processing
+			// Log but don't show error - webhook may still update it
+			console.warn('Checkout verification:', e);
+			verified = true; // Show success anyway - Stripe redirected here
+		}
+
+		verifying = false;
 
 		// Auto-redirect to rentals page after 5 seconds
 		setTimeout(() => {
@@ -29,11 +46,27 @@
 <div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
 	<div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl max-w-2xl w-full border border-white/20 shadow-2xl p-8">
 		<div class="text-center">
-			{#if loading}
+			{#if verifying}
 				<div class="flex justify-center mb-6">
 					<div class="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
 				</div>
-				<h1 class="text-2xl font-bold text-white mb-2">Processing Payment...</h1>
+				<h1 class="text-2xl font-bold text-white mb-2">Verifying Payment...</h1>
+			{:else if error}
+				<div class="flex justify-center mb-6">
+					<div class="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
+						<svg class="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</div>
+				</div>
+				<h1 class="text-3xl font-bold text-white mb-4">Something Went Wrong</h1>
+				<p class="text-white/70 text-lg mb-6">{error}</p>
+				<button
+					onclick={navigateToRentals}
+					class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 transition-all text-white"
+				>
+					View My Rentals
+				</button>
 			{:else}
 				<div class="flex justify-center mb-6">
 					<div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">

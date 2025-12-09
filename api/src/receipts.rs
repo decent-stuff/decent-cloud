@@ -349,8 +349,10 @@ pub async fn send_contract_rejected_notification(
 
     // Format refund info based on payment method
     let refund_info = match contract.payment_method.as_str() {
-        "stripe" => "A full refund has been initiated to your original payment method. \
-                     It may take 5-10 business days to appear on your statement.",
+        "stripe" => {
+            "A full refund has been initiated to your original payment method. \
+                     It may take 5-10 business days to appear on your statement."
+        }
         "icpay" => "A full refund has been initiated to your original wallet.",
         _ => "A refund has been initiated.",
     };
@@ -561,13 +563,12 @@ mod tests {
         send_contract_accepted_notification(&db, &contract_id).await;
 
         // Verify email was queued
-        let email: QueuedEmail = sqlx::query_as(
-            "SELECT subject, body FROM email_queue WHERE to_addr = ?",
-        )
-        .bind("user@test.example")
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
+        let email: QueuedEmail =
+            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = ?")
+                .bind("user@test.example")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
 
         assert!(email.subject.contains("accepted"));
         assert!(email.body.contains("accepted by the provider"));

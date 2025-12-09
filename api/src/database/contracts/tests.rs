@@ -44,10 +44,7 @@ struct StripeContractParams {
     end_timestamp_ns: i64,
 }
 
-async fn insert_stripe_contract_with_timestamps(
-    db: &Database,
-    params: StripeContractParams,
-) {
+async fn insert_stripe_contract_with_timestamps(db: &Database, params: StripeContractParams) {
     let stripe_payment_intent_id: Option<&str> = Some(&params.payment_intent_id);
     let stripe_customer_id: Option<&str> = None;
     let payment_method: &str = "stripe";
