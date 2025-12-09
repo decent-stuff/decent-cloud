@@ -269,11 +269,12 @@ describe('hexEncode', () => {
 });
 
 describe('getUserContracts', () => {
+	// API returns hex strings from backend (via sqlx lower(hex(...)))
 	const sampleContracts = [
 		{
-			contract_id: [1, 2, 3, 4],
-			requester_pubkey: [5, 6, 7, 8],
-			provider_pubkey: [9, 10, 11, 12],
+			contract_id: '01020304',
+			requester_pubkey: '05060708',
+			provider_pubkey: '090a0b0c',
 			requester_ssh_pubkey: 'ssh-ed25519 AAAA...',
 			requester_contact: 'user@example.com',
 			offering_id: 'off-123',
@@ -387,11 +388,12 @@ describe('getProviderContracts', () => {
 	});
 
 	it('fetches provider contracts for the given pubkey', async () => {
+		// API returns hex strings from backend
 		const contracts = [
 			{
-				contract_id: [0xde, 0xad],
-				requester_pubkey: [0xbe, 0xef],
-				provider_pubkey: [0xca, 0xfe],
+				contract_id: 'dead',
+				requester_pubkey: 'beef',
+				provider_pubkey: 'cafe',
 				requester_ssh_pubkey: 'ssh',
 				requester_contact: 'contact',
 				offering_id: 'offer-42',

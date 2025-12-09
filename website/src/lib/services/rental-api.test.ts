@@ -36,7 +36,7 @@ describe('createRentalRequest', () => {
 		};
 
 		const mockResponse = {
-			contract_id: 'abc123def456',
+			contractId: 'abc123def456',
 			message: 'Rental request created successfully'
 		};
 
@@ -81,7 +81,7 @@ describe('createRentalRequest', () => {
 			json: async () => ({
 				success: true,
 				data: {
-					contract_id: 'xyz789',
+					contractId: 'xyz789',
 					message: 'Request created'
 				}
 			})
@@ -257,15 +257,16 @@ describe('getPendingProviderRequests', () => {
 	};
 
 	it('returns normalized contracts when API succeeds', async () => {
+		// API returns hex strings from backend (via sqlx lower(hex(...)))
 		vi.mocked(fetch).mockResolvedValue({
 			ok: true,
 			json: async () => ({
 				success: true,
 				data: [
 					{
-						contract_id: [1, 2],
-						requester_pubkey: [10, 11],
-						provider_pubkey: [12, 13],
+						contract_id: '0102',
+						requester_pubkey: '0a0b',
+						provider_pubkey: '0c0d',
 						requester_ssh_pubkey: 'ssh-key',
 						requester_contact: 'email:user@example.com',
 						provider_pubkey_hex: 'ignored',
