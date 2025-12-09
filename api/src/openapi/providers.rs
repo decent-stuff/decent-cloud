@@ -925,16 +925,22 @@ impl ProvidersApi {
         };
 
         if req.accept {
-            // Accept: just update status
+            // Accept: update status and notify user
             match db
                 .update_contract_status(&contract_id, "accepted", &auth.pubkey, req.memo.as_deref())
                 .await
             {
-                Ok(_) => Json(ApiResponse {
-                    success: true,
-                    data: Some("Contract accepted".to_string()),
-                    error: None,
-                }),
+                Ok(_) => {
+                    // Send notification email to user (async, don't fail endpoint)
+                    crate::receipts::send_contract_accepted_notification(db.as_ref(), &contract_id)
+                        .await;
+
+                    Json(ApiResponse {
+                        success: true,
+                        data: Some("Contract accepted".to_string()),
+                        error: None,
+                    })
+                }
                 Err(e) => Json(ApiResponse {
                     success: false,
                     data: None,
@@ -956,11 +962,21 @@ impl ProvidersApi {
                 )
                 .await
             {
-                Ok(_) => Json(ApiResponse {
-                    success: true,
-                    data: Some("Contract rejected, refund initiated".to_string()),
-                    error: None,
-                }),
+                Ok(_) => {
+                    // Send notification email to user (async, don't fail endpoint)
+                    crate::receipts::send_contract_rejected_notification(
+                        db.as_ref(),
+                        &contract_id,
+                        req.memo.as_deref(),
+                    )
+                    .await;
+
+                    Json(ApiResponse {
+                        success: true,
+                        data: Some("Contract rejected, refund initiated".to_string()),
+                        error: None,
+                    })
+                }
                 Err(e) => Json(ApiResponse {
                     success: false,
                     data: None,

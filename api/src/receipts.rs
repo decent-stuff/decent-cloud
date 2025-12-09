@@ -233,6 +233,177 @@ async fn update_contract_receipt_info(
     Ok(())
 }
 
+/// Send notification email when a contract is accepted by provider
+pub async fn send_contract_accepted_notification(db: &Database, contract_id: &[u8]) {
+    let contract_hex = hex::encode(contract_id);
+
+    let contract = match db.get_contract(contract_id).await {
+        Ok(Some(c)) => c,
+        Ok(None) => {
+            tracing::warn!(
+                "Cannot send accepted notification: contract {} not found",
+                contract_hex
+            );
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Cannot send accepted notification for contract {}: {}",
+                contract_hex,
+                e
+            );
+            return;
+        }
+    };
+
+    let subject = "Your Decent Cloud rental request has been accepted";
+
+    let offering_name = format!("Offering {}", contract.offering_id);
+    let dashboard_url = format!(
+        "https://decent-cloud.org/dashboard/rentals/{}",
+        contract_hex
+    );
+
+    let body = format!(
+        r#"Good news!
+
+Your rental request has been accepted by the provider.
+
+CONTRACT DETAILS
+───────────────────────────────────
+Offering:    {offering_name}
+Contract ID: {contract_id}
+
+WHAT'S NEXT?
+The provider will now provision your service. You'll receive another
+notification once provisioning is complete with access details.
+
+View your rental: {dashboard_url}
+
+───────────────────────────────────
+Decent Cloud
+"#,
+        offering_name = offering_name,
+        contract_id = contract_hex,
+        dashboard_url = dashboard_url,
+    );
+
+    if let Err(e) = db
+        .queue_email(
+            &contract.requester_contact,
+            "noreply@decent-cloud.org",
+            subject,
+            &body,
+            false,
+            EmailType::General,
+        )
+        .await
+    {
+        tracing::warn!(
+            "Failed to queue accepted notification for contract {}: {}",
+            contract_hex,
+            e
+        );
+    } else {
+        tracing::info!(
+            "Queued accepted notification to {} for contract {}",
+            contract.requester_contact,
+            contract_hex
+        );
+    }
+}
+
+/// Send notification email when a contract is rejected by provider
+pub async fn send_contract_rejected_notification(
+    db: &Database,
+    contract_id: &[u8],
+    reject_memo: Option<&str>,
+) {
+    let contract_hex = hex::encode(contract_id);
+
+    let contract = match db.get_contract(contract_id).await {
+        Ok(Some(c)) => c,
+        Ok(None) => {
+            tracing::warn!(
+                "Cannot send rejected notification: contract {} not found",
+                contract_hex
+            );
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Cannot send rejected notification for contract {}: {}",
+                contract_hex,
+                e
+            );
+            return;
+        }
+    };
+
+    let subject = "Your Decent Cloud rental request was declined";
+
+    let offering_name = format!("Offering {}", contract.offering_id);
+    let reason = reject_memo.unwrap_or("No reason provided");
+    let marketplace_url = "https://decent-cloud.org/dashboard/marketplace";
+
+    // Format refund info based on payment method
+    let refund_info = match contract.payment_method.as_str() {
+        "stripe" => "A full refund has been initiated to your original payment method. \
+                     It may take 5-10 business days to appear on your statement.",
+        "icpay" => "A full refund has been initiated to your original wallet.",
+        _ => "A refund has been initiated.",
+    };
+
+    let body = format!(
+        r#"Unfortunately, your rental request was declined by the provider.
+
+CONTRACT DETAILS
+───────────────────────────────────
+Offering:    {offering_name}
+Contract ID: {contract_id}
+Reason:      {reason}
+
+REFUND
+{refund_info}
+
+You can browse other offerings on our marketplace:
+{marketplace_url}
+
+───────────────────────────────────
+Decent Cloud
+"#,
+        offering_name = offering_name,
+        contract_id = contract_hex,
+        reason = reason,
+        refund_info = refund_info,
+        marketplace_url = marketplace_url,
+    );
+
+    if let Err(e) = db
+        .queue_email(
+            &contract.requester_contact,
+            "noreply@decent-cloud.org",
+            subject,
+            &body,
+            false,
+            EmailType::General,
+        )
+        .await
+    {
+        tracing::warn!(
+            "Failed to queue rejected notification for contract {}: {}",
+            contract_hex,
+            e
+        );
+    } else {
+        tracing::info!(
+            "Queued rejected notification to {} for contract {}",
+            contract.requester_contact,
+            contract_hex
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
