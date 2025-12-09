@@ -131,7 +131,8 @@ impl ContractsApi {
 
     /// Get user contracts
     ///
-    /// Returns contracts for a specific user (as requester)
+    /// Returns contracts for a specific user (as requester).
+    /// Requires authentication - user can only access their own contracts.
     #[oai(
         path = "/users/:pubkey/contracts",
         method = "get",
@@ -140,6 +141,7 @@ impl ContractsApi {
     async fn get_user_contracts(
         &self,
         db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
@@ -152,6 +154,15 @@ impl ContractsApi {
                 })
             }
         };
+
+        // Authorization: user can only access their own contracts
+        if auth.pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own contracts".to_string()),
+            });
+        }
 
         match db.get_user_contracts(&pubkey_bytes).await {
             Ok(contracts) => Json(ApiResponse {

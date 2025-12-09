@@ -1,4 +1,5 @@
 use super::common::ApiResponse;
+use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
@@ -10,7 +11,8 @@ pub struct UsersApi;
 impl UsersApi {
     /// Get user activity
     ///
-    /// Returns activity summary for a specific user (blockchain-based)
+    /// Returns activity summary for a specific user (blockchain-based).
+    /// Requires authentication - user can only access their own activity.
     #[oai(
         path = "/users/:pubkey/activity",
         method = "get",
@@ -19,6 +21,7 @@ impl UsersApi {
     async fn get_user_activity(
         &self,
         db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<crate::database::users::UserActivity>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
@@ -31,6 +34,15 @@ impl UsersApi {
                 })
             }
         };
+
+        // Authorization: user can only access their own activity
+        if auth.pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own activity".to_string()),
+            });
+        }
 
         match db.get_user_activity(&pubkey_bytes).await {
             Ok(activity) => Json(ApiResponse {

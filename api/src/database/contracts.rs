@@ -816,52 +816,6 @@ impl Database {
         Ok(())
     }
 
-    /// Accept a contract (auto-acceptance for successful Stripe payments)
-    pub async fn accept_contract(&self, contract_id: &[u8]) -> Result<()> {
-        // Get contract to verify it exists
-        let contract = self
-            .get_contract(contract_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
-
-        // Only accept if still in requested status
-        if contract.status != "requested" {
-            return Err(anyhow::anyhow!(
-                "Contract cannot be auto-accepted in '{}' status",
-                contract.status
-            ));
-        }
-
-        // Update status to accepted
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let mut tx = self.pool.begin().await?;
-
-        sqlx::query!(
-            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ? WHERE contract_id = ?",
-            "accepted",
-            updated_at_ns,
-            contract_id
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        // Record status change in history
-        sqlx::query!(
-            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
-            contract_id,
-            contract.status,
-            "accepted",
-            contract.provider_pubkey, // Provider auto-accepts on payment
-            updated_at_ns,
-            "Auto-accepted on successful Stripe payment"
-        )
-        .execute(&mut *tx)
-        .await?;
-
-        tx.commit().await?;
-        Ok(())
-    }
-
     /// Get offering by offering_id string
     async fn get_offering_by_id(
         &self,

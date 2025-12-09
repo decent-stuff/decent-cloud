@@ -304,7 +304,8 @@ impl ProvidersApi {
 
     /// Get provider contracts
     ///
-    /// Returns contracts for a specific provider
+    /// Returns contracts for a specific provider.
+    /// Requires authentication - provider can only access their own contracts.
     #[oai(
         path = "/providers/:pubkey/contracts",
         method = "get",
@@ -313,6 +314,7 @@ impl ProvidersApi {
     async fn get_provider_contracts(
         &self,
         db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
@@ -325,6 +327,15 @@ impl ProvidersApi {
                 })
             }
         };
+
+        // Authorization: provider can only access their own contracts
+        if auth.pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own contracts".to_string()),
+            });
+        }
 
         match db.get_provider_contracts(&pubkey_bytes).await {
             Ok(contracts) => Json(ApiResponse {
