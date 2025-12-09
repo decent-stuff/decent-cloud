@@ -92,7 +92,7 @@ Start Date:      {start_date}
 End Date:        {end_date}
 Contract ID:     {contract_id}
 
-View your contract: https://decent-cloud.org/dashboard/contracts/{contract_id}
+View your rentals: https://decent-cloud.org/dashboard/rentals
 
 ───────────────────────────────────
 This is a payment receipt, not a tax invoice.
