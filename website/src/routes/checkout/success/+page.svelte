@@ -15,14 +15,14 @@
 
 		loading = false;
 
-		// Auto-redirect to contracts page after 5 seconds
+		// Auto-redirect to rentals page after 5 seconds
 		setTimeout(() => {
-			goto('/dashboard/contracts');
+			goto('/dashboard/rentals');
 		}, 5000);
 	});
 
-	function navigateToContracts() {
-		goto('/dashboard/contracts');
+	function navigateToRentals() {
+		goto('/dashboard/rentals');
 	}
 </script>
 
@@ -51,14 +51,14 @@
 				</p>
 				<div class="flex flex-col sm:flex-row gap-3 justify-center">
 					<button
-						onclick={navigateToContracts}
+						onclick={navigateToRentals}
 						class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 transition-all text-white"
 					>
-						View My Contracts
+						View My Rentals
 					</button>
 				</div>
 				<p class="text-white/50 text-xs mt-6">
-					Redirecting to your contracts in 5 seconds...
+					Redirecting to your rentals in 5 seconds...
 				</p>
 			{/if}
 		</div>

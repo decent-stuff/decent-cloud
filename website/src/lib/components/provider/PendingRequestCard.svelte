@@ -12,7 +12,7 @@
 	export let onMemoChange: (value: string) => void;
 	export let onRespond: (accept: boolean) => void;
 
-	const statusBadge = getContractStatusBadge(contract.status);
+	const statusBadge = getContractStatusBadge(contract.status, contract.payment_status);
 	let memoFieldId = "";
 	$: memoFieldId = `pending-response-${contract.contract_id}`;
 </script>

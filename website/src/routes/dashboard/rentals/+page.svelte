@@ -225,7 +225,7 @@
 	{:else}
 		<div class="space-y-4">
 			{#each contracts as contract}
-				{@const statusBadge = getStatusBadge(contract.status)}
+				{@const statusBadge = getStatusBadge(contract.status, contract.payment_status)}
 				<div
 					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-blue-400 transition-all"
 				>
@@ -256,7 +256,8 @@
 									</button>
 								{/if}
 								<!-- Download Invoice button for paid contracts -->
-								{#if contract.payment_status === "succeeded" && downloadingInvoiceContractId !== contract.contract_id}
+								<!-- Show for: payment succeeded/refunded OR contract progressed past payment (active/provisioned/provisioning/accepted) -->
+								{#if (contract.payment_status === "succeeded" || contract.payment_status === "refunded" || ["active", "provisioned", "provisioning", "accepted"].includes(contract.status.toLowerCase())) && downloadingInvoiceContractId !== contract.contract_id}
 									<button
 										onclick={() =>
 											handleDownloadInvoice(

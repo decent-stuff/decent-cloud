@@ -5,10 +5,22 @@ export interface ContractStatusBadge {
 }
 
 const STATUS_BADGES: Record<string, ContractStatusBadge> = {
+	// Payment-aware statuses (for 'requested' + payment_status combinations)
+	'awaiting_payment': {
+		text: 'Awaiting Payment',
+		class: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+		icon: '💳'
+	},
+	'payment_failed': {
+		text: 'Payment Failed',
+		class: 'bg-red-500/20 text-red-400 border-red-500/30',
+		icon: '❌'
+	},
+	// Standard contract statuses
 	requested: {
-		text: 'Requested',
+		text: 'Pending Provider',
 		class: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-		icon: '🟡'
+		icon: '⏳'
 	},
 	pending: {
 		text: 'Pending',
@@ -53,7 +65,29 @@ const DEFAULT_BADGE: ContractStatusBadge = {
 	icon: '⚪'
 };
 
-export function getContractStatusBadge(status: string): ContractStatusBadge {
-	const normalized = status?.toLowerCase() ?? '';
-	return STATUS_BADGES[normalized] ?? { ...DEFAULT_BADGE, text: status ?? DEFAULT_BADGE.text };
+/**
+ * Get display status badge based on contract status and payment status.
+ *
+ * State machine for display:
+ * - status='requested' + payment_status='pending' → 'Awaiting Payment' (Stripe not paid yet)
+ * - status='requested' + payment_status='failed' → 'Payment Failed'
+ * - status='requested' + payment_status='succeeded' → 'Requested' (paid, waiting for provider)
+ * - Other statuses → use status directly
+ */
+export function getContractStatusBadge(status: string, paymentStatus?: string): ContractStatusBadge {
+	const normalizedStatus = status?.toLowerCase() ?? '';
+	const normalizedPaymentStatus = paymentStatus?.toLowerCase() ?? '';
+
+	// Handle 'requested' status with payment_status awareness
+	if (normalizedStatus === 'requested') {
+		if (normalizedPaymentStatus === 'pending') {
+			return STATUS_BADGES['awaiting_payment'];
+		}
+		if (normalizedPaymentStatus === 'failed') {
+			return STATUS_BADGES['payment_failed'];
+		}
+		// payment_status='succeeded' falls through to show 'Requested'
+	}
+
+	return STATUS_BADGES[normalizedStatus] ?? { ...DEFAULT_BADGE, text: status ?? DEFAULT_BADGE.text };
 }

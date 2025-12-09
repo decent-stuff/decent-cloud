@@ -9,7 +9,7 @@
 	export let onNoteChange: (value: string) => void;
 	export let onUpdateStatus: (status: string) => void;
 
-	const badge = getContractStatusBadge(contract.status);
+	const badge = getContractStatusBadge(contract.status, contract.payment_status);
 	const normalizedStatus = contract.status.toLowerCase();
 </script>
 
