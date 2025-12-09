@@ -181,8 +181,7 @@ pub fn generate_provider_article(profile: &ProviderProfile) -> Result<String> {
 /// Result of syncing a provider article to Chatwoot
 #[derive(Debug)]
 pub struct SyncResult {
-    pub article_id: i64,
-    pub portal_slug: String,
+    pub article_url: String,
     pub action: String,
 }
 
@@ -266,7 +265,7 @@ pub async fn sync_provider_article(
 
     let existing_article = existing_articles.iter().find(|a| a.slug == article_slug);
 
-    let (article_id, action) = if let Some(existing) = existing_article {
+    let action = if let Some(existing) = existing_article {
         // Update existing article
         chatwoot
             .update_article(
@@ -278,10 +277,10 @@ pub async fn sync_provider_article(
             )
             .await
             .context("Failed to update article in Chatwoot")?;
-        (existing.id, "updated".to_string())
+        "updated".to_string()
     } else {
         // Create new article
-        let id = chatwoot
+        chatwoot
             .create_article(
                 &portal_slug,
                 &article_title,
@@ -292,12 +291,20 @@ pub async fn sync_provider_article(
             )
             .await
             .context("Failed to create article in Chatwoot")?;
-        (id, "created".to_string())
+        "created".to_string()
     };
 
+    // Construct the public article URL
+    let frontend_url = std::env::var("CHATWOOT_FRONTEND_URL")
+        .or_else(|_| std::env::var("CHATWOOT_BASE_URL"))
+        .unwrap_or_else(|_| "https://support.decent-cloud.org".to_string());
+    let article_url = format!(
+        "{}/hc/{}/articles/{}",
+        frontend_url, portal_slug, article_slug
+    );
+
     Ok(SyncResult {
-        article_id,
-        portal_slug,
+        article_url,
         action,
     })
 }

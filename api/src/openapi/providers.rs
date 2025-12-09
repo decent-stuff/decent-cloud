@@ -1437,8 +1437,7 @@ impl ProvidersApi {
             Ok(result) => Json(ApiResponse {
                 success: true,
                 data: Some(HelpcenterSyncResponse {
-                    article_id: result.article_id,
-                    portal_slug: result.portal_slug,
+                    article_url: result.article_url,
                     action: result.action,
                 }),
                 error: None,

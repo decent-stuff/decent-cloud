@@ -768,11 +768,7 @@ impl ChatwootClient {
 
     /// Find or create a team for a provider (idempotent).
     /// Returns existing team if one with the same name exists.
-    pub async fn find_or_create_team(
-        &self,
-        name: &str,
-        description: &str,
-    ) -> Result<TeamResponse> {
+    pub async fn find_or_create_team(&self, name: &str, description: &str) -> Result<TeamResponse> {
         let url = format!(
             "{}/api/v1/accounts/{}/teams",
             self.base_url, self.account_id
@@ -797,7 +793,10 @@ impl ChatwootClient {
 
         // Check if team already exists (case-insensitive - Chatwoot lowercases names)
         let name_lower = name.to_lowercase();
-        if let Some(existing) = teams.into_iter().find(|t| t.name.to_lowercase() == name_lower) {
+        if let Some(existing) = teams
+            .into_iter()
+            .find(|t| t.name.to_lowercase() == name_lower)
+        {
             tracing::debug!("Team '{}' already exists with id={}", name, existing.id);
             return Ok(existing);
         }
@@ -808,11 +807,7 @@ impl ChatwootClient {
 
     /// Find or create a Help Center portal for a provider (idempotent).
     /// Returns existing portal if one with the same slug exists.
-    pub async fn find_or_create_portal(
-        &self,
-        name: &str,
-        slug: &str,
-    ) -> Result<PortalResponse> {
+    pub async fn find_or_create_portal(&self, name: &str, slug: &str) -> Result<PortalResponse> {
         let url = format!(
             "{}/api/v1/accounts/{}/portals",
             self.base_url, self.account_id

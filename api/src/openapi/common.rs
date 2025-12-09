@@ -136,8 +136,6 @@ pub struct RentalRequestResponse {
     pub contract_id: String,
     pub message: String,
     #[oai(skip_serializing_if_is_none)]
-    pub client_secret: Option<String>,
-    #[oai(skip_serializing_if_is_none)]
     pub checkout_url: Option<String>,
 }
 
@@ -410,10 +408,8 @@ pub struct OnboardingUpdateResponse {
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct HelpcenterSyncResponse {
-    /// Article ID in Chatwoot
-    pub article_id: i64,
-    /// Portal slug where article was synced
-    pub portal_slug: String,
+    /// URL to view the article in the help center
+    pub article_url: String,
     /// Action performed: "created" or "updated"
     pub action: String,
 }
