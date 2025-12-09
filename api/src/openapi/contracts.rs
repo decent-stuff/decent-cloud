@@ -2,7 +2,7 @@ use super::common::{
     default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
     ExtendContractResponse, RentalRequestResponse, UpdateIcpayTransactionRequest,
 };
-use crate::auth::ApiAuthenticatedUser;
+use crate::auth::{AdminAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
@@ -51,13 +51,14 @@ async fn create_stripe_checkout_session(
 
 #[OpenApi]
 impl ContractsApi {
-    /// List contracts
+    /// List contracts (admin only)
     ///
-    /// Returns a paginated list of all contracts
-    #[oai(path = "/contracts", method = "get", tag = "ApiTags::Contracts")]
+    /// Returns a paginated list of all contracts. Requires admin authentication.
+    #[oai(path = "/contracts", method = "get", tag = "ApiTags::Admin")]
     async fn list_contracts(
         &self,
         db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
         #[oai(default = "default_limit")] limit: poem_openapi::param::Query<i64>,
         #[oai(default)] offset: poem_openapi::param::Query<i64>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
@@ -77,11 +78,12 @@ impl ContractsApi {
 
     /// Get contract by ID
     ///
-    /// Returns details of a specific contract
+    /// Returns details of a specific contract. User must be the requester or provider.
     #[oai(path = "/contracts/:id", method = "get", tag = "ApiTags::Contracts")]
     async fn get_contract(
         &self,
         db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<crate::database::contracts::Contract>> {
         let contract_id = match hex::decode(&id.0) {
@@ -96,11 +98,24 @@ impl ContractsApi {
         };
 
         match db.get_contract(&contract_id).await {
-            Ok(Some(contract)) => Json(ApiResponse {
-                success: true,
-                data: Some(contract),
-                error: None,
-            }),
+            Ok(Some(contract)) => {
+                // Authorization: user must be requester or provider
+                let user_pubkey = hex::encode(&auth.pubkey);
+                if contract.requester_pubkey != user_pubkey
+                    && contract.provider_pubkey != user_pubkey
+                {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Unauthorized: you are not a party to this contract".into()),
+                    });
+                }
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(contract),
+                    error: None,
+                })
+            }
             Ok(None) => Json(ApiResponse {
                 success: false,
                 data: None,
@@ -413,19 +428,9 @@ impl ContractsApi {
             }
         };
 
-        // Verify contract exists and user is the requester
-        match db.get_contract(&contract_id).await {
-            Ok(Some(contract)) => {
-                if contract.requester_pubkey != hex::encode(&auth.pubkey) {
-                    return Json(ApiResponse {
-                        success: false,
-                        data: None,
-                        error: Some(
-                            "Unauthorized: only requester can update transaction ID".to_string(),
-                        ),
-                    });
-                }
-            }
+        // Verify contract exists, user is the requester, and payment hasn't been confirmed
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(contract)) => contract,
             Ok(None) => {
                 return Json(ApiResponse {
                     success: false,
@@ -440,6 +445,25 @@ impl ContractsApi {
                     error: Some(e.to_string()),
                 })
             }
+        };
+
+        if contract.requester_pubkey != hex::encode(&auth.pubkey) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: only requester can update transaction ID".to_string()),
+            });
+        }
+
+        // Prevent updating transaction ID if payment already confirmed by webhook
+        if contract.icpay_payment_id.is_some() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Transaction ID already confirmed by payment webhook - cannot update".into(),
+                ),
+            });
         }
 
         match db

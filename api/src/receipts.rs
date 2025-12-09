@@ -45,10 +45,11 @@ pub async fn send_payment_receipt(
         other => other,
     };
 
-    // Transaction ID
+    // Transaction ID - prefer icpay_payment_id (webhook-set), fall back to icpay_transaction_id (frontend-set)
     let transaction_id = contract
         .stripe_payment_intent_id
         .or(contract.icpay_payment_id)
+        .or(contract.icpay_transaction_id)
         .unwrap_or_else(|| "N/A".to_string());
 
     // Format duration
@@ -512,5 +513,122 @@ mod tests {
 
         assert_eq!(row.receipt_number, Some(receipt_number));
         assert_eq!(row.receipt_sent_at_ns, Some(sent_at_ns));
+    }
+
+    /// Helper to create a test contract for notification tests
+    async fn create_test_contract(db: &Database, contract_id: &[u8], payment_method: &str) {
+        let requester_pk = vec![2u8; 32];
+        let provider_pk = vec![3u8; 32];
+
+        sqlx::query!(
+            r#"INSERT INTO contract_sign_requests
+               (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
+                provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
+                payment_method, payment_status, currency)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            contract_id,
+            requester_pk,
+            "ssh-key",
+            "user@test.example",
+            provider_pk,
+            "off-1",
+            1000000000i64,
+            "test",
+            0i64,
+            payment_method,
+            "succeeded",
+            "USD"
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct QueuedEmail {
+        subject: String,
+        body: String,
+    }
+
+    #[tokio::test]
+    async fn test_send_contract_accepted_notification_queues_email() {
+        let db = setup_test_db().await;
+        let contract_id = vec![10u8; 32];
+
+        create_test_contract(&db, &contract_id, "stripe").await;
+
+        // Send notification
+        send_contract_accepted_notification(&db, &contract_id).await;
+
+        // Verify email was queued
+        let email: QueuedEmail = sqlx::query_as(
+            "SELECT subject, body FROM email_queue WHERE to_addr = ?",
+        )
+        .bind("user@test.example")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+
+        assert!(email.subject.contains("accepted"));
+        assert!(email.body.contains("accepted by the provider"));
+    }
+
+    #[tokio::test]
+    async fn test_send_contract_accepted_notification_contract_not_found() {
+        let db = setup_test_db().await;
+        let nonexistent_id = vec![99u8; 32];
+
+        // Should not panic, just log warning
+        send_contract_accepted_notification(&db, &nonexistent_id).await;
+
+        // No email should be queued
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM email_queue")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_send_contract_rejected_notification_stripe_refund_info() {
+        let db = setup_test_db().await;
+        let contract_id = vec![11u8; 32];
+
+        create_test_contract(&db, &contract_id, "stripe").await;
+
+        // Send notification with rejection reason
+        send_contract_rejected_notification(&db, &contract_id, Some("Resource unavailable")).await;
+
+        // Verify email content
+        let email: QueuedEmail =
+            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = ?")
+                .bind("user@test.example")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+
+        assert!(email.body.contains("declined"));
+        assert!(email.body.contains("Resource unavailable"));
+        assert!(email.body.contains("5-10 business days")); // Stripe refund info
+    }
+
+    #[tokio::test]
+    async fn test_send_contract_rejected_notification_icpay_refund_info() {
+        let db = setup_test_db().await;
+        let contract_id = vec![12u8; 32];
+
+        create_test_contract(&db, &contract_id, "icpay").await;
+
+        send_contract_rejected_notification(&db, &contract_id, None).await;
+
+        let email: QueuedEmail =
+            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = ?")
+                .bind("user@test.example")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+
+        assert!(email.body.contains("original wallet")); // ICPay refund info
+        assert!(email.body.contains("No reason provided")); // Default reason
     }
 }

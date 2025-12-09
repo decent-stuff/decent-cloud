@@ -320,12 +320,6 @@ impl Database {
             ));
         }
 
-        // DEBUG: Log offering currency to diagnose currency mismatch issue
-        eprintln!(
-            "DEBUG create_rental_request: offering_id={}, currency={}, monthly_price={}",
-            offering.offering_id, offering.currency, offering.monthly_price
-        );
-
         // Get user's SSH key and contact if not provided
         let ssh_pubkey = if let Some(key) = params.ssh_pubkey {
             key
@@ -958,23 +952,6 @@ impl Database {
         refund_amount.max(0)
     }
 
-    /// Update Stripe payment intent ID for a contract
-    pub async fn update_stripe_payment_intent(
-        &self,
-        contract_id: &[u8],
-        payment_intent_id: &str,
-    ) -> Result<()> {
-        sqlx::query!(
-            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ? WHERE contract_id = ?",
-            payment_intent_id,
-            contract_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
     /// Update ICPay transaction ID for a contract
     pub async fn update_icpay_transaction_id(
         &self,
@@ -1338,7 +1315,7 @@ impl Database {
         Ok(())
     }
 
-    /// Get pending releases for a provider (status = 'released', ready for payout)
+    /// Get pending releases for a provider (ready for payout)
     pub async fn get_provider_pending_releases(
         &self,
         provider_pubkey: &[u8],
@@ -1348,7 +1325,7 @@ impl Database {
                period_end_ns, amount_e9s, provider_pubkey,
                status, created_at_ns, released_at_ns, payout_id
                FROM payment_releases
-               WHERE provider_pubkey = ? AND status = 'released'
+               WHERE provider_pubkey = ? AND status = 'pending'
                ORDER BY created_at_ns ASC"#,
         )
         .bind(provider_pubkey)
@@ -1392,7 +1369,7 @@ impl Database {
         let results = sqlx::query_as::<_, ProviderPendingReleases>(
             r#"SELECT provider_pubkey, SUM(amount_e9s) as total_pending_e9s, COUNT(*) as release_count
                FROM payment_releases
-               WHERE status = 'released'
+               WHERE status = 'pending'
                GROUP BY provider_pubkey
                ORDER BY total_pending_e9s DESC"#
         )
