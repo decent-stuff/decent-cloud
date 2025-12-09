@@ -150,27 +150,6 @@ requested → accepted → provisioning → provisioned → active
 
 Payment status runs parallel: `pending → succeeded/failed → refunded`
 
-### Improvement: Remove Auto-Accept on Payment
-
-**Status:** Ready to implement
-**Priority:** MEDIUM - Improves provider control
-
-Currently, Stripe/ICPay webhooks auto-accept contracts on payment success. This bypasses provider review.
-
-**Proposed change:**
-1. Remove `accept_contract()` call from webhook handlers
-2. Keep contract in `requested` status after payment succeeds
-3. Provider explicitly accepts/rejects via existing endpoints
-4. If rejected, automatic refund (already implemented)
-
-**Benefits:**
-- Providers can verify capacity before accepting
-- Suspicious requests can be rejected
-- Aligns with marketplace best practices (provider approval)
-
-**Files to modify:**
-- `/code/api/src/openapi/webhooks.rs` - Remove auto-accept calls (~lines 230, 633)
-
 ### Other Findings from State Machine Audit
 
 **Low Priority Issues:**

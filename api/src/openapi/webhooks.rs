@@ -226,19 +226,12 @@ pub async fn stripe_webhook(
                 ));
             }
 
-            // Auto-accept contract for Stripe Checkout payments
-            match db.accept_contract(&contract_id_bytes).await {
-                Ok(_) => {
-                    tracing::info!(
-                        "Auto-accepted contract {} after successful Stripe Checkout payment",
-                        contract_id_hex
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to auto-accept contract {}: {}", contract_id_hex, e);
-                    // Don't fail the webhook - payment status is already updated
-                }
-            }
+            // Contract stays in 'requested' status - provider must explicitly accept/reject
+            // If rejected, user gets full refund via reject_contract()
+            tracing::info!(
+                "Contract {} payment succeeded, awaiting provider review",
+                contract_id_hex
+            );
 
             // Send payment receipt
             match crate::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes).await {
@@ -629,23 +622,12 @@ pub async fn icpay_webhook(
                             ));
                         }
 
-                        // Auto-accept contract for ICPay payments
-                        match db.accept_contract(&contract_id_bytes).await {
-                            Ok(_) => {
-                                tracing::info!(
-                                    "Auto-accepted contract {} after successful ICPay payment",
-                                    contract_id_hex
-                                );
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Failed to auto-accept contract {}: {}",
-                                    contract_id_hex,
-                                    e
-                                );
-                                // Don't fail the webhook - payment status is already updated
-                            }
-                        }
+                        // Contract stays in 'requested' status - provider must explicitly accept/reject
+                        // If rejected, user gets full refund via reject_contract()
+                        tracing::info!(
+                            "Contract {} ICPay payment succeeded, awaiting provider review",
+                            contract_id_hex
+                        );
 
                         // Send payment receipt
                         match crate::receipts::send_payment_receipt(db.as_ref(), &contract_id_bytes)

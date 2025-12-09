@@ -506,6 +506,159 @@ impl Database {
         Ok(())
     }
 
+    /// Reject a rental request with full refund (provider-initiated)
+    ///
+    /// Unlike cancellation (user-initiated, prorated), rejection gives full refund
+    /// since the user never received the service.
+    pub async fn reject_contract(
+        &self,
+        contract_id: &[u8],
+        rejected_by_pubkey: &[u8],
+        reject_memo: Option<&str>,
+        stripe_client: Option<&crate::stripe_client::StripeClient>,
+        icpay_client: Option<&crate::icpay_client::IcpayClient>,
+    ) -> Result<()> {
+        let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
+            anyhow::anyhow!("Contract not found (ID: {})", hex::encode(contract_id))
+        })?;
+
+        // Only provider can reject
+        if contract.provider_pubkey != hex::encode(rejected_by_pubkey) {
+            return Err(anyhow::anyhow!(
+                "Unauthorized: only provider can reject rental request"
+            ));
+        }
+
+        // Can only reject contracts in requested/pending status
+        let status_lower = contract.status.to_lowercase();
+        if status_lower != "requested" && status_lower != "pending" {
+            return Err(anyhow::anyhow!(
+                "Contract cannot be rejected in '{}' status. Only requested/pending contracts can be rejected.",
+                contract.status
+            ));
+        }
+
+        // Full refund if payment succeeded (user never got the service)
+        let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) = if contract.payment_status
+            == "succeeded"
+        {
+            let full_refund = contract.payment_amount_e9s;
+            match contract.payment_method.as_str() {
+                "stripe" => {
+                    if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
+                        if let Some(client) = stripe_client {
+                            let refund_cents = full_refund / 10_000_000;
+                            match client
+                                .create_refund(payment_intent_id, Some(refund_cents))
+                                .await
+                            {
+                                Ok(refund_id) => {
+                                    tracing::info!(
+                                            "Stripe full refund created: {} for rejected contract {} (amount: {} cents)",
+                                            refund_id,
+                                            hex::encode(contract_id),
+                                            refund_cents
+                                        );
+                                    (Some(full_refund), Some(refund_id), None)
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                            "Failed to create Stripe refund for rejected contract {}: {}",
+                                            hex::encode(contract_id),
+                                            e
+                                        );
+                                    (Some(full_refund), None, None)
+                                }
+                            }
+                        } else {
+                            (Some(full_refund), None, None)
+                        }
+                    } else {
+                        (Some(full_refund), None, None)
+                    }
+                }
+                "icpay" => {
+                    if let Some(client) = icpay_client {
+                        if let Some(payment_id) = &contract.icpay_payment_id {
+                            match client.create_refund(payment_id, Some(full_refund)).await {
+                                Ok(refund_id) => {
+                                    tracing::info!(
+                                        "ICPay full refund created: {} for rejected contract {}",
+                                        refund_id,
+                                        hex::encode(contract_id)
+                                    );
+                                    (Some(full_refund), None, Some(refund_id))
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                            "Failed to create ICPay refund for rejected contract {}: {}",
+                                            hex::encode(contract_id),
+                                            e
+                                        );
+                                    (Some(full_refund), None, None)
+                                }
+                            }
+                        } else {
+                            (Some(full_refund), None, None)
+                        }
+                    } else {
+                        (Some(full_refund), None, None)
+                    }
+                }
+                _ => (None, None, None),
+            }
+        } else {
+            (None, None, None)
+        };
+
+        // Update status and refund info atomically
+        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let mut tx = self.pool.begin().await?;
+
+        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
+            sqlx::query!(
+                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ?, payment_status = ?, refund_amount_e9s = ?, stripe_refund_id = ?, icpay_refund_id = ?, refund_created_at_ns = ? WHERE contract_id = ?",
+                "rejected",
+                updated_at_ns,
+                rejected_by_pubkey,
+                "refunded",
+                refund_amount_e9s,
+                stripe_refund_id,
+                icpay_refund_id,
+                updated_at_ns,
+                contract_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+                "rejected",
+                updated_at_ns,
+                rejected_by_pubkey,
+                contract_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // Record in history
+        sqlx::query!(
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            contract_id,
+            contract.status,
+            "rejected",
+            rejected_by_pubkey,
+            updated_at_ns,
+            reject_memo
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Add provisioning details to a contract
     pub async fn add_provisioning_details(
         &self,
@@ -752,34 +905,39 @@ impl Database {
     ///
     /// # Arguments
     /// * `payment_amount_e9s` - Original payment amount in e9s
-    /// * `start_timestamp_ns` - Contract start time in nanoseconds
+    /// * `service_start_ns` - When user actually got access (provisioning_completed_at_ns)
     /// * `end_timestamp_ns` - Contract end time in nanoseconds
     /// * `current_timestamp_ns` - Current time in nanoseconds
     ///
     /// # Returns
-    /// Refund amount in e9s (cents for Stripe conversion)
+    /// Refund amount in e9s. Full refund if service never started.
     fn calculate_prorated_refund(
         payment_amount_e9s: i64,
-        start_timestamp_ns: Option<i64>,
+        service_start_ns: Option<i64>,
         end_timestamp_ns: Option<i64>,
         current_timestamp_ns: i64,
     ) -> i64 {
-        // If timestamps are missing, no refund (contract structure invalid)
-        let (start, end) = match (start_timestamp_ns, end_timestamp_ns) {
-            (Some(s), Some(e)) => (s, e),
-            _ => return 0,
+        // If service never started (not provisioned), full refund
+        let service_start = match service_start_ns {
+            Some(s) => s,
+            None => return payment_amount_e9s,
         };
 
-        // Total contract duration
-        let total_duration_ns = end - start;
+        let end = match end_timestamp_ns {
+            Some(e) => e,
+            None => return 0, // No end time = invalid contract
+        };
+
+        // Total service duration (from provisioning to end)
+        let total_duration_ns = end - service_start;
         if total_duration_ns <= 0 {
             return 0;
         }
 
-        // Time already used
-        let time_used_ns = current_timestamp_ns.saturating_sub(start);
+        // Time user actually used the service
+        let time_used_ns = current_timestamp_ns.saturating_sub(service_start);
 
-        // If current time is before start, full refund
+        // If current time is before service started, full refund
         if time_used_ns <= 0 {
             return payment_amount_e9s;
         }
@@ -893,10 +1051,11 @@ impl Database {
             (None, None) => return Ok((None, None)),
         };
 
-        // Calculate prorated refund amount
+        // Calculate prorated refund based on when service became active
+        // If never provisioned, user gets full refund
         let gross_refund_e9s = Self::calculate_prorated_refund(
             contract.payment_amount_e9s,
-            contract.start_timestamp_ns,
+            contract.provisioning_completed_at_ns,
             contract.end_timestamp_ns,
             current_timestamp_ns,
         );
@@ -984,10 +1143,10 @@ impl Database {
             match contract.payment_method.as_str() {
                 "stripe" => {
                     if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
-                        // Calculate prorated refund amount
+                        // Calculate prorated refund based on when service became active
                         let refund_e9s = Self::calculate_prorated_refund(
                             contract.payment_amount_e9s,
-                            contract.start_timestamp_ns,
+                            contract.provisioning_completed_at_ns,
                             contract.end_timestamp_ns,
                             current_timestamp_ns,
                         );

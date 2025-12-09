@@ -1205,17 +1205,35 @@ async fn test_accept_contract_not_found() {
 }
 
 // Refund calculation tests
+// Note: service_start_ns represents when service was provisioned (user got access)
+// If None, service never started -> full refund
+
 #[test]
-fn test_calculate_prorated_refund_full_refund_before_start() {
-    // Contract hasn't started yet, should get full refund
-    let payment_amount_e9s = 1_000_000_000; // Test amount in e9s
-    let start_timestamp_ns = 1000;
-    let end_timestamp_ns = 2000;
-    let current_timestamp_ns = 500; // Before start
+fn test_calculate_prorated_refund_service_never_started() {
+    // Service never provisioned (service_start_ns = None) -> full refund
+    let payment_amount_e9s = 1_000_000_000;
+    let current_timestamp_ns = 1500;
 
     let refund = Database::calculate_prorated_refund(
         payment_amount_e9s,
-        Some(start_timestamp_ns),
+        None, // Service never started
+        Some(2000),
+        current_timestamp_ns,
+    );
+    assert_eq!(refund, payment_amount_e9s); // Full refund
+}
+
+#[test]
+fn test_calculate_prorated_refund_full_refund_before_service_start() {
+    // Service provisioned but current time is before provisioning -> full refund
+    let payment_amount_e9s = 1_000_000_000;
+    let service_start_ns = 1000;
+    let end_timestamp_ns = 2000;
+    let current_timestamp_ns = 500; // Before service started
+
+    let refund = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
     );
@@ -1225,15 +1243,15 @@ fn test_calculate_prorated_refund_full_refund_before_start() {
 
 #[test]
 fn test_calculate_prorated_refund_half_used() {
-    // Contract is 50% through, should get 50% refund
+    // Service is 50% through, should get 50% refund
     let payment_amount_e9s = 1_000_000_000;
-    let start_timestamp_ns = 1000;
+    let service_start_ns = 1000;
     let end_timestamp_ns = 3000; // Duration: 2000ns
-    let current_timestamp_ns = 2000; // Halfway through
+    let current_timestamp_ns = 2000; // Halfway through service
 
     let refund = Database::calculate_prorated_refund(
         payment_amount_e9s,
-        Some(start_timestamp_ns),
+        Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
     );
@@ -1246,13 +1264,13 @@ fn test_calculate_prorated_refund_half_used() {
 fn test_calculate_prorated_refund_no_refund_after_end() {
     // Contract has already ended, no refund
     let payment_amount_e9s = 1_000_000_000;
-    let start_timestamp_ns = 1000;
+    let service_start_ns = 1000;
     let end_timestamp_ns = 2000;
     let current_timestamp_ns = 3000; // After end
 
     let refund = Database::calculate_prorated_refund(
         payment_amount_e9s,
-        Some(start_timestamp_ns),
+        Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
     );
@@ -1261,18 +1279,10 @@ fn test_calculate_prorated_refund_no_refund_after_end() {
 }
 
 #[test]
-fn test_calculate_prorated_refund_missing_timestamps() {
-    // Missing timestamps should return 0
+fn test_calculate_prorated_refund_missing_end_timestamp() {
+    // Missing end timestamp should return 0 (invalid contract)
     let payment_amount_e9s = 1_000_000_000;
     let current_timestamp_ns = 1500;
-
-    let refund = Database::calculate_prorated_refund(
-        payment_amount_e9s,
-        None,
-        Some(2000),
-        current_timestamp_ns,
-    );
-    assert_eq!(refund, 0);
 
     let refund = Database::calculate_prorated_refund(
         payment_amount_e9s,
@@ -1285,15 +1295,15 @@ fn test_calculate_prorated_refund_missing_timestamps() {
 
 #[test]
 fn test_calculate_prorated_refund_90_percent_remaining() {
-    // Used 10%, should get 90% refund
+    // Used 10% of service, should get 90% refund
     let payment_amount_e9s = 1_000_000_000;
-    let start_timestamp_ns = 0;
+    let service_start_ns = 0;
     let end_timestamp_ns = 10_000; // Duration: 10,000ns
     let current_timestamp_ns = 1_000; // 10% used
 
     let refund = Database::calculate_prorated_refund(
         payment_amount_e9s,
-        Some(start_timestamp_ns),
+        Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
     );

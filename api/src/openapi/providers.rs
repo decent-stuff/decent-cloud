@@ -899,7 +899,8 @@ impl ProvidersApi {
 
     /// Respond to rental request
     ///
-    /// Accept or reject a rental request (requires authentication)
+    /// Accept or reject a rental request (requires authentication).
+    /// Rejection triggers full refund since user never received the service.
     #[oai(
         path = "/provider/rental-requests/:id/respond",
         method = "post",
@@ -923,22 +924,49 @@ impl ProvidersApi {
             }
         };
 
-        let new_status = if req.accept { "accepted" } else { "rejected" };
+        if req.accept {
+            // Accept: just update status
+            match db
+                .update_contract_status(&contract_id, "accepted", &auth.pubkey, req.memo.as_deref())
+                .await
+            {
+                Ok(_) => Json(ApiResponse {
+                    success: true,
+                    data: Some("Contract accepted".to_string()),
+                    error: None,
+                }),
+                Err(e) => Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                }),
+            }
+        } else {
+            // Reject: trigger full refund since user never got the service
+            let stripe_client = crate::stripe_client::StripeClient::new().ok();
+            let icpay_client = crate::icpay_client::IcpayClient::new().ok();
 
-        match db
-            .update_contract_status(&contract_id, new_status, &auth.pubkey, req.memo.as_deref())
-            .await
-        {
-            Ok(_) => Json(ApiResponse {
-                success: true,
-                data: Some(format!("Contract {}", new_status)),
-                error: None,
-            }),
-            Err(e) => Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(e.to_string()),
-            }),
+            match db
+                .reject_contract(
+                    &contract_id,
+                    &auth.pubkey,
+                    req.memo.as_deref(),
+                    stripe_client.as_ref(),
+                    icpay_client.as_ref(),
+                )
+                .await
+            {
+                Ok(_) => Json(ApiResponse {
+                    success: true,
+                    data: Some("Contract rejected, refund initiated".to_string()),
+                    error: None,
+                }),
+                Err(e) => Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                }),
+            }
         }
     }
 
