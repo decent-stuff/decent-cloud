@@ -20,7 +20,7 @@ async fn create_stripe_checkout_session(
     let contract = db
         .get_contract(contract_id)
         .await
-        .map_err(|e| format!("Failed to retrieve contract: {}", e))?
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "Contract created but not found".to_string())?;
 
     // Validate currency is supported by Stripe
@@ -31,8 +31,8 @@ async fn create_stripe_checkout_session(
         ));
     }
 
-    let stripe_client = crate::stripe_client::StripeClient::new()
-        .map_err(|e| format!("Failed to initialize Stripe client: {}", e))?;
+    let stripe_client =
+        crate::stripe_client::StripeClient::new().map_err(|e| e.to_string())?;
 
     // Convert e9s to cents (divide by 10^7)
     let amount_cents = contract.payment_amount_e9s / 10_000_000;
@@ -45,7 +45,7 @@ async fn create_stripe_checkout_session(
             &contract_id_hex,
         )
         .await
-        .map_err(|e| format!("Failed to create Stripe checkout session: {}", e))?;
+        .map_err(|e| e.to_string())?;
 
     Ok(checkout_url)
 }
@@ -216,30 +216,6 @@ impl ContractsApi {
                 } else {
                     None
                 };
-
-                // Create Chatwoot conversation for customer-provider messaging
-                if crate::chatwoot::integration::is_configured() {
-                    if let Err(e) = crate::chatwoot::integration::create_contract_conversation(
-                        &db,
-                        &contract_id,
-                        &auth.pubkey,
-                    )
-                    .await
-                    {
-                        tracing::error!(
-                            "Failed to create Chatwoot conversation for contract: {}",
-                            e
-                        );
-                        return Json(ApiResponse {
-                            success: false,
-                            data: None,
-                            error: Some(format!(
-                                "Contract created but Chatwoot conversation creation failed: {}",
-                                e
-                            )),
-                        });
-                    }
-                }
 
                 Json(ApiResponse {
                     success: true,

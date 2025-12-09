@@ -409,38 +409,6 @@ impl std::fmt::Debug for ChatwootClient {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct CreateContactRequest<'a> {
-    inbox_id: u32,
-    identifier: &'a str,
-    name: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    email: Option<&'a str>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ContactResponse {
-    pub id: u64,
-    pub identifier: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct CreateConversationRequest<'a> {
-    inbox_id: u32,
-    contact_id: u64,
-    custom_attributes: ConversationAttributes<'a>,
-}
-
-#[derive(Debug, Serialize)]
-struct ConversationAttributes<'a> {
-    contract_id: &'a str,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ConversationResponse {
-    pub id: u64,
-}
-
 /// Response from creating an inbox.
 #[derive(Debug, Deserialize)]
 pub struct InboxResponse {
@@ -788,80 +756,6 @@ impl ChatwootClient {
             self.account_id
         );
         Ok(())
-    }
-
-    /// Create or update a contact (customer).
-    pub async fn create_contact(
-        &self,
-        inbox_id: u32,
-        identifier: &str,
-        name: &str,
-        email: Option<&str>,
-    ) -> Result<ContactResponse> {
-        let url = format!(
-            "{}/api/v1/accounts/{}/contacts",
-            self.base_url, self.account_id
-        );
-
-        let resp = self
-            .client
-            .post(&url)
-            .header("api_access_token", &self.api_token)
-            .json(&CreateContactRequest {
-                inbox_id,
-                identifier,
-                name,
-                email,
-            })
-            .send()
-            .await
-            .context("Failed to send create contact request")?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Chatwoot API error {}: {}", status, body);
-        }
-
-        resp.json()
-            .await
-            .context("Failed to parse contact response")
-    }
-
-    /// Create a conversation for a contract.
-    pub async fn create_conversation(
-        &self,
-        inbox_id: u32,
-        contact_id: u64,
-        contract_id: &str,
-    ) -> Result<ConversationResponse> {
-        let url = format!(
-            "{}/api/v1/accounts/{}/conversations",
-            self.base_url, self.account_id
-        );
-
-        let resp = self
-            .client
-            .post(&url)
-            .header("api_access_token", &self.api_token)
-            .json(&CreateConversationRequest {
-                inbox_id,
-                contact_id,
-                custom_attributes: ConversationAttributes { contract_id },
-            })
-            .send()
-            .await
-            .context("Failed to send create conversation request")?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Chatwoot API error {}: {}", status, body);
-        }
-
-        resp.json()
-            .await
-            .context("Failed to parse conversation response")
     }
 
     /// Fetch help center articles for a portal.
