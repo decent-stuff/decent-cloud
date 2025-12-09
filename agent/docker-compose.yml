@@ -14,6 +14,7 @@ services:
       - RUST_LOG=info
       - RUST_BACKTRACE=1
       - HOME=/home/ubuntu
+      - VIRTUAL_ENV=/home/ubuntu/.venv
     volumes:
       # Mount the entire repository directory to /code
       - ..:/code
