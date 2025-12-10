@@ -1,10 +1,11 @@
 use crate::database::Database;
+use crate::invoice_storage::{self, InvoiceType};
 use anyhow::{Context, Result};
 use chrono::Datelike;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 
-/// Invoice metadata stored in database
+/// Invoice metadata stored in database (PDF stored on disk)
 #[derive(Debug, Serialize, Deserialize, Object, sqlx::FromRow)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
@@ -25,8 +26,6 @@ pub struct Invoice {
     pub vat_amount_e9s: i64,
     pub total_e9s: i64,
     pub currency: String,
-    #[serde(skip)]
-    pub pdf_blob: Option<Vec<u8>>,
     pub pdf_generated_at_ns: Option<i64>,
     pub created_at_ns: i64,
 }
@@ -187,7 +186,7 @@ async fn get_next_invoice_number(db: &Database) -> Result<String> {
     Ok(format!("INV-{}-{:06}", current_year, number))
 }
 
-/// Create invoice record in database and generate PDF
+/// Create invoice record in database
 pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice> {
     // Check if invoice already exists
     if let Some(invoice) = get_invoice_by_contract(db, contract_id).await? {
@@ -387,14 +386,20 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     let json_data = serde_json::to_string(&invoice_data)?;
     tokio::fs::write(&json_path, &json_data)
         .await
-        .context("Failed to write invoice data")?;
+        .context(format!(
+            "Failed to write invoice data to {}",
+            json_path.display()
+        ))?;
 
     // Write embedded template to temp file (template is compiled into binary)
     const INVOICE_TEMPLATE: &str = include_str!("../templates/invoice.typ");
     let template_path = temp_dir.path().join("invoice.typ");
     tokio::fs::write(&template_path, INVOICE_TEMPLATE)
         .await
-        .context("Failed to write invoice template")?;
+        .context(format!(
+            "Failed to write invoice template to {}",
+            template_path.display()
+        ))?;
 
     // Run Typst CLI - set cache dir if not already set (for package downloads)
     let mut cmd = tokio::process::Command::new("typst");
@@ -417,9 +422,10 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     }
 
     // Read generated PDF
-    let pdf_bytes = tokio::fs::read(&output_path)
-        .await
-        .context("Failed to read generated PDF")?;
+    let pdf_bytes = tokio::fs::read(&output_path).await.context(format!(
+        "Failed to read generated PDF from {}",
+        output_path.display()
+    ))?;
 
     tracing::info!(
         "Generated PDF invoice {} ({} bytes)",
@@ -430,7 +436,17 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     Ok(pdf_bytes)
 }
 
-/// Get invoice PDF - uses Stripe invoice for Stripe payments, otherwise generates with Typst
+/// Get invoice PDF - prefers Stripe invoice, falls back to Typst
+///
+/// Strategy:
+/// 1. Always ensure a Typst invoice exists on disk (generated on first call)
+/// 2. For Stripe payments with invoice ID, fetch and persist Stripe PDF to disk
+/// 3. Return Stripe PDF if available, otherwise return Typst PDF
+///
+/// Both invoice types are stored on disk in {LEDGER_DIR}/invoices/{contract_id}/
+/// This ensures both invoices are available, and if a Stripe invoice
+/// arrives later (e.g., after user already clicked UI to get Typst invoice),
+/// it will be persisted and used for subsequent requests.
 pub async fn get_invoice_pdf(db: &Database, contract_id: &[u8]) -> Result<Vec<u8>> {
     // Get contract to check payment method and Stripe invoice ID
     let contract = db
@@ -438,25 +454,46 @@ pub async fn get_invoice_pdf(db: &Database, contract_id: &[u8]) -> Result<Vec<u8
         .await?
         .context("Contract not found")?;
 
-    // For Stripe payments with invoice ID, fetch PDF from Stripe
+    // Step 1: Ensure Typst invoice exists on disk (creates record + generates PDF if needed)
+    // This is our fallback, so we always want it available
+    let typst_pdf = get_typst_invoice_pdf(db, contract_id).await?;
+
+    // Step 2: For Stripe payments, try to get/fetch Stripe PDF
     if contract.payment_method == "stripe" {
         if let Some(stripe_invoice_id) = &contract.stripe_invoice_id {
-            return get_stripe_invoice_pdf(stripe_invoice_id).await;
+            // Check if we already have cached Stripe PDF on disk
+            if let Some(cached_pdf) =
+                invoice_storage::load_invoice_pdf(contract_id, InvoiceType::Stripe).await?
+            {
+                return Ok(cached_pdf);
+            }
+
+            // Fetch from Stripe and persist to disk
+            match fetch_and_persist_stripe_pdf(contract_id, stripe_invoice_id).await {
+                Ok(pdf) => return Ok(pdf),
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to fetch Stripe invoice PDF for contract {}: {}. Using Typst fallback.",
+                        hex::encode(contract_id),
+                        e
+                    );
+                    // Fall through to Typst
+                }
+            }
+        } else {
+            tracing::debug!(
+                "Stripe payment without invoice ID for contract {}, using Typst invoice",
+                hex::encode(contract_id)
+            );
         }
-        // Stripe payment without invoice ID - invoice creation wasn't enabled for this session
-        // Fall through to Typst generation
-        tracing::warn!(
-            "Stripe payment without invoice ID for contract {}, falling back to Typst generation",
-            hex::encode(contract_id)
-        );
     }
 
-    // For ICPay or legacy Stripe payments, use Typst generation
-    get_typst_invoice_pdf(db, contract_id).await
+    // Return Typst PDF as fallback
+    Ok(typst_pdf)
 }
 
-/// Fetch invoice PDF from Stripe
-async fn get_stripe_invoice_pdf(invoice_id: &str) -> Result<Vec<u8>> {
+/// Fetch Stripe invoice PDF and persist it to disk
+async fn fetch_and_persist_stripe_pdf(contract_id: &[u8], invoice_id: &str) -> Result<Vec<u8>> {
     let stripe_client = crate::stripe_client::StripeClient::new()?;
     let pdf_url = stripe_client
         .get_invoice_pdf_url(invoice_id)
@@ -478,38 +515,47 @@ async fn get_stripe_invoice_pdf(invoice_id: &str) -> Result<Vec<u8>> {
     let pdf_bytes = response
         .bytes()
         .await
-        .context("Failed to read invoice PDF bytes")?;
+        .context("Failed to read invoice PDF bytes")?
+        .to_vec();
 
-    Ok(pdf_bytes.to_vec())
+    // Persist to disk for future use
+    invoice_storage::save_invoice_pdf(contract_id, InvoiceType::Stripe, &pdf_bytes).await?;
+
+    tracing::info!(
+        "Fetched and persisted Stripe invoice PDF for contract {} ({} bytes)",
+        hex::encode(contract_id),
+        pdf_bytes.len()
+    );
+
+    Ok(pdf_bytes)
 }
 
-/// Generate invoice PDF using Typst (for ICPay or fallback)
+/// Get or generate Typst invoice PDF (stored on disk)
 async fn get_typst_invoice_pdf(db: &Database, contract_id: &[u8]) -> Result<Vec<u8>> {
-    // Get or create invoice record
-    let mut invoice = match get_invoice_by_contract(db, contract_id).await? {
+    // Check if PDF already exists on disk
+    if let Some(pdf) = invoice_storage::load_invoice_pdf(contract_id, InvoiceType::Typst).await? {
+        return Ok(pdf);
+    }
+
+    // Get or create invoice metadata record
+    let invoice = match get_invoice_by_contract(db, contract_id).await? {
         Some(inv) => inv,
         None => create_invoice(db, contract_id).await?,
     };
 
-    // Return cached PDF if exists
-    if let Some(pdf_blob) = &invoice.pdf_blob {
-        return Ok(pdf_blob.clone());
-    }
-
-    // Generate PDF
+    // Generate PDF using Typst
     let pdf_bytes = generate_invoice_pdf(db, &invoice).await?;
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
-    // Cache PDF in database
-    sqlx::query("UPDATE invoices SET pdf_blob = ?, pdf_generated_at_ns = ? WHERE id = ?")
-        .bind(&pdf_bytes)
+    // Save to disk
+    invoice_storage::save_invoice_pdf(contract_id, InvoiceType::Typst, &pdf_bytes).await?;
+
+    // Update metadata in DB (just the timestamp, PDF is on disk)
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    sqlx::query("UPDATE invoices SET pdf_generated_at_ns = ? WHERE id = ?")
         .bind(now_ns)
         .bind(invoice.id)
         .execute(&db.pool)
         .await?;
-
-    invoice.pdf_blob = Some(pdf_bytes.clone());
-    invoice.pdf_generated_at_ns = Some(now_ns);
 
     Ok(pdf_bytes)
 }
