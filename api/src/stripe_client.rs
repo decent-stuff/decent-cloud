@@ -1,9 +1,9 @@
 use anyhow::Result;
 use stripe::{
     CheckoutSession, CheckoutSessionId, CheckoutSessionMode, CheckoutSessionPaymentStatus, Client,
-    CreateCheckoutSession, CreateCheckoutSessionLineItems, CreateCheckoutSessionLineItemsPriceData,
-    CreateCheckoutSessionLineItemsPriceDataProductData, CreateRefund, Currency, PaymentIntentId,
-    Refund,
+    CreateCheckoutSession, CreateCheckoutSessionInvoiceCreation, CreateCheckoutSessionLineItems,
+    CreateCheckoutSessionLineItemsPriceData, CreateCheckoutSessionLineItemsPriceDataProductData,
+    CreateRefund, Currency, Expandable, Invoice, InvoiceId, PaymentIntentId, Refund,
 };
 
 /// Stripe API client wrapper for payment processing
@@ -94,6 +94,12 @@ impl StripeClient {
                 .collect(),
         );
 
+        // Enable invoice generation for post-purchase invoice PDF
+        params.invoice_creation = Some(CreateCheckoutSessionInvoiceCreation {
+            enabled: true,
+            invoice_data: None,
+        });
+
         let session = CheckoutSession::create(&self.client, params).await?;
 
         session
@@ -173,13 +179,34 @@ impl StripeClient {
 
         let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
 
+        // Extract invoice ID if invoice was created
+        let invoice_id = session.invoice.as_ref().map(|inv| match inv {
+            Expandable::Id(id) => id.to_string(),
+            Expandable::Object(invoice) => invoice.id.to_string(),
+        });
+
         Ok(Some(CheckoutSessionResult {
             contract_id,
             session_id: session.id.to_string(),
             tax_amount_cents,
             customer_tax_id,
             reverse_charge,
+            invoice_id,
         }))
+    }
+
+    /// Retrieves a Stripe invoice PDF URL
+    ///
+    /// # Arguments
+    /// * `invoice_id` - The Invoice ID (in_...)
+    ///
+    /// # Returns
+    /// PDF URL if available, None if invoice not finalized yet
+    pub async fn get_invoice_pdf_url(&self, invoice_id: &str) -> Result<Option<String>> {
+        let invoice_id: InvoiceId = invoice_id.parse()?;
+        let invoice = Invoice::retrieve(&self.client, &invoice_id, &[]).await?;
+
+        Ok(invoice.invoice_pdf)
     }
 }
 
@@ -190,6 +217,7 @@ pub struct CheckoutSessionResult {
     pub tax_amount_cents: Option<i64>,
     pub customer_tax_id: Option<String>,
     pub reverse_charge: bool,
+    pub invoice_id: Option<String>,
 }
 
 #[cfg(test)]

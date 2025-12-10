@@ -7,5 +7,5 @@ pub mod notifications;
 pub mod payment_release_service;
 pub mod receipts;
 mod search;
-mod stripe_client;
+pub mod stripe_client;
 pub mod support_bot;

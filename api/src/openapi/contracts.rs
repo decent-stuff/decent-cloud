@@ -590,6 +590,7 @@ impl ContractsApi {
                 tax_amount_e9s,
                 session_result.customer_tax_id.as_deref(),
                 session_result.reverse_charge,
+                session_result.invoice_id.as_deref(),
             )
             .await
         {

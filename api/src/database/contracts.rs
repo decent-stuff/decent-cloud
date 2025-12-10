@@ -93,6 +93,9 @@ pub struct Contract {
     /// Buyer address for B2B invoices
     #[oai(skip_serializing_if_is_none)]
     pub buyer_address: Option<String>,
+    /// Stripe invoice ID for invoice PDF retrieval
+    #[oai(skip_serializing_if_is_none)]
+    pub stripe_invoice_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -184,7 +187,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -203,7 +206,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -222,7 +225,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -241,7 +244,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -288,7 +291,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -800,15 +803,17 @@ impl Database {
         tax_amount_e9s: Option<i64>,
         customer_tax_id: Option<&str>,
         reverse_charge: bool,
+        stripe_invoice_id: Option<&str>,
     ) -> Result<()> {
         sqlx::query(
-            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ?, payment_status = ?, tax_amount_e9s = ?, customer_tax_id = ?, reverse_charge = ? WHERE contract_id = ?"
+            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ?, payment_status = ?, tax_amount_e9s = ?, customer_tax_id = ?, reverse_charge = ?, stripe_invoice_id = ? WHERE contract_id = ?"
         )
         .bind(checkout_session_id)
         .bind("succeeded")
         .bind(tax_amount_e9s)
         .bind(customer_tax_id)
         .bind(if reverse_charge { 1 } else { 0 })
+        .bind(stripe_invoice_id)
         .bind(contract_id)
         .execute(&self.pool)
         .await?;
@@ -1194,7 +1199,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
                FROM contract_sign_requests
                WHERE payment_method = 'icpay'
                AND payment_status = 'succeeded'

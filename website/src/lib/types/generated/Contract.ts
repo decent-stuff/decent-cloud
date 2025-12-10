@@ -4,4 +4,8 @@ export type Contract = { contract_id: string, requester_pubkey: string, requeste
 /**
  * Buyer address for B2B invoices
  */
-buyer_address: string | null, };
+buyer_address: string | null, 
+/**
+ * Stripe invoice ID for invoice PDF retrieval
+ */
+stripe_invoice_id: string | null, };

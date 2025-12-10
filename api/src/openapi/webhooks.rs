@@ -23,6 +23,7 @@ struct StripeEventData {
 #[derive(Debug, Deserialize)]
 struct StripeCheckoutSession {
     id: String,
+    invoice: Option<String>,
     metadata: Option<serde_json::Value>,
     total_details: Option<StripeTotalDetails>,
     customer_details: Option<StripeCustomerDetails>,
@@ -209,6 +210,7 @@ pub async fn stripe_webhook(
                     tax_amount_e9s,
                     customer_tax_id.as_deref(),
                     reverse_charge,
+                    session.invoice.as_deref(),
                 )
                 .await
             {
