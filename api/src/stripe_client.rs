@@ -95,9 +95,18 @@ impl StripeClient {
         );
 
         // Enable invoice generation for post-purchase invoice PDF
+        // Pass contract_id in invoice_data.metadata so we can link the invoice back
+        // when we receive the invoice.paid webhook (invoice is created asynchronously)
         params.invoice_creation = Some(CreateCheckoutSessionInvoiceCreation {
             enabled: true,
-            invoice_data: None,
+            invoice_data: Some(stripe::CreateCheckoutSessionInvoiceCreationInvoiceData {
+                metadata: Some(
+                    [("contract_id".to_string(), contract_id.to_string())]
+                        .into_iter()
+                        .collect(),
+                ),
+                ..Default::default()
+            }),
         });
 
         let session = CheckoutSession::create(&self.client, params).await?;

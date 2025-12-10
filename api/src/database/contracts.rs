@@ -821,6 +821,23 @@ impl Database {
         Ok(())
     }
 
+    /// Update stripe_invoice_id for a contract (called from invoice.paid webhook)
+    pub async fn update_stripe_invoice_id(
+        &self,
+        contract_id: &[u8],
+        stripe_invoice_id: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET stripe_invoice_id = ? WHERE contract_id = ?",
+            stripe_invoice_id,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Get offering by offering_id string
     async fn get_offering_by_id(
         &self,

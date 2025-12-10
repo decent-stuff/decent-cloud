@@ -46,6 +46,12 @@ struct StripeTaxId {
     value: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct StripeInvoice {
+    id: String,
+    metadata: Option<serde_json::Value>,
+}
+
 /// Verify Stripe webhook signature
 fn verify_signature(payload: &str, signature: &str, secret: &str) -> Result<()> {
     use hmac::{Hmac, Mac};
@@ -255,6 +261,61 @@ pub async fn stripe_webhook(
                     );
                     // Don't fail the webhook - payment was successful
                 }
+            }
+        }
+        // invoice.paid is fired when the invoice is finalized and paid
+        // This happens asynchronously after checkout.session.completed when invoice_creation is enabled
+        "invoice.paid" => {
+            let invoice: StripeInvoice =
+                serde_json::from_value(event.data.object).map_err(|e| {
+                    tracing::error!("Failed to parse invoice: {:#}", e);
+                    PoemError::from_string(
+                        format!("Invalid invoice data: {}", e),
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            tracing::info!("Invoice paid: {}", invoice.id);
+
+            // Extract contract_id from invoice metadata (passed via invoice_data.metadata)
+            let contract_id_hex = invoice
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("contract_id"))
+                .and_then(|v| v.as_str());
+
+            if let Some(contract_id_hex) = contract_id_hex {
+                match hex::decode(contract_id_hex) {
+                    Ok(contract_id_bytes) => {
+                        // Update contract with the invoice ID
+                        if let Err(e) = db
+                            .update_stripe_invoice_id(&contract_id_bytes, &invoice.id)
+                            .await
+                        {
+                            tracing::error!(
+                                "Failed to update stripe_invoice_id for contract {}: {}",
+                                contract_id_hex,
+                                e
+                            );
+                            // Don't fail webhook - invoice was created successfully
+                        } else {
+                            tracing::info!(
+                                "Updated contract {} with invoice ID {}",
+                                contract_id_hex,
+                                invoice.id
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Invalid contract_id hex in invoice metadata: {:#}", e);
+                    }
+                }
+            } else {
+                // This is fine - could be an invoice from a subscription or other source
+                tracing::debug!(
+                    "Invoice {} has no contract_id in metadata, skipping",
+                    invoice.id
+                );
             }
         }
         // Note: payment_intent.succeeded and payment_intent.payment_failed webhooks are NOT used.
@@ -1317,5 +1378,67 @@ mod tests {
         // This would trigger reverse charge
         let reverse_charge = has_vat_id && tax_amount.unwrap_or(1) == 0;
         assert!(reverse_charge);
+    }
+
+    // Invoice webhook tests
+    #[test]
+    fn test_invoice_deserialization_with_metadata() {
+        let json = r#"{
+            "id": "in_test_123",
+            "metadata": {
+                "contract_id": "abc123def456"
+            }
+        }"#;
+
+        let invoice: StripeInvoice = serde_json::from_str(json).unwrap();
+        assert_eq!(invoice.id, "in_test_123");
+        assert!(invoice.metadata.is_some());
+        let contract_id = invoice
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("contract_id"))
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(contract_id, "abc123def456");
+    }
+
+    #[test]
+    fn test_invoice_deserialization_without_metadata() {
+        let json = r#"{
+            "id": "in_test_456"
+        }"#;
+
+        let invoice: StripeInvoice = serde_json::from_str(json).unwrap();
+        assert_eq!(invoice.id, "in_test_456");
+        assert!(invoice.metadata.is_none());
+    }
+
+    #[test]
+    fn test_invoice_paid_event_deserialization() {
+        let json = r#"{
+            "type": "invoice.paid",
+            "data": {
+                "object": {
+                    "id": "in_test_789",
+                    "metadata": {
+                        "contract_id": "abc123"
+                    }
+                }
+            }
+        }"#;
+
+        let event: StripeEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.event_type, "invoice.paid");
+
+        let invoice: StripeInvoice = serde_json::from_value(event.data.object).unwrap();
+        assert_eq!(invoice.id, "in_test_789");
+
+        let contract_id = invoice
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("contract_id"))
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(contract_id, "abc123");
     }
 }
