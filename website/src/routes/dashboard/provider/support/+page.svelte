@@ -15,6 +15,10 @@
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 
+	// Support portal URLs - base URL from env, specific paths from portalStatus
+	const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
+	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || '1';
+
 	// Shared state
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -54,6 +58,19 @@
 	let newPassword = $state<string | null>(null);
 
 	const accountEmail = $derived(currentIdentity?.account?.email);
+
+	// Dynamic URLs based on provider's portal status
+	const supportDashboardUrl = $derived(
+		portalStatus?.inboxId
+			? `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/inbox/${portalStatus.inboxId}`
+			: `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`
+	);
+	// Help Center editing URL - goes to portal articles admin
+	const helpCenterEditUrl = $derived(
+		portalStatus?.portalSlug
+			? `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/portals/${portalStatus.portalSlug}/articles`
+			: null
+	);
 
 	// Options
 	const supportHoursOptions = ['24/7', 'Business hours (Mon-Fri 9-17 UTC)', 'Business hours (Mon-Fri 9-17 US Eastern)', 'custom'];
@@ -220,11 +237,18 @@
 	function copyPassword() { if (newPassword) navigator.clipboard.writeText(newPassword); }
 </script>
 
-<div class="space-y-8">
+<div class="space-y-6">
 	<div>
 		<h1 class="text-4xl font-bold text-white mb-2">Provider Setup</h1>
-		<p class="text-white/60">Configure your provider profile, help center, notifications, and portal access</p>
+		<p class="text-white/60">Manage your support account, notifications, and provider profile</p>
 	</div>
+
+	<!-- Section Navigation -->
+	<nav class="flex flex-wrap gap-2 bg-white/5 rounded-lg p-2">
+		<a href="#support" class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors">Support Portal</a>
+		<a href="#notifications" class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors">Notifications</a>
+		<a href="#helpcenter" class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors">Help Center Profile</a>
+	</nav>
 
 	{#if error}<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">{error}</div>{/if}
 	{#if success}<div class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-400">{success}{#if articleUrl} <a href={articleUrl} target="_blank" rel="noopener" class="underline hover:text-green-200">View article →</a>{/if}</div>{/if}
@@ -242,103 +266,116 @@
 	{:else if loading}
 		<div class="flex justify-center p-8"><div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"></div></div>
 	{:else}
-		<!-- Help Center Section -->
-		<form onsubmit={saveOnboarding} class="space-y-6">
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6">
-				<h2 class="text-2xl font-bold text-white flex items-center gap-2">📝 Help Center Setup</h2>
-				<p class="text-white/60 text-sm">Configure your provider help center article for customers</p>
+		<!-- Support Portal Section (moved to top - most frequently accessed) -->
+		<section id="support" class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6 scroll-mt-4">
+			<h2 class="text-2xl font-bold text-white">Support Portal</h2>
+			<p class="text-white/60 text-sm">Access your support dashboard and knowledge base</p>
 
-				<div class="grid md:grid-cols-2 gap-6">
+			<!-- Quick Links -->
+			<div class="grid md:grid-cols-2 gap-4">
+				<a href={supportDashboardUrl} target="_blank" rel="noopener noreferrer" class="flex items-start gap-4 p-4 rounded-lg bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 hover:border-blue-400/50 transition-colors group">
+					<span class="text-3xl">🎧</span>
 					<div>
-						<span class="block text-white/80 mb-2">Support Email <span class="text-red-400">*</span></span>
-						{#if accountEmail}
-							<div class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white/80">{accountEmail}</div>
-							<p class="text-white/50 text-xs mt-1">Using your account email. <a href="/dashboard/account/profile" class="text-blue-400 hover:underline">Change in Profile</a></p>
+						<h3 class="text-white font-semibold group-hover:text-blue-300 transition-colors">Support Dashboard <span class="text-xs opacity-50">↗</span></h3>
+						<p class="text-white/60 text-sm mt-1">View and respond to customer tickets, manage conversations</p>
+					</div>
+				</a>
+				{#if helpCenterEditUrl}
+					<a href={helpCenterEditUrl} target="_blank" rel="noopener noreferrer" class="flex items-start gap-4 p-4 rounded-lg bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 hover:border-green-400/50 transition-colors group">
+						<span class="text-3xl">📝</span>
+						<div>
+							<h3 class="text-white font-semibold group-hover:text-green-300 transition-colors">Help Center <span class="text-xs opacity-50">↗</span></h3>
+							<p class="text-white/60 text-sm mt-1">Edit and publish support articles for your customers</p>
+						</div>
+					</a>
+				{:else}
+					<div class="flex items-start gap-4 p-4 rounded-lg bg-white/5 border border-white/10">
+						<span class="text-3xl opacity-50">📝</span>
+						<div>
+							<h3 class="text-white/50 font-semibold">Help Center</h3>
+							<p class="text-white/40 text-sm mt-1">Create your portal account first to access the Help Center</p>
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Portal Account Status -->
+			<div class="bg-white/5 rounded-lg p-4 space-y-4">
+				<h3 class="text-white font-medium">Portal Account</h3>
+				{#if newPassword}
+					<div class="bg-green-500/20 border border-green-500/50 rounded-lg p-4 space-y-3">
+						<p class="text-green-300 font-semibold">Password generated:</p>
+						<div class="flex items-center gap-2">
+							<code class="bg-black/30 px-3 py-2 rounded font-mono text-white flex-1 text-sm">{newPassword}</code>
+							<button onclick={copyPassword} class="px-4 py-2 bg-white/10 rounded hover:bg-white/20 text-white transition-colors text-sm">Copy</button>
+						</div>
+						<p class="text-white/60 text-xs">Save this password now - it won't be shown again.</p>
+					</div>
+				{/if}
+				{#if portalStatus}
+					<div class="flex flex-wrap items-center gap-4 text-sm">
+						<div><span class="text-white/50">Status:</span> <span class="text-white font-medium {portalStatus.hasAccount ? 'text-green-400' : 'text-yellow-400'}">{portalStatus.hasAccount ? 'Active' : 'Not created'}</span></div>
+						{#if portalStatus.email}<div><span class="text-white/50">Email:</span> <span class="text-white">{portalStatus.email}</span></div>{/if}
+					</div>
+					<div class="flex flex-wrap gap-3">
+						{#if portalStatus.hasAccount}
+							<button onclick={handlePortalReset} disabled={resetting} class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors disabled:opacity-50">{resetting ? 'Resetting...' : 'Reset Password'}</button>
 						{:else}
-							<div class="w-full px-4 py-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-300">No email set</div>
-							<p class="text-yellow-400/80 text-sm mt-1">Please <a href="/dashboard/account/profile" class="underline">add your email</a> in Account settings first</p>
+							<button onclick={handlePortalCreate} disabled={creating} class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">{creating ? 'Creating...' : 'Create Account'}</button>
 						{/if}
 					</div>
-					<div>
-						<label for="support-hours" class="block text-white/80 mb-2">Support Hours <span class="text-red-400">*</span></label>
-						<select id="support-hours" bind:value={supportHours} required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
-							<option value="">Select...</option>
-							{#each supportHoursOptions as opt}<option value={opt}>{opt === 'custom' ? 'Custom...' : opt}</option>{/each}
-						</select>
-						{#if supportHours === 'custom'}<input type="text" bind:value={customSupportHours} placeholder="e.g., Mon-Fri 9-17 PST" class="w-full mt-2 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />{/if}
-					</div>
-				</div>
-
-				<div>
-					<div class="text-white/80 mb-2">Support Channels <span class="text-red-400">*</span></div>
-					<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-						{#each supportChannelOptions as ch}<label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked={supportChannels.includes(ch)} onchange={() => supportChannels = toggleArray(supportChannels, ch)} class="w-4 h-4 rounded" /><span class="text-white/80">{ch}</span></label>{/each}
-					</div>
-				</div>
-
-				<div>
-					<div class="text-white/80 mb-2">Regions <span class="text-red-400">*</span></div>
-					<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-						{#each regionOptions as r}<label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked={regions.includes(r)} onchange={() => regions = toggleArray(regions, r)} class="w-4 h-4 rounded" /><span class="text-white/80">{r}</span></label>{/each}
-					</div>
-				</div>
-
-				<div>
-					<div class="text-white/80 mb-2">Payment Methods <span class="text-red-400">*</span></div>
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-						{#each paymentMethodOptions as m}<label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked={paymentMethods.includes(m)} onchange={() => paymentMethods = toggleArray(paymentMethods, m)} class="w-4 h-4 rounded" /><span class="text-white/80">{m}</span></label>{/each}
-					</div>
-				</div>
-
-				<div class="grid md:grid-cols-2 gap-6">
-					<div>
-						<label for="refund-policy" class="block text-white/80 mb-2">Refund Policy</label>
-						<select id="refund-policy" bind:value={refundPolicy} class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
-							<option value="">Select...</option>
-							{#each refundPolicyOptions as opt}<option value={opt}>{opt === 'custom' ? 'Custom...' : opt}</option>{/each}
-						</select>
-						{#if refundPolicy === 'custom'}<input type="text" bind:value={customRefundPolicy} placeholder="Describe policy" class="w-full mt-2 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />{/if}
-					</div>
-					<div>
-						<label for="sla-guarantee" class="block text-white/80 mb-2">SLA Guarantee</label>
-						<select id="sla-guarantee" bind:value={slaGuarantee} class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
-							<option value="">Select...</option>
-							{#each slaGuaranteeOptions as opt}<option value={opt}>{opt}</option>{/each}
-						</select>
-					</div>
-				</div>
-
-				<div>
-					<div class="text-white/80 mb-2">Unique Selling Points <span class="text-white/50">(max 200 chars)</span></div>
-					<div class="space-y-3">
-						<input type="text" bind:value={usp1} maxlength="200" placeholder="Key differentiator #1" class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
-						<input type="text" bind:value={usp2} maxlength="200" placeholder="Key differentiator #2" class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
-						<input type="text" bind:value={usp3} maxlength="200" placeholder="Key differentiator #3" class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
-					</div>
-				</div>
-
-				<div>
-					<div class="flex justify-between items-center mb-2">
-						<span class="text-white/80">Common Issues / FAQ</span>
-						{#if commonIssues.length < 10}<button type="button" onclick={addCommonIssue} class="text-sm px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 text-white">Add</button>{/if}
-					</div>
-					{#each commonIssues as issue, i}
-						<div class="border border-white/20 rounded-lg p-3 mb-2 space-y-2">
-							<div class="flex justify-between"><span class="text-white/50 text-sm">#{i + 1}</span><button type="button" onclick={() => removeCommonIssue(i)} class="text-red-400 text-sm">Remove</button></div>
-							<input type="text" bind:value={issue.question} placeholder="Question" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
-							<textarea bind:value={issue.answer} rows="2" placeholder="Answer" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"></textarea>
-						</div>
-					{/each}
-				</div>
-
-				<button type="submit" disabled={savingOnboarding} class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50">{savingOnboarding ? 'Saving & Publishing...' : 'Save & Publish'}</button>
+				{:else}
+					<p class="text-white/60 text-sm">Unable to load portal status</p>
+				{/if}
 			</div>
-		</form>
+
+			<!-- How to use the support portal -->
+			<details class="bg-white/5 rounded-lg">
+				<summary class="cursor-pointer p-4 text-white font-medium hover:bg-white/5 rounded-lg transition-colors">How to use the Support Portal</summary>
+				<div class="px-4 pb-4 space-y-3 text-white/70 text-sm">
+					<div class="space-y-2">
+						<h4 class="text-white font-medium">Getting Started</h4>
+						<ol class="list-decimal list-inside space-y-1">
+							<li>Create your portal account using the button above (if not already done)</li>
+							<li>Copy the generated password and save it securely</li>
+							<li>Click "Support Dashboard" to open the portal</li>
+							<li>Log in with your email and the generated password</li>
+						</ol>
+					</div>
+					<div class="space-y-2">
+						<h4 class="text-white font-medium">Managing Customer Tickets</h4>
+						<ul class="list-disc list-inside space-y-1">
+							<li><strong>Dashboard:</strong> Shows all open conversations and tickets</li>
+							<li><strong>Conversations:</strong> Chat with customers in real-time</li>
+							<li><strong>Assign:</strong> Take ownership of tickets to resolve them</li>
+							<li><strong>Resolve:</strong> Mark tickets as resolved when completed</li>
+						</ul>
+					</div>
+					<div class="space-y-2">
+						<h4 class="text-white font-medium">Help Center</h4>
+						<ul class="list-disc list-inside space-y-1">
+							<li>Create and edit support articles for your customers</li>
+							<li>Publish FAQs, guides, and documentation</li>
+							<li>Help customers find answers without creating tickets</li>
+						</ul>
+					</div>
+					<div class="space-y-2">
+						<h4 class="text-white font-medium">Mobile App</h4>
+						<p>Respond to tickets on the go:</p>
+						<ul class="list-disc list-inside space-y-1">
+							<li><a href="https://apps.apple.com/app/chatwoot/id1495796682" target="_blank" rel="noopener" class="text-blue-400 hover:underline">iOS App Store</a></li>
+							<li><a href="https://play.google.com/store/apps/details?id=com.chatwoot.app" target="_blank" rel="noopener" class="text-blue-400 hover:underline">Android Play Store</a></li>
+							<li>Server URL: <code class="bg-black/30 px-1.5 py-0.5 rounded text-xs">{CHATWOOT_BASE_URL}</code></li>
+						</ul>
+					</div>
+				</div>
+			</details>
+		</section>
 
 		<!-- Notifications Section -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6">
-			<h2 class="text-2xl font-bold text-white flex items-center gap-2">🔔 Notifications</h2>
-			<p class="text-white/60 text-sm">Configure how you receive support escalation alerts</p>
+		<section id="notifications" class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6 scroll-mt-4">
+			<h2 class="text-2xl font-bold text-white">Notifications</h2>
+			<p class="text-white/60 text-sm">Get alerted when customers need support</p>
 
 			<div class="space-y-4">
 				<label class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyEmail ? 'bg-blue-500/20 border-blue-500/50' : 'bg-white/5 border-white/20 hover:border-white/40'}">
@@ -391,38 +428,103 @@
 			{/if}
 
 			<button onclick={saveNotifications} disabled={savingNotif} class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50">{savingNotif ? 'Saving...' : 'Save Notifications'}</button>
-		</div>
+		</section>
 
-		<!-- Portal Access Section -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6">
-			<h2 class="text-2xl font-bold text-white flex items-center gap-2">🎫 Portal Access</h2>
-			<p class="text-white/60 text-sm">Access your support portal account for ticket management</p>
-
-			{#if newPassword}
-				<div class="bg-green-500/20 border border-green-500/50 rounded-lg p-4 space-y-3">
-					<p class="text-green-300 font-semibold">Password generated:</p>
-					<div class="flex items-center gap-2">
-						<code class="bg-black/30 px-3 py-2 rounded font-mono text-white flex-1">{newPassword}</code>
-						<button onclick={copyPassword} class="px-4 py-2 bg-white/10 rounded hover:bg-white/20 text-white transition-colors">Copy</button>
+		<!-- Help Center Profile Section (moved to bottom - one-time setup) -->
+		<section id="helpcenter" class="scroll-mt-4">
+			<form onsubmit={saveOnboarding} class="space-y-6">
+				<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6">
+					<div>
+						<h2 class="text-2xl font-bold text-white">Help Center Profile</h2>
+						<p class="text-white/60 text-sm mt-1">Configure your provider profile - this auto-generates a help article for customers</p>
 					</div>
-					<p class="text-white/60 text-xs">Save this password now - it won't be shown again.</p>
-				</div>
-			{/if}
 
-			{#if portalStatus}
-				<div class="space-y-3">
-					<div><span class="text-white/70 text-sm">Status:</span> <span class="text-white font-semibold">{portalStatus.hasAccount ? 'Active' : 'Not created'}</span></div>
-					{#if portalStatus.email}<div><span class="text-white/70 text-sm">Email:</span> <span class="text-white">{portalStatus.email}</span></div>{/if}
-					<div><span class="text-white/70 text-sm">Login:</span> <a href={portalStatus.loginUrl} target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline">{portalStatus.loginUrl}</a></div>
+					<div class="grid md:grid-cols-2 gap-6">
+						<div>
+							<span class="block text-white/80 mb-2">Support Email <span class="text-red-400">*</span></span>
+							{#if accountEmail}
+								<div class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white/80">{accountEmail}</div>
+								<p class="text-white/50 text-xs mt-1">Using your account email. <a href="/dashboard/account/profile" class="text-blue-400 hover:underline">Change in Profile</a></p>
+							{:else}
+								<div class="w-full px-4 py-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-300">No email set</div>
+								<p class="text-yellow-400/80 text-sm mt-1">Please <a href="/dashboard/account/profile" class="underline">add your email</a> in Account settings first</p>
+							{/if}
+						</div>
+						<div>
+							<label for="support-hours" class="block text-white/80 mb-2">Support Hours <span class="text-red-400">*</span></label>
+							<select id="support-hours" bind:value={supportHours} required class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
+								<option value="">Select...</option>
+								{#each supportHoursOptions as opt}<option value={opt}>{opt === 'custom' ? 'Custom...' : opt}</option>{/each}
+							</select>
+							{#if supportHours === 'custom'}<input type="text" bind:value={customSupportHours} placeholder="e.g., Mon-Fri 9-17 PST" class="w-full mt-2 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />{/if}
+						</div>
+					</div>
+
+					<div>
+						<div class="text-white/80 mb-2">Support Channels <span class="text-red-400">*</span></div>
+						<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+							{#each supportChannelOptions as ch}<label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked={supportChannels.includes(ch)} onchange={() => supportChannels = toggleArray(supportChannels, ch)} class="w-4 h-4 rounded" /><span class="text-white/80">{ch}</span></label>{/each}
+						</div>
+					</div>
+
+					<div>
+						<div class="text-white/80 mb-2">Regions <span class="text-red-400">*</span></div>
+						<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+							{#each regionOptions as r}<label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked={regions.includes(r)} onchange={() => regions = toggleArray(regions, r)} class="w-4 h-4 rounded" /><span class="text-white/80">{r}</span></label>{/each}
+						</div>
+					</div>
+
+					<div>
+						<div class="text-white/80 mb-2">Payment Methods <span class="text-red-400">*</span></div>
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+							{#each paymentMethodOptions as m}<label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked={paymentMethods.includes(m)} onchange={() => paymentMethods = toggleArray(paymentMethods, m)} class="w-4 h-4 rounded" /><span class="text-white/80">{m}</span></label>{/each}
+						</div>
+					</div>
+
+					<div class="grid md:grid-cols-2 gap-6">
+						<div>
+							<label for="refund-policy" class="block text-white/80 mb-2">Refund Policy</label>
+							<select id="refund-policy" bind:value={refundPolicy} class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
+								<option value="">Select...</option>
+								{#each refundPolicyOptions as opt}<option value={opt}>{opt === 'custom' ? 'Custom...' : opt}</option>{/each}
+							</select>
+							{#if refundPolicy === 'custom'}<input type="text" bind:value={customRefundPolicy} placeholder="Describe policy" class="w-full mt-2 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />{/if}
+						</div>
+						<div>
+							<label for="sla-guarantee" class="block text-white/80 mb-2">SLA Guarantee</label>
+							<select id="sla-guarantee" bind:value={slaGuarantee} class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400">
+								<option value="">Select...</option>
+								{#each slaGuaranteeOptions as opt}<option value={opt}>{opt}</option>{/each}
+							</select>
+						</div>
+					</div>
+
+					<div>
+						<div class="text-white/80 mb-2">Unique Selling Points <span class="text-white/50">(max 200 chars)</span></div>
+						<div class="space-y-3">
+							<input type="text" bind:value={usp1} maxlength="200" placeholder="Key differentiator #1" class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
+							<input type="text" bind:value={usp2} maxlength="200" placeholder="Key differentiator #2" class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
+							<input type="text" bind:value={usp3} maxlength="200" placeholder="Key differentiator #3" class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
+						</div>
+					</div>
+
+					<div>
+						<div class="flex justify-between items-center mb-2">
+							<span class="text-white/80">Common Issues / FAQ</span>
+							{#if commonIssues.length < 10}<button type="button" onclick={addCommonIssue} class="text-sm px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 text-white">Add</button>{/if}
+						</div>
+						{#each commonIssues as issue, i}
+							<div class="border border-white/20 rounded-lg p-3 mb-2 space-y-2">
+								<div class="flex justify-between"><span class="text-white/50 text-sm">#{i + 1}</span><button type="button" onclick={() => removeCommonIssue(i)} class="text-red-400 text-sm">Remove</button></div>
+								<input type="text" bind:value={issue.question} placeholder="Question" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400" />
+								<textarea bind:value={issue.answer} rows="2" placeholder="Answer" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"></textarea>
+							</div>
+						{/each}
+					</div>
+
+					<button type="submit" disabled={savingOnboarding} class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50">{savingOnboarding ? 'Saving & Publishing...' : 'Save & Publish'}</button>
 				</div>
-				{#if portalStatus.hasAccount}
-					<button onclick={handlePortalReset} disabled={resetting} class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50">{resetting ? 'Resetting...' : 'Reset Password'}</button>
-				{:else}
-					<button onclick={handlePortalCreate} disabled={creating} class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50">{creating ? 'Creating...' : 'Create Account'}</button>
-				{/if}
-			{:else}
-				<p class="text-white/60">Unable to load portal status</p>
-			{/if}
-		</div>
+			</form>
+		</section>
 	{/if}
 </div>

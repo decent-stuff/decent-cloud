@@ -31,6 +31,12 @@ pub struct SupportPortalStatus {
     pub email: Option<String>,
     /// Login URL for the support portal
     pub login_url: String,
+    /// Help Center portal slug for this provider (if set up)
+    #[oai(skip_serializing_if_is_none)]
+    pub portal_slug: Option<String>,
+    /// Provider's inbox ID for filtering conversations
+    #[oai(skip_serializing_if_is_none)]
+    pub inbox_id: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Object)]
@@ -127,6 +133,16 @@ impl ChatwootApi {
             }
         };
 
+        // Get provider's Chatwoot resources (inbox_id, portal_slug)
+        let (inbox_id, portal_slug) = match db.get_provider_chatwoot_resources(&user.pubkey).await {
+            Ok(Some((inbox, _team, slug))) => (Some(inbox), Some(slug)),
+            Ok(None) => (None, None),
+            Err(e) => {
+                tracing::warn!("Failed to get provider Chatwoot resources: {:#}", e);
+                (None, None)
+            }
+        };
+
         Json(ApiResponse {
             success: true,
             data: Some(SupportPortalStatus {
@@ -134,6 +150,8 @@ impl ChatwootApi {
                 user_id: chatwoot_user_id,
                 email,
                 login_url: format!("{}/app/login", support_url),
+                portal_slug,
+                inbox_id,
             }),
             error: None,
         })

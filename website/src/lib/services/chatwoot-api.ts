@@ -12,6 +12,10 @@ export interface SupportPortalStatus {
 	userId: number | null;
 	email: string | null;
 	loginUrl: string;
+	/** Help Center portal slug for this provider (if set up) */
+	portalSlug: string | null;
+	/** Provider's inbox ID for filtering conversations */
+	inboxId: number | null;
 }
 
 export interface PasswordResetResponse {
