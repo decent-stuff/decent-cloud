@@ -5,6 +5,12 @@ set -e
 # Fix target directory ownership (volume may be created as root)
 chown ubuntu:ubuntu /code/target 2>/dev/null || mkdir -p /code/target && chown ubuntu:ubuntu /code/target
 
+# Fix docker socket permissions for ubuntu user
+if [ -S /var/run/docker.sock ]; then
+    chown root:ubuntu /var/run/docker.sock
+    chmod g+rw /var/run/docker.sock
+fi
+
 # Clean old build artifacts (files not accessed in 1 day)
 gosu ubuntu cargo sweep --time 1 --installed /code/target 2>/dev/null || true
 
