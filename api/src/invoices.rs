@@ -339,9 +339,8 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     };
 
     // Build invoice data
-    // Get seller IBAN from environment (required for invoice generation)
-    let seller_iban = std::env::var("INVOICE_SELLER_IBAN")
-        .context("INVOICE_SELLER_IBAN not set - required for invoice PDF generation")?;
+    // Get seller IBAN from environment (optional - bank details section will be hidden if not set)
+    let seller_iban = std::env::var("INVOICE_SELLER_IBAN").unwrap_or_default();
 
     let invoice_data = InvoiceData {
         language: None, // Use default (English) for now
