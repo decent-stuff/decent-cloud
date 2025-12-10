@@ -5,6 +5,11 @@ use anyhow::{Context, Result};
 use email_utils::{EmailAttachment, EmailService};
 use std::sync::Arc;
 
+/// Extract email address from contact string (strips "email:" prefix)
+fn extract_email(contact: &str) -> Option<&str> {
+    contact.strip_prefix("email:")
+}
+
 /// Send payment receipt email after successful payment
 /// If email_service is provided, sends directly with invoice PDF attached.
 /// Otherwise, queues plain text receipt for reliable delivery.
@@ -21,6 +26,12 @@ pub async fn send_payment_receipt(
         .get_contract(contract_id)
         .await?
         .context("Contract not found")?;
+
+    // Extract email from contact (strips "email:" prefix)
+    let recipient_email = extract_email(&contract.requester_contact).context(format!(
+        "Contract {} has non-email contact: {}",
+        contract_hex, contract.requester_contact
+    ))?;
 
     // Skip if receipt already sent (idempotent)
     if contract.receipt_sent_at_ns.is_some() {
@@ -181,7 +192,7 @@ Decent Cloud
         service
             .send_email_with_attachments(
                 from_addr,
-                &contract.requester_contact,
+                recipient_email,
                 &subject,
                 &body,
                 false,
@@ -192,7 +203,7 @@ Decent Cloud
     } else {
         // Fall back to queuing plain text receipt
         db.queue_email(
-            &contract.requester_contact,
+            recipient_email,
             from_addr,
             &subject,
             &body,
@@ -206,7 +217,7 @@ Decent Cloud
     tracing::info!(
         "Receipt #{} sent to {} for contract {}",
         receipt_number,
-        contract.requester_contact,
+        recipient_email,
         contract_hex
     );
 
@@ -267,6 +278,18 @@ pub async fn send_contract_accepted_notification(db: &Database, contract_id: &[u
         }
     };
 
+    // Extract email from contact (skip if not an email contact)
+    let recipient_email = match extract_email(&contract.requester_contact) {
+        Some(email) => email,
+        None => {
+            tracing::debug!(
+                "Skipping accepted notification for contract {}: non-email contact",
+                contract_hex
+            );
+            return;
+        }
+    };
+
     let subject = "Your Decent Cloud rental request has been accepted";
 
     let offering_name = format!("Offering {}", contract.offering_id);
@@ -301,7 +324,7 @@ Decent Cloud
 
     if let Err(e) = db
         .queue_email(
-            &contract.requester_contact,
+            recipient_email,
             "noreply@decent-cloud.org",
             subject,
             &body,
@@ -318,7 +341,7 @@ Decent Cloud
     } else {
         tracing::info!(
             "Queued accepted notification to {} for contract {}",
-            contract.requester_contact,
+            recipient_email,
             contract_hex
         );
     }
@@ -346,6 +369,18 @@ pub async fn send_contract_rejected_notification(
                 "Cannot send rejected notification for contract {}: {}",
                 contract_hex,
                 e
+            );
+            return;
+        }
+    };
+
+    // Extract email from contact (skip if not an email contact)
+    let recipient_email = match extract_email(&contract.requester_contact) {
+        Some(email) => email,
+        None => {
+            tracing::debug!(
+                "Skipping rejected notification for contract {}: non-email contact",
+                contract_hex
             );
             return;
         }
@@ -394,7 +429,7 @@ Decent Cloud
 
     if let Err(e) = db
         .queue_email(
-            &contract.requester_contact,
+            recipient_email,
             "noreply@decent-cloud.org",
             subject,
             &body,
@@ -411,7 +446,7 @@ Decent Cloud
     } else {
         tracing::info!(
             "Queued rejected notification to {} for contract {}",
-            contract.requester_contact,
+            recipient_email,
             contract_hex
         );
     }
@@ -421,6 +456,18 @@ Decent Cloud
 mod tests {
     use super::*;
     use crate::database::test_helpers::setup_test_db;
+
+    #[test]
+    fn test_extract_email() {
+        assert_eq!(
+            extract_email("email:user@example.com"),
+            Some("user@example.com")
+        );
+        assert_eq!(extract_email("email:"), Some(""));
+        assert_eq!(extract_email("telegram:@user"), None);
+        assert_eq!(extract_email("user@example.com"), None);
+        assert_eq!(extract_email(""), None);
+    }
 
     #[tokio::test]
     async fn test_get_next_receipt_number_sequential() {
@@ -541,7 +588,7 @@ mod tests {
             contract_id,
             requester_pk,
             "ssh-key",
-            "user@test.example",
+            "email:user@test.example",
             provider_pk,
             "off-1",
             1000000000i64,
