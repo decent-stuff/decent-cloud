@@ -106,11 +106,14 @@
 				headers,
 			);
 
-			// Refresh contracts list
-			contracts = await getUserContracts(
-				headers,
-				hexEncode(signingIdentityInfo.publicKeyBytes),
+			// Refresh contracts list (sign new request for GET)
+			const pubkeyHex = hexEncode(signingIdentityInfo.publicKeyBytes);
+			const { headers: getHeaders } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/users/${pubkeyHex}/contracts`,
 			);
+			contracts = await getUserContracts(getHeaders, pubkeyHex);
 		} catch (e) {
 			error =
 				e instanceof Error

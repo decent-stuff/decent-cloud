@@ -200,7 +200,7 @@
 				</div>
 
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<div>
+					<div class="min-w-0">
 						<label for="billingCountryCode" class="block text-white/70 text-sm mb-1">
 							Country (for VAT)
 						</label>
@@ -211,13 +211,13 @@
 						>
 							<option value="">Select country...</option>
 							{#each euCountries as country}
-								<option value={country.code}>{country.name} ({country.code})</option>
+								<option value={country.code}>{country.code} - {country.name}</option>
 							{/each}
 							<option value="OTHER">Other (non-EU)</option>
 						</select>
 					</div>
 
-					<div>
+					<div class="min-w-0">
 						<label for="billingVatId" class="block text-white/70 text-sm mb-1">
 							VAT ID (optional)
 						</label>
