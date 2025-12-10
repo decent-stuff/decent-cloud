@@ -8,4 +8,8 @@ buyer_address: string | null,
 /**
  * Stripe invoice ID for invoice PDF retrieval
  */
-stripe_invoice_id: string | null, };
+stripe_invoice_id: string | null, 
+/**
+ * Receipt tracking
+ */
+receipt_number: number | undefined, receipt_sent_at_ns: number | undefined, };

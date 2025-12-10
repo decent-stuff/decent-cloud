@@ -535,6 +535,7 @@ impl ContractsApi {
     async fn verify_checkout_session(
         &self,
         db: Data<&Arc<Database>>,
+        email_service: Data<&Option<Arc<email_utils::EmailService>>>,
         req: Json<VerifyCheckoutSessionRequest>,
     ) -> Json<ApiResponse<VerifyCheckoutSessionResponse>> {
         let stripe_client = match crate::stripe_client::StripeClient::new() {
@@ -610,6 +611,37 @@ impl ContractsApi {
             "Payment verified via session lookup for contract {}",
             session_result.contract_id
         );
+
+        // Send payment receipt (idempotent - skips if already sent)
+        match crate::receipts::send_payment_receipt(
+            db.as_ref(),
+            &contract_id_bytes,
+            email_service.as_ref(),
+        )
+        .await
+        {
+            Ok(0) => {
+                tracing::debug!(
+                    "Receipt already sent for contract {}",
+                    session_result.contract_id
+                );
+            }
+            Ok(receipt_num) => {
+                tracing::info!(
+                    "Sent receipt #{} for contract {} via verify-checkout",
+                    receipt_num,
+                    session_result.contract_id
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to send receipt for contract {}: {}",
+                    session_result.contract_id,
+                    e
+                );
+                // Don't fail - payment was verified successfully
+            }
+        }
 
         Json(ApiResponse {
             success: true,

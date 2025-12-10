@@ -189,10 +189,37 @@ impl StripeClient {
         let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
 
         // Extract invoice ID if invoice was created
-        let invoice_id = session.invoice.as_ref().map(|inv| match inv {
+        let mut invoice_id = session.invoice.as_ref().map(|inv| match inv {
             Expandable::Id(id) => id.to_string(),
             Expandable::Object(invoice) => invoice.id.to_string(),
         });
+
+        // If session doesn't have invoice yet (async creation), try to find it by metadata
+        if invoice_id.is_none() {
+            match self.find_invoice_by_contract_id(&contract_id).await {
+                Ok(Some(id)) => {
+                    tracing::info!(
+                        "Found invoice {} for contract {} via metadata search",
+                        id,
+                        contract_id
+                    );
+                    invoice_id = Some(id);
+                }
+                Ok(None) => {
+                    tracing::debug!(
+                        "No invoice found yet for contract {} (may still be processing)",
+                        contract_id
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to search for invoice by metadata for contract {}: {}",
+                        contract_id,
+                        e
+                    );
+                }
+            }
+        }
 
         Ok(Some(CheckoutSessionResult {
             contract_id,
@@ -216,6 +243,36 @@ impl StripeClient {
         let invoice = Invoice::retrieve(&self.client, &invoice_id, &[]).await?;
 
         Ok(invoice.invoice_pdf)
+    }
+
+    /// Search for invoice by contract_id in metadata
+    ///
+    /// This is useful when polling before the checkout session's invoice field is populated.
+    ///
+    /// # Arguments
+    /// * `contract_id` - The contract ID (hex string) stored in invoice metadata
+    ///
+    /// # Returns
+    /// Invoice ID if found, None otherwise
+    pub async fn find_invoice_by_contract_id(&self, contract_id: &str) -> Result<Option<String>> {
+        // Note: Stripe's rust library doesn't expose the search API directly,
+        // so we list recent invoices and filter by metadata.
+        // This is acceptable because invoices are created immediately after payment.
+        let params = stripe::ListInvoices {
+            ..Default::default()
+        };
+
+        let invoices = Invoice::list(&self.client, &params).await?;
+
+        for invoice in invoices.data {
+            if let Some(metadata) = &invoice.metadata {
+                if metadata.get("contract_id").map(|s| s.as_str()) == Some(contract_id) {
+                    return Ok(Some(invoice.id.to_string()));
+                }
+            }
+        }
+
+        Ok(None)
     }
 }
 

@@ -238,29 +238,20 @@ pub async fn stripe_webhook(
                 contract_id_hex
             );
 
-            // Send payment receipt with invoice attachment
-            match crate::receipts::send_payment_receipt(
-                db.as_ref(),
-                &contract_id_bytes,
-                email_service.as_ref(),
-            )
-            .await
-            {
-                Ok(receipt_num) => {
-                    tracing::info!(
-                        "Sent receipt #{} for contract {} after Stripe Checkout payment",
-                        receipt_num,
-                        contract_id_hex
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to send receipt for contract {}: {}",
-                        contract_id_hex,
-                        e
-                    );
-                    // Don't fail the webhook - payment was successful
-                }
+            // Schedule delayed receipt sending - wait for Stripe invoice to be ready
+            // Background processor will retry 5 times at 1-minute intervals before falling back to Typst
+            if let Err(e) = db.schedule_pending_stripe_receipt(&contract_id_bytes).await {
+                tracing::error!(
+                    "Failed to schedule pending receipt for contract {}: {}",
+                    contract_id_hex,
+                    e
+                );
+                // Don't fail the webhook - payment was successful
+            } else {
+                tracing::info!(
+                    "Scheduled pending receipt for contract {} (will wait for Stripe invoice)",
+                    contract_id_hex
+                );
             }
         }
         // invoice.paid is fired when the invoice is finalized and paid
@@ -304,6 +295,41 @@ pub async fn stripe_webhook(
                                 contract_id_hex,
                                 invoice.id
                             );
+                        }
+
+                        // Cancel any pending receipt - we'll send immediately with Stripe invoice
+                        let _ = db.remove_pending_stripe_receipt(&contract_id_bytes).await;
+
+                        // Send receipt with Stripe invoice PDF attached
+                        // This is idempotent - skips if receipt already sent
+                        match crate::receipts::send_payment_receipt(
+                            db.as_ref(),
+                            &contract_id_bytes,
+                            email_service.as_ref(),
+                        )
+                        .await
+                        {
+                            Ok(0) => {
+                                tracing::debug!(
+                                    "Receipt already sent for contract {}, skipping",
+                                    contract_id_hex
+                                );
+                            }
+                            Ok(receipt_num) => {
+                                tracing::info!(
+                                    "Sent receipt #{} with Stripe invoice for contract {} via invoice.paid",
+                                    receipt_num,
+                                    contract_id_hex
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to send receipt for contract {}: {}",
+                                    contract_id_hex,
+                                    e
+                                );
+                                // Don't fail the webhook - invoice was created successfully
+                            }
                         }
                     }
                     Err(e) => {

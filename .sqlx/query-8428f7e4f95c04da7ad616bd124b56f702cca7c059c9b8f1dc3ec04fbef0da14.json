@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT contract_id, created_at_ns, next_attempt_at_ns, attempts\n               FROM pending_stripe_receipts\n               WHERE next_attempt_at_ns <= ?\n               ORDER BY next_attempt_at_ns ASC\n               LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "contract_id",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at_ns",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "next_attempt_at_ns",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "attempts",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8428f7e4f95c04da7ad616bd124b56f702cca7c059c9b8f1dc3ec04fbef0da14"
+}

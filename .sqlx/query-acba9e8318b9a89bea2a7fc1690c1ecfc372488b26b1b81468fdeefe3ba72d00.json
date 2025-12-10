@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,\n               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id\n               FROM contract_sign_requests\n               WHERE payment_method = 'icpay'\n               AND payment_status = 'succeeded'\n               AND status IN ('active', 'provisioned')\n               ORDER BY created_at_ns ASC",
+  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,\n               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns\n               FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -202,10 +202,20 @@
         "name": "stripe_invoice_id",
         "ordinal": 39,
         "type_info": "Text"
+      },
+      {
+        "name": "receipt_number",
+        "ordinal": 40,
+        "type_info": "Integer"
+      },
+      {
+        "name": "receipt_sent_at_ns",
+        "ordinal": 41,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       null,
@@ -247,8 +257,10 @@
       true,
       true,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "1d5303bbd62735fdad3f51f8eb6869133fa52d8d26c13773c745bef044d667c8"
+  "hash": "acba9e8318b9a89bea2a7fc1690c1ecfc372488b26b1b81468fdeefe3ba72d00"
 }

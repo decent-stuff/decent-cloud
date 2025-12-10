@@ -58,6 +58,9 @@ impl EmailProcessor {
         if let Err(e) = self.process_sla_breaches().await {
             tracing::error!("SLA breach processing failed: {:#}", e);
         }
+        if let Err(e) = self.process_pending_stripe_receipts().await {
+            tracing::error!("Pending Stripe receipt processing failed: {:#}", e);
+        }
     }
 
     /// Mark emails that exceeded the 7-day window as permanently failed
@@ -335,6 +338,153 @@ impl EmailProcessor {
             hex::encode(account_id),
             hex::encode(&failed_email.id)
         );
+
+        Ok(())
+    }
+
+    /// Process pending Stripe receipts - try to get Stripe invoice and send receipt
+    async fn process_pending_stripe_receipts(&self) -> anyhow::Result<()> {
+        let pending = self
+            .database
+            .get_pending_stripe_receipts(self.batch_size)
+            .await?;
+
+        if pending.is_empty() {
+            return Ok(());
+        }
+
+        let stripe_client = match crate::stripe_client::StripeClient::new() {
+            Ok(c) => Some(c),
+            Err(e) => {
+                tracing::warn!(
+                    "Stripe not configured, will use Typst for pending receipts: {}",
+                    e
+                );
+                None
+            }
+        };
+
+        for receipt in pending {
+            let contract_id_hex = hex::encode(&receipt.contract_id);
+
+            // Check if receipt was already sent (e.g., via invoice.paid webhook)
+            if self
+                .database
+                .cancel_pending_stripe_receipt_if_sent(&receipt.contract_id)
+                .await?
+            {
+                tracing::debug!(
+                    "Pending receipt for contract {} already sent, removed from queue",
+                    contract_id_hex
+                );
+                continue;
+            }
+
+            // Try to get Stripe invoice
+            let has_stripe_invoice = if let Some(ref client) = stripe_client {
+                match client.find_invoice_by_contract_id(&contract_id_hex).await {
+                    Ok(Some(invoice_id)) => {
+                        // Update contract with invoice ID
+                        if let Err(e) = self
+                            .database
+                            .update_stripe_invoice_id(&receipt.contract_id, &invoice_id)
+                            .await
+                        {
+                            tracing::warn!(
+                                "Failed to update stripe_invoice_id for contract {}: {}",
+                                contract_id_hex,
+                                e
+                            );
+                        } else {
+                            tracing::info!(
+                                "Found Stripe invoice {} for contract {}",
+                                invoice_id,
+                                contract_id_hex
+                            );
+                        }
+                        true
+                    }
+                    Ok(None) => {
+                        tracing::debug!(
+                            "No Stripe invoice yet for contract {} (attempt {})",
+                            contract_id_hex,
+                            receipt.attempts + 1
+                        );
+                        false
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to search for Stripe invoice for contract {}: {}",
+                            contract_id_hex,
+                            e
+                        );
+                        false
+                    }
+                }
+            } else {
+                false
+            };
+
+            // If we have Stripe invoice or max attempts reached, send receipt
+            let should_send = has_stripe_invoice || receipt.attempts >= 4; // 5th attempt = max
+
+            if should_send {
+                // Send receipt (will use Stripe PDF if available, otherwise Typst)
+                match crate::receipts::send_payment_receipt(
+                    self.database.as_ref(),
+                    &receipt.contract_id,
+                    Some(&self.email_service),
+                )
+                .await
+                {
+                    Ok(0) => {
+                        tracing::debug!(
+                            "Receipt already sent for contract {}, removing from pending",
+                            contract_id_hex
+                        );
+                    }
+                    Ok(receipt_num) => {
+                        if has_stripe_invoice {
+                            tracing::info!(
+                                "Sent receipt #{} with Stripe invoice for contract {}",
+                                receipt_num,
+                                contract_id_hex
+                            );
+                        } else {
+                            tracing::info!(
+                                "Sent receipt #{} with Typst invoice for contract {} (max attempts reached)",
+                                receipt_num,
+                                contract_id_hex
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to send receipt for contract {}: {}",
+                            contract_id_hex,
+                            e
+                        );
+                    }
+                }
+
+                // Remove from pending queue
+                self.database
+                    .remove_pending_stripe_receipt(&receipt.contract_id)
+                    .await?;
+            } else {
+                // Schedule next retry
+                if !self
+                    .database
+                    .update_pending_stripe_receipt_retry(&receipt.contract_id)
+                    .await?
+                {
+                    // Max attempts reached but update failed - remove anyway
+                    self.database
+                        .remove_pending_stripe_receipt(&receipt.contract_id)
+                        .await?;
+                }
+            }
+        }
 
         Ok(())
     }

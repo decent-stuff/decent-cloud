@@ -96,6 +96,13 @@ pub struct Contract {
     /// Stripe invoice ID for invoice PDF retrieval
     #[oai(skip_serializing_if_is_none)]
     pub stripe_invoice_id: Option<String>,
+    /// Receipt tracking
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub receipt_number: Option<i64>,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub receipt_sent_at_ns: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -187,7 +194,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -206,7 +213,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -225,7 +232,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -244,7 +251,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -291,7 +298,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -1216,7 +1223,7 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
                FROM contract_sign_requests
                WHERE payment_method = 'icpay'
                AND payment_status = 'succeeded'
@@ -1354,6 +1361,111 @@ impl Database {
 
         Ok(results)
     }
+
+    // ========== Pending Stripe Receipts ==========
+
+    /// Schedule a pending Stripe receipt for delayed processing
+    /// First attempt will be after 1 minute
+    pub async fn schedule_pending_stripe_receipt(&self, contract_id: &[u8]) -> Result<()> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let first_attempt_ns = now_ns + 60_000_000_000; // 1 minute
+
+        sqlx::query!(
+            "INSERT OR IGNORE INTO pending_stripe_receipts (contract_id, created_at_ns, next_attempt_at_ns, attempts) VALUES (?, ?, ?, 0)",
+            contract_id,
+            now_ns,
+            first_attempt_ns
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get pending Stripe receipts ready for processing
+    pub async fn get_pending_stripe_receipts(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<PendingStripeReceipt>> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let rows = sqlx::query!(
+            r#"SELECT contract_id, created_at_ns, next_attempt_at_ns, attempts
+               FROM pending_stripe_receipts
+               WHERE next_attempt_at_ns <= ?
+               ORDER BY next_attempt_at_ns ASC
+               LIMIT ?"#,
+            now_ns,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| {
+                Some(PendingStripeReceipt {
+                    contract_id: r.contract_id?,
+                    created_at_ns: r.created_at_ns,
+                    next_attempt_at_ns: r.next_attempt_at_ns,
+                    attempts: r.attempts,
+                })
+            })
+            .collect())
+    }
+
+    /// Update pending receipt for next retry (1 minute intervals, max 5 attempts)
+    pub async fn update_pending_stripe_receipt_retry(&self, contract_id: &[u8]) -> Result<bool> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let next_attempt_ns = now_ns + 60_000_000_000; // 1 minute
+
+        // Increment attempts and update next_attempt_at_ns
+        // Only if attempts < 5
+        let result = sqlx::query!(
+            "UPDATE pending_stripe_receipts SET attempts = attempts + 1, next_attempt_at_ns = ? WHERE contract_id = ? AND attempts < 5",
+            next_attempt_ns,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Remove pending receipt (either sent successfully or max attempts reached)
+    pub async fn remove_pending_stripe_receipt(&self, contract_id: &[u8]) -> Result<()> {
+        sqlx::query!(
+            "DELETE FROM pending_stripe_receipts WHERE contract_id = ?",
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Cancel pending receipt if receipt already sent (e.g., via invoice.paid webhook)
+    pub async fn cancel_pending_stripe_receipt_if_sent(&self, contract_id: &[u8]) -> Result<bool> {
+        // Check if receipt already sent for this contract
+        let contract = self.get_contract(contract_id).await?;
+        if let Some(c) = contract {
+            if c.receipt_sent_at_ns.is_some() {
+                self.remove_pending_stripe_receipt(contract_id).await?;
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
+
+/// Pending Stripe receipt for background processing
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct PendingStripeReceipt {
+    pub contract_id: Vec<u8>,
+    pub created_at_ns: i64,
+    pub next_attempt_at_ns: i64,
+    pub attempts: i64,
 }
 
 #[cfg(test)]

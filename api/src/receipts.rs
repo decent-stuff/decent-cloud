@@ -8,7 +8,8 @@ use std::sync::Arc;
 /// Send payment receipt email after successful payment
 /// If email_service is provided, sends directly with invoice PDF attached.
 /// Otherwise, queues plain text receipt for reliable delivery.
-/// Returns the receipt number assigned.
+/// Returns the receipt number assigned, or 0 if already sent.
+/// This function is idempotent - safe to call multiple times.
 pub async fn send_payment_receipt(
     db: &Database,
     contract_id: &[u8],
@@ -20,6 +21,15 @@ pub async fn send_payment_receipt(
         .get_contract(contract_id)
         .await?
         .context("Contract not found")?;
+
+    // Skip if receipt already sent (idempotent)
+    if contract.receipt_sent_at_ns.is_some() {
+        tracing::debug!(
+            "Receipt already sent for contract {}, skipping",
+            contract_hex
+        );
+        return Ok(0);
+    }
 
     // Get next receipt number atomically
     let receipt_number = get_next_receipt_number(db).await?;
