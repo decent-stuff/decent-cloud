@@ -31,10 +31,12 @@ pub struct Invoice {
     pub created_at_ns: i64,
 }
 
-/// JSON format for invoice-maker Typst template
+/// JSON format for Typst invoice template
 #[derive(Debug, Serialize)]
 struct InvoiceData {
-    language: String,
+    /// Language code for invoice (en, de, fr, es). Defaults to "en" if not specified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
     #[serde(rename = "invoice-id")]
     invoice_id: String,
     #[serde(rename = "issuing-date")]
@@ -58,6 +60,8 @@ struct InvoiceParty {
     address: InvoiceAddress,
     #[serde(rename = "vat-id", skip_serializing_if = "Option::is_none")]
     vat_id: Option<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    iban: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -71,7 +75,6 @@ struct InvoiceAddress {
 
 #[derive(Debug, Serialize)]
 struct InvoiceItem {
-    number: i64,
     description: String,
     quantity: i64,
     price: f64,
@@ -336,8 +339,12 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     };
 
     // Build invoice data
+    // Get seller IBAN from environment (required for invoice generation)
+    let seller_iban = std::env::var("INVOICE_SELLER_IBAN")
+        .context("INVOICE_SELLER_IBAN not set - required for invoice PDF generation")?;
+
     let invoice_data = InvoiceData {
-        language: "en".to_string(),
+        language: None, // Use default (English) for now
         invoice_id: invoice.invoice_number.clone(),
         issuing_date: invoice_date,
         delivery_date,
@@ -351,6 +358,7 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
                 country: invoice.seller_address.clone(),
             },
             vat_id: invoice.seller_vat_id.clone(),
+            iban: seller_iban,
         },
         recipient: InvoiceParty {
             name: invoice
@@ -359,9 +367,9 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
                 .unwrap_or_else(|| "Customer".to_string()),
             address: parse_buyer_address(invoice.buyer_address.as_deref()),
             vat_id: invoice.buyer_vat_id.clone(),
+            iban: String::new(),
         },
         items: vec![InvoiceItem {
-            number: 1,
             description,
             quantity: 1,
             price,
@@ -423,9 +431,62 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     Ok(pdf_bytes)
 }
 
-/// Get invoice PDF, generate if not cached
+/// Get invoice PDF - uses Stripe invoice for Stripe payments, otherwise generates with Typst
 pub async fn get_invoice_pdf(db: &Database, contract_id: &[u8]) -> Result<Vec<u8>> {
-    // Get or create invoice
+    // Get contract to check payment method and Stripe invoice ID
+    let contract = db
+        .get_contract(contract_id)
+        .await?
+        .context("Contract not found")?;
+
+    // For Stripe payments with invoice ID, fetch PDF from Stripe
+    if contract.payment_method == "stripe" {
+        if let Some(stripe_invoice_id) = &contract.stripe_invoice_id {
+            return get_stripe_invoice_pdf(stripe_invoice_id).await;
+        }
+        // Stripe payment without invoice ID - invoice creation wasn't enabled for this session
+        // Fall through to Typst generation
+        tracing::warn!(
+            "Stripe payment without invoice ID for contract {}, falling back to Typst generation",
+            hex::encode(contract_id)
+        );
+    }
+
+    // For ICPay or legacy Stripe payments, use Typst generation
+    get_typst_invoice_pdf(db, contract_id).await
+}
+
+/// Fetch invoice PDF from Stripe
+async fn get_stripe_invoice_pdf(invoice_id: &str) -> Result<Vec<u8>> {
+    let stripe_client = crate::stripe_client::StripeClient::new()?;
+    let pdf_url = stripe_client
+        .get_invoice_pdf_url(invoice_id)
+        .await?
+        .context("Stripe invoice PDF not yet available")?;
+
+    // Download PDF from Stripe URL
+    let response = reqwest::get(&pdf_url)
+        .await
+        .context("Failed to download invoice PDF from Stripe")?;
+
+    if !response.status().is_success() {
+        anyhow::bail!(
+            "Failed to download invoice PDF from Stripe: {}",
+            response.status()
+        );
+    }
+
+    let pdf_bytes = response
+        .bytes()
+        .await
+        .context("Failed to read invoice PDF bytes")?;
+
+    Ok(pdf_bytes.to_vec())
+}
+
+/// Generate invoice PDF using Typst (for ICPay or fallback)
+async fn get_typst_invoice_pdf(db: &Database, contract_id: &[u8]) -> Result<Vec<u8>> {
+    // Get or create invoice record
     let mut invoice = match get_invoice_by_contract(db, contract_id).await? {
         Some(inv) => inv,
         None => create_invoice(db, contract_id).await?,
