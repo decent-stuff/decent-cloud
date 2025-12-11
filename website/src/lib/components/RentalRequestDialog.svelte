@@ -10,7 +10,11 @@
 	import { loadStripe, type Stripe } from "@stripe/stripe-js";
 	import { onMount, onDestroy } from "svelte";
 	import { isStripeSupportedCurrency } from "$lib/utils/stripe-currencies";
-	import { getIcpay, getWalletSelect, isIcpayConfigured } from "$lib/utils/icpay";
+	import {
+		getIcpay,
+		getWalletSelect,
+		isIcpayConfigured,
+	} from "$lib/utils/icpay";
 
 	interface Props {
 		offering: Offering | null;
@@ -49,7 +53,10 @@
 		if (isIcpayConfigured()) {
 			const icpay = getIcpay();
 			if (icpay) {
-				icpayEventUnsubscribe = icpay.on('icpay-sdk-transaction-completed', handleIcpaySuccess);
+				icpayEventUnsubscribe = icpay.on(
+					"icpay-sdk-transaction-completed",
+					handleIcpaySuccess,
+				);
 			}
 		}
 	});
@@ -59,7 +66,6 @@
 			icpayEventUnsubscribe();
 		}
 	});
-
 
 	function calculatePrice(): string {
 		if (!offering) return "0.00";
@@ -72,7 +78,7 @@
 			const walletSelect = getWalletSelect();
 			// For now, we'll try to connect with Internet Identity
 			// In the future, this could show a wallet selection dialog
-			await walletSelect.connect('ii');
+			await walletSelect.connect("ii");
 			walletConnected = true;
 			error = null;
 		} catch (e) {
@@ -97,7 +103,6 @@
 		// For now, proceed with success
 		onSuccess(pendingContractId);
 	}
-
 
 	async function handleSubmit() {
 		if (!offering) return;
@@ -159,12 +164,15 @@
 					// Event listener will handle completion via handleIcpaySuccess
 					await icpay.createPaymentUsd({
 						usdAmount,
-						tokenShortcode: 'ic_icp',
+						tokenShortcode: "ic_icp",
 						metadata: { contractId: response.contractId },
 					});
 					// Don't set processingPayment = false here; let the event handler do it
 				} catch (icpayError) {
-					error = icpayError instanceof Error ? icpayError.message : "ICPay payment failed";
+					error =
+						icpayError instanceof Error
+							? icpayError.message
+							: "ICPay payment failed";
 					console.error("ICPay payment error:", icpayError);
 					loading = false;
 					processingPayment = false;
@@ -259,7 +267,8 @@
 								</h4>
 								<p class="text-red-300/80 text-sm mt-1">
 									{#if offering.has_critical_flags}
-										This provider has critical reliability flags. Review their
+										This provider has critical reliability
+										flags. Review their
 										<a
 											href="/dashboard/reputation/{offering.pubkey}"
 											target="_blank"
@@ -399,12 +408,16 @@
 
 				<!-- ICPay Payment Section -->
 				{#if paymentMethod === "icpay"}
-					<div class="bg-white/5 rounded-lg p-4 border border-white/10">
+					<div
+						class="bg-white/5 rounded-lg p-4 border border-white/10"
+					>
 						<h3 class="text-sm font-semibold text-white/70 mb-2">
 							Crypto Payment via ICPay
 						</h3>
 						<p class="text-sm text-white/60 mb-3">
-							Connect your wallet (Internet Identity, Plug, etc.) to complete the payment with ICP or other supported tokens.
+							Connect your wallet (Internet Identity, Plug, etc.)
+							to complete the payment with ICP or other supported
+							tokens.
 						</p>
 						{#if !walletConnected}
 							<button
@@ -416,8 +429,11 @@
 							</button>
 						{:else}
 							<div class="flex items-center gap-2 text-green-400">
-								<span class="w-2 h-2 bg-green-400 rounded-full"></span>
-								<span class="text-sm font-medium">Wallet Connected</span>
+								<span class="w-2 h-2 bg-green-400 rounded-full"
+								></span>
+								<span class="text-sm font-medium"
+									>Wallet Connected</span
+								>
 							</div>
 						{/if}
 					</div>
@@ -425,12 +441,34 @@
 
 				<!-- Stripe Payment Info -->
 				{#if paymentMethod === "stripe"}
-					<div class="bg-white/5 rounded-lg p-4 border border-white/10">
+					<div
+						class="bg-white/5 rounded-lg p-4 border border-white/10"
+					>
 						<h3 class="text-sm font-semibold text-white/70 mb-2">
 							Credit Card Payment via Stripe
 						</h3>
 						<p class="text-sm text-white/60">
-							You will be redirected to Stripe's secure checkout page to complete your payment. Tax will be calculated automatically based on your location.
+							You will be redirected to Stripe's secure checkout
+							page to complete your payment. Tax will be
+							calculated automatically based on your location.<br
+							/>
+							While the platform is in test mode, you can use the following
+							test cards:<br />
+							A card number of 4242 4242 4242 4242 results in a successful
+							payment that is immediately processed and does not require
+							authentication.<br />
+							The card number 4000 0025 0000 3155 requires 3D Secure
+							2 authentication for the payment to succeed.<br />
+							A payment using the card number 4000 0000 0000 9995 is
+							declined with the code insufficient_funds, simulating
+							a lack of available funds.<br />
+							The card number 4000 0000 0000 0002 is used to simulate
+							a declined payment, often resulting in a generic decline.<br
+							/>
+							A card number of 4000 0000 0000 0069 simulates an expired
+							card, leading to a decline.<br />
+							The card number 4000 0000 0000 0127 is used to test an
+							incorrect CVC input, resulting in a decline.
 						</p>
 					</div>
 				{/if}
