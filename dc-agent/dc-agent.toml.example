@@ -1,0 +1,80 @@
+# Decent Cloud Agent Configuration Example
+# Copy this file to dc-agent.toml and adjust the values
+
+[api]
+# API endpoint of the Decent Cloud platform
+endpoint = "https://api.decent-cloud.org"
+
+# Provider's Ed25519 public key (hex-encoded)
+provider_pubkey = "your_ed25519_public_key_hex"
+
+# Provider's Ed25519 secret key (hex-encoded or path to key file)
+provider_secret_key = "your_ed25519_secret_key_hex"
+
+[polling]
+# Interval in seconds to poll for new contracts (default: 30)
+interval_seconds = 30
+
+# Interval in seconds to perform health checks (default: 300)
+health_check_interval_seconds = 300
+
+# Provisioner Configuration
+# Choose one of: proxmox, script, or manual
+
+[provisioner]
+type = "proxmox"
+
+# Proxmox VE Provisioner Configuration
+[provisioner.proxmox]
+# Proxmox API endpoint
+api_url = "https://proxmox.local:8006"
+
+# API token ID (created in Proxmox: Datacenter -> Permissions -> API Tokens)
+api_token_id = "root@pam!dc-agent"
+
+# API token secret
+api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Target node name
+node = "pve1"
+
+# VM template ID to clone from
+template_vmid = 9000
+
+# Target storage for full clones (default: "local-lvm")
+storage = "local-lvm"
+
+# Optional: Resource pool for VMs
+pool = "dc-vms"
+
+# Whether to verify SSL certificates (default: true)
+verify_ssl = false
+
+
+# Alternative: Script-based Provisioner
+# Uncomment to use script provisioner instead
+# [provisioner]
+# type = "script"
+#
+# [provisioner.script]
+# # Path to provision script
+# provision = "/opt/dc-agent/provision.sh"
+#
+# # Path to terminate script
+# terminate = "/opt/dc-agent/terminate.sh"
+#
+# # Path to health check script
+# health_check = "/opt/dc-agent/health.sh"
+#
+# # Script timeout in seconds (default: 300)
+# timeout_seconds = 300
+
+
+# Alternative: Manual Provisioner (notifications only)
+# Uncomment to use manual provisioner instead
+# [provisioner]
+# type = "manual"
+#
+# [provisioner.manual]
+# # Optional: Webhook URL for notifications (e.g., Slack)
+# notification_webhook = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
