@@ -53,7 +53,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Disable telemetry
       DISABLE_TELEMETRY: "true"
-    command: bundle exec rails s -p 59102 -b '0.0.0.0'
+    command: sh -c "rm -f /app/tmp/pids/server.pid && bundle exec rails s -p 59102 -b '0.0.0.0'"
     ports:
       - "59102:59102"
     networks:
