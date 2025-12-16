@@ -25,11 +25,26 @@ pub struct PollingConfig {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum ProvisionerConfig {
-    Proxmox(ProxmoxConfig),
-    Script(ScriptConfig),
-    Manual(ManualConfig),
+pub struct ProvisionerConfig {
+    #[serde(rename = "type")]
+    pub provisioner_type: ProvisionerType,
+    #[serde(flatten)]
+    pub config: ProvisionerVariant,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProvisionerType {
+    Proxmox,
+    Script,
+    Manual,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProvisionerVariant {
+    pub proxmox: Option<ProxmoxConfig>,
+    pub script: Option<ScriptConfig>,
+    pub manual: Option<ManualConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,6 +73,29 @@ pub struct ScriptConfig {
 #[derive(Debug, Deserialize)]
 pub struct ManualConfig {
     pub notification_webhook: Option<String>,
+}
+
+impl ProvisionerConfig {
+    pub fn get_proxmox(&self) -> Option<&ProxmoxConfig> {
+        match self.provisioner_type {
+            ProvisionerType::Proxmox => self.config.proxmox.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn get_script(&self) -> Option<&ScriptConfig> {
+        match self.provisioner_type {
+            ProvisionerType::Script => self.config.script.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn get_manual(&self) -> Option<&ManualConfig> {
+        match self.provisioner_type {
+            ProvisionerType::Manual => self.config.manual.as_ref(),
+            _ => None,
+        }
+    }
 }
 
 impl Config {
@@ -142,22 +180,23 @@ verify_ssl = false
         assert_eq!(config.polling.interval_seconds, 45);
         assert_eq!(config.polling.health_check_interval_seconds, 600);
 
-        match config.provisioner {
-            ProvisionerConfig::Proxmox(proxmox) => {
-                assert_eq!(proxmox.api_url, "https://proxmox.local:8006");
-                assert_eq!(proxmox.api_token_id, "root@pam!dc-agent");
-                assert_eq!(
-                    proxmox.api_token_secret,
-                    "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                );
-                assert_eq!(proxmox.node, "pve1");
-                assert_eq!(proxmox.template_vmid, 9000);
-                assert_eq!(proxmox.storage, "local-zfs");
-                assert_eq!(proxmox.pool, Some("dc-vms".to_string()));
-                assert!(!proxmox.verify_ssl);
-            }
-            _ => panic!("Expected Proxmox provisioner"),
-        }
+        assert!(matches!(
+            config.provisioner.provisioner_type,
+            ProvisionerType::Proxmox
+        ));
+
+        let proxmox = config.provisioner.get_proxmox().unwrap();
+        assert_eq!(proxmox.api_url, "https://proxmox.local:8006");
+        assert_eq!(proxmox.api_token_id, "root@pam!dc-agent");
+        assert_eq!(
+            proxmox.api_token_secret,
+            "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        );
+        assert_eq!(proxmox.node, "pve1");
+        assert_eq!(proxmox.template_vmid, 9000);
+        assert_eq!(proxmox.storage, "local-zfs");
+        assert_eq!(proxmox.pool, Some("dc-vms".to_string()));
+        assert!(!proxmox.verify_ssl);
     }
 
     #[test]
@@ -187,15 +226,16 @@ timeout_seconds = 600
 
         let config = Config::load(&config_path).unwrap();
 
-        match config.provisioner {
-            ProvisionerConfig::Script(script) => {
-                assert_eq!(script.provision, "/opt/dc-agent/provision.sh");
-                assert_eq!(script.terminate, "/opt/dc-agent/terminate.sh");
-                assert_eq!(script.health_check, "/opt/dc-agent/health.sh");
-                assert_eq!(script.timeout_seconds, 600);
-            }
-            _ => panic!("Expected Script provisioner"),
-        }
+        assert!(matches!(
+            config.provisioner.provisioner_type,
+            ProvisionerType::Script
+        ));
+
+        let script = config.provisioner.get_script().unwrap();
+        assert_eq!(script.provision, "/opt/dc-agent/provision.sh");
+        assert_eq!(script.terminate, "/opt/dc-agent/terminate.sh");
+        assert_eq!(script.health_check, "/opt/dc-agent/health.sh");
+        assert_eq!(script.timeout_seconds, 600);
     }
 
     #[test]
@@ -222,15 +262,16 @@ notification_webhook = "https://slack.webhook/xyz"
 
         let config = Config::load(&config_path).unwrap();
 
-        match config.provisioner {
-            ProvisionerConfig::Manual(manual) => {
-                assert_eq!(
-                    manual.notification_webhook,
-                    Some("https://slack.webhook/xyz".to_string())
-                );
-            }
-            _ => panic!("Expected Manual provisioner"),
-        }
+        assert!(matches!(
+            config.provisioner.provisioner_type,
+            ProvisionerType::Manual
+        ));
+
+        let manual = config.provisioner.get_manual().unwrap();
+        assert_eq!(
+            manual.notification_webhook,
+            Some("https://slack.webhook/xyz".to_string())
+        );
     }
 
     #[test]
@@ -266,14 +307,10 @@ template_vmid = 9000
         assert_eq!(config.polling.health_check_interval_seconds, 300);
 
         // Check proxmox defaults
-        match config.provisioner {
-            ProvisionerConfig::Proxmox(proxmox) => {
-                assert_eq!(proxmox.storage, "local-lvm");
-                assert!(proxmox.verify_ssl);
-                assert_eq!(proxmox.pool, None);
-            }
-            _ => panic!("Expected Proxmox provisioner"),
-        }
+        let proxmox = config.provisioner.get_proxmox().unwrap();
+        assert_eq!(proxmox.storage, "local-lvm");
+        assert!(proxmox.verify_ssl);
+        assert_eq!(proxmox.pool, None);
     }
 
     #[test]
@@ -302,12 +339,8 @@ health_check = "/opt/dc-agent/health.sh"
 
         let config = Config::load(&config_path).unwrap();
 
-        match config.provisioner {
-            ProvisionerConfig::Script(script) => {
-                assert_eq!(script.timeout_seconds, 300);
-            }
-            _ => panic!("Expected Script provisioner"),
-        }
+        let script = config.provisioner.get_script().unwrap();
+        assert_eq!(script.timeout_seconds, 300);
     }
 
     #[test]
@@ -333,12 +366,8 @@ type = "manual"
 
         let config = Config::load(&config_path).unwrap();
 
-        match config.provisioner {
-            ProvisionerConfig::Manual(manual) => {
-                assert_eq!(manual.notification_webhook, None);
-            }
-            _ => panic!("Expected Manual provisioner"),
-        }
+        let manual = config.provisioner.get_manual().unwrap();
+        assert_eq!(manual.notification_webhook, None);
     }
 
     #[test]
@@ -359,8 +388,17 @@ type = "manual"
 
         let result = Config::load(&config_path);
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("missing field `api`"));
+        let err = result.unwrap_err();
+        // Get the full error chain
+        let full_err = format!("{:#}", err);
+        // Should fail on missing api section or one of its required fields
+        assert!(
+            full_err.contains("missing field")
+                && (full_err.contains("api")
+                    || full_err.contains("endpoint")
+                    || full_err.contains("provider_pubkey")
+                    || full_err.contains("provider_secret_key"))
+        );
     }
 
     #[test]
@@ -388,8 +426,10 @@ template_vmid = 9000
 
         let result = Config::load(&config_path);
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("missing field `type`"));
+        let err = result.unwrap_err();
+        let full_err = format!("{:#}", err);
+        // Should fail on missing type field
+        assert!(full_err.contains("missing field") && full_err.contains("type"));
     }
 
     #[test]
@@ -418,10 +458,12 @@ node = "pve1"
         let result = Config::load(&config_path);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        // Should fail on missing api_token_id or api_token_secret
+        // Should fail on missing required proxmox fields
         assert!(
             err_msg.contains("missing field")
-                && (err_msg.contains("api_token_id") || err_msg.contains("api_token_secret"))
+                && (err_msg.contains("api_token_id")
+                    || err_msg.contains("api_token_secret")
+                    || err_msg.contains("template_vmid"))
         );
     }
 

@@ -23,6 +23,7 @@ tokio.workspace = true
 toml = "0.8"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+urlencoding = "2.1"
 
 [dev-dependencies]
 tempfile = "3.8"
