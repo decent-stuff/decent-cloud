@@ -557,5 +557,40 @@ Scripts receive JSON on stdin, output JSON on stdout.
   - Doctor command provides actionable diagnostics
 - **Outcome:** Success - Polling loop and doctor command fully implemented
 
+### Step 9: Write Proxmox provisioner mock tests
+- **Implementation:** Created comprehensive unit tests for Proxmox provisioner using mockito HTTP mocking
+  - Added mockito 1.6 to dev-dependencies in `/code/dc-agent/Cargo.toml`
+  - Implemented tests in `/code/dc-agent/src/provisioner/proxmox_tests.rs` (12 async tests):
+    - `test_provision_vm_success`: Tests complete provision flow with mock clone, config, start, and network responses
+    - `test_provision_vm_clone_task_failure`: Tests failure when Proxmox clone task fails (exitstatus != "OK")
+    - `test_provision_vm_network_unavailable`: Tests graceful handling when QEMU guest agent unavailable (no IP)
+    - `test_terminate_vm_success`: Tests stop + delete flow for running VM
+    - `test_terminate_vm_already_stopped`: Tests terminate when VM already stopped (skips stop)
+    - `test_terminate_vm_not_found`: Tests idempotent terminate (returns Ok for non-existent VM)
+    - `test_health_check_running`: Tests health check returns Healthy with uptime
+    - `test_health_check_stopped`: Tests health check returns Unhealthy for stopped VM
+    - `test_health_check_not_found`: Tests health check returns Unhealthy for non-existent VM
+    - `test_get_instance_with_ip`: Tests instance retrieval with IPv4 and IPv6 addresses
+    - `test_get_instance_not_found`: Tests get_instance returns None for non-existent VM
+    - `test_vmid_generation_deterministic`: Tests VMID allocation is deterministic and in valid range
+    - `test_provision_with_ipv6_only`: Tests provisioning succeeds with IPv6-only network
+  - All tests use real Proxmox API response formats from spec:
+    - Clone: `{"data":"UPID:pve1:00001234:12345678:12345678:qmclone:100:root@pam:"}`
+    - Task status: `{"data":{"status":"stopped","exitstatus":"OK"}}`
+    - VM status: `{"data":{"vmid":100,"status":"running","uptime":3600,"name":"dc-test"}}`
+    - Network: `{"data":{"result":[{"name":"eth0","ip-addresses":[{"ip-address":"10.0.0.100","ip-address-type":"ipv4","prefix":24}]}]}}`
+  - Tests cover both happy paths and error paths (task failures, VM not found, network unavailable)
+  - Fixed unused import warnings in `api_client.rs` (added Verifier, VerifyingKey traits for signature verification test)
+- **Files modified:**
+  - `/code/dc-agent/Cargo.toml` - Added mockito dev-dependency
+  - `/code/dc-agent/src/provisioner/proxmox_tests.rs` - Created comprehensive mock tests (607 lines)
+  - `/code/dc-agent/src/provisioner/proxmox.rs` - Added test module include
+  - `/code/dc-agent/src/api_client.rs` - Added Verifier and VerifyingKey imports for tests
+- **Verification:**
+  - All 12 Proxmox tests pass (verified with `cargo test --lib -p dc-agent`)
+  - Total test suite: 39 tests across all modules (api_client, config, provisioner)
+  - All tests pass successfully (37 pass quickly, 2 provision tests take ~120s due to IP retry logic)
+- **Outcome:** Success - Comprehensive Proxmox provisioner tests implemented with real API response formats
+
 ## Completion Summary
 (To be filled in Phase 4)
