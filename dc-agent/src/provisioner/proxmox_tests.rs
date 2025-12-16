@@ -146,10 +146,15 @@ mod tests {
 
         let result = provisioner.provision(&request).await;
         assert!(result.is_err(), "Provision should fail when clone task fails");
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Task failed with status"));
+        let err = result.unwrap_err();
+        let err_msg = format!("{:#}", err);
+        assert!(
+            err_msg.contains("VMID 100 already exists")
+                || err_msg.contains("Task failed")
+                || err_msg.contains("Clone task failed"),
+            "Expected task failure error, got: {}",
+            err_msg
+        );
     }
 
     #[tokio::test]

@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_load_signing_key_wrong_length() {
-        let short_key = hex::encode(&[1u8; 16]); // Only 16 bytes
+        let short_key = hex::encode([1u8; 16]); // Only 16 bytes
         let result = ApiClient::load_signing_key(&short_key);
         assert!(result.is_err());
     }

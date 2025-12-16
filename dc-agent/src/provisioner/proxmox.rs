@@ -95,8 +95,8 @@ impl ProxmoxProvisioner {
         let hash = hasher.finish();
 
         // Map to range 10000-999999 to avoid conflicts with templates
-        let vmid = 10000 + (hash % 990000) as u32;
-        vmid
+        
+        10000 + (hash % 990000) as u32
     }
 
     async fn wait_for_task(&self, upid: &str) -> Result<()> {
@@ -494,7 +494,8 @@ impl Provisioner for ProxmoxProvisioner {
 
             match self.get_vm_ip(vmid).await {
                 Ok((v4, v6)) => {
-                    if v4.is_some() {
+                    // Accept either IPv4 or IPv6 (or both)
+                    if v4.is_some() || v6.is_some() {
                         ipv4 = v4;
                         ipv6 = v6;
                         break;
