@@ -106,22 +106,14 @@ All billing features implemented:
 - Track paid quota separately from free tier
 - Consider monthly subscription vs pay-per-notification
 
-## Rentals Deep-Linking
+## Rentals Deep-Linking - ✅ COMPLETE
 
-**Priority:** LOW - Nice to have
-**Effort:** Small
+**Completed:** 2025-12-16
 
-Add support for direct links to specific contracts on the rentals page (e.g., `/dashboard/rentals?contract=abc123` or `/dashboard/rentals/[contract_id]`).
-
-**Use cases:**
-- Email receipts can link directly to the purchased contract
-- Bookmarking specific contracts
-- Support links when discussing specific rentals
-
-**Implementation:**
-- Read `contract_id` from URL params on rentals page
-- Auto-scroll to and highlight the matching contract
-- Or: Create a separate `/dashboard/rentals/[contract_id]` route for contract detail view
+Direct links to specific contracts work via `/dashboard/rentals?contract=<contract_id>`:
+- URL param `contract` is read on page load
+- Page auto-scrolls to the matching contract
+- Highlighted contract has blue ring styling to stand out
 
 ---
 

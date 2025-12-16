@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from "svelte";
+	import { onMount, onDestroy, tick } from "svelte";
 	import { page } from "$app/stores";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import {
@@ -25,6 +25,7 @@
 	let downloadingInvoiceContractId = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
+	let highlightedContractId = $state<string | null>(null);
 
 	async function loadContracts() {
 		if (!isAuthenticated) {
@@ -60,10 +61,24 @@
 		}
 	}
 
+	async function scrollToHighlightedContract() {
+		if (!highlightedContractId) return;
+
+		await tick(); // Wait for DOM update
+		const element = document.getElementById(`contract-${highlightedContractId}`);
+		if (element) {
+			element.scrollIntoView({ behavior: "smooth", block: "center" });
+		}
+	}
+
 	onMount(async () => {
-		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
+		// Read contract ID from URL params for deep-linking
+		highlightedContractId = $page.url.searchParams.get("contract");
+
+		unsubscribeAuth = authStore.isAuthenticated.subscribe(async (isAuth) => {
 			isAuthenticated = isAuth;
-			loadContracts();
+			await loadContracts();
+			scrollToHighlightedContract();
 		});
 	});
 
@@ -229,8 +244,12 @@
 		<div class="space-y-4">
 			{#each contracts as contract}
 				{@const statusBadge = getStatusBadge(contract.status, contract.payment_status)}
+				{@const isHighlighted = highlightedContractId === contract.contract_id}
 				<div
-					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-blue-400 transition-all"
+					id="contract-{contract.contract_id}"
+					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border transition-all {isHighlighted
+						? 'border-blue-400 ring-2 ring-blue-400/50'
+						: 'border-white/20 hover:border-blue-400'}"
 				>
 					<div class="flex items-start justify-between mb-4">
 						<div class="flex-1">
