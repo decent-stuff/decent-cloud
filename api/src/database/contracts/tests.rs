@@ -183,6 +183,255 @@ async fn test_get_pending_provider_contracts() {
 }
 
 #[tokio::test]
+async fn test_get_pending_provision_contracts_empty() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+
+    let contracts = db
+        .get_pending_provision_contracts(&provider_pk)
+        .await
+        .unwrap();
+    assert_eq!(contracts.len(), 0);
+}
+
+#[tokio::test]
+async fn test_get_pending_provision_contracts_accepted_and_paid() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester = vec![1u8; 32];
+
+    // Insert contract with status='accepted' AND payment_status='succeeded'
+    let contract1 = vec![1u8; 32];
+    insert_contract_request(
+        &db,
+        &contract1,
+        &requester,
+        &provider_pk,
+        "off-1",
+        0,
+        "accepted",
+    )
+    .await;
+
+    // Update payment status to succeeded (ICPay default is succeeded already)
+    // Verify it's already succeeded from insert_contract_request
+    let contract = db.get_contract(&contract1).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "succeeded");
+
+    let contracts = db
+        .get_pending_provision_contracts(&provider_pk)
+        .await
+        .unwrap();
+    assert_eq!(contracts.len(), 1);
+    assert_eq!(contracts[0].status, "accepted");
+    assert_eq!(contracts[0].payment_status, "succeeded");
+}
+
+#[tokio::test]
+async fn test_get_pending_provision_contracts_filters_correctly() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester = vec![1u8; 32];
+
+    // Insert various contracts with different statuses and payment statuses
+    let contract1 = vec![1u8; 32];
+    insert_contract_request(
+        &db,
+        &contract1,
+        &requester,
+        &provider_pk,
+        "off-1",
+        0,
+        "accepted",
+    )
+    .await;
+    // payment_status='succeeded' from insert_contract_request (ICPay default)
+
+    let contract2 = vec![2u8; 32];
+    insert_contract_request(
+        &db,
+        &contract2,
+        &requester,
+        &provider_pk,
+        "off-1",
+        100,
+        "requested",
+    )
+    .await;
+    // Should NOT be returned (status != 'accepted')
+
+    let contract3 = vec![3u8; 32];
+    insert_contract_request(
+        &db,
+        &contract3,
+        &requester,
+        &provider_pk,
+        "off-1",
+        200,
+        "accepted",
+    )
+    .await;
+    // Update payment_status to pending (shouldn't be returned)
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET payment_status = ? WHERE contract_id = ?",
+        "pending",
+        contract3
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let contract4 = vec![4u8; 32];
+    insert_contract_request(
+        &db,
+        &contract4,
+        &requester,
+        &provider_pk,
+        "off-1",
+        300,
+        "provisioning",
+    )
+    .await;
+    // Should NOT be returned (status != 'accepted')
+
+    let contract5 = vec![5u8; 32];
+    insert_contract_request(
+        &db,
+        &contract5,
+        &requester,
+        &provider_pk,
+        "off-1",
+        400,
+        "accepted",
+    )
+    .await;
+    // payment_status='succeeded', should be returned
+
+    let contracts = db
+        .get_pending_provision_contracts(&provider_pk)
+        .await
+        .unwrap();
+
+    // Should return only contracts 1 and 5 (accepted + payment succeeded)
+    assert_eq!(contracts.len(), 2);
+    assert!(contracts.iter().all(|c| c.status == "accepted"));
+    assert!(contracts
+        .iter()
+        .all(|c| c.payment_status == "succeeded"));
+}
+
+#[tokio::test]
+async fn test_get_pending_provision_contracts_ordered_by_created_at() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester = vec![1u8; 32];
+
+    // Insert contracts in reverse chronological order
+    let contract3 = vec![3u8; 32];
+    insert_contract_request(
+        &db,
+        &contract3,
+        &requester,
+        &provider_pk,
+        "off-1",
+        300,
+        "accepted",
+    )
+    .await;
+
+    let contract1 = vec![1u8; 32];
+    insert_contract_request(
+        &db,
+        &contract1,
+        &requester,
+        &provider_pk,
+        "off-1",
+        100,
+        "accepted",
+    )
+    .await;
+
+    let contract2 = vec![2u8; 32];
+    insert_contract_request(
+        &db,
+        &contract2,
+        &requester,
+        &provider_pk,
+        "off-1",
+        200,
+        "accepted",
+    )
+    .await;
+
+    let contracts = db
+        .get_pending_provision_contracts(&provider_pk)
+        .await
+        .unwrap();
+
+    // Should return in ascending order by created_at_ns (oldest first)
+    assert_eq!(contracts.len(), 3);
+    assert_eq!(contracts[0].created_at_ns, 100);
+    assert_eq!(contracts[1].created_at_ns, 200);
+    assert_eq!(contracts[2].created_at_ns, 300);
+}
+
+#[tokio::test]
+async fn test_get_pending_provision_contracts_different_providers() {
+    let db = setup_test_db().await;
+    let provider_pk1 = vec![2u8; 32];
+    let provider_pk2 = vec![3u8; 32];
+    let requester = vec![1u8; 32];
+
+    // Insert contract for provider 1
+    let contract1 = vec![1u8; 32];
+    insert_contract_request(
+        &db,
+        &contract1,
+        &requester,
+        &provider_pk1,
+        "off-1",
+        0,
+        "accepted",
+    )
+    .await;
+
+    // Insert contract for provider 2
+    let contract2 = vec![2u8; 32];
+    insert_contract_request(
+        &db,
+        &contract2,
+        &requester,
+        &provider_pk2,
+        "off-1",
+        100,
+        "accepted",
+    )
+    .await;
+
+    // Query for provider 1
+    let contracts1 = db
+        .get_pending_provision_contracts(&provider_pk1)
+        .await
+        .unwrap();
+    assert_eq!(contracts1.len(), 1);
+    assert_eq!(
+        contracts1[0].provider_pubkey,
+        hex::encode(&provider_pk1)
+    );
+
+    // Query for provider 2
+    let contracts2 = db
+        .get_pending_provision_contracts(&provider_pk2)
+        .await
+        .unwrap();
+    assert_eq!(contracts2.len(), 1);
+    assert_eq!(
+        contracts2[0].provider_pubkey,
+        hex::encode(&provider_pk2)
+    );
+}
+
+#[tokio::test]
 async fn test_get_contract_by_id() {
     let db = setup_test_db().await;
     let contract_id = vec![3u8; 32];

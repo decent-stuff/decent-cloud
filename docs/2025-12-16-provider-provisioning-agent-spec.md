@@ -335,5 +335,38 @@ Scripts receive JSON on stdin, output JSON on stdout.
 - **Verification:** `cargo build -p dc-agent` compiles successfully, binary runs with --help, run, and doctor subcommands
 - **Outcome:** Success - skeleton compiles and workspace member added
 
+### Step 3: Implement Provisioner trait and Script provisioner
+- **Implementation:** Implemented Provisioner trait and ScriptProvisioner in dc-agent
+  - Updated `/code/dc-agent/src/config.rs` with ScriptConfig (minimal for this step)
+  - Implemented `/code/dc-agent/src/provisioner/mod.rs`:
+    - `Instance` struct: external_id, ip_address, ipv6_address, ssh_port, root_password, additional_details
+    - `HealthStatus` enum: Healthy, Unhealthy, Unknown (tagged serde representation)
+    - `ProvisionRequest` struct: contract_id, offering_id, cpu_cores, memory_mb, storage_gb, requester_ssh_pubkey, instance_config
+    - `Provisioner` trait: provision(), terminate(), health_check(), get_instance()
+  - Implemented `/code/dc-agent/src/provisioner/script.rs`:
+    - `ScriptProvisioner` struct with ScriptConfig
+    - `ScriptInput` struct for JSON stdin (action, request, external_id with flatten)
+    - `ScriptOutput` struct for JSON stdout (success, instance, health, error, retry_possible)
+    - `run_script()` method: spawns process, writes JSON to stdin, reads JSON from stdout
+    - Uses tokio::process::Command with timeout from config
+    - Implements all Provisioner trait methods using run_script
+    - Error handling: fails fast with detailed context on script errors, timeouts, or invalid JSON
+  - Unit tests (7 tests):
+    - test_script_output_parse_success: Parses successful provision response with instance
+    - test_script_output_parse_error: Parses error response with retry_possible
+    - test_script_output_parse_health_healthy: Parses healthy status with uptime
+    - test_script_output_parse_health_unhealthy: Parses unhealthy status with reason
+    - test_script_output_parse_health_unknown: Parses unknown health status
+    - test_script_input_serialize_provision: Validates provision request JSON structure
+    - test_script_input_serialize_terminate: Validates terminate request JSON structure
+- **Files modified:**
+  - `/code/dc-agent/src/config.rs` - Added ScriptConfig struct
+  - `/code/dc-agent/src/provisioner/mod.rs` - Implemented Provisioner trait and types
+  - `/code/dc-agent/src/provisioner/script.rs` - Implemented ScriptProvisioner
+- **Verification:**
+  - `cargo test -p dc-agent` passes (7 tests)
+  - `cargo clippy --tests` passes with no warnings
+- **Outcome:** Success - Provisioner trait and Script provisioner fully implemented with test coverage
+
 ## Completion Summary
 (To be filled in Phase 4)

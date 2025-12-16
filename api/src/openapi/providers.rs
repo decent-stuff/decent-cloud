@@ -351,6 +351,55 @@ impl ProvidersApi {
         }
     }
 
+    /// Get contracts pending provisioning
+    ///
+    /// Returns contracts ready for provisioning (accepted + payment succeeded).
+    /// Requires authentication - provider can only access their own contracts.
+    #[oai(
+        path = "/providers/:pubkey/contracts/pending-provision",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_pending_provision_contracts(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: provider can only access their own contracts
+        if auth.pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own contracts".to_string()),
+            });
+        }
+
+        match db.get_pending_provision_contracts(&pubkey_bytes).await {
+            Ok(contracts) => Json(ApiResponse {
+                success: true,
+                data: Some(contracts),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get provider offerings
     ///
     /// Returns all offerings for a specific provider

@@ -242,6 +242,30 @@ impl Database {
         Ok(contracts)
     }
 
+    /// Get contracts pending provisioning for a provider
+    /// Returns contracts with status='accepted' AND payment_status='succeeded'
+    pub async fn get_pending_provision_contracts(&self, provider_pubkey: &[u8]) -> Result<Vec<Contract>> {
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               FROM contract_sign_requests
+               WHERE provider_pubkey = ?
+               AND status = 'accepted'
+               AND payment_status = 'succeeded'
+               ORDER BY created_at_ns ASC"#,
+            provider_pubkey
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
+
     /// Get contract by ID
     pub async fn get_contract(&self, contract_id: &[u8]) -> Result<Option<Contract>> {
         let contract = sqlx::query_as!(
