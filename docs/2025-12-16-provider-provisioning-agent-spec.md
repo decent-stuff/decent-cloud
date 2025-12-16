@@ -360,6 +360,34 @@ Scripts receive JSON on stdin, output JSON on stdout.
 - **Verification:** `cargo build -p dc-agent` compiles successfully, binary runs with --help, run, and doctor subcommands
 - **Outcome:** Success - skeleton compiles and workspace member added
 
+### Step 2: Implement configuration parsing
+- **Implementation:** Implemented TOML configuration parsing with serde
+  - Created `/code/dc-agent/src/config.rs` with complete configuration structures
+  - Configuration structure supports nested TOML format from spec:
+    - `Config` struct with api, polling, and provisioner sections
+    - `ApiConfig` - API endpoint and Ed25519 keys
+    - `PollingConfig` - with defaults (interval: 30s, health_check: 300s)
+    - `ProvisionerConfig` - wrapper struct with type + flattened variant fields
+    - `ProvisionerType` enum - discriminates between Proxmox/Script/Manual
+    - `ProvisionerVariant` struct - holds optional configs for each type
+    - `ProxmoxConfig` - full Proxmox VE configuration with defaults (storage: "local-lvm", verify_ssl: true)
+    - `ScriptConfig` - script paths with default timeout (300s)
+    - `ManualConfig` - optional webhook URL
+  - Helper methods on ProvisionerConfig: `get_proxmox()`, `get_script()`, `get_manual()`
+  - Default functions for all optional fields as required
+  - KISS approach - minimal validation, deserialization handles required fields
+  - Created `/code/dc-agent/dc-agent.toml.example` with Proxmox configuration example
+  - Added 11 comprehensive unit tests covering:
+    - Positive: valid Proxmox config, valid Script config, valid Manual config
+    - Defaults: polling intervals, storage, verify_ssl, script timeout, optional webhook
+    - Negative: missing API section, missing provisioner type, missing Proxmox required fields, invalid TOML syntax, nonexistent file
+- **Files created/modified:**
+  - `/code/dc-agent/src/config.rs` - complete implementation with tests
+  - `/code/dc-agent/dc-agent.toml.example` - example configuration file
+  - `/code/dc-agent/Cargo.toml` - added tempfile dev-dependency for tests
+- **Verification:** `cargo test -p dc-agent` passes all 18 tests (11 config tests + 7 existing provisioner tests)
+- **Outcome:** Success - config parsing complete, all tests pass
+
 ### Step 3: Implement Provisioner trait and Script provisioner
 - **Implementation:** Implemented Provisioner trait and ScriptProvisioner in dc-agent
   - Updated `/code/dc-agent/src/config.rs` with ScriptConfig (minimal for this step)
