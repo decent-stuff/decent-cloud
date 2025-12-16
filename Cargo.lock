@@ -929,6 +929,7 @@ dependencies = [
  "clap",
  "ed25519-dalek",
  "hex",
+ "mockito",
  "reqwest 0.12.24",
  "serde",
  "serde_json",

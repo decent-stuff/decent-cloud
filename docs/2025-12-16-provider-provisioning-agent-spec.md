@@ -281,15 +281,15 @@ Scripts receive JSON on stdin, output JSON on stdout.
 
 ### Step 5: Implement Script provisioner
 **Success:** Executes external scripts, parses JSON responses
-**Status:** Pending
+**Status:** Complete
 
 ### Step 6: Implement API client
 **Success:** Authenticates, fetches pending contracts, reports status
-**Status:** Pending
+**Status:** Complete
 
 ### Step 7: Implement polling loop
 **Success:** Polls API, provisions contracts, handles errors
-**Status:** Pending
+**Status:** Complete
 
 ### Step 8: Add API extension endpoint
 **Success:** GET /providers/{pubkey}/contracts/pending-provision works
@@ -461,6 +461,101 @@ Scripts receive JSON on stdin, output JSON on stdout.
   - All API endpoint paths and response formats match official Proxmox VE API documentation
   - VMID allocation is deterministic and avoids template range (10000-999999)
 - **Outcome:** Success - Proxmox provisioner fully implemented with real API endpoints
+
+### Step 6: Implement API client
+- **Implementation:** Implemented ApiClient with Ed25519 authentication in `/code/dc-agent/src/api_client.rs`
+  - `ApiClient` struct with reqwest HTTP client and Ed25519 signing key
+  - Authentication using Ed25519 signatures:
+    - Signs requests with format: `{method}{path}{timestamp}`
+    - Base64-encoded signature in `X-Signature` header
+    - Provider pubkey in `X-Provider-Pubkey` header
+    - Unix timestamp in `X-Timestamp` header
+  - `load_signing_key()` method:
+    - Accepts hex-encoded key directly OR path to file containing hex key
+    - Validates key is exactly 32 bytes for Ed25519
+    - Supports whitespace trimming from file contents
+    - Fails fast with detailed error messages
+  - `sign_request()` method:
+    - Creates signature from method, path, and timestamp
+    - Returns Base64-encoded signature
+  - API methods:
+    - `get_pending_contracts()`: GET `/api/v1/providers/{pubkey}/contracts/pending-provision`
+    - `report_provisioned()`: POST `/api/v1/provider/rental-requests/{id}/provisioning` with Instance JSON
+    - `report_failed()`: POST `/api/v1/provider/rental-requests/{id}/provision-failed` with error message
+    - `report_health()`: POST `/api/v1/provider/contracts/{id}/health` with HealthStatus
+  - Generic `get()` and `post()` helper methods with authentication
+  - Response format: `ApiResponse<T>` with success/data/error fields (camelCase)
+  - Contract representation: `PendingContract` with contract_id, offering_id, requester_ssh_pubkey, instance_config
+  - Request structs: `ProvisionedRequest`, `ProvisionFailedRequest`, `HealthCheckRequest` (camelCase)
+  - Error handling: fails fast with context, includes HTTP status and response body in errors
+  - Unit tests (9 tests):
+    - test_load_signing_key_from_hex: Loads key from hex string
+    - test_load_signing_key_from_file: Loads key from file path
+    - test_load_signing_key_from_file_with_whitespace: Handles whitespace in file
+    - test_load_signing_key_invalid_hex: Rejects invalid hex/missing file
+    - test_load_signing_key_wrong_length: Rejects keys with wrong byte length
+    - test_sign_request: Verifies signature is valid for message
+    - test_sign_request_different_methods: Verifies different methods produce different signatures
+    - test_sign_request_different_timestamps: Verifies different timestamps produce different signatures
+- **Files modified:**
+  - `/code/dc-agent/src/api_client.rs` - Implemented ApiClient with authentication (390 lines)
+- **Verification:**
+  - All tests pass
+  - Signature verification tests confirm Ed25519 correctness
+  - Error handling tests confirm proper failure modes
+- **Outcome:** Success - API client fully implemented with Ed25519 authentication and comprehensive tests
+
+### Step 7: Implement polling loop
+- **Implementation:** Implemented main polling loop and doctor command in `/code/dc-agent/src/main.rs`
+  - Main function with tokio async runtime
+  - CLI with clap:
+    - `run` subcommand - starts polling loop
+    - `doctor` subcommand - validates configuration and connectivity
+  - `run_agent()` function:
+    - Creates ApiClient and Provisioner based on config
+    - Configurable polling interval from config (default 30s)
+    - Infinite loop with tokio interval ticker
+    - Fetches pending contracts from API via `get_pending_contracts()`
+    - Processes each contract sequentially:
+      - Parses instance_config JSON if present
+      - Creates ProvisionRequest with contract details
+      - Calls provisioner.provision()
+      - On success: reports to API via `report_provisioned()`
+      - On failure: reports to API via `report_failed()`
+    - Graceful error handling - logs errors but continues polling
+    - Structured logging with tracing (info/warn/error levels)
+  - `create_provisioner()` function:
+    - Factory function to create provisioner from config
+    - Supports Proxmox, Script, and Manual provisioner types
+    - Validates config exists for selected type
+    - Returns Arc<dyn Provisioner> for thread-safe sharing
+  - `run_doctor()` command:
+    - Validates configuration file loaded successfully
+    - Displays API endpoint, provider pubkey, polling intervals
+    - Checks provisioner-specific config:
+      - Proxmox: displays API URL, node, template VMID, storage, SSL verification, pool
+      - Script: displays script paths and timeout, validates script files exist
+      - Manual: displays notification webhook if configured
+    - Initializes API client to verify config is valid
+    - Returns error if critical config missing
+  - Implemented minimal ManualProvisioner in `/code/dc-agent/src/provisioner/manual.rs`:
+    - Implements Provisioner trait
+    - provision() and terminate() methods log warning and return error (requires human intervention)
+    - health_check() returns HealthStatus::Unknown
+    - get_instance() returns None
+    - Optional webhook notification logging (actual implementation TODO)
+  - Updated config structs to derive Clone:
+    - Added Clone to ProxmoxConfig, ScriptConfig, ManualConfig
+- **Files modified:**
+  - `/code/dc-agent/src/main.rs` - Implemented full agent with polling loop and doctor command (258 lines)
+  - `/code/dc-agent/src/provisioner/manual.rs` - Implemented minimal ManualProvisioner (63 lines)
+  - `/code/dc-agent/src/config.rs` - Added Clone derive to config structs
+  - `/code/dc-agent/src/api_client.rs` - Removed unused imports (Verifier, VerifyingKey from top-level)
+- **Verification:**
+  - `cargo build -p dc-agent` compiles successfully with no warnings
+  - All error paths fail fast with detailed context
+  - Doctor command provides actionable diagnostics
+- **Outcome:** Success - Polling loop and doctor command fully implemented
 
 ## Completion Summary
 (To be filled in Phase 4)

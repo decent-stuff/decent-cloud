@@ -623,3 +623,7 @@ impl Provisioner for ProxmoxProvisioner {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "proxmox_tests.rs"]
+mod proxmox_tests;
