@@ -34,6 +34,20 @@ enum Commands {
         #[command(subcommand)]
         provisioner: SetupProvisioner,
     },
+    /// Test provisioning by creating and optionally destroying a test VM
+    TestProvision {
+        /// SSH public key to inject into the test VM
+        #[arg(long)]
+        ssh_pubkey: Option<String>,
+
+        /// Keep the VM running after provisioning (don't terminate)
+        #[arg(long, default_value = "false")]
+        keep: bool,
+
+        /// Custom contract ID for the test (default: test-<timestamp>)
+        #[arg(long)]
+        contract_id: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -86,11 +100,14 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run | Commands::Doctor => {
+        Commands::Run | Commands::Doctor | Commands::TestProvision { .. } => {
             let config = Config::load(&cli.config)?;
             match cli.command {
                 Commands::Run => run_agent(config).await,
                 Commands::Doctor => run_doctor(config).await,
+                Commands::TestProvision { ssh_pubkey, keep, contract_id } => {
+                    run_test_provision(config, ssh_pubkey, keep, contract_id).await
+                }
                 _ => unreachable!(),
             }
         }
@@ -182,6 +199,84 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             Ok(())
         }
     }
+}
+
+async fn run_test_provision(
+    config: Config,
+    ssh_pubkey: Option<String>,
+    keep: bool,
+    contract_id: Option<String>,
+) -> Result<()> {
+    println!("dc-agent test-provision");
+    println!("=======================\n");
+
+    let provisioner: Arc<dyn Provisioner> = create_provisioner(&config)?;
+
+    // Generate contract ID if not provided
+    let contract_id = contract_id.unwrap_or_else(|| {
+        format!("test-{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs())
+    });
+
+    // Use provided SSH key or a placeholder
+    let ssh_key = ssh_pubkey.unwrap_or_else(|| {
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyNotForRealUse test@dc-agent".to_string()
+    });
+
+    println!("Contract ID: {}", contract_id);
+    println!("SSH Public Key: {}...", &ssh_key[..ssh_key.len().min(50)]);
+    println!();
+
+    let request = ProvisionRequest {
+        contract_id: contract_id.clone(),
+        offering_id: "test-offering".to_string(),
+        cpu_cores: Some(1),
+        memory_mb: Some(1024),
+        storage_gb: Some(10),
+        requester_ssh_pubkey: Some(ssh_key),
+        instance_config: None,
+    };
+
+    println!("Provisioning test VM...");
+    let start = std::time::Instant::now();
+    let instance = provisioner.provision(&request).await?;
+    let provision_time = start.elapsed();
+
+    println!("\n✓ VM provisioned successfully in {:.1}s", provision_time.as_secs_f64());
+    println!();
+    println!("Instance details:");
+    println!("  External ID: {}", instance.external_id);
+    if let Some(ipv4) = &instance.ip_address {
+        println!("  IPv4: {}", ipv4);
+    }
+    if let Some(ipv6) = &instance.ipv6_address {
+        println!("  IPv6: {}", ipv6);
+    }
+
+    // Health check
+    println!("\nRunning health check...");
+    let health = provisioner.health_check(&instance.external_id).await?;
+    println!("  Status: {:?}", health);
+
+    if keep {
+        println!("\n--keep specified, VM will remain running.");
+        println!("To terminate later, use the Proxmox web UI or API.");
+        if let Some(ipv4) = &instance.ip_address {
+            println!("\nYou can SSH into the VM:");
+            println!("  ssh root@{}", ipv4);
+        }
+    } else {
+        println!("\nTerminating test VM...");
+        provisioner.terminate(&instance.external_id).await?;
+        println!("✓ VM terminated successfully");
+    }
+
+    println!("\n=======================");
+    println!("Test complete!");
+
+    Ok(())
 }
 
 async fn run_agent(config: Config) -> Result<()> {
