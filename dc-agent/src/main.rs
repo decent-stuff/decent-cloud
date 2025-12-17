@@ -4,6 +4,7 @@ use dc_agent::{
     api_client::ApiClient,
     config::{Config, ProvisionerType},
     provisioner::{manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner, ProvisionRequest, Provisioner},
+    setup::{proxmox::OsTemplate, ProxmoxSetup},
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,6 +29,54 @@ enum Commands {
     Run,
     /// Check agent configuration and connectivity
     Doctor,
+    /// Set up a new provisioner
+    Setup {
+        #[command(subcommand)]
+        provisioner: SetupProvisioner,
+    },
+}
+
+#[derive(Subcommand)]
+enum SetupProvisioner {
+    /// Set up Proxmox VE provisioner (creates templates and API token)
+    Proxmox {
+        /// Proxmox host IP or hostname
+        #[arg(long)]
+        host: String,
+
+        /// SSH port (default: 22)
+        #[arg(long, default_value = "22")]
+        ssh_port: u16,
+
+        /// SSH username (default: root)
+        #[arg(long, default_value = "root")]
+        ssh_user: String,
+
+        /// Proxmox API username (default: root@pam)
+        #[arg(long, default_value = "root@pam")]
+        proxmox_user: String,
+
+        /// Storage for VM disks (default: local-lvm)
+        #[arg(long, default_value = "local-lvm")]
+        storage: String,
+
+        /// OS templates to create (comma-separated: ubuntu-24.04,debian-12,rocky-9)
+        /// Available: ubuntu-24.04, ubuntu-22.04, debian-12, rocky-9
+        #[arg(long, default_value = "ubuntu-24.04")]
+        templates: String,
+
+        /// Output config file path
+        #[arg(long, default_value = "dc-agent.toml")]
+        output: PathBuf,
+
+        /// Decent Cloud API endpoint
+        #[arg(long, default_value = "https://api.decent-cloud.org")]
+        api_endpoint: String,
+
+        /// Provider public key (hex)
+        #[arg(long, default_value = "")]
+        provider_pubkey: String,
+    },
 }
 
 #[tokio::main]
@@ -35,11 +84,103 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let cli = Cli::parse();
-    let config = Config::load(&cli.config)?;
 
     match cli.command {
-        Commands::Run => run_agent(config).await,
-        Commands::Doctor => run_doctor(config).await,
+        Commands::Run | Commands::Doctor => {
+            let config = Config::load(&cli.config)?;
+            match cli.command {
+                Commands::Run => run_agent(config).await,
+                Commands::Doctor => run_doctor(config).await,
+                _ => unreachable!(),
+            }
+        }
+        Commands::Setup { provisioner } => run_setup(provisioner).await,
+    }
+}
+
+async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
+    match provisioner {
+        SetupProvisioner::Proxmox {
+            host,
+            ssh_port,
+            ssh_user,
+            proxmox_user,
+            storage,
+            templates,
+            output,
+            api_endpoint,
+            provider_pubkey,
+        } => {
+            println!("Decent Cloud Agent - Proxmox Setup");
+            println!("===================================\n");
+
+            // Parse templates
+            let template_list: Vec<OsTemplate> = templates
+                .split(',')
+                .filter_map(|s| {
+                    let t = OsTemplate::parse(s.trim());
+                    if t.is_none() {
+                        eprintln!("Warning: Unknown template '{}', skipping", s.trim());
+                    }
+                    t
+                })
+                .collect();
+
+            if template_list.is_empty() {
+                anyhow::bail!("No valid templates specified. Available: ubuntu-24.04, ubuntu-22.04, debian-12, rocky-9");
+            }
+
+            println!("Host: {}", host);
+            println!("SSH User: {}", ssh_user);
+            println!("Proxmox User: {}", proxmox_user);
+            println!("Storage: {}", storage);
+            println!("Templates: {}", template_list.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "));
+            println!();
+
+            // Prompt for passwords
+            let ssh_password = rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?;
+            let proxmox_password = if ssh_user == proxmox_user.split('@').next().unwrap_or("root") {
+                // Same user, reuse password
+                ssh_password.clone()
+            } else {
+                rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
+            };
+
+            println!();
+
+            let setup = ProxmoxSetup {
+                host,
+                port: ssh_port,
+                ssh_user,
+                ssh_password,
+                proxmox_user,
+                proxmox_password,
+                storage,
+                templates: template_list,
+            };
+
+            let result = setup.run().await?;
+
+            // Write config file
+            let pubkey = if provider_pubkey.is_empty() {
+                "YOUR_PROVIDER_PUBKEY_HERE"
+            } else {
+                &provider_pubkey
+            };
+            result.write_config(&output, &api_endpoint, pubkey)?;
+
+            println!("\n===================================");
+            println!("Setup complete!");
+            println!();
+            println!("Configuration written to: {}", output.display());
+            println!();
+            println!("Next steps:");
+            println!("1. Edit {} and set your provider_secret_key", output.display());
+            println!("2. Run: dc-agent --config {} doctor", output.display());
+            println!("3. Run: dc-agent --config {} run", output.display());
+
+            Ok(())
+        }
     }
 }
 
