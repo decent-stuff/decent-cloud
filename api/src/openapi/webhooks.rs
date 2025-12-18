@@ -238,6 +238,24 @@ pub async fn stripe_webhook(
                 contract_id_hex
             );
 
+            // Notify provider about new rental request
+            if let Ok(Some(contract)) = db.get_contract(&contract_id_bytes).await {
+                if let Err(e) = crate::rental_notifications::notify_provider_new_rental(
+                    db.as_ref(),
+                    email_service.as_ref(),
+                    &contract,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to notify provider for contract {}: {}",
+                        contract_id_hex,
+                        e
+                    );
+                    // Don't fail the webhook - payment succeeded
+                }
+            }
+
             // Schedule delayed receipt sending - wait for Stripe invoice to be ready
             // Background processor will retry 5 times at 1-minute intervals before falling back to Typst
             if let Err(e) = db.schedule_pending_stripe_receipt(&contract_id_bytes).await {
@@ -722,6 +740,24 @@ pub async fn icpay_webhook(
                             "Contract {} ICPay payment succeeded, awaiting provider review",
                             contract_id_hex
                         );
+
+                        // Notify provider about new rental request
+                        if let Ok(Some(contract)) = db.get_contract(&contract_id_bytes).await {
+                            if let Err(e) = crate::rental_notifications::notify_provider_new_rental(
+                                db.as_ref(),
+                                email_service.as_ref(),
+                                &contract,
+                            )
+                            .await
+                            {
+                                tracing::warn!(
+                                    "Failed to notify provider for contract {}: {}",
+                                    contract_id_hex,
+                                    e
+                                );
+                                // Don't fail the webhook - payment succeeded
+                            }
+                        }
 
                         // Send payment receipt with invoice attachment
                         match crate::receipts::send_payment_receipt(

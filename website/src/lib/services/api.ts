@@ -641,6 +641,34 @@ export async function createRentalRequest(
 	return payload.data;
 }
 
+/**
+ * Update ICPay transaction ID for a contract after payment completes
+ */
+export async function updateIcpayTransactionId(
+	contractId: string,
+	transactionId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/icpay-transaction`;
+
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify({ transaction_id: transactionId })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, 'Failed to update ICPay transaction ID');
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update ICPay transaction ID');
+	}
+}
+
 export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?: string): Promise<Contract[]> {
 	if (!pubkeyHex) {
 		const pubkey = headers['X-Public-Key'];

@@ -8,6 +8,7 @@ mod ledger_path;
 pub mod notifications;
 pub mod payment_release_service;
 pub mod receipts;
+pub mod rental_notifications;
 mod search;
 pub mod stripe_client;
 pub mod support_bot;

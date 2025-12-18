@@ -2,6 +2,7 @@
 	import type { Offering } from "$lib/services/api";
 	import {
 		createRentalRequest,
+		updateIcpayTransactionId,
 		type RentalRequestParams,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
@@ -99,8 +100,27 @@
 		// Transaction completed successfully
 		console.log("ICPay payment completed:", detail);
 
-		// TODO: Call backend API to record transaction ID
-		// For now, proceed with success
+		// Record the transaction ID in the backend for audit trail
+		const transactionId = detail?.transactionId || detail?.id || detail?.txId;
+		if (transactionId) {
+			try {
+				const signingIdentityInfo = await authStore.getSigningIdentity();
+				if (signingIdentityInfo) {
+					const signed = await signRequest(
+						signingIdentityInfo.identity as Ed25519KeyIdentity,
+						"PUT",
+						`/api/v1/contracts/${pendingContractId}/icpay-transaction`,
+						{ transaction_id: transactionId }
+					);
+					await updateIcpayTransactionId(pendingContractId, transactionId, signed.headers);
+					console.log("ICPay transaction ID recorded:", transactionId);
+				}
+			} catch (e) {
+				// Log but don't fail - payment succeeded, just audit trail update failed
+				console.warn("Failed to record ICPay transaction ID:", e);
+			}
+		}
+
 		onSuccess(pendingContractId);
 	}
 
@@ -110,6 +130,12 @@
 		const signingIdentityInfo = await authStore.getSigningIdentity();
 		if (!signingIdentityInfo) {
 			error = "You must be logged in to rent resources";
+			return;
+		}
+
+		// SSH key is required for server access
+		if (!sshKey.trim()) {
+			error = "SSH public key is required for server access after provisioning";
 			return;
 		}
 
@@ -130,7 +156,7 @@
 		try {
 			const params: RentalRequestParams = {
 				offering_db_id: offering.id!,
-				ssh_pubkey: sshKey || undefined,
+				ssh_pubkey: sshKey.trim(), // Required
 				contact_method: contactMethod || undefined,
 				request_memo: memo || undefined,
 				duration_hours: durationHours,
@@ -473,26 +499,24 @@
 					</div>
 				{/if}
 
-				<!-- SSH Key -->
+				<!-- SSH Key (Required) -->
 				<div>
 					<label
 						for="ssh-key"
 						class="block text-sm font-medium text-white mb-2"
 					>
-						SSH Public Key <span class="text-white/50"
-							>(optional)</span
-						>
+						SSH Public Key <span class="text-red-400">*</span>
 					</label>
 					<textarea
 						id="ssh-key"
 						bind:value={sshKey}
 						placeholder="ssh-ed25519 AAAA..."
 						rows="3"
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors font-mono text-sm"
+						required
+						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors font-mono text-sm {!sshKey.trim() ? 'border-red-500/50' : ''}"
 					></textarea>
 					<p class="text-xs text-white/50 mt-1">
-						Provide your SSH public key for server access after
-						provisioning
+						Required for server access after provisioning
 					</p>
 				</div>
 
