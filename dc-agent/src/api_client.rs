@@ -83,6 +83,7 @@ pub struct HeartbeatResponse {
 enum Method {
     Get,
     Post,
+    Put,
 }
 
 impl Method {
@@ -90,6 +91,7 @@ impl Method {
         match self {
             Method::Get => "GET",
             Method::Post => "POST",
+            Method::Put => "PUT",
         }
     }
 }
@@ -97,9 +99,7 @@ impl Method {
 /// Authentication type for requests.
 #[derive(Clone, Copy)]
 enum AuthType {
-    /// Use provider pubkey header (X-Public-Key)
-    Provider,
-    /// Use agent pubkey header (X-Agent-Pubkey) if in agent mode, else provider
+    /// Use agent pubkey header (X-Agent-Pubkey) if in agent mode, else provider (X-Public-Key)
     AgentOrProvider,
 }
 
@@ -203,6 +203,7 @@ impl ApiClient {
         let mut request_builder = match method {
             Method::Get => self.client.get(&url),
             Method::Post => self.client.post(&url),
+            Method::Put => self.client.put(&url),
         };
 
         // Add auth headers based on type
@@ -211,17 +212,14 @@ impl ApiClient {
             .header("X-Nonce", &nonce_str)
             .header("X-Signature", signature);
 
-        // Set identity header based on auth type
-        request_builder = match auth_type {
-            AuthType::Provider => request_builder.header("X-Public-Key", &self.provider_pubkey),
-            AuthType::AgentOrProvider => match &self.auth_mode {
-                AuthMode::Agent { agent_pubkey } => {
-                    request_builder.header("X-Agent-Pubkey", agent_pubkey)
-                }
-                AuthMode::Provider => {
-                    request_builder.header("X-Public-Key", &self.provider_pubkey)
-                }
-            },
+        // Set identity header based on auth mode
+        // (auth_type parameter kept for future flexibility)
+        let _ = auth_type;
+        request_builder = match &self.auth_mode {
+            AuthMode::Agent { agent_pubkey } => {
+                request_builder.header("X-Agent-Pubkey", agent_pubkey)
+            }
+            AuthMode::Provider => request_builder.header("X-Public-Key", &self.provider_pubkey),
         };
 
         // Add body if present
@@ -280,7 +278,7 @@ impl ApiClient {
             self.provider_pubkey
         );
         let response: ApiResponse<Vec<PendingContract>> =
-            self.request(Method::Get, &path, None, AuthType::Provider).await?;
+            self.request(Method::Get, &path, None, AuthType::AgentOrProvider).await?;
         Self::unwrap_response(response, "API error")
     }
 
@@ -298,14 +296,14 @@ impl ApiClient {
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> =
-            self.request(Method::Post, &path, Some(&body), AuthType::Provider).await?;
+            self.request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider).await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
     /// Report provisioning failure.
     pub async fn report_failed(&self, contract_id: &str, error: &str) -> Result<()> {
         let path = format!(
-            "/api/v1/provider/rental-requests/{}/provision-failed",
+            "/api/v1/provider/rental-requests/{}/provisioning",
             contract_id
         );
         let request = ProvisionFailedRequest {
@@ -314,7 +312,7 @@ impl ApiClient {
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> =
-            self.request(Method::Post, &path, Some(&body), AuthType::Provider).await?;
+            self.request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider).await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
@@ -326,7 +324,7 @@ impl ApiClient {
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> =
-            self.request(Method::Post, &path, Some(&body), AuthType::Provider).await?;
+            self.request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider).await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 

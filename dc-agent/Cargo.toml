@@ -30,6 +30,8 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 urlencoding = "2.1"
 uuid = { version = "1.0", features = ["v4"] }
+# Pin to fix future-incompat warning (transitive from russh)
+num-bigint-dig.workspace = true
 
 [dev-dependencies]
 mockito = "1.6"

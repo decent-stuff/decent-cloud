@@ -80,3 +80,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 which = "8.0"
+
+# Pin num-bigint-dig to fix future-incompat warning in v0.8.5
+# See: https://github.com/rust-lang/rust/issues/120192
+num-bigint-dig = "0.8.6"

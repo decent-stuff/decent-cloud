@@ -6,7 +6,7 @@ use super::common::{
     ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
     TestNotificationResponse, UpdateNotificationConfigRequest,
 };
-use crate::auth::ApiAuthenticatedUser;
+use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
@@ -354,7 +354,7 @@ impl ProvidersApi {
     /// Get contracts pending provisioning
     ///
     /// Returns contracts ready for provisioning (accepted + payment succeeded).
-    /// Requires authentication - provider can only access their own contracts.
+    /// Requires agent authentication - agent can only access their delegated provider's contracts.
     #[oai(
         path = "/providers/:pubkey/contracts/pending-provision",
         method = "get",
@@ -363,7 +363,7 @@ impl ProvidersApi {
     async fn get_pending_provision_contracts(
         &self,
         db: Data<&Arc<Database>>,
-        auth: ApiAuthenticatedUser,
+        auth: AgentAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
@@ -377,12 +377,12 @@ impl ProvidersApi {
             }
         };
 
-        // Authorization: provider can only access their own contracts
-        if auth.pubkey != pubkey_bytes {
+        // Authorization: agent can only access contracts for their delegated provider
+        if auth.provider_pubkey != pubkey_bytes {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Unauthorized: can only access your own contracts".to_string()),
+                error: Some("Unauthorized: can only access your delegated provider's contracts".to_string()),
             });
         }
 
@@ -1048,7 +1048,7 @@ impl ProvidersApi {
 
     /// Update provisioning status
     ///
-    /// Updates the provisioning status of a contract (requires authentication)
+    /// Updates the provisioning status of a contract (requires agent authentication)
     #[oai(
         path = "/provider/rental-requests/:id/provisioning",
         method = "put",
@@ -1057,7 +1057,7 @@ impl ProvidersApi {
     async fn update_provisioning_status(
         &self,
         db: Data<&Arc<Database>>,
-        auth: ApiAuthenticatedUser,
+        auth: AgentAuthenticatedUser,
         id: Path<String>,
         req: Json<ProvisioningStatusRequest>,
     ) -> Json<ApiResponse<String>> {
@@ -1085,7 +1085,7 @@ impl ProvidersApi {
             };
 
         match db
-            .update_contract_status(&contract_id, &req.status, &auth.pubkey, None)
+            .update_contract_status(&contract_id, &req.status, &auth.provider_pubkey, None)
             .await
         {
             Ok(_) => {
