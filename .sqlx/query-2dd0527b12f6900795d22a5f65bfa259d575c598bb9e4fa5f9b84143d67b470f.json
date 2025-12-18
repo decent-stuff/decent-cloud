@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_agent_delegations\n               SET revoked_at_ns = ?\n               WHERE provider_pubkey = ? AND agent_pubkey = ? AND revoked_at_ns IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "2dd0527b12f6900795d22a5f65bfa259d575c598bb9e4fa5f9b84143d67b470f"
+}

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns\n               FROM provider_agent_delegations\n               WHERE provider_pubkey = ?\n               ORDER BY created_at_ns DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "agent_pubkey",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "provider_pubkey",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "permissions",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "expires_at_ns",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "label",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "signature",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at_ns",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "revoked_at_ns",
+        "ordinal": 7,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "765b3ee2b3d6610a05a7b6b94fee51e01654006d88a524046ad8fbf27633964f"
+}

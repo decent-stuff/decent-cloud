@@ -71,9 +71,7 @@ mod tests {
         let _start_mock = server
             .mock(
                 "POST",
-                mockito::Matcher::Regex(
-                    r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string(),
-                ),
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string()),
             )
             .with_status(200)
             .with_header("content-type", "application/json")
@@ -133,9 +131,7 @@ mod tests {
             )
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(
-                r#"{"data":{"status":"stopped","exitstatus":"VMID 100 already exists"}}"#,
-            )
+            .with_body(r#"{"data":{"status":"stopped","exitstatus":"VMID 100 already exists"}}"#)
             .create_async()
             .await;
 
@@ -145,7 +141,10 @@ mod tests {
         let request = test_provision_request();
 
         let result = provisioner.provision(&request).await;
-        assert!(result.is_err(), "Provision should fail when clone task fails");
+        assert!(
+            result.is_err(),
+            "Provision should fail when clone task fails"
+        );
         let err = result.unwrap_err();
         let err_msg = format!("{:#}", err);
         assert!(
@@ -198,9 +197,7 @@ mod tests {
         let _start_mock = server
             .mock(
                 "POST",
-                mockito::Matcher::Regex(
-                    r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string(),
-                ),
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string()),
             )
             .with_status(200)
             .with_header("content-type", "application/json")
@@ -244,10 +241,7 @@ mod tests {
 
         // Mock get status endpoint - VM is running
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/12345/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/12345/status/current")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(
@@ -285,7 +279,9 @@ mod tests {
             )
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"data":"UPID:pve1:00001237:12345678:12345678:qmdestroy:12345:root@pam:"}"#)
+            .with_body(
+                r#"{"data":"UPID:pve1:00001237:12345678:12345678:qmdestroy:12345:root@pam:"}"#,
+            )
             .create_async()
             .await;
 
@@ -302,10 +298,7 @@ mod tests {
 
         // Mock get status endpoint - VM is already stopped
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/12345/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/12345/status/current")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{"data":{"vmid":12345,"status":"stopped","name":"dc-test"}}"#)
@@ -320,7 +313,9 @@ mod tests {
             )
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"data":"UPID:pve1:00001237:12345678:12345678:qmdestroy:12345:root@pam:"}"#)
+            .with_body(
+                r#"{"data":"UPID:pve1:00001237:12345678:12345678:qmdestroy:12345:root@pam:"}"#,
+            )
             .create_async()
             .await;
 
@@ -341,10 +336,7 @@ mod tests {
 
         // Mock get status endpoint - VM not found (404)
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/99999/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/99999/status/current")
             .with_status(404)
             .with_header("content-type", "application/json")
             .with_body(r#"{"data":null}"#)
@@ -368,10 +360,7 @@ mod tests {
 
         // Mock get status endpoint - VM is running
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/12345/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/12345/status/current")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(
@@ -400,10 +389,7 @@ mod tests {
 
         // Mock get status endpoint - VM is stopped
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/12345/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/12345/status/current")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{"data":{"vmid":12345,"status":"stopped","name":"dc-test"}}"#)
@@ -430,10 +416,7 @@ mod tests {
 
         // Mock get status endpoint - VM not found
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/99999/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/99999/status/current")
             .with_status(404)
             .with_header("content-type", "application/json")
             .with_body(r#"{"data":null}"#)
@@ -460,10 +443,7 @@ mod tests {
 
         // Mock get status endpoint
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/12345/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/12345/status/current")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(
@@ -508,10 +488,7 @@ mod tests {
 
         // Mock get status endpoint - VM not found
         let _status_mock = server
-            .mock(
-                "GET",
-                "/api2/json/nodes/pve1/qemu/99999/status/current",
-            )
+            .mock("GET", "/api2/json/nodes/pve1/qemu/99999/status/current")
             .with_status(404)
             .with_header("content-type", "application/json")
             .with_body(r#"{"data":null}"#)
@@ -601,9 +578,7 @@ mod tests {
         let _start_mock = server
             .mock(
                 "POST",
-                mockito::Matcher::Regex(
-                    r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string(),
-                ),
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string()),
             )
             .with_status(200)
             .with_header("content-type", "application/json")

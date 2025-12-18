@@ -3,24 +3,60 @@
 ## Provider Provisioning Agent
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
-**Status:** Ready to implement, large feature, needs /orchestrate
+**Status:** MVP complete (Phase 4-5 done: delegated keys, heartbeat, doctor --verify-api)
 **Priority:** HIGH - Critical for automated cloud platform
 
 Software that providers run to automatically provision services when contracts are accepted. Transforms Decent Cloud from "marketplace with manual fulfillment" to "automated cloud platform."
 
 **Prerequisite:** ✅ Payments fully working (Stripe + ICPay complete)
 
-### Key Components
-- Polling-based agent daemon (`dc-agent`)
-- Provisioner plugins: Hetzner, Proxmox, Docker, Manual
-- Health check reporting → feeds into reputation
-- Credential encryption (user's pubkey)
+### Completed ✓
+- [x] Agent skeleton with polling loop (`dc-agent run`)
+- [x] Configuration file parsing (TOML)
+- [x] Ed25519 authentication with API
+- [x] Proxmox provisioner (full VM lifecycle)
+- [x] Setup wizard (`dc-agent setup proxmox`)
+- [x] Test provisioning (`dc-agent test-provision`)
+- [x] API: `GET /providers/{pubkey}/contracts/pending-provision`
+- [x] API: `PUT /provider/rental-requests/{id}/provisioning`
 
-### Implementation Order
-1. API extensions (provisioning endpoints)
-2. Agent MVP with manual provisioner
-3. Hetzner Cloud provisioner
-4. Health check + reputation integration
+### Current Phase: Delegated Agent Keys + One-Liner UX
+
+**Goal:** Provider goes from zero to "healthy on dashboard" with:
+```bash
+dc-agent setup proxmox --host 192.168.1.100
+dc-agent doctor --verify-api
+dc-agent run
+```
+
+#### Phase 4: Delegated Agent Keys (Security) ✅ COMPLETE
+Agent uses separate keypair from provider's main key to limit blast radius if compromised.
+
+- [x] **4.1 Database:** Add `provider_agent_delegations` and `provider_agent_status` tables
+- [x] **4.2 API:** Delegation CRUD endpoints (`POST/GET/DELETE /providers/{pubkey}/agent-delegations`)
+- [x] **4.3 API:** Modify auth to accept agent keys via `X-Agent-Pubkey` header
+- [x] **4.4 Agent:** `dc-agent init` command for keypair generation
+- [x] **4.5 Agent:** `dc-agent register` command for delegation registration
+
+#### Phase 5: One-Liner UX (Complete)
+- [x] **5.1 Setup:** Generate agent keypair (`dc-agent init`)
+- [x] **5.2 Doctor:** Add `--verify-api` flag for API connectivity test
+- [x] **5.3 Heartbeat:** `POST /providers/{pubkey}/heartbeat` endpoint + agent integration
+- [ ] **5.4 Dashboard:** Show "online"/"offline" badge on provider cards (frontend-only)
+
+#### Phase 6: Health & Reputation
+- [ ] **6.1 API:** `POST /contracts/{id}/health` endpoint + `contract_health_checks` table
+- [ ] **6.2 API:** Uptime calculation per provider
+- [ ] **6.3 Dashboard:** Show uptime percentage on provider profile
+
+#### Phase 7: Credential Encryption
+- [ ] Encrypt VM passwords with requester's pubkey (Ed25519→X25519)
+- [ ] Frontend decryption with user's private key
+- [ ] Auto-delete credentials after 7 days
+
+### Future Phases
+- Phase 8: Hetzner Cloud provisioner
+- Phase 9: Docker, DigitalOcean, Vultr provisioners
 
 ---
 

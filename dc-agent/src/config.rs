@@ -13,7 +13,12 @@ pub struct Config {
 pub struct ApiConfig {
     pub endpoint: String,
     pub provider_pubkey: String,
-    pub provider_secret_key: String, // hex or file path
+    /// Agent's secret key for signing API requests (hex or file path)
+    /// If not provided, falls back to provider_secret_key (legacy mode)
+    pub agent_secret_key: Option<String>,
+    /// Provider's secret key (legacy - use agent_secret_key instead)
+    #[serde(default)]
+    pub provider_secret_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -174,7 +179,7 @@ verify_ssl = false
         );
         assert_eq!(
             config.api.provider_secret_key,
-            "ed25519_secret_hex_1234567890abcdef"
+            Some("ed25519_secret_hex_1234567890abcdef".to_string())
         );
 
         assert_eq!(config.polling.interval_seconds, 45);

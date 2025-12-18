@@ -244,7 +244,10 @@ impl Database {
 
     /// Get contracts pending provisioning for a provider
     /// Returns contracts with status='accepted' AND payment_status='succeeded'
-    pub async fn get_pending_provision_contracts(&self, provider_pubkey: &[u8]) -> Result<Vec<Contract>> {
+    pub async fn get_pending_provision_contracts(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
             r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",

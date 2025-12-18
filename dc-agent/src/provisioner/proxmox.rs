@@ -40,7 +40,7 @@ struct VmStatus {
 // Task status response (for polling async operations)
 #[derive(Deserialize, Debug)]
 struct TaskStatus {
-    status: String, // "running" or "stopped"
+    status: String,             // "running" or "stopped"
     exitstatus: Option<String>, // "OK" when successful, "some error" on failure
 }
 
@@ -95,7 +95,7 @@ impl ProxmoxProvisioner {
         let hash = hasher.finish();
 
         // Map to range 10000-999999 to avoid conflicts with templates
-        
+
         10000 + (hash % 990000) as u32
     }
 
@@ -336,10 +336,7 @@ impl ProxmoxProvisioner {
             vmid
         );
 
-        let params = vec![
-            ("purge", "1"),
-            ("destroy-unreferenced-disks", "1"),
-        ];
+        let params = vec![("purge", "1"), ("destroy-unreferenced-disks", "1")];
 
         let response = self
             .client
@@ -435,9 +432,16 @@ impl ProxmoxProvisioner {
 
             if let Some(ip_addresses) = interface.ip_addresses {
                 for ip in ip_addresses {
-                    if ip.ip_address_type == "ipv4" && ipv4.is_none() && ip.ip_address != "127.0.0.1" {
+                    if ip.ip_address_type == "ipv4"
+                        && ipv4.is_none()
+                        && ip.ip_address != "127.0.0.1"
+                    {
                         ipv4 = Some(ip.ip_address.clone());
-                    } else if ip.ip_address_type == "ipv6" && ipv6.is_none() && !ip.ip_address.starts_with("::1") && !ip.ip_address.starts_with("fe80") {
+                    } else if ip.ip_address_type == "ipv6"
+                        && ipv6.is_none()
+                        && !ip.ip_address.starts_with("::1")
+                        && !ip.ip_address.starts_with("fe80")
+                    {
                         ipv6 = Some(ip.ip_address.clone());
                     }
                 }
@@ -462,26 +466,34 @@ impl Provisioner for ProxmoxProvisioner {
         );
 
         // Step 1: Clone template to new VMID
-        tracing::debug!("Cloning template {} to VMID {}", self.config.template_vmid, vmid);
-        let clone_upid = self.clone_vm(self.config.template_vmid, vmid, &vm_name).await
+        tracing::debug!(
+            "Cloning template {} to VMID {}",
+            self.config.template_vmid,
+            vmid
+        );
+        let clone_upid = self
+            .clone_vm(self.config.template_vmid, vmid, &vm_name)
+            .await
             .context("Failed to clone VM")?;
 
         tracing::debug!("Waiting for clone task to complete: {}", clone_upid);
-        self.wait_for_task(&clone_upid).await
+        self.wait_for_task(&clone_upid)
+            .await
             .context("Clone task failed")?;
 
         // Step 2: Configure VM (cloud-init, resources)
         tracing::debug!("Configuring VM {}", vmid);
-        self.configure_vm(vmid, request).await
+        self.configure_vm(vmid, request)
+            .await
             .context("Failed to configure VM")?;
 
         // Step 3: Start VM
         tracing::debug!("Starting VM {}", vmid);
-        let start_upid = self.start_vm(vmid).await
-            .context("Failed to start VM")?;
+        let start_upid = self.start_vm(vmid).await.context("Failed to start VM")?;
 
         tracing::debug!("Waiting for start task to complete: {}", start_upid);
-        self.wait_for_task(&start_upid).await
+        self.wait_for_task(&start_upid)
+            .await
             .context("Start task failed")?;
 
         // Step 4: Wait for VM to boot and get IP (with retries)
@@ -507,7 +519,10 @@ impl Provisioner for ProxmoxProvisioner {
             }
 
             if attempt == 12 {
-                tracing::warn!("VM {} started but no IP address obtained after 2 minutes", vmid);
+                tracing::warn!(
+                    "VM {} started but no IP address obtained after 2 minutes",
+                    vmid
+                );
             }
         }
 
@@ -524,14 +539,17 @@ impl Provisioner for ProxmoxProvisioner {
             })),
         };
 
-        tracing::info!("Successfully provisioned VM {} with IP: {:?}", vmid, instance.ip_address);
+        tracing::info!(
+            "Successfully provisioned VM {} with IP: {:?}",
+            vmid,
+            instance.ip_address
+        );
 
         Ok(instance)
     }
 
     async fn terminate(&self, external_id: &str) -> Result<()> {
-        let vmid: u32 = external_id.parse()
-            .context("Invalid VMID format")?;
+        let vmid: u32 = external_id.parse().context("Invalid VMID format")?;
 
         tracing::info!("Terminating VM {}", vmid);
 
@@ -540,8 +558,7 @@ impl Provisioner for ProxmoxProvisioner {
             Ok(status) => {
                 if status.status == "running" {
                     tracing::debug!("Stopping VM {}", vmid);
-                    self.stop_vm(vmid).await
-                        .context("Failed to stop VM")?;
+                    self.stop_vm(vmid).await.context("Failed to stop VM")?;
                 }
             }
             Err(e) => {
@@ -555,8 +572,7 @@ impl Provisioner for ProxmoxProvisioner {
 
         // Delete VM
         tracing::debug!("Deleting VM {}", vmid);
-        self.delete_vm(vmid).await
-            .context("Failed to delete VM")?;
+        self.delete_vm(vmid).await.context("Failed to delete VM")?;
 
         tracing::info!("Successfully terminated VM {}", vmid);
 
@@ -564,8 +580,7 @@ impl Provisioner for ProxmoxProvisioner {
     }
 
     async fn health_check(&self, external_id: &str) -> Result<HealthStatus> {
-        let vmid: u32 = external_id.parse()
-            .context("Invalid VMID format")?;
+        let vmid: u32 = external_id.parse().context("Invalid VMID format")?;
 
         match self.get_vm_status(vmid).await {
             Ok(status) => {
@@ -592,8 +607,7 @@ impl Provisioner for ProxmoxProvisioner {
     }
 
     async fn get_instance(&self, external_id: &str) -> Result<Option<Instance>> {
-        let vmid: u32 = external_id.parse()
-            .context("Invalid VMID format")?;
+        let vmid: u32 = external_id.parse().context("Invalid VMID format")?;
 
         match self.get_vm_status(vmid).await {
             Ok(status) => {

@@ -315,9 +315,7 @@ async fn test_get_pending_provision_contracts_filters_correctly() {
     // Should return only contracts 1 and 5 (accepted + payment succeeded)
     assert_eq!(contracts.len(), 2);
     assert!(contracts.iter().all(|c| c.status == "accepted"));
-    assert!(contracts
-        .iter()
-        .all(|c| c.payment_status == "succeeded"));
+    assert!(contracts.iter().all(|c| c.payment_status == "succeeded"));
 }
 
 #[tokio::test]
@@ -414,10 +412,7 @@ async fn test_get_pending_provision_contracts_different_providers() {
         .await
         .unwrap();
     assert_eq!(contracts1.len(), 1);
-    assert_eq!(
-        contracts1[0].provider_pubkey,
-        hex::encode(&provider_pk1)
-    );
+    assert_eq!(contracts1[0].provider_pubkey, hex::encode(&provider_pk1));
 
     // Query for provider 2
     let contracts2 = db
@@ -425,10 +420,7 @@ async fn test_get_pending_provision_contracts_different_providers() {
         .await
         .unwrap();
     assert_eq!(contracts2.len(), 1);
-    assert_eq!(
-        contracts2[0].provider_pubkey,
-        hex::encode(&provider_pk2)
-    );
+    assert_eq!(contracts2[0].provider_pubkey, hex::encode(&provider_pk2));
 }
 
 #[tokio::test]

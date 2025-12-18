@@ -226,10 +226,7 @@ impl ProxmoxSetup {
                 .await
                 .context("Failed to download cloud image")?;
             if download_result.exit_status != 0 {
-                bail!(
-                    "Failed to download image: {}",
-                    download_result.stdout
-                );
+                bail!("Failed to download image: {}", download_result.stdout);
             }
         } else {
             println!("  Cloud image already downloaded, reusing");
@@ -325,10 +322,7 @@ impl ProxmoxSetup {
             .context("Failed to authenticate with Proxmox API")?;
 
         if !auth_response.status().is_success() {
-            bail!(
-                "Proxmox authentication failed: {}",
-                auth_response.status()
-            );
+            bail!("Proxmox authentication failed: {}", auth_response.status());
         }
 
         let auth_data: AuthResponse = auth_response
@@ -342,11 +336,7 @@ impl ProxmoxSetup {
         // Create API token
         let token_name = "dc-agent";
         let user_part = self.proxmox_user.split('@').next().unwrap_or("root");
-        let realm = self
-            .proxmox_user
-            .split('@')
-            .nth(1)
-            .unwrap_or("pam");
+        let realm = self.proxmox_user.split('@').nth(1).unwrap_or("pam");
         let token_id = format!("{}@{}!{}", user_part, realm, token_name);
 
         let token_url = format!(
@@ -361,10 +351,7 @@ impl ProxmoxSetup {
             COOKIE,
             HeaderValue::from_str(&format!("PVEAuthCookie={}", ticket))?,
         );
-        headers.insert(
-            "CSRFPreventionToken",
-            HeaderValue::from_str(csrf_token)?,
-        );
+        headers.insert("CSRFPreventionToken", HeaderValue::from_str(csrf_token)?);
 
         // Check if token already exists, delete it first
         let check_response = client
@@ -421,10 +408,7 @@ impl ProxmoxSetup {
             .context("Failed to verify API token")?;
 
         if !response.status().is_success() {
-            bail!(
-                "API token verification failed: {}",
-                response.status()
-            );
+            bail!("API token verification failed: {}", response.status());
         }
 
         Ok(())
@@ -487,7 +471,8 @@ verify_ssl = false
             node = self.node,
             vmid = primary_vmid,
             storage = self.storage,
-            template_comments = self.template_vmids
+            template_comments = self
+                .template_vmids
                 .iter()
                 .map(|(t, v)| format!("# {} = {}", t.template_name(), v))
                 .collect::<Vec<_>>()
@@ -496,7 +481,12 @@ verify_ssl = false
     }
 
     /// Write configuration to file.
-    pub fn write_config(&self, path: &Path, api_endpoint: &str, provider_pubkey: &str) -> Result<()> {
+    pub fn write_config(
+        &self,
+        path: &Path,
+        api_endpoint: &str,
+        provider_pubkey: &str,
+    ) -> Result<()> {
         let content = self.generate_config(api_endpoint, provider_pubkey);
         std::fs::write(path, content).context("Failed to write config file")?;
         Ok(())
@@ -546,7 +536,10 @@ mod tests {
 
     #[test]
     fn test_os_template_parse() {
-        assert_eq!(OsTemplate::parse("ubuntu-24.04"), Some(OsTemplate::Ubuntu2404));
+        assert_eq!(
+            OsTemplate::parse("ubuntu-24.04"),
+            Some(OsTemplate::Ubuntu2404)
+        );
         assert_eq!(OsTemplate::parse("noble"), Some(OsTemplate::Ubuntu2404));
         assert_eq!(OsTemplate::parse("debian-12"), Some(OsTemplate::Debian12));
         assert_eq!(OsTemplate::parse("rocky-9"), Some(OsTemplate::RockyLinux9));

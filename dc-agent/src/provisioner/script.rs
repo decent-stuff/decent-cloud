@@ -73,8 +73,8 @@ impl ScriptProvisioner {
             );
         }
 
-        let stdout = String::from_utf8(output.stdout)
-            .context("Script output is not valid UTF-8")?;
+        let stdout =
+            String::from_utf8(output.stdout).context("Script output is not valid UTF-8")?;
 
         let script_output: ScriptOutput = serde_json::from_str(&stdout)
             .with_context(|| format!("Failed to parse script output as JSON: {}", stdout))?;

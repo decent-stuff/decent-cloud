@@ -165,6 +165,20 @@ pub struct AdminAuthenticatedUser {
     pub pubkey: Vec<u8>,
 }
 
+/// Agent authenticated user (signature-based with delegated permissions)
+/// Used by provisioning agents that have been delegated authority by a provider
+#[derive(Debug, Clone)]
+pub struct AgentAuthenticatedUser {
+    /// The agent's public key (used for signing)
+    /// Stored for audit logging; database queries use provider_pubkey
+    #[allow(dead_code)]
+    pub agent_pubkey: Vec<u8>,
+    /// The provider's public key (the delegator)
+    pub provider_pubkey: Vec<u8>,
+    /// Permissions granted to this agent
+    pub permissions: Vec<crate::database::AgentPermission>,
+}
+
 impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
     const TYPES: &'static [poem_openapi::ApiExtractorType] =
         &[poem_openapi::ApiExtractorType::RequestObject];
@@ -395,6 +409,137 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
         *body = poem::RequestBody::new(poem::Body::from(body_bytes));
 
         Ok(AdminAuthenticatedUser { pubkey })
+    }
+}
+
+impl<'a> poem_openapi::ApiExtractor<'a> for AgentAuthenticatedUser {
+    const TYPES: &'static [poem_openapi::ApiExtractorType] =
+        &[poem_openapi::ApiExtractorType::RequestObject];
+    const PARAM_IS_REQUIRED: bool = true;
+
+    type ParamType = ();
+    type ParamRawType = ();
+
+    fn register(registry: &mut poem_openapi::registry::Registry) {
+        registry.create_security_scheme(
+            "AgentSignatureAuth",
+            MetaSecurityScheme {
+                ty: "apiKey",
+                description: Some(
+                    "Agent signature-based authentication using X-Agent-Pubkey, X-Signature, and X-Timestamp headers. \
+                     Requires a valid delegation from a provider.",
+                ),
+                name: Some("X-Agent-Pubkey"),
+                key_in: Some("header"),
+                scheme: None,
+                bearer_format: None,
+                flows: None,
+                openid_connect_url: None,
+            },
+        );
+    }
+
+    fn security_schemes() -> Vec<&'static str> {
+        vec!["AgentSignatureAuth"]
+    }
+
+    async fn from_request(
+        request: &'a poem::Request,
+        body: &mut poem::RequestBody,
+        _param_opts: poem_openapi::ExtractParamOptions<Self::ParamType>,
+    ) -> poem::Result<Self> {
+        let headers = request.headers();
+
+        // Agent uses X-Agent-Pubkey instead of X-Public-Key
+        let agent_pubkey_hex = headers
+            .get("X-Agent-Pubkey")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Agent-Pubkey".to_string()))?;
+
+        let signature_hex = headers
+            .get("X-Signature")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+
+        let timestamp = headers
+            .get("X-Timestamp")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+
+        let nonce = headers
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+
+        // Read body
+        let body_bytes = body.take()?.into_vec().await?;
+
+        // Get the full path including /api/v1 prefix for signature verification
+        let full_path = format!("/api/v1{}", request.uri().path());
+
+        // Verify signature using agent's pubkey
+        let agent_pubkey = verify_request_signature(
+            agent_pubkey_hex,
+            signature_hex,
+            timestamp,
+            nonce,
+            request.method().as_str(),
+            &full_path,
+            &body_bytes,
+            None,
+        )?;
+
+        // Get database from request data
+        let db = request
+            .data::<std::sync::Arc<crate::database::Database>>()
+            .ok_or_else(|| {
+                AuthError::InternalError("Database not available in request context".to_string())
+            })?;
+
+        // Look up delegation for this agent pubkey
+        let delegation = db
+            .get_active_delegation(&agent_pubkey)
+            .await
+            .map_err(|e| AuthError::InternalError(format!("Failed to query delegation: {}", e)))?
+            .ok_or_else(|| {
+                AuthError::InvalidSignature(format!(
+                    "No active delegation found for agent key '{}'",
+                    hex::encode(&agent_pubkey)
+                ))
+            })?;
+
+        let (provider_pubkey, permissions, _signature) = delegation;
+
+        // Restore body for downstream handlers
+        *body = poem::RequestBody::new(poem::Body::from(body_bytes));
+
+        Ok(AgentAuthenticatedUser {
+            agent_pubkey,
+            provider_pubkey,
+            permissions,
+        })
+    }
+}
+
+impl AgentAuthenticatedUser {
+    /// Check if this agent has a specific permission
+    pub fn has_permission(&self, permission: crate::database::AgentPermission) -> bool {
+        self.permissions.contains(&permission)
+    }
+
+    /// Require a specific permission, returning an error if not present
+    pub fn require_permission(
+        &self,
+        permission: crate::database::AgentPermission,
+    ) -> Result<(), poem::Error> {
+        if self.has_permission(permission) {
+            Ok(())
+        } else {
+            Err(poem::Error::from_string(
+                format!("Agent does not have '{}' permission", permission.as_str()),
+                StatusCode::FORBIDDEN,
+            ))
+        }
     }
 }
 
