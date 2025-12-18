@@ -1,6 +1,6 @@
 //! Agent registration and delegation management.
 //!
-//! This module handles registering agents with the Decent Cloud API,
+//! Handles registering agents with the Decent Cloud API,
 //! including signing delegations and managing agent keypairs.
 
 use anyhow::{bail, Context, Result};
@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 /// Default permissions granted to agent delegations.
-pub const DEFAULT_PERMISSIONS: &[&str] = &["provision", "health_check", "heartbeat", "fetch_contracts"];
+pub const DEFAULT_PERMISSIONS: &[&str] =
+    &["provision", "health_check", "heartbeat", "fetch_contracts"];
 
 /// Get the default agent keys directory (~/.dc-agent).
 pub fn default_agent_dir() -> PathBuf {
@@ -30,7 +31,12 @@ pub fn generate_agent_keypair(agent_dir: &Path, force: bool) -> Result<(PathBuf,
     // Return existing key if not forcing overwrite
     if private_key_path.exists() && !force {
         let pubkey_hex = std::fs::read_to_string(&public_key_path)
-            .with_context(|| format!("Failed to read existing agent key: {}", public_key_path.display()))?
+            .with_context(|| {
+                format!(
+                    "Failed to read existing agent key: {}",
+                    public_key_path.display()
+                )
+            })?
             .trim()
             .to_string();
         return Ok((private_key_path, pubkey_hex));
@@ -43,7 +49,7 @@ pub fn generate_agent_keypair(agent_dir: &Path, force: bool) -> Result<(PathBuf,
     let identity = DccIdentity::new_signing(&signing_key)?;
 
     let pubkey_bytes = identity.to_bytes_verifying();
-    let pubkey_hex = hex::encode(&pubkey_bytes);
+    let pubkey_hex = hex::encode(pubkey_bytes);
     let secret_hex = hex::encode(signing_key.to_bytes());
 
     std::fs::write(&private_key_path, &secret_hex)?;
@@ -60,7 +66,9 @@ pub fn generate_agent_keypair(agent_dir: &Path, force: bool) -> Result<(PathBuf,
 
 /// Load agent public key from the default or specified directory.
 pub fn load_agent_pubkey(keys_dir: Option<&Path>) -> Result<String> {
-    let agent_dir = keys_dir.map(Path::to_path_buf).unwrap_or_else(default_agent_dir);
+    let agent_dir = keys_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(default_agent_dir);
     let public_key_path = agent_dir.join("agent.pub");
 
     if !public_key_path.exists() {
@@ -74,11 +82,13 @@ pub fn load_agent_pubkey(keys_dir: Option<&Path>) -> Result<String> {
         .trim()
         .to_string();
 
-    let pubkey_bytes = hex::decode(&pubkey_hex)
-        .with_context(|| "Invalid agent public key hex")?;
+    let pubkey_bytes = hex::decode(&pubkey_hex).context("Invalid agent public key hex")?;
 
     if pubkey_bytes.len() != 32 {
-        bail!("Agent public key must be 32 bytes, got {}", pubkey_bytes.len());
+        bail!(
+            "Agent public key must be 32 bytes, got {}",
+            pubkey_bytes.len()
+        );
     }
 
     Ok(pubkey_hex)
@@ -164,13 +174,13 @@ fn build_delegation_message(
     Ok(message)
 }
 
-/// Sign an HTTP request and return auth headers.
-fn sign_http_request(
+/// Sign an HTTP request for API authentication.
+fn sign_request(
     identity: &DccIdentity,
     method: &str,
     path: &str,
     body: &str,
-) -> Result<(String, String, String, String)> {
+) -> Result<RequestAuth> {
     let timestamp = chrono::Utc::now()
         .timestamp_nanos_opt()
         .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
@@ -188,15 +198,29 @@ fn sign_http_request(
     let signature = identity.sign(&sign_message)?;
     let signature_hex = hex::encode(signature.to_bytes());
 
-    Ok((timestamp_str, nonce_str, signature_hex, hex::encode(identity.to_bytes_verifying())))
+    Ok(RequestAuth {
+        timestamp: timestamp_str,
+        nonce: nonce_str,
+        signature: signature_hex,
+        pubkey: hex::encode(identity.to_bytes_verifying()),
+    })
+}
+
+/// Authentication headers for API requests.
+struct RequestAuth {
+    timestamp: String,
+    nonce: String,
+    signature: String,
+    pubkey: String,
 }
 
 /// API response wrapper.
 #[derive(Debug, Deserialize)]
-pub struct ApiResponse<T> {
-    pub success: bool,
-    pub data: Option<T>,
-    pub error: Option<String>,
+struct ApiResponse<T> {
+    success: bool,
+    #[allow(dead_code)]
+    data: Option<T>,
+    error: Option<String>,
 }
 
 /// Request to create an agent delegation.
@@ -220,8 +244,7 @@ pub async fn register_agent_with_api(
     let provider_pubkey_bytes = provider_identity.to_bytes_verifying();
     let provider_pubkey = hex::encode(&provider_pubkey_bytes);
 
-    let agent_pubkey = hex::decode(agent_pubkey_hex)
-        .context("Invalid agent public key hex")?;
+    let agent_pubkey = hex::decode(agent_pubkey_hex).context("Invalid agent public key hex")?;
 
     if agent_pubkey.len() != 32 {
         bail!("Agent public key must be 32 bytes");
@@ -248,8 +271,7 @@ pub async fn register_agent_with_api(
     };
 
     let body_json = serde_json::to_string(&request_body)?;
-    let (timestamp_str, nonce_str, http_signature, pubkey) =
-        sign_http_request(provider_identity, "POST", &path, &body_json)?;
+    let auth = sign_request(provider_identity, "POST", &path, &body_json)?;
 
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -260,10 +282,10 @@ pub async fn register_agent_with_api(
     let response = client
         .post(&url)
         .header("Content-Type", "application/json")
-        .header("X-Public-Key", &pubkey)
-        .header("X-Timestamp", &timestamp_str)
-        .header("X-Nonce", &nonce_str)
-        .header("X-Signature", http_signature)
+        .header("X-Public-Key", &auth.pubkey)
+        .header("X-Timestamp", &auth.timestamp)
+        .header("X-Nonce", &auth.nonce)
+        .header("X-Signature", auth.signature)
         .body(body_json)
         .send()
         .await
@@ -282,7 +304,9 @@ pub async fn register_agent_with_api(
     if !api_response.success {
         bail!(
             "Registration failed: {}",
-            api_response.error.unwrap_or_else(|| "Unknown error".to_string())
+            api_response
+                .error
+                .unwrap_or_else(|| "Unknown error".to_string())
         );
     }
 
@@ -308,10 +332,7 @@ mod tests {
     fn test_generate_agent_keypair_returns_existing() {
         let temp_dir = TempDir::new().unwrap();
 
-        // First generation
         let (_, pubkey1) = generate_agent_keypair(temp_dir.path(), false).unwrap();
-
-        // Second call without force returns same key
         let (_, pubkey2) = generate_agent_keypair(temp_dir.path(), false).unwrap();
 
         assert_eq!(pubkey1, pubkey2);

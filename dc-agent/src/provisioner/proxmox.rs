@@ -3,11 +3,10 @@ use crate::config::ProxmoxConfig;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
 use std::time::Duration;
 
 /// FNV-1a hash - stable across Rust versions (unlike DefaultHasher).
-/// Uses the 64-bit variant for good distribution.
 pub(crate) fn fnv1a_hash(data: &[u8]) -> u64 {
     const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
     const FNV_PRIME: u64 = 0x100000001b3;
@@ -25,13 +24,13 @@ pub struct ProxmoxProvisioner {
     client: Client,
 }
 
-// Proxmox API response wrapper
+/// Proxmox API response wrapper.
 #[derive(Deserialize, Debug)]
 struct ProxmoxResponse<T> {
     data: T,
 }
 
-// Task UPID response (for async operations like clone, start)
+/// Task UPID response (for async operations like clone, start).
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
 enum TaskResponse {
@@ -39,24 +38,33 @@ enum TaskResponse {
     Object { upid: String },
 }
 
-// VM status response
+impl TaskResponse {
+    fn upid(self) -> String {
+        match self {
+            TaskResponse::Upid(upid) => upid,
+            TaskResponse::Object { upid } => upid,
+        }
+    }
+}
+
+/// VM status response.
 #[derive(Deserialize, Debug)]
 struct VmStatus {
     #[allow(dead_code)]
     vmid: Option<u32>,
-    status: String, // "running" or "stopped"
+    status: String,
     uptime: Option<u64>,
     name: Option<String>,
 }
 
-// Task status response (for polling async operations)
+/// Task status response.
 #[derive(Deserialize, Debug)]
 struct TaskStatus {
-    status: String,             // "running" or "stopped"
-    exitstatus: Option<String>, // "OK" when successful, "some error" on failure
+    status: String,
+    exitstatus: Option<String>,
 }
 
-// Network interfaces response from QEMU guest agent
+/// Network interfaces response from QEMU guest agent.
 #[derive(Deserialize, Debug)]
 struct NetworkResponse {
     result: Vec<NetworkInterface>,
@@ -74,7 +82,7 @@ struct IpAddress {
     #[serde(rename = "ip-address")]
     ip_address: String,
     #[serde(rename = "ip-address-type")]
-    ip_address_type: String, // "ipv4" or "ipv6"
+    ip_address_type: String,
 }
 
 impl ProxmoxProvisioner {
@@ -99,66 +107,128 @@ impl ProxmoxProvisioner {
         self.config.api_url.trim_end_matches('/')
     }
 
-    fn allocate_vmid(&self, contract_id: &str) -> u32 {
-        // Generate deterministic VMID from contract_id using FNV-1a hash
-        // Uses stable hash (not DefaultHasher which varies across Rust versions)
-        // Range: 10000-999999 (Proxmox valid range, avoiding template range 9000-9999)
+    pub(crate) fn allocate_vmid(&self, contract_id: &str) -> u32 {
         let hash = fnv1a_hash(contract_id.as_bytes());
         10000 + (hash % 990000) as u32
     }
 
+    /// Execute a GET request to the Proxmox API.
+    async fn api_get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let url = format!("{}{}", self.base_url(), path);
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+            .with_context(|| format!("Failed GET {}", path))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            bail!("GET {} failed ({}): {}", path, status, body);
+        }
+
+        let result: ProxmoxResponse<T> = response
+            .json()
+            .await
+            .with_context(|| format!("Failed to parse GET {} response", path))?;
+
+        Ok(result.data)
+    }
+
+    /// Execute a POST request to the Proxmox API.
+    async fn api_post<T: DeserializeOwned>(&self, path: &str, params: &[(&str, String)]) -> Result<T> {
+        let url = format!("{}{}", self.base_url(), path);
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", self.auth_header())
+            .form(params)
+            .send()
+            .await
+            .with_context(|| format!("Failed POST {}", path))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            bail!("POST {} failed ({}): {}", path, status, body);
+        }
+
+        let result: ProxmoxResponse<T> = response
+            .json()
+            .await
+            .with_context(|| format!("Failed to parse POST {} response", path))?;
+
+        Ok(result.data)
+    }
+
+    /// Execute a PUT request to the Proxmox API.
+    async fn api_put(&self, path: &str, params: &[(&str, String)]) -> Result<()> {
+        let url = format!("{}{}", self.base_url(), path);
+        let response = self
+            .client
+            .put(&url)
+            .header("Authorization", self.auth_header())
+            .form(params)
+            .send()
+            .await
+            .with_context(|| format!("Failed PUT {}", path))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            bail!("PUT {} failed ({}): {}", path, status, body);
+        }
+
+        Ok(())
+    }
+
+    /// Execute a DELETE request to the Proxmox API.
+    async fn api_delete(&self, path: &str, query: &[(&str, &str)]) -> Result<()> {
+        let url = format!("{}{}", self.base_url(), path);
+        let response = self
+            .client
+            .delete(&url)
+            .header("Authorization", self.auth_header())
+            .query(query)
+            .send()
+            .await
+            .with_context(|| format!("Failed DELETE {}", path))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            bail!("DELETE {} failed ({}): {}", path, status, body);
+        }
+
+        Ok(())
+    }
+
     async fn wait_for_task(&self, upid: &str) -> Result<()> {
-        // Parse UPID to extract node name
-        // Format: UPID:node:pid:pstart:starttime:type:id:user:
         let parts: Vec<&str> = upid.split(':').collect();
         if parts.len() < 2 {
             bail!("Invalid UPID format: {}", upid);
         }
         let node = parts[1];
 
-        // Poll task status until complete (max 5 minutes)
-        let max_attempts = 60; // 5 minutes with 5 second intervals
+        let max_attempts = 60;
         let poll_interval = Duration::from_secs(5);
 
         for attempt in 1..=max_attempts {
-            let url = format!(
-                "{}/api2/json/nodes/{}/tasks/{}/status",
-                self.base_url(),
+            let path = format!(
+                "/api2/json/nodes/{}/tasks/{}/status",
                 node,
                 urlencoding::encode(upid)
             );
-
-            let response = self
-                .client
-                .get(&url)
-                .header("Authorization", self.auth_header())
-                .send()
-                .await
-                .context("Failed to get task status")?;
-
-            if !response.status().is_success() {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                bail!("Task status request failed ({}): {}", status, body);
-            }
-
-            let task_response: ProxmoxResponse<TaskStatus> = response
-                .json()
-                .await
-                .context("Failed to parse task status response")?;
-
-            let task_status = task_response.data;
+            let task_status: TaskStatus = self.api_get(&path).await?;
 
             if task_status.status == "stopped" {
-                if let Some(exitstatus) = &task_status.exitstatus {
-                    if exitstatus == "OK" {
-                        return Ok(());
-                    } else {
-                        bail!("Task failed with status: {}", exitstatus);
-                    }
-                } else {
-                    bail!("Task stopped without exit status");
-                }
+                return match task_status.exitstatus.as_deref() {
+                    Some("OK") => Ok(()),
+                    Some(exit) => bail!("Task failed with status: {}", exit),
+                    None => bail!("Task stopped without exit status"),
+                };
             }
 
             if attempt < max_attempts {
@@ -173,17 +243,15 @@ impl ProxmoxProvisioner {
     }
 
     async fn clone_vm(&self, template_vmid: u32, new_vmid: u32, name: &str) -> Result<String> {
-        let url = format!(
-            "{}/api2/json/nodes/{}/qemu/{}/clone",
-            self.base_url(),
-            self.config.node,
-            template_vmid
+        let path = format!(
+            "/api2/json/nodes/{}/qemu/{}/clone",
+            self.config.node, template_vmid
         );
 
         let mut params = vec![
             ("newid", new_vmid.to_string()),
             ("name", name.to_string()),
-            ("full", "1".to_string()), // Full clone
+            ("full", "1".to_string()),
             ("storage", self.config.storage.clone()),
         ];
 
@@ -191,53 +259,23 @@ impl ProxmoxProvisioner {
             params.push(("pool", pool.clone()));
         }
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", self.auth_header())
-            .form(&params)
-            .send()
-            .await
-            .context("Failed to send clone request")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            bail!("Clone request failed ({}): {}", status, body);
-        }
-
-        let clone_response: ProxmoxResponse<TaskResponse> = response
-            .json()
-            .await
-            .context("Failed to parse clone response")?;
-
-        let upid = match clone_response.data {
-            TaskResponse::Upid(upid) => upid,
-            TaskResponse::Object { upid } => upid,
-        };
-
-        Ok(upid)
+        let task_response: TaskResponse = self.api_post(&path, &params).await?;
+        Ok(task_response.upid())
     }
 
     async fn configure_vm(&self, vmid: u32, request: &ProvisionRequest) -> Result<()> {
-        let url = format!(
-            "{}/api2/json/nodes/{}/qemu/{}/config",
-            self.base_url(),
-            self.config.node,
-            vmid
+        let path = format!(
+            "/api2/json/nodes/{}/qemu/{}/config",
+            self.config.node, vmid
         );
 
-        let mut params = vec![
-            ("ipconfig0", "ip=dhcp".to_string()), // DHCP by default
-        ];
+        let mut params = vec![("ipconfig0", "ip=dhcp".to_string())];
 
-        // Set SSH keys if provided
         if let Some(ssh_key) = &request.requester_ssh_pubkey {
             let encoded_key = urlencoding::encode(ssh_key);
             params.push(("sshkeys", encoded_key.to_string()));
         }
 
-        // Set resources if specified
         if let Some(cores) = request.cpu_cores {
             params.push(("cores", cores.to_string()));
         }
@@ -245,182 +283,67 @@ impl ProxmoxProvisioner {
             params.push(("memory", memory_mb.to_string()));
         }
 
-        let response = self
-            .client
-            .put(&url)
-            .header("Authorization", self.auth_header())
-            .form(&params)
-            .send()
-            .await
-            .context("Failed to send config request")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            bail!("Config request failed ({}): {}", status, body);
-        }
-
-        Ok(())
+        self.api_put(&path, &params).await
     }
 
     async fn start_vm(&self, vmid: u32) -> Result<String> {
-        let url = format!(
-            "{}/api2/json/nodes/{}/qemu/{}/status/start",
-            self.base_url(),
-            self.config.node,
-            vmid
+        let path = format!(
+            "/api2/json/nodes/{}/qemu/{}/status/start",
+            self.config.node, vmid
         );
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", self.auth_header())
-            .send()
-            .await
-            .context("Failed to send start request")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            bail!("Start request failed ({}): {}", status, body);
-        }
-
-        let start_response: ProxmoxResponse<TaskResponse> = response
-            .json()
-            .await
-            .context("Failed to parse start response")?;
-
-        let upid = match start_response.data {
-            TaskResponse::Upid(upid) => upid,
-            TaskResponse::Object { upid } => upid,
-        };
-
-        Ok(upid)
+        let task_response: TaskResponse = self.api_post(&path, &[]).await?;
+        Ok(task_response.upid())
     }
 
     async fn stop_vm(&self, vmid: u32) -> Result<()> {
-        let url = format!(
-            "{}/api2/json/nodes/{}/qemu/{}/status/stop",
-            self.base_url(),
-            self.config.node,
-            vmid
+        let path = format!(
+            "/api2/json/nodes/{}/qemu/{}/status/stop",
+            self.config.node, vmid
         );
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", self.auth_header())
-            .send()
-            .await
-            .context("Failed to send stop request")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            bail!("Stop request failed ({}): {}", status, body);
-        }
-
-        // Wait for stop to complete
-        let stop_response: ProxmoxResponse<TaskResponse> = response
-            .json()
-            .await
-            .context("Failed to parse stop response")?;
-
-        let upid = match stop_response.data {
-            TaskResponse::Upid(upid) => upid,
-            TaskResponse::Object { upid } => upid,
-        };
-
-        self.wait_for_task(&upid).await?;
-
-        Ok(())
+        let task_response: TaskResponse = self.api_post(&path, &[]).await?;
+        self.wait_for_task(&task_response.upid()).await
     }
 
     async fn delete_vm(&self, vmid: u32) -> Result<()> {
-        let url = format!(
-            "{}/api2/json/nodes/{}/qemu/{}",
-            self.base_url(),
-            self.config.node,
-            vmid
+        let path = format!(
+            "/api2/json/nodes/{}/qemu/{}",
+            self.config.node, vmid
         );
 
-        let params = vec![("purge", "1"), ("destroy-unreferenced-disks", "1")];
-
-        let response = self
-            .client
-            .delete(&url)
-            .header("Authorization", self.auth_header())
-            .query(&params)
-            .send()
-            .await
-            .context("Failed to send delete request")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            bail!("Delete request failed ({}): {}", status, body);
-        }
-
-        Ok(())
+        self.api_delete(&path, &[("purge", "1"), ("destroy-unreferenced-disks", "1")]).await
     }
 
     async fn get_vm_status(&self, vmid: u32) -> Result<VmStatus> {
-        let url = format!(
-            "{}/api2/json/nodes/{}/qemu/{}/status/current",
-            self.base_url(),
-            self.config.node,
-            vmid
+        let path = format!(
+            "/api2/json/nodes/{}/qemu/{}/status/current",
+            self.config.node, vmid
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", self.auth_header())
-            .send()
-            .await
-            .context("Failed to get VM status")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            if status.as_u16() == 404 {
-                bail!("VM not found");
-            }
-            let body = response.text().await.unwrap_or_default();
-            bail!("Status request failed ({}): {}", status, body);
-        }
-
-        let status_response: ProxmoxResponse<VmStatus> = response
-            .json()
-            .await
-            .context("Failed to parse status response")?;
-
-        Ok(status_response.data)
+        self.api_get(&path).await
     }
 
     async fn get_vm_ip(&self, vmid: u32) -> Result<(Option<String>, Option<String>)> {
-        let url = format!(
-            "{}/api2/json/nodes/{}/qemu/{}/agent/network-get-interfaces",
-            self.base_url(),
-            self.config.node,
-            vmid
+        let path = format!(
+            "/api2/json/nodes/{}/qemu/{}/agent/network-get-interfaces",
+            self.config.node, vmid
         );
 
-        // Try to get IP from QEMU guest agent
+        let url = format!("{}{}", self.base_url(), path);
         let response = self
             .client
-            .get(&url)
+            .get(url)
             .header("Authorization", self.auth_header())
             .send()
             .await;
 
-        // If guest agent is not available, return None for IPs
         let response = match response {
             Ok(r) => r,
             Err(_) => return Ok((None, None)),
         };
 
         if !response.status().is_success() {
-            // Guest agent not available or not running yet
             return Ok((None, None));
         }
 
@@ -432,7 +355,6 @@ impl ProxmoxProvisioner {
         let mut ipv4 = None;
         let mut ipv6 = None;
 
-        // Find first non-loopback IP addresses
         for interface in net_response.data.result {
             if interface.name == "lo" {
                 continue;
@@ -473,7 +395,7 @@ impl Provisioner for ProxmoxProvisioner {
             self.config.template_vmid
         );
 
-        // Step 1: Clone template to new VMID
+        // Step 1: Clone template
         tracing::debug!(
             "Cloning template {} to VMID {}",
             self.config.template_vmid,
@@ -484,12 +406,12 @@ impl Provisioner for ProxmoxProvisioner {
             .await
             .context("Failed to clone VM")?;
 
-        tracing::debug!("Waiting for clone task to complete: {}", clone_upid);
+        tracing::debug!("Waiting for clone task: {}", clone_upid);
         self.wait_for_task(&clone_upid)
             .await
             .context("Clone task failed")?;
 
-        // Step 2: Configure VM (cloud-init, resources)
+        // Step 2: Configure VM
         tracing::debug!("Configuring VM {}", vmid);
         self.configure_vm(vmid, request)
             .await
@@ -499,12 +421,12 @@ impl Provisioner for ProxmoxProvisioner {
         tracing::debug!("Starting VM {}", vmid);
         let start_upid = self.start_vm(vmid).await.context("Failed to start VM")?;
 
-        tracing::debug!("Waiting for start task to complete: {}", start_upid);
+        tracing::debug!("Waiting for start task: {}", start_upid);
         self.wait_for_task(&start_upid)
             .await
             .context("Start task failed")?;
 
-        // Step 4: Wait for VM to boot and get IP (with retries)
+        // Step 4: Wait for IP
         tracing::debug!("Waiting for VM to boot and obtain IP address");
         let mut ipv4 = None;
         let mut ipv6 = None;
@@ -513,14 +435,12 @@ impl Provisioner for ProxmoxProvisioner {
             tokio::time::sleep(Duration::from_secs(10)).await;
 
             match self.get_vm_ip(vmid).await {
-                Ok((v4, v6)) => {
-                    // Accept either IPv4 or IPv6 (or both)
-                    if v4.is_some() || v6.is_some() {
-                        ipv4 = v4;
-                        ipv6 = v6;
-                        break;
-                    }
+                Ok((v4, v6)) if v4.is_some() || v6.is_some() => {
+                    ipv4 = v4;
+                    ipv6 = v6;
+                    break;
                 }
+                Ok(_) => {}
                 Err(e) => {
                     tracing::debug!("Failed to get IP on attempt {}: {}", attempt, e);
                 }
@@ -539,7 +459,7 @@ impl Provisioner for ProxmoxProvisioner {
             ip_address: ipv4,
             ipv6_address: ipv6,
             ssh_port: 22,
-            root_password: None, // Proxmox cloud-init doesn't return password
+            root_password: None,
             additional_details: Some(serde_json::json!({
                 "vmid": vmid,
                 "node": self.config.node,
@@ -561,7 +481,6 @@ impl Provisioner for ProxmoxProvisioner {
 
         tracing::info!("Terminating VM {}", vmid);
 
-        // Check if VM exists and is running
         match self.get_vm_status(vmid).await {
             Ok(status) => {
                 if status.status == "running" {
@@ -570,7 +489,9 @@ impl Provisioner for ProxmoxProvisioner {
                 }
             }
             Err(e) => {
-                if e.to_string().contains("VM not found") {
+                let err_str = e.to_string();
+                // Check for 404 or 500 status codes (may appear as "500" or "500 ")
+                if err_str.contains("(500") || err_str.contains("(404") {
                     tracing::warn!("VM {} not found, assuming already deleted", vmid);
                     return Ok(());
                 }
@@ -578,7 +499,6 @@ impl Provisioner for ProxmoxProvisioner {
             }
         }
 
-        // Delete VM
         tracing::debug!("Deleting VM {}", vmid);
         self.delete_vm(vmid).await.context("Failed to delete VM")?;
 
@@ -603,7 +523,9 @@ impl Provisioner for ProxmoxProvisioner {
                 }
             }
             Err(e) => {
-                if e.to_string().contains("VM not found") {
+                let err_str = e.to_string();
+                // Check for 404 or 500 status codes (may appear as "500" or "500 ")
+                if err_str.contains("(500") || err_str.contains("(404") {
                     Ok(HealthStatus::Unhealthy {
                         reason: "VM not found".to_string(),
                     })
@@ -637,7 +559,9 @@ impl Provisioner for ProxmoxProvisioner {
                 }))
             }
             Err(e) => {
-                if e.to_string().contains("VM not found") {
+                let err_str = e.to_string();
+                // Check for 404 or 500 status codes (may appear as "500" or "500 ")
+                if err_str.contains("(500") || err_str.contains("(404") {
                     Ok(None)
                 } else {
                     Err(e)

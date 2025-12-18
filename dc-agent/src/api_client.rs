@@ -1,13 +1,13 @@
 use anyhow::{bail, Context, Result};
 use ed25519_dalek::{Signature, Signer, SigningKey};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::config::ApiConfig;
 use crate::provisioner::{HealthStatus, Instance};
 
-/// Authentication mode for the API client
+/// Authentication mode for the API client.
 #[derive(Debug, Clone)]
 pub enum AuthMode {
     /// Legacy mode: using provider's main key directly
@@ -45,30 +45,30 @@ pub struct PendingContract {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProvisionedRequest {
-    pub status: String,
-    pub instance_details: String,
+    status: String,
+    instance_details: String,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProvisionFailedRequest {
-    pub status: String,
-    pub instance_details: String,
+    status: String,
+    instance_details: String,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HealthCheckRequest {
-    pub health_status: HealthStatus,
+    health_status: HealthStatus,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HeartbeatRequest {
-    pub version: Option<String>,
-    pub provisioner_type: Option<String>,
-    pub capabilities: Option<Vec<String>>,
-    pub active_contracts: i64,
+    version: Option<String>,
+    provisioner_type: Option<String>,
+    capabilities: Option<Vec<String>>,
+    active_contracts: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,12 +78,35 @@ pub struct HeartbeatResponse {
     pub next_heartbeat_seconds: i64,
 }
 
+/// HTTP method for requests.
+#[derive(Clone, Copy)]
+enum Method {
+    Get,
+    Post,
+}
+
+impl Method {
+    fn as_str(self) -> &'static str {
+        match self {
+            Method::Get => "GET",
+            Method::Post => "POST",
+        }
+    }
+}
+
+/// Authentication type for requests.
+#[derive(Clone, Copy)]
+enum AuthType {
+    /// Use provider pubkey header (X-Public-Key)
+    Provider,
+    /// Use agent pubkey header (X-Agent-Pubkey) if in agent mode, else provider
+    AgentOrProvider,
+}
+
 impl ApiClient {
     pub fn new(config: &ApiConfig) -> Result<Self> {
-        // Determine auth mode and load the appropriate key
         let (signing_key, auth_mode) = if let Some(agent_key) = &config.agent_secret_key {
             let signing_key = Self::load_signing_key(agent_key)?;
-            // Get agent public key from the signing key
             let agent_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
             (signing_key, AuthMode::Agent { agent_pubkey })
         } else if let Some(provider_key) = &config.provider_secret_key {
@@ -135,9 +158,12 @@ impl ApiClient {
     }
 
     /// Build authentication headers for API requests.
-    /// Returns (timestamp_str, nonce_str, signature_hex)
-    fn build_auth_headers(&self, method: &str, path: &str, body: &[u8]) -> Result<(String, String, String)> {
-        // API expects: timestamp (nanoseconds) + nonce (UUID) + method + path + body
+    fn build_auth_headers(
+        &self,
+        method: &str,
+        path: &str,
+        body: &[u8],
+    ) -> Result<(String, String, String)> {
         let timestamp = chrono::Utc::now()
             .timestamp_nanos_opt()
             .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
@@ -158,98 +184,150 @@ impl ApiClient {
         Ok((timestamp_str, nonce_str, signature_hex))
     }
 
-    /// Get contracts pending provisioning
+    /// Execute an HTTP request with authentication.
+    async fn request<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&[u8]>,
+        auth_type: AuthType,
+    ) -> Result<T> {
+        let body_bytes = body.unwrap_or(&[]);
+        let (timestamp_str, nonce_str, signature) =
+            self.build_auth_headers(method.as_str(), path, body_bytes)?;
+
+        let url = format!("{}{}", self.endpoint, path);
+        let mut request_builder = match method {
+            Method::Get => self.client.get(&url),
+            Method::Post => self.client.post(&url),
+        };
+
+        // Add auth headers based on type
+        request_builder = request_builder
+            .header("X-Timestamp", &timestamp_str)
+            .header("X-Nonce", &nonce_str)
+            .header("X-Signature", signature);
+
+        // Set identity header based on auth type
+        request_builder = match auth_type {
+            AuthType::Provider => request_builder.header("X-Public-Key", &self.provider_pubkey),
+            AuthType::AgentOrProvider => match &self.auth_mode {
+                AuthMode::Agent { agent_pubkey } => {
+                    request_builder.header("X-Agent-Pubkey", agent_pubkey)
+                }
+                AuthMode::Provider => {
+                    request_builder.header("X-Public-Key", &self.provider_pubkey)
+                }
+            },
+        };
+
+        // Add body if present
+        if let Some(body_data) = body {
+            request_builder = request_builder
+                .header("Content-Type", "application/json")
+                .body(body_data.to_vec());
+        }
+
+        let response = request_builder
+            .send()
+            .await
+            .with_context(|| format!("Failed to {} {}", method.as_str(), path))?;
+
+        let status = response.status();
+        let response_body = response
+            .text()
+            .await
+            .context("Failed to read response body")?;
+
+        if !status.is_success() {
+            bail!(
+                "HTTP {} for {} {}: {}",
+                status,
+                method.as_str(),
+                path,
+                response_body
+            );
+        }
+
+        serde_json::from_str(&response_body).with_context(|| {
+            format!(
+                "Failed to deserialize response from {} {}: {}",
+                method.as_str(),
+                path,
+                response_body
+            )
+        })
+    }
+
+    /// Helper to unwrap API response, checking success field.
+    fn unwrap_response<T>(response: ApiResponse<T>, context: &str) -> Result<T> {
+        if !response.success {
+            let error_msg = response.error.unwrap_or_else(|| "Unknown error".to_string());
+            bail!("{}: {}", context, error_msg);
+        }
+        response
+            .data
+            .ok_or_else(|| anyhow::anyhow!("{}: No data in response", context))
+    }
+
+    /// Get contracts pending provisioning.
     pub async fn get_pending_contracts(&self) -> Result<Vec<PendingContract>> {
         let path = format!(
             "/api/v1/providers/{}/contracts/pending-provision",
             self.provider_pubkey
         );
-        let response: ApiResponse<Vec<PendingContract>> = self.get(&path).await?;
-
-        if !response.success {
-            let error_msg = response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string());
-            bail!("API error: {}", error_msg);
-        }
-
-        response
-            .data
-            .ok_or_else(|| anyhow::anyhow!("No data in response"))
+        let response: ApiResponse<Vec<PendingContract>> =
+            self.request(Method::Get, &path, None, AuthType::Provider).await?;
+        Self::unwrap_response(response, "API error")
     }
 
-    /// Report successful provisioning
+    /// Report successful provisioning.
     pub async fn report_provisioned(&self, contract_id: &str, instance: &Instance) -> Result<()> {
         let path = format!(
             "/api/v1/provider/rental-requests/{}/provisioning",
             contract_id
         );
-
         let instance_json =
             serde_json::to_string(instance).context("Failed to serialize instance details")?;
-
         let request = ProvisionedRequest {
             status: "provisioned".to_string(),
             instance_details: instance_json,
         };
-
-        let response: ApiResponse<serde_json::Value> = self.post(&path, &request).await?;
-
-        if !response.success {
-            let error_msg = response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string());
-            bail!("API error: {}", error_msg);
-        }
-
-        Ok(())
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Post, &path, Some(&body), AuthType::Provider).await?;
+        Self::unwrap_response(response, "API error").map(|_| ())
     }
 
-    /// Report provisioning failure
+    /// Report provisioning failure.
     pub async fn report_failed(&self, contract_id: &str, error: &str) -> Result<()> {
         let path = format!(
             "/api/v1/provider/rental-requests/{}/provision-failed",
             contract_id
         );
-
         let request = ProvisionFailedRequest {
             status: "provision-failed".to_string(),
             instance_details: error.to_string(),
         };
-
-        let response: ApiResponse<serde_json::Value> = self.post(&path, &request).await?;
-
-        if !response.success {
-            let error_msg = response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string());
-            bail!("API error: {}", error_msg);
-        }
-
-        Ok(())
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Post, &path, Some(&body), AuthType::Provider).await?;
+        Self::unwrap_response(response, "API error").map(|_| ())
     }
 
-    /// Report health check
+    /// Report health check.
     pub async fn report_health(&self, contract_id: &str, status: &HealthStatus) -> Result<()> {
         let path = format!("/api/v1/provider/contracts/{}/health", contract_id);
-
         let request = HealthCheckRequest {
             health_status: status.clone(),
         };
-
-        let response: ApiResponse<serde_json::Value> = self.post(&path, &request).await?;
-
-        if !response.success {
-            let error_msg = response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string());
-            bail!("API error: {}", error_msg);
-        }
-
-        Ok(())
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Post, &path, Some(&body), AuthType::Provider).await?;
+        Self::unwrap_response(response, "API error").map(|_| ())
     }
 
-    /// Send heartbeat to report agent is online
+    /// Send heartbeat to report agent is online.
     pub async fn send_heartbeat(
         &self,
         version: Option<&str>,
@@ -258,155 +336,21 @@ impl ApiClient {
         active_contracts: i64,
     ) -> Result<HeartbeatResponse> {
         let path = format!("/api/v1/providers/{}/heartbeat", self.provider_pubkey);
-
         let request = HeartbeatRequest {
-            version: version.map(|s| s.to_string()),
-            provisioner_type: provisioner_type.map(|s| s.to_string()),
+            version: version.map(String::from),
+            provisioner_type: provisioner_type.map(String::from),
             capabilities: capabilities.map(|c| c.to_vec()),
             active_contracts,
         };
-
+        let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<HeartbeatResponse> =
-            self.post_agent_auth(&path, &request).await?;
-
-        if !response.success {
-            let error_msg = response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string());
-            bail!("Heartbeat failed: {}", error_msg);
-        }
-
-        response
-            .data
-            .ok_or_else(|| anyhow::anyhow!("No heartbeat response data"))
+            self.request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider).await?;
+        Self::unwrap_response(response, "Heartbeat failed")
     }
 
-    /// Returns the auth mode for diagnostics
+    /// Returns the auth mode for diagnostics.
     pub fn auth_mode(&self) -> &AuthMode {
         &self.auth_mode
-    }
-
-    async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T> {
-        let (timestamp_str, nonce_str, signature) = self.build_auth_headers("GET", path, b"")?;
-
-        let url = format!("{}{}", self.endpoint, path);
-        let response = self
-            .client
-            .get(&url)
-            .header("X-Public-Key", &self.provider_pubkey)
-            .header("X-Timestamp", &timestamp_str)
-            .header("X-Nonce", &nonce_str)
-            .header("X-Signature", signature)
-            .send()
-            .await
-            .with_context(|| format!("Failed to GET {}", path))?;
-
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .context("Failed to read response body")?;
-
-        if !status.is_success() {
-            bail!("HTTP {} for GET {}: {}", status, path, body);
-        }
-
-        serde_json::from_str(&body)
-            .with_context(|| format!("Failed to deserialize response from GET {}: {}", path, body))
-    }
-
-    async fn post<T: for<'de> Deserialize<'de>, B: Serialize>(
-        &self,
-        path: &str,
-        body: &B,
-    ) -> Result<T> {
-        let url = format!("{}{}", self.endpoint, path);
-        let body_json = serde_json::to_string(body).context("Failed to serialize request body")?;
-        let (timestamp_str, nonce_str, signature) =
-            self.build_auth_headers("POST", path, body_json.as_bytes())?;
-
-        let response = self
-            .client
-            .post(&url)
-            .header("X-Public-Key", &self.provider_pubkey)
-            .header("X-Timestamp", &timestamp_str)
-            .header("X-Nonce", &nonce_str)
-            .header("X-Signature", signature)
-            .header("Content-Type", "application/json")
-            .body(body_json)
-            .send()
-            .await
-            .with_context(|| format!("Failed to POST {}", path))?;
-
-        let status = response.status();
-        let response_body = response
-            .text()
-            .await
-            .context("Failed to read response body")?;
-
-        if !status.is_success() {
-            bail!("HTTP {} for POST {}: {}", status, path, response_body);
-        }
-
-        serde_json::from_str(&response_body).with_context(|| {
-            format!(
-                "Failed to deserialize response from POST {}: {}",
-                path, response_body
-            )
-        })
-    }
-
-    /// POST with agent authentication (uses X-Agent-Pubkey header for delegated auth)
-    async fn post_agent_auth<T: for<'de> Deserialize<'de>, B: Serialize>(
-        &self,
-        path: &str,
-        body: &B,
-    ) -> Result<T> {
-        let url = format!("{}{}", self.endpoint, path);
-        let body_json = serde_json::to_string(body).context("Failed to serialize request body")?;
-        let (timestamp_str, nonce_str, signature) =
-            self.build_auth_headers("POST", path, body_json.as_bytes())?;
-
-        // Set auth headers based on mode
-        let mut request_builder = self
-            .client
-            .post(&url)
-            .header("X-Timestamp", &timestamp_str)
-            .header("X-Nonce", &nonce_str)
-            .header("X-Signature", signature)
-            .header("Content-Type", "application/json");
-
-        match &self.auth_mode {
-            AuthMode::Agent { agent_pubkey } => {
-                request_builder = request_builder.header("X-Agent-Pubkey", agent_pubkey);
-            }
-            AuthMode::Provider => {
-                request_builder = request_builder.header("X-Public-Key", &self.provider_pubkey);
-            }
-        }
-
-        let response = request_builder
-            .body(body_json)
-            .send()
-            .await
-            .with_context(|| format!("Failed to POST {}", path))?;
-
-        let status = response.status();
-        let response_body = response
-            .text()
-            .await
-            .context("Failed to read response body")?;
-
-        if !status.is_success() {
-            bail!("HTTP {} for POST {}: {}", status, path, response_body);
-        }
-
-        serde_json::from_str(&response_body).with_context(|| {
-            format!(
-                "Failed to deserialize response from POST {}: {}",
-                path, response_body
-            )
-        })
     }
 }
 
@@ -419,7 +363,6 @@ mod tests {
 
     #[test]
     fn test_load_signing_key_from_hex() {
-        // Generate a valid Ed25519 key for testing
         let signing_key = SigningKey::from_bytes(&[42u8; 32]);
         let hex_key = hex::encode(signing_key.to_bytes());
 
@@ -529,7 +472,6 @@ mod tests {
         let (_, nonce1, _) = client.build_auth_headers("GET", "/path", b"").unwrap();
         let (_, nonce2, _) = client.build_auth_headers("GET", "/path", b"").unwrap();
 
-        // Each call should produce a unique nonce
         assert_ne!(nonce1, nonce2);
     }
 
@@ -589,5 +531,40 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("must be configured"));
+    }
+
+    #[test]
+    fn test_unwrap_response_success() {
+        let response = ApiResponse {
+            success: true,
+            data: Some("test_data".to_string()),
+            error: None,
+        };
+        let result = ApiClient::unwrap_response(response, "test");
+        assert_eq!(result.unwrap(), "test_data");
+    }
+
+    #[test]
+    fn test_unwrap_response_failure() {
+        let response: ApiResponse<String> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("test error".to_string()),
+        };
+        let result = ApiClient::unwrap_response(response, "test context");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("test error"));
+    }
+
+    #[test]
+    fn test_unwrap_response_no_data() {
+        let response: ApiResponse<String> = ApiResponse {
+            success: true,
+            data: None,
+            error: None,
+        };
+        let result = ApiClient::unwrap_response(response, "test context");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No data"));
     }
 }

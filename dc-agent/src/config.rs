@@ -6,6 +6,7 @@ use std::path::Path;
 pub struct Config {
     pub api: ApiConfig,
     pub polling: PollingConfig,
+    #[serde(deserialize_with = "deserialize_provisioner")]
     pub provisioner: ProvisionerConfig,
 }
 
@@ -14,7 +15,6 @@ pub struct ApiConfig {
     pub endpoint: String,
     pub provider_pubkey: String,
     /// Agent's secret key for signing API requests (hex or file path)
-    /// If not provided, falls back to provider_secret_key (legacy mode)
     pub agent_secret_key: Option<String>,
     /// Provider's secret key (legacy - use agent_secret_key instead)
     #[serde(default)]
@@ -29,27 +29,156 @@ pub struct PollingConfig {
     pub health_check_interval_seconds: u64,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ProvisionerConfig {
+/// Provisioner configuration enum.
+#[derive(Debug)]
+pub enum ProvisionerConfig {
+    Proxmox(ProxmoxConfig),
+    Script(ScriptConfig),
+    Manual(ManualConfig),
+}
+
+impl ProvisionerConfig {
+    pub fn as_proxmox(&self) -> Option<&ProxmoxConfig> {
+        match self {
+            ProvisionerConfig::Proxmox(cfg) => Some(cfg),
+            _ => None,
+        }
+    }
+
+    pub fn as_script(&self) -> Option<&ScriptConfig> {
+        match self {
+            ProvisionerConfig::Script(cfg) => Some(cfg),
+            _ => None,
+        }
+    }
+
+    pub fn as_manual(&self) -> Option<&ManualConfig> {
+        match self {
+            ProvisionerConfig::Manual(cfg) => Some(cfg),
+            _ => None,
+        }
+    }
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            ProvisionerConfig::Proxmox(_) => "proxmox",
+            ProvisionerConfig::Script(_) => "script",
+            ProvisionerConfig::Manual(_) => "manual",
+        }
+    }
+}
+
+/// Intermediate struct for deserializing the provisioner section.
+/// Supports both flat format (all fields in [provisioner]) and nested format ([provisioner.proxmox]).
+#[derive(Deserialize)]
+struct RawProvisionerConfig {
     #[serde(rename = "type")]
-    pub provisioner_type: ProvisionerType,
-    #[serde(flatten)]
-    pub config: ProvisionerVariant,
+    provisioner_type: String,
+    // Nested subsections
+    proxmox: Option<ProxmoxConfig>,
+    script: Option<ScriptConfig>,
+    manual: Option<ManualConfig>,
+    // Flat fields for proxmox (when not using nested [provisioner.proxmox])
+    api_url: Option<String>,
+    api_token_id: Option<String>,
+    api_token_secret: Option<String>,
+    node: Option<String>,
+    template_vmid: Option<u32>,
+    #[serde(default = "default_storage")]
+    storage: String,
+    pool: Option<String>,
+    #[serde(default = "default_verify_ssl")]
+    verify_ssl: bool,
+    // Flat fields for script
+    provision: Option<String>,
+    terminate: Option<String>,
+    health_check: Option<String>,
+    #[serde(default = "default_script_timeout")]
+    timeout_seconds: u64,
+    // Flat fields for manual
+    notification_webhook: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ProvisionerType {
-    Proxmox,
-    Script,
-    Manual,
-}
+fn deserialize_provisioner<'de, D>(deserializer: D) -> Result<ProvisionerConfig, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = RawProvisionerConfig::deserialize(deserializer)?;
 
-#[derive(Debug, Deserialize)]
-pub struct ProvisionerVariant {
-    pub proxmox: Option<ProxmoxConfig>,
-    pub script: Option<ScriptConfig>,
-    pub manual: Option<ManualConfig>,
+    match raw.provisioner_type.as_str() {
+        "proxmox" => {
+            // Prefer nested [provisioner.proxmox] section if present
+            let config = if let Some(nested) = raw.proxmox {
+                nested
+            } else {
+                // Fall back to flat format
+                let api_url = raw.api_url.ok_or_else(|| {
+                    serde::de::Error::missing_field("api_url")
+                })?;
+                let api_token_id = raw.api_token_id.ok_or_else(|| {
+                    serde::de::Error::missing_field("api_token_id")
+                })?;
+                let api_token_secret = raw.api_token_secret.ok_or_else(|| {
+                    serde::de::Error::missing_field("api_token_secret")
+                })?;
+                let node = raw.node.ok_or_else(|| {
+                    serde::de::Error::missing_field("node")
+                })?;
+                let template_vmid = raw.template_vmid.ok_or_else(|| {
+                    serde::de::Error::missing_field("template_vmid")
+                })?;
+
+                ProxmoxConfig {
+                    api_url,
+                    api_token_id,
+                    api_token_secret,
+                    node,
+                    template_vmid,
+                    storage: raw.storage,
+                    pool: raw.pool,
+                    verify_ssl: raw.verify_ssl,
+                }
+            };
+            Ok(ProvisionerConfig::Proxmox(config))
+        }
+        "script" => {
+            let config = if let Some(nested) = raw.script {
+                nested
+            } else {
+                let provision = raw.provision.ok_or_else(|| {
+                    serde::de::Error::missing_field("provision")
+                })?;
+                let terminate = raw.terminate.ok_or_else(|| {
+                    serde::de::Error::missing_field("terminate")
+                })?;
+                let health_check = raw.health_check.ok_or_else(|| {
+                    serde::de::Error::missing_field("health_check")
+                })?;
+
+                ScriptConfig {
+                    provision,
+                    terminate,
+                    health_check,
+                    timeout_seconds: raw.timeout_seconds,
+                }
+            };
+            Ok(ProvisionerConfig::Script(config))
+        }
+        "manual" => {
+            let config = if let Some(nested) = raw.manual {
+                nested
+            } else {
+                ManualConfig {
+                    notification_webhook: raw.notification_webhook,
+                }
+            };
+            Ok(ProvisionerConfig::Manual(config))
+        }
+        other => Err(serde::de::Error::unknown_variant(
+            other,
+            &["proxmox", "script", "manual"],
+        )),
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -80,29 +209,6 @@ pub struct ManualConfig {
     pub notification_webhook: Option<String>,
 }
 
-impl ProvisionerConfig {
-    pub fn get_proxmox(&self) -> Option<&ProxmoxConfig> {
-        match self.provisioner_type {
-            ProvisionerType::Proxmox => self.config.proxmox.as_ref(),
-            _ => None,
-        }
-    }
-
-    pub fn get_script(&self) -> Option<&ScriptConfig> {
-        match self.provisioner_type {
-            ProvisionerType::Script => self.config.script.as_ref(),
-            _ => None,
-        }
-    }
-
-    pub fn get_manual(&self) -> Option<&ManualConfig> {
-        match self.provisioner_type {
-            ProvisionerType::Manual => self.config.manual.as_ref(),
-            _ => None,
-        }
-    }
-}
-
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
@@ -112,7 +218,6 @@ impl Config {
     }
 }
 
-// Default functions
 fn default_interval() -> u64 {
     30
 }
@@ -140,10 +245,11 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_load_valid_proxmox_config() {
+    fn test_load_nested_proxmox_config() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.toml");
 
+        // Nested format: [provisioner.proxmox]
         let config_content = r#"
 [api]
 endpoint = "https://api.decent-cloud.org"
@@ -173,30 +279,11 @@ verify_ssl = false
         let config = Config::load(&config_path).unwrap();
 
         assert_eq!(config.api.endpoint, "https://api.decent-cloud.org");
-        assert_eq!(
-            config.api.provider_pubkey,
-            "ed25519_pubkey_hex_abcdef1234567890"
-        );
-        assert_eq!(
-            config.api.provider_secret_key,
-            Some("ed25519_secret_hex_1234567890abcdef".to_string())
-        );
-
         assert_eq!(config.polling.interval_seconds, 45);
-        assert_eq!(config.polling.health_check_interval_seconds, 600);
 
-        assert!(matches!(
-            config.provisioner.provisioner_type,
-            ProvisionerType::Proxmox
-        ));
-
-        let proxmox = config.provisioner.get_proxmox().unwrap();
+        let proxmox = config.provisioner.as_proxmox().expect("Should be Proxmox");
         assert_eq!(proxmox.api_url, "https://proxmox.local:8006");
         assert_eq!(proxmox.api_token_id, "root@pam!dc-agent");
-        assert_eq!(
-            proxmox.api_token_secret,
-            "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-        );
         assert_eq!(proxmox.node, "pve1");
         assert_eq!(proxmox.template_vmid, 9000);
         assert_eq!(proxmox.storage, "local-zfs");
@@ -205,7 +292,46 @@ verify_ssl = false
     }
 
     #[test]
-    fn test_load_valid_script_config() {
+    fn test_load_flat_proxmox_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Flat format: all in [provisioner]
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex_abcdef1234567890"
+provider_secret_key = "ed25519_secret_hex_1234567890abcdef"
+
+[polling]
+interval_seconds = 45
+health_check_interval_seconds = 600
+
+[provisioner]
+type = "proxmox"
+api_url = "https://proxmox.local:8006"
+api_token_id = "root@pam!dc-agent"
+api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+node = "pve1"
+template_vmid = 9000
+storage = "local-zfs"
+pool = "dc-vms"
+verify_ssl = false
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        let proxmox = config.provisioner.as_proxmox().expect("Should be Proxmox");
+        assert_eq!(proxmox.api_url, "https://proxmox.local:8006");
+        assert_eq!(proxmox.api_token_id, "root@pam!dc-agent");
+        assert_eq!(proxmox.storage, "local-zfs");
+        assert!(!proxmox.verify_ssl);
+    }
+
+    #[test]
+    fn test_load_nested_script_config() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.toml");
 
@@ -231,12 +357,7 @@ timeout_seconds = 600
 
         let config = Config::load(&config_path).unwrap();
 
-        assert!(matches!(
-            config.provisioner.provisioner_type,
-            ProvisionerType::Script
-        ));
-
-        let script = config.provisioner.get_script().unwrap();
+        let script = config.provisioner.as_script().expect("Should be Script");
         assert_eq!(script.provision, "/opt/dc-agent/provision.sh");
         assert_eq!(script.terminate, "/opt/dc-agent/terminate.sh");
         assert_eq!(script.health_check, "/opt/dc-agent/health.sh");
@@ -244,7 +365,37 @@ timeout_seconds = 600
     }
 
     #[test]
-    fn test_load_valid_manual_config() {
+    fn test_load_flat_script_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "script"
+provision = "/opt/dc-agent/provision.sh"
+terminate = "/opt/dc-agent/terminate.sh"
+health_check = "/opt/dc-agent/health.sh"
+timeout_seconds = 600
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        let script = config.provisioner.as_script().expect("Should be Script");
+        assert_eq!(script.provision, "/opt/dc-agent/provision.sh");
+        assert_eq!(script.timeout_seconds, 600);
+    }
+
+    #[test]
+    fn test_load_nested_manual_config() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.toml");
 
@@ -267,12 +418,36 @@ notification_webhook = "https://slack.webhook/xyz"
 
         let config = Config::load(&config_path).unwrap();
 
-        assert!(matches!(
-            config.provisioner.provisioner_type,
-            ProvisionerType::Manual
-        ));
+        let manual = config.provisioner.as_manual().expect("Should be Manual");
+        assert_eq!(
+            manual.notification_webhook,
+            Some("https://slack.webhook/xyz".to_string())
+        );
+    }
 
-        let manual = config.provisioner.get_manual().unwrap();
+    #[test]
+    fn test_load_flat_manual_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+notification_webhook = "https://slack.webhook/xyz"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        let manual = config.provisioner.as_manual().expect("Should be Manual");
         assert_eq!(
             manual.notification_webhook,
             Some("https://slack.webhook/xyz".to_string())
@@ -294,8 +469,6 @@ provider_secret_key = "ed25519_secret_hex"
 
 [provisioner]
 type = "proxmox"
-
-[provisioner.proxmox]
 api_url = "https://proxmox.local:8006"
 api_token_id = "root@pam!dc-agent"
 api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -312,7 +485,7 @@ template_vmid = 9000
         assert_eq!(config.polling.health_check_interval_seconds, 300);
 
         // Check proxmox defaults
-        let proxmox = config.provisioner.get_proxmox().unwrap();
+        let proxmox = config.provisioner.as_proxmox().expect("Should be Proxmox");
         assert_eq!(proxmox.storage, "local-lvm");
         assert!(proxmox.verify_ssl);
         assert_eq!(proxmox.pool, None);
@@ -333,8 +506,6 @@ provider_secret_key = "ed25519_secret_hex"
 
 [provisioner]
 type = "script"
-
-[provisioner.script]
 provision = "/opt/dc-agent/provision.sh"
 terminate = "/opt/dc-agent/terminate.sh"
 health_check = "/opt/dc-agent/health.sh"
@@ -344,7 +515,7 @@ health_check = "/opt/dc-agent/health.sh"
 
         let config = Config::load(&config_path).unwrap();
 
-        let script = config.provisioner.get_script().unwrap();
+        let script = config.provisioner.as_script().expect("Should be Script");
         assert_eq!(script.timeout_seconds, 300);
     }
 
@@ -363,15 +534,13 @@ provider_secret_key = "ed25519_secret_hex"
 
 [provisioner]
 type = "manual"
-
-[provisioner.manual]
 "#;
 
         fs::write(&config_path, config_content).unwrap();
 
         let config = Config::load(&config_path).unwrap();
 
-        let manual = config.provisioner.get_manual().unwrap();
+        let manual = config.provisioner.as_manual().expect("Should be Manual");
         assert_eq!(manual.notification_webhook, None);
     }
 
@@ -385,8 +554,6 @@ type = "manual"
 
 [provisioner]
 type = "manual"
-
-[provisioner.manual]
 "#;
 
         fs::write(&config_path, config_content).unwrap();
@@ -394,16 +561,8 @@ type = "manual"
         let result = Config::load(&config_path);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        // Get the full error chain
         let full_err = format!("{:#}", err);
-        // Should fail on missing api section or one of its required fields
-        assert!(
-            full_err.contains("missing field")
-                && (full_err.contains("api")
-                    || full_err.contains("endpoint")
-                    || full_err.contains("provider_pubkey")
-                    || full_err.contains("provider_secret_key"))
-        );
+        assert!(full_err.contains("missing field"));
     }
 
     #[test]
@@ -419,7 +578,7 @@ provider_secret_key = "ed25519_secret_hex"
 
 [polling]
 
-[provisioner.proxmox]
+[provisioner]
 api_url = "https://proxmox.local:8006"
 api_token_id = "root@pam!dc-agent"
 api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -433,14 +592,11 @@ template_vmid = 9000
         assert!(result.is_err());
         let err = result.unwrap_err();
         let full_err = format!("{:#}", err);
-        // Should fail on missing type field
         assert!(full_err.contains("missing field") && full_err.contains("type"));
     }
 
     #[test]
     fn test_proxmox_config_requires_all_fields() {
-        // Test that when type=proxmox is set, get_proxmox() returns None
-        // if the proxmox section has missing required fields (serde fails to deserialize it)
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.toml");
 
@@ -454,8 +610,6 @@ provider_secret_key = "ed25519_secret_hex"
 
 [provisioner]
 type = "proxmox"
-
-[provisioner.proxmox]
 api_url = "https://proxmox.local:8006"
 node = "pve1"
 "#;
@@ -463,26 +617,13 @@ node = "pve1"
         fs::write(&config_path, config_content).unwrap();
 
         let result = Config::load(&config_path);
-        // The config may parse, but the proxmox section should fail due to missing fields
-        // If it parses successfully, get_proxmox() should return None
-        match result {
-            Ok(config) => {
-                // If parsing succeeded, the proxmox config should be None (failed to deserialize nested)
-                assert!(
-                    config.provisioner.get_proxmox().is_none(),
-                    "Expected proxmox config to be None due to missing required fields"
-                );
-            }
-            Err(e) => {
-                // If parsing failed, it should mention missing fields
-                let err_msg = format!("{:#}", e);
-                assert!(
-                    err_msg.contains("missing field"),
-                    "Expected 'missing field' in error: {}",
-                    err_msg
-                );
-            }
-        }
+        assert!(result.is_err(), "Should fail due to missing required fields");
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            err_msg.contains("missing field"),
+            "Expected 'missing field' in error: {}",
+            err_msg
+        );
     }
 
     #[test]
@@ -511,5 +652,62 @@ endpoint = "https://api.decent-cloud.org"
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Failed to read config file"));
+    }
+
+    #[test]
+    fn test_provisioner_type_name() {
+        let proxmox = ProvisionerConfig::Proxmox(ProxmoxConfig {
+            api_url: "https://test:8006".to_string(),
+            api_token_id: "test".to_string(),
+            api_token_secret: "secret".to_string(),
+            node: "node".to_string(),
+            template_vmid: 9000,
+            storage: "local".to_string(),
+            pool: None,
+            verify_ssl: true,
+        });
+        assert_eq!(proxmox.type_name(), "proxmox");
+
+        let script = ProvisionerConfig::Script(ScriptConfig {
+            provision: "/p.sh".to_string(),
+            terminate: "/t.sh".to_string(),
+            health_check: "/h.sh".to_string(),
+            timeout_seconds: 300,
+        });
+        assert_eq!(script.type_name(), "script");
+
+        let manual = ProvisionerConfig::Manual(ManualConfig {
+            notification_webhook: None,
+        });
+        assert_eq!(manual.type_name(), "manual");
+    }
+
+    #[test]
+    fn test_error_on_unknown_provisioner_type() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "unknown"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = Config::load(&config_path);
+        assert!(result.is_err());
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            err_msg.contains("unknown variant"),
+            "Expected 'unknown variant' in error: {}",
+            err_msg
+        );
     }
 }

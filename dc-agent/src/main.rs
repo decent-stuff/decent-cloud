@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use dc_agent::{
     api_client::ApiClient,
-    config::{Config, ProvisionerType},
+    config::{Config, ProvisionerConfig},
     provisioner::{
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
         ProvisionRequest, Provisioner,
@@ -666,33 +666,18 @@ async fn run_agent(config: Config) -> Result<()> {
 }
 
 fn create_provisioner(config: &Config) -> Result<Box<dyn Provisioner>> {
-    match config.provisioner.provisioner_type {
-        ProvisionerType::Proxmox => {
-            let proxmox_config = config
-                .provisioner
-                .get_proxmox()
-                .ok_or_else(|| anyhow::anyhow!("Proxmox configuration missing"))?
-                .clone();
+    match &config.provisioner {
+        ProvisionerConfig::Proxmox(proxmox) => {
             info!("Creating Proxmox provisioner");
-            Ok(Box::new(ProxmoxProvisioner::new(proxmox_config)?))
+            Ok(Box::new(ProxmoxProvisioner::new(proxmox.clone())?))
         }
-        ProvisionerType::Script => {
-            let script_config = config
-                .provisioner
-                .get_script()
-                .ok_or_else(|| anyhow::anyhow!("Script configuration missing"))?
-                .clone();
+        ProvisionerConfig::Script(script) => {
             info!("Creating Script provisioner");
-            Ok(Box::new(ScriptProvisioner::new(script_config)))
+            Ok(Box::new(ScriptProvisioner::new(script.clone())))
         }
-        ProvisionerType::Manual => {
-            let manual_config = config
-                .provisioner
-                .get_manual()
-                .ok_or_else(|| anyhow::anyhow!("Manual configuration missing"))?
-                .clone();
+        ProvisionerConfig::Manual(manual) => {
             info!("Creating Manual provisioner");
-            Ok(Box::new(ManualProvisioner::new(manual_config)))
+            Ok(Box::new(ManualProvisioner::new(manual.clone())))
         }
     }
 }
@@ -724,76 +709,50 @@ async fn run_doctor(config: Config, verify_api: bool) -> Result<()> {
     println!();
 
     // Check provisioner configuration
-    match config.provisioner.provisioner_type {
-        ProvisionerType::Proxmox => {
-            if let Some(proxmox) = config.provisioner.get_proxmox() {
-                println!("Provisioner: Proxmox");
-                println!("  API URL: {}", proxmox.api_url);
-                println!("  Node: {}", proxmox.node);
-                println!("  Template VMID: {}", proxmox.template_vmid);
-                println!("  Storage: {}", proxmox.storage);
-                println!("  Verify SSL: {}", proxmox.verify_ssl);
-                if let Some(pool) = &proxmox.pool {
-                    println!("  Resource pool: {}", pool);
-                }
-            } else {
-                println!("X Proxmox configuration missing");
-                return Err(anyhow::anyhow!(
-                    "Proxmox type selected but configuration missing"
-                ));
+    match &config.provisioner {
+        ProvisionerConfig::Proxmox(proxmox) => {
+            println!("Provisioner: Proxmox");
+            println!("  API URL: {}", proxmox.api_url);
+            println!("  Node: {}", proxmox.node);
+            println!("  Template VMID: {}", proxmox.template_vmid);
+            println!("  Storage: {}", proxmox.storage);
+            println!("  Verify SSL: {}", proxmox.verify_ssl);
+            if let Some(pool) = &proxmox.pool {
+                println!("  Resource pool: {}", pool);
             }
         }
-        ProvisionerType::Script => {
-            if let Some(script) = config.provisioner.get_script() {
-                println!("Provisioner: Script");
-                println!("  Provision script: {}", script.provision);
-                println!("  Terminate script: {}", script.terminate);
-                println!("  Health check script: {}", script.health_check);
-                println!("  Timeout: {}s", script.timeout_seconds);
+        ProvisionerConfig::Script(script) => {
+            println!("Provisioner: Script");
+            println!("  Provision script: {}", script.provision);
+            println!("  Terminate script: {}", script.terminate);
+            println!("  Health check script: {}", script.health_check);
+            println!("  Timeout: {}s", script.timeout_seconds);
 
-                // Check if scripts exist
-                for (name, path) in [
-                    ("provision", &script.provision),
-                    ("terminate", &script.terminate),
-                    ("health_check", &script.health_check),
-                ] {
-                    if std::path::Path::new(path).exists() {
-                        println!("  [ok] {} script exists", name);
-                    } else {
-                        println!("  [MISSING] {} script: {}", name, path);
-                    }
+            // Check if scripts exist
+            for (name, path) in [
+                ("provision", &script.provision),
+                ("terminate", &script.terminate),
+                ("health_check", &script.health_check),
+            ] {
+                if std::path::Path::new(path).exists() {
+                    println!("  [ok] {} script exists", name);
+                } else {
+                    println!("  [MISSING] {} script: {}", name, path);
                 }
-            } else {
-                println!("X Script configuration missing");
-                return Err(anyhow::anyhow!(
-                    "Script type selected but configuration missing"
-                ));
             }
         }
-        ProvisionerType::Manual => {
-            if let Some(manual) = config.provisioner.get_manual() {
-                println!("Provisioner: Manual");
-                if let Some(webhook) = &manual.notification_webhook {
-                    println!("  Notification webhook: {}", webhook);
-                } else {
-                    println!("  No notification webhook configured");
-                }
+        ProvisionerConfig::Manual(manual) => {
+            println!("Provisioner: Manual");
+            if let Some(webhook) = &manual.notification_webhook {
+                println!("  Notification webhook: {}", webhook);
             } else {
-                println!("X Manual configuration missing");
-                return Err(anyhow::anyhow!(
-                    "Manual type selected but configuration missing"
-                ));
+                println!("  No notification webhook configured");
             }
         }
     }
     println!();
 
-    // Test API connectivity
-    let provisioner_type = match config.provisioner.provisioner_type {
-        ProvisionerType::Proxmox => "proxmox",
-        ProvisionerType::Script => "script",
-        ProvisionerType::Manual => "manual",
-    };
+    let provisioner_type = config.provisioner.type_name();
 
     let api_client = ApiClient::new(&config.api)?;
     println!("[ok] API client initialized");
