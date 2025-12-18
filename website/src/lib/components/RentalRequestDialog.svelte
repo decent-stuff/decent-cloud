@@ -33,6 +33,23 @@
 	let loading = $state(false);
 	let processingPayment = $state(false);
 	let error = $state<string | null>(null);
+	let sshKeyError = $state<string | null>(null);
+
+	// Validate SSH public key format
+	function validateSshKey(key: string): string | null {
+		if (!key.trim()) {
+			return "SSH public key is required for server access";
+		}
+		// Pattern: ssh-(rsa|ed25519|ecdsa|dss) <base64data> [optional comment]
+		const sshKeyPattern = /^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$/;
+		if (!sshKeyPattern.test(key.trim())) {
+			return "Invalid SSH key format. Expected: ssh-ed25519 AAAA... or ssh-rsa AAAA...";
+		}
+		return null;
+	}
+
+	// Reactive validation
+	let sshKeyValidation = $derived(validateSshKey(sshKey));
 	let paymentMethod = $state<"icpay" | "stripe">("icpay");
 	let stripe: Stripe | null = null;
 	let walletConnected = $state(false);
@@ -133,9 +150,10 @@
 			return;
 		}
 
-		// SSH key is required for server access
-		if (!sshKey.trim()) {
-			error = "SSH public key is required for server access after provisioning";
+		// SSH key is required for server access - validate format
+		const sshValidationError = validateSshKey(sshKey);
+		if (sshValidationError) {
+			error = sshValidationError;
 			return;
 		}
 
@@ -513,11 +531,21 @@
 						placeholder="ssh-ed25519 AAAA..."
 						rows="3"
 						required
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400 transition-colors font-mono text-sm {!sshKey.trim() ? 'border-red-500/50' : ''}"
+						class="w-full px-4 py-3 bg-white/10 border rounded-lg text-white placeholder-white/50 focus:outline-none transition-colors font-mono text-sm {sshKeyValidation ? 'border-red-500/50' : sshKey.trim() ? 'border-green-500/50' : 'border-white/20'} {!sshKeyValidation && sshKey.trim() ? 'focus:border-green-400' : 'focus:border-blue-400'}"
 					></textarea>
-					<p class="text-xs text-white/50 mt-1">
-						Required for server access after provisioning
-					</p>
+					{#if sshKeyValidation && sshKey.trim()}
+						<p class="text-xs text-red-400 mt-1">
+							{sshKeyValidation}
+						</p>
+					{:else if !sshKeyValidation && sshKey.trim()}
+						<p class="text-xs text-green-400 mt-1">
+							Valid SSH key format
+						</p>
+					{:else}
+						<p class="text-xs text-white/50 mt-1">
+							Required for server access after provisioning
+						</p>
+					{/if}
 				</div>
 
 				<!-- Contact Method -->

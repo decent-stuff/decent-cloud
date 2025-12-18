@@ -189,6 +189,40 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         params: Json<crate::database::contracts::RentalRequestParams>,
     ) -> Json<ApiResponse<RentalRequestResponse>> {
+        // Validate SSH public key is provided and has valid format
+        match &params.0.ssh_pubkey {
+            None => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("ssh_pubkey is required for server access".to_string()),
+                })
+            }
+            Some(key) if key.trim().is_empty() => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("ssh_pubkey cannot be empty".to_string()),
+                })
+            }
+            Some(key) => {
+                // Validate SSH key format: ssh-(rsa|ed25519|ecdsa|dss) <base64data> [optional comment]
+                let ssh_key_pattern =
+                    regex::Regex::new(r"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$")
+                        .expect("valid regex");
+                if !ssh_key_pattern.is_match(key.trim()) {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(
+                            "Invalid SSH key format. Expected: ssh-ed25519 AAAA... or ssh-rsa AAAA..."
+                                .to_string(),
+                        ),
+                    });
+                }
+            }
+        }
+
         let payment_method = match params.0.payment_method.clone() {
             Some(pm) => pm,
             None => {

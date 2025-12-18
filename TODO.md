@@ -1,5 +1,51 @@
 # TODO
 
+## HIGH PRIORITY: Streamlined Rental UX (Pick → Pay → Use)
+
+**Priority:** CRITICAL - Competitive feature parity with modern cloud providers
+**Goal:** Eliminate provider approval bottleneck; enable instant provisioning like AWS/GCP/Azure
+
+### Current Flow (Too Slow)
+```
+User picks offering → Pays → Waits for provider approval → Waits for provisioning → Gets access
+```
+
+### Target Flow (Modern Cloud UX)
+```
+User picks offering → Pays → Instantly provisioned → Gets SSH access
+```
+
+### Required Changes
+
+1. **Auto-Accept Mode for Providers**
+   - [ ] Add `auto_accept_rentals` boolean to provider settings
+   - [ ] When enabled: skip provider approval step entirely
+   - [ ] Contract goes directly from `payment-confirmed` → `accepted` → `provisioning`
+   - [ ] Provider can still reject/refund problematic rentals after the fact
+
+2. **Pre-configured Offering Templates**
+   - [ ] Providers define offering specs tied to VM templates
+   - [ ] dc-agent auto-provisions matching template when contract created
+   - [ ] No human-in-the-loop for standard offerings
+
+3. **Instant SSH Key Injection**
+   - [x] SSH key now required at rental time (done)
+   - [x] SSH key validated both frontend and backend (done)
+   - [x] SSH key passed to dc-agent during provisioning (done)
+   - [x] User notified via email when VM ready (done)
+
+4. **Provisioning Time Target**
+   - Goal: < 60 seconds from payment to SSH access
+   - Currently: minutes-hours (depends on provider approval)
+   - With auto-accept + dc-agent: ~30-60 seconds (clone + boot + network)
+
+### Implementation Notes
+- Auto-accept should be opt-in for providers (some may want manual review)
+- High-trust providers (verified, good uptime) could default to auto-accept
+- Consider tiered SLAs: "Instant" (auto-accept) vs "Standard" (manual review)
+
+---
+
 ## Provider Provisioning Agent
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)

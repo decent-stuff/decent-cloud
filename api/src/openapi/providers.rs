@@ -1063,6 +1063,7 @@ impl ProvidersApi {
     async fn update_provisioning_status(
         &self,
         db: Data<&Arc<Database>>,
+        email_service: Data<&Option<Arc<email_utils::EmailService>>>,
         auth: AgentAuthenticatedUser,
         id: Path<String>,
         req: Json<ProvisioningStatusRequest>,
@@ -1106,6 +1107,25 @@ impl ProvidersApi {
                                     e
                                 )),
                             });
+                        }
+
+                        // Notify user that their VM is ready
+                        if let Ok(Some(contract)) = db.get_contract(&contract_id).await {
+                            if let Err(e) = crate::rental_notifications::notify_user_provisioned(
+                                &db,
+                                email_service.as_ref(),
+                                &contract,
+                                details,
+                            )
+                            .await
+                            {
+                                // Log but don't fail - provisioning succeeded
+                                tracing::warn!(
+                                    "Failed to send provisioned notification for contract {}: {}",
+                                    &id.0[..16],
+                                    e
+                                );
+                            }
                         }
                     }
                 }
