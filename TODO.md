@@ -17,11 +17,13 @@ User picks offering → Pays → Instantly provisioned → Gets SSH access
 
 ### Required Changes
 
-1. **Auto-Accept Mode for Providers**
-   - [ ] Add `auto_accept_rentals` boolean to provider settings
-   - [ ] When enabled: skip provider approval step entirely
-   - [ ] Contract goes directly from `payment-confirmed` → `accepted` → `provisioning`
-   - [ ] Provider can still reject/refund problematic rentals after the fact
+1. **Auto-Accept Mode for Providers** ✅ COMPLETE
+   - [x] Add `auto_accept_rentals` boolean to provider settings (migration 048)
+   - [x] API endpoints: GET/PUT `/provider/settings/auto-accept`
+   - [x] When enabled: skip provider approval step entirely
+   - [x] Contract goes directly from `payment-confirmed` → `accepted` → `provisioning`
+   - [x] Works for both ICPay (immediate) and Stripe (after webhook confirmation)
+   - [x] Provider can still reject/refund problematic rentals after the fact
 
 2. **Pre-configured Offering Templates**
    - [ ] Providers define offering specs tied to VM templates

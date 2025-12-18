@@ -392,6 +392,24 @@ pub struct TestNotificationResponse {
     pub message: String,
 }
 
+/// Request to update auto-accept rentals setting
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AutoAcceptRequest {
+    /// Whether to auto-accept new rental contracts
+    pub auto_accept_rentals: bool,
+}
+
+/// Response with auto-accept rentals setting
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AutoAcceptResponse {
+    /// Whether auto-accept rentals is enabled
+    pub auto_accept_rentals: bool,
+}
+
 /// Response from updating provider onboarding
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]

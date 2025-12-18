@@ -274,6 +274,14 @@ impl ContractsApi {
                         }
                     }
                 } else {
+                    // ICPay: payment_status is "succeeded" immediately, try auto-accept
+                    if let Err(e) = db.try_auto_accept_contract(&contract_id).await {
+                        tracing::warn!(
+                            "Auto-accept check failed for contract {}: {}",
+                            hex::encode(&contract_id),
+                            e
+                        );
+                    }
                     None
                 };
 
@@ -675,6 +683,15 @@ impl ContractsApi {
                 );
                 // Don't fail - payment was verified successfully
             }
+        }
+
+        // Try auto-accept if provider has it enabled
+        if let Err(e) = db.try_auto_accept_contract(&contract_id_bytes).await {
+            tracing::warn!(
+                "Auto-accept check failed for contract {}: {}",
+                session_result.contract_id,
+                e
+            );
         }
 
         Json(ApiResponse {

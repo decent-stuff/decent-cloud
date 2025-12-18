@@ -517,6 +517,43 @@ impl Database {
             }
         }))
     }
+
+    /// Check if provider has auto-accept rentals enabled.
+    /// Returns false if provider profile doesn't exist or auto_accept_rentals is not set.
+    pub async fn get_provider_auto_accept_rentals(&self, pubkey: &[u8]) -> Result<bool> {
+        let row = sqlx::query_scalar!(
+            "SELECT auto_accept_rentals FROM provider_profiles WHERE pubkey = ?",
+            pubkey
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        // row is Option<i64> - None if no row found, Some(value) if found
+        Ok(row.unwrap_or(0) != 0)
+    }
+
+    /// Set provider auto-accept rentals setting.
+    /// Updates the provider_profiles table. Returns error if provider doesn't exist.
+    pub async fn set_provider_auto_accept_rentals(
+        &self,
+        pubkey: &[u8],
+        enabled: bool,
+    ) -> Result<()> {
+        let value = if enabled { 1 } else { 0 };
+        let result = sqlx::query!(
+            "UPDATE provider_profiles SET auto_accept_rentals = ? WHERE pubkey = ?",
+            value,
+            pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(anyhow::anyhow!("Provider profile not found"));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

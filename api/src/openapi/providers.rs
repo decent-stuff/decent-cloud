@@ -1,10 +1,11 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags,
-    BulkUpdateStatusRequest, CsvImportError, CsvImportResult, DuplicateOfferingRequest,
-    HelpcenterSyncResponse, NotificationConfigResponse, NotificationUsageResponse,
-    OnboardingUpdateResponse, ProvisioningStatusRequest, RentalResponseRequest,
-    ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
-    TestNotificationResponse, UpdateNotificationConfigRequest,
+    AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest, CsvImportError,
+    CsvImportResult, DuplicateOfferingRequest, HelpcenterSyncResponse,
+    NotificationConfigResponse, NotificationUsageResponse, OnboardingUpdateResponse,
+    ProvisioningStatusRequest, RentalResponseRequest, ResponseMetricsResponse,
+    ResponseTimeDistributionResponse, TestNotificationRequest, TestNotificationResponse,
+    UpdateNotificationConfigRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
@@ -1521,6 +1522,64 @@ impl ProvidersApi {
                 success: false,
                 data: None,
                 error: Some(format!("{:#}", e)),
+            }),
+        }
+    }
+
+    /// Get provider auto-accept rentals setting
+    ///
+    /// Returns whether the provider has auto-accept rentals enabled.
+    /// When enabled, new rental contracts skip provider approval and
+    /// transition directly to 'accepted' status after payment succeeds.
+    #[oai(
+        path = "/provider/settings/auto-accept",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_auto_accept_rentals(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<AutoAcceptResponse>> {
+        match db.get_provider_auto_accept_rentals(&auth.pubkey).await {
+            Ok(enabled) => Json(ApiResponse {
+                success: true,
+                data: Some(AutoAcceptResponse { auto_accept_rentals: enabled }),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Set provider auto-accept rentals setting
+    ///
+    /// Enable or disable auto-accept for new rental contracts.
+    /// When enabled, contracts skip provider approval step after payment succeeds.
+    #[oai(
+        path = "/provider/settings/auto-accept",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn set_auto_accept_rentals(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        req: Json<AutoAcceptRequest>,
+    ) -> Json<ApiResponse<AutoAcceptResponse>> {
+        match db.set_provider_auto_accept_rentals(&auth.pubkey, req.auto_accept_rentals).await {
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: Some(AutoAcceptResponse { auto_accept_rentals: req.auto_accept_rentals }),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
             }),
         }
     }

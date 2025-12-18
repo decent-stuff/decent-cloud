@@ -1534,6 +1534,81 @@ impl Database {
         }
         Ok(false)
     }
+
+    /// Auto-accept a rental contract when provider has auto_accept_rentals enabled.
+    ///
+    /// This is called after payment succeeds. If the provider has auto_accept_rentals=true,
+    /// the contract transitions from "requested" to "accepted" without manual provider approval.
+    ///
+    /// Returns Ok(true) if contract was auto-accepted, Ok(false) if not eligible.
+    /// Idempotent: safe to call multiple times (returns Ok(false) if already accepted).
+    pub async fn try_auto_accept_contract(&self, contract_id: &[u8]) -> Result<bool> {
+        // Get contract
+        let contract = self
+            .get_contract(contract_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
+
+        // Only auto-accept contracts in "requested" status
+        if contract.status.to_lowercase() != "requested" {
+            return Ok(false);
+        }
+
+        // Only auto-accept if payment succeeded
+        if contract.payment_status.to_lowercase() != "succeeded" {
+            return Ok(false);
+        }
+
+        // Check if provider has auto_accept_rentals enabled
+        let provider_pubkey = hex::decode(&contract.provider_pubkey)
+            .map_err(|_| anyhow::anyhow!("Invalid provider pubkey hex"))?;
+
+        let auto_accept = self
+            .get_provider_auto_accept_rentals(&provider_pubkey)
+            .await?;
+
+        if !auto_accept {
+            return Ok(false);
+        }
+
+        // Auto-accept the contract
+        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let new_status = "accepted";
+        let change_memo = "Auto-accepted (provider has auto_accept_rentals enabled)";
+
+        let mut tx = self.pool.begin().await?;
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+            new_status,
+            updated_at_ns,
+            provider_pubkey,
+            contract_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            contract_id,
+            contract.status,
+            new_status,
+            provider_pubkey,
+            updated_at_ns,
+            change_memo
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        tracing::info!(
+            "Auto-accepted contract {} for provider {}",
+            hex::encode(contract_id),
+            contract.provider_pubkey
+        );
+
+        Ok(true)
+    }
 }
 
 /// Pending Stripe receipt for background processing

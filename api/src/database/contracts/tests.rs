@@ -1682,3 +1682,87 @@ async fn test_cancel_contract_icpay_with_released_amount() {
         assert_eq!(contract.payment_status, "succeeded");
     }
 }
+
+#[tokio::test]
+async fn test_try_auto_accept_contract_enabled() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile with auto_accept_rentals enabled
+    sqlx::query!(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES (?, 'Test Provider', 'v1', '1.0', 0, 1)",
+        provider_pk
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create contract in 'requested' status with payment_status='succeeded'
+    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk, "off-1", 0, "requested").await;
+
+    // Try auto-accept
+    let result = db.try_auto_accept_contract(&contract_id).await.unwrap();
+    assert!(result, "Should return true when contract was auto-accepted");
+
+    // Verify contract status changed to 'accepted'
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "accepted");
+}
+
+#[tokio::test]
+async fn test_try_auto_accept_contract_disabled() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile with auto_accept_rentals disabled (default)
+    sqlx::query!(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test Provider', 'v1', '1.0', 0)",
+        provider_pk
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create contract in 'requested' status with payment_status='succeeded'
+    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk, "off-1", 0, "requested").await;
+
+    // Try auto-accept - should return false since auto_accept_rentals is disabled
+    let result = db.try_auto_accept_contract(&contract_id).await.unwrap();
+    assert!(!result, "Should return false when auto-accept is disabled");
+
+    // Verify contract status unchanged
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "requested");
+}
+
+#[tokio::test]
+async fn test_try_auto_accept_contract_idempotent() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile with auto_accept_rentals enabled
+    sqlx::query!(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES (?, 'Test Provider', 'v1', '1.0', 0, 1)",
+        provider_pk
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create contract already in 'accepted' status
+    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk, "off-1", 0, "accepted").await;
+
+    // Try auto-accept - should return false since already accepted (idempotent)
+    let result = db.try_auto_accept_contract(&contract_id).await.unwrap();
+    assert!(!result, "Should return false when contract already accepted");
+
+    // Verify contract status unchanged
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "accepted");
+}

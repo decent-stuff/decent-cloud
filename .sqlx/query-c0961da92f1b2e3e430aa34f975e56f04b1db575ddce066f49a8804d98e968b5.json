@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_profiles SET auto_accept_rentals = ? WHERE pubkey = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c0961da92f1b2e3e430aa34f975e56f04b1db575ddce066f49a8804d98e968b5"
+}
