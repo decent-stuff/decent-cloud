@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO provider_agent_delegations\n               (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns)\n               VALUES (?, ?, ?, ?, ?, ?, ?)\n               ON CONFLICT(agent_pubkey) DO UPDATE SET\n                   provider_pubkey = excluded.provider_pubkey,\n                   permissions = excluded.permissions,\n                   expires_at_ns = excluded.expires_at_ns,\n                   label = excluded.label,\n                   signature = excluded.signature,\n                   revoked_at_ns = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "fe02657626824a02c88a7ae7cfcb261d0272f59ec92e18119c5906c0954483e7"
+}

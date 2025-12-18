@@ -20,13 +20,13 @@ Software that providers run to automatically provision services when contracts a
 - [x] API: `GET /providers/{pubkey}/contracts/pending-provision`
 - [x] API: `PUT /provider/rental-requests/{id}/provisioning`
 
-### Current Phase: Delegated Agent Keys + One-Liner UX
+### Current Phase: Delegated Agent Keys + One-Liner UX ✅ COMPLETE
 
-**Goal:** Provider goes from zero to "healthy on dashboard" with:
+**Goal achieved:** Provider goes from zero to "healthy on dashboard" with:
 ```bash
-dc-agent setup proxmox --host 192.168.1.100
-dc-agent doctor --verify-api
-dc-agent run
+dc-agent setup proxmox --host 192.168.1.100   # Auto-detects identity, generates agent key, registers
+dc-agent doctor --verify-api                   # Verifies API connectivity
+dc-agent run                                   # Starts polling loop
 ```
 
 #### Phase 4: Delegated Agent Keys (Security) ✅ COMPLETE
@@ -35,11 +35,11 @@ Agent uses separate keypair from provider's main key to limit blast radius if co
 - [x] **4.1 Database:** Add `provider_agent_delegations` and `provider_agent_status` tables
 - [x] **4.2 API:** Delegation CRUD endpoints (`POST/GET/DELETE /providers/{pubkey}/agent-delegations`)
 - [x] **4.3 API:** Modify auth to accept agent keys via `X-Agent-Pubkey` header
-- [x] **4.4 Agent:** `dc-agent init` command for keypair generation
-- [x] **4.5 Agent:** `dc-agent register` command for delegation registration
+- [x] **4.4 Agent:** `dc-agent init` command for keypair generation (also integrated into setup)
+- [x] **4.5 Agent:** `dc-agent register` command (integrated into setup for one-liner UX)
 
-#### Phase 5: One-Liner UX (Complete)
-- [x] **5.1 Setup:** Generate agent keypair (`dc-agent init`)
+#### Phase 5: One-Liner UX ✅ COMPLETE
+- [x] **5.1 Setup:** Integrated - `dc-agent setup` now auto-generates agent key and registers
 - [x] **5.2 Doctor:** Add `--verify-api` flag for API connectivity test
 - [x] **5.3 Heartbeat:** `POST /providers/{pubkey}/heartbeat` endpoint + agent integration
 - [ ] **5.4 Dashboard:** Show "online"/"offline" badge on provider cards (frontend-only)

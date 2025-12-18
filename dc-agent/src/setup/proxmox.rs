@@ -427,13 +427,27 @@ pub struct SetupResult {
 
 impl SetupResult {
     /// Generate dc-agent.toml configuration file content.
-    pub fn generate_config(&self, api_endpoint: &str, provider_pubkey: &str) -> String {
+    /// If agent_secret_key is provided, uses delegated agent auth. Otherwise placeholder.
+    pub fn generate_config(
+        &self,
+        api_endpoint: &str,
+        provider_pubkey: &str,
+        agent_secret_key: Option<&str>,
+    ) -> String {
         let primary_vmid = self
             .template_vmids
             .get(&OsTemplate::Ubuntu2404)
             .or_else(|| self.template_vmids.values().next())
             .copied()
             .unwrap_or(9000);
+
+        let auth_config = match agent_secret_key {
+            Some(key_path) => format!(
+                r#"agent_secret_key = "{}"  # Delegated agent key"#,
+                key_path
+            ),
+            None => r#"# agent_secret_key = "/path/to/agent.key"  # Run setup with --identity to auto-configure"#.to_string(),
+        };
 
         format!(
             r#"# Decent Cloud Agent Configuration
@@ -442,7 +456,7 @@ impl SetupResult {
 [api]
 endpoint = "{api_endpoint}"
 provider_pubkey = "{provider_pubkey}"
-provider_secret_key = "YOUR_SECRET_KEY_HERE"  # Replace with your Ed25519 secret key
+{auth_config}
 
 [polling]
 interval_seconds = 30
@@ -465,6 +479,7 @@ verify_ssl = false
 "#,
             api_endpoint = api_endpoint,
             provider_pubkey = provider_pubkey,
+            auth_config = auth_config,
             api_url = self.api_url,
             token_id = self.api_token_id,
             token_secret = self.api_token_secret,
@@ -486,8 +501,9 @@ verify_ssl = false
         path: &Path,
         api_endpoint: &str,
         provider_pubkey: &str,
+        agent_secret_key: Option<&str>,
     ) -> Result<()> {
-        let content = self.generate_config(api_endpoint, provider_pubkey);
+        let content = self.generate_config(api_endpoint, provider_pubkey, agent_secret_key);
         std::fs::write(path, content).context("Failed to write config file")?;
         Ok(())
     }
@@ -554,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_config() {
+    fn test_generate_config_with_agent_key() {
         let mut template_vmids = HashMap::new();
         template_vmids.insert(OsTemplate::Ubuntu2404, 9000);
 
@@ -567,9 +583,30 @@ mod tests {
             template_vmids,
         };
 
-        let config = result.generate_config("https://api.example.com", "pubkey123");
+        let config =
+            result.generate_config("https://api.example.com", "pubkey123", Some("/path/to/key"));
         assert!(config.contains("api_url = \"https://192.168.1.100:8006\""));
         assert!(config.contains("api_token_id = \"root@pam!dc-agent\""));
         assert!(config.contains("template_vmid = 9000"));
+        assert!(config.contains("agent_secret_key = \"/path/to/key\""));
+    }
+
+    #[test]
+    fn test_generate_config_without_agent_key() {
+        let mut template_vmids = HashMap::new();
+        template_vmids.insert(OsTemplate::Ubuntu2404, 9000);
+
+        let result = SetupResult {
+            api_url: "https://192.168.1.100:8006".to_string(),
+            api_token_id: "root@pam!dc-agent".to_string(),
+            api_token_secret: "secret-uuid".to_string(),
+            node: "pve".to_string(),
+            storage: "local-lvm".to_string(),
+            template_vmids,
+        };
+
+        let config = result.generate_config("https://api.example.com", "pubkey123", None);
+        assert!(config.contains("# agent_secret_key"));
+        assert!(config.contains("Run setup with --identity to auto-configure"));
     }
 }

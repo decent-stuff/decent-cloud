@@ -131,7 +131,10 @@ struct AgentStatusRow {
 }
 
 impl Database {
-    /// Create a new agent delegation.
+    /// Create or update an agent delegation.
+    ///
+    /// If a delegation already exists for this agent_pubkey, it will be updated
+    /// (including un-revoking if previously revoked). This allows re-registration.
     ///
     /// The signature must be verified by the caller before calling this function.
     pub async fn create_agent_delegation(
@@ -150,7 +153,14 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO provider_agent_delegations
                (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns)
-               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(agent_pubkey) DO UPDATE SET
+                   provider_pubkey = excluded.provider_pubkey,
+                   permissions = excluded.permissions,
+                   expires_at_ns = excluded.expires_at_ns,
+                   label = excluded.label,
+                   signature = excluded.signature,
+                   revoked_at_ns = NULL"#,
             provider_pubkey,
             agent_pubkey,
             permissions_json,

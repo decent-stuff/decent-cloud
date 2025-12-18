@@ -4,9 +4,21 @@ use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::time::Duration;
+
+/// FNV-1a hash - stable across Rust versions (unlike DefaultHasher).
+/// Uses the 64-bit variant for good distribution.
+pub(crate) fn fnv1a_hash(data: &[u8]) -> u64 {
+    const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    let mut hash = FNV_OFFSET_BASIS;
+    for byte in data {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
+}
 
 pub struct ProxmoxProvisioner {
     config: ProxmoxConfig,
@@ -88,14 +100,10 @@ impl ProxmoxProvisioner {
     }
 
     fn allocate_vmid(&self, contract_id: &str) -> u32 {
-        // Generate deterministic VMID from contract_id hash
-        // Range: 100-999999 (Proxmox valid range, avoiding template range)
-        let mut hasher = DefaultHasher::new();
-        contract_id.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        // Map to range 10000-999999 to avoid conflicts with templates
-
+        // Generate deterministic VMID from contract_id using FNV-1a hash
+        // Uses stable hash (not DefaultHasher which varies across Rust versions)
+        // Range: 10000-999999 (Proxmox valid range, avoiding template range 9000-9999)
+        let hash = fnv1a_hash(contract_id.as_bytes());
         10000 + (hash % 990000) as u32
     }
 

@@ -1,9 +1,8 @@
 use anyhow::{bail, Context, Result};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use dcc_common::DccIdentity;
 use ed25519_dalek::{Signature, Signer, SigningKey};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::config::ApiConfig;
 use crate::provisioner::{HealthStatus, Instance};
@@ -135,10 +134,28 @@ impl ApiClient {
         Ok(SigningKey::from_bytes(&key_bytes))
     }
 
-    fn sign_request(&self, method: &str, path: &str, timestamp: i64) -> String {
-        let message = format!("{}{}{}", method, path, timestamp);
-        let signature: Signature = self.signing_key.sign(message.as_bytes());
-        BASE64.encode(signature.to_bytes())
+    /// Build authentication headers for API requests.
+    /// Returns (timestamp_str, nonce_str, signature_hex)
+    fn build_auth_headers(&self, method: &str, path: &str, body: &[u8]) -> Result<(String, String, String)> {
+        // API expects: timestamp (nanoseconds) + nonce (UUID) + method + path + body
+        let timestamp = chrono::Utc::now()
+            .timestamp_nanos_opt()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
+        let nonce = Uuid::new_v4();
+        let timestamp_str = timestamp.to_string();
+        let nonce_str = nonce.to_string();
+
+        let mut sign_message = Vec::new();
+        sign_message.extend_from_slice(timestamp_str.as_bytes());
+        sign_message.extend_from_slice(nonce_str.as_bytes());
+        sign_message.extend_from_slice(method.as_bytes());
+        sign_message.extend_from_slice(path.as_bytes());
+        sign_message.extend_from_slice(body);
+
+        let signature: Signature = self.signing_key.sign(&sign_message);
+        let signature_hex = hex::encode(signature.to_bytes());
+
+        Ok((timestamp_str, nonce_str, signature_hex))
     }
 
     /// Get contracts pending provisioning
@@ -240,7 +257,7 @@ impl ApiClient {
         capabilities: Option<&[String]>,
         active_contracts: i64,
     ) -> Result<HeartbeatResponse> {
-        let path = format!("/providers/{}/heartbeat", self.provider_pubkey);
+        let path = format!("/api/v1/providers/{}/heartbeat", self.provider_pubkey);
 
         let request = HeartbeatRequest {
             version: version.map(|s| s.to_string()),
@@ -270,15 +287,15 @@ impl ApiClient {
     }
 
     async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T> {
-        let timestamp = chrono::Utc::now().timestamp();
-        let signature = self.sign_request("GET", path, timestamp);
+        let (timestamp_str, nonce_str, signature) = self.build_auth_headers("GET", path, b"")?;
 
         let url = format!("{}{}", self.endpoint, path);
         let response = self
             .client
             .get(&url)
-            .header("X-Provider-Pubkey", &self.provider_pubkey)
-            .header("X-Timestamp", timestamp.to_string())
+            .header("X-Public-Key", &self.provider_pubkey)
+            .header("X-Timestamp", &timestamp_str)
+            .header("X-Nonce", &nonce_str)
             .header("X-Signature", signature)
             .send()
             .await
@@ -303,18 +320,20 @@ impl ApiClient {
         path: &str,
         body: &B,
     ) -> Result<T> {
-        let timestamp = chrono::Utc::now().timestamp();
-        let signature = self.sign_request("POST", path, timestamp);
-
         let url = format!("{}{}", self.endpoint, path);
+        let body_json = serde_json::to_string(body).context("Failed to serialize request body")?;
+        let (timestamp_str, nonce_str, signature) =
+            self.build_auth_headers("POST", path, body_json.as_bytes())?;
+
         let response = self
             .client
             .post(&url)
-            .header("X-Provider-Pubkey", &self.provider_pubkey)
-            .header("X-Timestamp", timestamp.to_string())
+            .header("X-Public-Key", &self.provider_pubkey)
+            .header("X-Timestamp", &timestamp_str)
+            .header("X-Nonce", &nonce_str)
             .header("X-Signature", signature)
             .header("Content-Type", "application/json")
-            .json(body)
+            .body(body_json)
             .send()
             .await
             .with_context(|| format!("Failed to POST {}", path))?;
@@ -337,28 +356,24 @@ impl ApiClient {
         })
     }
 
-    /// POST with agent authentication (uses DccIdentity signing for compatibility with API)
+    /// POST with agent authentication (uses X-Agent-Pubkey header for delegated auth)
     async fn post_agent_auth<T: for<'de> Deserialize<'de>, B: Serialize>(
         &self,
         path: &str,
         body: &B,
     ) -> Result<T> {
-        let timestamp = chrono::Utc::now().timestamp();
         let url = format!("{}{}", self.endpoint, path);
         let body_json = serde_json::to_string(body).context("Failed to serialize request body")?;
-
-        // Use DccIdentity for signing (compatible with API verification)
-        let identity = DccIdentity::new_signing(&self.signing_key)?;
-        let sign_message = format!("POST\n{}\n{}\n{}", url, timestamp, body_json);
-        let signature = identity.sign(sign_message.as_bytes())?;
-        let signature_hex = hex::encode(signature.to_bytes());
+        let (timestamp_str, nonce_str, signature) =
+            self.build_auth_headers("POST", path, body_json.as_bytes())?;
 
         // Set auth headers based on mode
         let mut request_builder = self
             .client
             .post(&url)
-            .header("X-Timestamp", timestamp.to_string())
-            .header("X-Signature", signature_hex)
+            .header("X-Timestamp", &timestamp_str)
+            .header("X-Nonce", &nonce_str)
+            .header("X-Signature", signature)
             .header("Content-Type", "application/json");
 
         match &self.auth_mode {
@@ -456,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sign_request() {
+    fn test_build_auth_headers() {
         let signing_key = SigningKey::from_bytes(&[88u8; 32]);
         let verifying_key = signing_key.verifying_key();
 
@@ -471,20 +486,35 @@ mod tests {
 
         let method = "GET";
         let path = "/api/v1/test";
-        let timestamp = 1234567890i64;
+        let body = b"";
 
-        let signature_b64 = client.sign_request(method, path, timestamp);
+        let (timestamp_str, nonce_str, signature_hex) =
+            client.build_auth_headers(method, path, body).unwrap();
 
-        // Decode and verify signature
-        let signature_bytes = BASE64.decode(signature_b64).unwrap();
+        // Verify timestamp is nanoseconds (at least 19 digits)
+        assert!(timestamp_str.len() >= 19);
+
+        // Verify nonce is UUID format
+        assert!(uuid::Uuid::parse_str(&nonce_str).is_ok());
+
+        // Verify signature is valid hex
+        let signature_bytes = hex::decode(&signature_hex).unwrap();
+        assert_eq!(signature_bytes.len(), 64);
+
+        // Verify the signature is valid for the message
+        let mut message = Vec::new();
+        message.extend_from_slice(timestamp_str.as_bytes());
+        message.extend_from_slice(nonce_str.as_bytes());
+        message.extend_from_slice(method.as_bytes());
+        message.extend_from_slice(path.as_bytes());
+        message.extend_from_slice(body);
+
         let signature = Signature::from_bytes(&signature_bytes.try_into().unwrap());
-
-        let message = format!("{}{}{}", method, path, timestamp);
-        assert!(verifying_key.verify(message.as_bytes(), &signature).is_ok());
+        assert!(verifying_key.verify(&message, &signature).is_ok());
     }
 
     #[test]
-    fn test_sign_request_different_methods() {
+    fn test_build_auth_headers_unique_nonce() {
         let signing_key = SigningKey::from_bytes(&[123u8; 32]);
 
         let config = ApiConfig {
@@ -496,31 +526,11 @@ mod tests {
 
         let client = ApiClient::new(&config).unwrap();
 
-        let sig_get = client.sign_request("GET", "/path", 1000);
-        let sig_post = client.sign_request("POST", "/path", 1000);
+        let (_, nonce1, _) = client.build_auth_headers("GET", "/path", b"").unwrap();
+        let (_, nonce2, _) = client.build_auth_headers("GET", "/path", b"").unwrap();
 
-        // Different methods should produce different signatures
-        assert_ne!(sig_get, sig_post);
-    }
-
-    #[test]
-    fn test_sign_request_different_timestamps() {
-        let signing_key = SigningKey::from_bytes(&[200u8; 32]);
-
-        let config = ApiConfig {
-            endpoint: "https://api.example.com".to_string(),
-            provider_pubkey: "test_pubkey".to_string(),
-            agent_secret_key: None,
-            provider_secret_key: Some(hex::encode(signing_key.to_bytes())),
-        };
-
-        let client = ApiClient::new(&config).unwrap();
-
-        let sig1 = client.sign_request("GET", "/path", 1000);
-        let sig2 = client.sign_request("GET", "/path", 2000);
-
-        // Different timestamps should produce different signatures
-        assert_ne!(sig1, sig2);
+        // Each call should produce a unique nonce
+        assert_ne!(nonce1, nonce2);
     }
 
     #[test]

@@ -7,13 +7,14 @@ use dc_agent::{
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
         ProvisionRequest, Provisioner,
     },
+    registration::{
+        default_agent_dir, generate_agent_keypair, load_agent_pubkey, load_provider_identity,
+        register_agent_with_api, DEFAULT_PERMISSIONS,
+    },
     setup::{proxmox::OsTemplate, ProxmoxSetup},
 };
 use dcc_common::DccIdentity;
-use ed25519_dalek::SigningKey;
-use rand::rngs::OsRng;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 
@@ -31,7 +32,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new agent keypair
+    /// Initialize a new agent keypair (use 'setup' for automatic registration)
     Init {
         /// Output directory for keys (default: ~/.dc-agent)
         #[arg(long)]
@@ -41,7 +42,7 @@ enum Commands {
         #[arg(long, default_value = "false")]
         force: bool,
     },
-    /// Register agent with the Decent Cloud API
+    /// Register agent with API (use 'setup' for automatic registration)
     Register {
         /// Provider's main public key (hex)
         #[arg(long)]
@@ -129,9 +130,13 @@ enum SetupProvisioner {
         #[arg(long, default_value = "https://api.decent-cloud.org")]
         api_endpoint: String,
 
-        /// Provider public key (hex)
-        #[arg(long, default_value = "")]
-        provider_pubkey: String,
+        /// Provider identity name or path (default: auto-detect from ~/.dcc/identity/)
+        #[arg(long)]
+        identity: Option<String>,
+
+        /// Skip agent registration (for offline setup)
+        #[arg(long, default_value = "false")]
+        skip_registration: bool,
     },
 }
 
@@ -176,23 +181,16 @@ async fn main() -> Result<()> {
     }
 }
 
-/// Get the default agent keys directory (~/.dc-agent)
-fn default_agent_dir() -> PathBuf {
-    dirs::home_dir()
-        .expect("Failed to find home directory")
-        .join(".dc-agent")
-}
 
-/// Initialize a new agent keypair
+/// Initialize a new agent keypair.
 fn run_init(output: Option<PathBuf>, force: bool) -> Result<()> {
     println!("dc-agent init");
     println!("=============\n");
 
     let agent_dir = output.unwrap_or_else(default_agent_dir);
     let private_key_path = agent_dir.join("agent.key");
-    let public_key_path = agent_dir.join("agent.pub");
 
-    // Check if keys already exist
+    // Check if key exists without force flag
     if private_key_path.exists() && !force {
         anyhow::bail!(
             "Agent key already exists at {}. Use --force to overwrite.",
@@ -200,36 +198,13 @@ fn run_init(output: Option<PathBuf>, force: bool) -> Result<()> {
         );
     }
 
-    // Create directory if needed
-    std::fs::create_dir_all(&agent_dir)?;
-
-    // Generate new Ed25519 keypair
     println!("Generating new Ed25519 keypair...");
-    let signing_key = SigningKey::generate(&mut OsRng);
-    let identity = DccIdentity::new_signing(&signing_key)?;
+    let (key_path, pubkey_hex) = generate_agent_keypair(&agent_dir, force)?;
 
-    // Get the public key bytes and hex
-    let pubkey_bytes = identity.to_bytes_verifying();
-    let pubkey_hex = hex::encode(&pubkey_bytes);
-    let secret_bytes = signing_key.to_bytes();
-    let secret_hex = hex::encode(secret_bytes);
-
-    // Write private key (secret + public = 64 bytes for ed25519)
-    std::fs::write(&private_key_path, &secret_hex)?;
-    // Set restrictive permissions on Unix
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&private_key_path, std::fs::Permissions::from_mode(0o600))?;
-    }
-
-    // Write public key
-    std::fs::write(&public_key_path, &pubkey_hex)?;
-
-    println!("✓ Agent keypair generated successfully\n");
+    println!("Agent keypair generated successfully\n");
     println!("Keys directory: {}", agent_dir.display());
-    println!("Private key: {}", private_key_path.display());
-    println!("Public key:  {}", public_key_path.display());
+    println!("Private key: {}", key_path.display());
+    println!("Public key:  {}", agent_dir.join("agent.pub").display());
     println!();
     println!("Agent public key (hex): {}", pubkey_hex);
     println!();
@@ -242,7 +217,7 @@ fn run_init(output: Option<PathBuf>, force: bool) -> Result<()> {
     Ok(())
 }
 
-/// Register agent with the Decent Cloud API
+/// Register agent with the Decent Cloud API.
 async fn run_register(
     provider_pubkey: String,
     provider_secret_key: Option<String>,
@@ -253,27 +228,9 @@ async fn run_register(
     println!("dc-agent register");
     println!("=================\n");
 
-    let agent_dir = keys_dir.unwrap_or_else(default_agent_dir);
+    let agent_dir = keys_dir.as_deref().map(std::path::Path::to_path_buf).unwrap_or_else(default_agent_dir);
     let private_key_path = agent_dir.join("agent.key");
-    let public_key_path = agent_dir.join("agent.pub");
-
-    // Load agent public key
-    if !public_key_path.exists() {
-        anyhow::bail!(
-            "Agent key not found at {}. Run 'dc-agent init' first.",
-            public_key_path.display()
-        );
-    }
-
-    let agent_pubkey_hex = std::fs::read_to_string(&public_key_path)?
-        .trim()
-        .to_string();
-    let agent_pubkey = hex::decode(&agent_pubkey_hex)
-        .map_err(|e| anyhow::anyhow!("Invalid agent public key: {}", e))?;
-
-    if agent_pubkey.len() != 32 {
-        anyhow::bail!("Agent public key must be 32 bytes");
-    }
+    let agent_pubkey_hex = load_agent_pubkey(keys_dir.as_deref())?;
 
     println!("Agent public key: {}", agent_pubkey_hex);
     println!("Provider public key: {}", provider_pubkey);
@@ -283,7 +240,7 @@ async fn run_register(
     }
     println!();
 
-    // Get provider secret key
+    // Get provider secret key (prompt if not provided)
     let provider_secret = match provider_secret_key {
         Some(key) => key,
         None => rpassword::prompt_password("Provider secret key (hex): ")?,
@@ -296,116 +253,32 @@ async fn run_register(
         anyhow::bail!("Provider secret key must be 32 bytes");
     }
 
-    // Create provider identity for signing
+    // Create provider identity and verify it matches the provided pubkey
     let provider_identity = DccIdentity::new_signing_from_bytes(&provider_secret_bytes)?;
+    let derived_pubkey = hex::encode(provider_identity.to_bytes_verifying());
 
-    // Verify provider pubkey matches
-    let derived_pubkey = provider_identity.to_bytes_verifying();
-    let expected_pubkey = hex::decode(&provider_pubkey)
-        .map_err(|e| anyhow::anyhow!("Invalid provider public key: {}", e))?;
-
-    if derived_pubkey != expected_pubkey {
+    if derived_pubkey != provider_pubkey {
         anyhow::bail!(
             "Provider secret key does not match the provided public key.\n\
              Expected: {}\n\
              Derived:  {}",
             provider_pubkey,
-            hex::encode(&derived_pubkey)
+            derived_pubkey
         );
     }
 
-    // Build delegation message
-    // Format: agent_pubkey || provider_pubkey || permissions_json || expires_at_ns || label
-    let permissions = vec!["provision", "health_check", "heartbeat", "fetch_contracts"];
-    let permissions_json = serde_json::to_string(&permissions)?;
+    println!("Signing delegation and registering with API...");
+    register_agent_with_api(
+        &provider_identity,
+        &agent_pubkey_hex,
+        &api_endpoint,
+        label.as_deref(),
+    )
+    .await?;
 
-    let mut message = Vec::new();
-    message.extend_from_slice(&agent_pubkey);
-    message.extend_from_slice(&derived_pubkey);
-    message.extend_from_slice(permissions_json.as_bytes());
-    // No expiry (None)
-    if let Some(lbl) = &label {
-        message.extend_from_slice(lbl.as_bytes());
-    }
-
-    // Sign the delegation
-    println!("Signing delegation...");
-    let signature = provider_identity.sign(&message)?;
-    let signature_hex = hex::encode(signature.to_bytes());
-
-    // Register with API
-    println!("Registering with API...");
-
-    let client = reqwest::Client::new();
-    let url = format!(
-        "{}/providers/{}/agent-delegations",
-        api_endpoint, provider_pubkey
-    );
-
-    #[derive(serde::Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct CreateDelegationRequest {
-        agent_pubkey: String,
-        permissions: Vec<String>,
-        expires_at_ns: Option<i64>,
-        label: Option<String>,
-        signature: String,
-    }
-
-    let request_body = CreateDelegationRequest {
-        agent_pubkey: agent_pubkey_hex.clone(),
-        permissions: permissions.iter().map(|s| s.to_string()).collect(),
-        expires_at_ns: None,
-        label: label.clone(),
-        signature: signature_hex,
-    };
-
-    // Sign the HTTP request with provider key
-    let timestamp = chrono::Utc::now().timestamp();
-    let body_json = serde_json::to_string(&request_body)?;
-    let sign_message = format!("POST\n{}\n{}\n{}", url, timestamp, body_json);
-    let http_signature = provider_identity.sign(sign_message.as_bytes())?;
-
-    let response = client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .header("X-Public-Key", &provider_pubkey)
-        .header("X-Timestamp", timestamp.to_string())
-        .header("X-Signature", hex::encode(http_signature.to_bytes()))
-        .body(body_json)
-        .send()
-        .await?;
-
-    let status = response.status();
-    let response_text = response.text().await?;
-
-    if !status.is_success() {
-        anyhow::bail!("Registration failed ({}): {}", status, response_text);
-    }
-
-    #[derive(serde::Deserialize)]
-    #[allow(dead_code)]
-    struct ApiResponse<T> {
-        success: bool,
-        data: Option<T>,
-        error: Option<String>,
-    }
-
-    let api_response: ApiResponse<serde_json::Value> = serde_json::from_str(&response_text)
-        .map_err(|e| anyhow::anyhow!("Failed to parse API response: {}", e))?;
-
-    if !api_response.success {
-        anyhow::bail!(
-            "Registration failed: {}",
-            api_response
-                .error
-                .unwrap_or_else(|| "Unknown error".to_string())
-        );
-    }
-
-    println!("\n✓ Agent registered successfully!\n");
+    println!("\nAgent registered successfully!\n");
     println!("Agent public key: {}", agent_pubkey_hex);
-    println!("Permissions: {}", permissions.join(", "));
+    println!("Permissions: {}", DEFAULT_PERMISSIONS.join(", "));
     println!();
     println!("Next steps:");
     println!("1. Update your dc-agent.toml with:");
@@ -431,10 +304,49 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             templates,
             output,
             api_endpoint,
-            provider_pubkey,
+            identity,
+            skip_registration,
         } => {
             println!("Decent Cloud Agent - Proxmox Setup");
             println!("===================================\n");
+
+            // Step 1: Load provider identity (if not skipping registration)
+            let provider_identity = if skip_registration {
+                println!("[skip] Agent registration skipped (--skip-registration)");
+                None
+            } else {
+                match load_provider_identity(identity.as_deref()) {
+                    Ok(id) => {
+                        println!(
+                            "[ok] Provider identity loaded: {}",
+                            hex::encode(id.to_bytes_verifying())
+                        );
+                        Some(id)
+                    }
+                    Err(e) => {
+                        // Check if this is "no identities" vs "multiple identities" or other error
+                        let err_str = e.to_string();
+                        if err_str.contains("Multiple identities") {
+                            // User has identities but we can't pick - this is a user error, fail
+                            return Err(e);
+                        } else if err_str.contains("No identities found") {
+                            // No identity at all - proceed without registration
+                            println!("[skip] {}", e);
+                            println!("       Proxmox setup will continue, but agent won't be registered.");
+                            println!();
+                            None
+                        } else {
+                            // Other error (e.g., corrupted key) - fail
+                            return Err(e);
+                        }
+                    }
+                }
+            };
+
+            let provider_pubkey = provider_identity
+                .as_ref()
+                .map(|id| hex::encode(id.to_bytes_verifying()))
+                .unwrap_or_else(|| "YOUR_PROVIDER_PUBKEY_HERE".to_string());
 
             // Parse templates
             let template_list: Vec<OsTemplate> = templates
@@ -452,12 +364,14 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 anyhow::bail!("No valid templates specified. Available: ubuntu-24.04, ubuntu-22.04, debian-12, rocky-9");
             }
 
-            println!("Host: {}", host);
-            println!("SSH User: {}", ssh_user);
-            println!("Proxmox User: {}", proxmox_user);
-            println!("Storage: {}", storage);
+            println!();
+            println!("Proxmox Setup");
+            println!("  Host: {}", host);
+            println!("  SSH User: {}", ssh_user);
+            println!("  Proxmox User: {}", proxmox_user);
+            println!("  Storage: {}", storage);
             println!(
-                "Templates: {}",
+                "  Templates: {}",
                 template_list
                     .iter()
                     .map(|t| t.to_string())
@@ -470,7 +384,6 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             let ssh_password =
                 rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?;
             let proxmox_password = if ssh_user == proxmox_user.split('@').next().unwrap_or("root") {
-                // Same user, reuse password
                 ssh_password.clone()
             } else {
                 rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
@@ -479,7 +392,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             println!();
 
             let setup = ProxmoxSetup {
-                host,
+                host: host.clone(),
                 port: ssh_port,
                 ssh_user,
                 ssh_password,
@@ -491,26 +404,86 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
 
             let result = setup.run().await?;
 
-            // Write config file
-            let pubkey = if provider_pubkey.is_empty() {
-                "YOUR_PROVIDER_PUBKEY_HERE"
-            } else {
-                &provider_pubkey
-            };
-            result.write_config(&output, &api_endpoint, pubkey)?;
+            // Step 2: Generate agent keypair and register (if identity available)
+            let agent_key_path = if let Some(ref provider_id) = provider_identity {
+                println!();
+                println!("Agent Registration");
+                println!("------------------");
 
-            println!("\n===================================");
-            println!("Setup complete!");
+                let agent_dir = default_agent_dir();
+                let (key_path, agent_pubkey) = generate_agent_keypair(&agent_dir, false)?;
+                println!("[ok] Agent keypair: {}", key_path.display());
+
+                // Register with API
+                let label = Some(format!("proxmox-{}", host));
+                let registration_ok = match register_agent_with_api(provider_id, &agent_pubkey, &api_endpoint, label.as_deref()).await {
+                    Ok(()) => {
+                        println!("[ok] Agent registered with API");
+                        true
+                    }
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        println!("[FAILED] Agent registration failed: {}", e);
+                        println!();
+                        if err_str.contains("404") || err_str.contains("not found") {
+                            println!("       Your identity may not be registered as a provider.");
+                            println!("       Register as provider first: dc provider register");
+                        } else if err_str.contains("401") || err_str.contains("403") {
+                            println!("       Authentication failed. Check your identity key.");
+                        } else {
+                            println!("       Check your network connection and API endpoint.");
+                        }
+                        println!();
+                        println!("       Config will be written, but you must register before running.");
+                        println!("       After fixing the issue, run: dc-agent register --provider-pubkey {}", hex::encode(provider_id.to_bytes_verifying()));
+                        false
+                    }
+                };
+
+                // Return key path and registration status
+                Some((key_path.to_string_lossy().to_string(), registration_ok))
+            } else {
+                None
+            };
+
+            // Step 3: Write config file
+            result.write_config(
+                &output,
+                &api_endpoint,
+                &provider_pubkey,
+                agent_key_path.as_ref().map(|(p, _)| p.as_str()),
+            )?;
+
+            let registration_failed = agent_key_path.as_ref().map(|(_, ok)| !ok).unwrap_or(false);
+
             println!();
-            println!("Configuration written to: {}", output.display());
+            println!("===================================");
+            if registration_failed {
+                println!("Setup incomplete - agent registration failed!");
+            } else {
+                println!("Setup complete!");
+            }
             println!();
-            println!("Next steps:");
-            println!(
-                "1. Edit {} and set your provider_secret_key",
-                output.display()
-            );
-            println!("2. Run: dc-agent --config {} doctor", output.display());
-            println!("3. Run: dc-agent --config {} run", output.display());
+            println!("Configuration: {}", output.display());
+
+            if provider_identity.is_some() {
+                println!();
+                if registration_failed {
+                    println!("After fixing registration, run:");
+                    println!("  dc-agent register --provider-pubkey {}", provider_pubkey);
+                    println!();
+                    println!("Then verify with:");
+                } else {
+                    println!("Next steps:");
+                }
+                println!("  dc-agent --config {} doctor --verify-api", output.display());
+                println!("  dc-agent --config {} run", output.display());
+            } else {
+                println!();
+                println!("Next steps:");
+                println!("  1. Create provider identity: dc identity new provider");
+                println!("  2. Re-run setup: dc-agent setup proxmox --host {} --identity provider", host);
+            }
 
             Ok(())
         }
@@ -526,7 +499,7 @@ async fn run_test_provision(
     println!("dc-agent test-provision");
     println!("=======================\n");
 
-    let provisioner: Arc<dyn Provisioner> = create_provisioner(&config)?;
+    let provisioner = create_provisioner(&config)?;
 
     // Generate contract ID if not provided
     let contract_id = contract_id.unwrap_or_else(|| {
@@ -604,8 +577,8 @@ async fn run_test_provision(
 async fn run_agent(config: Config) -> Result<()> {
     info!("Starting dc-agent");
 
-    let api_client = Arc::new(ApiClient::new(&config.api)?);
-    let provisioner: Arc<dyn Provisioner> = create_provisioner(&config)?;
+    let api_client = ApiClient::new(&config.api)?;
+    let provisioner = create_provisioner(&config)?;
 
     let poll_interval = Duration::from_secs(config.polling.interval_seconds);
     let mut ticker = interval(poll_interval);
@@ -692,7 +665,7 @@ async fn run_agent(config: Config) -> Result<()> {
     }
 }
 
-fn create_provisioner(config: &Config) -> Result<Arc<dyn Provisioner>> {
+fn create_provisioner(config: &Config) -> Result<Box<dyn Provisioner>> {
     match config.provisioner.provisioner_type {
         ProvisionerType::Proxmox => {
             let proxmox_config = config
@@ -701,7 +674,7 @@ fn create_provisioner(config: &Config) -> Result<Arc<dyn Provisioner>> {
                 .ok_or_else(|| anyhow::anyhow!("Proxmox configuration missing"))?
                 .clone();
             info!("Creating Proxmox provisioner");
-            Ok(Arc::new(ProxmoxProvisioner::new(proxmox_config)?))
+            Ok(Box::new(ProxmoxProvisioner::new(proxmox_config)?))
         }
         ProvisionerType::Script => {
             let script_config = config
@@ -710,7 +683,7 @@ fn create_provisioner(config: &Config) -> Result<Arc<dyn Provisioner>> {
                 .ok_or_else(|| anyhow::anyhow!("Script configuration missing"))?
                 .clone();
             info!("Creating Script provisioner");
-            Ok(Arc::new(ScriptProvisioner::new(script_config)))
+            Ok(Box::new(ScriptProvisioner::new(script_config)))
         }
         ProvisionerType::Manual => {
             let manual_config = config
@@ -719,7 +692,7 @@ fn create_provisioner(config: &Config) -> Result<Arc<dyn Provisioner>> {
                 .ok_or_else(|| anyhow::anyhow!("Manual configuration missing"))?
                 .clone();
             info!("Creating Manual provisioner");
-            Ok(Arc::new(ManualProvisioner::new(manual_config)))
+            Ok(Box::new(ManualProvisioner::new(manual_config)))
         }
     }
 }

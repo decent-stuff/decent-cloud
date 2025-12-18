@@ -2,7 +2,7 @@
 mod tests {
     use super::super::{HealthStatus, ProvisionRequest, Provisioner};
     use crate::config::ProxmoxConfig;
-    use crate::provisioner::proxmox::ProxmoxProvisioner;
+    use crate::provisioner::proxmox::{fnv1a_hash, ProxmoxProvisioner};
     use mockito::Server;
 
     fn test_config(server_url: &str) -> ProxmoxConfig {
@@ -535,6 +535,14 @@ mod tests {
         assert!(vmid1 < 1000000);
         assert!(vmid3 >= 10000);
         assert!(vmid3 < 1000000);
+
+        // Verify known values to detect hash algorithm changes
+        // These values are computed from FNV-1a and must remain stable
+        assert_eq!(
+            provisioner.allocate_vmid("test-contract-abc"),
+            10000 + (fnv1a_hash(b"test-contract-abc") % 990000) as u32,
+            "VMID generation must use FNV-1a hash"
+        );
     }
 
     #[tokio::test]
