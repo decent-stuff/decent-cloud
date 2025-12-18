@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use ed25519_dalek::{Signature, Signer, SigningKey};
+use dcc_common::DccIdentity;
 use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
@@ -21,7 +21,7 @@ pub struct ApiClient {
     client: Client,
     endpoint: String,
     provider_pubkey: String,
-    signing_key: SigningKey,
+    identity: DccIdentity,
     auth_mode: AuthMode,
 }
 
@@ -105,13 +105,13 @@ enum AuthType {
 
 impl ApiClient {
     pub fn new(config: &ApiConfig) -> Result<Self> {
-        let (signing_key, auth_mode) = if let Some(agent_key) = &config.agent_secret_key {
-            let signing_key = Self::load_signing_key(agent_key)?;
-            let agent_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
-            (signing_key, AuthMode::Agent { agent_pubkey })
+        let (identity, auth_mode) = if let Some(agent_key) = &config.agent_secret_key {
+            let identity = Self::load_identity(agent_key)?;
+            let agent_pubkey = hex::encode(identity.to_bytes_verifying());
+            (identity, AuthMode::Agent { agent_pubkey })
         } else if let Some(provider_key) = &config.provider_secret_key {
-            let signing_key = Self::load_signing_key(provider_key)?;
-            (signing_key, AuthMode::Provider)
+            let identity = Self::load_identity(provider_key)?;
+            (identity, AuthMode::Provider)
         } else {
             bail!("Either agent_secret_key or provider_secret_key must be configured");
         };
@@ -125,17 +125,17 @@ impl ApiClient {
             client,
             endpoint: config.endpoint.clone(),
             provider_pubkey: config.provider_pubkey.clone(),
-            signing_key,
+            identity,
             auth_mode,
         })
     }
 
-    fn load_signing_key(key_or_path: &str) -> Result<SigningKey> {
+    fn load_identity(key_or_path: &str) -> Result<DccIdentity> {
         // Try hex first
         if let Ok(bytes) = hex::decode(key_or_path) {
             if bytes.len() == 32 {
-                let key_bytes: [u8; 32] = bytes.try_into().unwrap();
-                return Ok(SigningKey::from_bytes(&key_bytes));
+                return DccIdentity::new_signing_from_bytes(&bytes)
+                    .map_err(|e| anyhow::anyhow!("Failed to create identity from hex key: {}", e));
             }
         }
 
@@ -153,8 +153,8 @@ impl ApiClient {
             );
         }
 
-        let key_bytes: [u8; 32] = bytes.try_into().unwrap();
-        Ok(SigningKey::from_bytes(&key_bytes))
+        DccIdentity::new_signing_from_bytes(&bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to create identity from key file: {}", e))
     }
 
     /// Build authentication headers for API requests.
@@ -178,7 +178,10 @@ impl ApiClient {
         sign_message.extend_from_slice(path.as_bytes());
         sign_message.extend_from_slice(body);
 
-        let signature: Signature = self.signing_key.sign(&sign_message);
+        let signature = self
+            .identity
+            .sign(&sign_message)
+            .map_err(|e| anyhow::anyhow!("Failed to sign message: {}", e))?;
         let signature_hex = hex::encode(signature.to_bytes());
 
         Ok((timestamp_str, nonce_str, signature_hex))
@@ -357,21 +360,24 @@ impl ApiClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_dalek::Verifier;
+    use ed25519_dalek::SigningKey;
     use std::fs;
     use tempfile::TempDir;
 
     #[test]
-    fn test_load_signing_key_from_hex() {
+    fn test_load_identity_from_hex() {
         let signing_key = SigningKey::from_bytes(&[42u8; 32]);
         let hex_key = hex::encode(signing_key.to_bytes());
 
-        let loaded_key = ApiClient::load_signing_key(&hex_key).unwrap();
-        assert_eq!(signing_key.to_bytes(), loaded_key.to_bytes());
+        let identity = ApiClient::load_identity(&hex_key).unwrap();
+        assert_eq!(
+            identity.to_bytes_verifying(),
+            signing_key.verifying_key().to_bytes()
+        );
     }
 
     #[test]
-    fn test_load_signing_key_from_file() {
+    fn test_load_identity_from_file() {
         let temp_dir = TempDir::new().unwrap();
         let key_path = temp_dir.path().join("secret.key");
 
@@ -379,12 +385,15 @@ mod tests {
         let hex_key = hex::encode(signing_key.to_bytes());
         fs::write(&key_path, hex_key).unwrap();
 
-        let loaded_key = ApiClient::load_signing_key(key_path.to_str().unwrap()).unwrap();
-        assert_eq!(signing_key.to_bytes(), loaded_key.to_bytes());
+        let identity = ApiClient::load_identity(key_path.to_str().unwrap()).unwrap();
+        assert_eq!(
+            identity.to_bytes_verifying(),
+            signing_key.verifying_key().to_bytes()
+        );
     }
 
     #[test]
-    fn test_load_signing_key_from_file_with_whitespace() {
+    fn test_load_identity_from_file_with_whitespace() {
         let temp_dir = TempDir::new().unwrap();
         let key_path = temp_dir.path().join("secret.key");
 
@@ -392,13 +401,16 @@ mod tests {
         let hex_key = format!("  {}\n", hex::encode(signing_key.to_bytes()));
         fs::write(&key_path, hex_key).unwrap();
 
-        let loaded_key = ApiClient::load_signing_key(key_path.to_str().unwrap()).unwrap();
-        assert_eq!(signing_key.to_bytes(), loaded_key.to_bytes());
+        let identity = ApiClient::load_identity(key_path.to_str().unwrap()).unwrap();
+        assert_eq!(
+            identity.to_bytes_verifying(),
+            signing_key.verifying_key().to_bytes()
+        );
     }
 
     #[test]
-    fn test_load_signing_key_invalid_hex() {
-        let result = ApiClient::load_signing_key("not_hex");
+    fn test_load_identity_invalid_hex() {
+        let result = ApiClient::load_identity("not_hex");
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -407,16 +419,15 @@ mod tests {
     }
 
     #[test]
-    fn test_load_signing_key_wrong_length() {
+    fn test_load_identity_wrong_length() {
         let short_key = hex::encode([1u8; 16]); // Only 16 bytes
-        let result = ApiClient::load_signing_key(&short_key);
+        let result = ApiClient::load_identity(&short_key);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_build_auth_headers() {
         let signing_key = SigningKey::from_bytes(&[88u8; 32]);
-        let verifying_key = signing_key.verifying_key();
 
         let config = ApiConfig {
             endpoint: "https://api.example.com".to_string(),
@@ -444,7 +455,7 @@ mod tests {
         let signature_bytes = hex::decode(&signature_hex).unwrap();
         assert_eq!(signature_bytes.len(), 64);
 
-        // Verify the signature is valid for the message
+        // Verify the signature using DccIdentity (prehashed + context)
         let mut message = Vec::new();
         message.extend_from_slice(timestamp_str.as_bytes());
         message.extend_from_slice(nonce_str.as_bytes());
@@ -452,8 +463,10 @@ mod tests {
         message.extend_from_slice(path.as_bytes());
         message.extend_from_slice(body);
 
-        let signature = Signature::from_bytes(&signature_bytes.try_into().unwrap());
-        assert!(verifying_key.verify(&message, &signature).is_ok());
+        // Use DccIdentity for verification (matches server behavior)
+        let verifier = DccIdentity::new_verifying_from_bytes(&signing_key.verifying_key().to_bytes())
+            .unwrap();
+        assert!(verifier.verify_bytes(&message, &signature_bytes).is_ok());
     }
 
     #[test]

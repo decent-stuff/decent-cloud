@@ -579,88 +579,147 @@ async fn run_agent(config: Config) -> Result<()> {
 
     let api_client = ApiClient::new(&config.api)?;
     let provisioner = create_provisioner(&config)?;
+    let provisioner_type = config.provisioner.type_name();
 
     let poll_interval = Duration::from_secs(config.polling.interval_seconds);
-    let mut ticker = interval(poll_interval);
+    let mut poll_ticker = interval(poll_interval);
+
+    // Start with a 60s default heartbeat interval, will be updated from server response
+    let mut heartbeat_interval_secs: u64 = 60;
+    let mut heartbeat_ticker = interval(Duration::from_secs(heartbeat_interval_secs));
+
+    // Track active contracts for heartbeat reporting
+    let mut active_contracts: i64 = 0;
 
     info!(
-        interval_seconds = config.polling.interval_seconds,
-        "Polling loop started"
+        poll_interval_seconds = config.polling.interval_seconds,
+        heartbeat_interval_seconds = heartbeat_interval_secs,
+        "Agent started"
     );
 
+    // Send initial heartbeat immediately
+    send_heartbeat(&api_client, provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker).await;
+
     loop {
-        ticker.tick().await;
+        tokio::select! {
+            _ = poll_ticker.tick() => {
+                active_contracts = poll_and_provision(&api_client, &*provisioner).await;
+            }
+            _ = heartbeat_ticker.tick() => {
+                send_heartbeat(&api_client, provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker).await;
+            }
+        }
+    }
+}
 
-        // Fetch pending contracts
-        match api_client.get_pending_contracts().await {
-            Ok(contracts) => {
-                if contracts.is_empty() {
-                    continue;
-                }
+async fn send_heartbeat(
+    api_client: &ApiClient,
+    provisioner_type: &str,
+    active_contracts: i64,
+    heartbeat_interval_secs: &mut u64,
+    heartbeat_ticker: &mut tokio::time::Interval,
+) {
+    match api_client
+        .send_heartbeat(
+            Some(env!("CARGO_PKG_VERSION")),
+            Some(provisioner_type),
+            None,
+            active_contracts,
+        )
+        .await
+    {
+        Ok(response) => {
+            info!(
+                active_contracts = active_contracts,
+                next_heartbeat_seconds = response.next_heartbeat_seconds,
+                "Heartbeat sent"
+            );
+            // Update heartbeat interval if server suggests a different one
+            let suggested = response.next_heartbeat_seconds as u64;
+            if suggested > 0 && suggested != *heartbeat_interval_secs {
+                *heartbeat_interval_secs = suggested;
+                *heartbeat_ticker = interval(Duration::from_secs(suggested));
+                info!(interval_seconds = suggested, "Heartbeat interval updated");
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to send heartbeat");
+        }
+    }
+}
 
-                info!(count = contracts.len(), "Found pending contracts");
+async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisioner) -> i64 {
+    // Fetch pending contracts
+    match api_client.get_pending_contracts().await {
+        Ok(contracts) => {
+            if contracts.is_empty() {
+                return 0;
+            }
 
-                for contract in contracts {
-                    info!(contract_id = %contract.contract_id, "Processing contract");
+            info!(count = contracts.len(), "Found pending contracts");
 
-                    // Parse instance_config if present
-                    let instance_config: Option<serde_json::Value> = contract
-                        .instance_config
-                        .as_ref()
-                        .and_then(|s| serde_json::from_str(s).ok());
+            for contract in &contracts {
+                info!(contract_id = %contract.contract_id, "Processing contract");
 
-                    let request = ProvisionRequest {
-                        contract_id: contract.contract_id.clone(),
-                        offering_id: contract.offering_id.clone(),
-                        cpu_cores: None, // Extract from offering if available
-                        memory_mb: None,
-                        storage_gb: None,
-                        requester_ssh_pubkey: Some(contract.requester_ssh_pubkey.clone()),
-                        instance_config,
-                    };
+                // Parse instance_config if present
+                let instance_config: Option<serde_json::Value> = contract
+                    .instance_config
+                    .as_ref()
+                    .and_then(|s| serde_json::from_str(s).ok());
 
-                    match provisioner.provision(&request).await {
-                        Ok(instance) => {
-                            info!(
-                                contract_id = %contract.contract_id,
-                                external_id = %instance.external_id,
-                                ip_address = ?instance.ip_address,
-                                "Provisioned successfully"
-                            );
-                            if let Err(e) = api_client
-                                .report_provisioned(&contract.contract_id, &instance)
-                                .await
-                            {
-                                error!(
-                                    contract_id = %contract.contract_id,
-                                    error = %e,
-                                    "Failed to report provisioning to API"
-                                );
-                            }
-                        }
-                        Err(e) => {
+                let request = ProvisionRequest {
+                    contract_id: contract.contract_id.clone(),
+                    offering_id: contract.offering_id.clone(),
+                    cpu_cores: None, // Extract from offering if available
+                    memory_mb: None,
+                    storage_gb: None,
+                    requester_ssh_pubkey: Some(contract.requester_ssh_pubkey.clone()),
+                    instance_config,
+                };
+
+                match provisioner.provision(&request).await {
+                    Ok(instance) => {
+                        info!(
+                            contract_id = %contract.contract_id,
+                            external_id = %instance.external_id,
+                            ip_address = ?instance.ip_address,
+                            "Provisioned successfully"
+                        );
+                        if let Err(e) = api_client
+                            .report_provisioned(&contract.contract_id, &instance)
+                            .await
+                        {
                             error!(
                                 contract_id = %contract.contract_id,
                                 error = %e,
-                                "Provisioning failed"
+                                "Failed to report provisioning to API"
                             );
-                            if let Err(report_err) = api_client
-                                .report_failed(&contract.contract_id, &e.to_string())
-                                .await
-                            {
-                                error!(
-                                    contract_id = %contract.contract_id,
-                                    error = %report_err,
-                                    "Failed to report failure to API"
-                                );
-                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            contract_id = %contract.contract_id,
+                            error = %e,
+                            "Provisioning failed"
+                        );
+                        if let Err(report_err) = api_client
+                            .report_failed(&contract.contract_id, &e.to_string())
+                            .await
+                        {
+                            error!(
+                                contract_id = %contract.contract_id,
+                                error = %report_err,
+                                "Failed to report failure to API"
+                            );
                         }
                     }
                 }
             }
-            Err(e) => {
-                warn!(error = %e, "Failed to fetch pending contracts");
-            }
+            contracts.len() as i64
+        }
+        Err(e) => {
+            warn!(error = %e, "Failed to fetch pending contracts");
+            0
         }
     }
 }
