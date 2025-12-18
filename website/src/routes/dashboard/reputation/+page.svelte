@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
 	import { computePubkey } from '$lib/utils/contract-format';
+	import { truncatePubkey } from '$lib/utils/identity';
 	import {
 		searchReputation,
 		type AccountSearchResult
@@ -65,11 +66,6 @@
 
 	function formatNumber(num: number): string {
 		return num.toLocaleString();
-	}
-
-	function shortPubkey(fullPubkey: string): string {
-		if (fullPubkey.length <= 12) return fullPubkey;
-		return `${fullPubkey.slice(0, 6)}...${fullPubkey.slice(-6)}`;
 	}
 
 	function navigateToProfile(pubkey: string) {
@@ -144,7 +140,7 @@
 									<p class="text-sm text-white/60">@{result.username}</p>
 								{/if}
 								<p class="text-xs text-white/50 font-mono mt-1">
-									{shortPubkey(result.pubkey)}
+									{truncatePubkey(result.pubkey)}
 								</p>
 							</div>
 							<div class="text-right">

@@ -6,6 +6,7 @@
 		type UserActivity,
 	} from "$lib/services/api-user-activity";
 	import { formatContractDate } from "$lib/utils/contract-format";
+	import { truncatePubkey } from "$lib/utils/identity";
 
 	const pubkey = $page.params.pubkey ?? "";
 
@@ -32,11 +33,6 @@
 			loading = false;
 		}
 	});
-
-	function shortPubkey(fullPubkey: string): string {
-		if (fullPubkey.length <= 12) return fullPubkey;
-		return `${fullPubkey.slice(0, 6)}...${fullPubkey.slice(-6)}`;
-	}
 </script>
 
 <div class="space-y-8">
@@ -44,7 +40,7 @@
 		<h1 class="text-4xl font-bold text-white mb-2">User Info</h1>
 		<p class="text-white/60">
 			Public Key: <span class="font-mono text-sm"
-				>{shortPubkey(pubkey)}</span
+				>{truncatePubkey(pubkey)}</span
 			>
 		</p>
 	</div>
@@ -59,7 +55,7 @@
 					<h2 class="text-2xl font-bold mb-2">User Not Found</h2>
 					<p class="mb-4">
 						The user with pubkey <span class="font-mono text-sm"
-							>{shortPubkey(pubkey)}</span
+							>{truncatePubkey(pubkey)}</span
 						> was not found in the system.
 					</p>
 					<p class="text-sm text-red-300/70">This could mean:</p>
@@ -159,7 +155,7 @@
 											href="/dashboard/reputation/{contract.provider_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(
+											{truncatePubkey(
 												contract.provider_pubkey,
 											)}
 										</a>
@@ -211,7 +207,7 @@
 											href="/dashboard/reputation/{contract.requester_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(
+											{truncatePubkey(
 												contract.requester_pubkey,
 											)}
 										</a>

@@ -42,3 +42,27 @@ export function hexToBytes(hex: string): Uint8Array {
 	}
 	return bytes;
 }
+
+/**
+ * Normalizes a public key to a hex string.
+ * Handles both hex strings and byte arrays (from backend responses).
+ */
+export function normalizePubkey(pubkey: string | number[]): string {
+	if (typeof pubkey === 'string') {
+		return pubkey;
+	}
+	return bytesToHex(new Uint8Array(pubkey));
+}
+
+/**
+ * Truncates a public key hex string for display.
+ * Shows first 6 and last 6 characters with ellipsis.
+ * Consistent format across the entire UI.
+ */
+export function truncatePubkey(pubkey: string, visible: number = 6): string {
+	if (!pubkey) return '';
+	if (pubkey.length <= visible * 2) {
+		return pubkey;
+	}
+	return `${pubkey.slice(0, visible)}...${pubkey.slice(-visible)}`;
+}

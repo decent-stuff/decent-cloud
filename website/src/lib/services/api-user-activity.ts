@@ -1,5 +1,6 @@
-import type { Contract, Offering, ApiResponse, API_BASE_URL as BASE_URL } from './api';
-import { API_BASE_URL, hexEncode } from './api';
+import type { Contract, Offering, ApiResponse } from './api';
+import { API_BASE_URL } from './api';
+import { normalizePubkey } from '$lib/utils/identity';
 
 // ============ User Activity Endpoints ============
 
@@ -7,13 +8,6 @@ export interface UserActivity {
 	offerings_provided: Offering[];
 	rentals_as_requester: Contract[];
 	rentals_as_provider: Contract[];
-}
-
-function normalizePubkey(pubkey: string | number[]): string {
-	if (typeof pubkey === 'string') {
-		return pubkey;
-	}
-	return hexEncode(new Uint8Array(pubkey));
 }
 
 export async function getUserActivity(pubkeyHex: string): Promise<UserActivity> {

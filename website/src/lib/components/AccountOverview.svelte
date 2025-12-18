@@ -4,6 +4,7 @@
 	import { updateDeviceName, removeAccountKey } from "$lib/services/account-api";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 	import AddDeviceModal from "./AddDeviceModal.svelte";
+	import { truncatePubkey } from "$lib/utils/identity";
 
 	let { account } = $props<{ account: AccountInfo }>();
 
@@ -20,11 +21,6 @@
 	authStore.currentIdentity.subscribe((value) => {
 		currentIdentity = value;
 	});
-
-	function truncate(str: string, length: number = 16): string {
-		if (str.length <= length) return str;
-		return `${str.slice(0, length / 2)}...${str.slice(-length / 2)}`;
-	}
 
 	function formatDate(timestampNs: number): string {
 		const date = new Date(timestampNs / 1_000_000);
@@ -167,7 +163,7 @@
 			<div class="text-sm text-white/60 mb-1">Account ID</div>
 			<div class="flex items-center gap-2">
 				<span class="text-sm font-mono text-white/80"
-					>{truncate(account.id, 24)}</span
+					>{truncatePubkey(account.id)}</span
 				>
 				<button
 					type="button"
@@ -266,7 +262,7 @@
 									</button>
 								{/if}
 								<div class="text-xs text-white/50 font-mono">
-									{truncate(key.publicKey, 20)}
+									{truncatePubkey(key.publicKey)}
 								</div>
 							</div>
 						</div>

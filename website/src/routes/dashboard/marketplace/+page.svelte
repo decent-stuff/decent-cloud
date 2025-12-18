@@ -5,6 +5,7 @@
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
 	import TrustBadge from "$lib/components/TrustBadge.svelte";
 	import { authStore } from "$lib/stores/auth";
+	import { truncatePubkey } from "$lib/utils/identity";
 
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
@@ -220,10 +221,6 @@
 			return `${offering.datacenter_city}, ${offering.datacenter_country}`;
 		}
 		return offering.datacenter_country || "—";
-	}
-
-	function shortPubkey(pubkey: string): string {
-		return pubkey.length <= 12 ? pubkey : `${pubkey.slice(0, 6)}…${pubkey.slice(-4)}`;
 	}
 
 	const typeOptions = [
@@ -477,7 +474,7 @@
 											href="/dashboard/reputation/{offering.pubkey}"
 											onclick={(e) => e.stopPropagation()}
 											class="text-xs text-white/50 hover:text-blue-400 font-mono"
-										>{shortPubkey(offering.pubkey)}</a>
+										>{truncatePubkey(offering.pubkey)}</a>
 									</td>
 									<td class="py-3 pr-4">
 										<span class="whitespace-nowrap">{getTypeIcon(offering.product_type)} {offering.product_type}</span>

@@ -1,4 +1,4 @@
-import { hexEncode } from '$lib/services/api';
+import { bytesToHex, truncatePubkey } from '$lib/utils/identity';
 import { Principal } from '@dfinity/principal';
 
 export function formatContractDate(timestamp_ns?: number): string {
@@ -11,12 +11,11 @@ export function formatContractPrice(amount_e9s: number, currency: string): strin
 	return `${(amount_e9s / 1_000_000_000).toFixed(2)} ${currency.toUpperCase()}`;
 }
 
+/**
+ * Truncates a hash/pubkey for display. Delegates to truncatePubkey for consistency.
+ */
 export function truncateContractHash(hash: string, visible: number = 6): string {
-	if (!hash) return '';
-	if (hash.length <= visible * 2) {
-		return hash;
-	}
-	return `${hash.slice(0, visible)}...${hash.slice(-visible)}`;
+	return truncatePubkey(hash, visible);
 }
 
 /**
@@ -24,7 +23,7 @@ export function truncateContractHash(hash: string, visible: number = 6): string 
  * Returns the raw public key hex (not a hash) so IC Principal can be derived from it.
  */
 export function computePubkey(publicKeyBytes: Uint8Array): string {
-	return hexEncode(publicKeyBytes);
+	return bytesToHex(publicKeyBytes);
 }
 
 /**

@@ -10,6 +10,7 @@ import type { UserPublicKey } from '$lib/types/generated/UserPublicKey';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 import type { ProviderTrustMetrics as ProviderTrustMetricsRaw } from '$lib/types/generated/ProviderTrustMetrics';
 import type { ProviderOnboarding as ProviderOnboardingRaw } from '$lib/types/generated/ProviderOnboarding';
+import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
 type NullToUndefined<T> = T extends null ? undefined : T;
@@ -90,20 +91,8 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
 	return payload.data;
 }
 
-function hexEncode(bytes: Uint8Array | number[]): string {
-	return Array.from(bytes)
-		.map((b) => b.toString(16).padStart(2, '0'))
-		.join('');
-}
-
+// Re-export for backward compatibility
 export { hexEncode };
-
-function normalizePubkey(pubkey: string | number[]): string {
-	if (typeof pubkey === 'string') {
-		return pubkey;
-	}
-	return hexEncode(new Uint8Array(pubkey));
-}
 
 /**
  * Helper to extract error message from response

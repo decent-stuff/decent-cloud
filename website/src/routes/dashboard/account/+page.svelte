@@ -4,6 +4,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import { computePubkey } from "$lib/utils/contract-format";
+	import { truncatePubkey } from "$lib/utils/identity";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -107,7 +108,7 @@
 				<div>
 					<p class="text-white/70 text-sm">Account ID</p>
 					<p class="text-white/60 font-mono text-xs">
-						{currentIdentity.account.id.substring(0, 16)}...
+						{truncatePubkey(currentIdentity.account.id)}
 					</p>
 				</div>
 				<div>

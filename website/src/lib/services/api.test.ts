@@ -258,7 +258,7 @@ describe('hexEncode', () => {
 	});
 
 	it('encodes number array to hex string', () => {
-		const bytes = [0xab, 0xcd, 0x12, 0x34];
+		const bytes = new Uint8Array([0xab, 0xcd, 0x12, 0x34]);
 		expect(hexEncode(bytes)).toBe('abcd1234');
 	});
 

@@ -34,6 +34,7 @@
 		calculateActualDuration,
 		formatDuration,
 	} from "$lib/utils/contract-format";
+	import { truncatePubkey } from "$lib/utils/identity";
 	import { authStore } from "$lib/stores/auth";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
@@ -82,12 +83,6 @@
 			}
 		})(),
 	);
-
-	// Helper to format account addresses
-	function shortPubkey(fullPubkey: string): string {
-		if (fullPubkey.length <= 12) return fullPubkey;
-		return `${fullPubkey.slice(0, 6)}...${fullPubkey.slice(-6)}`;
-	}
 
 	// Format balance from e9s to tokens
 	function formatBalance(balanceE9s: number, currency: string): string {
@@ -426,7 +421,7 @@
 				<h2 class="text-2xl font-bold mb-2">No Account Data</h2>
 				<p class="mb-4">
 					The public key <span class="font-mono text-sm"
-						>{shortPubkey(pubkey)}</span
+						>{truncatePubkey(pubkey)}</span
 					>
 					is not registered in the system.
 				</p>
@@ -709,7 +704,7 @@
 											href="/dashboard/reputation/{transfer.from_account}"
 											class="font-mono text-sm text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(transfer.from_account)}
+											{truncatePubkey(transfer.from_account)}
 										</a>
 									</div>
 									<div class="flex items-center gap-2">
@@ -720,7 +715,7 @@
 											href="/dashboard/reputation/{transfer.to_account}"
 											class="font-mono text-sm text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(transfer.to_account)}
+											{truncatePubkey(transfer.to_account)}
 										</a>
 									</div>
 								</div>
@@ -811,7 +806,7 @@
 											href="/dashboard/reputation/{contract.provider_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(
+											{truncatePubkey(
 												contract.provider_pubkey,
 											)}
 										</a>
@@ -879,7 +874,7 @@
 											href="/dashboard/reputation/{contract.requester_pubkey}"
 											class="text-blue-400 hover:text-blue-300"
 										>
-											{shortPubkey(
+											{truncatePubkey(
 												contract.requester_pubkey,
 											)}
 										</a>
