@@ -1718,9 +1718,9 @@ async fn test_try_auto_accept_contract_disabled() {
     let requester_pk = vec![1u8; 32];
     let contract_id = vec![3u8; 32];
 
-    // Create provider profile with auto_accept_rentals disabled (default)
+    // Create provider profile with auto_accept_rentals explicitly disabled
     sqlx::query!(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test Provider', 'v1', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES (?, 'Test Provider', 'v1', '1.0', 0, 0)",
         provider_pk
     )
     .execute(&db.pool)

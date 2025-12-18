@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES (?, 'Test Provider', 'v1', '1.0', 0, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "370aa960073683c8c5bf79c2c37cf6c63535502397e757e01f829ba06f561423"
+}
