@@ -263,7 +263,9 @@ impl ApiClient {
     /// Helper to unwrap API response, checking success field.
     fn unwrap_response<T>(response: ApiResponse<T>, context: &str) -> Result<T> {
         if !response.success {
-            let error_msg = response.error.unwrap_or_else(|| "Unknown error".to_string());
+            let error_msg = response
+                .error
+                .unwrap_or_else(|| "Unknown error".to_string());
             bail!("{}: {}", context, error_msg);
         }
         response
@@ -277,8 +279,9 @@ impl ApiClient {
             "/api/v1/providers/{}/contracts/pending-provision",
             self.provider_pubkey
         );
-        let response: ApiResponse<Vec<PendingContract>> =
-            self.request(Method::Get, &path, None, AuthType::AgentOrProvider).await?;
+        let response: ApiResponse<Vec<PendingContract>> = self
+            .request(Method::Get, &path, None, AuthType::AgentOrProvider)
+            .await?;
         Self::unwrap_response(response, "API error")
     }
 
@@ -295,8 +298,9 @@ impl ApiClient {
             instance_details: instance_json,
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<serde_json::Value> =
-            self.request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider).await?;
+        let response: ApiResponse<serde_json::Value> = self
+            .request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider)
+            .await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
@@ -311,8 +315,9 @@ impl ApiClient {
             instance_details: error.to_string(),
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<serde_json::Value> =
-            self.request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider).await?;
+        let response: ApiResponse<serde_json::Value> = self
+            .request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider)
+            .await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
@@ -323,8 +328,9 @@ impl ApiClient {
             health_status: status.clone(),
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<serde_json::Value> =
-            self.request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider).await?;
+        let response: ApiResponse<serde_json::Value> = self
+            .request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider)
+            .await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
@@ -344,8 +350,9 @@ impl ApiClient {
             active_contracts,
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<HeartbeatResponse> =
-            self.request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider).await?;
+        let response: ApiResponse<HeartbeatResponse> = self
+            .request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider)
+            .await?;
         Self::unwrap_response(response, "Heartbeat failed")
     }
 
@@ -462,8 +469,8 @@ mod tests {
         message.extend_from_slice(body);
 
         // Use DccIdentity for verification (matches server behavior)
-        let verifier = DccIdentity::new_verifying_from_bytes(&signing_key.verifying_key().to_bytes())
-            .unwrap();
+        let verifier =
+            DccIdentity::new_verifying_from_bytes(&signing_key.verifying_key().to_bytes()).unwrap();
         assert!(verifier.verify_bytes(&message, &signature_bytes).is_ok());
     }
 

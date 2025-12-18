@@ -23,6 +23,11 @@
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
 	let revoking = $state<Record<string, boolean>>({});
+	let refreshInterval: ReturnType<typeof setInterval> | null = null;
+	let lastRefresh = $state<number>(Date.now());
+	let autoRefreshEnabled = $state(true);
+
+	const REFRESH_INTERVAL_MS = 10_000; // 10 seconds
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -36,11 +41,48 @@
 			isAuthenticated = isAuth;
 			if (isAuth) {
 				loadData();
+				startAutoRefresh();
 			} else {
 				loading = false;
+				stopAutoRefresh();
 			}
 		});
 	});
+
+	function startAutoRefresh() {
+		stopAutoRefresh();
+		if (autoRefreshEnabled) {
+			refreshInterval = setInterval(() => {
+				refreshStatus();
+			}, REFRESH_INTERVAL_MS);
+		}
+	}
+
+	function stopAutoRefresh() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+	}
+
+	function toggleAutoRefresh() {
+		autoRefreshEnabled = !autoRefreshEnabled;
+		if (autoRefreshEnabled) {
+			startAutoRefresh();
+		} else {
+			stopAutoRefresh();
+		}
+	}
+
+	async function refreshStatus() {
+		if (!providerHex || loading) return;
+		try {
+			agentStatus = await getProviderAgentStatus(providerHex);
+			lastRefresh = Date.now();
+		} catch (e) {
+			console.error("Failed to refresh agent status:", e);
+		}
+	}
 
 	async function loadData() {
 		if (!isAuthenticated) {
@@ -152,6 +194,7 @@
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
+		stopAutoRefresh();
 	});
 </script>
 
@@ -198,7 +241,33 @@
 		{:else}
 			<!-- Agent Status Card -->
 			<section class="space-y-4">
-				<h2 class="text-2xl font-semibold text-white">Agent Status</h2>
+				<div class="flex items-center justify-between">
+					<h2 class="text-2xl font-semibold text-white">Agent Status</h2>
+					<div class="flex items-center gap-3">
+						<button
+							onclick={refreshStatus}
+							class="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+							title="Refresh now"
+						>
+							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+							</svg>
+						</button>
+						<button
+							onclick={toggleAutoRefresh}
+							class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/5 text-white/50 border border-white/10'}"
+							title={autoRefreshEnabled ? 'Auto-refresh enabled (10s)' : 'Auto-refresh disabled'}
+						>
+							<span class="relative flex h-2 w-2">
+								{#if autoRefreshEnabled}
+									<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+								{/if}
+								<span class="relative inline-flex rounded-full h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-500' : 'bg-white/30'}"></span>
+							</span>
+							Auto
+						</button>
+					</div>
+				</div>
 
 				{#if agentStatus}
 					<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">

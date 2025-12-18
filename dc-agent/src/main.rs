@@ -186,7 +186,6 @@ async fn main() -> Result<()> {
     }
 }
 
-
 /// Initialize a new agent keypair.
 fn run_init(output: Option<PathBuf>, force: bool) -> Result<()> {
     println!("dc-agent init");
@@ -233,7 +232,10 @@ async fn run_register(
     println!("dc-agent register");
     println!("=================\n");
 
-    let agent_dir = keys_dir.as_deref().map(std::path::Path::to_path_buf).unwrap_or_else(default_agent_dir);
+    let agent_dir = keys_dir
+        .as_deref()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(default_agent_dir);
     let private_key_path = agent_dir.join("agent.key");
     let agent_pubkey_hex = load_agent_pubkey(keys_dir.as_deref())?;
 
@@ -421,7 +423,14 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
 
                 // Register with API
                 let label = Some(format!("proxmox-{}", host));
-                let registration_ok = match register_agent_with_api(provider_id, &agent_pubkey, &api_endpoint, label.as_deref()).await {
+                let registration_ok = match register_agent_with_api(
+                    provider_id,
+                    &agent_pubkey,
+                    &api_endpoint,
+                    label.as_deref(),
+                )
+                .await
+                {
                     Ok(()) => {
                         println!("[ok] Agent registered with API");
                         true
@@ -439,7 +448,9 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                             println!("       Check your network connection and API endpoint.");
                         }
                         println!();
-                        println!("       Config will be written, but you must register before running.");
+                        println!(
+                            "       Config will be written, but you must register before running."
+                        );
                         println!("       After fixing the issue, run: dc-agent register --provider-pubkey {}", hex::encode(provider_id.to_bytes_verifying()));
                         false
                     }
@@ -481,13 +492,19 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 } else {
                     println!("Next steps:");
                 }
-                println!("  dc-agent --config {} doctor --verify-api", output.display());
+                println!(
+                    "  dc-agent --config {} doctor --verify-api",
+                    output.display()
+                );
                 println!("  dc-agent --config {} run", output.display());
             } else {
                 println!();
                 println!("Next steps:");
                 println!("  1. Create provider identity: dc identity new provider");
-                println!("  2. Re-run setup: dc-agent setup proxmox --host {} --identity provider", host);
+                println!(
+                    "  2. Re-run setup: dc-agent setup proxmox --host {} --identity provider",
+                    host
+                );
             }
 
             Ok(())
@@ -603,7 +620,14 @@ async fn run_agent(config: Config) -> Result<()> {
     );
 
     // Send initial heartbeat immediately
-    send_heartbeat(&api_client, provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker).await;
+    send_heartbeat(
+        &api_client,
+        provisioner_type,
+        active_contracts,
+        &mut heartbeat_interval_secs,
+        &mut heartbeat_ticker,
+    )
+    .await;
 
     loop {
         tokio::select! {
@@ -837,10 +861,7 @@ async fn run_doctor(config: Config, verify_api: bool) -> Result<()> {
             Ok(response) => {
                 println!("[ok] API authentication successful");
                 println!("  Heartbeat acknowledged: {}", response.acknowledged);
-                println!(
-                    "  Next heartbeat in: {}s",
-                    response.next_heartbeat_seconds
-                );
+                println!("  Next heartbeat in: {}s", response.next_heartbeat_seconds);
             }
             Err(e) => {
                 println!("[FAILED] API verification failed: {}", e);

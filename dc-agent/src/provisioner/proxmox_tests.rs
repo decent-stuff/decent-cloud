@@ -627,4 +627,124 @@ mod tests {
             "IPv6 should be present"
         );
     }
+
+    #[tokio::test]
+    async fn test_provision_idempotent_reuses_existing_vm() {
+        let mut server = Server::new_async().await;
+
+        // Mock get status - VM already exists and running
+        let _status_mock = server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/current".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":{"vmid":12345,"status":"running","uptime":3600,"name":"dc-test"}}"#)
+            .create_async()
+            .await;
+
+        // Mock get IP
+        let _network_mock = server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex(
+                    r"/api2/json/nodes/pve1/qemu/\d+/agent/network-get-interfaces".to_string(),
+                ),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"data":{"result":[{"name":"eth0","ip-addresses":[{"ip-address":"10.0.0.100","ip-address-type":"ipv4","prefix":24}]}]}}"#,
+            )
+            .create_async()
+            .await;
+
+        let config = test_config(&server.url());
+        let provisioner = ProxmoxProvisioner::new(config).unwrap();
+
+        let request = test_provision_request();
+
+        // First provision - should reuse existing VM
+        let result = provisioner.provision(&request).await;
+        assert!(result.is_ok(), "Provision should succeed: {:?}", result);
+
+        let instance = result.unwrap();
+        assert_eq!(instance.ip_address, Some("10.0.0.100".to_string()));
+        // Check that reused flag is set
+        let details = instance.additional_details.unwrap();
+        assert_eq!(details.get("reused"), Some(&serde_json::json!(true)));
+    }
+
+    #[tokio::test]
+    async fn test_provision_idempotent_starts_stopped_vm() {
+        let mut server = Server::new_async().await;
+
+        // Mock get status - VM exists but stopped
+        let _status_mock = server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/current".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":{"vmid":12345,"status":"stopped","name":"dc-test"}}"#)
+            .create_async()
+            .await;
+
+        // Mock start endpoint
+        let _start_mock = server
+            .mock(
+                "POST",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":"UPID:pve1:00001235:12345678:12345678:qmstart:100:root@pam:"}"#)
+            .create_async()
+            .await;
+
+        // Mock task status
+        let _task_mock = server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/tasks/.*/status".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":{"status":"stopped","exitstatus":"OK"}}"#)
+            .create_async()
+            .await;
+
+        // Mock get IP
+        let _network_mock = server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex(
+                    r"/api2/json/nodes/pve1/qemu/\d+/agent/network-get-interfaces".to_string(),
+                ),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"data":{"result":[{"name":"eth0","ip-addresses":[{"ip-address":"10.0.0.101","ip-address-type":"ipv4","prefix":24}]}]}}"#,
+            )
+            .create_async()
+            .await;
+
+        let config = test_config(&server.url());
+        let provisioner = ProxmoxProvisioner::new(config).unwrap();
+
+        let request = test_provision_request();
+
+        let result = provisioner.provision(&request).await;
+        assert!(result.is_ok(), "Provision should succeed: {:?}", result);
+
+        let instance = result.unwrap();
+        // VM was started, so should have IP
+        assert_eq!(instance.ip_address, Some("10.0.0.101".to_string()));
+        // Check that reused flag is set
+        let details = instance.additional_details.unwrap();
+        assert_eq!(details.get("reused"), Some(&serde_json::json!(true)));
+    }
 }

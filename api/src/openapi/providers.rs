@@ -382,7 +382,9 @@ impl ProvidersApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Unauthorized: can only access your delegated provider's contracts".to_string()),
+                error: Some(
+                    "Unauthorized: can only access your delegated provider's contracts".to_string(),
+                ),
             });
         }
 

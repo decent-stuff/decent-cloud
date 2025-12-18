@@ -112,21 +112,21 @@ where
                 nested
             } else {
                 // Fall back to flat format
-                let api_url = raw.api_url.ok_or_else(|| {
-                    serde::de::Error::missing_field("api_url")
-                })?;
-                let api_token_id = raw.api_token_id.ok_or_else(|| {
-                    serde::de::Error::missing_field("api_token_id")
-                })?;
-                let api_token_secret = raw.api_token_secret.ok_or_else(|| {
-                    serde::de::Error::missing_field("api_token_secret")
-                })?;
-                let node = raw.node.ok_or_else(|| {
-                    serde::de::Error::missing_field("node")
-                })?;
-                let template_vmid = raw.template_vmid.ok_or_else(|| {
-                    serde::de::Error::missing_field("template_vmid")
-                })?;
+                let api_url = raw
+                    .api_url
+                    .ok_or_else(|| serde::de::Error::missing_field("api_url"))?;
+                let api_token_id = raw
+                    .api_token_id
+                    .ok_or_else(|| serde::de::Error::missing_field("api_token_id"))?;
+                let api_token_secret = raw
+                    .api_token_secret
+                    .ok_or_else(|| serde::de::Error::missing_field("api_token_secret"))?;
+                let node = raw
+                    .node
+                    .ok_or_else(|| serde::de::Error::missing_field("node"))?;
+                let template_vmid = raw
+                    .template_vmid
+                    .ok_or_else(|| serde::de::Error::missing_field("template_vmid"))?;
 
                 ProxmoxConfig {
                     api_url,
@@ -145,15 +145,15 @@ where
             let config = if let Some(nested) = raw.script {
                 nested
             } else {
-                let provision = raw.provision.ok_or_else(|| {
-                    serde::de::Error::missing_field("provision")
-                })?;
-                let terminate = raw.terminate.ok_or_else(|| {
-                    serde::de::Error::missing_field("terminate")
-                })?;
-                let health_check = raw.health_check.ok_or_else(|| {
-                    serde::de::Error::missing_field("health_check")
-                })?;
+                let provision = raw
+                    .provision
+                    .ok_or_else(|| serde::de::Error::missing_field("provision"))?;
+                let terminate = raw
+                    .terminate
+                    .ok_or_else(|| serde::de::Error::missing_field("terminate"))?;
+                let health_check = raw
+                    .health_check
+                    .ok_or_else(|| serde::de::Error::missing_field("health_check"))?;
 
                 ScriptConfig {
                     provision,
@@ -617,7 +617,10 @@ node = "pve1"
         fs::write(&config_path, config_content).unwrap();
 
         let result = Config::load(&config_path);
-        assert!(result.is_err(), "Should fail due to missing required fields");
+        assert!(
+            result.is_err(),
+            "Should fail due to missing required fields"
+        );
         let err_msg = format!("{:#}", result.unwrap_err());
         assert!(
             err_msg.contains("missing field"),

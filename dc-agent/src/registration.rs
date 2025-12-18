@@ -150,8 +150,13 @@ pub fn load_provider_identity(identity: Option<&str>) -> Result<DccIdentity> {
         bail!("Identity not found: {}", identity_dir.display());
     }
 
-    DccIdentity::load_from_dir(&identity_dir)
-        .map_err(|e| anyhow::anyhow!("Failed to load identity from {}: {}", identity_dir.display(), e))
+    DccIdentity::load_from_dir(&identity_dir).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to load identity from {}: {}",
+            identity_dir.display(),
+            e
+        )
+    })
 }
 
 /// Build delegation message for signing.

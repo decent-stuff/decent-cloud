@@ -199,10 +199,8 @@ impl Database {
         match row {
             Some(r) => {
                 let perms: Vec<String> = serde_json::from_str(&r.permissions)?;
-                let permissions: Vec<AgentPermission> = perms
-                    .iter()
-                    .filter_map(|s| s.parse().ok())
-                    .collect();
+                let permissions: Vec<AgentPermission> =
+                    perms.iter().filter_map(|s| s.parse().ok()).collect();
                 Ok(Some((r.provider_pubkey, permissions, r.signature)))
             }
             None => Ok(None),

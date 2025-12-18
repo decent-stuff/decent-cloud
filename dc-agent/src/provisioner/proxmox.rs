@@ -138,7 +138,11 @@ impl ProxmoxProvisioner {
     }
 
     /// Execute a POST request to the Proxmox API.
-    async fn api_post<T: DeserializeOwned>(&self, path: &str, params: &[(&str, String)]) -> Result<T> {
+    async fn api_post<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        params: &[(&str, String)],
+    ) -> Result<T> {
         let url = format!("{}{}", self.base_url(), path);
         let response = self
             .client
@@ -264,10 +268,7 @@ impl ProxmoxProvisioner {
     }
 
     async fn configure_vm(&self, vmid: u32, request: &ProvisionRequest) -> Result<()> {
-        let path = format!(
-            "/api2/json/nodes/{}/qemu/{}/config",
-            self.config.node, vmid
-        );
+        let path = format!("/api2/json/nodes/{}/qemu/{}/config", self.config.node, vmid);
 
         let mut params = vec![("ipconfig0", "ip=dhcp".to_string())];
 
@@ -307,12 +308,13 @@ impl ProxmoxProvisioner {
     }
 
     async fn delete_vm(&self, vmid: u32) -> Result<()> {
-        let path = format!(
-            "/api2/json/nodes/{}/qemu/{}",
-            self.config.node, vmid
-        );
+        let path = format!("/api2/json/nodes/{}/qemu/{}", self.config.node, vmid);
 
-        self.api_delete(&path, &[("purge", "1"), ("destroy-unreferenced-disks", "1")]).await
+        self.api_delete(
+            &path,
+            &[("purge", "1"), ("destroy-unreferenced-disks", "1")],
+        )
+        .await
     }
 
     async fn get_vm_status(&self, vmid: u32) -> Result<VmStatus> {
@@ -394,6 +396,37 @@ impl Provisioner for ProxmoxProvisioner {
             vmid,
             self.config.template_vmid
         );
+
+        // Check if VM already exists (idempotency)
+        if let Ok(status) = self.get_vm_status(vmid).await {
+            tracing::info!(
+                "VM {} already exists (status: {}), returning existing instance",
+                vmid,
+                status.status
+            );
+            // If VM exists but is not running, start it
+            if status.status != "running" {
+                tracing::debug!("Starting existing VM {}", vmid);
+                if let Ok(upid) = self.start_vm(vmid).await {
+                    let _ = self.wait_for_task(&upid).await;
+                }
+            }
+            // Get IP and return instance
+            let (ipv4, ipv6) = self.get_vm_ip(vmid).await.unwrap_or((None, None));
+            return Ok(Instance {
+                external_id: vmid.to_string(),
+                ip_address: ipv4,
+                ipv6_address: ipv6,
+                ssh_port: 22,
+                root_password: None,
+                additional_details: Some(serde_json::json!({
+                    "vmid": vmid,
+                    "node": self.config.node,
+                    "name": vm_name,
+                    "reused": true,
+                })),
+            });
+        }
 
         // Step 1: Clone template
         tracing::debug!(

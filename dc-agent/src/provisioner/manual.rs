@@ -2,15 +2,46 @@ use super::{HealthStatus, Instance, ProvisionRequest, Provisioner};
 use crate::config::ManualConfig;
 use anyhow::Result;
 use async_trait::async_trait;
+use reqwest::Client;
+use serde::Serialize;
 
 /// Manual provisioner - logs requests but requires human intervention
 pub struct ManualProvisioner {
     config: ManualConfig,
+    client: Client,
+}
+
+#[derive(Serialize)]
+struct WebhookPayload<'a> {
+    event: &'a str,
+    contract_id: Option<&'a str>,
+    external_id: Option<&'a str>,
+    offering_id: Option<&'a str>,
+    message: &'a str,
 }
 
 impl ManualProvisioner {
     pub fn new(config: ManualConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            client: Client::new(),
+        }
+    }
+
+    async fn send_webhook(&self, payload: &WebhookPayload<'_>) -> Result<()> {
+        let webhook_url = match &self.config.notification_webhook {
+            Some(url) => url,
+            None => return Ok(()),
+        };
+
+        self.client
+            .post(webhook_url)
+            .json(payload)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        Ok(())
     }
 }
 
@@ -23,15 +54,25 @@ impl Provisioner for ManualProvisioner {
             "Manual provisioning required - human intervention needed"
         );
 
-        if let Some(webhook) = &self.config.notification_webhook {
-            tracing::info!(webhook = %webhook, "Would send notification to webhook");
-            // TODO: Implement webhook notification
+        let message = format!(
+            "Manual provisioning required for contract {}",
+            request.contract_id
+        );
+
+        if let Err(e) = self
+            .send_webhook(&WebhookPayload {
+                event: "provision_required",
+                contract_id: Some(&request.contract_id),
+                external_id: None,
+                offering_id: Some(&request.offering_id),
+                message: &message,
+            })
+            .await
+        {
+            tracing::warn!(error = %e, "Failed to send webhook notification");
         }
 
-        anyhow::bail!(
-            "Manual provisioning not implemented - requires human intervention for contract {}",
-            request.contract_id
-        )
+        anyhow::bail!("{} - human intervention needed", message)
     }
 
     async fn terminate(&self, external_id: &str) -> Result<()> {
@@ -40,15 +81,22 @@ impl Provisioner for ManualProvisioner {
             "Manual termination required - human intervention needed"
         );
 
-        if let Some(webhook) = &self.config.notification_webhook {
-            tracing::info!(webhook = %webhook, "Would send termination notification");
-            // TODO: Implement webhook notification
+        let message = format!("Manual termination required for instance {}", external_id);
+
+        if let Err(e) = self
+            .send_webhook(&WebhookPayload {
+                event: "terminate_required",
+                contract_id: None,
+                external_id: Some(external_id),
+                offering_id: None,
+                message: &message,
+            })
+            .await
+        {
+            tracing::warn!(error = %e, "Failed to send webhook notification");
         }
 
-        anyhow::bail!(
-            "Manual termination not implemented - requires human intervention for instance {}",
-            external_id
-        )
+        anyhow::bail!("{} - human intervention needed", message)
     }
 
     async fn health_check(&self, _external_id: &str) -> Result<HealthStatus> {
