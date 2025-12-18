@@ -1256,3 +1256,86 @@ export async function downloadContractInvoice(
 	document.body.removeChild(link);
 	URL.revokeObjectURL(downloadUrl);
 }
+
+// ============ Agent Delegation and Status Endpoints ============
+
+import type { AgentStatus as AgentStatusRaw } from '$lib/types/generated/AgentStatus';
+import type { AgentDelegation as AgentDelegationRaw } from '$lib/types/generated/AgentDelegation';
+
+export type AgentStatus = ConvertNullToUndefined<AgentStatusRaw>;
+export type AgentDelegation = ConvertNullToUndefined<AgentDelegationRaw>;
+
+export async function getProviderAgentStatus(pubkey: string | Uint8Array): Promise<AgentStatus | null> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/agent-status`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		if (response.status === 404) {
+			return null;
+		}
+		throw new Error(`Failed to fetch agent status: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AgentStatus>;
+
+	if (!payload.success) {
+		// No agent status is not an error - return null
+		return null;
+	}
+
+	return payload.data ?? null;
+}
+
+export async function getProviderAgentDelegations(
+	pubkey: string | Uint8Array,
+	headers: SignedRequestHeaders
+): Promise<AgentDelegation[]> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/agent-delegations`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch agent delegations: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AgentDelegation[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch agent delegations');
+	}
+
+	return payload.data ?? [];
+}
+
+export async function revokeAgentDelegation(
+	providerPubkey: string | Uint8Array,
+	agentPubkey: string,
+	headers: SignedRequestHeaders
+): Promise<boolean> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/agent-delegations/${agentPubkey}`;
+
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to revoke agent delegation: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<boolean>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to revoke agent delegation');
+	}
+
+	return payload.data ?? false;
+}

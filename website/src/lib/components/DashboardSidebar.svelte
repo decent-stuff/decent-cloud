@@ -52,6 +52,11 @@
 			icon: "📥",
 			label: "Rental Requests",
 		},
+		{
+			href: "/dashboard/provider/agents",
+			icon: "🤖",
+			label: "DC-Agents",
+		},
 		{ href: "/dashboard/provider/reseller", icon: "💼", label: "Reseller" },
 	];
 
