@@ -503,14 +503,21 @@ impl Database {
             "pending"
         };
 
+        // Ensure accounts exist for both requester and provider
+        let requester_account_id = self.ensure_account_for_pubkey(requester_pubkey).await?;
+        let provider_account_id = self
+            .ensure_account_for_pubkey(&offering_pubkey_bytes)
+            .await?;
+
         sqlx::query!(
             r#"INSERT INTO contract_sign_requests (
                 contract_id, requester_pubkey, requester_ssh_pubkey,
                 requester_contact, provider_pubkey, offering_id,
                 payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                 duration_hours, original_duration_hours, request_memo,
-                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, buyer_address
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, buyer_address,
+                requester_account_id, provider_account_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             contract_id,
             requester_pubkey,
             ssh_pubkey,
@@ -530,7 +537,9 @@ impl Database {
             stripe_customer_id,
             payment_status,
             offering.currency,
-            params.buyer_address
+            params.buyer_address,
+            requester_account_id,
+            provider_account_id
         )
         .execute(&self.pool)
         .await?;
@@ -1608,6 +1617,75 @@ impl Database {
         );
 
         Ok(true)
+    }
+
+    /// Get contracts for a user by account_id (as requester)
+    /// Returns contracts from ALL keys under this account
+    pub async fn get_user_contracts_by_account_id(
+        &self,
+        account_id: &[u8],
+    ) -> Result<Vec<Contract>> {
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               FROM contract_sign_requests WHERE requester_account_id = ? ORDER BY created_at_ns DESC"#,
+            account_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
+
+    /// Get contracts for a provider by account_id
+    /// Returns contracts from ALL keys under this account
+    pub async fn get_provider_contracts_by_account_id(
+        &self,
+        account_id: &[u8],
+    ) -> Result<Vec<Contract>> {
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               FROM contract_sign_requests WHERE provider_account_id = ? ORDER BY created_at_ns DESC"#,
+            account_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
+
+    /// Get contracts for a user by username (as requester)
+    pub async fn get_user_contracts_by_username(&self, username: &str) -> Result<Vec<Contract>> {
+        let account = self
+            .get_account_by_username(username)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Account not found: {}", username))?;
+
+        self.get_user_contracts_by_account_id(&account.id).await
+    }
+
+    /// Get contracts for a provider by username
+    pub async fn get_provider_contracts_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Vec<Contract>> {
+        let account = self
+            .get_account_by_username(username)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Account not found: {}", username))?;
+
+        self.get_provider_contracts_by_account_id(&account.id).await
     }
 }
 

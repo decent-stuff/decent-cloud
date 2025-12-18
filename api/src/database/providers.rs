@@ -249,6 +249,7 @@ impl Database {
 
     /// Update or create provider onboarding data (upsert).
     /// If the provider profile doesn't exist, creates one with the given name.
+    /// Also ensures account_id is set (creates account if needed).
     pub async fn update_provider_onboarding(
         &self,
         pubkey: &[u8],
@@ -257,13 +258,17 @@ impl Database {
     ) -> Result<()> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
+        // Ensure account exists for this pubkey
+        let account_id = self.ensure_account_for_pubkey(pubkey).await?;
+
         sqlx::query!(
             r#"INSERT INTO provider_profiles (
                    pubkey, name, api_version, profile_version, updated_at_ns,
                    support_email, support_hours, support_channels, regions,
                    payment_methods, refund_policy, sla_guarantee,
-                   unique_selling_points, common_issues, onboarding_completed_at
-               ) VALUES (?, ?, 'v1', '1.0', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   unique_selling_points, common_issues, onboarding_completed_at,
+                   account_id
+               ) VALUES (?, ?, 'v1', '1.0', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(pubkey) DO UPDATE SET
                    support_email = excluded.support_email,
                    support_hours = excluded.support_hours,
@@ -275,7 +280,8 @@ impl Database {
                    unique_selling_points = excluded.unique_selling_points,
                    common_issues = excluded.common_issues,
                    onboarding_completed_at = excluded.onboarding_completed_at,
-                   updated_at_ns = excluded.updated_at_ns"#,
+                   updated_at_ns = excluded.updated_at_ns,
+                   account_id = COALESCE(account_id, excluded.account_id)"#,
             pubkey,
             provider_name,
             now_ns,
@@ -288,7 +294,8 @@ impl Database {
             data.sla_guarantee,
             data.unique_selling_points,
             data.common_issues,
-            now_ns
+            now_ns,
+            account_id
         )
         .execute(&self.pool)
         .await?;
@@ -553,6 +560,53 @@ impl Database {
         }
 
         Ok(())
+    }
+
+    /// Get provider profile by account_id
+    pub async fn get_provider_profile_by_account_id(
+        &self,
+        account_id: &[u8],
+    ) -> Result<Option<ProviderProfile>> {
+        let profile = sqlx::query_as!(
+            ProviderProfile,
+            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles WHERE account_id = ?",
+            account_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(profile)
+    }
+
+    /// Get provider profile by username (looks up account first)
+    pub async fn get_provider_profile_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<ProviderProfile>> {
+        let account = match self.get_account_by_username(username).await? {
+            Some(acc) => acc,
+            None => return Ok(None),
+        };
+
+        self.get_provider_profile_by_account_id(&account.id).await
+    }
+
+    /// Get username for a provider pubkey (for display in UI)
+    pub async fn get_username_for_provider_pubkey(&self, pubkey: &[u8]) -> Result<Option<String>> {
+        let result: Option<(Vec<u8>,)> = sqlx::query_as(
+            "SELECT account_id FROM provider_profiles WHERE pubkey = ? AND account_id IS NOT NULL",
+        )
+        .bind(pubkey)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match result {
+            Some((account_id,)) => {
+                let account = self.get_account(&account_id).await?;
+                Ok(account.map(|a| a.username))
+            }
+            None => Ok(None),
+        }
     }
 }
 

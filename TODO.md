@@ -246,3 +246,111 @@ Payment status runs parallel: `pending → succeeded/failed → refunded`
 - ✅ Status change history tracked for audit
 - ✅ Transaction boundaries for atomic updates
 - ✅ Stripe refunds work correctly
+
+---
+
+## Architectural Issues Requiring Review
+
+### CRITICAL: User Identification Architecture (Pubkey vs Account)
+
+**Status:** Analysis complete, awaiting decision
+**Priority:** HIGH - Impacts UX, URLs, and data model consistency
+**Date Identified:** 2025-12-18
+
+#### Problem Statement
+
+The codebase has a **dual-system problem** where user identification is split between:
+
+1. **Account system (new):** `accounts` table with usernames, linked to N public keys via `account_public_keys`
+2. **Legacy system:** Everything else (contracts, offerings, providers, URLs) uses raw 32-byte pubkeys
+
+**Impact:**
+- URLs are ugly and unmemorable: `/dashboard/user/abc123def456...` instead of `/dashboard/user/alice`
+- Users cannot be found by username - must know their pubkey
+- Contract history is per-key, not per-account (new device = fresh history)
+- Provider profiles not linked to accounts
+- Multi-device experience is broken
+
+#### Current State
+
+| Component | Uses | Issue |
+|-----------|------|-------|
+| User accounts/profiles | account_id + username | ✓ Correct |
+| Frontend URLs | pubkey in path | ✗ Poor UX |
+| Contracts | requester_pubkey, provider_pubkey | ✗ Not account-linked |
+| Provider profiles | pubkey as primary key | ✗ Not account-linked |
+| Provider offerings | pubkey column | ✗ Not account-linked |
+| Agent delegations | provider_pubkey | ✗ Not account-linked |
+
+#### Proposed Solution: Phased Migration
+
+**Phase 1: Link Providers to Accounts**
+```sql
+ALTER TABLE provider_profiles ADD COLUMN account_id BLOB REFERENCES accounts(id);
+ALTER TABLE provider_offerings ADD COLUMN account_id BLOB REFERENCES accounts(id);
+```
+
+**Phase 2: Link Contracts to Accounts**
+```sql
+ALTER TABLE contract_sign_requests ADD COLUMN requester_account_id BLOB REFERENCES accounts(id);
+ALTER TABLE contract_sign_requests ADD COLUMN provider_account_id BLOB REFERENCES accounts(id);
+```
+
+**Phase 3: Add Username-Based API Endpoints**
+```
+GET /api/v1/accounts/{username}           # Public profile
+GET /api/v1/accounts/{username}/offerings # Their offerings
+GET /api/v1/accounts/{username}/reputation# Their reputation
+```
+
+**Phase 4: Update Frontend URLs**
+```
+/u/{username}                    # Short public profile URL
+/dashboard/user/{username}       # Dashboard view
+/dashboard/reputation/{username} # Reputation by username
+```
+
+**Phase 5: Data Migration**
+- Backfill `account_id` on existing records by matching pubkey
+- Handle orphans (pubkeys without accounts)
+
+#### Decisions Needed
+
+1. **Legacy data handling:**
+   - A) Auto-create accounts for existing providers (generated usernames)
+   - B) Require manual migration (may lose some providers)
+   - C) Allow null account_id, show "Unknown Provider" in UI
+
+2. **URL backward compatibility:**
+   - A) Redirect pubkey URLs to username URLs
+   - B) Remove pubkey URLs entirely
+   - C) Support both indefinitely
+
+3. **Implementation priority:**
+   - A) Do now (blocking)
+   - B) Plan carefully with separate PRs
+   - C) Backlog for later
+
+#### Recommendation
+
+- Legacy data: Option A (auto-create) - minimal friction
+- URLs: Option A (redirect) - best UX, preserves links
+- Priority: Option B (plan carefully) - avoid breaking changes
+
+#### Files Affected
+
+**Database:**
+- `api/migrations/` - New migration for schema changes
+
+**Backend:**
+- `api/src/database/providers.rs` - Add account lookups
+- `api/src/database/contracts.rs` - Add account_id columns
+- `api/src/openapi/` - Add username-based endpoints
+
+**Frontend:**
+- `website/src/routes/dashboard/user/[pubkey]/` → `[username]/`
+- `website/src/routes/dashboard/reputation/[pubkey]/` → `[username]/`
+- `website/src/lib/utils/identity.ts` - Add username resolution
+- All components linking to user profiles
+
+---

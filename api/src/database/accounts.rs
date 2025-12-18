@@ -990,6 +990,201 @@ impl Database {
 
         Ok(())
     }
+
+    /// Ensure an account exists for a given pubkey, creating one if necessary.
+    /// This is used for auto-creating accounts for orphan pubkeys during migration.
+    ///
+    /// Returns the account_id (existing or newly created).
+    ///
+    /// Generated username format: `user_<first8chars_of_hex_pubkey>`
+    pub async fn ensure_account_for_pubkey(&self, pubkey: &[u8]) -> Result<Vec<u8>> {
+        // Check if account already exists for this pubkey
+        if let Some(account_id) = self.get_account_id_by_public_key(pubkey).await? {
+            return Ok(account_id);
+        }
+
+        // Generate username from pubkey prefix
+        let pubkey_hex = hex::encode(pubkey);
+        let base_username = format!("user_{}", &pubkey_hex[..8]);
+
+        // Try to create account with base username, append suffix if taken
+        let mut username = base_username.clone();
+        let mut suffix = 0u32;
+        loop {
+            match self
+                .create_account_internal(&username, pubkey, &format!("auto-{}@noemail.local", &pubkey_hex[..8]))
+                .await
+            {
+                Ok(account) => return Ok(account.id),
+                Err(e) => {
+                    let err_str = e.to_string().to_lowercase();
+                    if err_str.contains("unique constraint") || err_str.contains("duplicate") {
+                        // Username taken, try with suffix
+                        suffix += 1;
+                        username = format!("{}_{}", base_username, suffix);
+                        if suffix > 100 {
+                            bail!("Failed to generate unique username for pubkey after 100 attempts");
+                        }
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Internal account creation without sending welcome email.
+    /// Used by ensure_account_for_pubkey to avoid spamming auto-generated accounts.
+    async fn create_account_internal(
+        &self,
+        username: &str,
+        public_key: &[u8],
+        email: &str,
+    ) -> Result<Account> {
+        if public_key.len() != 32 {
+            bail!("Public key must be 32 bytes");
+        }
+
+        let mut tx = self.pool.begin().await?;
+
+        let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+        sqlx::query("INSERT INTO accounts (id, username, email) VALUES (?, ?, ?)")
+            .bind(&account_id)
+            .bind(username)
+            .bind(email)
+            .execute(&mut *tx)
+            .await?;
+
+        let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
+        sqlx::query(
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+        )
+        .bind(&key_id)
+        .bind(&account_id)
+        .bind(public_key)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        self.get_account(&account_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Account not found after creation"))
+    }
+
+    /// Get account by public key (returns full account, not just ID)
+    pub async fn get_account_by_public_key(&self, public_key: &[u8]) -> Result<Option<Account>> {
+        match self.get_account_id_by_public_key(public_key).await? {
+            Some(account_id) => self.get_account(&account_id).await,
+            None => Ok(None),
+        }
+    }
+
+    /// Backfill account_ids for existing provider_profiles, provider_offerings, and contracts.
+    /// This should be called on startup to migrate existing data.
+    ///
+    /// For each pubkey without account_id:
+    /// 1. Look up existing account via get_account_id_by_public_key()
+    /// 2. If not found, auto-create account via ensure_account_for_pubkey()
+    /// 3. Set account_id on the record
+    pub async fn backfill_account_ids(&self) -> Result<()> {
+        tracing::info!("Starting account_id backfill...");
+
+        // Backfill provider_profiles
+        let provider_pubkeys: Vec<(Vec<u8>,)> = sqlx::query_as(
+            "SELECT pubkey FROM provider_profiles WHERE account_id IS NULL",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for (pubkey,) in &provider_pubkeys {
+            let account_id = self.ensure_account_for_pubkey(pubkey).await?;
+            sqlx::query("UPDATE provider_profiles SET account_id = ? WHERE pubkey = ?")
+                .bind(&account_id)
+                .bind(pubkey)
+                .execute(&self.pool)
+                .await?;
+        }
+        if !provider_pubkeys.is_empty() {
+            tracing::info!(
+                "Backfilled account_id for {} provider profiles",
+                provider_pubkeys.len()
+            );
+        }
+
+        // Backfill provider_offerings
+        let offering_pubkeys: Vec<(Vec<u8>,)> = sqlx::query_as(
+            "SELECT DISTINCT pubkey FROM provider_offerings WHERE account_id IS NULL",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for (pubkey,) in &offering_pubkeys {
+            let account_id = self.ensure_account_for_pubkey(pubkey).await?;
+            sqlx::query("UPDATE provider_offerings SET account_id = ? WHERE pubkey = ?")
+                .bind(&account_id)
+                .bind(pubkey)
+                .execute(&self.pool)
+                .await?;
+        }
+        if !offering_pubkeys.is_empty() {
+            tracing::info!(
+                "Backfilled account_id for offerings from {} providers",
+                offering_pubkeys.len()
+            );
+        }
+
+        // Backfill contracts - requester_account_id
+        let requester_pubkeys: Vec<(Vec<u8>,)> = sqlx::query_as(
+            "SELECT DISTINCT requester_pubkey FROM contract_sign_requests WHERE requester_account_id IS NULL",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for (pubkey,) in &requester_pubkeys {
+            let account_id = self.ensure_account_for_pubkey(pubkey).await?;
+            sqlx::query(
+                "UPDATE contract_sign_requests SET requester_account_id = ? WHERE requester_pubkey = ?",
+            )
+            .bind(&account_id)
+            .bind(pubkey)
+            .execute(&self.pool)
+            .await?;
+        }
+        if !requester_pubkeys.is_empty() {
+            tracing::info!(
+                "Backfilled requester_account_id for contracts from {} requesters",
+                requester_pubkeys.len()
+            );
+        }
+
+        // Backfill contracts - provider_account_id
+        let provider_contract_pubkeys: Vec<(Vec<u8>,)> = sqlx::query_as(
+            "SELECT DISTINCT provider_pubkey FROM contract_sign_requests WHERE provider_account_id IS NULL",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for (pubkey,) in &provider_contract_pubkeys {
+            let account_id = self.ensure_account_for_pubkey(pubkey).await?;
+            sqlx::query(
+                "UPDATE contract_sign_requests SET provider_account_id = ? WHERE provider_pubkey = ?",
+            )
+            .bind(&account_id)
+            .bind(pubkey)
+            .execute(&self.pool)
+            .await?;
+        }
+        if !provider_contract_pubkeys.is_empty() {
+            tracing::info!(
+                "Backfilled provider_account_id for contracts from {} providers",
+                provider_contract_pubkeys.len()
+            );
+        }
+
+        tracing::info!("Account_id backfill complete");
+        Ok(())
+    }
 }
 
 /// OAuth account record from database

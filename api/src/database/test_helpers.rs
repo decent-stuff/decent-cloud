@@ -57,6 +57,8 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/046_remove_invoice_pdf_blob.sql"),
         include_str!("../../migrations/047_agent_delegations.sql"),
         include_str!("../../migrations/048_auto_accept_rentals.sql"),
+        include_str!("../../migrations/049_auto_accept_default_on.sql"),
+        include_str!("../../migrations/050_account_based_identification.sql"),
     ];
 
     for migration in &migrations {
