@@ -40,6 +40,88 @@ pub struct PendingContract {
     pub offering_id: String,
     pub requester_ssh_pubkey: String,
     pub instance_config: Option<String>,
+    /// CPU cores from offering (processor_cores)
+    pub cpu_cores: Option<i64>,
+    /// Memory amount from offering (e.g. "16 GB")
+    pub memory_amount: Option<String>,
+    /// Storage capacity from offering (e.g. "100 GB")
+    pub storage_capacity: Option<String>,
+}
+
+impl PendingContract {
+    /// Parse memory amount string to MB
+    /// Handles formats like "16 GB", "2048 MB", "16GB", "2048MB"
+    pub fn memory_mb(&self) -> Option<u32> {
+        parse_size_to_mb(self.memory_amount.as_deref())
+    }
+
+    /// Parse storage capacity string to GB
+    /// Handles formats like "100 GB", "500GB", "1 TB", "1TB"
+    pub fn storage_gb(&self) -> Option<u32> {
+        parse_size_to_gb(self.storage_capacity.as_deref())
+    }
+}
+
+/// Parse size string to MB (e.g. "16 GB" -> 16384, "2048 MB" -> 2048)
+fn parse_size_to_mb(size_str: Option<&str>) -> Option<u32> {
+    let s = size_str?.trim().to_uppercase();
+
+    // Try to extract number and unit
+    let (num_str, unit) = if s.ends_with("GB") {
+        (s.trim_end_matches("GB").trim(), "GB")
+    } else if s.ends_with("MB") {
+        (s.trim_end_matches("MB").trim(), "MB")
+    } else if s.ends_with("TB") {
+        (s.trim_end_matches("TB").trim(), "TB")
+    } else {
+        // Try splitting on space
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        if parts.len() >= 2 {
+            (parts[0], parts[1])
+        } else {
+            return None;
+        }
+    };
+
+    let num: f64 = num_str.parse().ok()?;
+    let mb = match unit {
+        "TB" => (num * 1024.0 * 1024.0) as u32,
+        "GB" => (num * 1024.0) as u32,
+        "MB" => num as u32,
+        _ => return None,
+    };
+    Some(mb)
+}
+
+/// Parse size string to GB (e.g. "100 GB" -> 100, "1 TB" -> 1024)
+fn parse_size_to_gb(size_str: Option<&str>) -> Option<u32> {
+    let s = size_str?.trim().to_uppercase();
+
+    // Try to extract number and unit
+    let (num_str, unit) = if s.ends_with("GB") {
+        (s.trim_end_matches("GB").trim(), "GB")
+    } else if s.ends_with("MB") {
+        (s.trim_end_matches("MB").trim(), "MB")
+    } else if s.ends_with("TB") {
+        (s.trim_end_matches("TB").trim(), "TB")
+    } else {
+        // Try splitting on space
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        if parts.len() >= 2 {
+            (parts[0], parts[1])
+        } else {
+            return None;
+        }
+    };
+
+    let num: f64 = num_str.parse().ok()?;
+    let gb = match unit {
+        "TB" => (num * 1024.0) as u32,
+        "GB" => num as u32,
+        "MB" => (num / 1024.0) as u32,
+        _ => return None,
+    };
+    Some(gb)
 }
 
 #[derive(Debug, Serialize)]
@@ -584,5 +666,59 @@ mod tests {
         let result = ApiClient::unwrap_response(response, "test context");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No data"));
+    }
+
+    #[test]
+    fn test_parse_size_to_mb() {
+        // GB formats
+        assert_eq!(super::parse_size_to_mb(Some("16 GB")), Some(16 * 1024));
+        assert_eq!(super::parse_size_to_mb(Some("16GB")), Some(16 * 1024));
+        assert_eq!(super::parse_size_to_mb(Some("  16 GB  ")), Some(16 * 1024));
+
+        // MB formats
+        assert_eq!(super::parse_size_to_mb(Some("2048 MB")), Some(2048));
+        assert_eq!(super::parse_size_to_mb(Some("2048MB")), Some(2048));
+
+        // TB formats
+        assert_eq!(super::parse_size_to_mb(Some("1 TB")), Some(1024 * 1024));
+        assert_eq!(super::parse_size_to_mb(Some("1TB")), Some(1024 * 1024));
+
+        // Invalid
+        assert_eq!(super::parse_size_to_mb(None), None);
+        assert_eq!(super::parse_size_to_mb(Some("")), None);
+        assert_eq!(super::parse_size_to_mb(Some("invalid")), None);
+    }
+
+    #[test]
+    fn test_parse_size_to_gb() {
+        // GB formats
+        assert_eq!(super::parse_size_to_gb(Some("100 GB")), Some(100));
+        assert_eq!(super::parse_size_to_gb(Some("100GB")), Some(100));
+        assert_eq!(super::parse_size_to_gb(Some("  500 GB  ")), Some(500));
+
+        // TB formats
+        assert_eq!(super::parse_size_to_gb(Some("1 TB")), Some(1024));
+        assert_eq!(super::parse_size_to_gb(Some("2TB")), Some(2048));
+
+        // Invalid
+        assert_eq!(super::parse_size_to_gb(None), None);
+        assert_eq!(super::parse_size_to_gb(Some("")), None);
+        assert_eq!(super::parse_size_to_gb(Some("invalid")), None);
+    }
+
+    #[test]
+    fn test_pending_contract_specs() {
+        let contract = PendingContract {
+            contract_id: "test-contract-123".to_string(),
+            offering_id: "offering-456".to_string(),
+            requester_ssh_pubkey: "ssh-rsa AAAA...".to_string(),
+            instance_config: None,
+            cpu_cores: Some(4),
+            memory_amount: Some("16 GB".to_string()),
+            storage_capacity: Some("100 GB".to_string()),
+        };
+
+        assert_eq!(contract.memory_mb(), Some(16 * 1024));
+        assert_eq!(contract.storage_gb(), Some(100));
     }
 }

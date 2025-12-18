@@ -284,7 +284,33 @@ impl ProxmoxProvisioner {
             params.push(("memory", memory_mb.to_string()));
         }
 
-        self.api_put(&path, &params).await
+        self.api_put(&path, &params).await?;
+
+        // Resize disk if requested
+        if let Some(storage_gb) = request.storage_gb {
+            self.resize_disk(vmid, storage_gb).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Resize the VM's primary disk (scsi0) to the specified size
+    async fn resize_disk(&self, vmid: u32, size_gb: u32) -> Result<()> {
+        let path = format!("/api2/json/nodes/{}/qemu/{}/resize", self.config.node, vmid);
+
+        // Proxmox resize sets the disk to the specified size (not delta)
+        // Use scsi0 as the primary disk (most common for cloud-init templates)
+        let params = [
+            ("disk", "scsi0".to_string()),
+            ("size", format!("{}G", size_gb)),
+        ];
+
+        tracing::debug!("Resizing disk scsi0 on VM {} to {}GB", vmid, size_gb);
+        self.api_put(&path, &params)
+            .await
+            .context("Failed to resize disk")?;
+
+        Ok(())
     }
 
     async fn start_vm(&self, vmid: u32) -> Result<String> {

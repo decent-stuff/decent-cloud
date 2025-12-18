@@ -696,12 +696,27 @@ async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisione
                     .as_ref()
                     .and_then(|s| serde_json::from_str(s).ok());
 
+                // Extract specs from offering (returned by API)
+                let cpu_cores = contract.cpu_cores.map(|c| c as u32);
+                let memory_mb = contract.memory_mb();
+                let storage_gb = contract.storage_gb();
+
+                if cpu_cores.is_some() || memory_mb.is_some() || storage_gb.is_some() {
+                    info!(
+                        contract_id = %contract.contract_id,
+                        cpu_cores = ?cpu_cores,
+                        memory_mb = ?memory_mb,
+                        storage_gb = ?storage_gb,
+                        "Using offering specs for VM"
+                    );
+                }
+
                 let request = ProvisionRequest {
                     contract_id: contract.contract_id.clone(),
                     offering_id: contract.offering_id.clone(),
-                    cpu_cores: None, // Extract from offering if available
-                    memory_mb: None,
-                    storage_gb: None,
+                    cpu_cores,
+                    memory_mb,
+                    storage_gb,
                     requester_ssh_pubkey: Some(contract.requester_ssh_pubkey.clone()),
                     instance_config,
                 };

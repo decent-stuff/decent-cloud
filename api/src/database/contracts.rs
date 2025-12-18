@@ -184,6 +184,27 @@ pub struct ContractExtension {
     pub created_at_ns: i64,
 }
 
+/// Contract with offering specs for dc-agent provisioning
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
+#[serde(rename_all = "camelCase")]
+#[oai(skip_serializing_if_is_none)]
+pub struct ContractWithSpecs {
+    pub contract_id: String,
+    pub offering_id: String,
+    pub requester_ssh_pubkey: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub instance_config: Option<String>,
+    /// CPU cores from offering (processor_cores)
+    #[oai(skip_serializing_if_is_none)]
+    pub cpu_cores: Option<i64>,
+    /// Memory amount from offering (e.g. "16 GB")
+    #[oai(skip_serializing_if_is_none)]
+    pub memory_amount: Option<String>,
+    /// Storage capacity from offering (e.g. "100 GB")
+    #[oai(skip_serializing_if_is_none)]
+    pub storage_capacity: Option<String>,
+}
+
 impl Database {
     /// Get contracts for a user (as requester)
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
@@ -261,6 +282,36 @@ impl Database {
                AND status = 'accepted'
                AND payment_status = 'succeeded'
                ORDER BY created_at_ns ASC"#,
+            provider_pubkey
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
+
+    /// Get contracts pending provisioning with offering specs
+    /// Returns contracts with status='accepted' AND payment_status='succeeded', joined with offering specs
+    pub async fn get_pending_provision_contracts_with_specs(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<ContractWithSpecs>> {
+        let contracts = sqlx::query_as!(
+            ContractWithSpecs,
+            r#"SELECT
+               lower(hex(c.contract_id)) as "contract_id!: String",
+               c.offering_id as "offering_id!",
+               c.requester_ssh_pubkey as "requester_ssh_pubkey!",
+               c.instance_config,
+               o.processor_cores as "cpu_cores: i64",
+               o.memory_amount,
+               o.total_ssd_capacity as storage_capacity
+               FROM contract_sign_requests c
+               LEFT JOIN provider_offerings o ON c.offering_id = o.offering_id AND c.provider_pubkey = o.pubkey
+               WHERE c.provider_pubkey = ?
+               AND c.status = 'accepted'
+               AND c.payment_status = 'succeeded'
+               ORDER BY c.created_at_ns ASC"#,
             provider_pubkey
         )
         .fetch_all(&self.pool)

@@ -353,7 +353,8 @@ impl ProvidersApi {
 
     /// Get contracts pending provisioning
     ///
-    /// Returns contracts ready for provisioning (accepted + payment succeeded).
+    /// Returns contracts ready for provisioning (accepted + payment succeeded) with offering specs.
+    /// Includes cpu_cores, memory_amount, and storage_capacity from the associated offering.
     /// Requires agent authentication - agent can only access their delegated provider's contracts.
     #[oai(
         path = "/providers/:pubkey/contracts/pending-provision",
@@ -365,7 +366,7 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         auth: AgentAuthenticatedUser,
         pubkey: Path<String>,
-    ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractWithSpecs>>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
             Ok(pk) => pk,
             Err(_) => {
@@ -388,7 +389,10 @@ impl ProvidersApi {
             });
         }
 
-        match db.get_pending_provision_contracts(&pubkey_bytes).await {
+        match db
+            .get_pending_provision_contracts_with_specs(&pubkey_bytes)
+            .await
+        {
             Ok(contracts) => Json(ApiResponse {
                 success: true,
                 data: Some(contracts),

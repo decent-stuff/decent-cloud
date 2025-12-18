@@ -67,6 +67,18 @@ mod tests {
             .create_async()
             .await;
 
+        // Mock resize endpoint
+        let _resize_mock = server
+            .mock(
+                "PUT",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/resize".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":null}"#)
+            .create_async()
+            .await;
+
         // Mock start endpoint - returns UPID
         let _start_mock = server
             .mock(
@@ -186,6 +198,18 @@ mod tests {
             .mock(
                 "PUT",
                 mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/config".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":null}"#)
+            .create_async()
+            .await;
+
+        // Mock resize endpoint
+        let _resize_mock = server
+            .mock(
+                "PUT",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/resize".to_string()),
             )
             .with_status(200)
             .with_header("content-type", "application/json")
@@ -575,6 +599,18 @@ mod tests {
             .mock(
                 "PUT",
                 mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/config".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":null}"#)
+            .create_async()
+            .await;
+
+        // Mock resize endpoint
+        let _resize_mock = server
+            .mock(
+                "PUT",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/resize".to_string()),
             )
             .with_status(200)
             .with_header("content-type", "application/json")
