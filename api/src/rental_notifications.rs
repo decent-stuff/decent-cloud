@@ -13,8 +13,8 @@ pub async fn notify_provider_new_rental(
     email_service: Option<&Arc<EmailService>>,
     contract: &Contract,
 ) -> Result<()> {
-    let provider_pubkey = hex::decode(&contract.provider_pubkey)
-        .context("Invalid provider pubkey hex")?;
+    let provider_pubkey =
+        hex::decode(&contract.provider_pubkey).context("Invalid provider pubkey hex")?;
 
     // Get provider notification config
     let config = db
@@ -65,7 +65,15 @@ pub async fn notify_provider_new_rental(
 
     // Send to Email if enabled
     if config.notify_email {
-        match send_email_rental_notification(db, email_service, &provider_pubkey, contract, &summary).await {
+        match send_email_rental_notification(
+            db,
+            email_service,
+            &provider_pubkey,
+            contract,
+            &summary,
+        )
+        .await
+        {
             Ok(()) => {
                 db.increment_notification_usage(provider_id, "email")
                     .await
@@ -117,7 +125,9 @@ async fn send_telegram_rental_notification(
         {} for {}\n\n\
         Contract: `{}`\n\n\
         Please review and accept/reject in your provider dashboard.",
-        amount_display, duration, &contract.contract_id[..32]
+        amount_display,
+        duration,
+        &contract.contract_id[..32]
     );
 
     telegram.send_message(chat_id, &message).await?;
@@ -203,8 +213,8 @@ pub async fn notify_user_provisioned(
     contract: &Contract,
     instance_details: &str,
 ) -> Result<()> {
-    let requester_pubkey = hex::decode(&contract.requester_pubkey)
-        .context("Invalid requester pubkey hex")?;
+    let requester_pubkey =
+        hex::decode(&contract.requester_pubkey).context("Invalid requester pubkey hex")?;
 
     // Get user notification config
     let config = db
@@ -260,9 +270,7 @@ pub async fn notify_user_provisioned(
         .await
         {
             Ok(()) => {
-                db.increment_notification_usage(user_id, "email")
-                    .await
-                    .ok();
+                db.increment_notification_usage(user_id, "email").await.ok();
                 channels_sent.push("email");
             }
             Err(e) => errors.push(format!("email: {}", e)),
@@ -395,11 +403,7 @@ async fn send_email_provisioned_notification(
         Use the SSH key you provided during the rental request.\n\n\
         View your rental details: https://decent-cloud.org/dashboard/rentals?contract={}\n\n\
         If you have any issues, please contact the provider through the platform.",
-        contract.contract_id,
-        ip_address,
-        ipv6_line,
-        ip_address,
-        contract.contract_id
+        contract.contract_id, ip_address, ipv6_line, ip_address, contract.contract_id
     );
 
     let from_addr =

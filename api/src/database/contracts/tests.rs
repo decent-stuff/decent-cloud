@@ -1700,7 +1700,16 @@ async fn test_try_auto_accept_contract_enabled() {
     .unwrap();
 
     // Create contract in 'requested' status with payment_status='succeeded'
-    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk, "off-1", 0, "requested").await;
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
 
     // Try auto-accept
     let result = db.try_auto_accept_contract(&contract_id).await.unwrap();
@@ -1728,7 +1737,16 @@ async fn test_try_auto_accept_contract_disabled() {
     .unwrap();
 
     // Create contract in 'requested' status with payment_status='succeeded'
-    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk, "off-1", 0, "requested").await;
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
 
     // Try auto-accept - should return false since auto_accept_rentals is disabled
     let result = db.try_auto_accept_contract(&contract_id).await.unwrap();
@@ -1756,11 +1774,23 @@ async fn test_try_auto_accept_contract_idempotent() {
     .unwrap();
 
     // Create contract already in 'accepted' status
-    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk, "off-1", 0, "accepted").await;
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "accepted",
+    )
+    .await;
 
     // Try auto-accept - should return false since already accepted (idempotent)
     let result = db.try_auto_accept_contract(&contract_id).await.unwrap();
-    assert!(!result, "Should return false when contract already accepted");
+    assert!(
+        !result,
+        "Should return false when contract already accepted"
+    );
 
     // Verify contract status unchanged
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();

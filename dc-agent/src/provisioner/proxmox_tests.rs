@@ -672,11 +672,15 @@ mod tests {
         let _status_mock = server
             .mock(
                 "GET",
-                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/current".to_string()),
+                mockito::Matcher::Regex(
+                    r"/api2/json/nodes/pve1/qemu/\d+/status/current".to_string(),
+                ),
             )
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"data":{"vmid":12345,"status":"running","uptime":3600,"name":"dc-test"}}"#)
+            .with_body(
+                r#"{"data":{"vmid":12345,"status":"running","uptime":3600,"name":"dc-test"}}"#,
+            )
             .create_async()
             .await;
 
@@ -720,7 +724,9 @@ mod tests {
         let _status_mock = server
             .mock(
                 "GET",
-                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/current".to_string()),
+                mockito::Matcher::Regex(
+                    r"/api2/json/nodes/pve1/qemu/\d+/status/current".to_string(),
+                ),
             )
             .with_status(200)
             .with_header("content-type", "application/json")

@@ -1,11 +1,10 @@
 use super::common::{
-    check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags,
-    AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest, CsvImportError,
-    CsvImportResult, DuplicateOfferingRequest, HelpcenterSyncResponse,
-    NotificationConfigResponse, NotificationUsageResponse, OnboardingUpdateResponse,
-    ProvisioningStatusRequest, RentalResponseRequest, ResponseMetricsResponse,
-    ResponseTimeDistributionResponse, TestNotificationRequest, TestNotificationResponse,
-    UpdateNotificationConfigRequest,
+    check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags, AutoAcceptRequest,
+    AutoAcceptResponse, BulkUpdateStatusRequest, CsvImportError, CsvImportResult,
+    DuplicateOfferingRequest, HelpcenterSyncResponse, NotificationConfigResponse,
+    NotificationUsageResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
+    RentalResponseRequest, ResponseMetricsResponse, ResponseTimeDistributionResponse,
+    TestNotificationRequest, TestNotificationResponse, UpdateNotificationConfigRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
@@ -1544,7 +1543,9 @@ impl ProvidersApi {
         match db.get_provider_auto_accept_rentals(&auth.pubkey).await {
             Ok(enabled) => Json(ApiResponse {
                 success: true,
-                data: Some(AutoAcceptResponse { auto_accept_rentals: enabled }),
+                data: Some(AutoAcceptResponse {
+                    auto_accept_rentals: enabled,
+                }),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -1570,10 +1571,15 @@ impl ProvidersApi {
         auth: ApiAuthenticatedUser,
         req: Json<AutoAcceptRequest>,
     ) -> Json<ApiResponse<AutoAcceptResponse>> {
-        match db.set_provider_auto_accept_rentals(&auth.pubkey, req.auto_accept_rentals).await {
+        match db
+            .set_provider_auto_accept_rentals(&auth.pubkey, req.auto_accept_rentals)
+            .await
+        {
             Ok(()) => Json(ApiResponse {
                 success: true,
-                data: Some(AutoAcceptResponse { auto_accept_rentals: req.auto_accept_rentals }),
+                data: Some(AutoAcceptResponse {
+                    auto_accept_rentals: req.auto_accept_rentals,
+                }),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

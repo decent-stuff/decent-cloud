@@ -1012,7 +1012,11 @@ impl Database {
         let mut suffix = 0u32;
         loop {
             match self
-                .create_account_internal(&username, pubkey, &format!("auto-{}@noemail.local", &pubkey_hex[..8]))
+                .create_account_internal(
+                    &username,
+                    pubkey,
+                    &format!("auto-{}@noemail.local", &pubkey_hex[..8]),
+                )
                 .await
             {
                 Ok(account) => return Ok(account.id),
@@ -1023,7 +1027,9 @@ impl Database {
                         suffix += 1;
                         username = format!("{}_{}", base_username, suffix);
                         if suffix > 100 {
-                            bail!("Failed to generate unique username for pubkey after 100 attempts");
+                            bail!(
+                                "Failed to generate unique username for pubkey after 100 attempts"
+                            );
                         }
                     } else {
                         return Err(e);
@@ -1091,11 +1097,10 @@ impl Database {
         tracing::info!("Starting account_id backfill...");
 
         // Backfill provider_profiles
-        let provider_pubkeys: Vec<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT pubkey FROM provider_profiles WHERE account_id IS NULL",
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let provider_pubkeys: Vec<(Vec<u8>,)> =
+            sqlx::query_as("SELECT pubkey FROM provider_profiles WHERE account_id IS NULL")
+                .fetch_all(&self.pool)
+                .await?;
 
         for (pubkey,) in &provider_pubkeys {
             let account_id = self.ensure_account_for_pubkey(pubkey).await?;
