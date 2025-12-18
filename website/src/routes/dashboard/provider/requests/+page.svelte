@@ -15,6 +15,7 @@
 		hexEncode,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
+	import { getAutoAcceptSetting, updateAutoAcceptSetting } from "$lib/services/notification-api";
 	import { authStore } from "$lib/stores/auth";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
 
@@ -30,6 +31,8 @@
 		updating = $state<Record<string, boolean>>({});
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
+	let autoAcceptEnabled = $state(false),
+		autoAcceptUpdating = $state(false);
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -103,6 +106,8 @@
 					contract.status.toLowerCase(),
 				),
 			);
+			// Load auto-accept setting
+			autoAcceptEnabled = await getAutoAcceptSetting(normalizedIdentity.identity);
 		} catch (e) {
 			error =
 				e instanceof Error
@@ -120,6 +125,29 @@
 	const memoValue = (contractId: string) => memoInputs[contractId] ?? "";
 	const provisioningValue = (contractId: string) =>
 		provisioningNotes[contractId] ?? "";
+
+	async function handleAutoAcceptToggle() {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) {
+			error = "Missing signing identity";
+			return;
+		}
+		error = null;
+		actionMessage = null;
+		autoAcceptUpdating = true;
+		try {
+			const newValue = !autoAcceptEnabled;
+			await updateAutoAcceptSetting(activeIdentity.identity, newValue);
+			autoAcceptEnabled = newValue;
+			actionMessage = newValue
+				? "Auto-accept enabled - new rentals will be accepted automatically"
+				: "Auto-accept disabled - new rentals will require manual approval";
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to update auto-accept setting";
+		} finally {
+			autoAcceptUpdating = false;
+		}
+	}
 
 	async function handleResponse(contract: Contract, accept: boolean) {
 		const activeIdentity = signingIdentityInfo;
@@ -251,6 +279,37 @@
 			></div>
 		</div>
 	{:else}
+		<!-- Auto-Accept Settings Card -->
+		<section class="bg-white/5 border border-white/10 rounded-xl p-6">
+			<div class="flex items-center justify-between">
+				<div>
+					<h3 class="text-lg font-semibold text-white">Auto-Accept Rentals</h3>
+					<p class="text-white/60 text-sm mt-1">
+						When enabled, new rental requests are automatically accepted after payment.
+						This enables instant provisioning for your customers.
+					</p>
+				</div>
+				<button
+					onclick={handleAutoAcceptToggle}
+					disabled={autoAcceptUpdating}
+					aria-label={autoAcceptEnabled ? 'Disable auto-accept rentals' : 'Enable auto-accept rentals'}
+					class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed {autoAcceptEnabled ? 'bg-emerald-500' : 'bg-white/20'}"
+				>
+					<span
+						class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {autoAcceptEnabled ? 'translate-x-5' : 'translate-x-0'}"
+					></span>
+				</button>
+			</div>
+			{#if autoAcceptEnabled}
+				<div class="mt-3 flex items-center gap-2 text-emerald-400 text-sm">
+					<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+					</svg>
+					<span>New rentals will be accepted automatically after payment</span>
+				</div>
+			{/if}
+		</section>
+
 		<section class="space-y-4">
 			<div class="flex items-center justify-between">
 				<h2 class="text-2xl font-semibold text-white">
@@ -265,7 +324,11 @@
 				<div
 					class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70"
 				>
-					No pending rental requests right now.
+					{#if autoAcceptEnabled}
+						No pending requests - auto-accept is handling new rentals automatically.
+					{:else}
+						No pending rental requests right now.
+					{/if}
 				</div>
 			{:else}
 				<div class="space-y-4">

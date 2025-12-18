@@ -214,3 +214,73 @@ export async function testEscalationNotification(
 	}
 	return result.data;
 }
+
+/**
+ * Auto-accept rentals setting from API
+ */
+export interface AutoAcceptSetting {
+	autoAcceptRentals: boolean;
+}
+
+/**
+ * Get provider's auto-accept rentals setting
+ */
+export async function getAutoAcceptSetting(
+	identity: Ed25519KeyIdentity
+): Promise<boolean> {
+	const { headers } = await signRequest(identity, 'GET', '/api/v1/provider/settings/auto-accept');
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/provider/settings/auto-accept`, {
+		method: 'GET',
+		headers: headers as HeadersInit
+	});
+
+	if (!response.ok) {
+		// Default to false if not found or error
+		return false;
+	}
+
+	const result: ApiResponse<AutoAcceptSetting> = await response.json();
+	return result.success && result.data ? result.data.autoAcceptRentals : false;
+}
+
+/**
+ * Update provider's auto-accept rentals setting
+ */
+export async function updateAutoAcceptSetting(
+	identity: Ed25519KeyIdentity,
+	enabled: boolean
+): Promise<void> {
+	const payload = { autoAcceptRentals: enabled };
+	const { headers, body } = await signRequest(
+		identity,
+		'PUT',
+		'/api/v1/provider/settings/auto-accept',
+		payload
+	);
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/provider/settings/auto-accept`, {
+		method: 'PUT',
+		headers: headers as HeadersInit,
+		body
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Failed to update auto-accept setting (HTTP ${response.status})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) {
+				errorMessage = errorData.error;
+			}
+		} catch {
+			// ignore parse errors
+		}
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<AutoAcceptSetting> = await response.json();
+	if (!result.success) {
+		throw new Error(result.error || 'Failed to update auto-accept setting');
+	}
+}
