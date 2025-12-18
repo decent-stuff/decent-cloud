@@ -47,34 +47,37 @@ CREATE INDEX idx_contracts_requester_account ON contract_sign_requests(requester
 CREATE INDEX idx_contracts_provider_account ON contract_sign_requests(provider_account_id);
 ```
 
-### Phase 2: Backend Changes ✅
+### Phase 2: Backend Changes
 
-#### 2.1 Data Backfill Function ✅
-- [x] Add `Database::backfill_account_ids()` to run on startup
-- [x] For each pubkey without account_id:
+#### 2.1 Data Backfill Function (TODO)
+- [ ] Add `Database::backfill_account_ids()` to run on startup
+- [ ] For each pubkey without account_id:
   - Look up account via `get_account_id_by_public_key()`
   - If found: set account_id
   - If not found: auto-create account with generated username
+
+Note: Implement when Phase 2.4 API endpoints are built.
 
 #### 2.2 Auto-Create Accounts for Orphan Pubkeys ✅
 - [x] Add `Database::ensure_account_for_pubkey()`
 - [x] Generate username from pubkey prefix: `user_<first8chars>`
 - [x] Create account with pubkey linked
-- [x] Called during backfill and when new providers/contracts are created
+- [ ] Called during backfill and when new providers/contracts are created (TODO)
 
-#### 2.3 Update Database Queries ✅
-- [x] `providers.rs`: Add account-based lookups
+#### 2.3 Update Database Queries (TODO)
+Implement these when API endpoints (2.4) are built to avoid dead code:
+- [ ] `providers.rs`: Add account-based lookups
   - `get_provider_profile_by_account_id()`
   - `get_provider_profile_by_username()`
   - `get_username_for_provider_pubkey()`
   - Update `update_provider_onboarding()` to set account_id
-- [x] `contracts.rs`: Add account-based lookups
+- [ ] `contracts.rs`: Add account-based lookups
   - `get_user_contracts_by_account_id()`
   - `get_provider_contracts_by_account_id()`
   - `get_user_contracts_by_username()`
   - `get_provider_contracts_by_username()`
   - Update `create_rental_request()` to set account_ids
-- [ ] `offerings.rs`: Add account-based lookups (TODO - not yet needed)
+- [ ] `offerings.rs`: Add account-based lookups
   - `get_offerings_by_account_id()`
   - `get_offerings_by_username()`
 
