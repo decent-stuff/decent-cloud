@@ -255,9 +255,9 @@ impl ProxmoxSetup {
         );
         let import_result = ssh.execute(&import_cmd).await?;
         if import_result.exit_status != 0 {
-            // Cleanup VM on failure - log but don't mask the original error
+            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
             if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after import failure");
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after import failure - system may have orphaned VM");
             }
             bail!("Failed to import disk: {}", import_result.stdout);
         }
@@ -277,9 +277,9 @@ impl ProxmoxSetup {
         for cmd in &config_cmds {
             let result = ssh.execute(cmd).await?;
             if result.exit_status != 0 {
-                // Cleanup VM on failure - log but don't mask the original error
+                // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
                 if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                    tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after config failure");
+                    tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after config failure - system may have orphaned VM");
                 }
                 bail!("Failed to configure VM: {}", result.stdout);
             }
@@ -292,9 +292,9 @@ impl ProxmoxSetup {
             .execute("dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools")
             .await?;
         if install_result.exit_status != 0 {
-            // Cleanup VM on failure - log but don't mask the original error
+            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
             if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after libguestfs-tools install failure");
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after libguestfs-tools install failure - system may have orphaned VM");
             }
             bail!(
                 "Failed to install libguestfs-tools (required for template customization).\n\
@@ -311,8 +311,9 @@ impl ProxmoxSetup {
             .execute(&format!("pvesm path {}", volume_id))
             .await?;
         if path_result.exit_status != 0 {
+            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
             if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after path lookup failure");
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after path lookup failure - system may have orphaned VM");
             }
             bail!("Failed to get disk path for {}: {}", volume_id, path_result.stdout);
         }
@@ -338,9 +339,9 @@ impl ProxmoxSetup {
             customize_result
         };
         if customize_result.exit_status != 0 {
-            // Cleanup VM on failure - log but don't mask the original error
+            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
             if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after image customization failure");
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after image customization failure - system may have orphaned VM");
             }
             // Show last 10 lines of output for debugging
             let error_context: String = customize_result
@@ -367,9 +368,9 @@ impl ProxmoxSetup {
         let template_cmd = format!("qm template {}", vmid);
         let template_result = ssh.execute(&template_cmd).await?;
         if template_result.exit_status != 0 {
-            // Cleanup VM on failure - log but don't mask the original error
+            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
             if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after template conversion failure");
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after template conversion failure - system may have orphaned VM");
             }
             bail!("Failed to convert to template: {}", template_result.stdout);
         }

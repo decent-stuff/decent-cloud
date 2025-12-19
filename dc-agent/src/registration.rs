@@ -16,10 +16,13 @@ pub const DEFAULT_PERMISSIONS: &[&str] =
     &["provision", "health_check", "heartbeat", "fetch_contracts"];
 
 /// Get the default agent keys directory (~/.dc-agent).
-pub fn default_agent_dir() -> PathBuf {
-    dirs::home_dir()
-        .expect("Failed to find home directory")
-        .join(".dc-agent")
+///
+/// # Errors
+/// Returns an error if the home directory cannot be determined.
+pub fn default_agent_dir() -> Result<PathBuf> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Failed to find home directory - HOME environment variable may not be set"))?;
+    Ok(home.join(".dc-agent"))
 }
 
 /// Generate agent keypair in the given directory.
@@ -66,9 +69,10 @@ pub fn generate_agent_keypair(agent_dir: &Path, force: bool) -> Result<(PathBuf,
 
 /// Load agent public key from the default or specified directory.
 pub fn load_agent_pubkey(keys_dir: Option<&Path>) -> Result<String> {
-    let agent_dir = keys_dir
-        .map(Path::to_path_buf)
-        .unwrap_or_else(default_agent_dir);
+    let agent_dir = match keys_dir {
+        Some(path) => path.to_path_buf(),
+        None => default_agent_dir()?,
+    };
     let public_key_path = agent_dir.join("agent.pub");
 
     if !public_key_path.exists() {

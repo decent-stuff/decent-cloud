@@ -177,13 +177,6 @@ impl Method {
     }
 }
 
-/// Authentication type for requests.
-#[derive(Clone, Copy)]
-enum AuthType {
-    /// Use agent pubkey header (X-Agent-Pubkey) if in agent mode, else provider (X-Public-Key)
-    AgentOrProvider,
-}
-
 impl ApiClient {
     pub fn new(config: &ApiConfig) -> Result<Self> {
         let (identity, auth_mode) = if let Some(agent_key) = &config.agent_secret_key {
@@ -274,7 +267,6 @@ impl ApiClient {
         method: Method,
         path: &str,
         body: Option<&[u8]>,
-        auth_type: AuthType,
     ) -> Result<T> {
         let body_bytes = body.unwrap_or(&[]);
         let (timestamp_str, nonce_str, signature) =
@@ -287,15 +279,13 @@ impl ApiClient {
             Method::Put => self.client.put(&url),
         };
 
-        // Add auth headers based on type
+        // Add auth headers
         request_builder = request_builder
             .header("X-Timestamp", &timestamp_str)
             .header("X-Nonce", &nonce_str)
             .header("X-Signature", signature);
 
         // Set identity header based on auth mode
-        // (auth_type parameter kept for future flexibility)
-        let _ = auth_type;
         request_builder = match &self.auth_mode {
             AuthMode::Agent { agent_pubkey } => {
                 request_builder.header("X-Agent-Pubkey", agent_pubkey)
@@ -361,7 +351,7 @@ impl ApiClient {
             self.provider_pubkey
         );
         let response: ApiResponse<Vec<PendingContract>> = self
-            .request(Method::Get, &path, None, AuthType::AgentOrProvider)
+            .request(Method::Get, &path, None)
             .await?;
         Self::unwrap_response(response, "API error")
     }
@@ -380,7 +370,7 @@ impl ApiClient {
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> = self
-            .request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider)
+            .request(Method::Put, &path, Some(&body))
             .await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
@@ -397,7 +387,7 @@ impl ApiClient {
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> = self
-            .request(Method::Put, &path, Some(&body), AuthType::AgentOrProvider)
+            .request(Method::Put, &path, Some(&body))
             .await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
@@ -410,7 +400,7 @@ impl ApiClient {
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> = self
-            .request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider)
+            .request(Method::Post, &path, Some(&body))
             .await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
@@ -432,7 +422,7 @@ impl ApiClient {
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<HeartbeatResponse> = self
-            .request(Method::Post, &path, Some(&body), AuthType::AgentOrProvider)
+            .request(Method::Post, &path, Some(&body))
             .await?;
         Self::unwrap_response(response, "Heartbeat failed")
     }

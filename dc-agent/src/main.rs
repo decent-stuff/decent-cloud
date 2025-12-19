@@ -198,7 +198,10 @@ fn run_init(output: Option<PathBuf>, force: bool) -> Result<()> {
     println!("dc-agent init");
     println!("=============\n");
 
-    let agent_dir = output.unwrap_or_else(default_agent_dir);
+    let agent_dir = match output {
+        Some(path) => path,
+        None => default_agent_dir()?,
+    };
     let private_key_path = agent_dir.join("agent.key");
 
     // Check if key exists without force flag
@@ -239,10 +242,10 @@ async fn run_register(
     println!("dc-agent register");
     println!("=================\n");
 
-    let agent_dir = keys_dir
-        .as_deref()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(default_agent_dir);
+    let agent_dir = match keys_dir.as_deref() {
+        Some(path) => path.to_path_buf(),
+        None => default_agent_dir()?,
+    };
     let private_key_path = agent_dir.join("agent.key");
     let agent_pubkey_hex = load_agent_pubkey(keys_dir.as_deref())?;
 
@@ -429,7 +432,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 println!("Agent Registration");
                 println!("------------------");
 
-                let agent_dir = default_agent_dir();
+                let agent_dir = default_agent_dir()?;
                 let (key_path, agent_pubkey) = generate_agent_keypair(&agent_dir, false)?;
                 println!("[ok] Agent keypair: {}", key_path.display());
 

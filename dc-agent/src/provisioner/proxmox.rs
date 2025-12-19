@@ -6,6 +6,35 @@ use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize};
 use std::time::Duration;
 
+/// Custom error for Proxmox API failures with HTTP status code.
+#[derive(Debug)]
+pub struct ProxmoxApiError {
+    pub status_code: u16,
+    pub method: &'static str,
+    pub path: String,
+    pub body: String,
+}
+
+impl std::fmt::Display for ProxmoxApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} failed ({}): {}",
+            self.method, self.path, self.status_code, self.body
+        )
+    }
+}
+
+impl std::error::Error for ProxmoxApiError {}
+
+impl ProxmoxApiError {
+    /// Check if this is a "not found" error (404 or 500 that indicates VM doesn't exist).
+    /// Proxmox returns 500 for some "not found" cases.
+    fn is_not_found(&self) -> bool {
+        self.status_code == 404 || self.status_code == 500
+    }
+}
+
 /// FNV-1a hash - stable across Rust versions (unlike DefaultHasher).
 pub(crate) fn fnv1a_hash(data: &[u8]) -> u64 {
     const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
@@ -128,11 +157,20 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
-            bail!("GET {} failed ({}): {}", path, status, body);
+            let body = match response.text().await {
+                Ok(text) => text,
+                Err(e) => {
+                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    format!("<failed to read response body: {}>", e)
+                }
+            };
+            return Err(ProxmoxApiError {
+                status_code: status.as_u16(),
+                method: "GET",
+                path: path.to_string(),
+                body,
+            }
+            .into());
         }
 
         let result: ProxmoxResponse<T> = response
@@ -161,11 +199,20 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
-            bail!("POST {} failed ({}): {}", path, status, body);
+            let body = match response.text().await {
+                Ok(text) => text,
+                Err(e) => {
+                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    format!("<failed to read response body: {}>", e)
+                }
+            };
+            return Err(ProxmoxApiError {
+                status_code: status.as_u16(),
+                method: "POST",
+                path: path.to_string(),
+                body,
+            }
+            .into());
         }
 
         let result: ProxmoxResponse<T> = response
@@ -190,11 +237,20 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
-            bail!("PUT {} failed ({}): {}", path, status, body);
+            let body = match response.text().await {
+                Ok(text) => text,
+                Err(e) => {
+                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    format!("<failed to read response body: {}>", e)
+                }
+            };
+            return Err(ProxmoxApiError {
+                status_code: status.as_u16(),
+                method: "PUT",
+                path: path.to_string(),
+                body,
+            }
+            .into());
         }
 
         Ok(())
@@ -214,11 +270,20 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
-            bail!("DELETE {} failed ({}): {}", path, status, body);
+            let body = match response.text().await {
+                Ok(text) => text,
+                Err(e) => {
+                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    format!("<failed to read response body: {}>", e)
+                }
+            };
+            return Err(ProxmoxApiError {
+                status_code: status.as_u16(),
+                method: "DELETE",
+                path: path.to_string(),
+                body,
+            }
+            .into());
         }
 
         Ok(())
@@ -635,11 +700,12 @@ impl Provisioner for ProxmoxProvisioner {
                 }
             }
             Err(e) => {
-                let err_str = e.to_string();
-                // Check for 404 or 500 status codes (may appear as "500" or "500 ")
-                if err_str.contains("(500") || err_str.contains("(404") {
-                    tracing::warn!("VM {} not found, assuming already deleted", vmid);
-                    return Ok(());
+                // Check if this is a "not found" error using our typed error
+                if let Some(api_err) = e.downcast_ref::<ProxmoxApiError>() {
+                    if api_err.is_not_found() {
+                        tracing::warn!("VM {} not found, assuming already deleted", vmid);
+                        return Ok(());
+                    }
                 }
                 return Err(e);
             }
@@ -669,16 +735,16 @@ impl Provisioner for ProxmoxProvisioner {
                 }
             }
             Err(e) => {
-                let err_str = e.to_string();
-                // Check for 404 or 500 status codes (may appear as "500" or "500 ")
-                if err_str.contains("(500") || err_str.contains("(404") {
-                    Ok(HealthStatus::Unhealthy {
-                        reason: "VM not found".to_string(),
-                    })
-                } else {
-                    // Propagate real errors - don't silently return Unknown
-                    Err(e).context("Health check failed")
+                // Check if this is a "not found" error using our typed error
+                if let Some(api_err) = e.downcast_ref::<ProxmoxApiError>() {
+                    if api_err.is_not_found() {
+                        return Ok(HealthStatus::Unhealthy {
+                            reason: "VM not found".to_string(),
+                        });
+                    }
                 }
+                // Propagate real errors - don't silently return Unknown
+                Err(e).context("Health check failed")
             }
         }
     }
@@ -709,13 +775,13 @@ impl Provisioner for ProxmoxProvisioner {
                 }))
             }
             Err(e) => {
-                let err_str = e.to_string();
-                // Check for 404 or 500 status codes (may appear as "500" or "500 ")
-                if err_str.contains("(500") || err_str.contains("(404") {
-                    Ok(None)
-                } else {
-                    Err(e)
+                // Check if this is a "not found" error using our typed error
+                if let Some(api_err) = e.downcast_ref::<ProxmoxApiError>() {
+                    if api_err.is_not_found() {
+                        return Ok(None);
+                    }
                 }
+                Err(e)
             }
         }
     }
