@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
-	import { goto } from "$app/navigation";
 	import {
 		getUserActivity,
 		type UserActivity,
@@ -198,10 +197,9 @@
 						emailVerified: account.emailVerified,
 						email: account.email,
 					};
-					// Redirect to username-based URL for cleaner URLs
+					// Update URL to username-based for cleaner URLs (without re-navigation)
 					if (username && username !== identifier) {
-						goto(`/dashboard/reputation/${username}`, { replaceState: true });
-						return;
+						history.replaceState(history.state, '', `/dashboard/reputation/${username}`);
 					}
 				}
 			} else {
@@ -328,126 +326,6 @@
 </script>
 
 <div class="space-y-8 max-w-7xl mx-auto p-6">
-	<!-- Page Header -->
-	<div
-		class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
-	>
-		<div class="flex items-start justify-between gap-4 mb-4">
-			<div class="flex-1">
-				<h1 class="text-4xl font-bold text-white mb-2">
-					{profile?.displayName || "Account Reputation"}
-				</h1>
-				{#if profile?.bio}
-					<p class="text-white/70 text-sm mb-3">{profile.bio}</p>
-				{/if}
-			</div>
-			{#if profile?.avatarUrl}
-				<img
-					src={profile.avatarUrl}
-					alt="Avatar"
-					class="w-20 h-20 rounded-full border-2 border-white/20"
-				/>
-			{/if}
-		</div>
-		<div class="space-y-3">
-			<div>
-				<p class="text-white/80 text-sm">Public Key:</p>
-				<p class="font-mono text-sm text-white/90 break-all">
-					{pubkey}
-				</p>
-			</div>
-			{#if derivedPrincipal}
-				<div>
-					<p class="text-white/80 text-sm">IC Principal:</p>
-					<p class="font-mono text-sm text-white/90 break-all">
-						{derivedPrincipal}
-					</p>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Contact Information & Socials -->
-		{#if filteredContacts.length > 0 || socials.length > 0 || accountInfo?.emailVerified}
-			<div class="mt-4 pt-4 border-t border-white/10">
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<!-- Contacts -->
-					{#if filteredContacts.length > 0 || accountInfo?.emailVerified}
-						<div>
-							<h3
-								class="text-sm font-semibold text-white/80 mb-2"
-							>
-								Contact
-							</h3>
-							<div class="space-y-2">
-								{#if accountInfo?.emailVerified}
-									<div class="flex items-center gap-2 text-sm">
-										<span class="text-white/60">Email:</span>
-										<span class="text-green-400 text-xs bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30">
-											✓ Verified
-										</span>
-									</div>
-								{/if}
-								{#each filteredContacts as contact}
-									<div
-										class="flex items-center gap-2 text-sm"
-									>
-										<span class="text-white/60 capitalize"
-											>{contact.contactType}:</span
-										>
-										<span class="text-white/90"
-											>{contact.contactValue}</span
-										>
-										{#if contact.verified}
-											<span class="text-green-400 text-xs"
-												>✓</span
-											>
-										{/if}
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/if}
-
-					<!-- Social Links -->
-					{#if socials.length > 0}
-						<div>
-							<h3
-								class="text-sm font-semibold text-white/80 mb-2"
-							>
-								Social
-							</h3>
-							<div class="space-y-2">
-								{#each socials as social}
-									<div
-										class="flex items-center gap-2 text-sm"
-									>
-										<span class="text-white/60 capitalize"
-											>{social.platform}:</span
-										>
-										{#if social.profileUrl}
-											<a
-												href={social.profileUrl}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="text-blue-400 hover:text-blue-300"
-											>
-												@{social.username} →
-											</a>
-										{:else}
-											<span class="text-white/90"
-												>@{social.username}</span
-											>
-										{/if}
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/if}
-				</div>
-			</div>
-		{/if}
-	</div>
-
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
 			<div
@@ -462,8 +340,8 @@
 				<div class="text-6xl mb-4">🔍</div>
 				<h2 class="text-2xl font-bold mb-2">No Account Data</h2>
 				<p class="mb-4">
-					The public key <span class="font-mono text-sm"
-						>{truncatePubkey(pubkey)}</span
+					The identifier <span class="font-mono text-sm"
+						>{identifier}</span
 					>
 					is not registered in the system.
 				</p>
@@ -483,6 +361,126 @@
 			</div>
 		</div>
 	{:else}
+		<!-- Page Header -->
+		<div
+			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+		>
+			<div class="flex items-start justify-between gap-4 mb-4">
+				<div class="flex-1">
+					<h1 class="text-4xl font-bold text-white mb-2">
+						{profile?.displayName || "Account Reputation"}
+					</h1>
+					{#if profile?.bio}
+						<p class="text-white/70 text-sm mb-3">{profile.bio}</p>
+					{/if}
+				</div>
+				{#if profile?.avatarUrl}
+					<img
+						src={profile.avatarUrl}
+						alt="Avatar"
+						class="w-20 h-20 rounded-full border-2 border-white/20"
+					/>
+				{/if}
+			</div>
+			<div class="space-y-3">
+				<div>
+					<p class="text-white/80 text-sm">Public Key:</p>
+					<p class="font-mono text-sm text-white/90 break-all">
+						{pubkey}
+					</p>
+				</div>
+				{#if derivedPrincipal}
+					<div>
+						<p class="text-white/80 text-sm">IC Principal:</p>
+						<p class="font-mono text-sm text-white/90 break-all">
+							{derivedPrincipal}
+						</p>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Contact Information & Socials -->
+			{#if filteredContacts.length > 0 || socials.length > 0 || accountInfo?.emailVerified}
+				<div class="mt-4 pt-4 border-t border-white/10">
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<!-- Contacts -->
+						{#if filteredContacts.length > 0 || accountInfo?.emailVerified}
+							<div>
+								<h3
+									class="text-sm font-semibold text-white/80 mb-2"
+								>
+									Contact
+								</h3>
+								<div class="space-y-2">
+									{#if accountInfo?.emailVerified}
+										<div class="flex items-center gap-2 text-sm">
+											<span class="text-white/60">Email:</span>
+											<span class="text-green-400 text-xs bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30">
+												✓ Verified
+											</span>
+										</div>
+									{/if}
+									{#each filteredContacts as contact}
+										<div
+											class="flex items-center gap-2 text-sm"
+										>
+											<span class="text-white/60 capitalize"
+												>{contact.contactType}:</span
+											>
+											<span class="text-white/90"
+												>{contact.contactValue}</span
+											>
+											{#if contact.verified}
+												<span class="text-green-400 text-xs"
+													>✓</span
+												>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Social Links -->
+						{#if socials.length > 0}
+							<div>
+								<h3
+									class="text-sm font-semibold text-white/80 mb-2"
+								>
+									Social
+								</h3>
+								<div class="space-y-2">
+									{#each socials as social}
+										<div
+											class="flex items-center gap-2 text-sm"
+										>
+											<span class="text-white/60 capitalize"
+												>{social.platform}:</span
+											>
+											{#if social.profileUrl}
+												<a
+													href={social.profileUrl}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="text-blue-400 hover:text-blue-300"
+												>
+													@{social.username} →
+												</a>
+											{:else}
+												<span class="text-white/90"
+													>@{social.username}</span
+												>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+		</div>
+
 		<!-- Overview Stats -->
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 			<!-- Balance -->
