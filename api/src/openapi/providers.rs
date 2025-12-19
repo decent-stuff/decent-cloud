@@ -8,7 +8,7 @@ use super::common::{
     ResponseTimeDistributionResponse, TestNotificationRequest, TestNotificationResponse,
     UpdateNotificationConfigRequest,
 };
-use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
+use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
@@ -1170,7 +1170,8 @@ impl ProvidersApi {
 
     /// Update provisioning status
     ///
-    /// Updates the provisioning status of a contract (requires agent authentication)
+    /// Updates the provisioning status of a contract.
+    /// Accepts either provider authentication (X-Public-Key) or agent authentication (X-Agent-Pubkey).
     #[oai(
         path = "/provider/rental-requests/:id/provisioning",
         method = "put",
@@ -1180,7 +1181,7 @@ impl ProvidersApi {
         &self,
         db: Data<&Arc<Database>>,
         email_service: Data<&Option<Arc<email_utils::EmailService>>>,
-        auth: AgentAuthenticatedUser,
+        auth: ProviderOrAgentAuth,
         id: Path<String>,
         req: Json<ProvisioningStatusRequest>,
     ) -> Json<ApiResponse<String>> {
@@ -1223,6 +1224,33 @@ impl ProvidersApi {
                                     e
                                 )),
                             });
+                        }
+
+                        // Check if provider has auto_accept_rentals enabled - if so, auto-activate
+                        let auto_accept = db
+                            .get_provider_auto_accept_rentals(&auth.provider_pubkey)
+                            .await
+                            .unwrap_or(false);
+
+                        if auto_accept {
+                            // Auto-transition to active
+                            if let Err(e) = db
+                                .update_contract_status(
+                                    &contract_id,
+                                    "active",
+                                    &auth.provider_pubkey,
+                                    Some(
+                                        "Auto-activated (provider has auto_accept_rentals enabled)",
+                                    ),
+                                )
+                                .await
+                            {
+                                tracing::warn!(
+                                    "Failed to auto-activate contract {}: {}",
+                                    &id.0[..16],
+                                    e
+                                );
+                            }
                         }
 
                         // Notify user that their VM is ready
@@ -1783,7 +1811,8 @@ impl ProvidersApi {
             match db.get_contract(&contract_id_bytes).await {
                 Ok(Some(contract)) => {
                     // Check if contract belongs to this provider
-                    let contract_provider = hex::decode(&contract.provider_pubkey).unwrap_or_default();
+                    let contract_provider =
+                        hex::decode(&contract.provider_pubkey).unwrap_or_default();
                     if contract_provider != pubkey_bytes {
                         unknown.push(ReconcileUnknownInstance {
                             external_id: instance.external_id.clone(),

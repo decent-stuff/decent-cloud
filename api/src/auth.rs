@@ -543,5 +543,144 @@ impl AgentAuthenticatedUser {
     }
 }
 
+/// Authentication that accepts either a provider (via X-Public-Key) or an agent (via X-Agent-Pubkey)
+/// Used for endpoints that can be called by either the provider directly or their delegated agent.
+#[derive(Debug, Clone)]
+pub struct ProviderOrAgentAuth {
+    /// The provider's public key (always present - either directly or via delegation)
+    pub provider_pubkey: Vec<u8>,
+    /// If authenticated via agent, contains the agent's pubkey; None if provider authenticated directly
+    /// Kept for audit logging purposes.
+    #[allow(dead_code)]
+    pub agent_pubkey: Option<Vec<u8>>,
+}
+
+impl<'a> poem_openapi::ApiExtractor<'a> for ProviderOrAgentAuth {
+    const TYPES: &'static [poem_openapi::ApiExtractorType] =
+        &[poem_openapi::ApiExtractorType::RequestObject];
+    const PARAM_IS_REQUIRED: bool = true;
+
+    type ParamType = ();
+    type ParamRawType = ();
+
+    fn register(registry: &mut poem_openapi::registry::Registry) {
+        registry.create_security_scheme(
+            "ProviderOrAgentAuth",
+            MetaSecurityScheme {
+                ty: "apiKey",
+                description: Some(
+                    "Accepts either provider signature (X-Public-Key) or agent signature (X-Agent-Pubkey). \
+                     For agent auth, requires a valid delegation from the provider.",
+                ),
+                name: Some("X-Public-Key"),
+                key_in: Some("header"),
+                scheme: None,
+                bearer_format: None,
+                flows: None,
+                openid_connect_url: None,
+            },
+        );
+    }
+
+    fn security_schemes() -> Vec<&'static str> {
+        vec!["ProviderOrAgentAuth"]
+    }
+
+    async fn from_request(
+        request: &'a poem::Request,
+        body: &mut poem::RequestBody,
+        _param_opts: poem_openapi::ExtractParamOptions<Self::ParamType>,
+    ) -> poem::Result<Self> {
+        let headers = request.headers();
+
+        // Check which auth method is being used
+        let agent_pubkey_hex = headers.get("X-Agent-Pubkey").and_then(|v| v.to_str().ok());
+        let user_pubkey_hex = headers.get("X-Public-Key").and_then(|v| v.to_str().ok());
+
+        let (pubkey_hex, is_agent) = match (agent_pubkey_hex, user_pubkey_hex) {
+            (Some(agent), _) => (agent, true), // Prefer agent auth if both present
+            (None, Some(user)) => (user, false),
+            (None, None) => {
+                return Err(
+                    AuthError::MissingHeader("X-Public-Key or X-Agent-Pubkey".to_string()).into(),
+                )
+            }
+        };
+
+        let signature_hex = headers
+            .get("X-Signature")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+
+        let timestamp = headers
+            .get("X-Timestamp")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+
+        let nonce = headers
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+
+        // Read body
+        let body_bytes = body.take()?.into_vec().await?;
+
+        // Get the full path including /api/v1 prefix for signature verification
+        let full_path = format!("/api/v1{}", request.uri().path());
+
+        // Verify signature
+        let pubkey = verify_request_signature(
+            pubkey_hex,
+            signature_hex,
+            timestamp,
+            nonce,
+            request.method().as_str(),
+            &full_path,
+            &body_bytes,
+            None,
+        )?;
+
+        // Restore body for downstream handlers
+        *body = poem::RequestBody::new(poem::Body::from(body_bytes));
+
+        if is_agent {
+            // Agent auth - look up delegation
+            let db = request
+                .data::<std::sync::Arc<crate::database::Database>>()
+                .ok_or_else(|| {
+                    AuthError::InternalError(
+                        "Database not available in request context".to_string(),
+                    )
+                })?;
+
+            let delegation = db
+                .get_active_delegation(&pubkey)
+                .await
+                .map_err(|e| {
+                    AuthError::InternalError(format!("Failed to query delegation: {}", e))
+                })?
+                .ok_or_else(|| {
+                    AuthError::InvalidSignature(format!(
+                        "No active delegation found for agent key '{}'",
+                        hex::encode(&pubkey)
+                    ))
+                })?;
+
+            let (provider_pubkey, _permissions, _signature) = delegation;
+
+            Ok(ProviderOrAgentAuth {
+                provider_pubkey,
+                agent_pubkey: Some(pubkey),
+            })
+        } else {
+            // Direct provider auth
+            Ok(ProviderOrAgentAuth {
+                provider_pubkey: pubkey,
+                agent_pubkey: None,
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
