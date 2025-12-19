@@ -201,7 +201,7 @@
 	});
 
 	function isCancellable(status: string): boolean {
-		return ["requested", "pending", "accepted", "provisioning"].includes(
+		return ["requested", "pending", "accepted", "provisioning", "provisioned", "active"].includes(
 			status.toLowerCase(),
 		);
 	}
