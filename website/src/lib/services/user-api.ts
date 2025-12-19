@@ -1,6 +1,22 @@
 import { signRequest } from './auth-api';
 import { API_BASE_URL } from './api';
 import type { Ed25519KeyIdentity } from '@dfinity/identity';
+import type { AccountExternalKey } from '$lib/types/generated/AccountExternalKey';
+
+/**
+ * Fetch external keys for an account (public endpoint)
+ */
+export async function getExternalKeys(username: string): Promise<AccountExternalKey[]> {
+	const res = await fetch(`${API_BASE_URL}/api/v1/accounts/${username}/external-keys`);
+	if (!res.ok) {
+		throw new Error(`Failed to fetch external keys: ${res.status}`);
+	}
+	const data = await res.json();
+	if (!data.success) {
+		throw new Error(data.error || 'Failed to fetch external keys');
+	}
+	return data.data || [];
+}
 
 /**
  * Helper function to handle API response errors consistently

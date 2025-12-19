@@ -6,6 +6,7 @@
 		type RentalRequestParams,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
+	import { getExternalKeys } from "$lib/services/user-api";
 	import { authStore } from "$lib/stores/auth";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 	import { loadStripe, type Stripe } from "@stripe/stripe-js";
@@ -16,6 +17,7 @@
 		getWalletSelect,
 		isIcpayConfigured,
 	} from "$lib/utils/icpay";
+	import type { AccountExternalKey } from "$lib/types/generated/AccountExternalKey";
 
 	interface Props {
 		offering: Offering | null;
@@ -26,6 +28,7 @@
 	let { offering, onClose, onSuccess }: Props = $props();
 
 	let sshKey = $state("");
+	let savedSshKeys = $state<AccountExternalKey[]>([]);
 	let contactMethod = $state("");
 	let buyerAddress = $state("");
 	let durationHours = $state(720); // Default: 30 days
@@ -77,6 +80,25 @@
 				);
 			}
 		}
+
+		// Fetch user's saved SSH keys from profile
+		const unsubscribe = authStore.activeIdentity.subscribe(async (identity) => {
+			if (identity?.account?.username) {
+				try {
+					const keys = await getExternalKeys(identity.account.username);
+					// Filter to SSH keys only (ssh-ed25519, ssh-rsa, etc.)
+					savedSshKeys = keys.filter((k) => k.keyType.startsWith("ssh-"));
+					// Pre-populate with first SSH key if user hasn't entered one
+					if (savedSshKeys.length > 0 && !sshKey.trim()) {
+						sshKey = savedSshKeys[0].keyData;
+					}
+				} catch (e) {
+					console.warn("Failed to fetch saved SSH keys:", e);
+				}
+			}
+		});
+		// Unsubscribe after first call (we only need the initial value)
+		unsubscribe();
 	});
 
 	onDestroy(() => {
@@ -525,6 +547,25 @@
 					>
 						SSH Public Key <span class="text-red-400">*</span>
 					</label>
+					{#if savedSshKeys.length > 0}
+						<select
+							id="ssh-key-select"
+							onchange={(e) => {
+								const value = (e.target as HTMLSelectElement).value;
+								if (value !== "__custom__") {
+									sshKey = value;
+								}
+							}}
+							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors mb-2"
+						>
+							{#each savedSshKeys as key}
+								<option value={key.keyData} selected={sshKey === key.keyData}>
+									{key.label || key.keyType} ({key.keyData.slice(0, 30)}...)
+								</option>
+							{/each}
+							<option value="__custom__">Enter a different key...</option>
+						</select>
+					{/if}
 					<textarea
 						id="ssh-key"
 						bind:value={sshKey}
