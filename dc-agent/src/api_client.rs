@@ -405,9 +405,8 @@ impl ApiClient {
             "/api/v1/providers/{}/contracts/pending-provision",
             self.provider_pubkey
         );
-        let response: ApiResponse<Vec<PendingContract>> = self
-            .request(Method::Get, &path, None)
-            .await?;
+        let response: ApiResponse<Vec<PendingContract>> =
+            self.request(Method::Get, &path, None).await?;
         Self::unwrap_response(response, "API error")
     }
 
@@ -456,9 +455,8 @@ impl ApiClient {
             instance_details: error.to_string(),
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<serde_json::Value> = self
-            .request(Method::Put, &path, Some(&body))
-            .await?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Put, &path, Some(&body)).await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
@@ -469,9 +467,8 @@ impl ApiClient {
             health_status: status.clone(),
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<serde_json::Value> = self
-            .request(Method::Post, &path, Some(&body))
-            .await?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Post, &path, Some(&body)).await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
@@ -491,9 +488,8 @@ impl ApiClient {
             active_contracts,
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<HeartbeatResponse> = self
-            .request(Method::Post, &path, Some(&body))
-            .await?;
+        let response: ApiResponse<HeartbeatResponse> =
+            self.request(Method::Post, &path, Some(&body)).await?;
         Self::unwrap_response(response, "Heartbeat failed")
     }
 

@@ -1589,7 +1589,8 @@ async fn test_cancel_active_contract_with_prorated_refund() {
     let end_ns = now_ns + (23 * 3600 * 1_000_000_000i64); // 24 hour contract, 23 hours left
 
     // Set ICPay payment and instance details
-    let instance_details = r#"{"external_id":"vm-12345","ip_address":"192.168.1.100","ssh_port":22}"#;
+    let instance_details =
+        r#"{"external_id":"vm-12345","ip_address":"192.168.1.100","ssh_port":22}"#;
     sqlx::query!(
         "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ?, icpay_payment_id = ?, provisioning_instance_details = ?, provisioning_completed_at_ns = ?, start_timestamp_ns = ?, end_timestamp_ns = ? WHERE contract_id = ?",
         "icpay",
@@ -1606,9 +1607,15 @@ async fn test_cancel_active_contract_with_prorated_refund() {
     .unwrap();
 
     // Cancel the active contract
-    db.cancel_contract(&contract_id, &requester_pk, Some("User cancelled active rental"), None, None)
-        .await
-        .unwrap();
+    db.cancel_contract(
+        &contract_id,
+        &requester_pk,
+        Some("User cancelled active rental"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
@@ -1617,7 +1624,10 @@ async fn test_cancel_active_contract_with_prorated_refund() {
     // Prorated refund should be present (23/24 hours remaining = ~96% of 1 ICP)
     let refund = contract.refund_amount_e9s.unwrap();
     assert!(refund > 0, "Should have a refund amount");
-    assert!(refund < 1_000_000_000, "Refund should be less than full amount");
+    assert!(
+        refund < 1_000_000_000,
+        "Refund should be less than full amount"
+    );
 }
 
 #[tokio::test]
@@ -1686,7 +1696,10 @@ async fn test_get_pending_termination_contracts() {
     .unwrap();
 
     // Get pending terminations
-    let pending = db.get_pending_termination_contracts(&provider_pk).await.unwrap();
+    let pending = db
+        .get_pending_termination_contracts(&provider_pk)
+        .await
+        .unwrap();
 
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].contract_id, hex::encode(&contract_id_1));
@@ -1712,7 +1725,8 @@ async fn test_mark_contract_terminated() {
     )
     .await;
 
-    let instance_details = r#"{"external_id":"vm-to-terminate","ip_address":"10.0.0.5","ssh_port":22}"#;
+    let instance_details =
+        r#"{"external_id":"vm-to-terminate","ip_address":"10.0.0.5","ssh_port":22}"#;
     sqlx::query!(
         "UPDATE contract_sign_requests SET provisioning_instance_details = ? WHERE contract_id = ?",
         instance_details,
@@ -1723,14 +1737,20 @@ async fn test_mark_contract_terminated() {
     .unwrap();
 
     // Verify it appears in pending terminations
-    let pending = db.get_pending_termination_contracts(&provider_pk).await.unwrap();
+    let pending = db
+        .get_pending_termination_contracts(&provider_pk)
+        .await
+        .unwrap();
     assert_eq!(pending.len(), 1);
 
     // Mark as terminated
     db.mark_contract_terminated(&contract_id).await.unwrap();
 
     // Verify it no longer appears in pending terminations
-    let pending = db.get_pending_termination_contracts(&provider_pk).await.unwrap();
+    let pending = db
+        .get_pending_termination_contracts(&provider_pk)
+        .await
+        .unwrap();
     assert_eq!(pending.len(), 0);
 
     // Verify terminated_at_ns is set
@@ -1767,7 +1787,10 @@ async fn test_mark_contract_terminated_not_cancelled() {
     // Attempt to mark as terminated should fail
     let result = db.mark_contract_terminated(&contract_id).await;
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("not in cancelled status"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("not in cancelled status"));
 }
 
 // Tests for reconciliation support - verifying get_contract returns data needed for expiry checks

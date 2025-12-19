@@ -289,7 +289,9 @@ impl ProxmoxSetup {
         // First ensure libguestfs-tools is installed
         println!("  Ensuring libguestfs-tools is installed...");
         let install_result = ssh
-            .execute("dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools")
+            .execute(
+                "dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools",
+            )
             .await?;
         if install_result.exit_status != 0 {
             // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
@@ -307,15 +309,17 @@ impl ProxmoxSetup {
         println!("  Customizing image (installing qemu-guest-agent)...");
         // Get actual disk path using pvesm (works for all storage types: LVM, directory, etc.)
         let volume_id = format!("{}:{}", self.storage, disk_name);
-        let path_result = ssh
-            .execute(&format!("pvesm path {}", volume_id))
-            .await?;
+        let path_result = ssh.execute(&format!("pvesm path {}", volume_id)).await?;
         if path_result.exit_status != 0 {
             // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
             if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
                 tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after path lookup failure - system may have orphaned VM");
             }
-            bail!("Failed to get disk path for {}: {}", volume_id, path_result.stdout);
+            bail!(
+                "Failed to get disk path for {}: {}",
+                volume_id,
+                path_result.stdout
+            );
         }
         let disk_path = path_result.stdout.trim();
         let virt_customize_args = format!(

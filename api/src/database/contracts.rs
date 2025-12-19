@@ -1650,7 +1650,6 @@ impl Database {
 
         Ok(true)
     }
-
 }
 
 /// Pending Stripe receipt for background processing

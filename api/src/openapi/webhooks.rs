@@ -4,12 +4,7 @@ use crate::notifications::telegram::{TelegramClient, TelegramUpdate};
 use crate::support_bot::handler::handle_customer_message;
 use anyhow::{Context, Result};
 use email_utils::EmailService;
-use poem::{
-    handler,
-    http::header::HeaderMap,
-    web::Data,
-    Body, Error as PoemError, Response,
-};
+use poem::{handler, http::header::HeaderMap, web::Data, Body, Error as PoemError, Response};
 use serde::Deserialize;
 use std::sync::Arc;
 

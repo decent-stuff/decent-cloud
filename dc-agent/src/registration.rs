@@ -20,8 +20,9 @@ pub const DEFAULT_PERMISSIONS: &[&str] =
 /// # Errors
 /// Returns an error if the home directory cannot be determined.
 pub fn default_agent_dir() -> Result<PathBuf> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("Failed to find home directory - HOME environment variable may not be set"))?;
+    let home = dirs::home_dir().ok_or_else(|| {
+        anyhow::anyhow!("Failed to find home directory - HOME environment variable may not be set")
+    })?;
     Ok(home.join(".dc-agent"))
 }
 
@@ -122,17 +123,15 @@ pub fn load_provider_identity(identity: Option<&str>) -> Result<DccIdentity> {
             }
 
             let mut identities: Vec<_> = std::fs::read_dir(&identities_dir)?
-                .filter_map(|entry_result| {
-                    match entry_result {
-                        Ok(e) => Some(e),
-                        Err(e) => {
-                            tracing::warn!(
-                                error = %e,
-                                dir = %identities_dir.display(),
-                                "Failed to read directory entry while listing identities"
-                            );
-                            None
-                        }
+                .filter_map(|entry_result| match entry_result {
+                    Ok(e) => Some(e),
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            dir = %identities_dir.display(),
+                            "Failed to read directory entry while listing identities"
+                        );
+                        None
                     }
                 })
                 .filter(|e| e.path().is_dir())

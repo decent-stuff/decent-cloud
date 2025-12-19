@@ -742,22 +742,22 @@ async fn poll_and_provision(
                     info!(contract_id = %contract.contract_id, "Processing contract");
 
                     // Parse instance_config if present - log warning if malformed
-                    let instance_config: Option<serde_json::Value> =
-                        match &contract.instance_config {
-                            Some(s) => match serde_json::from_str(s) {
-                                Ok(v) => Some(v),
-                                Err(e) => {
-                                    warn!(
-                                        contract_id = %contract.contract_id,
-                                        error = %e,
-                                        raw_config = %s,
-                                        "Invalid instance_config JSON, ignoring"
-                                    );
-                                    None
-                                }
-                            },
-                            None => None,
-                        };
+                    let instance_config: Option<serde_json::Value> = match &contract.instance_config
+                    {
+                        Some(s) => match serde_json::from_str(s) {
+                            Ok(v) => Some(v),
+                            Err(e) => {
+                                warn!(
+                                    contract_id = %contract.contract_id,
+                                    error = %e,
+                                    raw_config = %s,
+                                    "Invalid instance_config JSON, ignoring"
+                                );
+                                None
+                            }
+                        },
+                        None => None,
+                    };
 
                     // Extract specs from offering (returned by API)
                     let cpu_cores = contract.cpu_cores.map(|c| c as u32);
@@ -1116,16 +1116,17 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 println!("  Cloning test VM from template...");
                 match provisioner.provision(&request).await {
                     Ok(instance) => {
-                        println!(
-                            "[ok] Test VM created: VMID {}",
-                            instance.external_id
-                        );
+                        println!("[ok] Test VM created: VMID {}", instance.external_id);
 
                         // Check if we got an IP address (indicates QEMU guest agent is working)
                         let ip_warning = match &instance.ip_address {
                             None => {
-                                println!("[WARN] No IP address obtained - QEMU guest agent not running");
-                                println!("       Template may be missing qemu-guest-agent package.");
+                                println!(
+                                    "[WARN] No IP address obtained - QEMU guest agent not running"
+                                );
+                                println!(
+                                    "       Template may be missing qemu-guest-agent package."
+                                );
                                 println!("       Re-run setup to fix: dc-agent setup proxmox ...");
                                 true
                             }
@@ -1150,14 +1151,19 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                                     println!("  3. Customize image:");
                                     println!("     virt-customize -a /var/lib/vz/images/<vmid>/vm-<vmid>-disk-0 \\");
                                     println!("       --install qemu-guest-agent \\");
-                                    println!("       --run-command 'systemctl enable qemu-guest-agent'");
+                                    println!(
+                                        "       --run-command 'systemctl enable qemu-guest-agent'"
+                                    );
                                 } else {
                                     println!("Provisioning is working correctly!");
                                 }
                             }
                             Err(e) => {
                                 println!("[WARN] Test VM created but termination failed: {}", e);
-                                println!("  Manual cleanup may be required for VMID {}", instance.external_id);
+                                println!(
+                                    "  Manual cleanup may be required for VMID {}",
+                                    instance.external_id
+                                );
                             }
                         }
                     }

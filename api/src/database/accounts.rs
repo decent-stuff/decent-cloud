@@ -1078,7 +1078,6 @@ impl Database {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Account not found after creation"))
     }
-
 }
 
 /// OAuth account record from database

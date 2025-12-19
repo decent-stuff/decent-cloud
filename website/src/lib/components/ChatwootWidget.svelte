@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { authStore } from '$lib/stores/auth';
 	import { getChatwootIdentity } from '$lib/services/chatwoot-api';
+	import { bytesToHex } from '$lib/utils/identity';
 	import type { IdentityInfo } from '$lib/stores/auth';
 
 	interface Props {
@@ -71,13 +72,19 @@
 			const chatwootIdentity = await getChatwootIdentity(identity.identity);
 			if (!chatwootIdentity) return;
 
+			// Chatwoot requires at least one of: avatar_url, email, or name
+			// Use username if available, otherwise truncated pubkey as fallback
+			const pubkeyHex = bytesToHex(identity.publicKeyBytes);
+			const name = identity.account?.username || `${pubkeyHex.slice(0, 8)}...${pubkeyHex.slice(-6)}`;
+			const email = identity.account?.email;
+
 			// @ts-expect-error - Chatwoot global
 			if (window.$chatwoot) {
 				// @ts-expect-error - Chatwoot global
 				window.$chatwoot.setUser(chatwootIdentity.identifier, {
 					identifier_hash: chatwootIdentity.identifierHash,
-					name: identity.account?.username,
-					email: identity.account?.email
+					name,
+					email
 				});
 			}
 		} catch (error) {

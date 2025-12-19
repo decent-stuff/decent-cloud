@@ -1,4 +1,6 @@
-use super::{HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance, SetupVerification};
+use super::{
+    HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance, SetupVerification,
+};
 use crate::config::ProxmoxConfig;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
@@ -816,7 +818,9 @@ impl Provisioner for ProxmoxProvisioner {
             }
             Err(e) => {
                 result.api_reachable = Some(false);
-                result.errors.push(format!("Cannot reach Proxmox API: {}", e));
+                result
+                    .errors
+                    .push(format!("Cannot reach Proxmox API: {}", e));
                 return result; // No point checking further if API is unreachable
             }
         }
@@ -869,7 +873,9 @@ impl Provisioner for ProxmoxProvisioner {
                 }
                 Err(e) => {
                     result.pool_exists = Some(false);
-                    result.errors.push(format!("Pool '{}' not found: {}", pool, e));
+                    result
+                        .errors
+                        .push(format!("Pool '{}' not found: {}", pool, e));
                 }
             }
         }
