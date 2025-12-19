@@ -90,6 +90,8 @@ impl ProxmoxProvisioner {
         let client = Client::builder()
             .danger_accept_invalid_certs(!config.verify_ssl)
             .timeout(Duration::from_secs(30))
+            // Disable connection pooling to avoid keep-alive issues with Proxmox
+            .pool_max_idle_per_host(0)
             .build()
             .context("Failed to build HTTP client")?;
 
@@ -113,6 +115,7 @@ impl ProxmoxProvisioner {
     }
 
     /// Execute a GET request to the Proxmox API.
+    /// The path may contain pre-encoded segments (e.g., UPID with %3A for colons).
     async fn api_get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let url = format!("{}{}", self.base_url(), path);
         let response = self
@@ -230,7 +233,15 @@ impl ProxmoxProvisioner {
             if task_status.status == "stopped" {
                 return match task_status.exitstatus.as_deref() {
                     Some("OK") => Ok(()),
-                    Some(exit) => bail!("Task failed with status: {}", exit),
+                    Some(exit) => {
+                        // Fetch task log for detailed error
+                        let log = self.get_task_log(node, upid).await.unwrap_or_default();
+                        if log.is_empty() {
+                            bail!("Task failed with status: {}", exit);
+                        } else {
+                            bail!("Task failed ({}): {}", exit, log);
+                        }
+                    }
                     None => bail!("Task stopped without exit status"),
                 };
             }
@@ -244,6 +255,37 @@ impl ProxmoxProvisioner {
             "Task did not complete within {} seconds",
             max_attempts * poll_interval.as_secs()
         );
+    }
+
+    /// Fetch task log to get detailed error message.
+    async fn get_task_log(&self, node: &str, upid: &str) -> Result<String> {
+        let path = format!(
+            "/api2/json/nodes/{}/tasks/{}/log",
+            node,
+            urlencoding::encode(upid)
+        );
+
+        #[derive(Deserialize)]
+        struct LogEntry {
+            t: String, // log line text
+        }
+
+        let entries: Vec<LogEntry> = self.api_get(&path).await?;
+
+        // Get last few non-empty lines that might contain error info
+        let log_text: String = entries
+            .iter()
+            .rev()
+            .filter(|e| !e.t.trim().is_empty())
+            .take(5)
+            .map(|e| e.t.trim())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join(" | ");
+
+        Ok(log_text)
     }
 
     async fn clone_vm(&self, template_vmid: u32, new_vmid: u32, name: &str) -> Result<String> {

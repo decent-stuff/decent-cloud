@@ -68,13 +68,13 @@ enum Commands {
     Run,
     /// Check agent configuration and connectivity
     Doctor {
-        /// Actually call the API to verify authentication works
+        /// Skip API authentication verification
         #[arg(long, default_value = "false")]
-        verify_api: bool,
+        no_verify_api: bool,
 
-        /// Test provisioning by cloning and immediately deleting a test VM
+        /// Skip provisioning test (cloning and deleting a test VM)
         #[arg(long, default_value = "false")]
-        test_provision: bool,
+        no_test_provision: bool,
     },
     /// Set up a new provisioner
     Setup {
@@ -178,9 +178,9 @@ async fn main() -> Result<()> {
             match cli.command {
                 Commands::Run => run_agent(config).await,
                 Commands::Doctor {
-                    verify_api,
-                    test_provision,
-                } => run_doctor(config, verify_api, test_provision).await,
+                    no_verify_api,
+                    no_test_provision,
+                } => run_doctor(config, !no_verify_api, !no_test_provision).await,
                 Commands::TestProvision {
                     ssh_pubkey,
                     keep,
@@ -499,10 +499,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 } else {
                     println!("Next steps:");
                 }
-                println!(
-                    "  dc-agent --config {} doctor --verify-api",
-                    output.display()
-                );
+                println!("  dc-agent --config {} doctor", output.display());
                 println!("  dc-agent --config {} run", output.display());
             } else {
                 println!();
@@ -927,9 +924,6 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 return Err(anyhow::anyhow!("API verification failed: {}", e));
             }
         }
-    } else {
-        println!();
-        println!("Tip: Use --verify-api to test API authentication");
     }
 
     // Test provisioning if requested (only for Proxmox)
@@ -972,14 +966,14 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                         }
                     }
                     Err(e) => {
-                        println!("[FAILED] Provisioning test failed: {}", e);
+                        println!("[FAILED] Provisioning test failed: {:#}", e);
                         println!();
                         println!("Possible causes:");
                         println!("  - Template VM does not exist or is locked");
                         println!("  - Storage pool is full or inaccessible");
                         println!("  - API token lacks required permissions");
                         println!("  - Resource pool does not exist");
-                        return Err(anyhow::anyhow!("Provisioning test failed: {}", e));
+                        return Err(anyhow::anyhow!("Provisioning test failed: {:#}", e));
                     }
                 }
             }
@@ -987,9 +981,6 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 println!("  [skip] --test-provision only supported for Proxmox provisioner");
             }
         }
-    } else if matches!(&config.provisioner, ProvisionerConfig::Proxmox(_)) {
-        println!();
-        println!("Tip: Use --test-provision to verify VM cloning works");
     }
     println!();
 

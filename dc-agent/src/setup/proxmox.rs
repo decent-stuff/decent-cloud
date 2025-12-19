@@ -370,10 +370,11 @@ impl ProxmoxSetup {
                 .context("Failed to delete existing token")?;
         }
 
-        // Create new token
+        // Create new token with privilege separation disabled (inherits user permissions)
         let token_response = client
             .post(&token_url)
             .headers(headers)
+            .form(&[("privsep", "0")])
             .send()
             .await
             .context("Failed to create API token")?;
