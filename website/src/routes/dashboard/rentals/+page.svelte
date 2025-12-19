@@ -27,6 +27,117 @@
 	let unsubscribeAuth: (() => void) | null = null;
 	let highlightedContractId = $state<string | null>(null);
 
+	// Auto-refresh state
+	let refreshInterval: ReturnType<typeof setInterval> | null = null;
+	let autoRefreshEnabled = $state(true);
+	let lastRefresh = $state<number>(Date.now());
+	const REFRESH_INTERVAL_MS = 15_000; // 15 seconds
+
+	// Lifecycle stages for progress indicator
+	const LIFECYCLE_STAGES = [
+		{ key: "payment", label: "Payment", icon: "💳" },
+		{ key: "provider", label: "Provider Review", icon: "⏳" },
+		{ key: "provisioning", label: "Provisioning", icon: "⚙️" },
+		{ key: "ready", label: "Ready", icon: "✅" },
+	] as const;
+
+	// Get current stage index for a contract (0-3, or -1 for terminal states)
+	function getStageIndex(status: string, paymentStatus?: string): number {
+		const s = status.toLowerCase();
+		const ps = paymentStatus?.toLowerCase() ?? "";
+
+		if (s === "cancelled" || s === "rejected") return -1;
+		if (s === "requested" && ps === "pending") return 0; // awaiting payment
+		if (s === "requested" && ps === "failed") return 0; // payment failed
+		if (s === "requested" || s === "pending") return 1; // waiting for provider
+		if (s === "accepted") return 2; // accepted, waiting for provisioning
+		if (s === "provisioning") return 2; // actively provisioning
+		if (s === "provisioned" || s === "active") return 3; // ready
+		return 1; // default
+	}
+
+	// Get "what's next" info for a contract
+	function getNextStepInfo(status: string, paymentStatus?: string): { text: string; isWaiting: boolean } | null {
+		const s = status.toLowerCase();
+		const ps = paymentStatus?.toLowerCase() ?? "";
+
+		if (s === "requested" && ps === "pending") {
+			return { text: "Complete payment to proceed", isWaiting: false };
+		}
+		if (s === "requested" && ps === "failed") {
+			return { text: "Payment failed. Please try again or contact support.", isWaiting: false };
+		}
+		if (s === "requested" && ps === "succeeded") {
+			return { text: "Waiting for provider to accept your request (typically within a few hours)", isWaiting: true };
+		}
+		if (s === "pending") {
+			return { text: "Waiting for provider response", isWaiting: true };
+		}
+		if (s === "accepted") {
+			return { text: "Provider accepted! Waiting for provisioning to start...", isWaiting: true };
+		}
+		if (s === "provisioning") {
+			return { text: "Provider is setting up your resource (typically 5-15 minutes)", isWaiting: true };
+		}
+		if (s === "provisioned" || s === "active") {
+			return { text: "Your resource is ready! See connection details below.", isWaiting: false };
+		}
+		if (s === "rejected") {
+			return { text: "Provider rejected this request. You can try another provider.", isWaiting: false };
+		}
+		if (s === "cancelled") {
+			return null;
+		}
+		return null;
+	}
+
+	function startAutoRefresh() {
+		stopAutoRefresh();
+		if (autoRefreshEnabled && isAuthenticated) {
+			refreshInterval = setInterval(() => {
+				refreshContracts();
+			}, REFRESH_INTERVAL_MS);
+		}
+	}
+
+	function stopAutoRefresh() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+	}
+
+	function toggleAutoRefresh() {
+		autoRefreshEnabled = !autoRefreshEnabled;
+		if (autoRefreshEnabled) {
+			startAutoRefresh();
+		} else {
+			stopAutoRefresh();
+		}
+	}
+
+	async function refreshContracts() {
+		if (!isAuthenticated || loading) return;
+		try {
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) return;
+
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/users/${hexEncode(signingIdentityInfo.publicKeyBytes)}/contracts`,
+			);
+
+			contracts = await getUserContracts(
+				headers,
+				hexEncode(signingIdentityInfo.publicKeyBytes),
+			);
+			lastRefresh = Date.now();
+		} catch (e) {
+			console.error("Error refreshing contracts:", e);
+		}
+	}
+
 	async function loadContracts() {
 		if (!isAuthenticated) {
 			loading = false;
@@ -53,6 +164,7 @@
 				headers,
 				hexEncode(signingIdentityInfo.publicKeyBytes),
 			);
+			lastRefresh = Date.now();
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load rentals";
 			console.error("Error loading rentals:", e);
@@ -79,6 +191,11 @@
 			isAuthenticated = isAuth;
 			await loadContracts();
 			scrollToHighlightedContract();
+			if (isAuth) {
+				startAutoRefresh();
+			} else {
+				stopAutoRefresh();
+			}
 		});
 	});
 
@@ -171,15 +288,42 @@
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
+		stopAutoRefresh();
 	});
 </script>
 
 <div class="space-y-8">
-	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">My Rentals</h1>
-		<p class="text-white/60">
-			View and manage your resource rental requests
-		</p>
+	<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+		<div>
+			<h1 class="text-4xl font-bold text-white mb-2">My Rentals</h1>
+			<p class="text-white/60">
+				View and manage your resource rental requests
+			</p>
+		</div>
+		{#if isAuthenticated && contracts.length > 0}
+			<div class="flex items-center gap-3">
+				<button
+					onclick={toggleAutoRefresh}
+					class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/5 text-white/50 border border-white/10'}"
+					title={autoRefreshEnabled ? 'Auto-refresh enabled (15s)' : 'Auto-refresh disabled'}
+				>
+					<span class="relative flex h-2 w-2">
+						{#if autoRefreshEnabled}
+							<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+						{/if}
+						<span class="relative inline-flex rounded-full h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-400' : 'bg-white/30'}"></span>
+					</span>
+					Auto-refresh
+				</button>
+				<button
+					onclick={refreshContracts}
+					class="px-3 py-1.5 rounded-lg text-sm bg-white/5 text-white/70 border border-white/10 hover:bg-white/10 transition-colors"
+					title="Refresh now"
+				>
+					↻ Refresh
+				</button>
+			</div>
+		{/if}
 	</div>
 
 	{#if !isAuthenticated}
@@ -245,6 +389,8 @@
 			{#each contracts as contract}
 				{@const statusBadge = getStatusBadge(contract.status, contract.payment_status)}
 				{@const isHighlighted = highlightedContractId === contract.contract_id}
+				{@const stageIndex = getStageIndex(contract.status, contract.payment_status)}
+				{@const nextStep = getNextStepInfo(contract.status, contract.payment_status)}
 				<div
 					id="contract-{contract.contract_id}"
 					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border transition-all {isHighlighted
@@ -335,6 +481,55 @@
 							{/if}
 						</div>
 					</div>
+
+					<!-- Progress indicator (only for active rental flows) -->
+					{#if stageIndex >= 0}
+						<div class="mb-4 p-4 bg-white/5 rounded-lg border border-white/10">
+							<div class="flex items-center justify-between mb-3">
+								{#each LIFECYCLE_STAGES as stage, i}
+									<div class="flex flex-col items-center flex-1">
+										<div class="flex items-center w-full">
+											{#if i > 0}
+												<div class="flex-1 h-0.5 {i <= stageIndex ? 'bg-emerald-500' : 'bg-white/20'}"></div>
+											{/if}
+											<div
+												class="w-8 h-8 rounded-full flex items-center justify-center text-sm border-2 transition-all {
+													i < stageIndex
+														? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+														: i === stageIndex
+															? 'bg-blue-500/20 border-blue-500 text-blue-400 ring-2 ring-blue-500/30'
+															: 'bg-white/5 border-white/20 text-white/40'
+												}"
+											>
+												{stage.icon}
+											</div>
+											{#if i < LIFECYCLE_STAGES.length - 1}
+												<div class="flex-1 h-0.5 {i < stageIndex ? 'bg-emerald-500' : 'bg-white/20'}"></div>
+											{/if}
+										</div>
+										<span class="text-xs mt-1 {i <= stageIndex ? 'text-white/80' : 'text-white/40'}">{stage.label}</span>
+									</div>
+								{/each}
+							</div>
+							{#if nextStep}
+								<div class="flex items-start gap-2 text-sm {nextStep.isWaiting ? 'text-blue-400' : 'text-white/70'}">
+									{#if nextStep.isWaiting}
+										<div class="animate-pulse mt-0.5">⏳</div>
+									{:else}
+										<span class="mt-0.5">→</span>
+									{/if}
+									<div>
+										<span>{nextStep.text}</span>
+										{#if nextStep.isWaiting}
+											<p class="text-white/50 text-xs mt-1">
+												You'll receive an email when your resource is ready. Make sure your <a href="/dashboard/account/profile" class="text-blue-400 hover:underline">profile</a> has a valid email address.
+											</p>
+										{/if}
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
 
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 						<div

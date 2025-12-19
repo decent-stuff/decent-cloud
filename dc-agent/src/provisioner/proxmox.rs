@@ -1,4 +1,4 @@
-use super::{HealthStatus, Instance, ProvisionRequest, Provisioner};
+use super::{HealthStatus, Instance, ProvisionRequest, Provisioner, SetupVerification};
 use crate::config::ProxmoxConfig;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
@@ -627,6 +627,78 @@ impl Provisioner for ProxmoxProvisioner {
                 }
             }
         }
+    }
+
+    async fn verify_setup(&self) -> SetupVerification {
+        let mut result = SetupVerification::default();
+
+        // Check 1: Can we reach the Proxmox API?
+        let version_path = "/api2/json/version";
+        match self.api_get::<serde_json::Value>(version_path).await {
+            Ok(_) => {
+                result.api_reachable = Some(true);
+            }
+            Err(e) => {
+                result.api_reachable = Some(false);
+                result.errors.push(format!("Cannot reach Proxmox API: {}", e));
+                return result; // No point checking further if API is unreachable
+            }
+        }
+
+        // Check 2: Does the template VM exist?
+        match self.get_vm_status(self.config.template_vmid).await {
+            Ok(status) => {
+                result.template_exists = Some(true);
+                // Warn if template is running (should be stopped for cloning)
+                if status.status == "running" {
+                    result.errors.push(format!(
+                        "Template VM {} is running (should be stopped for cloning)",
+                        self.config.template_vmid
+                    ));
+                }
+            }
+            Err(e) => {
+                result.template_exists = Some(false);
+                result.errors.push(format!(
+                    "Template VM {} not found: {}",
+                    self.config.template_vmid, e
+                ));
+            }
+        }
+
+        // Check 3: Does the storage exist?
+        let storage_path = format!(
+            "/api2/json/nodes/{}/storage/{}",
+            self.config.node, self.config.storage
+        );
+        match self.api_get::<serde_json::Value>(&storage_path).await {
+            Ok(_) => {
+                result.storage_accessible = Some(true);
+            }
+            Err(e) => {
+                result.storage_accessible = Some(false);
+                result.errors.push(format!(
+                    "Storage '{}' not accessible: {}",
+                    self.config.storage, e
+                ));
+            }
+        }
+
+        // Check 4: If pool is configured, does it exist?
+        if let Some(pool) = &self.config.pool {
+            let pool_path = format!("/api2/json/pools/{}", pool);
+            match self.api_get::<serde_json::Value>(&pool_path).await {
+                Ok(_) => {
+                    result.pool_exists = Some(true);
+                }
+                Err(e) => {
+                    result.pool_exists = Some(false);
+                    result.errors.push(format!("Pool '{}' not found: {}", pool, e));
+                }
+            }
+        }
+
+        result
     }
 }
 

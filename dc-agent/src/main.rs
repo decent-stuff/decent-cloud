@@ -71,6 +71,10 @@ enum Commands {
         /// Actually call the API to verify authentication works
         #[arg(long, default_value = "false")]
         verify_api: bool,
+
+        /// Test provisioning by cloning and immediately deleting a test VM
+        #[arg(long, default_value = "false")]
+        test_provision: bool,
     },
     /// Set up a new provisioner
     Setup {
@@ -173,7 +177,10 @@ async fn main() -> Result<()> {
             let config = Config::load(&cli.config)?;
             match cli.command {
                 Commands::Run => run_agent(config).await,
-                Commands::Doctor { verify_api } => run_doctor(config, verify_api).await,
+                Commands::Doctor {
+                    verify_api,
+                    test_provision,
+                } => run_doctor(config, verify_api, test_provision).await,
                 Commands::TestProvision {
                     ssh_pubkey,
                     keep,
@@ -741,13 +748,15 @@ async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisione
                         }
                     }
                     Err(e) => {
+                        // Use {:?} to show full error chain including underlying cause
                         error!(
                             contract_id = %contract.contract_id,
-                            error = %e,
+                            error = ?e,
                             "Provisioning failed"
                         );
+                        // Include full chain in failure report
                         if let Err(report_err) = api_client
-                            .report_failed(&contract.contract_id, &e.to_string())
+                            .report_failed(&contract.contract_id, &format!("{:?}", e))
                             .await
                         {
                             error!(
@@ -785,7 +794,7 @@ fn create_provisioner(config: &Config) -> Result<Box<dyn Provisioner>> {
     }
 }
 
-async fn run_doctor(config: Config, verify_api: bool) -> Result<()> {
+async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> Result<()> {
     println!("dc-agent doctor");
     println!("================");
     println!();
@@ -811,7 +820,9 @@ async fn run_doctor(config: Config, verify_api: bool) -> Result<()> {
     println!("  Auth mode: {}", auth_mode);
     println!();
 
-    // Check provisioner configuration
+    // Check provisioner configuration and verify setup
+    let provisioner = create_provisioner(&config)?;
+
     match &config.provisioner {
         ProvisionerConfig::Proxmox(proxmox) => {
             println!("Provisioner: Proxmox");
@@ -822,6 +833,33 @@ async fn run_doctor(config: Config, verify_api: bool) -> Result<()> {
             println!("  Verify SSL: {}", proxmox.verify_ssl);
             if let Some(pool) = &proxmox.pool {
                 println!("  Resource pool: {}", pool);
+            }
+            println!();
+            println!("Verifying Proxmox setup...");
+            let verification = provisioner.verify_setup().await;
+            if verification.api_reachable == Some(true) {
+                println!("  [ok] Proxmox API reachable");
+            }
+            if verification.template_exists == Some(true) {
+                println!("  [ok] Template VM {} exists", proxmox.template_vmid);
+            }
+            if verification.storage_accessible == Some(true) {
+                println!("  [ok] Storage '{}' accessible", proxmox.storage);
+            }
+            if let Some(pool) = &proxmox.pool {
+                if verification.pool_exists == Some(true) {
+                    println!("  [ok] Pool '{}' exists", pool);
+                }
+            }
+            if !verification.errors.is_empty() {
+                println!();
+                for error in &verification.errors {
+                    println!("  [FAILED] {}", error);
+                }
+                return Err(anyhow::anyhow!(
+                    "Proxmox setup verification failed with {} error(s)",
+                    verification.errors.len()
+                ));
             }
         }
         ProvisionerConfig::Script(script) => {
@@ -892,6 +930,66 @@ async fn run_doctor(config: Config, verify_api: bool) -> Result<()> {
     } else {
         println!();
         println!("Tip: Use --verify-api to test API authentication");
+    }
+
+    // Test provisioning if requested (only for Proxmox)
+    if test_provision {
+        println!();
+        println!("Testing provisioning...");
+
+        match &config.provisioner {
+            ProvisionerConfig::Proxmox(_) => {
+                let test_contract_id = format!("doctor-test-{}", std::process::id());
+
+                let request = ProvisionRequest {
+                    contract_id: test_contract_id.clone(),
+                    offering_id: "doctor-test".to_string(),
+                    cpu_cores: Some(1),
+                    memory_mb: Some(512),
+                    storage_gb: None, // Use template default
+                    requester_ssh_pubkey: None,
+                    instance_config: None,
+                };
+
+                println!("  Cloning test VM from template...");
+                match provisioner.provision(&request).await {
+                    Ok(instance) => {
+                        println!(
+                            "[ok] Test VM created: VMID {}",
+                            instance.external_id
+                        );
+                        println!("  Terminating test VM...");
+                        match provisioner.terminate(&instance.external_id).await {
+                            Ok(()) => {
+                                println!("[ok] Test VM terminated successfully");
+                                println!();
+                                println!("Provisioning is working correctly!");
+                            }
+                            Err(e) => {
+                                println!("[WARN] Test VM created but termination failed: {}", e);
+                                println!("  Manual cleanup may be required for VMID {}", instance.external_id);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("[FAILED] Provisioning test failed: {}", e);
+                        println!();
+                        println!("Possible causes:");
+                        println!("  - Template VM does not exist or is locked");
+                        println!("  - Storage pool is full or inaccessible");
+                        println!("  - API token lacks required permissions");
+                        println!("  - Resource pool does not exist");
+                        return Err(anyhow::anyhow!("Provisioning test failed: {}", e));
+                    }
+                }
+            }
+            _ => {
+                println!("  [skip] --test-provision only supported for Proxmox provisioner");
+            }
+        }
+    } else if matches!(&config.provisioner, ProvisionerConfig::Proxmox(_)) {
+        println!();
+        println!("Tip: Use --test-provision to verify VM cloning works");
     }
     println!();
 

@@ -34,7 +34,6 @@ pub struct ApiResponse<T> {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PendingContract {
     pub contract_id: String,
     pub offering_id: String,

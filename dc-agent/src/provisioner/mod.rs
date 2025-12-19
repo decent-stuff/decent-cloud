@@ -38,6 +38,26 @@ pub struct ProvisionRequest {
     pub instance_config: Option<serde_json::Value>,
 }
 
+/// Result of verifying provisioner setup
+#[derive(Debug, Default)]
+pub struct SetupVerification {
+    pub api_reachable: Option<bool>,
+    pub template_exists: Option<bool>,
+    pub storage_accessible: Option<bool>,
+    pub pool_exists: Option<bool>,
+    pub errors: Vec<String>,
+}
+
+impl SetupVerification {
+    pub fn is_ok(&self) -> bool {
+        self.errors.is_empty()
+            && self.api_reachable != Some(false)
+            && self.template_exists != Some(false)
+            && self.storage_accessible != Some(false)
+            && self.pool_exists != Some(false)
+    }
+}
+
 /// Provisioner trait - implement for each backend
 #[async_trait]
 pub trait Provisioner: Send + Sync {
@@ -52,4 +72,9 @@ pub trait Provisioner: Send + Sync {
 
     /// Get instance details (for IP discovery after boot)
     async fn get_instance(&self, external_id: &str) -> Result<Option<Instance>>;
+
+    /// Verify provisioner setup without creating resources
+    async fn verify_setup(&self) -> SetupVerification {
+        SetupVerification::default()
+    }
 }
