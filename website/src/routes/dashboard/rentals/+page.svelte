@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy, tick } from "svelte";
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import {
 		getUserContracts,
@@ -391,11 +392,12 @@
 				{@const isHighlighted = highlightedContractId === contract.contract_id}
 				{@const stageIndex = getStageIndex(contract.status, contract.payment_status)}
 				{@const nextStep = getNextStepInfo(contract.status, contract.payment_status)}
-				<div
+				<a
+					href="/dashboard/rentals/{contract.contract_id}"
 					id="contract-{contract.contract_id}"
-					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border transition-all {isHighlighted
+					class="block bg-white/10 backdrop-blur-lg rounded-xl p-6 border transition-all cursor-pointer {isHighlighted
 						? 'border-blue-400 ring-2 ring-blue-400/50'
-						: 'border-white/20 hover:border-blue-400'}"
+						: 'border-white/20 hover:border-blue-400 hover:bg-white/[0.12]'}"
 				>
 					<div class="flex items-start justify-between mb-4">
 						<div class="flex-1">
@@ -412,11 +414,11 @@
 								<!-- Cancel button for cancelable contracts -->
 								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
 									<button
-										onclick={() =>
-											handleCancelContract(
-												contract.contract_id,
-												contract.status,
-											)}
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											handleCancelContract(contract.contract_id, contract.status);
+										}}
 										class="px-2 py-1 text-xs bg-red-600/80 text-white rounded hover:bg-red-700 transition-colors"
 										title="Cancel this rental request"
 									>
@@ -427,10 +429,11 @@
 								<!-- Show for: payment succeeded/refunded OR contract progressed past payment (active/provisioned/provisioning/accepted) -->
 								{#if (contract.payment_status === "succeeded" || contract.payment_status === "refunded" || ["active", "provisioned", "provisioning", "accepted"].includes(contract.status.toLowerCase())) && downloadingInvoiceContractId !== contract.contract_id}
 									<button
-										onclick={() =>
-											handleDownloadInvoice(
-												contract.contract_id,
-											)}
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											handleDownloadInvoice(contract.contract_id);
+										}}
 										class="px-2 py-1 text-xs bg-blue-600/80 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
 										title="Download invoice PDF"
 									>
@@ -522,7 +525,7 @@
 										<span>{nextStep.text}</span>
 										{#if nextStep.isWaiting}
 											<p class="text-white/50 text-xs mt-1">
-												You'll receive an email when your resource is ready. Make sure your <a href="/dashboard/account/profile" class="text-blue-400 hover:underline">profile</a> has a valid email address.
+												You'll receive an email when your resource is ready. Make sure your <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto('/dashboard/account/profile'); }} class="text-blue-400 hover:underline">profile</button> has a valid email address.
 											</p>
 										{/if}
 									</div>
@@ -576,12 +579,16 @@
 							<div class="text-white/60 text-xs mb-1">
 								Provider
 							</div>
-							<a
-								href="/dashboard/reputation/{contract.provider_pubkey}"
-								class="text-white text-sm font-mono hover:text-blue-400 transition-colors"
+							<button
+								onclick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									goto(`/dashboard/reputation/${contract.provider_pubkey}`);
+								}}
+								class="text-white text-sm font-mono hover:text-blue-400 transition-colors text-left"
 							>
 								{truncateHash(contract.provider_pubkey)}
-							</a>
+							</button>
 						</div>
 					</div>
 
@@ -615,7 +622,7 @@
 							{/if}
 						</div>
 					{/if}
-				</div>
+				</a>
 			{/each}
 		</div>
 	{/if}
