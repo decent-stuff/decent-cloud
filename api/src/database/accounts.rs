@@ -746,6 +746,7 @@ impl Database {
     }
 
     /// Get account by Chatwoot user ID
+    #[allow(dead_code)]
     pub async fn get_account_by_chatwoot_user_id(
         &self,
         chatwoot_user_id: i64,

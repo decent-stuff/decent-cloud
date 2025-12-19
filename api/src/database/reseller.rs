@@ -1,3 +1,6 @@
+// Reseller functionality is partially implemented - some methods only used in tests
+#![allow(dead_code)]
+
 use super::types::Database;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};

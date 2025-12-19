@@ -50,6 +50,7 @@ impl Database {
     }
 
     /// Clean up old tracking entries (older than specified days).
+    #[allow(dead_code)]
     pub async fn cleanup_telegram_tracking(&self, days_old: i64) -> Result<u64> {
         let cutoff = chrono::Utc::now().timestamp() - (days_old * 24 * 60 * 60);
 

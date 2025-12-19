@@ -380,7 +380,8 @@ impl Database {
         Ok(providers)
     }
 
-    /// Create or update an external provider
+    /// Create or update an external provider (used by api-cli scraper)
+    #[allow(dead_code)]
     pub async fn create_or_update_external_provider(
         &self,
         pubkey: &[u8],

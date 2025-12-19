@@ -573,6 +573,7 @@ pub async fn chatwoot_webhook(
 
 // ICPay webhook types
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct IcpayWebhookEvent {
     id: String,
     #[serde(rename = "type")]
@@ -586,6 +587,7 @@ struct IcpayWebhookData {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct IcpayPaymentObject {
     id: String,
     status: String,

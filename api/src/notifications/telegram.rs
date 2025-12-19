@@ -24,6 +24,7 @@ struct SendMessageRequest<'a> {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct TelegramMessage {
     pub message_id: i64,
     pub chat: TelegramChat,
@@ -112,6 +113,7 @@ pub struct TelegramUpdate {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct TelegramIncomingMessage {
     pub message_id: i64,
     pub chat: TelegramChat,
