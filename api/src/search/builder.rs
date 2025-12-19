@@ -14,80 +14,59 @@ fn field_allowlist() -> HashMap<&'static str, FieldConfig> {
     let mut map = HashMap::new();
     // Basic offering info
     map.insert("name", FieldConfig::new("offer_name", FieldType::Text));
+    map.insert("desc", FieldConfig::new("description", FieldType::Text));
     map.insert("type", FieldConfig::new("product_type", FieldType::Text));
     map.insert("stock", FieldConfig::new("stock_status", FieldType::Text));
+    map.insert("source", FieldConfig::new("offering_source", FieldType::Text));
 
     // Pricing
     map.insert("price", FieldConfig::new("monthly_price", FieldType::Float));
     map.insert("setup_fee", FieldConfig::new("setup_fee", FieldType::Float));
+    map.insert("currency", FieldConfig::new("currency", FieldType::Text));
 
     // Processor
     map.insert("cores", FieldConfig::new("processor_cores", FieldType::Int));
-    map.insert(
-        "cpu_brand",
-        FieldConfig::new("processor_brand", FieldType::Text),
-    );
-    map.insert(
-        "cpu_speed",
-        FieldConfig::new("processor_speed", FieldType::Text),
-    );
+    map.insert("cpu_count", FieldConfig::new("processor_amount", FieldType::Int));
+    map.insert("cpu_brand", FieldConfig::new("processor_brand", FieldType::Text));
+    map.insert("cpu_speed", FieldConfig::new("processor_speed", FieldType::Text));
+    map.insert("cpu", FieldConfig::new("processor_name", FieldType::Text));
 
     // Memory
     map.insert("memory", FieldConfig::new("memory_amount", FieldType::Text));
+    map.insert("mem_type", FieldConfig::new("memory_type", FieldType::Text));
+    map.insert("ecc", FieldConfig::new("memory_error_correction", FieldType::Text));
 
     // Storage
-    map.insert(
-        "ssd",
-        FieldConfig::new("total_ssd_capacity", FieldType::Text),
-    );
-    map.insert(
-        "hdd",
-        FieldConfig::new("total_hdd_capacity", FieldType::Text),
-    );
+    map.insert("ssd", FieldConfig::new("total_ssd_capacity", FieldType::Text));
+    map.insert("ssd_count", FieldConfig::new("ssd_amount", FieldType::Int));
+    map.insert("hdd", FieldConfig::new("total_hdd_capacity", FieldType::Text));
+    map.insert("hdd_count", FieldConfig::new("hdd_amount", FieldType::Int));
 
     // Location
-    map.insert(
-        "country",
-        FieldConfig::new("datacenter_country", FieldType::Text),
-    );
+    map.insert("country", FieldConfig::new("datacenter_country", FieldType::Text));
     map.insert("city", FieldConfig::new("datacenter_city", FieldType::Text));
 
     // GPU
     map.insert("gpu", FieldConfig::new("gpu_name", FieldType::Text));
     map.insert("gpu_count", FieldConfig::new("gpu_count", FieldType::Int));
-    map.insert(
-        "gpu_memory",
-        FieldConfig::new("gpu_memory_gb", FieldType::Int),
-    );
+    map.insert("gpu_memory", FieldConfig::new("gpu_memory_gb", FieldType::Int));
 
     // Network
-    map.insert(
-        "unmetered",
-        FieldConfig::new("unmetered_bandwidth", FieldType::Bool),
-    );
+    map.insert("unmetered", FieldConfig::new("unmetered_bandwidth", FieldType::Bool));
+    map.insert("uplink", FieldConfig::new("uplink_speed", FieldType::Text));
     map.insert("traffic", FieldConfig::new("traffic", FieldType::Int));
 
     // Contract terms
-    map.insert(
-        "min_hours",
-        FieldConfig::new("min_contract_hours", FieldType::Int),
-    );
-    map.insert(
-        "max_hours",
-        FieldConfig::new("max_contract_hours", FieldType::Int),
-    );
-    map.insert(
-        "billing",
-        FieldConfig::new("billing_interval", FieldType::Text),
-    );
+    map.insert("min_hours", FieldConfig::new("min_contract_hours", FieldType::Int));
+    map.insert("max_hours", FieldConfig::new("max_contract_hours", FieldType::Int));
+    map.insert("billing", FieldConfig::new("billing_interval", FieldType::Text));
 
     // Platform/features
-    map.insert(
-        "virt",
-        FieldConfig::new("virtualization_type", FieldType::Text),
-    );
+    map.insert("virt", FieldConfig::new("virtualization_type", FieldType::Text));
+    map.insert("panel", FieldConfig::new("control_panel", FieldType::Text));
     map.insert("features", FieldConfig::new("features", FieldType::Csv));
     map.insert("os", FieldConfig::new("operating_systems", FieldType::Csv));
+    map.insert("payment", FieldConfig::new("payment_methods", FieldType::Csv));
 
     // Trust
     map.insert("trust", FieldConfig::new("trust_score", FieldType::Int));
@@ -142,6 +121,26 @@ pub fn build_sql(filters: &[Filter]) -> Result<(String, Vec<SqlValue>), String> 
     Ok((sql, bind_values))
 }
 
+/// Fields that should use LIKE matching for substring search
+const LIKE_FIELDS: &[&str] = &[
+    "name",
+    "desc",
+    "memory",
+    "gpu",
+    "features",
+    "os",
+    "ssd",
+    "hdd",
+    "cpu_brand",
+    "cpu_speed",
+    "cpu",
+    "mem_type",
+    "ecc",
+    "uplink",
+    "panel",
+    "payment",
+];
+
 fn build_filter_sql(
     filter: &Filter,
     config: &FieldConfig,
@@ -150,18 +149,7 @@ fn build_filter_sql(
     let use_like = (matches!(config.field_type, FieldType::Text)
         || matches!(config.field_type, FieldType::Csv))
         && matches!(filter.operator, Operator::Eq)
-        && [
-            "name",
-            "memory",
-            "gpu",
-            "features",
-            "os",
-            "ssd",
-            "hdd",
-            "cpu_brand",
-            "cpu_speed",
-        ]
-        .contains(&filter.field.as_str());
+        && LIKE_FIELDS.contains(&filter.field.as_str());
 
     let sql = match (&filter.operator, filter.values.len()) {
         (Operator::Eq, 1) if use_like => build_like_clause(column, filter.negated),

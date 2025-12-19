@@ -513,20 +513,53 @@ fn test_sql_complex_query() {
 #[test]
 fn test_sql_all_allowlisted_fields() {
     let queries = vec![
+        // Basic offering info
         ("name:test", "offer_name LIKE ?"),
+        ("desc:cloud", "description LIKE ?"),
         ("type:gpu", "product_type = ?"),
         ("stock:available", "stock_status = ?"),
+        ("source:seeded", "offering_source = ?"),
+        // Pricing
         ("price:100", "monthly_price = ?"),
+        ("setup_fee:50", "setup_fee = ?"),
+        ("currency:EUR", "currency = ?"),
+        // Processor
         ("cores:8", "processor_cores = ?"),
+        ("cpu_count:2", "processor_amount = ?"),
+        ("cpu_brand:AMD", "processor_brand LIKE ?"),
+        ("cpu_speed:3.5GHz", "processor_speed LIKE ?"),
+        ("cpu:Xeon", "processor_name LIKE ?"),
+        // Memory
         ("memory:32GB", "memory_amount LIKE ?"),
+        ("mem_type:DDR5", "memory_type LIKE ?"),
+        ("ecc:ECC", "memory_error_correction LIKE ?"),
+        // Storage
+        ("ssd:500GB", "total_ssd_capacity LIKE ?"),
+        ("ssd_count:2", "ssd_amount = ?"),
+        ("hdd:2TB", "total_hdd_capacity LIKE ?"),
+        ("hdd_count:4", "hdd_amount = ?"),
+        // Location
         ("country:US", "datacenter_country = ?"),
         ("city:NYC", "datacenter_city = ?"),
+        // GPU
         ("gpu:RTX", "gpu_name LIKE ?"),
         ("gpu_count:2", "gpu_count = ?"),
         ("gpu_memory:16", "gpu_memory_gb = ?"),
-        ("features:ssd", "features LIKE ?"),
+        // Network
         ("unmetered:true", "unmetered_bandwidth = ?"),
+        ("uplink:10Gbps", "uplink_speed LIKE ?"),
         ("traffic:1000", "traffic = ?"),
+        // Contract terms
+        ("min_hours:720", "min_contract_hours = ?"),
+        ("max_hours:8760", "max_contract_hours = ?"),
+        ("billing:monthly", "billing_interval = ?"),
+        // Platform/features
+        ("virt:kvm", "virtualization_type = ?"),
+        ("panel:cPanel", "control_panel LIKE ?"),
+        ("features:ssd", "features LIKE ?"),
+        ("os:Ubuntu", "operating_systems LIKE ?"),
+        ("payment:crypto", "payment_methods LIKE ?"),
+        // Trust
         ("trust:95", "trust_score = ?"),
     ];
 
