@@ -69,10 +69,11 @@ impl Provisioner for ManualProvisioner {
             })
             .await
         {
-            tracing::error!(
-                contract_id = %request.contract_id,
-                error = %e,
-                "Webhook notification failed! Operator may not be alerted about this provisioning request."
+            // Webhook failure is critical - operator won't be notified!
+            // Include this in the error to ensure it's visible
+            anyhow::bail!(
+                "{} - human intervention needed. CRITICAL: Webhook notification FAILED ({}), operator may not be alerted!",
+                message, e
             );
         }
 
@@ -97,10 +98,11 @@ impl Provisioner for ManualProvisioner {
             })
             .await
         {
-            tracing::error!(
-                external_id = %external_id,
-                error = %e,
-                "Webhook notification failed! Operator may not be alerted about this termination request."
+            // Webhook failure is critical - operator won't be notified!
+            // Include this in the error to ensure it's visible
+            anyhow::bail!(
+                "{} - human intervention needed. CRITICAL: Webhook notification FAILED ({}), operator may not be alerted!",
+                message, e
             );
         }
 

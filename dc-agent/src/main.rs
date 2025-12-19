@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use dc_agent::{
     api_client::ApiClient,
@@ -368,7 +368,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 .filter_map(|s| {
                     let t = OsTemplate::parse(s.trim());
                     if t.is_none() {
-                        eprintln!("Warning: Unknown template '{}', skipping", s.trim());
+                        warn!(template = %s.trim(), "Unknown template, skipping");
                     }
                     t
                 })
@@ -397,7 +397,12 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             // Prompt for passwords
             let ssh_password =
                 rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?;
-            let proxmox_password = if ssh_user == proxmox_user.split('@').next().unwrap_or("root") {
+            // Extract user part from proxmox_user (e.g., "root" from "root@pam")
+            let proxmox_user_part = proxmox_user
+                .split_once('@')
+                .map(|(user, _)| user)
+                .unwrap_or(&proxmox_user);
+            let proxmox_password = if ssh_user == proxmox_user_part {
                 ssh_password.clone()
             } else {
                 rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
@@ -528,15 +533,16 @@ async fn run_test_provision(
     let provisioner = create_provisioner(&config)?;
 
     // Generate contract ID if not provided
-    let contract_id = contract_id.unwrap_or_else(|| {
-        format!(
-            "test-{}",
-            std::time::SystemTime::now()
+    let contract_id = match contract_id {
+        Some(id) => id,
+        None => {
+            let secs = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-        )
-    });
+                .context("System clock is before Unix epoch - check system time")?
+                .as_secs();
+            format!("test-{}", secs)
+        }
+    };
 
     // Use provided SSH key or a placeholder
     let ssh_key = ssh_pubkey.unwrap_or_else(|| {
@@ -1025,14 +1031,17 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                         );
 
                         // Check if we got an IP address (indicates QEMU guest agent is working)
-                        let ip_warning = if instance.ip_address.is_none() {
-                            println!("[WARN] No IP address obtained - QEMU guest agent not running");
-                            println!("       Template may be missing qemu-guest-agent package.");
-                            println!("       Re-run setup to fix: dc-agent setup proxmox ...");
-                            true
-                        } else {
-                            println!("  IP address: {}", instance.ip_address.as_ref().unwrap());
-                            false
+                        let ip_warning = match &instance.ip_address {
+                            None => {
+                                println!("[WARN] No IP address obtained - QEMU guest agent not running");
+                                println!("       Template may be missing qemu-guest-agent package.");
+                                println!("       Re-run setup to fix: dc-agent setup proxmox ...");
+                                true
+                            }
+                            Some(ip) => {
+                                println!("  IP address: {}", ip);
+                                false
+                            }
                         };
 
                         println!("  Terminating test VM...");

@@ -305,7 +305,18 @@ impl ProxmoxSetup {
         }
 
         println!("  Customizing image (installing qemu-guest-agent)...");
-        let disk_path = format!("/var/lib/vz/images/{}/{}", vmid, disk_name);
+        // Get actual disk path using pvesm (works for all storage types: LVM, directory, etc.)
+        let volume_id = format!("{}:{}", self.storage, disk_name);
+        let path_result = ssh
+            .execute(&format!("pvesm path {}", volume_id))
+            .await?;
+        if path_result.exit_status != 0 {
+            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
+                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after path lookup failure");
+            }
+            bail!("Failed to get disk path for {}: {}", volume_id, path_result.stdout);
+        }
+        let disk_path = path_result.stdout.trim();
         let virt_customize_args = format!(
             "-a {} --install qemu-guest-agent \
              --run-command 'systemctl enable qemu-guest-agent' \
@@ -331,11 +342,22 @@ impl ProxmoxSetup {
             if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
                 tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after image customization failure");
             }
+            // Show last 10 lines of output for debugging
+            let error_context: String = customize_result
+                .stdout
+                .lines()
+                .rev()
+                .take(10)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>()
+                .join("\n");
             bail!(
                 "Failed to customize image with qemu-guest-agent.\n\
                  VMs created from this template will NOT report IP addresses.\n\
-                 Error: {}",
-                customize_result.stdout.lines().last().unwrap_or("unknown error")
+                 Error output:\n{}",
+                error_context
             );
         }
         println!("  Image customized successfully");
@@ -388,8 +410,16 @@ impl ProxmoxSetup {
 
         // Create API token
         let token_name = "dc-agent";
-        let user_part = self.proxmox_user.split('@').next().unwrap_or("root");
-        let realm = self.proxmox_user.split('@').nth(1).unwrap_or("pam");
+        let (user_part, realm) = match self.proxmox_user.split_once('@') {
+            Some((user, realm)) => (user, realm),
+            None => {
+                tracing::warn!(
+                    proxmox_user = %self.proxmox_user,
+                    "No realm specified in proxmox_user, defaulting to 'pam'"
+                );
+                (self.proxmox_user.as_str(), "pam")
+            }
+        };
         let token_id = format!("{}@{}!{}", user_part, realm, token_name);
 
         let token_url = format!(
