@@ -111,3 +111,4 @@ crash-*
 .just-tmp/
 .venv/
 third_party/
+dc-agent.toml

@@ -128,7 +128,10 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
             bail!("GET {} failed ({}): {}", path, status, body);
         }
 
@@ -158,7 +161,10 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
             bail!("POST {} failed ({}): {}", path, status, body);
         }
 
@@ -184,7 +190,10 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
             bail!("PUT {} failed ({}): {}", path, status, body);
         }
 
@@ -205,7 +214,10 @@ impl ProxmoxProvisioner {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
             bail!("DELETE {} failed ({}): {}", path, status, body);
         }
 
@@ -235,11 +247,18 @@ impl ProxmoxProvisioner {
                     Some("OK") => Ok(()),
                     Some(exit) => {
                         // Fetch task log for detailed error
-                        let log = self.get_task_log(node, upid).await.unwrap_or_default();
-                        if log.is_empty() {
-                            bail!("Task failed with status: {}", exit);
-                        } else {
+                        let log = match self.get_task_log(node, upid).await {
+                            Ok(log) if log.is_empty() => None,
+                            Ok(log) => Some(log),
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to fetch task log for error details");
+                                None
+                            }
+                        };
+                        if let Some(log) = log {
                             bail!("Task failed ({}): {}", exit, log);
+                        } else {
+                            bail!("Task failed with status: {}", exit);
                         }
                     }
                     None => bail!("Task stopped without exit status"),
@@ -421,7 +440,10 @@ impl ProxmoxProvisioner {
                 );
                 return Ok((None, None));
             }
-            let body = response.text().await.unwrap_or_default();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
             bail!(
                 "Failed to get network interfaces from VM {} ({}): {}",
                 vmid,

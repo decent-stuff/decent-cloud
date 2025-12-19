@@ -617,6 +617,10 @@ async fn run_agent(config: Config) -> Result<()> {
     // Track active contracts for heartbeat reporting
     let mut active_contracts: i64 = 0;
 
+    // Track consecutive failures for escalating log levels
+    let mut heartbeat_failures: u32 = 0;
+    let mut poll_failures: u32 = 0;
+
     info!(
         poll_interval_seconds = config.polling.interval_seconds,
         heartbeat_interval_seconds = heartbeat_interval_secs,
@@ -630,16 +634,17 @@ async fn run_agent(config: Config) -> Result<()> {
         active_contracts,
         &mut heartbeat_interval_secs,
         &mut heartbeat_ticker,
+        &mut heartbeat_failures,
     )
     .await;
 
     loop {
         tokio::select! {
             _ = poll_ticker.tick() => {
-                active_contracts = poll_and_provision(&api_client, &*provisioner).await;
+                active_contracts = poll_and_provision(&api_client, &*provisioner, &mut poll_failures).await;
             }
             _ = heartbeat_ticker.tick() => {
-                send_heartbeat(&api_client, provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker).await;
+                send_heartbeat(&api_client, provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures).await;
             }
         }
     }
@@ -651,6 +656,7 @@ async fn send_heartbeat(
     active_contracts: i64,
     heartbeat_interval_secs: &mut u64,
     heartbeat_ticker: &mut tokio::time::Interval,
+    consecutive_failures: &mut u32,
 ) {
     match api_client
         .send_heartbeat(
@@ -662,6 +668,13 @@ async fn send_heartbeat(
         .await
     {
         Ok(response) => {
+            if *consecutive_failures > 0 {
+                info!(
+                    previous_failures = *consecutive_failures,
+                    "Heartbeat connection restored"
+                );
+                *consecutive_failures = 0;
+            }
             info!(
                 active_contracts = active_contracts,
                 next_heartbeat_seconds = response.next_heartbeat_seconds,
@@ -676,15 +689,41 @@ async fn send_heartbeat(
             }
         }
         Err(e) => {
-            warn!(error = %e, "Failed to send heartbeat");
+            *consecutive_failures += 1;
+            // Escalate to error level after 3 consecutive failures
+            if *consecutive_failures >= 3 {
+                error!(
+                    error = %e,
+                    consecutive_failures = *consecutive_failures,
+                    "HEARTBEAT FAILURE: Agent cannot reach API server! Check network connectivity."
+                );
+            } else {
+                warn!(
+                    error = %e,
+                    consecutive_failures = *consecutive_failures,
+                    "Failed to send heartbeat"
+                );
+            }
         }
     }
 }
 
-async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisioner) -> i64 {
+async fn poll_and_provision(
+    api_client: &ApiClient,
+    provisioner: &dyn Provisioner,
+    consecutive_failures: &mut u32,
+) -> i64 {
     // Fetch pending contracts
     match api_client.get_pending_contracts().await {
         Ok(contracts) => {
+            if *consecutive_failures > 0 {
+                info!(
+                    previous_failures = *consecutive_failures,
+                    "API connection restored"
+                );
+                *consecutive_failures = 0;
+            }
+
             if contracts.is_empty() {
                 return 0;
             }
@@ -694,11 +733,22 @@ async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisione
             for contract in &contracts {
                 info!(contract_id = %contract.contract_id, "Processing contract");
 
-                // Parse instance_config if present
-                let instance_config: Option<serde_json::Value> = contract
-                    .instance_config
-                    .as_ref()
-                    .and_then(|s| serde_json::from_str(s).ok());
+                // Parse instance_config if present - log warning if malformed
+                let instance_config: Option<serde_json::Value> = match &contract.instance_config {
+                    Some(s) => match serde_json::from_str(s) {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            warn!(
+                                contract_id = %contract.contract_id,
+                                error = %e,
+                                raw_config = %s,
+                                "Invalid instance_config JSON, ignoring"
+                            );
+                            None
+                        }
+                    },
+                    None => None,
+                };
 
                 // Extract specs from offering (returned by API)
                 let cpu_cores = contract.cpu_cores.map(|c| c as u32);
@@ -737,10 +787,14 @@ async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisione
                             .report_provisioned(&contract.contract_id, &instance)
                             .await
                         {
+                            // This is a critical error - VM was created but API doesn't know
                             error!(
                                 contract_id = %contract.contract_id,
+                                external_id = %instance.external_id,
+                                ip_address = ?instance.ip_address,
                                 error = %e,
-                                "Failed to report provisioning to API"
+                                "CRITICAL: VM provisioned but failed to report to API! \
+                                 Contract may be stuck. Manual intervention may be required."
                             );
                         }
                     }
@@ -756,10 +810,13 @@ async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisione
                             .report_failed(&contract.contract_id, &format!("{:?}", e))
                             .await
                         {
+                            // Less critical than report_provisioned failure, but still serious
                             error!(
                                 contract_id = %contract.contract_id,
-                                error = %report_err,
-                                "Failed to report failure to API"
+                                original_error = ?e,
+                                report_error = %report_err,
+                                "Failed to report provisioning failure to API. \
+                                 Contract may remain stuck in pending state."
                             );
                         }
                     }
@@ -768,7 +825,21 @@ async fn poll_and_provision(api_client: &ApiClient, provisioner: &dyn Provisione
             contracts.len() as i64
         }
         Err(e) => {
-            warn!(error = %e, "Failed to fetch pending contracts");
+            *consecutive_failures += 1;
+            // Escalate to error level after 3 consecutive failures
+            if *consecutive_failures >= 3 {
+                error!(
+                    error = %e,
+                    consecutive_failures = *consecutive_failures,
+                    "POLL FAILURE: Cannot fetch contracts from API server! Check network connectivity."
+                );
+            } else {
+                warn!(
+                    error = %e,
+                    consecutive_failures = *consecutive_failures,
+                    "Failed to fetch pending contracts"
+                );
+            }
             0
         }
     }

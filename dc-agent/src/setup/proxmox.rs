@@ -255,8 +255,10 @@ impl ProxmoxSetup {
         );
         let import_result = ssh.execute(&import_cmd).await?;
         if import_result.exit_status != 0 {
-            // Cleanup VM on failure
-            let _ = ssh.execute(&format!("qm destroy {}", vmid)).await;
+            // Cleanup VM on failure - log but don't mask the original error
+            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
+                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after import failure");
+            }
             bail!("Failed to import disk: {}", import_result.stdout);
         }
 
@@ -275,7 +277,10 @@ impl ProxmoxSetup {
         for cmd in &config_cmds {
             let result = ssh.execute(cmd).await?;
             if result.exit_status != 0 {
-                let _ = ssh.execute(&format!("qm destroy {}", vmid)).await;
+                // Cleanup VM on failure - log but don't mask the original error
+                if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
+                    tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after config failure");
+                }
                 bail!("Failed to configure VM: {}", result.stdout);
             }
         }
@@ -287,7 +292,10 @@ impl ProxmoxSetup {
             .execute("dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools")
             .await?;
         if install_result.exit_status != 0 {
-            let _ = ssh.execute(&format!("qm destroy {}", vmid)).await;
+            // Cleanup VM on failure - log but don't mask the original error
+            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
+                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after libguestfs-tools install failure");
+            }
             bail!(
                 "Failed to install libguestfs-tools (required for template customization).\n\
                  Manual fix: apt install libguestfs-tools\n\
@@ -298,16 +306,31 @@ impl ProxmoxSetup {
 
         println!("  Customizing image (installing qemu-guest-agent)...");
         let disk_path = format!("/var/lib/vz/images/{}/{}", vmid, disk_name);
-        let customize_cmd = format!(
-            "virt-customize -a {} \
-               --install qemu-guest-agent \
-               --run-command 'systemctl enable qemu-guest-agent' \
-               --run-command 'truncate -s 0 /etc/machine-id' 2>&1",
+        let virt_customize_args = format!(
+            "-a {} --install qemu-guest-agent \
+             --run-command 'systemctl enable qemu-guest-agent' \
+             --run-command 'truncate -s 0 /etc/machine-id' 2>&1",
             disk_path
         );
-        let customize_result = ssh.execute(&customize_cmd).await?;
+        // Try with KVM first (faster), fall back to direct mode for nested virtualization
+        let customize_result = ssh
+            .execute(&format!("virt-customize {}", virt_customize_args))
+            .await?;
+        let customize_result = if customize_result.exit_status != 0 {
+            println!("  KVM mode failed, trying direct mode (nested virtualization?)...");
+            ssh.execute(&format!(
+                "LIBGUESTFS_BACKEND=direct virt-customize {}",
+                virt_customize_args
+            ))
+            .await?
+        } else {
+            customize_result
+        };
         if customize_result.exit_status != 0 {
-            let _ = ssh.execute(&format!("qm destroy {}", vmid)).await;
+            // Cleanup VM on failure - log but don't mask the original error
+            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
+                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after image customization failure");
+            }
             bail!(
                 "Failed to customize image with qemu-guest-agent.\n\
                  VMs created from this template will NOT report IP addresses.\n\
@@ -322,7 +345,10 @@ impl ProxmoxSetup {
         let template_cmd = format!("qm template {}", vmid);
         let template_result = ssh.execute(&template_cmd).await?;
         if template_result.exit_status != 0 {
-            let _ = ssh.execute(&format!("qm destroy {}", vmid)).await;
+            // Cleanup VM on failure - log but don't mask the original error
+            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
+                tracing::warn!(vmid, error = %cleanup_err, "Failed to cleanup VM after template conversion failure");
+            }
             bail!("Failed to convert to template: {}", template_result.stdout);
         }
 
@@ -408,7 +434,10 @@ impl ProxmoxSetup {
 
         if !token_response.status().is_success() {
             let status = token_response.status();
-            let body = token_response.text().await.unwrap_or_default();
+            let body = token_response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
             bail!("Failed to create API token: {} - {}", status, body);
         }
 

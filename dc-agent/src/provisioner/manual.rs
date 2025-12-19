@@ -69,7 +69,11 @@ impl Provisioner for ManualProvisioner {
             })
             .await
         {
-            tracing::warn!(error = %e, "Failed to send webhook notification");
+            tracing::error!(
+                contract_id = %request.contract_id,
+                error = %e,
+                "Webhook notification failed! Operator may not be alerted about this provisioning request."
+            );
         }
 
         anyhow::bail!("{} - human intervention needed", message)
@@ -93,7 +97,11 @@ impl Provisioner for ManualProvisioner {
             })
             .await
         {
-            tracing::warn!(error = %e, "Failed to send webhook notification");
+            tracing::error!(
+                external_id = %external_id,
+                error = %e,
+                "Webhook notification failed! Operator may not be alerted about this termination request."
+            );
         }
 
         anyhow::bail!("{} - human intervention needed", message)
