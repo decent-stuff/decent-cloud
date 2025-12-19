@@ -27,9 +27,23 @@
 	let selectedCountry = $state<string>("");
 	let selectedCity = $state<string>("");
 	let minCores = $state<number | undefined>(undefined);
+	let minMemoryGb = $state<number | undefined>(undefined);
+	let minSsdGb = $state<number | undefined>(undefined);
+	let selectedVirt = $state<string>("");
 	let unmeteredOnly = $state(false);
 	let minTrust = $state<number | undefined>(undefined);
 	let showDemoOfferings = $state(true);
+
+	// Derived: unique virtualization types from offerings
+	let virtTypes = $derived(
+		[
+			...new Set(
+				offerings
+					.map((o) => o.virtualization_type)
+					.filter((v): v is string => !!v),
+			),
+		].sort(),
+	);
 
 	// Derived: unique countries and cities from offerings
 	let countries = $derived(
@@ -73,6 +87,42 @@
 			const threshold = minCores;
 			result = result.filter(
 				(o) => (o.processor_cores ?? 0) >= threshold,
+			);
+		}
+
+		// Client-side memory filter (parse "32" or "32 GB" etc from memory_amount)
+		if (minMemoryGb !== undefined) {
+			const threshold = minMemoryGb;
+			result = result.filter((o) => {
+				const mem = o.memory_amount;
+				if (!mem) return false;
+				const match = mem.match(/(\d+)/);
+				if (!match) return false;
+				return parseInt(match[1], 10) >= threshold;
+			});
+		}
+
+		// Client-side SSD filter (parse from total_ssd_capacity)
+		if (minSsdGb !== undefined) {
+			const threshold = minSsdGb;
+			result = result.filter((o) => {
+				const ssd = o.total_ssd_capacity;
+				if (!ssd) return false;
+				const match = ssd.match(/(\d+)/);
+				if (!match) return false;
+				let value = parseInt(match[1], 10);
+				// Convert TB to GB if needed
+				if (ssd.toLowerCase().includes("tb")) value *= 1000;
+				return value >= threshold;
+			});
+		}
+
+		// Client-side virtualization type filter
+		if (selectedVirt) {
+			result = result.filter(
+				(o) =>
+					o.virtualization_type?.toLowerCase() ===
+					selectedVirt.toLowerCase(),
 			);
 		}
 
@@ -150,6 +200,9 @@
 		selectedCountry = "";
 		selectedCity = "";
 		minCores = undefined;
+		minMemoryGb = undefined;
+		minSsdGb = undefined;
+		selectedVirt = "";
 		unmeteredOnly = false;
 		minTrust = undefined;
 		showDemoOfferings = true;
@@ -438,6 +491,58 @@
 							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
 						/>
 					</div>
+
+					<!-- Memory Filter -->
+					<div>
+						<div
+							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+						>
+							Min Memory (GB)
+						</div>
+						<input
+							type="number"
+							placeholder="e.g., 8"
+							bind:value={minMemoryGb}
+							min="1"
+							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+						/>
+					</div>
+
+					<!-- SSD Filter -->
+					<div>
+						<div
+							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+						>
+							Min SSD (GB)
+						</div>
+						<input
+							type="number"
+							placeholder="e.g., 100"
+							bind:value={minSsdGb}
+							min="1"
+							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+						/>
+					</div>
+
+					<!-- Virtualization Type Filter -->
+					{#if virtTypes.length > 0}
+						<div>
+							<div
+								class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							>
+								Virtualization
+							</div>
+							<select
+								bind:value={selectedVirt}
+								class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+							>
+								<option value="">All types</option>
+								{#each virtTypes as vt}
+									<option value={vt}>{vt.toUpperCase()}</option>
+								{/each}
+							</select>
+						</div>
+					{/if}
 
 					<!-- Min Trust Filter -->
 					<div>
