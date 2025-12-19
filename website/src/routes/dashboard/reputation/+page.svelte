@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
-	import { computePubkey } from '$lib/utils/contract-format';
 	import { truncatePubkey } from '$lib/utils/identity';
 	import {
 		searchReputation,
@@ -14,23 +13,16 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
-	let myPubkey = $state<string | null>(null);
+	let myUsername = $state<string | null>(null);
 
-	onMount(async () => {
-		// Get user's own pubkey for "My Reputation" link
-		const isAuth = await new Promise<boolean>((resolve) => {
-			const unsubscribe = authStore.isAuthenticated.subscribe((value) => {
-				resolve(value);
-				unsubscribe();
-			});
-		});
-
-		if (isAuth) {
-			const identity = await authStore.getSigningIdentity();
-			if (identity?.publicKeyBytes) {
-				myPubkey = computePubkey(identity.publicKeyBytes);
+	onMount(() => {
+		// Get user's username for "My Reputation" link
+		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
+			if (identity?.account?.username) {
+				myUsername = identity.account.username;
 			}
-		}
+		});
+		return unsubscribe;
 	});
 
 	async function performSearch() {
@@ -68,8 +60,8 @@
 		return num.toLocaleString();
 	}
 
-	function navigateToProfile(pubkey: string) {
-		goto(`/dashboard/reputation/${pubkey}`);
+	function navigateToProfile(identifier: string) {
+		goto(`/dashboard/reputation/${identifier}`);
 	}
 </script>
 
@@ -82,10 +74,10 @@
 	</div>
 
 	<!-- My Reputation Link -->
-	{#if myPubkey}
+	{#if myUsername}
 		<div class="flex gap-4">
 			<button
-				onclick={() => navigateToProfile(myPubkey!)}
+				onclick={() => navigateToProfile(myUsername!)}
 				class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 			>
 				View My Reputation
@@ -128,7 +120,7 @@
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{#each results as result}
 					<button
-						onclick={() => navigateToProfile(result.pubkey)}
+						onclick={() => navigateToProfile(result.username)}
 						class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:bg-white/15 hover:border-white/30 transition-all text-left"
 					>
 						<div class="flex items-start justify-between gap-4 mb-3">

@@ -3,8 +3,6 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
-	import { computePubkey } from "$lib/utils/contract-format";
-	import { truncatePubkey } from "$lib/utils/identity";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -12,12 +10,6 @@
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 	let currentPath = $state("");
-
-	const myPubkey = $derived(
-		currentIdentity?.publicKeyBytes
-			? computePubkey(currentIdentity.publicKeyBytes)
-			: null,
-	);
 
 	onMount(() => {
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
@@ -106,10 +98,13 @@
 					</p>
 				</div>
 				<div>
-					<p class="text-white/70 text-sm">Account ID</p>
-					<p class="text-white/60 font-mono text-xs">
-						{truncatePubkey(currentIdentity.account.id)}
-					</p>
+					<p class="text-white/70 text-sm">Public Profile</p>
+					<a
+						href="/dashboard/reputation/{currentIdentity.account.username}"
+						class="text-blue-400 hover:text-blue-300 text-sm transition-colors"
+					>
+						View My Reputation →
+					</a>
 				</div>
 				<div>
 					<p class="text-white/70 text-sm">Created</p>

@@ -29,7 +29,9 @@
 			isNotFound = false;
 
 			// Step 1: Resolve identifier to pubkey
-			const { getAccount, getAccountByPublicKey } = await import('$lib/services/account-api');
+			const { getAccount, getAccountByPublicKey } = await import(
+				"$lib/services/account-api"
+			);
 
 			let resolvedPubkey: string | null = null;
 
@@ -37,23 +39,34 @@
 				// It's a pubkey - use it directly
 				resolvedPubkey = identifier;
 				// Try to get username from account for display and redirect
-				const account = await getAccountByPublicKey(identifier).catch(() => null);
+				const account = await getAccountByPublicKey(identifier).catch(
+					() => null,
+				);
 				if (account) {
 					username = account.username;
 					// Redirect to username-based URL for cleaner URLs
 					if (username && username !== identifier) {
-						goto(`/dashboard/user/${username}`, { replaceState: true });
+						goto(`/dashboard/user/${username}`, {
+							replaceState: true,
+						});
 						return;
 					}
 				}
 			} else {
 				// It's a username - look up the account
 				const account = await getAccount(identifier).catch(() => null);
-				if (account && account.publicKeys && account.publicKeys.length > 0) {
+				if (
+					account &&
+					account.publicKeys &&
+					account.publicKeys.length > 0
+				) {
 					username = account.username;
 					// Get the first active public key
-					const activeKey = account.publicKeys.find((k) => k.isActive);
-					resolvedPubkey = activeKey?.publicKey ?? account.publicKeys[0].publicKey;
+					const activeKey = account.publicKeys.find(
+						(k) => k.isActive,
+					);
+					resolvedPubkey =
+						activeKey?.publicKey ?? account.publicKeys[0].publicKey;
 				}
 			}
 
@@ -89,7 +102,9 @@
 			{#if username}
 				Username: <span class="font-semibold">{username}</span>
 			{:else if pubkey}
-				Public Key: <span class="font-mono text-sm">{truncatePubkey(pubkey)}</span>
+				Public Key: <span class="font-mono text-sm"
+					>{truncatePubkey(pubkey)}</span
+				>
 			{:else}
 				<span class="font-mono text-sm">{identifier}</span>
 			{/if}

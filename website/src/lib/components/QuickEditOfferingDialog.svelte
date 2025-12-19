@@ -108,7 +108,8 @@
 				offering_source: offering.offering_source || undefined,
 				external_checkout_url: offering.external_checkout_url || undefined,
 				reseller_name: undefined,
-				reseller_commission_percent: undefined
+				reseller_commission_percent: undefined,
+				owner_username: undefined
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed
