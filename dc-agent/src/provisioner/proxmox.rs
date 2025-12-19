@@ -403,24 +403,37 @@ impl ProxmoxProvisioner {
         let url = format!("{}{}", self.base_url(), path);
         let response = self
             .client
-            .get(url)
+            .get(&url)
             .header("Authorization", self.auth_header())
             .send()
-            .await;
+            .await
+            .with_context(|| format!("Failed to query guest agent on VM {}", vmid))?;
 
-        let response = match response {
-            Ok(r) => r,
-            Err(_) => return Ok((None, None)),
-        };
-
-        if !response.status().is_success() {
-            return Ok((None, None));
+        let status = response.status();
+        if !status.is_success() {
+            // Guest agent not available or VM not ready - return None for IPs but don't error
+            // This is expected during VM boot before guest agent starts
+            if status.as_u16() == 500 {
+                tracing::debug!(
+                    "Guest agent not responding on VM {} (status {})",
+                    vmid,
+                    status
+                );
+                return Ok((None, None));
+            }
+            let body = response.text().await.unwrap_or_default();
+            bail!(
+                "Failed to get network interfaces from VM {} ({}): {}",
+                vmid,
+                status,
+                body
+            );
         }
 
-        let net_response: ProxmoxResponse<NetworkResponse> = match response.json().await {
-            Ok(r) => r,
-            Err(_) => return Ok((None, None)),
-        };
+        let net_response: ProxmoxResponse<NetworkResponse> = response
+            .json()
+            .await
+            .context("Failed to parse network interfaces response")?;
 
         let mut ipv4 = None;
         let mut ipv6 = None;
@@ -475,12 +488,19 @@ impl Provisioner for ProxmoxProvisioner {
             // If VM exists but is not running, start it
             if status.status != "running" {
                 tracing::debug!("Starting existing VM {}", vmid);
-                if let Ok(upid) = self.start_vm(vmid).await {
-                    let _ = self.wait_for_task(&upid).await;
-                }
+                let upid = self
+                    .start_vm(vmid)
+                    .await
+                    .context("Failed to start existing VM")?;
+                self.wait_for_task(&upid)
+                    .await
+                    .context("Start task failed for existing VM")?;
             }
-            // Get IP and return instance
-            let (ipv4, ipv6) = self.get_vm_ip(vmid).await.unwrap_or((None, None));
+            // Get IP - propagate errors, don't swallow them
+            let (ipv4, ipv6) = self
+                .get_vm_ip(vmid)
+                .await
+                .context("Failed to get IP for existing VM")?;
             return Ok(Instance {
                 external_id: vmid.to_string(),
                 ip_address: ipv4,
@@ -634,7 +654,8 @@ impl Provisioner for ProxmoxProvisioner {
                         reason: "VM not found".to_string(),
                     })
                 } else {
-                    Ok(HealthStatus::Unknown)
+                    // Propagate real errors - don't silently return Unknown
+                    Err(e).context("Health check failed")
                 }
             }
         }
@@ -645,7 +666,10 @@ impl Provisioner for ProxmoxProvisioner {
 
         match self.get_vm_status(vmid).await {
             Ok(status) => {
-                let (ipv4, ipv6) = self.get_vm_ip(vmid).await.unwrap_or((None, None));
+                let (ipv4, ipv6) = self
+                    .get_vm_ip(vmid)
+                    .await
+                    .context("Failed to get IP for instance")?;
 
                 Ok(Some(Instance {
                     external_id: vmid.to_string(),

@@ -287,9 +287,13 @@ impl ProxmoxSetup {
             .execute("dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools")
             .await?;
         if install_result.exit_status != 0 {
-            println!("  Warning: Could not install libguestfs-tools");
-            println!("  VMs may not report their IP addresses correctly.");
-            println!("  Manual fix: apt install libguestfs-tools");
+            let _ = ssh.execute(&format!("qm destroy {}", vmid)).await;
+            bail!(
+                "Failed to install libguestfs-tools (required for template customization).\n\
+                 Manual fix: apt install libguestfs-tools\n\
+                 Output: {}",
+                install_result.stdout
+            );
         }
 
         println!("  Customizing image (installing qemu-guest-agent)...");
@@ -303,14 +307,15 @@ impl ProxmoxSetup {
         );
         let customize_result = ssh.execute(&customize_cmd).await?;
         if customize_result.exit_status != 0 {
-            println!(
-                "  Warning: Failed to customize image: {}",
+            let _ = ssh.execute(&format!("qm destroy {}", vmid)).await;
+            bail!(
+                "Failed to customize image with qemu-guest-agent.\n\
+                 VMs created from this template will NOT report IP addresses.\n\
+                 Error: {}",
                 customize_result.stdout.lines().last().unwrap_or("unknown error")
             );
-            println!("  VMs may not report their IP addresses correctly.");
-        } else {
-            println!("  Image customized successfully");
         }
+        println!("  Image customized successfully");
 
         // Convert to template
         println!("  Converting to template...");

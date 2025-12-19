@@ -250,12 +250,16 @@ mod tests {
         let request = test_provision_request();
 
         let result = provisioner.provision(&request).await;
-        assert!(result.is_ok(), "Provision should succeed even without IP");
-
-        let instance = result.unwrap();
+        // Provisioning MUST fail if no IP address can be obtained - a VM without an IP is useless
         assert!(
-            instance.ip_address.is_none(),
-            "IP should be None when guest agent unavailable"
+            result.is_err(),
+            "Provision should fail when no IP address is available"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("no IP address obtained"),
+            "Error should mention IP address issue: {}",
+            err
         );
     }
 
