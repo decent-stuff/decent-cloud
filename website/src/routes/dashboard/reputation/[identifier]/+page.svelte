@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import {
 		getUserActivity,
 		type UserActivity,
@@ -34,11 +35,17 @@
 		calculateActualDuration,
 		formatDuration,
 	} from "$lib/utils/contract-format";
-	import { truncatePubkey } from "$lib/utils/identity";
+	import { truncatePubkey, isPubkeyHex, resolveIdentifierToPubkey } from "$lib/utils/identity";
 	import { authStore } from "$lib/stores/auth";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
-	const pubkey = $page.params.pubkey ?? "";
+	// Identifier can be a pubkey (64 hex chars) OR a username
+	const identifier = $page.params.identifier ?? "";
+
+	// Resolved pubkey (set after resolution in onMount)
+	let pubkey = $state<string>("");
+	// Username (set if identifier was a username or fetched from account)
+	let username = $state<string | null>(null);
 
 	let activity = $state<UserActivity | null>(null);
 	let reputation = $state<ReputationInfo | null>(null);
@@ -171,7 +178,58 @@
 			error = null;
 			isNotFound = false;
 
-			// Fetch all data in parallel
+			// Step 1: Resolve identifier to pubkey
+			// If it's a pubkey (64 hex chars), use it directly
+			// If it's a username, look up the account to get the pubkey
+			const { getAccount, getAccountByPublicKey } = await import('$lib/services/account-api');
+
+			let accountExists = false;
+			let resolvedPubkey: string | null = null;
+
+			if (isPubkeyHex(identifier)) {
+				// It's a pubkey - use it directly
+				resolvedPubkey = identifier;
+				// Try to get username from account
+				const account = await getAccountByPublicKey(identifier).catch(() => null);
+				if (account) {
+					accountExists = true;
+					username = account.username;
+					accountInfo = {
+						emailVerified: account.emailVerified,
+						email: account.email,
+					};
+					// Redirect to username-based URL for cleaner URLs
+					if (username && username !== identifier) {
+						goto(`/dashboard/reputation/${username}`, { replaceState: true });
+						return;
+					}
+				}
+			} else {
+				// It's a username - look up the account
+				const account = await getAccount(identifier).catch(() => null);
+				if (account && account.publicKeys && account.publicKeys.length > 0) {
+					accountExists = true;
+					username = account.username;
+					accountInfo = {
+						emailVerified: account.emailVerified,
+						email: account.email,
+					};
+					// Get the first active public key
+					const activeKey = account.publicKeys.find((k) => k.isActive);
+					resolvedPubkey = activeKey?.publicKey ?? account.publicKeys[0].publicKey;
+				}
+			}
+
+			if (!resolvedPubkey) {
+				isNotFound = true;
+				error = "Account not found";
+				loading = false;
+				return;
+			}
+
+			pubkey = resolvedPubkey;
+
+			// Step 2: Fetch all data in parallel using the resolved pubkey
 			const [
 				activityData,
 				reputationData,
@@ -204,30 +262,14 @@
 			trustMetrics = trustMetricsData;
 			responseMetrics = responseMetricsData;
 
-			// Check if account exists in the new account system
-			// Try to fetch account by public key
-			let accountExists = false;
-			try {
-				const { getAccountByPublicKey } = await import('$lib/services/account-api');
-				const account = await getAccountByPublicKey(pubkey);
-				if (account) {
-					accountExists = true;
-					accountInfo = {
-						emailVerified: account.emailVerified,
-						email: account.email,
-					};
-					// Use account username as display name if no profile
-					if (!profile) {
-						profile = {
-							displayName: account.username,
-							bio: null,
-							avatarUrl: null,
-							updated_at_ns: Date.now() * 1_000_000
-						};
-					}
-				}
-			} catch {
-				// Account lookup failed, continue with old logic
+			// Use account username as display name if no profile
+			if (!profile && username) {
+				profile = {
+					displayName: username,
+					bio: null,
+					avatarUrl: null,
+					updated_at_ns: Date.now() * 1_000_000
+				};
 			}
 
 			// If we have no data at all AND account doesn't exist, mark as not found

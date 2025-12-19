@@ -11,7 +11,7 @@ use oauth2::{
 use poem::{
     handler,
     http::StatusCode,
-    web::cookie::{Cookie, CookieJar},
+    web::cookie::{Cookie, CookieJar, SameSite},
     web::Data,
     web::Query,
     Response, Result as PoemResult,
@@ -29,8 +29,6 @@ lazy_static::lazy_static! {
 
 #[derive(Debug, Clone)]
 struct OAuthState {
-    #[allow(dead_code)]
-    csrf_token: String,
     pkce_verifier_secret: String,
     created_at: std::time::Instant,
 }
@@ -131,9 +129,8 @@ pub async fn google_authorize() -> PoemResult<Response> {
 
     let state_key = csrf_token.secret().clone();
     OAUTH_STATES.write().await.insert(
-        state_key.clone(),
+        state_key,
         OAuthState {
-            csrf_token: state_key,
             pkce_verifier_secret: pkce_verifier.secret().clone(),
             created_at: std::time::Instant::now(),
         },
@@ -337,6 +334,7 @@ pub async fn google_callback(
         cookie.set_path("/");
         cookie.set_http_only(true);
         cookie.set_secure(should_use_secure_cookies());
+        cookie.set_same_site(Some(SameSite::Lax)); // CSRF protection
         cookie.set_max_age(std::time::Duration::from_secs(7 * 24 * 60 * 60)); // 7 days
         cookie_jar.add(cookie);
     } else {
@@ -354,6 +352,7 @@ pub async fn google_callback(
         oauth_info_cookie.set_path("/");
         oauth_info_cookie.set_http_only(true);
         oauth_info_cookie.set_secure(should_use_secure_cookies());
+        oauth_info_cookie.set_same_site(Some(SameSite::Lax)); // CSRF protection
         oauth_info_cookie.set_max_age(std::time::Duration::from_secs(15 * 60)); // 15 minutes
         cookie_jar.add(oauth_info_cookie);
     }
@@ -461,6 +460,7 @@ pub async fn oauth_logout(
     clear_keypair.set_path("/");
     clear_keypair.set_http_only(true);
     clear_keypair.set_secure(should_use_secure_cookies());
+    clear_keypair.set_same_site(Some(SameSite::Lax));
     clear_keypair.set_max_age(std::time::Duration::from_secs(0));
     cookie_jar.add(clear_keypair);
 
@@ -469,6 +469,7 @@ pub async fn oauth_logout(
     clear_info.set_path("/");
     clear_info.set_http_only(true);
     clear_info.set_secure(should_use_secure_cookies());
+    clear_info.set_same_site(Some(SameSite::Lax));
     clear_info.set_max_age(std::time::Duration::from_secs(0));
     cookie_jar.add(clear_info);
 
@@ -596,12 +597,14 @@ pub async fn oauth_register(
     cookie.set_path("/");
     cookie.set_http_only(true);
     cookie.set_secure(should_use_secure_cookies());
+    cookie.set_same_site(Some(SameSite::Lax)); // CSRF protection
     cookie.set_max_age(std::time::Duration::from_secs(7 * 24 * 60 * 60)); // 7 days
     cookie_jar.add(cookie);
 
     // Remove oauth_info cookie as it's no longer needed
     let mut clear_oauth_info = Cookie::new_with_str("oauth_info", "");
     clear_oauth_info.set_path("/");
+    clear_oauth_info.set_same_site(Some(SameSite::Lax));
     clear_oauth_info.set_max_age(std::time::Duration::from_secs(0));
     cookie_jar.add(clear_oauth_info);
 

@@ -1,8 +1,8 @@
 # Account-Based User Identification Migration
 
 **Date:** 2025-12-18
-**Status:** Foundation Complete (YAGNI deferred remaining phases)
-**Priority:** LOW (username-based URLs deferred until needed)
+**Status:** In progress
+**Priority:** MEDIUM
 
 ## Problem Statement
 
@@ -157,13 +157,15 @@ If issues arise:
 - ✅ `create_rental_request()` sets requester_account_id and provider_account_id
 - ✅ `update_provider_onboarding()` sets account_id
 - ✅ Frontend reputation page fetches account info by pubkey
+- ✅ Username-based URL routes (routes use `[identifier]` and accept both pubkey and username)
+- ✅ Auto-redirect from pubkey URLs to username URLs when account exists
+- ✅ Utility functions in `identity.ts`: `isPubkeyHex()`, `resolveIdentifierToPubkey()`, `getDisplayNameForPubkey()`
 
 **What's deferred (YAGNI):**
-- Username-based URL routes (current pubkey URLs work fine)
-- Username-based API endpoints
+- Username-based API endpoints (current pubkey-based endpoints work fine)
 - Data backfill function (new data already gets account_ids)
 
-The foundation is complete. Username-based URLs can be added later when there's actual user demand for memorable profile URLs.
+The implementation is complete. Both pubkey and username URLs work, with automatic redirect to username URLs for cleaner URLs when an account exists.
 
 ## Notes
 

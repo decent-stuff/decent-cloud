@@ -66,3 +66,41 @@ export function truncatePubkey(pubkey: string, visible: number = 6): string {
 	}
 	return `${pubkey.slice(0, visible)}...${pubkey.slice(-visible)}`;
 }
+
+/**
+ * Checks if a string is a valid Ed25519 public key hex string.
+ * Ed25519 keys are 32 bytes = 64 hex characters.
+ */
+export function isPubkeyHex(identifier: string): boolean {
+	return /^[0-9a-fA-F]{64}$/.test(identifier);
+}
+
+/**
+ * Resolves an identifier (pubkey or username) to a pubkey.
+ * If it's already a pubkey hex, returns it directly.
+ * If it's a username, looks up the account and returns the first active public key.
+ * Returns null if not found.
+ */
+export async function resolveIdentifierToPubkey(identifier: string): Promise<string | null> {
+	if (isPubkeyHex(identifier)) {
+		return identifier;
+	}
+	// It's a username - look up the account
+	const { getAccount } = await import('$lib/services/account-api');
+	const account = await getAccount(identifier);
+	if (!account || !account.publicKeys || account.publicKeys.length === 0) {
+		return null;
+	}
+	// Return the first active public key
+	const activeKey = account.publicKeys.find((k) => k.isActive);
+	return activeKey?.publicKey ?? account.publicKeys[0].publicKey;
+}
+
+/**
+ * Get the display name for an identifier - username if available, truncated pubkey otherwise.
+ */
+export async function getDisplayNameForPubkey(pubkey: string): Promise<string> {
+	const { getAccountByPublicKey } = await import('$lib/services/account-api');
+	const account = await getAccountByPublicKey(pubkey);
+	return account?.username ?? truncatePubkey(pubkey);
+}

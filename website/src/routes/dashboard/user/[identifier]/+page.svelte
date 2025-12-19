@@ -1,14 +1,21 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import {
 		getUserActivity,
 		type UserActivity,
 	} from "$lib/services/api-user-activity";
 	import { formatContractDate } from "$lib/utils/contract-format";
-	import { truncatePubkey } from "$lib/utils/identity";
+	import { truncatePubkey, isPubkeyHex } from "$lib/utils/identity";
 
-	const pubkey = $page.params.pubkey ?? "";
+	// Identifier can be a pubkey (64 hex chars) OR a username
+	const identifier = $page.params.identifier ?? "";
+
+	// Resolved pubkey (set after resolution in onMount)
+	let pubkey = $state<string>("");
+	// Username (set if identifier was a username or fetched from account)
+	let username = $state<string | null>(null);
 
 	let activity = $state<UserActivity | null>(null);
 	let loading = $state(true);
@@ -20,6 +27,46 @@
 			loading = true;
 			error = null;
 			isNotFound = false;
+
+			// Step 1: Resolve identifier to pubkey
+			const { getAccount, getAccountByPublicKey } = await import('$lib/services/account-api');
+
+			let resolvedPubkey: string | null = null;
+
+			if (isPubkeyHex(identifier)) {
+				// It's a pubkey - use it directly
+				resolvedPubkey = identifier;
+				// Try to get username from account for display and redirect
+				const account = await getAccountByPublicKey(identifier).catch(() => null);
+				if (account) {
+					username = account.username;
+					// Redirect to username-based URL for cleaner URLs
+					if (username && username !== identifier) {
+						goto(`/dashboard/user/${username}`, { replaceState: true });
+						return;
+					}
+				}
+			} else {
+				// It's a username - look up the account
+				const account = await getAccount(identifier).catch(() => null);
+				if (account && account.publicKeys && account.publicKeys.length > 0) {
+					username = account.username;
+					// Get the first active public key
+					const activeKey = account.publicKeys.find((k) => k.isActive);
+					resolvedPubkey = activeKey?.publicKey ?? account.publicKeys[0].publicKey;
+				}
+			}
+
+			if (!resolvedPubkey) {
+				isNotFound = true;
+				error = "User not found";
+				loading = false;
+				return;
+			}
+
+			pubkey = resolvedPubkey;
+
+			// Step 2: Fetch user activity
 			activity = await getUserActivity(pubkey);
 		} catch (e) {
 			const errorMessage =
@@ -39,9 +86,13 @@
 	<div>
 		<h1 class="text-4xl font-bold text-white mb-2">User Info</h1>
 		<p class="text-white/60">
-			Public Key: <span class="font-mono text-sm"
-				>{truncatePubkey(pubkey)}</span
-			>
+			{#if username}
+				Username: <span class="font-semibold">{username}</span>
+			{:else if pubkey}
+				Public Key: <span class="font-mono text-sm">{truncatePubkey(pubkey)}</span>
+			{:else}
+				<span class="font-mono text-sm">{identifier}</span>
+			{/if}
 		</p>
 	</div>
 
@@ -54,8 +105,8 @@
 					<div class="text-6xl mb-4">🔍</div>
 					<h2 class="text-2xl font-bold mb-2">User Not Found</h2>
 					<p class="mb-4">
-						The user with pubkey <span class="font-mono text-sm"
-							>{truncatePubkey(pubkey)}</span
+						The user <span class="font-mono text-sm"
+							>{identifier}</span
 						> was not found in the system.
 					</p>
 					<p class="text-sm text-red-300/70">This could mean:</p>
@@ -66,7 +117,7 @@
 							The user hasn't created any offerings or contracts
 							yet
 						</li>
-						<li>The pubkey address is incorrect</li>
+						<li>The username or pubkey is incorrect</li>
 						<li>The user is new to the platform</li>
 					</ul>
 					<div class="mt-6">
