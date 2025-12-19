@@ -800,7 +800,14 @@ async fn test_cancel_contract_success_all_cancellable_statuses() {
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
 
-    let cancellable_statuses = ["requested", "pending", "accepted", "provisioning"];
+    let cancellable_statuses = [
+        "requested",
+        "pending",
+        "accepted",
+        "provisioning",
+        "provisioned",
+        "active",
+    ];
 
     for (i, status) in cancellable_statuses.iter().enumerate() {
         let contract_id = vec![10 + i as u8; 32];
@@ -911,7 +918,8 @@ async fn test_cancel_contract_fails_for_non_cancellable_statuses() {
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
 
-    let non_cancellable_statuses = ["provisioned", "active", "rejected", "cancelled"];
+    // Only terminal statuses are non-cancellable (rejected, cancelled, completed)
+    let non_cancellable_statuses = ["rejected", "cancelled", "completed"];
 
     for (i, status) in non_cancellable_statuses.iter().enumerate() {
         let contract_id = vec![20 + i as u8; 32];
@@ -1260,7 +1268,7 @@ async fn test_cancel_contract_invalid_status() {
     let provider_pk = vec![2u8; 32];
     let contract_id = vec![103u8; 32];
 
-    // Insert contract in non-cancellable status
+    // Insert contract in non-cancellable status (terminal status)
     insert_contract_request(
         &db,
         &contract_id,
@@ -1268,7 +1276,7 @@ async fn test_cancel_contract_invalid_status() {
         &provider_pk,
         "off-1",
         0,
-        "provisioned", // Not cancellable
+        "completed", // Terminal status - not cancellable
     )
     .await;
 
@@ -1285,7 +1293,7 @@ async fn test_cancel_contract_invalid_status() {
 
     // Verify contract still in original status
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.status, "provisioned");
+    assert_eq!(contract.status, "completed");
 }
 
 #[tokio::test]
@@ -1554,4 +1562,352 @@ async fn test_try_auto_accept_contract_idempotent() {
     // Verify contract status unchanged
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "accepted");
+}
+
+#[tokio::test]
+async fn test_cancel_active_contract_with_prorated_refund() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![50u8; 32];
+
+    // Insert active contract with instance details
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        1_000_000_000, // 1 ICP in e9s
+        "active",
+    )
+    .await;
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    // Use recent start time and future end time for clearer refund calculation
+    let start_ns = now_ns - (1 * 3600 * 1_000_000_000i64); // Started 1 hour ago
+    let end_ns = now_ns + (23 * 3600 * 1_000_000_000i64); // 24 hour contract, 23 hours left
+
+    // Set ICPay payment and instance details
+    let instance_details = r#"{"external_id":"vm-12345","ip_address":"192.168.1.100","ssh_port":22}"#;
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ?, icpay_payment_id = ?, provisioning_instance_details = ?, provisioning_completed_at_ns = ?, start_timestamp_ns = ?, end_timestamp_ns = ? WHERE contract_id = ?",
+        "icpay",
+        "succeeded",
+        "pay_test_active",
+        instance_details,
+        start_ns,
+        start_ns,
+        end_ns,
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Cancel the active contract
+    db.cancel_contract(&contract_id, &requester_pk, Some("User cancelled active rental"), None, None)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    assert_eq!(contract.payment_status, "refunded");
+    assert!(contract.refund_amount_e9s.is_some());
+    // Prorated refund should be present (23/24 hours remaining = ~96% of 1 ICP)
+    let refund = contract.refund_amount_e9s.unwrap();
+    assert!(refund > 0, "Should have a refund amount");
+    assert!(refund < 1_000_000_000, "Refund should be less than full amount");
+}
+
+#[tokio::test]
+async fn test_get_pending_termination_contracts() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+
+    // Create a cancelled contract WITH instance details (should be returned)
+    let contract_id_1 = vec![60u8; 32];
+    insert_contract_request(
+        &db,
+        &contract_id_1,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "cancelled",
+    )
+    .await;
+
+    let instance_details_1 = r#"{"external_id":"vm-001","ip_address":"10.0.0.1","ssh_port":22}"#;
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET provisioning_instance_details = ? WHERE contract_id = ?",
+        instance_details_1,
+        contract_id_1
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create a cancelled contract WITHOUT instance details (should NOT be returned)
+    let contract_id_2 = vec![61u8; 32];
+    insert_contract_request(
+        &db,
+        &contract_id_2,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "cancelled",
+    )
+    .await;
+
+    // Create an active contract WITH instance details (should NOT be returned - not cancelled)
+    let contract_id_3 = vec![62u8; 32];
+    insert_contract_request(
+        &db,
+        &contract_id_3,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "active",
+    )
+    .await;
+
+    let instance_details_3 = r#"{"external_id":"vm-003","ip_address":"10.0.0.3","ssh_port":22}"#;
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET provisioning_instance_details = ? WHERE contract_id = ?",
+        instance_details_3,
+        contract_id_3
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Get pending terminations
+    let pending = db.get_pending_termination_contracts(&provider_pk).await.unwrap();
+
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].contract_id, hex::encode(&contract_id_1));
+    assert_eq!(pending[0].instance_details, instance_details_1);
+}
+
+#[tokio::test]
+async fn test_mark_contract_terminated() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![70u8; 32];
+
+    // Create cancelled contract with instance details
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "cancelled",
+    )
+    .await;
+
+    let instance_details = r#"{"external_id":"vm-to-terminate","ip_address":"10.0.0.5","ssh_port":22}"#;
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET provisioning_instance_details = ? WHERE contract_id = ?",
+        instance_details,
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Verify it appears in pending terminations
+    let pending = db.get_pending_termination_contracts(&provider_pk).await.unwrap();
+    assert_eq!(pending.len(), 1);
+
+    // Mark as terminated
+    db.mark_contract_terminated(&contract_id).await.unwrap();
+
+    // Verify it no longer appears in pending terminations
+    let pending = db.get_pending_termination_contracts(&provider_pk).await.unwrap();
+    assert_eq!(pending.len(), 0);
+
+    // Verify terminated_at_ns is set
+    let contract_id_param = contract_id.clone();
+    let terminated_at: Option<i64> = sqlx::query_scalar!(
+        r#"SELECT terminated_at_ns FROM contract_sign_requests WHERE contract_id = ?"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert!(terminated_at.is_some());
+}
+
+#[tokio::test]
+async fn test_mark_contract_terminated_not_cancelled() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![71u8; 32];
+
+    // Create active contract (not cancelled)
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "active",
+    )
+    .await;
+
+    // Attempt to mark as terminated should fail
+    let result = db.mark_contract_terminated(&contract_id).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not in cancelled status"));
+}
+
+// Tests for reconciliation support - verifying get_contract returns data needed for expiry checks
+
+#[tokio::test]
+async fn test_get_contract_returns_end_timestamp_for_active() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![80u8; 32];
+
+    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let future = now + 3600_000_000_000; // 1 hour in future
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "offering-1".to_string(),
+            payment_intent_id: "pi_test".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1000,
+            start_timestamp_ns: now,
+            end_timestamp_ns: future,
+        },
+    )
+    .await;
+
+    // Update status to provisioned (active)
+    sqlx::query("UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = ?")
+        .bind(&contract_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    assert_eq!(contract.status, "provisioned");
+    assert!(contract.end_timestamp_ns.is_some());
+    assert_eq!(contract.end_timestamp_ns.unwrap(), future);
+    // Verify contract is NOT expired (end_timestamp_ns is in future)
+    assert!(contract.end_timestamp_ns.unwrap() > now);
+}
+
+#[tokio::test]
+async fn test_get_contract_returns_end_timestamp_for_expired() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![81u8; 32];
+
+    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let past = now - 3600_000_000_000; // 1 hour ago
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "offering-1".to_string(),
+            payment_intent_id: "pi_test2".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1000,
+            start_timestamp_ns: past - 7200_000_000_000, // 2 hours before end
+            end_timestamp_ns: past,
+        },
+    )
+    .await;
+
+    // Update status to provisioned (was running)
+    sqlx::query("UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = ?")
+        .bind(&contract_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    assert_eq!(contract.status, "provisioned");
+    assert!(contract.end_timestamp_ns.is_some());
+    // Verify contract IS expired (end_timestamp_ns is in past)
+    assert!(contract.end_timestamp_ns.unwrap() < now);
+}
+
+#[tokio::test]
+async fn test_get_contract_returns_cancelled_status() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![82u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "cancelled",
+    )
+    .await;
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    assert_eq!(contract.status, "cancelled");
+}
+
+#[tokio::test]
+async fn test_get_contract_returns_provider_pubkey() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![2u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let contract_id = vec![83u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    // Verify provider_pubkey matches (for authorization checks in reconcile)
+    assert_eq!(hex::decode(&contract.provider_pubkey).unwrap(), provider_pk);
+}
+
+#[tokio::test]
+async fn test_get_contract_not_found() {
+    let db = setup_test_db().await;
+    let non_existent_id = vec![99u8; 32];
+
+    let contract = db.get_contract(&non_existent_id).await.unwrap();
+
+    assert!(contract.is_none());
 }

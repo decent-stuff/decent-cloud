@@ -457,6 +457,72 @@ pub struct FulfillResellerOrderRequest {
     pub external_order_details: Option<String>,
 }
 
+// VM Reconciliation types for dc-agent
+
+/// Running instance reported by dc-agent
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileRunningInstance {
+    /// External ID of the VM (e.g., Proxmox VMID)
+    pub external_id: String,
+    /// Contract ID this VM is associated with (extracted from VM name/tags)
+    pub contract_id: Option<String>,
+}
+
+/// Request body for reconciliation
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileRequest {
+    /// List of VMs currently running on this agent
+    pub running_instances: Vec<ReconcileRunningInstance>,
+}
+
+/// Instance that should continue running
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileKeepInstance {
+    pub external_id: String,
+    pub contract_id: String,
+    /// When this contract ends (nanoseconds since epoch)
+    pub ends_at: i64,
+}
+
+/// Instance that should be terminated
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileTerminateInstance {
+    pub external_id: String,
+    pub contract_id: String,
+    /// Reason for termination: "expired", "cancelled"
+    pub reason: String,
+}
+
+/// Unknown instance (orphan - no matching contract)
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileUnknownInstance {
+    pub external_id: String,
+    pub message: String,
+}
+
+/// Response for reconciliation request
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileResponse {
+    /// Instances that should continue running
+    pub keep: Vec<ReconcileKeepInstance>,
+    /// Instances that should be terminated
+    pub terminate: Vec<ReconcileTerminateInstance>,
+    /// Instances with no matching contract (orphans)
+    pub unknown: Vec<ReconcileUnknownInstance>,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints

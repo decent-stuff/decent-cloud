@@ -1,4 +1,4 @@
-use super::{HealthStatus, Instance, ProvisionRequest, Provisioner, SetupVerification};
+use super::{HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance, SetupVerification};
 use crate::config::ProxmoxConfig;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
@@ -84,6 +84,14 @@ struct VmStatus {
     status: String,
     uptime: Option<u64>,
     name: Option<String>,
+}
+
+/// VM list entry (from /nodes/{node}/qemu)
+#[derive(Deserialize, Debug)]
+struct VmListEntry {
+    vmid: u32,
+    name: Option<String>,
+    status: String,
 }
 
 /// Task status response.
@@ -478,6 +486,17 @@ impl ProxmoxProvisioner {
         self.api_get(&path).await
     }
 
+    /// List all VMs on the node
+    async fn list_vms(&self) -> Result<Vec<VmListEntry>> {
+        let path = format!("/api2/json/nodes/{}/qemu", self.config.node);
+        self.api_get(&path).await
+    }
+
+    /// Extract contract ID from VM name (dc-{contract_id} -> contract_id)
+    fn extract_contract_id(name: &str) -> Option<String> {
+        name.strip_prefix("dc-").map(String::from)
+    }
+
     async fn get_vm_ip(&self, vmid: u32) -> Result<(Option<String>, Option<String>)> {
         let path = format!(
             "/api2/json/nodes/{}/qemu/{}/agent/network-get-interfaces",
@@ -856,6 +875,30 @@ impl Provisioner for ProxmoxProvisioner {
         }
 
         result
+    }
+
+    async fn list_running_instances(&self) -> Result<Vec<RunningInstance>> {
+        let vms = self.list_vms().await?;
+        let mut instances = Vec::new();
+
+        for vm in vms {
+            // Only include running VMs with dc- prefix (managed by this agent)
+            if vm.status != "running" {
+                continue;
+            }
+            let name = match &vm.name {
+                Some(n) if n.starts_with("dc-") => n,
+                _ => continue,
+            };
+
+            let contract_id = Self::extract_contract_id(name);
+            instances.push(RunningInstance {
+                external_id: vm.vmid.to_string(),
+                contract_id,
+            });
+        }
+
+        Ok(instances)
     }
 }
 

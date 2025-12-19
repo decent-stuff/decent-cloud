@@ -793,4 +793,82 @@ mod tests {
         let details = instance.additional_details.unwrap();
         assert_eq!(details.get("reused"), Some(&serde_json::json!(true)));
     }
+
+    #[test]
+    fn test_extract_contract_id_valid() {
+        assert_eq!(
+            ProxmoxProvisioner::extract_contract_id("dc-test-contract-123"),
+            Some("test-contract-123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_contract_id_no_prefix() {
+        assert_eq!(ProxmoxProvisioner::extract_contract_id("test-vm"), None);
+    }
+
+    #[test]
+    fn test_extract_contract_id_empty_after_prefix() {
+        assert_eq!(
+            ProxmoxProvisioner::extract_contract_id("dc-"),
+            Some("".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_running_instances() {
+        let mut server = Server::new_async().await;
+
+        // Mock VM list - includes running dc- VMs, stopped VMs, and non-dc VMs
+        let _list_mock = server
+            .mock("GET", "/api2/json/nodes/pve1/qemu")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"data":[
+                    {"vmid":100,"name":"dc-contract-123","status":"running"},
+                    {"vmid":101,"name":"dc-contract-456","status":"stopped"},
+                    {"vmid":102,"name":"other-vm","status":"running"},
+                    {"vmid":103,"name":"dc-contract-789","status":"running"},
+                    {"vmid":9000,"status":"stopped"}
+                ]}"#,
+            )
+            .create_async()
+            .await;
+
+        let config = test_config(&server.url());
+        let provisioner = ProxmoxProvisioner::new(config).unwrap();
+
+        let instances = provisioner.list_running_instances().await.unwrap();
+
+        // Should only include running VMs with dc- prefix
+        assert_eq!(instances.len(), 2);
+
+        // Verify contract IDs are extracted correctly
+        assert_eq!(instances[0].external_id, "100");
+        assert_eq!(instances[0].contract_id, Some("contract-123".to_string()));
+
+        assert_eq!(instances[1].external_id, "103");
+        assert_eq!(instances[1].contract_id, Some("contract-789".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_list_running_instances_empty() {
+        let mut server = Server::new_async().await;
+
+        // Mock VM list - no running dc- VMs
+        let _list_mock = server
+            .mock("GET", "/api2/json/nodes/pve1/qemu")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":[{"vmid":100,"name":"other-vm","status":"running"}]}"#)
+            .create_async()
+            .await;
+
+        let config = test_config(&server.url());
+        let provisioner = ProxmoxProvisioner::new(config).unwrap();
+
+        let instances = provisioner.list_running_instances().await.unwrap();
+        assert!(instances.is_empty());
+    }
 }

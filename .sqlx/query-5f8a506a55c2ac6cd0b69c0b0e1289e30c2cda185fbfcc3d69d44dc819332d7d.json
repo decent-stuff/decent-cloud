@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "5f8a506a55c2ac6cd0b69c0b0e1289e30c2cda185fbfcc3d69d44dc819332d7d"
+}

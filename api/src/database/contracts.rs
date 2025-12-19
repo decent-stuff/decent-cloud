@@ -205,6 +205,15 @@ pub struct ContractWithSpecs {
     pub storage_capacity: Option<String>,
 }
 
+/// Contract pending termination for dc-agent
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractPendingTermination {
+    pub contract_id: String,
+    /// Instance details JSON (contains external_id needed for termination)
+    pub instance_details: String,
+}
+
 impl Database {
     /// Get contracts for a user (as requester)
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
@@ -264,7 +273,8 @@ impl Database {
     }
 
     /// Get contracts pending provisioning with offering specs
-    /// Returns contracts with status='accepted' AND payment_status='succeeded', joined with offering specs
+    /// Returns contracts with status='accepted' or 'provisioning' AND payment_status='succeeded',
+    /// joined with offering specs. Includes 'provisioning' to handle dc-agent restarts.
     pub async fn get_pending_provision_contracts_with_specs(
         &self,
         provider_pubkey: &[u8],
@@ -282,7 +292,7 @@ impl Database {
                FROM contract_sign_requests c
                LEFT JOIN provider_offerings o ON c.offering_id = o.offering_id AND c.provider_pubkey = o.pubkey
                WHERE c.provider_pubkey = ?
-               AND c.status = 'accepted'
+               AND c.status IN ('accepted', 'provisioning')
                AND c.payment_status = 'succeeded'
                ORDER BY c.created_at_ns ASC"#,
             provider_pubkey
@@ -291,6 +301,55 @@ impl Database {
         .await?;
 
         Ok(contracts)
+    }
+
+    /// Get cancelled contracts pending termination
+    ///
+    /// Returns contracts that are cancelled, have instance details (were provisioned),
+    /// and have not yet been terminated by dc-agent.
+    pub async fn get_pending_termination_contracts(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<ContractPendingTermination>> {
+        let contracts = sqlx::query_as!(
+            ContractPendingTermination,
+            r#"SELECT
+               lower(hex(contract_id)) as "contract_id!: String",
+               provisioning_instance_details as "instance_details!: String"
+               FROM contract_sign_requests
+               WHERE provider_pubkey = ?
+               AND status = 'cancelled'
+               AND provisioning_instance_details IS NOT NULL
+               AND terminated_at_ns IS NULL
+               ORDER BY status_updated_at_ns ASC"#,
+            provider_pubkey
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
+
+    /// Mark a contract as terminated by dc-agent
+    pub async fn mark_contract_terminated(&self, contract_id: &[u8]) -> Result<()> {
+        let terminated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let result = sqlx::query!(
+            "UPDATE contract_sign_requests SET terminated_at_ns = ? WHERE contract_id = ? AND status = 'cancelled'",
+            terminated_at_ns,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(anyhow::anyhow!(
+                "Contract not found or not in cancelled status (ID: {})",
+                hex::encode(contract_id)
+            ));
+        }
+
+        Ok(())
     }
 
     /// Get contract by ID
@@ -931,7 +990,7 @@ impl Database {
     fn is_cancellable_status(status: &str) -> bool {
         matches!(
             status,
-            "requested" | "pending" | "accepted" | "provisioning"
+            "requested" | "pending" | "accepted" | "provisioning" | "provisioned" | "active"
         )
     }
 
@@ -1150,7 +1209,7 @@ impl Database {
         // Verify contract is in a cancellable status
         if !Self::is_cancellable_status(&contract.status) {
             return Err(anyhow::anyhow!(
-                "Contract cannot be cancelled in '{}' status. Only requested, pending, accepted, or provisioning contracts can be cancelled.",
+                "Contract cannot be cancelled in '{}' status. Only requested, pending, accepted, provisioning, provisioned, or active contracts can be cancelled.",
                 contract.status
             ));
         }

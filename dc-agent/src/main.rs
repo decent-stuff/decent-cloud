@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use dc_agent::{
-    api_client::ApiClient,
+    api_client::{ApiClient, ReconcileResponse},
     config::{Config, ProvisionerConfig},
     provisioner::{
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
@@ -722,7 +722,9 @@ async fn poll_and_provision(
     provisioner: &dyn Provisioner,
     consecutive_failures: &mut u32,
 ) -> i64 {
-    // Fetch pending contracts
+    let mut active_count: i64 = 0;
+
+    // Fetch pending contracts for provisioning
     match api_client.get_pending_contracts().await {
         Ok(contracts) => {
             if *consecutive_failures > 0 {
@@ -733,105 +735,116 @@ async fn poll_and_provision(
                 *consecutive_failures = 0;
             }
 
-            if contracts.is_empty() {
-                return 0;
-            }
+            if !contracts.is_empty() {
+                info!(count = contracts.len(), "Found pending contracts");
 
-            info!(count = contracts.len(), "Found pending contracts");
+                for contract in &contracts {
+                    info!(contract_id = %contract.contract_id, "Processing contract");
 
-            for contract in &contracts {
-                info!(contract_id = %contract.contract_id, "Processing contract");
+                    // Parse instance_config if present - log warning if malformed
+                    let instance_config: Option<serde_json::Value> =
+                        match &contract.instance_config {
+                            Some(s) => match serde_json::from_str(s) {
+                                Ok(v) => Some(v),
+                                Err(e) => {
+                                    warn!(
+                                        contract_id = %contract.contract_id,
+                                        error = %e,
+                                        raw_config = %s,
+                                        "Invalid instance_config JSON, ignoring"
+                                    );
+                                    None
+                                }
+                            },
+                            None => None,
+                        };
 
-                // Parse instance_config if present - log warning if malformed
-                let instance_config: Option<serde_json::Value> = match &contract.instance_config {
-                    Some(s) => match serde_json::from_str(s) {
-                        Ok(v) => Some(v),
-                        Err(e) => {
-                            warn!(
-                                contract_id = %contract.contract_id,
-                                error = %e,
-                                raw_config = %s,
-                                "Invalid instance_config JSON, ignoring"
-                            );
-                            None
-                        }
-                    },
-                    None => None,
-                };
+                    // Extract specs from offering (returned by API)
+                    let cpu_cores = contract.cpu_cores.map(|c| c as u32);
+                    let memory_mb = contract.memory_mb();
+                    let storage_gb = contract.storage_gb();
 
-                // Extract specs from offering (returned by API)
-                let cpu_cores = contract.cpu_cores.map(|c| c as u32);
-                let memory_mb = contract.memory_mb();
-                let storage_gb = contract.storage_gb();
-
-                if cpu_cores.is_some() || memory_mb.is_some() || storage_gb.is_some() {
-                    info!(
-                        contract_id = %contract.contract_id,
-                        cpu_cores = ?cpu_cores,
-                        memory_mb = ?memory_mb,
-                        storage_gb = ?storage_gb,
-                        "Using offering specs for VM"
-                    );
-                }
-
-                let request = ProvisionRequest {
-                    contract_id: contract.contract_id.clone(),
-                    offering_id: contract.offering_id.clone(),
-                    cpu_cores,
-                    memory_mb,
-                    storage_gb,
-                    requester_ssh_pubkey: Some(contract.requester_ssh_pubkey.clone()),
-                    instance_config,
-                };
-
-                match provisioner.provision(&request).await {
-                    Ok(instance) => {
+                    if cpu_cores.is_some() || memory_mb.is_some() || storage_gb.is_some() {
                         info!(
                             contract_id = %contract.contract_id,
-                            external_id = %instance.external_id,
-                            ip_address = ?instance.ip_address,
-                            "Provisioned successfully"
+                            cpu_cores = ?cpu_cores,
+                            memory_mb = ?memory_mb,
+                            storage_gb = ?storage_gb,
+                            "Using offering specs for VM"
                         );
-                        if let Err(e) = api_client
-                            .report_provisioned(&contract.contract_id, &instance)
-                            .await
-                        {
-                            // This is a critical error - VM was created but API doesn't know
-                            error!(
+                    }
+
+                    let request = ProvisionRequest {
+                        contract_id: contract.contract_id.clone(),
+                        offering_id: contract.offering_id.clone(),
+                        cpu_cores,
+                        memory_mb,
+                        storage_gb,
+                        requester_ssh_pubkey: Some(contract.requester_ssh_pubkey.clone()),
+                        instance_config,
+                    };
+
+                    // Mark contract as provisioning before starting (for UI feedback)
+                    if let Err(e) = api_client
+                        .report_provisioning_started(&contract.contract_id)
+                        .await
+                    {
+                        warn!(
+                            contract_id = %contract.contract_id,
+                            error = %e,
+                            "Failed to report provisioning started, continuing anyway"
+                        );
+                    }
+
+                    match provisioner.provision(&request).await {
+                        Ok(instance) => {
+                            info!(
                                 contract_id = %contract.contract_id,
                                 external_id = %instance.external_id,
                                 ip_address = ?instance.ip_address,
-                                error = %e,
-                                "CRITICAL: VM provisioned but failed to report to API! \
-                                 Contract may be stuck. Manual intervention may be required."
+                                "Provisioned successfully"
                             );
+                            if let Err(e) = api_client
+                                .report_provisioned(&contract.contract_id, &instance)
+                                .await
+                            {
+                                // This is a critical error - VM was created but API doesn't know
+                                error!(
+                                    contract_id = %contract.contract_id,
+                                    external_id = %instance.external_id,
+                                    ip_address = ?instance.ip_address,
+                                    error = %e,
+                                    "CRITICAL: VM provisioned but failed to report to API! \
+                                     Contract may be stuck. Manual intervention may be required."
+                                );
+                            }
                         }
-                    }
-                    Err(e) => {
-                        // Use {:?} to show full error chain including underlying cause
-                        error!(
-                            contract_id = %contract.contract_id,
-                            error = ?e,
-                            "Provisioning failed"
-                        );
-                        // Include full chain in failure report
-                        if let Err(report_err) = api_client
-                            .report_failed(&contract.contract_id, &format!("{:?}", e))
-                            .await
-                        {
-                            // Less critical than report_provisioned failure, but still serious
+                        Err(e) => {
+                            // Use {:?} to show full error chain including underlying cause
                             error!(
                                 contract_id = %contract.contract_id,
-                                original_error = ?e,
-                                report_error = %report_err,
-                                "Failed to report provisioning failure to API. \
-                                 Contract may remain stuck in pending state."
+                                error = ?e,
+                                "Provisioning failed"
                             );
+                            // Include full chain in failure report
+                            if let Err(report_err) = api_client
+                                .report_failed(&contract.contract_id, &format!("{:?}", e))
+                                .await
+                            {
+                                // Less critical than report_provisioned failure, but still serious
+                                error!(
+                                    contract_id = %contract.contract_id,
+                                    original_error = ?e,
+                                    report_error = %report_err,
+                                    "Failed to report provisioning failure to API. \
+                                     Contract may remain stuck in pending state."
+                                );
+                            }
                         }
                     }
                 }
+                active_count = contracts.len() as i64;
             }
-            contracts.len() as i64
         }
         Err(e) => {
             *consecutive_failures += 1;
@@ -849,8 +862,83 @@ async fn poll_and_provision(
                     "Failed to fetch pending contracts"
                 );
             }
-            0
+            return 0;
         }
+    }
+
+    // Reconcile running instances - handles expired, cancelled, and orphan VMs
+    reconcile_instances(api_client, provisioner).await;
+
+    active_count
+}
+
+/// Reconcile running instances with the API.
+/// Reports running VMs, terminates expired/cancelled contracts, warns about orphans.
+async fn reconcile_instances(api_client: &ApiClient, provisioner: &dyn Provisioner) {
+    // Get running instances from provisioner
+    let running_instances = match provisioner.list_running_instances().await {
+        Ok(instances) => instances,
+        Err(e) => {
+            warn!(error = %e, "Failed to list running instances, skipping reconciliation");
+            return;
+        }
+    };
+
+    if running_instances.is_empty() {
+        return;
+    }
+
+    // Call reconcile API
+    let response: ReconcileResponse = match api_client.reconcile(&running_instances).await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(error = %e, "Failed to reconcile with API");
+            return;
+        }
+    };
+
+    // Process terminations
+    for vm in &response.terminate {
+        info!(
+            external_id = %vm.external_id,
+            contract_id = %vm.contract_id,
+            reason = %vm.reason,
+            "Terminating VM"
+        );
+
+        match provisioner.terminate(&vm.external_id).await {
+            Ok(()) => {
+                info!(
+                    external_id = %vm.external_id,
+                    contract_id = %vm.contract_id,
+                    "VM terminated successfully"
+                );
+                if let Err(e) = api_client.report_terminated(&vm.contract_id).await {
+                    error!(
+                        contract_id = %vm.contract_id,
+                        error = %e,
+                        "Failed to report termination to API. May retry on next poll."
+                    );
+                }
+            }
+            Err(e) => {
+                error!(
+                    external_id = %vm.external_id,
+                    contract_id = %vm.contract_id,
+                    error = ?e,
+                    "Termination failed"
+                );
+            }
+        }
+    }
+
+    // Warn about orphan VMs
+    for vm in &response.unknown {
+        warn!(
+            external_id = %vm.external_id,
+            message = %vm.message,
+            "Orphan VM detected - no matching contract"
+        );
     }
 }
 

@@ -5,7 +5,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::config::ApiConfig;
-use crate::provisioner::{HealthStatus, Instance};
+use crate::provisioner::{HealthStatus, Instance, RunningInstance};
 
 /// Authentication mode for the API client.
 #[derive(Debug, Clone)]
@@ -45,6 +45,15 @@ pub struct PendingContract {
     pub memory_amount: Option<String>,
     /// Storage capacity from offering (e.g. "100 GB")
     pub storage_capacity: Option<String>,
+}
+
+/// Contract pending termination (cancelled with VM still running)
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractPendingTermination {
+    pub contract_id: String,
+    /// Instance details JSON (contains external_id needed for termination)
+    pub instance_details: String,
 }
 
 impl PendingContract {
@@ -157,6 +166,52 @@ struct HeartbeatRequest {
 pub struct HeartbeatResponse {
     pub acknowledged: bool,
     pub next_heartbeat_seconds: i64,
+}
+
+// Reconciliation types
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReconcileRunningInstanceRequest {
+    external_id: String,
+    contract_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReconcileRequest {
+    running_instances: Vec<ReconcileRunningInstanceRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileKeepInstance {
+    pub external_id: String,
+    pub contract_id: String,
+    pub ends_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileTerminateInstance {
+    pub external_id: String,
+    pub contract_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileUnknownInstance {
+    pub external_id: String,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileResponse {
+    pub keep: Vec<ReconcileKeepInstance>,
+    pub terminate: Vec<ReconcileTerminateInstance>,
+    pub unknown: Vec<ReconcileUnknownInstance>,
 }
 
 /// HTTP method for requests.
@@ -356,6 +411,22 @@ impl ApiClient {
         Self::unwrap_response(response, "API error")
     }
 
+    /// Report that provisioning has started (transitions status from accepted to provisioning).
+    pub async fn report_provisioning_started(&self, contract_id: &str) -> Result<()> {
+        let path = format!(
+            "/api/v1/provider/rental-requests/{}/provisioning",
+            contract_id
+        );
+        let request = ProvisionedRequest {
+            status: "provisioning".to_string(),
+            instance_details: String::new(),
+        };
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Put, &path, Some(&body)).await?;
+        Self::unwrap_response(response, "API error").map(|_| ())
+    }
+
     /// Report successful provisioning.
     pub async fn report_provisioned(&self, contract_id: &str, instance: &Instance) -> Result<()> {
         let path = format!(
@@ -369,9 +440,8 @@ impl ApiClient {
             instance_details: instance_json,
         };
         let body = serde_json::to_vec(&request)?;
-        let response: ApiResponse<serde_json::Value> = self
-            .request(Method::Put, &path, Some(&body))
-            .await?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Put, &path, Some(&body)).await?;
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
@@ -425,6 +495,50 @@ impl ApiClient {
             .request(Method::Post, &path, Some(&body))
             .await?;
         Self::unwrap_response(response, "Heartbeat failed")
+    }
+
+    /// Get contracts pending termination.
+    pub async fn get_pending_terminations(&self) -> Result<Vec<ContractPendingTermination>> {
+        let path = format!(
+            "/api/v1/providers/{}/contracts/pending-termination",
+            self.provider_pubkey
+        );
+        let response: ApiResponse<Vec<ContractPendingTermination>> =
+            self.request(Method::Get, &path, None).await?;
+        Self::unwrap_response(response, "API error")
+    }
+
+    /// Report successful termination.
+    pub async fn report_terminated(&self, contract_id: &str) -> Result<()> {
+        let path = format!(
+            "/api/v1/providers/{}/contracts/{}/terminated",
+            self.provider_pubkey, contract_id
+        );
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Put, &path, None).await?;
+        Self::unwrap_response(response, "API error").map(|_| ())
+    }
+
+    /// Reconcile running instances with API.
+    /// Returns which VMs to keep, terminate, or are unknown (orphans).
+    pub async fn reconcile(
+        &self,
+        running_instances: &[RunningInstance],
+    ) -> Result<ReconcileResponse> {
+        let path = format!("/api/v1/providers/{}/reconcile", self.provider_pubkey);
+        let request = ReconcileRequest {
+            running_instances: running_instances
+                .iter()
+                .map(|i| ReconcileRunningInstanceRequest {
+                    external_id: i.external_id.clone(),
+                    contract_id: i.contract_id.clone(),
+                })
+                .collect(),
+        };
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<ReconcileResponse> =
+            self.request(Method::Post, &path, Some(&body)).await?;
+        Self::unwrap_response(response, "Reconcile failed")
     }
 
     /// Returns the auth mode for diagnostics.

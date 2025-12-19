@@ -59,6 +59,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/048_auto_accept_rentals.sql"),
         include_str!("../../migrations/049_auto_accept_default_on.sql"),
         include_str!("../../migrations/050_account_based_identification.sql"),
+        include_str!("../../migrations/051_termination_tracking.sql"),
     ];
 
     for migration in &migrations {

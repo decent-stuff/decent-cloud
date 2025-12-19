@@ -17,6 +17,15 @@ pub struct Instance {
     pub additional_details: Option<serde_json::Value>,
 }
 
+/// Running instance for reconciliation reporting
+#[derive(Debug, Clone)]
+pub struct RunningInstance {
+    /// External ID of the VM (e.g., Proxmox VMID)
+    pub external_id: String,
+    /// Contract ID extracted from VM name (dc-{contract_id})
+    pub contract_id: Option<String>,
+}
+
 /// Health status of a provisioned instance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
@@ -72,6 +81,13 @@ pub trait Provisioner: Send + Sync {
 
     /// Get instance details (for IP discovery after boot)
     async fn get_instance(&self, external_id: &str) -> Result<Option<Instance>>;
+
+    /// List all running instances managed by this agent.
+    /// Used for reconciliation to detect expired/cancelled contracts.
+    async fn list_running_instances(&self) -> Result<Vec<RunningInstance>> {
+        // Default: return empty list (legacy provisioners)
+        Ok(vec![])
+    }
 
     /// Verify provisioner setup without creating resources
     async fn verify_setup(&self) -> SetupVerification {

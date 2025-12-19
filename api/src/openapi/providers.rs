@@ -3,8 +3,10 @@ use super::common::{
     AutoAcceptResponse, BulkUpdateStatusRequest, CsvImportError, CsvImportResult,
     DuplicateOfferingRequest, HelpcenterSyncResponse, NotificationConfigResponse,
     NotificationUsageResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
-    RentalResponseRequest, ResponseMetricsResponse, ResponseTimeDistributionResponse,
-    TestNotificationRequest, TestNotificationResponse, UpdateNotificationConfigRequest,
+    ReconcileKeepInstance, ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance,
+    ReconcileUnknownInstance, RentalResponseRequest, ResponseMetricsResponse,
+    ResponseTimeDistributionResponse, TestNotificationRequest, TestNotificationResponse,
+    UpdateNotificationConfigRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
@@ -396,6 +398,120 @@ impl ProvidersApi {
             Ok(contracts) => Json(ApiResponse {
                 success: true,
                 data: Some(contracts),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get contracts pending termination
+    ///
+    /// Returns cancelled contracts that had VMs provisioned and need termination.
+    /// Requires agent authentication - agent can only access their delegated provider's contracts.
+    #[oai(
+        path = "/providers/:pubkey/contracts/pending-termination",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_pending_termination_contracts(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractPendingTermination>>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: agent can only access contracts for their delegated provider
+        if auth.provider_pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Unauthorized: can only access your delegated provider's contracts".to_string(),
+                ),
+            });
+        }
+
+        match db.get_pending_termination_contracts(&pubkey_bytes).await {
+            Ok(contracts) => Json(ApiResponse {
+                success: true,
+                data: Some(contracts),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Mark a contract as terminated
+    ///
+    /// Called by dc-agent after successfully terminating a VM for a cancelled contract.
+    /// Requires agent authentication - agent can only mark contracts for their delegated provider.
+    #[oai(
+        path = "/providers/:pubkey/contracts/:contract_id/terminated",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn mark_contract_terminated(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        pubkey: Path<String>,
+        contract_id: Path<String>,
+    ) -> Json<ApiResponse<bool>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        let contract_id_bytes = match hex::decode(&contract_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: agent can only mark contracts for their delegated provider
+        if auth.provider_pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Unauthorized: can only mark your delegated provider's contracts".to_string(),
+                ),
+            });
+        }
+
+        match db.mark_contract_terminated(&contract_id_bytes).await {
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: Some(true),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -1588,5 +1704,144 @@ impl ProvidersApi {
                 error: Some(e.to_string()),
             }),
         }
+    }
+
+    /// Reconcile running VMs with contract state
+    ///
+    /// dc-agent reports running VMs, API returns which should continue running,
+    /// be terminated, or are unknown (orphans). This replaces the old
+    /// pending-termination polling approach with a reconciliation model.
+    ///
+    /// Requires agent authentication.
+    #[oai(
+        path = "/providers/:pubkey/reconcile",
+        method = "post",
+        tag = "ApiTags::Providers"
+    )]
+    async fn reconcile_instances(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        pubkey: Path<String>,
+        req: Json<ReconcileRequest>,
+    ) -> Json<ApiResponse<ReconcileResponse>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: agent can only reconcile their delegated provider's contracts
+        if auth.provider_pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Unauthorized: can only reconcile your delegated provider's contracts"
+                        .to_string(),
+                ),
+            });
+        }
+
+        // Get current timestamp for expiry checks
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let mut keep = Vec::new();
+        let mut terminate = Vec::new();
+        let mut unknown = Vec::new();
+
+        for instance in &req.running_instances {
+            // If no contract_id, mark as unknown
+            let contract_id = match &instance.contract_id {
+                Some(id) => id,
+                None => {
+                    unknown.push(ReconcileUnknownInstance {
+                        external_id: instance.external_id.clone(),
+                        message: "No contract ID associated with this instance".to_string(),
+                    });
+                    continue;
+                }
+            };
+
+            // Look up contract
+            let contract_id_bytes = match hex::decode(contract_id) {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    unknown.push(ReconcileUnknownInstance {
+                        external_id: instance.external_id.clone(),
+                        message: format!("Invalid contract ID format: {}", contract_id),
+                    });
+                    continue;
+                }
+            };
+
+            match db.get_contract(&contract_id_bytes).await {
+                Ok(Some(contract)) => {
+                    // Check if contract belongs to this provider
+                    let contract_provider = hex::decode(&contract.provider_pubkey).unwrap_or_default();
+                    if contract_provider != pubkey_bytes {
+                        unknown.push(ReconcileUnknownInstance {
+                            external_id: instance.external_id.clone(),
+                            message: "Contract belongs to different provider".to_string(),
+                        });
+                        continue;
+                    }
+
+                    // Determine action based on contract state
+                    let end_ns = contract.end_timestamp_ns.unwrap_or(0);
+                    let is_expired = end_ns > 0 && end_ns < now_ns;
+                    let is_cancelled = contract.status == "cancelled";
+
+                    if is_cancelled {
+                        terminate.push(ReconcileTerminateInstance {
+                            external_id: instance.external_id.clone(),
+                            contract_id: contract_id.clone(),
+                            reason: "cancelled".to_string(),
+                        });
+                    } else if is_expired {
+                        terminate.push(ReconcileTerminateInstance {
+                            external_id: instance.external_id.clone(),
+                            contract_id: contract_id.clone(),
+                            reason: "expired".to_string(),
+                        });
+                    } else {
+                        // Contract is active
+                        keep.push(ReconcileKeepInstance {
+                            external_id: instance.external_id.clone(),
+                            contract_id: contract_id.clone(),
+                            ends_at: end_ns,
+                        });
+                    }
+                }
+                Ok(None) => {
+                    unknown.push(ReconcileUnknownInstance {
+                        external_id: instance.external_id.clone(),
+                        message: format!("No contract found with ID: {}", contract_id),
+                    });
+                }
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Database error: {}", e)),
+                    });
+                }
+            }
+        }
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(ReconcileResponse {
+                keep,
+                terminate,
+                unknown,
+            }),
+            error: None,
+        })
     }
 }
