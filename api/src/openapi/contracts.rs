@@ -655,34 +655,53 @@ impl ContractsApi {
             session_result.contract_id
         );
 
-        // Send payment receipt (idempotent - skips if already sent)
-        match crate::receipts::send_payment_receipt(
-            db.as_ref(),
-            &contract_id_bytes,
-            email_service.as_ref(),
-        )
-        .await
-        {
-            Ok(0) => {
-                tracing::debug!(
-                    "Receipt already sent for contract {}",
-                    session_result.contract_id
-                );
+        // Handle receipt: if we have Stripe invoice ID, send now; otherwise schedule for polling
+        if session_result.invoice_id.is_some() {
+            // Stripe invoice is ready, send receipt now
+            match crate::receipts::send_payment_receipt(
+                db.as_ref(),
+                &contract_id_bytes,
+                email_service.as_ref(),
+            )
+            .await
+            {
+                Ok(0) => {
+                    tracing::debug!(
+                        "Receipt already sent for contract {}",
+                        session_result.contract_id
+                    );
+                }
+                Ok(receipt_num) => {
+                    tracing::info!(
+                        "Sent receipt #{} for contract {} via verify-checkout (with Stripe invoice)",
+                        receipt_num,
+                        session_result.contract_id
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to send receipt for contract {}: {}",
+                        session_result.contract_id,
+                        e
+                    );
+                    // Don't fail - payment was verified successfully
+                }
             }
-            Ok(receipt_num) => {
-                tracing::info!(
-                    "Sent receipt #{} for contract {} via verify-checkout",
-                    receipt_num,
-                    session_result.contract_id
-                );
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to send receipt for contract {}: {}",
+        } else {
+            // Stripe invoice not ready yet - schedule for background polling
+            // This matches the behavior of checkout.session.completed webhook
+            if let Err(e) = db.schedule_pending_stripe_receipt(&contract_id_bytes).await {
+                tracing::error!(
+                    "Failed to schedule pending receipt for contract {}: {}",
                     session_result.contract_id,
                     e
                 );
                 // Don't fail - payment was verified successfully
+            } else {
+                tracing::info!(
+                    "Scheduled pending receipt for contract {} (waiting for Stripe invoice)",
+                    session_result.contract_id
+                );
             }
         }
 

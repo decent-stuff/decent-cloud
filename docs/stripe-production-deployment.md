@@ -20,8 +20,8 @@ This guide explains how to deploy Stripe payment integration to production.
    - Click **Add endpoint**
    - Endpoint URL: `https://your-domain.com/api/v1/webhooks/stripe`
    - Select events to listen to:
-     - `payment_intent.succeeded`
-     - `payment_intent.payment_failed`
+     - `checkout.session.completed` (handles payment confirmation)
+     - `invoice.paid` (provides Stripe invoice PDF)
    - Click **Add endpoint**
    - Reveal and copy the **Signing secret** (`whsec_...`)
 
@@ -91,13 +91,13 @@ brew install stripe/stripe-cli/stripe
 stripe login
 
 # Test webhook delivery to production
-stripe trigger payment_intent.succeeded --forward-to https://your-domain.com/api/v1/webhooks/stripe
+stripe trigger checkout.session.completed --forward-to https://your-domain.com/api/v1/webhooks/stripe
 ```
 
 Check your API logs for:
 ```
-[INFO] Received Stripe webhook: payment_intent.succeeded
-[INFO] Payment succeeded: pi_xxx
+[INFO] Received Stripe webhook: checkout.session.completed
+[INFO] Checkout session completed: cs_xxx
 ```
 
 ### 4. Test Payment Flow
@@ -166,7 +166,7 @@ npm run build
 
 **Test**: Use Stripe CLI to trigger test webhook:
 ```bash
-stripe trigger payment_intent.succeeded --forward-to https://your-domain.com/api/v1/webhooks/stripe
+stripe trigger checkout.session.completed --forward-to https://your-domain.com/api/v1/webhooks/stripe
 ```
 
 ### Payment succeeds but contract doesn't auto-accept
@@ -175,7 +175,7 @@ stripe trigger payment_intent.succeeded --forward-to https://your-domain.com/api
 **Check API logs for**:
 ```
 [ERROR] Webhook signature verification failed
-[WARN] Contract not found for payment_intent_id: pi_xxx
+[ERROR] Missing contract_id in session metadata
 ```
 
 **Solution**: Verify `STRIPE_WEBHOOK_SECRET` matches the signing secret in Stripe Dashboard
