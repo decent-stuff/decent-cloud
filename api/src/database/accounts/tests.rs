@@ -1484,3 +1484,65 @@ async fn test_get_account_by_chatwoot_user_id_not_found() {
         "Should return None for nonexistent Chatwoot user ID"
     );
 }
+
+#[tokio::test]
+async fn test_ensure_account_for_pubkey_creates_new_account() {
+    let db = create_test_db().await;
+    let pubkey = [0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, // first 8 chars = abcdef12
+                  0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                  0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                  0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17];
+
+    // First call should create a new account
+    let account_id = db.ensure_account_for_pubkey(&pubkey).await.unwrap();
+    assert!(!account_id.is_empty());
+
+    // Verify the account was created with expected username format
+    let account = db.get_account_with_keys_by_public_key(&pubkey).await.unwrap();
+    assert!(account.is_some());
+    let account = account.unwrap();
+    assert!(account.username.starts_with("user_abcdef12"));
+}
+
+#[tokio::test]
+async fn test_ensure_account_for_pubkey_returns_existing() {
+    let db = create_test_db().await;
+    let pubkey = [0x99u8; 32];
+
+    // Create account first
+    let first_id = db.ensure_account_for_pubkey(&pubkey).await.unwrap();
+
+    // Second call should return the same account (idempotent)
+    let second_id = db.ensure_account_for_pubkey(&pubkey).await.unwrap();
+    assert_eq!(first_id, second_id, "Should return existing account");
+}
+
+#[tokio::test]
+async fn test_ensure_account_for_pubkey_handles_username_collision() {
+    let db = create_test_db().await;
+
+    // Two pubkeys with the same first 8 hex chars (different later bytes)
+    let pubkey1 = [0xde, 0xad, 0xbe, 0xef, // first 8 chars = deadbeef
+                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                   0x00, 0x00, 0x00, 0x01]; // last byte different
+    let pubkey2 = [0xde, 0xad, 0xbe, 0xef, // same first 8 chars
+                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                   0x00, 0x00, 0x00, 0x02]; // last byte different
+
+    // Create first account
+    let id1 = db.ensure_account_for_pubkey(&pubkey1).await.unwrap();
+
+    // Create second account - should get a suffixed username
+    let id2 = db.ensure_account_for_pubkey(&pubkey2).await.unwrap();
+    assert_ne!(id1, id2, "Should create different accounts");
+
+    // Verify usernames are different
+    let acc1 = db.get_account_with_keys_by_public_key(&pubkey1).await.unwrap().unwrap();
+    let acc2 = db.get_account_with_keys_by_public_key(&pubkey2).await.unwrap().unwrap();
+    assert_eq!(acc1.username, "user_deadbeef");
+    assert!(acc2.username.starts_with("user_deadbeef_"), "Second account should have suffix");
+}
