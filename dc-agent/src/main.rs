@@ -952,12 +952,37 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                             "[ok] Test VM created: VMID {}",
                             instance.external_id
                         );
+
+                        // Check if we got an IP address (indicates QEMU guest agent is working)
+                        let ip_warning = if instance.ip_address.is_none() {
+                            println!("[WARN] No IP address obtained - QEMU guest agent not running");
+                            println!("       Template may be missing qemu-guest-agent package.");
+                            println!("       Re-run setup to fix: dc-agent setup proxmox ...");
+                            true
+                        } else {
+                            println!("  IP address: {}", instance.ip_address.as_ref().unwrap());
+                            false
+                        };
+
                         println!("  Terminating test VM...");
                         match provisioner.terminate(&instance.external_id).await {
                             Ok(()) => {
                                 println!("[ok] Test VM terminated successfully");
                                 println!();
-                                println!("Provisioning is working correctly!");
+                                if ip_warning {
+                                    println!("Provisioning works but IP detection is broken!");
+                                    println!("VMs will start but won't report their IP addresses.");
+                                    println!();
+                                    println!("To fix, install qemu-guest-agent in template:");
+                                    println!("  1. SSH to Proxmox: ssh root@<proxmox-host>");
+                                    println!("  2. Install libguestfs-tools: apt install libguestfs-tools");
+                                    println!("  3. Customize image:");
+                                    println!("     virt-customize -a /var/lib/vz/images/<vmid>/vm-<vmid>-disk-0 \\");
+                                    println!("       --install qemu-guest-agent \\");
+                                    println!("       --run-command 'systemctl enable qemu-guest-agent'");
+                                } else {
+                                    println!("Provisioning is working correctly!");
+                                }
                             }
                             Err(e) => {
                                 println!("[WARN] Test VM created but termination failed: {}", e);

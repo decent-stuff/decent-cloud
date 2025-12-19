@@ -280,15 +280,37 @@ impl ProxmoxSetup {
             }
         }
 
-        // Clear machine-id (important for proper cloning)
-        println!("  Clearing machine-id for clean clones...");
-        // This requires virt-customize from libguestfs-tools
-        let clear_machineid = format!(
-            "command -v virt-customize >/dev/null 2>&1 && \
-             virt-customize -a /var/lib/vz/images/{}/{} --run-command 'truncate -s 0 /etc/machine-id' 2>/dev/null || true",
-            vmid, disk_name
+        // Customize the image: install qemu-guest-agent and clear machine-id
+        // First ensure libguestfs-tools is installed
+        println!("  Ensuring libguestfs-tools is installed...");
+        let install_result = ssh
+            .execute("dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools")
+            .await?;
+        if install_result.exit_status != 0 {
+            println!("  Warning: Could not install libguestfs-tools");
+            println!("  VMs may not report their IP addresses correctly.");
+            println!("  Manual fix: apt install libguestfs-tools");
+        }
+
+        println!("  Customizing image (installing qemu-guest-agent)...");
+        let disk_path = format!("/var/lib/vz/images/{}/{}", vmid, disk_name);
+        let customize_cmd = format!(
+            "virt-customize -a {} \
+               --install qemu-guest-agent \
+               --run-command 'systemctl enable qemu-guest-agent' \
+               --run-command 'truncate -s 0 /etc/machine-id' 2>&1",
+            disk_path
         );
-        let _ = ssh.execute(&clear_machineid).await; // Best effort, don't fail if not available
+        let customize_result = ssh.execute(&customize_cmd).await?;
+        if customize_result.exit_status != 0 {
+            println!(
+                "  Warning: Failed to customize image: {}",
+                customize_result.stdout.lines().last().unwrap_or("unknown error")
+            );
+            println!("  VMs may not report their IP addresses correctly.");
+        } else {
+            println!("  Image customized successfully");
+        }
 
         // Convert to template
         println!("  Converting to template...");

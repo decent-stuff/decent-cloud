@@ -16,7 +16,7 @@ type = "proxmox"
 [provisioner.proxmox]
 api_url = "https://192.168.122.92:8006"
 api_token_id = "root@pam!dc-agent"
-api_token_secret = "3f203531-2c9d-4c70-ad91-a71dfa96784e"
+api_token_secret = "6a8bbeeb-26ac-4ae4-80a6-a28411a9de28"
 node = "pxmx"
 template_vmid = 9000
 storage = "local-lvm"

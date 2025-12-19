@@ -546,13 +546,15 @@ impl Provisioner for ProxmoxProvisioner {
                     tracing::debug!("Failed to get IP on attempt {}: {}", attempt, e);
                 }
             }
+        }
 
-            if attempt == 12 {
-                tracing::warn!(
-                    "VM {} started but no IP address obtained after 2 minutes",
-                    vmid
-                );
-            }
+        // Fail if no IP address was obtained - VM is not accessible
+        if ipv4.is_none() && ipv6.is_none() {
+            bail!(
+                "VM {} started but no IP address obtained after 2 minutes. \
+                Check that qemu-guest-agent is installed and running in the template.",
+                vmid
+            );
         }
 
         let instance = Instance {
@@ -569,9 +571,10 @@ impl Provisioner for ProxmoxProvisioner {
         };
 
         tracing::info!(
-            "Successfully provisioned VM {} with IP: {:?}",
+            "Successfully provisioned VM {} with IP: {:?}/{:?}",
             vmid,
-            instance.ip_address
+            instance.ip_address,
+            instance.ipv6_address
         );
 
         Ok(instance)
