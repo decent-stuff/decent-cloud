@@ -4,9 +4,6 @@ import type { ProviderProfile as ProviderProfileRaw } from '$lib/types/generated
 import type { Validator as ValidatorRaw } from '$lib/types/generated/Validator';
 import type { PlatformOverview } from '$lib/types/generated/PlatformOverview';
 import type { UserProfile as UserProfileRaw } from '$lib/types/generated/UserProfile';
-import type { UserContact } from '$lib/types/generated/UserContact';
-import type { UserSocial } from '$lib/types/generated/UserSocial';
-import type { UserPublicKey } from '$lib/types/generated/UserPublicKey';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 import type { ProviderTrustMetrics as ProviderTrustMetricsRaw } from '$lib/types/generated/ProviderTrustMetrics';
 import type { ProviderOnboarding as ProviderOnboardingRaw } from '$lib/types/generated/ProviderOnboarding';

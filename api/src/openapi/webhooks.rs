@@ -4,7 +4,12 @@ use crate::notifications::telegram::{TelegramClient, TelegramUpdate};
 use crate::support_bot::handler::handle_customer_message;
 use anyhow::{Context, Result};
 use email_utils::EmailService;
-use poem::{handler, web::Data, Body, Error as PoemError, Response};
+use poem::{
+    handler,
+    http::header::HeaderMap,
+    web::Data,
+    Body, Error as PoemError, Response,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -859,7 +864,44 @@ pub async fn icpay_webhook(
 
 /// Handle Telegram webhook updates for provider replies and /start command
 #[handler]
-pub async fn telegram_webhook(db: Data<&Arc<Database>>, body: Body) -> Result<Response, PoemError> {
+pub async fn telegram_webhook(
+    db: Data<&Arc<Database>>,
+    headers: &HeaderMap,
+    body: Body,
+) -> Result<Response, PoemError> {
+    // Verify Telegram webhook secret if configured
+    // When setWebhook is called with secret_token, Telegram sends it in this header
+    if let Ok(expected_secret) = std::env::var("TELEGRAM_WEBHOOK_SECRET") {
+        let provided_secret = headers
+            .get("x-telegram-bot-api-secret-token")
+            .and_then(|v| v.to_str().ok());
+
+        match provided_secret {
+            Some(secret) if secret == expected_secret => {
+                // Secret verified
+            }
+            Some(_) => {
+                tracing::warn!("Telegram webhook: invalid secret token");
+                return Err(PoemError::from_string(
+                    "Invalid secret token",
+                    poem::http::StatusCode::UNAUTHORIZED,
+                ));
+            }
+            None => {
+                tracing::warn!("Telegram webhook: missing secret token header");
+                return Err(PoemError::from_string(
+                    "Missing secret token",
+                    poem::http::StatusCode::UNAUTHORIZED,
+                ));
+            }
+        }
+    } else {
+        tracing::warn!(
+            "TELEGRAM_WEBHOOK_SECRET not set - webhook requests are NOT verified! \
+             Set this env var and use it when calling setWebhook API."
+        );
+    }
+
     let body_bytes = body.into_vec().await.map_err(|e| {
         PoemError::from_string(
             format!("Failed to read body: {}", e),

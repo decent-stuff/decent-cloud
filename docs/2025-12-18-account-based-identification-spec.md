@@ -1,8 +1,8 @@
 # Account-Based User Identification Migration
 
 **Date:** 2025-12-18
-**Status:** In Progress
-**Priority:** HIGH
+**Status:** Foundation Complete (YAGNI deferred remaining phases)
+**Priority:** LOW (username-based URLs deferred until needed)
 
 ## Problem Statement
 
@@ -148,6 +148,22 @@ If issues arise:
 1. Drop the new columns (requires new migration)
 2. Frontend routes still work if we keep pubkey support as fallback
 3. API endpoints can be versioned to maintain backward compat
+
+## Current State (2025-12-19)
+
+**What's implemented:**
+- ✅ Database schema with account_id columns on contracts, provider_profiles, and offerings
+- ✅ `ensure_account_for_pubkey()` auto-creates accounts for orphan pubkeys
+- ✅ `create_rental_request()` sets requester_account_id and provider_account_id
+- ✅ `update_provider_onboarding()` sets account_id
+- ✅ Frontend reputation page fetches account info by pubkey
+
+**What's deferred (YAGNI):**
+- Username-based URL routes (current pubkey URLs work fine)
+- Username-based API endpoints
+- Data backfill function (new data already gets account_ids)
+
+The foundation is complete. Username-based URLs can be added later when there's actual user demand for memorable profile URLs.
 
 ## Notes
 
