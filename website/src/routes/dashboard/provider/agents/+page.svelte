@@ -27,14 +27,23 @@
 	let showCreateForm = $state(false);
 	let editingPool = $state<AgentPoolWithStats | null>(null);
 	let formName = $state("");
-	let formLocation = $state("eu");
+	let formLocation = $state("europe");
 	let formProvisionerType = $state("proxmox");
 	let formSubmitting = $state(false);
 
 	// Deleting state
 	let deleting = $state<Record<string, boolean>>({});
 
-	const LOCATIONS = ["eu", "us", "asia", "default"];
+	// Region identifiers matching api/src/database/agent_pools.rs REGIONS constant
+	const LOCATIONS: { code: string; name: string }[] = [
+		{ code: "europe", name: "Europe" },
+		{ code: "na", name: "North America" },
+		{ code: "latam", name: "Latin America" },
+		{ code: "apac", name: "Asia Pacific" },
+		{ code: "mena", name: "Middle East & North Africa" },
+		{ code: "ssa", name: "Sub-Saharan Africa" },
+		{ code: "cis", name: "CIS (Russia & neighbors)" },
+	];
 	const PROVISIONER_TYPES = ["proxmox", "script", "manual"];
 
 	type SigningIdentity = {
@@ -103,7 +112,7 @@
 
 	function resetForm() {
 		formName = "";
-		formLocation = "eu";
+		formLocation = "europe";
 		formProvisionerType = "proxmox";
 		showCreateForm = false;
 		editingPool = null;
@@ -260,7 +269,7 @@
 									class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
 								>
 									{#each LOCATIONS as loc}
-										<option value={loc}>{loc}</option>
+										<option value={loc.code}>{loc.name}</option>
 									{/each}
 								</select>
 							</div>

@@ -25,17 +25,17 @@ Agent Pools enable providers to run multiple DC-Agents (one per hypervisor) with
 
 ```
 Provider
-  └── Pool "eu-proxmox"
-        ├── location: "eu"
+  └── Pool "europe-proxmox"
+        ├── location: "europe"
         ├── provisioner_type: "proxmox"
         ├── Agents: [node-1, node-2, node-3]
-  └── Pool "us-proxmox"
-        ├── location: "us"
+  └── Pool "na-proxmox"
+        ├── location: "na"
         ├── provisioner_type: "proxmox"
         └── Agents: [node-us-1]
 
 Offering "VPS-EU"
-  └── datacenter_country: "DE" → auto-matches "eu" location
+  └── datacenter_country: "DE" → auto-matches "europe" location
   └── (optional) explicit pool_id override
 ```
 
@@ -57,8 +57,8 @@ Offering "VPS-EU"
 CREATE TABLE agent_pools (
     pool_id TEXT PRIMARY KEY,
     provider_pubkey BLOB NOT NULL,
-    name TEXT NOT NULL,                    -- "eu-proxmox", "us-hetzner"
-    location TEXT NOT NULL,                -- "eu", "us", "asia" (region identifier)
+    name TEXT NOT NULL,                    -- "europe-proxmox", "na-hetzner"
+    location TEXT NOT NULL,                -- "europe", "na", "apac", etc. (region identifier)
     provisioner_type TEXT NOT NULL,        -- "proxmox", "script", "manual"
     created_at_ns INTEGER NOT NULL,
     FOREIGN KEY (provider_pubkey) REFERENCES provider_registrations(pubkey)
@@ -148,7 +148,7 @@ dc-agent setup --token apt_eu1_7f3a9c2b4d6e8f0a --api-url https://api.dcmarket.i
 [agent]
 api_url = "https://api.dcmarket.io"
 provider_pubkey = "abc123..."
-pool_id = "eu-proxmox"
+pool_id = "europe-proxmox"
 
 [keys]
 # Private key stored securely
@@ -274,23 +274,44 @@ ORDER BY c.created_at_ns ASC
 ## Location Matching Logic
 
 ```rust
+/// All supported region identifiers
+pub const REGIONS: &[(&str, &str)] = &[
+    ("europe", "Europe"),
+    ("na", "North America"),
+    ("latam", "Latin America"),
+    ("apac", "Asia Pacific"),
+    ("mena", "Middle East & North Africa"),
+    ("ssa", "Sub-Saharan Africa"),
+    ("cis", "CIS (Russia & neighbors)"),
+];
+
 /// Normalize country code to region identifier
-/// TODO: extend with all country codes and regions
+/// Covers all ISO 3166-1 alpha-2 country codes
 fn country_to_region(country: &str) -> &'static str {
     match country.to_uppercase().as_str() {
-        // Europe
-        "DE" | "FR" | "NL" | "GB" | "UK" | "BE" | "AT" | "CH" |
-        "PL" | "CZ" | "IT" | "ES" | "PT" | "SE" | "NO" | "DK" |
-        "FI" | "IE" | "LU" => "eu",
+        // Europe (geographic)
+        "AT" | "BE" | "FR" | "DE" | ... => "europe",
 
-        // North America
-        "US" | "CA" | "MX" => "us",
+        // CIS - Commonwealth of Independent States
+        "RU" | "BY" | "UA" | "KZ" | ... => "cis",
 
-        // Asia Pacific
-        "SG" | "JP" | "AU" | "NZ" | "KR" | "HK" | "TW" | "IN" => "asia",
+        // North America (incl. Central America & Caribbean)
+        "US" | "CA" | "MX" | "CR" | ... => "na",
 
-        // Other regions could be added
-        _ => "default"
+        // Latin America (South America)
+        "BR" | "AR" | "CL" | "CO" | ... => "latam",
+
+        // Asia Pacific (East/SE/South Asia + Oceania)
+        "CN" | "JP" | "SG" | "AU" | "IN" | ... => "apac",
+
+        // MENA - Middle East & North Africa
+        "AE" | "SA" | "IL" | "TR" | "EG" | ... => "mena",
+
+        // Sub-Saharan Africa
+        "ZA" | "NG" | "KE" | "GH" | ... => "ssa",
+
+        // Fallback
+        _ => "europe"
     }
 }
 
@@ -327,11 +348,11 @@ fn find_pool_for_offering(
 │ Agent Pools                                              [+ Create Pool]     │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ ┌──────────────────────────────────────────────────────────────────────────┐ │
-│ │ Pool          │ Region │ Type    │ Agents │ Online │ Active │ Actions   │ │
-│ ├───────────────┼────────┼─────────┼────────┼────────┼────────┼───────────┤ │
-│ │ eu-proxmox    │ eu     │ proxmox │ 5      │ 4/5    │ 23     │ [+] [...] │ │
-│ │ us-proxmox    │ us     │ proxmox │ 2      │ 2/2    │ 8      │ [+] [...] │ │
-│ │ asia-hetzner  │ asia   │ script  │ 1      │ 1/1    │ 3      │ [+] [...] │ │
+│ │ Pool            │ Region │ Type    │ Agents │ Online │ Active │ Actions   │ │
+│ ├─────────────────┼────────┼─────────┼────────┼────────┼────────┼───────────┤ │
+│ │ europe-proxmox  │ europe │ proxmox │ 5      │ 4/5    │ 23     │ [+] [...] │ │
+│ │ na-proxmox      │ na     │ proxmox │ 2      │ 2/2    │ 8      │ [+] [...] │ │
+│ │ apac-hetzner    │ apac   │ script  │ 1      │ 1/1    │ 3      │ [+] [...] │ │
 │ └──────────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
 │ [+] = Add Agent    [...] = Edit/Delete Pool                                 │
@@ -342,8 +363,8 @@ fn find_pool_for_offering(
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Pool: eu-proxmox                                         [Edit] [Delete]     │
-│ Region: eu  │  Type: proxmox  │  Offerings: 47 linked                       │
+│ Pool: europe-proxmox                                     [Edit] [Delete]     │
+│ Region: europe  │  Type: proxmox  │  Offerings: 47 linked                       │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ Agents                                                   [+ Add Agent]       │
 │ ┌──────────────────────────────────────────────────────────────────────────┐ │
@@ -369,7 +390,7 @@ fn find_pool_for_offering(
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Add Agent to Pool: eu-proxmox                                   │
+│ Add Agent to Pool: europe-proxmox                                   │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │ Agent Label: [proxmox-node-6          ]                        │
@@ -404,11 +425,11 @@ fn find_pool_for_offering(
 │ ┌──────────────────────────────────────────────────────────────────────────┐ │
 │ │ ID       │ Name        │ Type    │ Location │ Pool       │ Price │ Status│ │
 │ ├──────────┼─────────────┼─────────┼──────────┼────────────┼───────┼───────┤ │
-│ │ vps-s-eu │ VPS Small   │ Compute │ DE       │ eu-proxmox │ $5/mo │ Active│ │
-│ │ vps-m-eu │ VPS Medium  │ Compute │ DE       │ eu-proxmox │ $10/mo│ Active│ │
-│ │ vps-l-eu │ VPS Large   │ Compute │ DE       │ eu-proxmox │ $20/mo│ Active│ │
-│ │ vps-s-us │ VPS Small US│ Compute │ US       │ us-proxmox │ $5/mo │ Active│ │
-│ │ ded-1    │ Dedicated 1 │ Dedicated│ DE      │ (auto: eu) │ $99/mo│ Active│ │
+│ │ vps-s-eu │ VPS Small   │ Compute │ DE       │ europe-proxmox │ $5/mo │ Active│ │
+│ │ vps-m-eu │ VPS Medium  │ Compute │ DE       │ europe-proxmox │ $10/mo│ Active│ │
+│ │ vps-l-eu │ VPS Large   │ Compute │ DE       │ europe-proxmox │ $20/mo│ Active│ │
+│ │ vps-s-us │ VPS Small US│ Compute │ US       │ na-proxmox     │ $5/mo │ Active│ │
+│ │ ded-1    │ Dedicated 1 │ Dedicated│ DE      │ (auto: europe) │ $99/mo│ Active│ │
 │ └──────────────────────────────────────────────────────────────────────────┘ │
 │ Showing 1-50 of 147                              [<] [1] [2] [3] [>]        │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -556,7 +577,7 @@ async fn provision_loop(agent: &Agent) {
 [agent]
 api_url = "https://api.dcmarket.io"
 provider_pubkey = "hex-encoded-provider-pubkey"
-pool_id = "eu-proxmox"
+pool_id = "europe-proxmox"
 poll_interval_seconds = 30
 lock_timeout_seconds = 300
 

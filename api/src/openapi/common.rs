@@ -559,7 +559,7 @@ pub struct ReconcileResponse {
 pub struct CreatePoolRequest {
     /// Human-readable name (e.g., "eu-proxmox")
     pub name: String,
-    /// Location/region identifier (e.g., "eu", "us", "asia")
+    /// Location/region identifier (e.g., "europe", "na", "apac")
     pub location: String,
     /// Provisioner type (e.g., "proxmox", "script", "manual")
     pub provisioner_type: String,

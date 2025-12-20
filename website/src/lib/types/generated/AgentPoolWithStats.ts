@@ -29,7 +29,7 @@ providerPubkey: string,
  */
 name: string, 
 /**
- * Location/region identifier (e.g., "eu", "us", "asia")
+ * Location/region identifier (e.g., "europe", "na", "apac")
  */
 location: string, 
 /**
