@@ -65,6 +65,7 @@
 			role="dialog"
 			aria-labelledby="dialog-title"
 			aria-describedby="dialog-description"
+			tabindex="-1"
 		>
 			<header class="p-6 border-b border-white/10">
 				<h2 id="dialog-title" class="text-2xl font-bold">Add Agent to {pool.name}</h2>
