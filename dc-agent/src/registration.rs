@@ -61,7 +61,6 @@ pub fn generate_agent_keypair(agent_dir: &Path, force: bool) -> Result<(PathBuf,
     Ok((private_key_path, pubkey_hex))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

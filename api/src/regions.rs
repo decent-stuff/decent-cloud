@@ -98,30 +98,26 @@ pub fn countries_in_region(region: &str) -> Vec<&'static str> {
     // This is a bit inefficient but rarely called
     let all_countries = [
         // Europe
-        "AT", "BE", "FR", "DE", "LI", "LU", "MC", "NL", "CH", "DK", "EE", "FI", "IS", "IE",
-        "LV", "LT", "NO", "SE", "GB", "UK", "AD", "AL", "BA", "HR", "CY", "GR", "IT", "MT",
-        "ME", "MK", "PT", "SM", "RS", "SI", "ES", "VA", "XK", "BG", "CZ", "HU", "PL", "RO", "SK",
+        "AT", "BE", "FR", "DE", "LI", "LU", "MC", "NL", "CH", "DK", "EE", "FI", "IS", "IE", "LV",
+        "LT", "NO", "SE", "GB", "UK", "AD", "AL", "BA", "HR", "CY", "GR", "IT", "MT", "ME", "MK",
+        "PT", "SM", "RS", "SI", "ES", "VA", "XK", "BG", "CZ", "HU", "PL", "RO", "SK",
         // CIS
-        "RU", "BY", "UA", "MD", "AM", "AZ", "GE", "KZ", "KG", "TJ", "TM", "UZ",
-        // NA
-        "US", "CA", "MX", "GT", "BZ", "HN", "SV", "NI", "CR", "PA", "CU", "JM", "HT", "DO",
-        "PR", "BS", "BB", "TT", "LC", "VC", "GD", "AG", "DM", "KN", "AW", "CW", "SX", "BM",
-        "KY", "VI", "VG", "TC", "AI", "MS", "GP", "MQ", "MF", "BL", "GL", "PM",
-        // LATAM
+        "RU", "BY", "UA", "MD", "AM", "AZ", "GE", "KZ", "KG", "TJ", "TM", "UZ", // NA
+        "US", "CA", "MX", "GT", "BZ", "HN", "SV", "NI", "CR", "PA", "CU", "JM", "HT", "DO", "PR",
+        "BS", "BB", "TT", "LC", "VC", "GD", "AG", "DM", "KN", "AW", "CW", "SX", "BM", "KY", "VI",
+        "VG", "TC", "AI", "MS", "GP", "MQ", "MF", "BL", "GL", "PM", // LATAM
         "AR", "BO", "BR", "CL", "CO", "EC", "GY", "PY", "PE", "SR", "UY", "VE", "GF", "FK",
         // APAC
-        "CN", "JP", "KR", "KP", "MN", "TW", "HK", "MO", "SG", "MY", "TH", "VN", "PH", "ID",
-        "MM", "KH", "LA", "BN", "TL", "IN", "PK", "BD", "LK", "NP", "BT", "MV", "AF", "AU",
-        "NZ", "PG", "FJ", "SB", "VU", "NC", "PF", "WS", "TO", "FM", "PW", "MH", "KI", "NR",
-        "TV", "GU", "MP", "AS", "CK", "NU", "TK", "WF",
-        // MENA
-        "AE", "SA", "QA", "KW", "BH", "OM", "YE", "IQ", "IR", "JO", "LB", "SY", "IL", "PS",
-        "TR", "EG", "LY", "TN", "DZ", "MA", "EH",
-        // SSA
-        "MR", "ML", "NE", "TD", "SD", "SS", "ER", "DJ", "SO", "ET", "KE", "UG", "RW", "BI",
-        "TZ", "MZ", "MW", "ZM", "ZW", "BW", "NA", "SZ", "LS", "ZA", "MG", "MU", "SC", "KM",
-        "RE", "YT", "AO", "CD", "CG", "CF", "CM", "GA", "GQ", "ST", "NG", "GH", "CI", "SN",
-        "GM", "GN", "GW", "SL", "LR", "BF", "TG", "BJ", "CV",
+        "CN", "JP", "KR", "KP", "MN", "TW", "HK", "MO", "SG", "MY", "TH", "VN", "PH", "ID", "MM",
+        "KH", "LA", "BN", "TL", "IN", "PK", "BD", "LK", "NP", "BT", "MV", "AF", "AU", "NZ", "PG",
+        "FJ", "SB", "VU", "NC", "PF", "WS", "TO", "FM", "PW", "MH", "KI", "NR", "TV", "GU", "MP",
+        "AS", "CK", "NU", "TK", "WF", // MENA
+        "AE", "SA", "QA", "KW", "BH", "OM", "YE", "IQ", "IR", "JO", "LB", "SY", "IL", "PS", "TR",
+        "EG", "LY", "TN", "DZ", "MA", "EH", // SSA
+        "MR", "ML", "NE", "TD", "SD", "SS", "ER", "DJ", "SO", "ET", "KE", "UG", "RW", "BI", "TZ",
+        "MZ", "MW", "ZM", "ZW", "BW", "NA", "SZ", "LS", "ZA", "MG", "MU", "SC", "KM", "RE", "YT",
+        "AO", "CD", "CG", "CF", "CM", "GA", "GQ", "ST", "NG", "GH", "CI", "SN", "GM", "GN", "GW",
+        "SL", "LR", "BF", "TG", "BJ", "CV",
     ];
 
     all_countries

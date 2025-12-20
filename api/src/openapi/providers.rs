@@ -433,7 +433,11 @@ impl ProvidersApi {
         };
 
         let result = db
-            .get_pending_provision_contracts_for_pool(&pubkey_bytes, Some(&pool_id), Some(&location))
+            .get_pending_provision_contracts_for_pool(
+                &pubkey_bytes,
+                Some(&pool_id),
+                Some(&location),
+            )
             .await;
 
         match result {

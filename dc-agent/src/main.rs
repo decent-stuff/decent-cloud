@@ -173,11 +173,7 @@ async fn run_setup_token(
             let region_name = region
                 .and_then(region_display_name)
                 .unwrap_or("Unknown region");
-            println!(
-                "[ok] Detected location: {} ({})",
-                country,
-                region_name
-            );
+            println!("[ok] Detected location: {} ({})", country, region_name);
             Some((country, region))
         }
         Ok(None) => {

@@ -1,7 +1,6 @@
 pub mod chatwoot;
 pub mod database;
 pub mod helpcenter;
-pub mod regions;
 mod icpay_client;
 pub mod invoice_storage;
 pub mod invoices;
@@ -9,6 +8,7 @@ mod ledger_path;
 pub mod notifications;
 pub mod payment_release_service;
 pub mod receipts;
+pub mod regions;
 pub mod rental_notifications;
 mod search;
 pub mod stripe_client;

@@ -380,7 +380,6 @@ impl Database {
 
         Ok(result.rows_affected())
     }
-
 }
 
 #[cfg(test)]

@@ -116,7 +116,6 @@ struct SetupTokenRow {
     used_by_agent: Option<Vec<u8>>,
 }
 
-
 impl Database {
     // ==================== Pool CRUD ====================
 
