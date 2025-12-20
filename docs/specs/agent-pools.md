@@ -1,5 +1,9 @@
 # Agent Pools: Load Distribution with Location Routing
 
+> **Status: ✅ COMPLETE** (Implemented 2025-12-20)
+>
+> All features implemented. See [Implementation Status](#implementation-status) for details.
+
 ## Overview
 
 Agent Pools enable providers to run multiple DC-Agents (one per hypervisor) with proper load distribution and location-based routing. This solves the race condition where multiple agents attempt to provision the same contract.
@@ -618,44 +622,43 @@ async fn cleanup_expired_tokens(db: &Database) {
 
 ---
 
-## Files to Modify
+## Implementation Status
 
-### Backend (api/)
+**Status: ✅ COMPLETE** (Implemented 2025-12-20)
 
-| File                                | Changes                                     |
-|-------------------------------------|---------------------------------------------|
-| `migrations/053_agent_pools.sql`    | New tables and columns                      |
-| `src/database/mod.rs`               | Add agent_pools module                      |
-| `src/database/agent_pools.rs`       | **New** - Pool CRUD, location matching      |
-| `src/database/agent_delegations.rs` | Add pool_id, setup token handling           |
-| `src/database/contracts.rs`         | Lock acquire/release, pool-filtered queries |
-| `src/openapi/mod.rs`                | Add pools routes                            |
-| `src/openapi/pools.rs`              | **New** - Pool CRUD endpoints               |
-| `src/openapi/agents.rs`             | Setup endpoint, heartbeat pool info         |
-| `src/openapi/providers.rs`          | Lock endpoints, modified pending-provision  |
-| `src/background_jobs.rs`            | Lock expiry, token cleanup jobs             |
+All core features have been implemented and tested. See below for actual file locations.
 
-### DC-Agent (dc-agent/)
+### Backend (api/) - ✅ Complete
 
-| File                | Changes                                     |
-|---------------------|---------------------------------------------|
-| `src/main.rs`       | Setup command, lock-based provisioning loop |
-| `src/config.rs`     | Pool ID in config                           |
-| `src/api_client.rs` | Lock endpoints, setup endpoint              |
+| File                                | Status | Notes                                       |
+|-------------------------------------|--------|---------------------------------------------|
+| `migrations/053_agent_pools.sql`    | ✅ | New tables and columns                      |
+| `src/database/mod.rs`               | ✅ | agent_pools module added                    |
+| `src/database/agent_pools.rs`       | ✅ | Pool CRUD, location matching, setup tokens  |
+| `src/database/agent_delegations.rs` | ✅ | pool_id column support                      |
+| `src/database/contracts.rs`         | ✅ | Lock acquire/release, pool-filtered queries |
+| `src/openapi/agents.rs`             | ✅ | POST /agents/setup endpoint, heartbeat pool info |
+| `src/openapi/providers.rs`          | ✅ | Pool CRUD, setup tokens, lock endpoints     |
+| `src/cleanup_service.rs`            | ✅ | Lock expiry, token cleanup jobs             |
 
-### Frontend (website/)
+### DC-Agent (dc-agent/) - ✅ Complete
 
-| File                                                    | Changes                     |
-|---------------------------------------------------------|-----------------------------|
-| `src/routes/dashboard/provider/pools/+page.svelte`      | **New** - Pools list        |
-| `src/routes/dashboard/provider/pools/[id]/+page.svelte` | **New** - Pool detail       |
-| `src/lib/components/AgentPoolTable.svelte`              | **New** - Dense pool table  |
-| `src/lib/components/AgentTable.svelte`                  | **New** - Dense agent table |
-| `src/lib/components/SetupTokenDialog.svelte`            | **New** - Token generation  |
-| `src/lib/components/OfferingsEditor.svelte`             | Add pool_id column          |
-| `src/lib/components/Sidebar.svelte`                     | Add Pools nav link          |
-| `src/lib/services/api.ts`                               | Pool API functions          |
-| `src/lib/types/`                                        | Pool, SetupToken types      |
+| File                | Status | Notes                                       |
+|---------------------|--------|---------------------------------------------|
+| `src/main.rs`       | ✅ | `dc-agent setup token` command              |
+| `src/api_client.rs` | ✅ | setup_agent(), acquire_lock(), release_lock() |
+
+### Frontend (website/) - ✅ Complete
+
+| File                                                    | Status | Notes                     |
+|---------------------------------------------------------|--------|---------------------------|
+| `src/routes/dashboard/provider/agents/+page.svelte`     | ✅ | Pools list (was /pools)   |
+| `src/routes/dashboard/provider/agents/[pool_id]/+page.svelte` | ✅ | Pool detail         |
+| `src/lib/components/provider/AgentPoolTable.svelte`     | ✅ | Dense pool table          |
+| `src/lib/components/provider/SetupTokenDialog.svelte`   | ✅ | Token generation dialog   |
+| `src/lib/components/DashboardSidebar.svelte`            | ✅ | "Agents" nav link         |
+| `src/lib/services/api.ts`                               | ✅ | Pool API functions        |
+| `src/lib/types/generated/`                              | ✅ | AgentPool, SetupToken, etc. |
 
 ---
 

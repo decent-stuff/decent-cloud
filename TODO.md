@@ -68,7 +68,7 @@ Software that providers run to automatically provision services when contracts a
 - [x] API: `GET /providers/{pubkey}/contracts/pending-provision`
 - [x] API: `PUT /provider/rental-requests/{id}/provisioning`
 
-### Current Phase: Delegated Agent Keys + One-Liner UX ✅ COMPLETE
+### Phases 4-5: Delegated Agent Keys + One-Liner UX ✅ COMPLETE
 
 **Goal achieved:** Provider goes from zero to "healthy on dashboard" with:
 ```bash
@@ -77,20 +77,30 @@ dc-agent doctor --verify-api                   # Verifies API connectivity
 dc-agent run                                   # Starts polling loop
 ```
 
-#### Phase 4: Delegated Agent Keys (Security) ✅ COMPLETE
-Agent uses separate keypair from provider's main key to limit blast radius if compromised.
-
 - [x] **4.1 Database:** Add `provider_agent_delegations` and `provider_agent_status` tables
 - [x] **4.2 API:** Delegation CRUD endpoints (`POST/GET/DELETE /providers/{pubkey}/agent-delegations`)
 - [x] **4.3 API:** Modify auth to accept agent keys via `X-Agent-Pubkey` header
 - [x] **4.4 Agent:** `dc-agent init` command for keypair generation (also integrated into setup)
 - [x] **4.5 Agent:** `dc-agent register` command (integrated into setup for one-liner UX)
-
-#### Phase 5: One-Liner UX ✅ COMPLETE
 - [x] **5.1 Setup:** Integrated - `dc-agent setup` now auto-generates agent key and registers
 - [x] **5.2 Doctor:** Add `--verify-api` flag for API connectivity test
 - [x] **5.3 Heartbeat:** `POST /providers/{pubkey}/heartbeat` endpoint + agent integration
 - [ ] **5.4 Dashboard:** Show "online"/"offline" badge on provider cards (frontend-only)
+
+### Phase 5.5: Agent Pools ✅ COMPLETE (2025-12-20)
+
+**Spec:** [agent-pools.md](docs/specs/agent-pools.md)
+
+Enables multiple DC-Agents (one per hypervisor) with load distribution and location-based routing. Prevents race conditions where multiple agents try to provision the same contract.
+
+- [x] **Database:** `agent_pools`, `agent_setup_tokens` tables + lock columns on contracts
+- [x] **Pool CRUD:** Create/list/update/delete pools with location + provisioner type
+- [x] **Setup Tokens:** One-time tokens for agent registration to specific pools
+- [x] **Agent Setup:** `dc-agent setup token --token <TOKEN>` command
+- [x] **Two-Phase Provisioning:** Lock acquisition prevents race conditions
+- [x] **Pool Filtering:** Agents only see contracts matching their pool's location
+- [x] **Background Jobs:** Lock expiry + token cleanup in cleanup_service
+- [x] **Frontend:** Pool management UI at `/dashboard/provider/agents`
 
 #### Phase 6: Health & Reputation
 - [ ] **6.1 API:** `POST /contracts/{id}/health` endpoint + `contract_health_checks` table
