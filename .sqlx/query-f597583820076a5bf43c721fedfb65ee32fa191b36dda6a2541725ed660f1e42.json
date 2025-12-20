@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_sign_requests\n               SET provisioning_lock_agent = ?,\n                   provisioning_lock_at_ns = ?,\n                   provisioning_lock_expires_ns = ?\n               WHERE contract_id = ?\n                 AND status IN ('accepted', 'provisioning')\n                 AND payment_status = 'succeeded'\n                 AND (provisioning_lock_agent IS NULL\n                      OR provisioning_lock_agent = ?\n                      OR provisioning_lock_expires_ns < ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "f597583820076a5bf43c721fedfb65ee32fa191b36dda6a2541725ed660f1e42"
+}

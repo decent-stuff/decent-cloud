@@ -37,10 +37,11 @@ impl CleanupService {
 
     async fn cleanup_once(&self) -> anyhow::Result<()> {
         tracing::info!(
-            "Running signature audit cleanup (retention: {} days)",
+            "Running cleanup (signature audit retention: {} days)",
             self.retention_days
         );
 
+        // Signature audit cleanup
         let deleted_count = self
             .database
             .cleanup_signature_audit(self.retention_days)
@@ -50,6 +51,32 @@ impl CleanupService {
             tracing::info!("Deleted {} old signature audit records", deleted_count);
         } else {
             tracing::debug!("No old signature audit records to delete");
+        }
+
+        // Expired provisioning locks cleanup
+        match self.database.clear_expired_provisioning_locks().await {
+            Ok(count) if count > 0 => {
+                tracing::info!("Cleared {} expired provisioning locks", count);
+            }
+            Ok(_) => {
+                tracing::debug!("No expired provisioning locks to clear");
+            }
+            Err(e) => {
+                tracing::error!("Failed to clear expired provisioning locks: {:#}", e);
+            }
+        }
+
+        // Expired setup tokens cleanup
+        match self.database.cleanup_expired_setup_tokens().await {
+            Ok(count) if count > 0 => {
+                tracing::info!("Cleaned up {} expired setup tokens", count);
+            }
+            Ok(_) => {
+                tracing::debug!("No expired setup tokens to clean up");
+            }
+            Err(e) => {
+                tracing::error!("Failed to clean up expired setup tokens: {:#}", e);
+            }
         }
 
         Ok(())

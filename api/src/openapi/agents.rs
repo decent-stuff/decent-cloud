@@ -174,7 +174,7 @@ impl AgentsApi {
             });
         }
 
-        // Create the delegation
+        // Create the delegation (pool_id is None for legacy registration, use setup tokens for pool assignment)
         match db
             .create_agent_delegation(
                 &provider_pubkey,
@@ -183,6 +183,7 @@ impl AgentsApi {
                 req.expires_at_ns,
                 req.label.as_deref(),
                 &signature,
+                None, // pool_id - use setup tokens for pool-based registration
             )
             .await
         {
@@ -195,6 +196,7 @@ impl AgentsApi {
                     label: req.label.clone(),
                     created_at_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
                     active: true,
+                    pool_id: None,
                 };
                 Json(ApiResponse {
                     success: true,

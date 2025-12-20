@@ -1,15 +1,15 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags, AutoAcceptRequest,
-    AutoAcceptResponse, BulkUpdateStatusRequest, CsvImportError, CsvImportResult,
-    DuplicateOfferingRequest, HelpcenterSyncResponse, NotificationConfigResponse,
-    NotificationUsageResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
-    ReconcileKeepInstance, ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance,
-    ReconcileUnknownInstance, RentalResponseRequest, ResponseMetricsResponse,
-    ResponseTimeDistributionResponse, TestNotificationRequest, TestNotificationResponse,
-    UpdateNotificationConfigRequest,
+    AutoAcceptResponse, BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest,
+    CsvImportError, CsvImportResult, DuplicateOfferingRequest, HelpcenterSyncResponse,
+    LockResponse, NotificationConfigResponse, NotificationUsageResponse,
+    OnboardingUpdateResponse, ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest,
+    ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
+    ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
+    TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePoolRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
-use crate::database::Database;
+use crate::database::{AgentPoolWithStats, Database, SetupToken};
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
@@ -1872,5 +1872,671 @@ impl ProvidersApi {
             }),
             error: None,
         })
+    }
+
+    // ==================== Agent Pool Endpoints ====================
+
+    /// Create agent pool
+    ///
+    /// Creates a new agent pool for grouping provisioning agents by location and type.
+    #[oai(
+        path = "/providers/:pubkey/pools",
+        method = "post",
+        tag = "ApiTags::Pools"
+    )]
+    async fn create_pool(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        req: Json<CreatePoolRequest>,
+    ) -> Json<ApiResponse<crate::database::AgentPool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Generate a unique pool_id from name (sanitized)
+        let pool_id = format!(
+            "{}-{}",
+            req.name
+                .chars()
+                .filter(|c| c.is_alphanumeric() || *c == '-')
+                .collect::<String>()
+                .to_lowercase(),
+            &uuid::Uuid::new_v4().to_string()[..8]
+        );
+
+        match db
+            .create_agent_pool(
+                &pool_id,
+                &provider_pubkey,
+                &req.name,
+                &req.location,
+                &req.provisioner_type,
+            )
+            .await
+        {
+            Ok(pool) => Json(ApiResponse {
+                success: true,
+                data: Some(pool),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// List agent pools
+    ///
+    /// Returns all agent pools for a provider with statistics.
+    #[oai(
+        path = "/providers/:pubkey/pools",
+        method = "get",
+        tag = "ApiTags::Pools"
+    )]
+    async fn list_pools(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<AgentPoolWithStats>>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.list_agent_pools_with_stats(&provider_pubkey).await {
+            Ok(pools) => Json(ApiResponse {
+                success: true,
+                data: Some(pools),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get agent pool
+    ///
+    /// Returns details for a specific agent pool.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id",
+        method = "get",
+        tag = "ApiTags::Pools"
+    )]
+    async fn get_pool(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+    ) -> Json<ApiResponse<crate::database::AgentPool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.get_agent_pool(&pool_id.0).await {
+            Ok(Some(pool)) => {
+                // Verify pool belongs to this provider
+                if pool.provider_pubkey != hex::encode(&provider_pubkey) {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Pool not found".to_string()),
+                    });
+                }
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(pool),
+                    error: None,
+                })
+            }
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Pool not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update agent pool
+    ///
+    /// Updates an existing agent pool's name, location, or provisioner type.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id",
+        method = "put",
+        tag = "ApiTags::Pools"
+    )]
+    async fn update_pool(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+        req: Json<UpdatePoolRequest>,
+    ) -> Json<ApiResponse<bool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db
+            .update_agent_pool(
+                &pool_id.0,
+                &provider_pubkey,
+                req.name.as_deref(),
+                req.location.as_deref(),
+                req.provisioner_type.as_deref(),
+            )
+            .await
+        {
+            Ok(updated) => Json(ApiResponse {
+                success: true,
+                data: Some(updated),
+                error: if updated {
+                    None
+                } else {
+                    Some("No fields to update or pool not found".to_string())
+                },
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Delete agent pool
+    ///
+    /// Deletes an agent pool. Fails if pool has any agents assigned.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id",
+        method = "delete",
+        tag = "ApiTags::Pools"
+    )]
+    async fn delete_pool(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+    ) -> Json<ApiResponse<bool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.delete_agent_pool(&pool_id.0, &provider_pubkey).await {
+            Ok(deleted) => Json(ApiResponse {
+                success: true,
+                data: Some(deleted),
+                error: if deleted {
+                    None
+                } else {
+                    Some("Pool not found".to_string())
+                },
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Create setup token
+    ///
+    /// Creates a one-time setup token for agent registration in a pool.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id/setup-tokens",
+        method = "post",
+        tag = "ApiTags::Pools"
+    )]
+    async fn create_setup_token(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+        req: Json<CreateSetupTokenRequest>,
+    ) -> Json<ApiResponse<SetupToken>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Verify pool exists and belongs to provider
+        match db.get_agent_pool(&pool_id.0).await {
+            Ok(Some(pool)) if pool.provider_pubkey == hex::encode(&provider_pubkey) => {}
+            Ok(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Pool not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        let expires_in_hours = req.expires_in_hours.unwrap_or(24);
+
+        match db
+            .create_setup_token(&pool_id.0, req.label.as_deref(), expires_in_hours)
+            .await
+        {
+            Ok(token) => Json(ApiResponse {
+                success: true,
+                data: Some(token),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// List setup tokens
+    ///
+    /// Returns pending (unused, unexpired) setup tokens for a pool.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id/setup-tokens",
+        method = "get",
+        tag = "ApiTags::Pools"
+    )]
+    async fn list_setup_tokens(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+    ) -> Json<ApiResponse<Vec<SetupToken>>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Verify pool exists and belongs to provider
+        match db.get_agent_pool(&pool_id.0).await {
+            Ok(Some(pool)) if pool.provider_pubkey == hex::encode(&provider_pubkey) => {}
+            Ok(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Pool not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        match db.list_pending_setup_tokens(&pool_id.0).await {
+            Ok(tokens) => Json(ApiResponse {
+                success: true,
+                data: Some(tokens),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Delete setup token
+    ///
+    /// Deletes a setup token (e.g., to revoke it before it's used).
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id/setup-tokens/:token",
+        method = "delete",
+        tag = "ApiTags::Pools"
+    )]
+    async fn delete_setup_token(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+        token: Path<String>,
+    ) -> Json<ApiResponse<bool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Verify pool exists and belongs to provider
+        match db.get_agent_pool(&pool_id.0).await {
+            Ok(Some(pool)) if pool.provider_pubkey == hex::encode(&provider_pubkey) => {}
+            Ok(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Pool not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        match db.delete_setup_token(&token.0).await {
+            Ok(deleted) => Json(ApiResponse {
+                success: true,
+                data: Some(deleted),
+                error: if deleted {
+                    None
+                } else {
+                    Some("Token not found".to_string())
+                },
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    // ==================== Provisioning Lock Endpoints ====================
+
+    /// Acquire provisioning lock
+    ///
+    /// Atomically acquires a provisioning lock on a contract.
+    /// Returns 200 with acquired=true if lock acquired, acquired=false if already locked.
+    /// Requires agent authentication with provision permission.
+    #[oai(
+        path = "/providers/:pubkey/contracts/:contract_id/lock",
+        method = "post",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn acquire_lock(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        pubkey: Path<String>,
+        contract_id: Path<String>,
+    ) -> Json<ApiResponse<LockResponse>> {
+        use crate::database::AgentPermission;
+
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        // Verify agent belongs to this provider
+        if provider_pubkey != auth.provider_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Agent is not delegated by this provider".to_string()),
+            });
+        }
+
+        // Check provision permission
+        if let Err(e) = auth.require_permission(AgentPermission::Provision) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        // Decode contract ID
+        let contract_bytes = match hex::decode(&contract_id.0) {
+            Ok(b) => b,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid contract_id hex: {}", e)),
+                })
+            }
+        };
+
+        // Lock duration: 5 minutes
+        let lock_duration_ns = 5 * 60 * 1_000_000_000i64;
+        let expires_at_ns =
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) + lock_duration_ns;
+
+        match db
+            .acquire_provisioning_lock(&contract_bytes, &auth.agent_pubkey, lock_duration_ns)
+            .await
+        {
+            Ok(acquired) => Json(ApiResponse {
+                success: true,
+                data: Some(LockResponse {
+                    acquired,
+                    expires_at_ns,
+                }),
+                error: if acquired {
+                    None
+                } else {
+                    Some("Contract already locked by another agent".to_string())
+                },
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Release provisioning lock
+    ///
+    /// Releases a provisioning lock held by this agent.
+    /// Requires agent authentication.
+    #[oai(
+        path = "/providers/:pubkey/contracts/:contract_id/lock",
+        method = "delete",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn release_lock(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        pubkey: Path<String>,
+        contract_id: Path<String>,
+    ) -> Json<ApiResponse<bool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        // Verify agent belongs to this provider
+        if provider_pubkey != auth.provider_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Agent is not delegated by this provider".to_string()),
+            });
+        }
+
+        // Decode contract ID
+        let contract_bytes = match hex::decode(&contract_id.0) {
+            Ok(b) => b,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid contract_id hex: {}", e)),
+                })
+            }
+        };
+
+        match db
+            .release_provisioning_lock(&contract_bytes, &auth.agent_pubkey)
+            .await
+        {
+            Ok(released) => Json(ApiResponse {
+                success: true,
+                data: Some(released),
+                error: if released {
+                    None
+                } else {
+                    Some("Lock not held by this agent".to_string())
+                },
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
     }
 }

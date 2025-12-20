@@ -1353,3 +1353,233 @@ export async function revokeAgentDelegation(
 
 	return payload.data ?? false;
 }
+
+// ==================== Agent Pool APIs ====================
+
+import type { AgentPool } from '$lib/types/generated/AgentPool';
+import type { AgentPoolWithStats } from '$lib/types/generated/AgentPoolWithStats';
+import type { SetupToken } from '$lib/types/generated/SetupToken';
+
+export interface CreatePoolParams {
+	name: string;
+	location: string;
+	provisionerType: string;
+}
+
+export interface UpdatePoolParams {
+	name?: string;
+	location?: string;
+	provisionerType?: string;
+}
+
+export interface CreateSetupTokenParams {
+	label?: string;
+	expiresInHours?: number;
+}
+
+export async function listAgentPools(
+	providerPubkey: string | Uint8Array,
+	headers: SignedRequestHeaders
+): Promise<AgentPoolWithStats[]> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools`;
+
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch agent pools: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AgentPoolWithStats[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch agent pools');
+	}
+
+	return payload.data ?? [];
+}
+
+export async function createAgentPool(
+	providerPubkey: string | Uint8Array,
+	params: CreatePoolParams,
+	headers: SignedRequestHeaders
+): Promise<AgentPool> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools`;
+
+	const body = JSON.stringify({
+		name: params.name,
+		location: params.location,
+		provisionerType: params.provisionerType
+	});
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to create agent pool: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AgentPool>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to create agent pool');
+	}
+
+	return payload.data;
+}
+
+export async function updateAgentPool(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	params: UpdatePoolParams,
+	headers: SignedRequestHeaders
+): Promise<boolean> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}`;
+
+	const body = JSON.stringify({
+		name: params.name,
+		location: params.location,
+		provisionerType: params.provisionerType
+	});
+
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to update agent pool: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<boolean>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update agent pool');
+	}
+
+	return payload.data ?? false;
+}
+
+export async function deleteAgentPool(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	headers: SignedRequestHeaders
+): Promise<boolean> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}`;
+
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to delete agent pool: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<boolean>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to delete agent pool');
+	}
+
+	return payload.data ?? false;
+}
+
+// ==================== Setup Token APIs ====================
+
+export async function listSetupTokens(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	headers: SignedRequestHeaders
+): Promise<SetupToken[]> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}/setup-tokens`;
+
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch setup tokens: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<SetupToken[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch setup tokens');
+	}
+
+	return payload.data ?? [];
+}
+
+export async function createSetupToken(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	params: CreateSetupTokenParams,
+	headers: SignedRequestHeaders
+): Promise<SetupToken> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}/setup-tokens`;
+
+	const body = JSON.stringify({
+		label: params.label,
+		expiresInHours: params.expiresInHours ?? 24
+	});
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to create setup token: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<SetupToken>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to create setup token');
+	}
+
+	return payload.data;
+}
+
+export async function deleteSetupToken(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	token: string,
+	headers: SignedRequestHeaders
+): Promise<boolean> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}/setup-tokens/${token}`;
+
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to delete setup token: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<boolean>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to delete setup token');
+	}
+
+	return payload.data ?? false;
+}

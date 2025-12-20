@@ -1659,6 +1659,179 @@ impl Database {
 
         Ok(true)
     }
+
+    // ==================== Provisioning Locks ====================
+
+    /// Acquire a provisioning lock on a contract.
+    /// Returns Ok(true) if lock acquired, Ok(false) if already locked by another agent.
+    /// Fails if contract not found or not in lockable status.
+    ///
+    /// Lock duration is typically 5 minutes; expired locks can be cleared by background job.
+    pub async fn acquire_provisioning_lock(
+        &self,
+        contract_id: &[u8],
+        agent_pubkey: &[u8],
+        lock_duration_ns: i64,
+    ) -> Result<bool> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let expires_ns = now_ns + lock_duration_ns;
+
+        // Atomically try to acquire lock:
+        // - Only lock if not already locked by another agent
+        // - Allow re-locking by same agent (idempotent)
+        // - Only lock contracts in accepted/provisioning status with succeeded payment
+        let result = sqlx::query!(
+            r#"UPDATE contract_sign_requests
+               SET provisioning_lock_agent = ?,
+                   provisioning_lock_at_ns = ?,
+                   provisioning_lock_expires_ns = ?
+               WHERE contract_id = ?
+                 AND status IN ('accepted', 'provisioning')
+                 AND payment_status = 'succeeded'
+                 AND (provisioning_lock_agent IS NULL
+                      OR provisioning_lock_agent = ?
+                      OR provisioning_lock_expires_ns < ?)"#,
+            agent_pubkey,
+            now_ns,
+            expires_ns,
+            contract_id,
+            agent_pubkey,
+            now_ns
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            Ok(true)
+        } else {
+            // Check if contract exists and why we couldn't lock
+            let contract = self.get_contract(contract_id).await?;
+            match contract {
+                None => Err(anyhow::anyhow!(
+                    "Contract not found: {}",
+                    hex::encode(contract_id)
+                )),
+                Some(c) if c.status != "accepted" && c.status != "provisioning" => {
+                    Err(anyhow::anyhow!(
+                        "Contract {} is not in lockable status (status: {})",
+                        hex::encode(contract_id),
+                        c.status
+                    ))
+                }
+                Some(c) if c.payment_status != "succeeded" => Err(anyhow::anyhow!(
+                    "Contract {} payment not succeeded (status: {})",
+                    hex::encode(contract_id),
+                    c.payment_status
+                )),
+                _ => Ok(false), // Already locked by another agent
+            }
+        }
+    }
+
+    /// Release a provisioning lock held by the specified agent.
+    /// Returns Ok(true) if lock was released, Ok(false) if agent didn't hold the lock.
+    pub async fn release_provisioning_lock(
+        &self,
+        contract_id: &[u8],
+        agent_pubkey: &[u8],
+    ) -> Result<bool> {
+        let result = sqlx::query!(
+            r#"UPDATE contract_sign_requests
+               SET provisioning_lock_agent = NULL,
+                   provisioning_lock_at_ns = NULL,
+                   provisioning_lock_expires_ns = NULL
+               WHERE contract_id = ?
+                 AND provisioning_lock_agent = ?"#,
+            contract_id,
+            agent_pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Clear expired provisioning locks.
+    /// Should be called by a background job periodically.
+    /// Returns the number of locks cleared.
+    pub async fn clear_expired_provisioning_locks(&self) -> Result<u64> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let result = sqlx::query!(
+            r#"UPDATE contract_sign_requests
+               SET provisioning_lock_agent = NULL,
+                   provisioning_lock_at_ns = NULL,
+                   provisioning_lock_expires_ns = NULL
+               WHERE provisioning_lock_expires_ns IS NOT NULL
+                 AND provisioning_lock_expires_ns < ?
+                 AND status IN ('accepted', 'provisioning')"#,
+            now_ns
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Get pending contracts filtered by agent's pool.
+    /// Returns contracts that:
+    /// - Match the agent's pool (explicit pool_id match) OR
+    /// - Match by location (offering datacenter_country maps to pool location)
+    /// - Are not locked by another agent (or lock is expired)
+    /// - Have status 'accepted' or 'provisioning' with payment succeeded
+    ///
+    /// If pool_id is None, returns all pending contracts (legacy behavior).
+    pub async fn get_pending_provision_contracts_for_pool(
+        &self,
+        provider_pubkey: &[u8],
+        pool_id: Option<&str>,
+        pool_location: Option<&str>,
+    ) -> Result<Vec<ContractWithSpecs>> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        // If no pool specified, use legacy behavior (all contracts)
+        if pool_id.is_none() {
+            return self
+                .get_pending_provision_contracts_with_specs(provider_pubkey)
+                .await;
+        }
+
+        let pool_id = pool_id.unwrap();
+        // pool_location will be used for location-based matching in the future
+        let _pool_location = pool_location.unwrap_or("default");
+
+        // Query contracts that match either:
+        // 1. Offering explicitly assigned to this pool (agent_pool_id = pool_id)
+        // 2. Offering without pool assignment (for location-based matching, TODO)
+        let contracts = sqlx::query_as!(
+            ContractWithSpecs,
+            r#"SELECT
+               lower(hex(c.contract_id)) as "contract_id!: String",
+               c.offering_id as "offering_id!",
+               c.requester_ssh_pubkey as "requester_ssh_pubkey!",
+               c.instance_config,
+               o.processor_cores as "cpu_cores: i64",
+               o.memory_amount,
+               o.total_ssd_capacity as storage_capacity,
+               o.provisioner_type,
+               o.provisioner_config
+               FROM contract_sign_requests c
+               LEFT JOIN provider_offerings o ON c.offering_id = o.offering_id AND c.provider_pubkey = o.pubkey
+               WHERE c.provider_pubkey = ?
+               AND c.status IN ('accepted', 'provisioning')
+               AND c.payment_status = 'succeeded'
+               AND (c.provisioning_lock_agent IS NULL OR c.provisioning_lock_expires_ns < ?)
+               AND (o.agent_pool_id = ? OR o.agent_pool_id IS NULL)
+               ORDER BY c.created_at_ns ASC"#,
+            provider_pubkey,
+            now_ns,
+            pool_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
 }
 
 /// Pending Stripe receipt for background processing

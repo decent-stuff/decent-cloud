@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns\n               FROM provider_agent_delegations\n               WHERE agent_pubkey = ?\n                 AND revoked_at_ns IS NULL\n                 AND (expires_at_ns IS NULL OR expires_at_ns > ?)",
+  "query": "SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns, pool_id\n               FROM provider_agent_delegations\n               WHERE agent_pubkey = ?\n                 AND revoked_at_ns IS NULL\n                 AND (expires_at_ns IS NULL OR expires_at_ns > ?)",
   "describe": {
     "columns": [
       {
@@ -42,6 +42,11 @@
         "name": "revoked_at_ns",
         "ordinal": 7,
         "type_info": "Integer"
+      },
+      {
+        "name": "pool_id",
+        "ordinal": 8,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -55,8 +60,9 @@
       true,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "d261eb4f6de29ef310c481f9e64dfcb815c9f992e4649ccbb5cb0ffac5658812"
+  "hash": "cf395070e9546e58c2c19437f998d9397a84dcc87544d10399701a1ce5cfafa2"
 }

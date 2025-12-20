@@ -509,7 +509,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AgentAuthenticatedUser {
                 ))
             })?;
 
-        let (provider_pubkey, permissions, _signature) = delegation;
+        let (provider_pubkey, permissions, _signature, _pool_id) = delegation;
 
         // Restore body for downstream handlers
         *body = poem::RequestBody::new(poem::Body::from(body_bytes));
@@ -667,7 +667,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ProviderOrAgentAuth {
                     ))
                 })?;
 
-            let (provider_pubkey, _permissions, _signature) = delegation;
+            let (provider_pubkey, _permissions, _signature, _pool_id) = delegation;
 
             Ok(ProviderOrAgentAuth {
                 provider_pubkey,

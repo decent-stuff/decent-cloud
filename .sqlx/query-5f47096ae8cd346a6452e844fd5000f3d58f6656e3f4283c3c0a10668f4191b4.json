@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_offerings SET\n                offering_id = ?, offer_name = ?, description = ?, product_page_url = ?,\n                currency = ?, monthly_price = ?, setup_fee = ?, visibility = ?, product_type = ?,\n                virtualization_type = ?, billing_interval = ?, stock_status = ?,\n                processor_brand = ?, processor_amount = ?, processor_cores = ?, processor_speed = ?,\n                processor_name = ?, memory_error_correction = ?, memory_type = ?, memory_amount = ?,\n                hdd_amount = ?, total_hdd_capacity = ?, ssd_amount = ?, total_ssd_capacity = ?,\n                unmetered_bandwidth = ?, uplink_speed = ?, traffic = ?, datacenter_country = ?,\n                datacenter_city = ?, datacenter_latitude = ?, datacenter_longitude = ?,\n                control_panel = ?, gpu_name = ?, gpu_count = ?, gpu_memory_gb = ?,\n                min_contract_hours = ?, max_contract_hours = ?,\n                payment_methods = ?, features = ?, operating_systems = ?,\n                offering_source = ?, external_checkout_url = ?,\n                provisioner_type = ?, provisioner_config = ?, agent_pool_id = ?\n            WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 46
+    },
+    "nullable": []
+  },
+  "hash": "5f47096ae8cd346a6452e844fd5000f3d58f6656e3f4283c3c0a10668f4191b4"
+}

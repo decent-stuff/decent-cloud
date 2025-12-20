@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO provider_offerings (\n                pubkey, offering_id, offer_name, description, product_page_url,\n                currency, monthly_price, setup_fee, visibility, product_type,\n                virtualization_type, billing_interval, stock_status, processor_brand,\n                processor_amount, processor_cores, processor_speed, processor_name,\n                memory_error_correction, memory_type, memory_amount, hdd_amount,\n                total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth,\n                uplink_speed, traffic, datacenter_country, datacenter_city,\n                datacenter_latitude, datacenter_longitude, control_panel, gpu_name,\n                gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours,\n                payment_methods, features, operating_systems, offering_source,\n                external_checkout_url, provisioner_type, provisioner_config, agent_pool_id, created_at_ns\n            ) VALUES (\n                ?, ?, ?, ?, ?,\n                ?, ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?,\n                ?, ?, ?, ?, ?\n            )\n            RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 47
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6b882955881b9442adbe072aa36eaa756e28d5d20c36eb572a9d8f07ee3e8e0f"
+}

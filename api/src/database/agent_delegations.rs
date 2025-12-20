@@ -80,6 +80,8 @@ pub struct AgentDelegation {
     pub created_at_ns: i64,
     /// Whether delegation is active (not revoked and not expired)
     pub active: bool,
+    /// Pool ID this agent belongs to (null for legacy agents)
+    pub pool_id: Option<String>,
 }
 
 /// Agent status record
@@ -117,6 +119,7 @@ struct DelegationRow {
     signature: Vec<u8>,
     created_at_ns: i64,
     revoked_at_ns: Option<i64>,
+    pool_id: Option<String>,
 }
 
 /// Internal row type for agent status queries
@@ -146,6 +149,7 @@ impl Database {
         expires_at_ns: Option<i64>,
         label: Option<&str>,
         signature: &[u8],
+        pool_id: Option<&str>,
     ) -> Result<()> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let permissions_json =
@@ -153,14 +157,15 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO provider_agent_delegations
-               (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+               (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, pool_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(agent_pubkey) DO UPDATE SET
                    provider_pubkey = excluded.provider_pubkey,
                    permissions = excluded.permissions,
                    expires_at_ns = excluded.expires_at_ns,
                    label = excluded.label,
                    signature = excluded.signature,
+                   pool_id = excluded.pool_id,
                    revoked_at_ns = NULL"#,
             provider_pubkey,
             agent_pubkey,
@@ -168,7 +173,8 @@ impl Database {
             expires_at_ns,
             label,
             signature,
-            now_ns
+            now_ns,
+            pool_id
         )
         .execute(&self.pool)
         .await?;
@@ -178,15 +184,16 @@ impl Database {
 
     /// Get an active delegation for an agent pubkey.
     /// Returns None if delegation doesn't exist, is revoked, or is expired.
+    /// Returns (provider_pubkey, permissions, signature, pool_id)
     pub async fn get_active_delegation(
         &self,
         agent_pubkey: &[u8],
-    ) -> Result<Option<(Vec<u8>, Vec<AgentPermission>, Vec<u8>)>> {
+    ) -> Result<Option<(Vec<u8>, Vec<AgentPermission>, Vec<u8>, Option<String>)>> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         let row = sqlx::query_as!(
             DelegationRow,
-            r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns
+            r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns, pool_id
                FROM provider_agent_delegations
                WHERE agent_pubkey = ?
                  AND revoked_at_ns IS NULL
@@ -202,7 +209,7 @@ impl Database {
                 let perms: Vec<String> = serde_json::from_str(&r.permissions)?;
                 let permissions: Vec<AgentPermission> =
                     perms.iter().filter_map(|s| s.parse().ok()).collect();
-                Ok(Some((r.provider_pubkey, permissions, r.signature)))
+                Ok(Some((r.provider_pubkey, permissions, r.signature, r.pool_id)))
             }
             None => Ok(None),
         }
@@ -217,7 +224,7 @@ impl Database {
 
         let rows = sqlx::query_as!(
             DelegationRow,
-            r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns
+            r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns, pool_id
                FROM provider_agent_delegations
                WHERE provider_pubkey = ?
                ORDER BY created_at_ns DESC"#,
@@ -240,6 +247,7 @@ impl Database {
                     label: r.label,
                     created_at_ns: r.created_at_ns,
                     active,
+                    pool_id: r.pool_id,
                 }
             })
             .collect();

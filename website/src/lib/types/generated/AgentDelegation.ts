@@ -31,4 +31,8 @@ createdAtNs: number,
 /**
  * Whether delegation is active (not revoked and not expired)
  */
-active: boolean, };
+active: boolean, 
+/**
+ * Pool ID this agent belongs to (null for legacy agents)
+ */
+poolId: string | null, };

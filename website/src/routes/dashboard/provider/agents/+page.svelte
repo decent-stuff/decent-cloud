@@ -395,6 +395,14 @@
 													{delegation.label}
 												</span>
 											{/if}
+											{#if delegation.poolId}
+												<a
+													href="/dashboard/provider/pools"
+													class="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
+												>
+													Pool: {delegation.poolId}
+												</a>
+											{/if}
 										</div>
 										<div class="flex flex-wrap gap-2">
 											{#each delegation.permissions as permission}

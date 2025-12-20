@@ -942,10 +942,7 @@ async fn poll_and_provision(
 /// Reconcile running instances with the API.
 /// Reports running VMs, terminates expired/cancelled contracts, warns about orphans.
 /// Collects instances from ALL provisioners and tries to terminate via the appropriate one.
-async fn reconcile_instances(
-    api_client: &ApiClient,
-    provisioners: &ProvisionerMap,
-) {
+async fn reconcile_instances(api_client: &ApiClient, provisioners: &ProvisionerMap) {
     // Collect running instances from ALL provisioners
     let mut all_running_instances = Vec::new();
     for (ptype, provisioner) in provisioners {
@@ -1039,9 +1036,7 @@ async fn reconcile_instances(
 }
 
 /// Create a single provisioner from config
-fn create_provisioner_from_config(
-    prov_config: &ProvisionerConfig,
-) -> Result<Box<dyn Provisioner>> {
+fn create_provisioner_from_config(prov_config: &ProvisionerConfig) -> Result<Box<dyn Provisioner>> {
     match prov_config {
         ProvisionerConfig::Proxmox(proxmox) => {
             info!("Creating Proxmox provisioner");
@@ -1059,9 +1054,7 @@ fn create_provisioner_from_config(
 }
 
 /// Create a map of all configured provisioners and return the default type
-fn create_provisioner_map(
-    config: &Config,
-) -> Result<(ProvisionerMap, String)> {
+fn create_provisioner_map(config: &Config) -> Result<(ProvisionerMap, String)> {
     let mut map: ProvisionerMap = HashMap::new();
 
     // Add the default (required) provisioner

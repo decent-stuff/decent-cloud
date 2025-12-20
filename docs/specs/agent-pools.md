@@ -1,0 +1,711 @@
+# Agent Pools: Load Distribution with Location Routing
+
+## Overview
+
+Agent Pools enable providers to run multiple DC-Agents (one per hypervisor) with proper load distribution and location-based routing. This solves the race condition where multiple agents attempt to provision the same contract.
+
+## Requirements
+
+1. **Multiple agents with SAME provisioner type** - load distribution across hypervisors
+2. **Location-aware routing** - EU offerings → EU agents, US offerings → US agents
+3. **Scale**: typically <100 offerings, occasionally 1000+
+4. **No race conditions** - exactly one agent provisions each contract
+5. **Simple agent setup** - one-liner that associates agent to specific pool
+6. **Dense UI** - table-based views for managing many agents/pools
+
+---
+
+## Architecture
+
+### Concept
+
+```
+Provider
+  └── Pool "eu-proxmox"
+        ├── location: "eu"
+        ├── provisioner_type: "proxmox"
+        ├── Agents: [node-1, node-2, node-3]
+  └── Pool "us-proxmox"
+        ├── location: "us"
+        ├── provisioner_type: "proxmox"
+        └── Agents: [node-us-1]
+
+Offering "VPS-EU"
+  └── datacenter_country: "DE" → auto-matches "eu" location
+  └── (optional) explicit pool_id override
+```
+
+### Key Design Decisions
+
+1. **Hybrid config storage**: Pool defines type+location in DB; agent provides credentials locally
+2. **Routing**: Auto-match by location, with explicit pool override option
+3. **Two-phase provisioning**: Claim lock → provision → confirm (prevents races)
+4. **Setup tokens**: One-time tokens for agent setup that bind to specific pool
+
+---
+
+## Database Schema
+
+### Migration 053: Agent Pools
+
+```sql
+-- Agent pools for grouping agents by location/type
+CREATE TABLE agent_pools (
+    pool_id TEXT PRIMARY KEY,
+    provider_pubkey BLOB NOT NULL,
+    name TEXT NOT NULL,                    -- "eu-proxmox", "us-hetzner"
+    location TEXT NOT NULL,                -- "eu", "us", "asia" (region identifier)
+    provisioner_type TEXT NOT NULL,        -- "proxmox", "script", "manual"
+    created_at_ns INTEGER NOT NULL,
+    FOREIGN KEY (provider_pubkey) REFERENCES provider_registrations(pubkey)
+);
+
+CREATE INDEX idx_agent_pools_provider ON agent_pools(provider_pubkey);
+
+-- Setup tokens for agent registration (one-time use)
+CREATE TABLE agent_setup_tokens (
+    token TEXT PRIMARY KEY,                -- Unique token (UUID or similar)
+    pool_id TEXT NOT NULL,                 -- Which pool this token is for
+    label TEXT,                            -- Optional label for the agent
+    created_at_ns INTEGER NOT NULL,
+    expires_at_ns INTEGER NOT NULL,        -- Token expiry (e.g., 24 hours)
+    used_at_ns INTEGER,                    -- When token was used (NULL if unused)
+    used_by_agent BLOB,                    -- Agent pubkey that used this token
+    FOREIGN KEY (pool_id) REFERENCES agent_pools(pool_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_setup_tokens_pool ON agent_setup_tokens(pool_id);
+
+-- Link agents to pools (agent can belong to one pool)
+ALTER TABLE provider_agent_delegations ADD COLUMN pool_id TEXT REFERENCES agent_pools(pool_id);
+
+-- Offering can explicitly specify pool (overrides location matching)
+ALTER TABLE provider_offerings ADD COLUMN agent_pool_id TEXT REFERENCES agent_pools(pool_id);
+
+-- Contract provisioning locks (two-phase commit)
+ALTER TABLE contract_sign_requests ADD COLUMN provisioning_lock_agent BLOB;
+ALTER TABLE contract_sign_requests ADD COLUMN provisioning_lock_at_ns INTEGER;
+ALTER TABLE contract_sign_requests ADD COLUMN provisioning_lock_expires_ns INTEGER;
+```
+
+---
+
+## Agent Setup Flow
+
+### 1. Provider Creates Setup Token (UI)
+
+Provider clicks "Add Agent" on pool, system generates one-time setup token:
+
+```
+Token: apt_eu1_7f3a9c2b4d6e8f0a  (prefix identifies pool region)
+Pool: eu-proxmox
+Expires: 24 hours
+```
+
+### 2. Provider Runs One-Liner on Hypervisor
+
+```bash
+# One-liner setup command (shown in UI)
+curl -sSL https://dcmarket.io/setup | bash -s -- \
+  --token apt_eu1_7f3a9c2b4d6e8f0a \
+  --api-url https://api.dcmarket.io
+
+# Or with dc-agent directly:
+dc-agent setup --token apt_eu1_7f3a9c2b4d6e8f0a --api-url https://api.dcmarket.io
+```
+
+### 3. Agent Setup Process
+
+```
+1. Agent generates new Ed25519 keypair locally
+2. Agent calls POST /api/v1/agents/setup with:
+   - token
+   - agent_pubkey
+   - Optional: provisioner config validation
+3. API validates token:
+   - Token exists and not expired
+   - Token not already used
+   - Pool exists and provider is active
+4. API creates delegation:
+   - Links agent_pubkey to pool
+   - Marks token as used
+   - Returns: provider_pubkey, pool info, delegation signature
+5. Agent saves config locally:
+   - Private key
+   - Provider pubkey
+   - Pool ID
+   - API URL
+```
+
+### 4. Agent Config File (Generated)
+
+```toml
+# ~/.config/dc-agent/config.toml (auto-generated by setup)
+[agent]
+api_url = "https://api.dcmarket.io"
+provider_pubkey = "abc123..."
+pool_id = "eu-proxmox"
+
+[keys]
+# Private key stored securely
+private_key_path = "/etc/dc-agent/agent.key"
+
+[provisioner]
+type = "proxmox"
+# Provider configures these manually after setup:
+api_url = "https://proxmox.local:8006"
+api_token_id = "dc-agent@pam!provisioning"
+api_token_secret = "secret-here"
+node = "pve1"
+template_vmid = 100
+```
+
+---
+
+## Two-Phase Provisioning (Race Condition Prevention)
+
+### Problem
+
+Multiple agents poll for contracts simultaneously. Without coordination:
+- Agent A fetches contract, starts provisioning (takes 2 min)
+- Agent B fetches same contract, also starts provisioning
+- Two VMs created for one contract
+
+### Solution: Provisioning Locks
+
+```
+Phase 1: ACQUIRE LOCK
+─────────────────────
+Agent A: POST /contracts/{id}/lock
+  → API: Check lock is free or expired
+  → API: SET provisioning_lock_agent = A, lock_expires = now + 5min
+  → Response: 200 OK, lock acquired
+
+Agent B: POST /contracts/{id}/lock
+  → API: Check lock - already held by A
+  → Response: 409 Conflict, lock held by another agent
+
+Phase 2: PROVISION
+──────────────────
+Agent A: Creates VM on Proxmox
+Agent A: POST /contracts/{id}/provisioned
+  → API: Verify lock held by A
+  → API: SET status = 'provisioned', clear lock
+  → Response: 200 OK
+
+LOCK EXPIRY (Background Job)
+────────────────────────────
+Every minute, check for expired locks:
+  WHERE provisioning_lock_expires_ns < now()
+    AND status NOT IN ('provisioned', 'cancelled')
+  → Clear lock (SET provisioning_lock_agent = NULL)
+  → Contract becomes available for retry
+```
+
+### Lock States
+
+| State        | provisioning_lock_agent | status      | Meaning                        |
+|--------------|-------------------------|-------------|--------------------------------|
+| Available    | NULL                    | accepted    | Ready for any agent            |
+| Locked       | agent_A                 | accepted    | Agent A is provisioning        |
+| Provisioned  | NULL                    | provisioned | Complete, no lock needed       |
+| Lock Expired | NULL (cleared)          | accepted    | Previous attempt failed, retry |
+
+### API Endpoints for Locking
+
+```
+POST /api/v1/providers/{pubkey}/contracts/{id}/lock
+  - Acquires provisioning lock (5 min TTL)
+  - Returns 200 if acquired, 409 if held by another
+  - Idempotent: same agent can re-lock (extends TTL)
+
+DELETE /api/v1/providers/{pubkey}/contracts/{id}/lock
+  - Releases lock (agent giving up)
+  - Only lock holder can release
+
+POST /api/v1/providers/{pubkey}/contracts/{id}/provisioned
+  - Reports successful provisioning
+  - Clears lock, sets status = provisioned
+  - Only lock holder can report success
+
+POST /api/v1/providers/{pubkey}/contracts/{id}/failed
+  - Reports provisioning failure
+  - Clears lock, keeps status = accepted (allows retry)
+  - Only lock holder can report failure
+```
+
+### Modified Contract Fetch
+
+```sql
+-- GET /providers/{pubkey}/contracts/pending-provision
+-- Only return contracts that are:
+-- 1. In the agent's pool (or matching location)
+-- 2. Not locked by another agent
+-- 3. Lock expired counts as unlocked
+
+SELECT c.*, o.provisioner_type, o.provisioner_config
+FROM contract_sign_requests c
+JOIN provider_offerings o ON c.offering_id = o.offering_id
+LEFT JOIN agent_pools p ON o.agent_pool_id = p.pool_id
+LEFT JOIN provider_agent_delegations d ON d.agent_pubkey = ?
+WHERE c.provider_pubkey = ?
+  AND c.status IN ('accepted', 'provisioning')
+  AND c.payment_status = 'succeeded'
+  -- Pool matching
+  AND (
+    o.agent_pool_id = d.pool_id                    -- Explicit pool match
+    OR (o.agent_pool_id IS NULL AND ...)           -- Location auto-match
+  )
+  -- Lock check: unlocked OR locked by this agent OR lock expired
+  AND (
+    c.provisioning_lock_agent IS NULL
+    OR c.provisioning_lock_agent = ?               -- This agent's lock
+    OR c.provisioning_lock_expires_ns < ?          -- Expired lock
+  )
+ORDER BY c.created_at_ns ASC
+```
+
+---
+
+## Location Matching Logic
+
+```rust
+/// Normalize country code to region identifier
+/// TODO: extend with all country codes and regions
+fn country_to_region(country: &str) -> &'static str {
+    match country.to_uppercase().as_str() {
+        // Europe
+        "DE" | "FR" | "NL" | "GB" | "UK" | "BE" | "AT" | "CH" |
+        "PL" | "CZ" | "IT" | "ES" | "PT" | "SE" | "NO" | "DK" |
+        "FI" | "IE" | "LU" => "eu",
+
+        // North America
+        "US" | "CA" | "MX" => "us",
+
+        // Asia Pacific
+        "SG" | "JP" | "AU" | "NZ" | "KR" | "HK" | "TW" | "IN" => "asia",
+
+        // Other regions could be added
+        _ => "default"
+    }
+}
+
+/// Find matching pool for an offering
+fn find_pool_for_offering(
+    offering: &Offering,
+    pools: &[AgentPool],
+    agent_pool_id: &str,
+) -> Option<&AgentPool> {
+    // 1. If offering explicitly specifies pool, use that
+    if let Some(pool_id) = &offering.agent_pool_id {
+        return pools.iter().find(|p| p.pool_id == *pool_id);
+    }
+
+    // 2. Auto-match by location + provisioner type
+    let offering_region = country_to_region(&offering.datacenter_country);
+    let provisioner_type = offering.provisioner_type.as_deref().unwrap_or("proxmox");
+
+    pools.iter().find(|p|
+        p.location == offering_region &&
+        p.provisioner_type == provisioner_type
+    )
+}
+```
+
+---
+
+## UI Design (Dense Tables)
+
+### Agent Pools Page (`/dashboard/provider/pools`)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Agent Pools                                              [+ Create Pool]     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ┌──────────────────────────────────────────────────────────────────────────┐ │
+│ │ Pool          │ Region │ Type    │ Agents │ Online │ Active │ Actions   │ │
+│ ├───────────────┼────────┼─────────┼────────┼────────┼────────┼───────────┤ │
+│ │ eu-proxmox    │ eu     │ proxmox │ 5      │ 4/5    │ 23     │ [+] [...] │ │
+│ │ us-proxmox    │ us     │ proxmox │ 2      │ 2/2    │ 8      │ [+] [...] │ │
+│ │ asia-hetzner  │ asia   │ script  │ 1      │ 1/1    │ 3      │ [+] [...] │ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│ [+] = Add Agent    [...] = Edit/Delete Pool                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Pool Detail / Agents Table (Expanded or Separate Page)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Pool: eu-proxmox                                         [Edit] [Delete]     │
+│ Region: eu  │  Type: proxmox  │  Offerings: 47 linked                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Agents                                                   [+ Add Agent]       │
+│ ┌──────────────────────────────────────────────────────────────────────────┐ │
+│ │ Label          │ Status  │ Version │ Active │ Last Seen  │ Actions      │ │
+│ ├────────────────┼─────────┼─────────┼────────┼────────────┼──────────────┤ │
+│ │ proxmox-node-1 │ 🟢 Online│ 0.5.2   │ 8      │ 30s ago    │ [Revoke]     │ │
+│ │ proxmox-node-2 │ 🟢 Online│ 0.5.2   │ 7      │ 45s ago    │ [Revoke]     │ │
+│ │ proxmox-node-3 │ 🟢 Online│ 0.5.1   │ 6      │ 1m ago     │ [Revoke]     │ │
+│ │ proxmox-node-4 │ 🔴 Offline│ 0.5.0  │ 0      │ 2h ago     │ [Revoke]     │ │
+│ │ proxmox-node-5 │ 🟢 Online│ 0.5.2   │ 2      │ 15s ago    │ [Revoke]     │ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│ Pending Setup Tokens                                                         │
+│ ┌──────────────────────────────────────────────────────────────────────────┐ │
+│ │ Token                    │ Label    │ Created    │ Expires   │ Actions   │ │
+│ ├──────────────────────────┼──────────┼────────────┼───────────┼───────────┤ │
+│ │ apt_eu1_7f3a9c2b...      │ node-6   │ 5m ago     │ 23h 55m   │ [Copy][X] │ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Add Agent Dialog
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Add Agent to Pool: eu-proxmox                                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ Agent Label: [proxmox-node-6          ]                        │
+│              (Optional, helps identify the agent)               │
+│                                                                 │
+│ ─────────────────────────────────────────────────────────────  │
+│                                                                 │
+│ Setup Command (copy and run on your hypervisor):               │
+│ ┌─────────────────────────────────────────────────────────────┐│
+│ │ curl -sSL https://dcmarket.io/setup | bash -s -- \          ││
+│ │   --token apt_eu1_7f3a9c2b4d6e8f0a \                        ││
+│ │   --api-url https://api.dcmarket.io                         ││
+│ └─────────────────────────────────────────────────────────────┘│
+│                                                    [Copy]       │
+│                                                                 │
+│ Token expires in: 24 hours                                     │
+│                                                                 │
+│ After running the command, configure your provisioner          │
+│ credentials in /etc/dc-agent/config.toml                       │
+│                                                                 │
+│ [Cancel]                                         [Create Token] │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Offerings Table (with Pool Column)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Offerings                                    [Import CSV] [Export] [+ New]   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Filter: [All Pools     ▼] [All Types ▼] [All Status ▼]  Search: [________]  │
+│ ┌──────────────────────────────────────────────────────────────────────────┐ │
+│ │ ID       │ Name        │ Type    │ Location │ Pool       │ Price │ Status│ │
+│ ├──────────┼─────────────┼─────────┼──────────┼────────────┼───────┼───────┤ │
+│ │ vps-s-eu │ VPS Small   │ Compute │ DE       │ eu-proxmox │ $5/mo │ Active│ │
+│ │ vps-m-eu │ VPS Medium  │ Compute │ DE       │ eu-proxmox │ $10/mo│ Active│ │
+│ │ vps-l-eu │ VPS Large   │ Compute │ DE       │ eu-proxmox │ $20/mo│ Active│ │
+│ │ vps-s-us │ VPS Small US│ Compute │ US       │ us-proxmox │ $5/mo │ Active│ │
+│ │ ded-1    │ Dedicated 1 │ Dedicated│ DE      │ (auto: eu) │ $99/mo│ Active│ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
+│ Showing 1-50 of 147                              [<] [1] [2] [3] [>]        │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## API Endpoints
+
+### Pool Management
+
+```
+POST   /api/v1/providers/{pubkey}/pools
+       Create new pool
+       Body: { name, location, provisioner_type }
+
+GET    /api/v1/providers/{pubkey}/pools
+       List all pools with agent counts
+
+GET    /api/v1/providers/{pubkey}/pools/{pool_id}
+       Get pool details with agents list
+
+PUT    /api/v1/providers/{pubkey}/pools/{pool_id}
+       Update pool (name, location, type)
+
+DELETE /api/v1/providers/{pubkey}/pools/{pool_id}
+       Delete pool (must have no agents)
+```
+
+### Setup Tokens
+
+```
+POST   /api/v1/providers/{pubkey}/pools/{pool_id}/setup-tokens
+       Create setup token
+       Body: { label?, expires_in_hours? }
+       Response: { token, expires_at, setup_command }
+
+GET    /api/v1/providers/{pubkey}/pools/{pool_id}/setup-tokens
+       List pending (unused, unexpired) tokens
+
+DELETE /api/v1/providers/{pubkey}/setup-tokens/{token}
+       Revoke/delete a setup token
+```
+
+### Agent Setup (Unauthenticated)
+
+```
+POST   /api/v1/agents/setup
+       Register new agent using setup token
+       Body: { token, agent_pubkey }
+       Response: {
+         provider_pubkey,
+         pool_id,
+         pool_name,
+         delegation_signature,
+         permissions
+       }
+```
+
+### Provisioning Locks
+
+```
+POST   /api/v1/providers/{pubkey}/contracts/{id}/lock
+       Acquire provisioning lock (agent-authenticated)
+       Response: 200 OK or 409 Conflict
+
+DELETE /api/v1/providers/{pubkey}/contracts/{id}/lock
+       Release lock without provisioning (give up)
+
+POST   /api/v1/providers/{pubkey}/contracts/{id}/provisioned
+       Report successful provisioning (clears lock)
+       Body: { instance_details }
+
+POST   /api/v1/providers/{pubkey}/contracts/{id}/failed
+       Report provisioning failure (clears lock, allows retry)
+       Body: { error_message }
+```
+
+### Modified Endpoints
+
+```
+GET    /api/v1/providers/{pubkey}/contracts/pending-provision
+       Now filters by agent's pool + excludes locked contracts
+
+POST   /api/v1/providers/{pubkey}/heartbeat
+       Response now includes pool_id, pool_name
+```
+
+---
+
+## DC-Agent Changes
+
+### Setup Command
+
+```bash
+dc-agent setup --token <TOKEN> --api-url <URL>
+```
+
+1. Generates Ed25519 keypair
+2. Calls setup API with token
+3. Saves config file with delegation info
+4. Prompts user to configure provisioner credentials
+
+### Modified Provisioning Loop
+
+```rust
+async fn provision_loop(agent: &Agent) {
+    loop {
+        // 1. Fetch available contracts (pre-filtered by pool)
+        let contracts = agent.fetch_pending_contracts().await?;
+
+        for contract in contracts {
+            // 2. Acquire lock
+            match agent.acquire_lock(&contract.id).await {
+                Ok(_) => {
+                    // 3. Provision
+                    match agent.provision(&contract).await {
+                        Ok(details) => {
+                            // 4a. Report success
+                            agent.report_provisioned(&contract.id, details).await?;
+                        }
+                        Err(e) => {
+                            // 4b. Report failure (releases lock)
+                            agent.report_failed(&contract.id, e).await?;
+                        }
+                    }
+                }
+                Err(LockConflict) => {
+                    // Another agent got it, skip
+                    continue;
+                }
+            }
+        }
+
+        sleep(poll_interval).await;
+    }
+}
+```
+
+### Config File Structure
+
+```toml
+# /etc/dc-agent/config.toml
+
+[agent]
+api_url = "https://api.dcmarket.io"
+provider_pubkey = "hex-encoded-provider-pubkey"
+pool_id = "eu-proxmox"
+poll_interval_seconds = 30
+lock_timeout_seconds = 300
+
+[keys]
+private_key_path = "/etc/dc-agent/agent.key"
+
+[provisioner]
+type = "proxmox"
+
+[provisioner.proxmox]
+api_url = "https://proxmox.local:8006"
+api_token_id = "dc-agent@pam!provisioning"
+api_token_secret = "your-secret-here"
+node = "pve1"
+template_vmid = 100
+storage = "local-lvm"
+bridge = "vmbr0"
+pool = "dc-vms"
+```
+
+---
+
+## Background Jobs
+
+### Lock Expiry Cleanup
+
+```rust
+/// Run every minute
+async fn cleanup_expired_locks(db: &Database) {
+    let now = current_time_ns();
+
+    sqlx::query!(
+        r#"
+        UPDATE contract_sign_requests
+        SET provisioning_lock_agent = NULL,
+            provisioning_lock_at_ns = NULL,
+            provisioning_lock_expires_ns = NULL
+        WHERE provisioning_lock_expires_ns < ?
+          AND status NOT IN ('provisioned', 'cancelled')
+        "#,
+        now
+    )
+    .execute(db)
+    .await?;
+}
+```
+
+### Setup Token Cleanup
+
+```rust
+/// Run every hour
+async fn cleanup_expired_tokens(db: &Database) {
+    let now = current_time_ns();
+
+    sqlx::query!(
+        "DELETE FROM agent_setup_tokens WHERE expires_at_ns < ? AND used_at_ns IS NULL",
+        now
+    )
+    .execute(db)
+    .await?;
+}
+```
+
+---
+
+## Files to Modify
+
+### Backend (api/)
+
+| File                                | Changes                                     |
+|-------------------------------------|---------------------------------------------|
+| `migrations/053_agent_pools.sql`    | New tables and columns                      |
+| `src/database/mod.rs`               | Add agent_pools module                      |
+| `src/database/agent_pools.rs`       | **New** - Pool CRUD, location matching      |
+| `src/database/agent_delegations.rs` | Add pool_id, setup token handling           |
+| `src/database/contracts.rs`         | Lock acquire/release, pool-filtered queries |
+| `src/openapi/mod.rs`                | Add pools routes                            |
+| `src/openapi/pools.rs`              | **New** - Pool CRUD endpoints               |
+| `src/openapi/agents.rs`             | Setup endpoint, heartbeat pool info         |
+| `src/openapi/providers.rs`          | Lock endpoints, modified pending-provision  |
+| `src/background_jobs.rs`            | Lock expiry, token cleanup jobs             |
+
+### DC-Agent (dc-agent/)
+
+| File                | Changes                                     |
+|---------------------|---------------------------------------------|
+| `src/main.rs`       | Setup command, lock-based provisioning loop |
+| `src/config.rs`     | Pool ID in config                           |
+| `src/api_client.rs` | Lock endpoints, setup endpoint              |
+
+### Frontend (website/)
+
+| File                                                    | Changes                     |
+|---------------------------------------------------------|-----------------------------|
+| `src/routes/dashboard/provider/pools/+page.svelte`      | **New** - Pools list        |
+| `src/routes/dashboard/provider/pools/[id]/+page.svelte` | **New** - Pool detail       |
+| `src/lib/components/AgentPoolTable.svelte`              | **New** - Dense pool table  |
+| `src/lib/components/AgentTable.svelte`                  | **New** - Dense agent table |
+| `src/lib/components/SetupTokenDialog.svelte`            | **New** - Token generation  |
+| `src/lib/components/OfferingsEditor.svelte`             | Add pool_id column          |
+| `src/lib/components/Sidebar.svelte`                     | Add Pools nav link          |
+| `src/lib/services/api.ts`                               | Pool API functions          |
+| `src/lib/types/`                                        | Pool, SetupToken types      |
+
+---
+
+## Testing Requirements
+
+### Unit Tests
+
+- [ ] Location matching (country → region)
+- [ ] Pool selection for offering
+- [ ] Lock acquisition/release logic
+- [ ] Token validation and expiry
+
+### Integration Tests
+
+- [ ] Agent setup with token
+- [ ] Two agents racing for same contract (only one succeeds)
+- [ ] Lock expiry and retry
+- [ ] Pool-based contract filtering
+
+### E2E Tests
+
+- [ ] Full setup flow: create pool → generate token → setup agent
+- [ ] Full provisioning flow with locks
+- [ ] UI: create pool, add agents, view status
+
+---
+
+## Backward Compatibility
+
+- Agents without pool_id receive all contracts (legacy behavior)
+- Offerings without agent_pool_id use location auto-matching
+- Existing contracts work without locks (legacy agents don't acquire locks)
+- New lock fields are nullable, migration is additive
+
+---
+
+## Security Considerations
+
+1. **Setup tokens** are single-use and time-limited (24h default)
+2. **Agent private keys** never leave the hypervisor
+3. **Provisioner credentials** stored locally, not in central DB
+4. **Lock acquisition** requires valid agent authentication
+5. **Pool membership** verified on every API call
+
+---
+
+## Future Enhancements
+
+1. **Capacity-aware routing**: Route to least-loaded agent in pool
+2. **Health-based routing**: Skip agents with recent failures
+3. **Sticky sessions**: Prefer same agent for contract lifecycle
+4. **Pool priorities**: Fallback pools if primary is unavailable
+5. **Metrics**: Pool-level provisioning success rates

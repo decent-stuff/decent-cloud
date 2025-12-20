@@ -550,6 +550,54 @@ pub struct ReconcileResponse {
     pub unknown: Vec<ReconcileUnknownInstance>,
 }
 
+// Agent Pool request/response types
+
+/// Request to create an agent pool
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePoolRequest {
+    /// Human-readable name (e.g., "eu-proxmox")
+    pub name: String,
+    /// Location/region identifier (e.g., "eu", "us", "asia")
+    pub location: String,
+    /// Provisioner type (e.g., "proxmox", "script", "manual")
+    pub provisioner_type: String,
+}
+
+/// Request to update an agent pool
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePoolRequest {
+    pub name: Option<String>,
+    pub location: Option<String>,
+    pub provisioner_type: Option<String>,
+}
+
+/// Request to create a setup token for agent registration
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSetupTokenRequest {
+    /// Optional label for the agent using this token
+    pub label: Option<String>,
+    /// Token expiry in hours (default: 24)
+    #[oai(default)]
+    pub expires_in_hours: Option<u32>,
+}
+
+/// Response for provisioning lock acquisition
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct LockResponse {
+    /// Whether the lock was acquired
+    pub acquired: bool,
+    /// Lock expiration timestamp (nanoseconds)
+    pub expires_at_ns: i64,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints
@@ -576,4 +624,6 @@ pub enum ApiTags {
     Chatwoot,
     /// Reseller operations endpoints
     Resellers,
+    /// Agent pool operations endpoints
+    Pools,
 }
