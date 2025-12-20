@@ -2,9 +2,9 @@ use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags, AutoAcceptRequest,
     AutoAcceptResponse, BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest,
     CsvImportError, CsvImportResult, DuplicateOfferingRequest, HelpcenterSyncResponse,
-    LockResponse, NotificationConfigResponse, NotificationUsageResponse,
-    OnboardingUpdateResponse, ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest,
-    ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
+    LockResponse, NotificationConfigResponse, NotificationUsageResponse, OnboardingUpdateResponse,
+    ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest, ReconcileResponse,
+    ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
     ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
     TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePoolRequest,
 };
@@ -428,7 +428,10 @@ impl ProvidersApi {
                 )
                 .await
             }
-            None => db.get_pending_provision_contracts_with_specs(&pubkey_bytes).await,
+            None => {
+                db.get_pending_provision_contracts_with_specs(&pubkey_bytes)
+                    .await
+            }
         };
 
         match result {
@@ -2076,7 +2079,9 @@ impl ProvidersApi {
                     Json(ApiResponse {
                         success: false,
                         data: None,
-                        error: Some("Pool not found or does not belong to this provider".to_string()),
+                        error: Some(
+                            "Pool not found or does not belong to this provider".to_string(),
+                        ),
                     })
                 }
             }

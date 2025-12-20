@@ -209,7 +209,12 @@ impl Database {
                 let perms: Vec<String> = serde_json::from_str(&r.permissions)?;
                 let permissions: Vec<AgentPermission> =
                     perms.iter().filter_map(|s| s.parse().ok()).collect();
-                Ok(Some((r.provider_pubkey, permissions, r.signature, r.pool_id)))
+                Ok(Some((
+                    r.provider_pubkey,
+                    permissions,
+                    r.signature,
+                    r.pool_id,
+                )))
             }
             None => Ok(None),
         }

@@ -268,7 +268,10 @@ type = "{provisioner_type}"
     println!("Configuration written to: {}", output.display());
     println!();
     println!("Next steps:");
-    println!("  1. Edit {} and configure provisioner settings", output.display());
+    println!(
+        "  1. Edit {} and configure provisioner settings",
+        output.display()
+    );
     println!("  2. Run: dc-agent --config {} doctor", output.display());
     println!("  3. Run: dc-agent --config {} run", output.display());
 
@@ -398,9 +401,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             token,
             api_url,
             output,
-        } => {
-            run_setup_token(&token, &api_url, &output).await
-        }
+        } => run_setup_token(&token, &api_url, &output).await,
         SetupProvisioner::Proxmox {
             host,
             ssh_port,

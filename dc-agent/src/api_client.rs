@@ -558,8 +558,7 @@ impl ApiClient {
             "/api/v1/providers/{}/contracts/{}/lock",
             self.provider_pubkey, contract_id
         );
-        let response: ApiResponse<LockResponse> =
-            self.request(Method::Post, &path, None).await?;
+        let response: ApiResponse<LockResponse> = self.request(Method::Post, &path, None).await?;
         match Self::unwrap_response(response, "Failed to acquire lock") {
             Ok(r) => Ok(r.acquired),
             Err(e) => {
@@ -640,13 +639,15 @@ pub async fn setup_agent(
         bail!("Setup failed (HTTP {}): {}", status, response_body);
     }
 
-    let api_response: ApiResponse<SetupResponse> = serde_json::from_str(&response_body)
-        .context("Failed to parse setup response")?;
+    let api_response: ApiResponse<SetupResponse> =
+        serde_json::from_str(&response_body).context("Failed to parse setup response")?;
 
     if !api_response.success {
         bail!(
             "Setup failed: {}",
-            api_response.error.unwrap_or_else(|| "Unknown error".to_string())
+            api_response
+                .error
+                .unwrap_or_else(|| "Unknown error".to_string())
         );
     }
 

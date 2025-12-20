@@ -132,7 +132,10 @@ impl AgentsApi {
         };
 
         // Validate and consume the setup token
-        let (pool, label) = match db.validate_and_use_setup_token(&req.token, &agent_pubkey).await {
+        let (pool, label) = match db
+            .validate_and_use_setup_token(&req.token, &agent_pubkey)
+            .await
+        {
             Ok(result) => result,
             Err(e) => {
                 return Json(ApiResponse {

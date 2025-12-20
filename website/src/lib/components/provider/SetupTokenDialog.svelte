@@ -62,11 +62,13 @@
 			class="bg-gray-900 border border-white/20 rounded-2xl shadow-lg w-full max-w-2xl m-4 text-white"
 			onclick={stopPropagation}
 			onkeydown={stopPropagation}
-			role="document"
+			role="dialog"
+			aria-labelledby="dialog-title"
+			aria-describedby="dialog-description"
 		>
 			<header class="p-6 border-b border-white/10">
-				<h2 class="text-2xl font-bold">Add Agent to {pool.name}</h2>
-				<p class="text-sm text-white/60 mt-1">
+				<h2 id="dialog-title" class="text-2xl font-bold">Add Agent to {pool.name}</h2>
+				<p id="dialog-description" class="text-sm text-white/60 mt-1">
 					Generate a one-time setup token for a new agent.
 				</p>
 			</header>

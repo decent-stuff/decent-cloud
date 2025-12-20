@@ -281,6 +281,7 @@ async fn test_create_offering_success() {
         provisioner_type: None,
         provisioner_config: None,
         agent_pool_id: None,
+        provider_online: None,
     };
 
     let offering_id = db.create_offering(&pubkey, params).await.unwrap();
@@ -382,6 +383,7 @@ async fn test_create_offering_duplicate_id() {
         provisioner_type: None,
         provisioner_config: None,
         agent_pool_id: None,
+        provider_online: None,
     };
 
     // First creation should succeed
@@ -453,6 +455,7 @@ async fn test_create_offering_missing_required_fields() {
         provisioner_type: None,
         provisioner_config: None,
         agent_pool_id: None,
+        provider_online: None,
     };
 
     let result = db.create_offering(&pubkey, params).await;
@@ -523,6 +526,7 @@ async fn test_update_offering_success() {
         provisioner_type: None,
         provisioner_config: None,
         agent_pool_id: None,
+        provider_online: None,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -602,6 +606,7 @@ async fn test_update_offering_unauthorized() {
         provisioner_type: None,
         provisioner_config: None,
         agent_pool_id: None,
+        provider_online: None,
     };
 
     let result = db.update_offering(&pubkey2, db_id, params).await;

@@ -1164,10 +1164,12 @@ impl Database {
         summary.offerings_deleted += result.rows_affected() as i64;
         // Also delete any offerings by pubkey (for backwards compatibility / incomplete backfill)
         for pubkey in &pubkeys {
-            let result = sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ? AND account_id IS NULL")
-                .bind(pubkey)
-                .execute(&mut *tx)
-                .await?;
+            let result = sqlx::query(
+                "DELETE FROM provider_offerings WHERE pubkey = ? AND account_id IS NULL",
+            )
+            .bind(pubkey)
+            .execute(&mut *tx)
+            .await?;
             summary.offerings_deleted += result.rows_affected() as i64;
         }
 
@@ -1215,10 +1217,12 @@ impl Database {
         }
         // Also delete any profiles by pubkey (for backwards compatibility / incomplete backfill)
         for pubkey in &pubkeys {
-            let result = sqlx::query("DELETE FROM provider_profiles WHERE pubkey = ? AND account_id IS NULL")
-                .bind(pubkey)
-                .execute(&mut *tx)
-                .await?;
+            let result = sqlx::query(
+                "DELETE FROM provider_profiles WHERE pubkey = ? AND account_id IS NULL",
+            )
+            .bind(pubkey)
+            .execute(&mut *tx)
+            .await?;
             if result.rows_affected() > 0 {
                 summary.provider_profile_deleted = true;
             }

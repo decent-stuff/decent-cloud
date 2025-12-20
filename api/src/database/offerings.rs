@@ -98,6 +98,10 @@ pub struct Offering {
     // Agent pool override - if set, only agents in this pool can provision
     // NULL = auto-match by location
     pub agent_pool_id: Option<String>,
+    // Provider agent online status (from provider_agent_status table)
+    #[ts(type = "boolean | undefined")]
+    #[sqlx(default)]
+    pub provider_online: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -117,8 +121,11 @@ impl Database {
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let five_mins_ns = 5i64 * 60 * 1_000_000_000;
+        let heartbeat_cutoff = now_ns - five_mins_ns;
         let mut query = String::from(
-            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id WHERE LOWER(o.visibility) = 'public'"
+            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id, CASE WHEN pas.online = 1 AND pas.last_heartbeat_ns > ? THEN 1 ELSE 0 END as provider_online FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey WHERE LOWER(o.visibility) = 'public'"
         );
 
         if params.product_type.is_some() {
@@ -133,7 +140,9 @@ impl Database {
 
         query.push_str(" ORDER BY o.monthly_price ASC LIMIT ? OFFSET ?");
 
-        let mut query_builder = sqlx::query_as::<_, Offering>(&query).bind(example_provider_pubkey);
+        let mut query_builder = sqlx::query_as::<_, Offering>(&query)
+            .bind(example_provider_pubkey)
+            .bind(heartbeat_cutoff);
 
         if let Some(pt) = params.product_type {
             query_builder = query_builder.bind(pt);
@@ -167,7 +176,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, agent_pool_id
+               provisioner_type, provisioner_config, agent_pool_id, NULL as provider_online
                FROM provider_offerings WHERE pubkey = ? ORDER BY monthly_price ASC"#
         )
         .bind(example_provider_pubkey)
@@ -191,7 +200,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, agent_pool_id
+               provisioner_type, provisioner_config, agent_pool_id, NULL as provider_online
                FROM provider_offerings WHERE id = ?"#)
                 .bind(example_provider_pubkey)
                 .bind(offering_id)
@@ -215,7 +224,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, agent_pool_id
+               provisioner_type, provisioner_config, agent_pool_id, NULL as provider_online
                FROM provider_offerings WHERE pubkey = ? ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey_hex)
@@ -240,7 +249,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(hex(pubkey)) = ? THEN 1 ELSE 0 END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, agent_pool_id
+               provisioner_type, provisioner_config, agent_pool_id, NULL as provider_online
                FROM provider_offerings WHERE pubkey = ? AND product_type = ? ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey_hex)
@@ -279,6 +288,9 @@ impl Database {
         offset: i64,
     ) -> Result<Vec<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let five_mins_ns = 5i64 * 60 * 1_000_000_000;
+        let heartbeat_cutoff = now_ns - five_mins_ns;
 
         // Parse DSL query
         let filters = crate::search::parse_dsl(query)
@@ -289,7 +301,7 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("SQL build error: {}", e))?;
 
         // Base SELECT with same fields as search_offerings
-        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id";
+        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id, CASE WHEN pas.online = 1 AND pas.last_heartbeat_ns > ? THEN 1 ELSE 0 END as provider_online FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey";
 
         // Build WHERE clause: base filters + DSL filters
         let where_clause = if dsl_where.is_empty() {
@@ -305,8 +317,9 @@ impl Database {
         );
 
         // Build query with bindings
-        let mut query_builder =
-            sqlx::query_as::<_, Offering>(&query_sql).bind(&example_provider_pubkey);
+        let mut query_builder = sqlx::query_as::<_, Offering>(&query_sql)
+            .bind(&example_provider_pubkey)
+            .bind(heartbeat_cutoff);
 
         // Bind DSL values
         for value in dsl_values {
@@ -408,6 +421,7 @@ impl Database {
             provisioner_type,
             provisioner_config,
             agent_pool_id,
+            provider_online: _,
         } = params;
 
         let mut tx = self.pool.begin().await?;
@@ -594,6 +608,7 @@ impl Database {
             provisioner_type,
             provisioner_config,
             agent_pool_id,
+            provider_online: _,
         } = params;
 
         sqlx::query!(
@@ -777,6 +792,7 @@ impl Database {
             provisioner_type: source.provisioner_type,
             provisioner_config: source.provisioner_config,
             agent_pool_id: source.agent_pool_id,
+            provider_online: None,
         };
 
         self.create_offering(pubkey, params).await
@@ -1067,6 +1083,7 @@ impl Database {
             provisioner_type: get_opt_str("provisioner_type"),
             provisioner_config: get_opt_str("provisioner_config"),
             agent_pool_id: get_opt_str("agent_pool_id"),
+            provider_online: None,
         })
     }
 }
