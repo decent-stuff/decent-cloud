@@ -110,16 +110,16 @@ pub struct AgentStatus {
 
 /// Internal row type for database queries
 #[derive(Debug, sqlx::FromRow)]
-struct DelegationRow {
-    agent_pubkey: Vec<u8>,
-    provider_pubkey: Vec<u8>,
-    permissions: String,
-    expires_at_ns: Option<i64>,
-    label: Option<String>,
-    signature: Vec<u8>,
-    created_at_ns: i64,
-    revoked_at_ns: Option<i64>,
-    pool_id: Option<String>,
+pub struct DelegationRow {
+    pub agent_pubkey: Vec<u8>,
+    pub provider_pubkey: Vec<u8>,
+    pub permissions: String,
+    pub expires_at_ns: Option<i64>,
+    pub label: Option<String>,
+    pub signature: Vec<u8>,
+    pub created_at_ns: i64,
+    pub revoked_at_ns: Option<i64>,
+    pub pool_id: Option<String>,
 }
 
 /// Internal row type for agent status queries

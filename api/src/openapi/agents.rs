@@ -90,6 +90,12 @@ pub struct HeartbeatResponse {
     /// Recommended seconds until next heartbeat
     #[ts(type = "number")]
     pub next_heartbeat_seconds: i64,
+    /// The agent's pool ID, if it belongs to one
+    #[oai(skip_serializing_if_is_none)]
+    pub pool_id: Option<String>,
+    /// The agent's pool name, if it belongs to one
+    #[oai(skip_serializing_if_is_none)]
+    pub pool_name: Option<String>,
 }
 
 /// API Tags for agent operations
@@ -530,6 +536,17 @@ impl AgentsApi {
             });
         }
 
+        // Fetch pool info if agent belongs to a pool
+        let pool_name = if let Some(pool_id) = &auth.pool_id {
+            match db.get_agent_pool(pool_id).await {
+                Ok(Some(pool)) => Some(pool.name),
+                // Log error but don't fail heartbeat if pool lookup fails
+                _ => None,
+            }
+        } else {
+            None
+        };
+
         // Update heartbeat
         match db
             .update_agent_heartbeat(
@@ -546,6 +563,8 @@ impl AgentsApi {
                 data: Some(HeartbeatResponse {
                     acknowledged: true,
                     next_heartbeat_seconds: 60,
+                    pool_id: auth.pool_id,
+                    pool_name,
                 }),
                 error: None,
             }),

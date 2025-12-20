@@ -3,31 +3,39 @@
 	import { page } from "$app/stores";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import {
-		getProviderAgentStatus,
-		getProviderAgentDelegations,
-		revokeAgentDelegation,
+		listAgentPools,
+		createAgentPool,
+		updateAgentPool,
+		deleteAgentPool,
 		hexEncode,
-		type AgentStatus,
-		type AgentDelegation,
 	} from "$lib/services/api";
+	import type { AgentPoolWithStats } from "$lib/types/generated/AgentPoolWithStats";
 	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
+	import AgentPoolTable from "$lib/components/provider/AgentPoolTable.svelte";
 
-	let agentStatus = $state<AgentStatus | null>(null);
-	let delegations = $state<AgentDelegation[]>([]);
+	let pools = $state<AgentPoolWithStats[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let actionMessage = $state<string | null>(null);
 	let providerHex = $state("");
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
-	let revoking = $state<Record<string, boolean>>({});
-	let refreshInterval: ReturnType<typeof setInterval> | null = null;
-	let lastRefresh = $state<number>(Date.now());
-	let autoRefreshEnabled = $state(true);
 
-	const REFRESH_INTERVAL_MS = 10_000; // 10 seconds
+	// Form state
+	let showCreateForm = $state(false);
+	let editingPool = $state<AgentPoolWithStats | null>(null);
+	let formName = $state("");
+	let formLocation = $state("eu");
+	let formProvisionerType = $state("proxmox");
+	let formSubmitting = $state(false);
+
+	// Deleting state
+	let deleting = $state<Record<string, boolean>>({});
+
+	const LOCATIONS = ["eu", "us", "asia", "default"];
+	const PROVISIONER_TYPES = ["proxmox", "script", "manual"];
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -41,48 +49,11 @@
 			isAuthenticated = isAuth;
 			if (isAuth) {
 				loadData();
-				startAutoRefresh();
 			} else {
 				loading = false;
-				stopAutoRefresh();
 			}
 		});
 	});
-
-	function startAutoRefresh() {
-		stopAutoRefresh();
-		if (autoRefreshEnabled) {
-			refreshInterval = setInterval(() => {
-				refreshStatus();
-			}, REFRESH_INTERVAL_MS);
-		}
-	}
-
-	function stopAutoRefresh() {
-		if (refreshInterval) {
-			clearInterval(refreshInterval);
-			refreshInterval = null;
-		}
-	}
-
-	function toggleAutoRefresh() {
-		autoRefreshEnabled = !autoRefreshEnabled;
-		if (autoRefreshEnabled) {
-			startAutoRefresh();
-		} else {
-			stopAutoRefresh();
-		}
-	}
-
-	async function refreshStatus() {
-		if (!providerHex || loading) return;
-		try {
-			agentStatus = await getProviderAgentStatus(providerHex);
-			lastRefresh = Date.now();
-		} catch (e) {
-			console.error("Failed to refresh agent status:", e);
-		}
-	}
 
 	async function loadData() {
 		if (!isAuthenticated) {
@@ -95,11 +66,11 @@
 			error = null;
 			const info = await authStore.getSigningIdentity();
 			if (!info) {
-				error = "You must be authenticated to view agent status";
+				error = "You must be authenticated to manage agent pools";
 				return;
 			}
 			if (!(info.identity instanceof Ed25519KeyIdentity)) {
-				error = "Only Ed25519 identities can view agent status";
+				error = "Only Ed25519 identities can manage agent pools";
 				return;
 			}
 			const normalizedIdentity: SigningIdentity = {
@@ -109,24 +80,18 @@
 			signingIdentityInfo = normalizedIdentity;
 			providerHex = hexEncode(normalizedIdentity.publicKeyBytes);
 
-			// Fetch agent status (public endpoint)
-			agentStatus = await getProviderAgentStatus(providerHex);
-
-			// Fetch delegations (requires auth)
-			const delegationsSigned = await signRequest(
+			// Fetch pools
+			const signed = await signRequest(
 				normalizedIdentity.identity,
 				"GET",
-				`/api/v1/providers/${providerHex}/agent-delegations`,
+				`/api/v1/providers/${providerHex}/pools`,
 			);
-			delegations = await getProviderAgentDelegations(
-				providerHex,
-				delegationsSigned.headers,
-			);
+			pools = await listAgentPools(providerHex, signed.headers);
 		} catch (e) {
 			error =
 				e instanceof Error
 					? e.message
-					: "Failed to load agent information";
+					: "Failed to load agent pools";
 		} finally {
 			loading = false;
 		}
@@ -136,74 +101,104 @@
 		navigateToLogin($page.url.pathname);
 	}
 
-	async function handleRevoke(agentPubkey: string) {
+	function resetForm() {
+		formName = "";
+		formLocation = "eu";
+		formProvisionerType = "proxmox";
+		showCreateForm = false;
+		editingPool = null;
+	}
+
+	function startEdit(pool: AgentPoolWithStats) {
+		editingPool = pool;
+		formName = pool.name;
+		formLocation = pool.location;
+		formProvisionerType = pool.provisionerType;
+		showCreateForm = true;
+	}
+
+	async function handleSubmit() {
 		const activeIdentity = signingIdentityInfo;
 		if (!activeIdentity) {
 			error = "Missing signing identity";
 			return;
 		}
+		if (!formName.trim()) {
+			error = "Pool name is required";
+			return;
+		}
+
 		error = null;
 		actionMessage = null;
-		revoking = { ...revoking, [agentPubkey]: true };
+		formSubmitting = true;
+
 		try {
-			const signed = await signRequest(
-				activeIdentity.identity,
-				"DELETE",
-				`/api/v1/providers/${providerHex}/agent-delegations/${agentPubkey}`,
-			);
-			await revokeAgentDelegation(providerHex, agentPubkey, signed.headers);
-			actionMessage = "Agent delegation revoked";
+			if (editingPool) {
+				// Update existing pool
+				const signed = await signRequest(
+					activeIdentity.identity,
+					"PUT",
+					`/api/v1/providers/${providerHex}/pools/${editingPool.poolId}`,
+				);
+				await updateAgentPool(
+					providerHex,
+					editingPool.poolId,
+					{
+						name: formName.trim(),
+						location: formLocation,
+						provisionerType: formProvisionerType,
+					},
+					signed.headers,
+				);
+				actionMessage = `Pool "${formName}" updated`;
+			} else {
+				// Create new pool
+				const signed = await signRequest(
+					activeIdentity.identity,
+					"POST",
+					`/api/v1/providers/${providerHex}/pools`,
+				);
+				await createAgentPool(
+					providerHex,
+					{
+						name: formName.trim(),
+						location: formLocation,
+						provisionerType: formProvisionerType,
+					},
+					signed.headers,
+				);
+				actionMessage = `Pool "${formName}" created`;
+			}
+			resetForm();
 			await loadData();
 		} catch (e) {
-			error = e instanceof Error ? e.message : "Failed to revoke delegation";
+			error = e instanceof Error ? e.message : "Failed to save pool";
 		} finally {
-			revoking = { ...revoking, [agentPubkey]: false };
+			formSubmitting = false;
 		}
 	}
-
-	function formatTimestamp(ns: number | undefined): string {
-		if (!ns) return "Never";
-		const date = new Date(ns / 1_000_000);
-		return date.toLocaleString();
-	}
-
-	function formatTimeAgo(ns: number | undefined): string {
-		if (!ns) return "Never";
-		const now = Date.now();
-		const timestampMs = ns / 1_000_000;
-		const diffMs = now - timestampMs;
-
-		if (diffMs < 60_000) {
-			return `${Math.floor(diffMs / 1000)}s ago`;
-		} else if (diffMs < 3600_000) {
-			return `${Math.floor(diffMs / 60_000)}m ago`;
-		} else if (diffMs < 86400_000) {
-			return `${Math.floor(diffMs / 3600_000)}h ago`;
-		} else {
-			return `${Math.floor(diffMs / 86400_000)}d ago`;
-		}
-	}
-
-	function truncatePubkey(pubkey: string): string {
-		if (pubkey.length <= 16) return pubkey;
-		return `${pubkey.slice(0, 8)}...${pubkey.slice(-8)}`;
-	}
-
-	const activeDelegations = $derived(delegations.filter((d) => d.active));
-	const revokedDelegations = $derived(delegations.filter((d) => !d.active));
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
-		stopAutoRefresh();
 	});
 </script>
 
 <div class="space-y-8">
-	<header>
-		<h1 class="text-4xl font-bold text-white mb-2">DC-Agent Status</h1>
-		<p class="text-white/60">
-			Monitor your provisioning agents and manage delegations
-		</p>
+	<header class="flex items-center justify-between">
+		<div>
+			<h1 class="text-4xl font-bold text-white mb-2">Agents</h1>
+			<p class="text-white/60">
+				Group agents into pools by location and provisioner type for load distribution.
+			</p>
+		</div>
+		{#if isAuthenticated && !loading && !showCreateForm}
+			<button
+				onclick={() => { showCreateForm = true; }}
+				class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
+			>
+				+ New Pool
+			</button>
+		{/if}
 	</header>
 
 	{#if !isAuthenticated}
@@ -212,7 +207,7 @@
 				<span class="text-6xl">🤖</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
 				<p class="text-white/70">
-					Create an account or login to view your DC-Agent status and manage delegations.
+					Create an account or login to manage your agents and pools.
 				</p>
 				<button
 					onclick={handleLogin}
@@ -239,240 +234,78 @@
 				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"></div>
 			</div>
 		{:else}
-			<!-- Agent Status Card -->
-			<section class="space-y-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-2xl font-semibold text-white">Agent Status</h2>
-					<div class="flex items-center gap-3">
-						<button
-							onclick={refreshStatus}
-							class="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-							title="Refresh now"
-						>
-							<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-							</svg>
-						</button>
-						<button
-							onclick={toggleAutoRefresh}
-							class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-white/5 text-white/50 border border-white/10'}"
-							title={autoRefreshEnabled ? 'Auto-refresh enabled (10s)' : 'Auto-refresh disabled'}
-						>
-							<span class="relative flex h-2 w-2">
-								{#if autoRefreshEnabled}
-									<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-								{/if}
-								<span class="relative inline-flex rounded-full h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-500' : 'bg-white/30'}"></span>
-							</span>
-							Auto
-						</button>
-					</div>
-				</div>
-
-				{#if agentStatus}
-					<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-							<!-- Online Status -->
-							<div class="space-y-2">
-								<div class="text-white/60 text-sm">Status</div>
-								<div class="flex items-center gap-2">
-									<span class="relative flex h-3 w-3">
-										{#if agentStatus.online}
-											<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-											<span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-										{:else}
-											<span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-										{/if}
-									</span>
-									<span class="text-lg font-semibold {agentStatus.online ? 'text-green-400' : 'text-red-400'}">
-										{agentStatus.online ? 'Online' : 'Offline'}
-									</span>
-								</div>
-							</div>
-
-							<!-- Last Heartbeat -->
-							<div class="space-y-2">
-								<div class="text-white/60 text-sm">Last Heartbeat</div>
-								<div class="text-white font-medium">
-									{formatTimeAgo(agentStatus.lastHeartbeatNs)}
-								</div>
-								<div class="text-white/40 text-xs">
-									{formatTimestamp(agentStatus.lastHeartbeatNs)}
-								</div>
-							</div>
-
-							<!-- Version -->
-							<div class="space-y-2">
-								<div class="text-white/60 text-sm">Version</div>
-								<div class="text-white font-medium">
-									{agentStatus.version ?? 'Unknown'}
-								</div>
-							</div>
-
-							<!-- Active Contracts -->
-							<div class="space-y-2">
-								<div class="text-white/60 text-sm">Active Contracts</div>
-								<div class="text-white font-medium text-2xl">
-									{agentStatus.activeContracts}
-								</div>
-							</div>
+			<!-- Create/Edit Form -->
+			{#if showCreateForm}
+				<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+					<h2 class="text-xl font-semibold text-white mb-4">
+						{editingPool ? "Edit Pool" : "Create Agent Pool"}
+					</h2>
+					<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-4">
+						<div>
+							<label for="poolName" class="block text-sm text-white/70 mb-1">Pool Name</label>
+							<input
+								id="poolName"
+								type="text"
+								bind:value={formName}
+								placeholder="e.g., eu-proxmox"
+								class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+							/>
 						</div>
-
-						<!-- Additional Info Row -->
-						<div class="mt-6 pt-6 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-6">
-							<!-- Provisioner Type -->
-							<div class="space-y-2">
-								<div class="text-white/60 text-sm">Provisioner Type</div>
-								<div class="text-white font-medium">
-									{#if agentStatus.provisionerType}
-										<span class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-500/20 text-blue-300 border border-blue-500/30">
-											{agentStatus.provisionerType}
-										</span>
-									{:else}
-										<span class="text-white/40">Not specified</span>
-									{/if}
-								</div>
-							</div>
-
-							<!-- Capabilities -->
-							<div class="space-y-2">
-								<div class="text-white/60 text-sm">Capabilities</div>
-								<div class="flex flex-wrap gap-2">
-									{#if agentStatus.capabilities && agentStatus.capabilities.length > 0}
-										{#each agentStatus.capabilities as capability}
-											<span class="inline-flex items-center px-2 py-1 rounded text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
-												{capability}
-											</span>
-										{/each}
-									{:else}
-										<span class="text-white/40">None reported</span>
-									{/if}
-								</div>
-							</div>
-						</div>
-					</div>
-				{:else}
-					<div class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70">
-						<div class="flex items-center gap-4">
-							<span class="text-4xl">🤖</span>
+						<div class="grid grid-cols-2 gap-4">
 							<div>
-								<div class="font-medium text-white">No agent registered</div>
-								<div class="text-sm">
-									Set up a DC-Agent to automate provisioning for your offerings.
-									<a href="https://docs.decent-cloud.org/dc-agent" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline ml-1">
-										Learn more
-									</a>
-								</div>
+								<label for="location" class="block text-sm text-white/70 mb-1">Location</label>
+								<select
+									id="location"
+									bind:value={formLocation}
+									class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+								>
+									{#each LOCATIONS as loc}
+										<option value={loc}>{loc}</option>
+									{/each}
+								</select>
+							</div>
+							<div>
+								<label for="provisionerType" class="block text-sm text-white/70 mb-1">Provisioner Type</label>
+								<select
+									id="provisionerType"
+									bind:value={formProvisionerType}
+									class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+								>
+									{#each PROVISIONER_TYPES as ptype}
+										<option value={ptype}>{ptype}</option>
+									{/each}
+								</select>
 							</div>
 						</div>
-					</div>
-				{/if}
-			</section>
-
-			<!-- Active Delegations -->
-			<section class="space-y-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-2xl font-semibold text-white">Active Delegations</h2>
-					<span class="text-white/60 text-sm">{activeDelegations.length} active</span>
+						<div class="flex justify-end gap-3 pt-2">
+							<button
+								type="button"
+								onclick={resetForm}
+								class="px-4 py-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+							>
+								Cancel
+							</button>
+							<button
+								type="submit"
+								disabled={formSubmitting}
+								class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+							>
+								{#if formSubmitting}
+									Saving...
+								{:else if editingPool}
+									Update Pool
+								{:else}
+									Create Pool
+								{/if}
+							</button>
+						</div>
+					</form>
 				</div>
-
-				{#if activeDelegations.length === 0}
-					<div class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70">
-						No active agent delegations.
-					</div>
-				{:else}
-					<div class="space-y-3">
-						{#each activeDelegations as delegation}
-							<div class="bg-white/10 backdrop-blur-lg rounded-xl p-5 border border-white/20">
-								<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-									<div class="space-y-2 flex-1">
-										<div class="flex items-center gap-3">
-											<span class="font-mono text-white/90 text-sm" title={delegation.agentPubkey}>
-												{truncatePubkey(delegation.agentPubkey)}
-											</span>
-											{#if delegation.label}
-												<span class="px-2 py-0.5 rounded text-xs bg-white/10 text-white/70">
-													{delegation.label}
-												</span>
-											{/if}
-											{#if delegation.poolId}
-												<a
-													href="/dashboard/provider/pools"
-													class="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-colors"
-												>
-													Pool: {delegation.poolId}
-												</a>
-											{/if}
-										</div>
-										<div class="flex flex-wrap gap-2">
-											{#each delegation.permissions as permission}
-												<span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-													{permission}
-												</span>
-											{/each}
-										</div>
-										<div class="text-white/40 text-xs">
-											Created {formatTimestamp(delegation.createdAtNs)}
-											{#if delegation.expiresAtNs}
-												<span class="ml-2">
-													Expires {formatTimestamp(delegation.expiresAtNs)}
-												</span>
-											{/if}
-										</div>
-									</div>
-									<button
-										onclick={() => handleRevoke(delegation.agentPubkey)}
-										disabled={revoking[delegation.agentPubkey]}
-										class="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-									>
-										{#if revoking[delegation.agentPubkey]}
-											Revoking...
-										{:else}
-											Revoke
-										{/if}
-									</button>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</section>
-
-			<!-- Revoked Delegations (collapsed by default) -->
-			{#if revokedDelegations.length > 0}
-				<section class="space-y-4">
-					<details class="group">
-						<summary class="flex items-center justify-between cursor-pointer list-none">
-							<h2 class="text-xl font-semibold text-white/60">Revoked Delegations</h2>
-							<span class="text-white/40 text-sm group-open:hidden">{revokedDelegations.length} revoked - click to expand</span>
-						</summary>
-						<div class="mt-4 space-y-3">
-							{#each revokedDelegations as delegation}
-								<div class="bg-white/5 rounded-xl p-4 border border-white/10 opacity-60">
-									<div class="space-y-2">
-										<div class="flex items-center gap-3">
-											<span class="font-mono text-white/70 text-sm line-through" title={delegation.agentPubkey}>
-												{truncatePubkey(delegation.agentPubkey)}
-											</span>
-											{#if delegation.label}
-												<span class="px-2 py-0.5 rounded text-xs bg-white/5 text-white/50">
-													{delegation.label}
-												</span>
-											{/if}
-											<span class="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400">
-												Revoked
-											</span>
-										</div>
-										<div class="text-white/30 text-xs">
-											Created {formatTimestamp(delegation.createdAtNs)}
-										</div>
-									</div>
-								</div>
-							{/each}
-						</div>
-					</details>
-				</section>
 			{/if}
+
+			<!-- Pool List -->
+			<AgentPoolTable {pools} />
+
 		{/if}
 	{/if}
 </div>

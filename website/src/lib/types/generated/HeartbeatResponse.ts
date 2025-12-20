@@ -11,4 +11,12 @@ acknowledged: boolean,
 /**
  * Recommended seconds until next heartbeat
  */
-nextHeartbeatSeconds: number, };
+nextHeartbeatSeconds: number, 
+/**
+ * The agent's pool ID, if it belongs to one
+ */
+poolId: string | null, 
+/**
+ * The agent's pool name, if it belongs to one
+ */
+poolName: string | null, };

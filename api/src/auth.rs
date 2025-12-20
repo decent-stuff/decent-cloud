@@ -178,6 +178,8 @@ pub struct AgentAuthenticatedUser {
     pub provider_pubkey: Vec<u8>,
     /// Permissions granted to this agent
     pub permissions: Vec<crate::database::AgentPermission>,
+    /// The pool this agent belongs to, if any
+    pub pool_id: Option<String>,
 }
 
 impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
@@ -509,7 +511,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AgentAuthenticatedUser {
                 ))
             })?;
 
-        let (provider_pubkey, permissions, _signature, _pool_id) = delegation;
+        let (provider_pubkey, permissions, _signature, pool_id) = delegation;
 
         // Restore body for downstream handlers
         *body = poem::RequestBody::new(poem::Body::from(body_bytes));
@@ -518,6 +520,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AgentAuthenticatedUser {
             agent_pubkey,
             provider_pubkey,
             permissions,
+            pool_id,
         })
     }
 }

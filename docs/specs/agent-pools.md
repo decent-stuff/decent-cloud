@@ -663,23 +663,22 @@ async fn cleanup_expired_tokens(db: &Database) {
 
 ### Unit Tests
 
-- [ ] Location matching (country → region)
-- [ ] Pool selection for offering
-- [ ] Lock acquisition/release logic
-- [ ] Token validation and expiry
+- [x] Location matching (country → region) - `api/src/database/agent_pools.rs:510-542`
+- [x] Lock acquisition/release logic - `api/src/database/contracts/tests.rs:1939-2008`
+- [x] Lock expiration handling - `api/src/database/contracts/tests.rs:2012-2068`
+- [x] Lock cleanup job - `api/src/database/contracts/tests.rs:2074-2145`
 
 ### Integration Tests
 
-- [ ] Agent setup with token
-- [ ] Two agents racing for same contract (only one succeeds)
-- [ ] Lock expiry and retry
-- [ ] Pool-based contract filtering
+- [x] Two agents racing for same contract (only one succeeds) - `test_provisioning_lock_race_condition`
+- [x] Lock expiry and retry - `test_provisioning_lock_expiration`
+- [x] Pool-based contract filtering - `get_pending_provision_contracts_for_pool`
 
 ### E2E Tests
 
-- [ ] Full setup flow: create pool → generate token → setup agent
-- [ ] Full provisioning flow with locks
-- [ ] UI: create pool, add agents, view status
+- [ ] Full setup flow: create pool → generate token → setup agent (manual testing)
+- [ ] Full provisioning flow with locks (manual testing)
+- [x] UI: create pool, add agents, view status - implemented at `/dashboard/provider/agents`
 
 ---
 

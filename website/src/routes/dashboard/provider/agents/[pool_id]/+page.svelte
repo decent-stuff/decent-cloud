@@ -1,0 +1,250 @@
+<script lang="ts">
+	import { page } from "$app/stores";
+	import { onMount } from "svelte";
+	import {
+		getAgentPoolDetails,
+		listAgentsInPool,
+		listSetupTokens,
+		createSetupToken,
+		deleteSetupToken,
+		hexEncode,
+		type CreateSetupTokenParams,
+		type AgentDelegation,
+	} from "$lib/services/api";
+	import { signRequest } from "$lib/services/auth-api";
+	import { authStore } from "$lib/stores/auth";
+	import { Ed25519KeyIdentity } from "@dfinity/identity";
+	import type { AgentPoolWithStats } from "$lib/types/generated/AgentPoolWithStats";
+	import type { SetupToken } from "$lib/types/generated/SetupToken";
+	import SetupTokenDialog from "$lib/components/provider/SetupTokenDialog.svelte";
+
+	let pool = $state<AgentPoolWithStats | null>(null);
+	let delegations = $state<AgentDelegation[]>([]);
+	let tokens = $state<SetupToken[]>([]);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
+
+	let showTokenDialog = $state(false);
+
+	type SigningIdentity = {
+		identity: Ed25519KeyIdentity;
+		publicKeyBytes: Uint8Array;
+	};
+
+	let signingIdentityInfo = $state<SigningIdentity | null>(null);
+	let providerHex = $state("");
+
+	// Get pool_id from route params, ensuring it's defined
+	let poolId = $derived($page.params.pool_id ?? "");
+
+	onMount(() => {
+		const unsubscribe = authStore.isAuthenticated.subscribe((isAuth) => {
+			if (isAuth && poolId) {
+				loadData();
+			} else {
+				loading = false;
+			}
+		});
+		return unsubscribe;
+	});
+
+	async function loadData() {
+		if (!poolId) {
+			error = "Pool ID not specified";
+			loading = false;
+			return;
+		}
+
+		try {
+			loading = true;
+			error = null;
+			const info = await authStore.getSigningIdentity();
+			if (!info || !(info.identity instanceof Ed25519KeyIdentity)) {
+				error = "Authentication failed or invalid identity type.";
+				return;
+			}
+			signingIdentityInfo = {
+				identity: info.identity,
+				publicKeyBytes: info.publicKeyBytes,
+			};
+			providerHex = hexEncode(signingIdentityInfo.publicKeyBytes);
+
+			const signed = await signRequest(
+				signingIdentityInfo.identity,
+				"GET",
+				`/api/v1/providers/${providerHex}/pools/${poolId}`
+			);
+
+			[pool, delegations, tokens] = await Promise.all([
+				getAgentPoolDetails(providerHex, poolId, signed.headers),
+				listAgentsInPool(providerHex, poolId, signed.headers),
+				listSetupTokens(providerHex, poolId, signed.headers)
+			]);
+
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to load pool details.";
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function handleCreateToken(label: string, expiresHours: number) {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) throw new Error("Not authenticated");
+
+		const signed = await signRequest(
+			activeIdentity.identity,
+			"POST",
+			`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens`
+		);
+		const params: CreateSetupTokenParams = { label, expiresInHours: expiresHours };
+		await createSetupToken(providerHex, poolId, params, signed.headers);
+		tokens = await listSetupTokens(providerHex, poolId, signed.headers);
+	}
+
+	async function handleDeleteToken(token: string) {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) throw new Error("Not authenticated");
+
+		const signed = await signRequest(
+			activeIdentity.identity,
+			"DELETE",
+			`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens/${token}`
+		);
+		await deleteSetupToken(providerHex, poolId, token, signed.headers);
+		tokens = await listSetupTokens(providerHex, poolId, signed.headers);
+	}
+
+	function formatPubkey(hex: string): string {
+		if (hex.length <= 16) return hex;
+		return hex.slice(0, 8) + "..." + hex.slice(-8);
+	}
+
+	function formatTimestamp(ns: number): string {
+		const date = new Date(ns / 1_000_000);
+		return date.toLocaleDateString();
+	}
+</script>
+
+<div class="space-y-6">
+	{#if loading}
+		<div class="text-center py-16">
+			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400 mx-auto"></div>
+		</div>
+	{:else if error}
+		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-300">
+			<h2 class="font-bold mb-2">Error loading pool</h2>
+			<p>{error}</p>
+		</div>
+	{:else if pool}
+		<!-- Header -->
+		<header>
+			<a href="/dashboard/provider/agents" class="text-sm text-blue-400 hover:underline mb-2 block">&larr; Back to all pools</a>
+			<div class="flex flex-wrap items-center justify-between gap-4">
+				<div>
+					<h1 class="text-3xl font-bold text-white">{pool.name}</h1>
+					<div class="flex items-center gap-3 text-sm mt-2">
+						<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">{pool.location}</span>
+						<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">{pool.provisionerType}</span>
+					</div>
+				</div>
+				<div>
+					<button
+						onclick={() => showTokenDialog = true}
+						class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
+					>
+						+ Add Agent
+					</button>
+				</div>
+			</div>
+		</header>
+
+		<!-- Stats Cards -->
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+			<div class="bg-white/5 border border-white/10 rounded-xl p-5">
+				<div class="text-sm text-white/60 mb-1">Agents</div>
+				<div class="text-2xl font-semibold text-white">{pool.agentCount}</div>
+			</div>
+			<div class="bg-white/5 border border-white/10 rounded-xl p-5">
+				<div class="text-sm text-white/60 mb-1">Online</div>
+				<div class="text-2xl font-semibold text-green-400">{pool.onlineCount} / {pool.agentCount}</div>
+			</div>
+			<div class="bg-white/5 border border-white/10 rounded-xl p-5">
+				<div class="text-sm text-white/60 mb-1">Active Contracts</div>
+				<div class="text-2xl font-semibold text-white">{pool.activeContracts}</div>
+			</div>
+		</div>
+
+		<!-- Agent Delegations Table -->
+		<div class="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+			<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-white/10">
+				Agent Delegations
+			</h3>
+			<table class="w-full text-sm text-left">
+				<thead class="bg-white/5 text-xs text-white/60 uppercase">
+					<tr>
+						<th scope="col" class="px-6 py-3">Label</th>
+						<th scope="col" class="px-6 py-3">Agent Pubkey</th>
+						<th scope="col" class="px-6 py-3">Permissions</th>
+						<th scope="col" class="px-6 py-3">Created</th>
+						<th scope="col" class="px-6 py-3">Status</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#if delegations.length === 0}
+						<tr>
+							<td colspan="5" class="text-center py-8 text-white/50">
+								No agents delegated to this pool yet.
+							</td>
+						</tr>
+					{/if}
+					{#each delegations as delegation (delegation.agentPubkey)}
+						<tr class="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
+							<th scope="row" class="px-6 py-4 font-medium text-white whitespace-nowrap">
+								{delegation.label || "No label"}
+							</th>
+							<td class="px-6 py-4 font-mono text-xs text-white/70" title={delegation.agentPubkey}>
+								{formatPubkey(delegation.agentPubkey)}
+							</td>
+							<td class="px-6 py-4">
+								<div class="flex flex-wrap gap-1">
+									{#each delegation.permissions as perm}
+										<span class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded">
+											{perm}
+										</span>
+									{/each}
+								</div>
+							</td>
+							<td class="px-6 py-4 text-white/80">
+								{formatTimestamp(delegation.createdAtNs)}
+							</td>
+							<td class="px-6 py-4">
+								{#if delegation.active}
+									<span class="flex items-center gap-2 text-green-400">
+										<span class="h-2 w-2 rounded-full bg-green-400"></span>
+										Active
+									</span>
+								{:else}
+									<span class="flex items-center gap-2 text-red-400">
+										<span class="h-2 w-2 rounded-full bg-red-400"></span>
+										Revoked
+									</span>
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+
+		<!-- Add Agent Dialog -->
+		<SetupTokenDialog
+			bind:isOpen={showTokenDialog}
+			{pool}
+			{tokens}
+			onCreate={handleCreateToken}
+			onDelete={handleDeleteToken}
+			onClose={() => showTokenDialog = false}
+		/>
+	{/if}
+</div>

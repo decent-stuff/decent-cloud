@@ -2,6 +2,7 @@
 //!
 //! Handles agent pool management for load distribution and location-based routing.
 
+use super::agent_delegations::{AgentDelegation, DelegationRow};
 use super::types::Database;
 use anyhow::{anyhow, Result};
 use poem_openapi::Object;
@@ -468,6 +469,37 @@ impl Database {
         .flatten();
 
         Ok(pool_id)
+    }
+
+    /// List all active agent delegations for a specific pool.
+    pub async fn list_agents_in_pool(&self, pool_id: &str) -> Result<Vec<AgentDelegation>> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let rows = sqlx::query_as::<_, DelegationRow>(
+            "SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, created_at_ns, revoked_at_ns, label, pool_id, signature FROM provider_agent_delegations WHERE pool_id = ? AND revoked_at_ns IS NULL ORDER BY created_at_ns DESC"
+        )
+        .bind(pool_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let delegations = rows
+            .into_iter()
+            .map(|row| {
+                let perms: Vec<String> = serde_json::from_str(&row.permissions).unwrap_or_default();
+                let active = row.revoked_at_ns.is_none()
+                    && (row.expires_at_ns.is_none() || row.expires_at_ns.unwrap() > now_ns);
+                AgentDelegation {
+                    agent_pubkey: hex::encode(row.agent_pubkey),
+                    provider_pubkey: hex::encode(row.provider_pubkey),
+                    permissions: perms,
+                    expires_at_ns: row.expires_at_ns,
+                    created_at_ns: row.created_at_ns,
+                    active,
+                    pool_id: row.pool_id,
+                    label: row.label,
+                }
+            })
+            .collect();
+        Ok(delegations)
     }
 }
 

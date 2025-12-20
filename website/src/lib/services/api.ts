@@ -1496,6 +1496,54 @@ export async function deleteAgentPool(
 	return payload.data ?? false;
 }
 
+export async function getAgentPoolDetails(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	headers: SignedRequestHeaders
+): Promise<AgentPoolWithStats> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}`;
+
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch agent pool details: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AgentPoolWithStats>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch agent pool details');
+	}
+
+	return payload.data;
+}
+
+export async function listAgentsInPool(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	headers: SignedRequestHeaders
+): Promise<AgentDelegation[]> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}/agents`;
+
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch agents in pool: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AgentDelegation[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch agents in pool');
+	}
+
+	return payload.data ?? [];
+}
+
 // ==================== Setup Token APIs ====================
 
 export async function listSetupTokens(

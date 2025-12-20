@@ -1787,6 +1787,8 @@ impl Database {
         pool_id: Option<&str>,
         pool_location: Option<&str>,
     ) -> Result<Vec<ContractWithSpecs>> {
+        use crate::database::agent_pools::country_to_region;
+
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         // If no pool specified, use legacy behavior (all contracts)
@@ -1797,24 +1799,40 @@ impl Database {
         }
 
         let pool_id = pool_id.unwrap();
-        // pool_location will be used for location-based matching in the future
-        let _pool_location = pool_location.unwrap_or("default");
+        let pool_location = pool_location.unwrap_or("default");
 
-        // Query contracts that match either:
-        // 1. Offering explicitly assigned to this pool (agent_pool_id = pool_id)
-        // 2. Offering without pool assignment (for location-based matching, TODO)
-        let contracts = sqlx::query_as!(
-            ContractWithSpecs,
+        // Internal struct to include country for location matching
+        #[derive(sqlx::FromRow)]
+        struct ContractWithCountry {
+            contract_id: String,
+            offering_id: String,
+            requester_ssh_pubkey: String,
+            instance_config: Option<String>,
+            cpu_cores: Option<i64>,
+            memory_amount: Option<String>,
+            storage_capacity: Option<String>,
+            provisioner_type: Option<String>,
+            provisioner_config: Option<String>,
+            agent_pool_id: Option<String>,
+            datacenter_country: Option<String>,
+        }
+
+        // Single query that fetches all candidates:
+        // - Explicit pool match (agent_pool_id = pool_id)
+        // - Location-matchable (agent_pool_id IS NULL with datacenter_country)
+        let candidates = sqlx::query_as::<_, ContractWithCountry>(
             r#"SELECT
-               lower(hex(c.contract_id)) as "contract_id!: String",
-               c.offering_id as "offering_id!",
-               c.requester_ssh_pubkey as "requester_ssh_pubkey!",
+               lower(hex(c.contract_id)) as contract_id,
+               c.offering_id,
+               c.requester_ssh_pubkey,
                c.instance_config,
-               o.processor_cores as "cpu_cores: i64",
+               o.processor_cores as cpu_cores,
                o.memory_amount,
                o.total_ssd_capacity as storage_capacity,
                o.provisioner_type,
-               o.provisioner_config
+               o.provisioner_config,
+               o.agent_pool_id,
+               o.datacenter_country
                FROM contract_sign_requests c
                LEFT JOIN provider_offerings o ON c.offering_id = o.offering_id AND c.provider_pubkey = o.pubkey
                WHERE c.provider_pubkey = ?
@@ -1823,12 +1841,41 @@ impl Database {
                AND (c.provisioning_lock_agent IS NULL OR c.provisioning_lock_expires_ns < ?)
                AND (o.agent_pool_id = ? OR o.agent_pool_id IS NULL)
                ORDER BY c.created_at_ns ASC"#,
-            provider_pubkey,
-            now_ns,
-            pool_id
         )
+        .bind(provider_pubkey)
+        .bind(now_ns)
+        .bind(pool_id)
         .fetch_all(&self.pool)
         .await?;
+
+        // Filter: explicit pool match OR location auto-match
+        let contracts: Vec<ContractWithSpecs> = candidates
+            .into_iter()
+            .filter(|c| {
+                // Explicit pool match
+                if c.agent_pool_id.as_deref() == Some(pool_id) {
+                    return true;
+                }
+                // Location auto-match: no explicit pool, country maps to pool location
+                if c.agent_pool_id.is_none() {
+                    if let Some(country) = &c.datacenter_country {
+                        return country_to_region(country) == pool_location;
+                    }
+                }
+                false
+            })
+            .map(|c| ContractWithSpecs {
+                contract_id: c.contract_id,
+                offering_id: c.offering_id,
+                requester_ssh_pubkey: c.requester_ssh_pubkey,
+                instance_config: c.instance_config,
+                cpu_cores: c.cpu_cores,
+                memory_amount: c.memory_amount,
+                storage_capacity: c.storage_capacity,
+                provisioner_type: c.provisioner_type,
+                provisioner_config: c.provisioner_config,
+            })
+            .collect();
 
         Ok(contracts)
     }

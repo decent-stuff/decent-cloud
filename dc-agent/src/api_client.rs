@@ -732,6 +732,7 @@ mod tests {
             provider_pubkey: "test_pubkey".to_string(),
             agent_secret_key: None,
             provider_secret_key: Some(hex::encode(signing_key.to_bytes())),
+            pool_id: None,
         };
 
         let client = ApiClient::new(&config).unwrap();
@@ -776,6 +777,7 @@ mod tests {
             provider_pubkey: "test_pubkey".to_string(),
             agent_secret_key: None,
             provider_secret_key: Some(hex::encode(signing_key.to_bytes())),
+            pool_id: None,
         };
 
         let client = ApiClient::new(&config).unwrap();
@@ -796,6 +798,7 @@ mod tests {
             provider_pubkey: "provider_pubkey".to_string(),
             agent_secret_key: Some(hex::encode(signing_key.to_bytes())),
             provider_secret_key: None,
+            pool_id: None,
         };
 
         let client = ApiClient::new(&config).unwrap();
@@ -817,6 +820,7 @@ mod tests {
             provider_pubkey: "provider_pubkey".to_string(),
             agent_secret_key: None,
             provider_secret_key: Some(hex::encode(signing_key.to_bytes())),
+            pool_id: None,
         };
 
         let client = ApiClient::new(&config).unwrap();
@@ -834,6 +838,7 @@ mod tests {
             provider_pubkey: "provider_pubkey".to_string(),
             agent_secret_key: None,
             provider_secret_key: None,
+            pool_id: None,
         };
 
         let result = ApiClient::new(&config);

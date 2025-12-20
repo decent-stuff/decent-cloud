@@ -53,14 +53,9 @@
 			label: "Rental Requests",
 		},
 		{
-			href: "/dashboard/provider/pools",
-			icon: "🎱",
-			label: "Agent Pools",
-		},
-		{
 			href: "/dashboard/provider/agents",
 			icon: "🤖",
-			label: "DC-Agents",
+			label: "Agents",
 		},
 		{ href: "/dashboard/provider/reseller", icon: "💼", label: "Reseller" },
 	];

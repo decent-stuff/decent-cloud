@@ -358,6 +358,7 @@ impl ProvidersApi {
     /// Returns contracts ready for provisioning (accepted + payment succeeded) with offering specs.
     /// Includes cpu_cores, memory_amount, and storage_capacity from the associated offering.
     /// Requires agent authentication - agent can only access their delegated provider's contracts.
+    /// If agent belongs to a pool, only returns contracts matching that pool (explicit or location-based).
     #[oai(
         path = "/providers/:pubkey/contracts/pending-provision",
         method = "get",
@@ -391,10 +392,46 @@ impl ProvidersApi {
             });
         }
 
-        match db
-            .get_pending_provision_contracts_with_specs(&pubkey_bytes)
-            .await
-        {
+        // Get agent's pool info for filtering (if they belong to a pool)
+        let pool_info = match db.get_agent_pool_id(&auth.agent_pubkey).await {
+            Ok(Some(pool_id)) => {
+                // Get pool location for location-based matching
+                match db.get_agent_pool(&pool_id).await {
+                    Ok(Some(pool)) => Some((pool_id, pool.location)),
+                    Ok(None) => None,
+                    Err(e) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(format!("Failed to get pool info: {}", e)),
+                        });
+                    }
+                }
+            }
+            Ok(None) => None, // Legacy agent without pool
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get agent pool: {}", e)),
+                });
+            }
+        };
+
+        // Use pool-filtered query if agent belongs to a pool, otherwise all contracts
+        let result = match pool_info {
+            Some((pool_id, location)) => {
+                db.get_pending_provision_contracts_for_pool(
+                    &pubkey_bytes,
+                    Some(&pool_id),
+                    Some(&location),
+                )
+                .await
+            }
+            None => db.get_pending_provision_contracts_with_specs(&pubkey_bytes).await,
+        };
+
+        match result {
             Ok(contracts) => Json(ApiResponse {
                 success: true,
                 data: Some(contracts),
@@ -1981,6 +2018,141 @@ impl ProvidersApi {
             Ok(pools) => Json(ApiResponse {
                 success: true,
                 data: Some(pools),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get agent pool details
+    ///
+    /// Returns details and statistics for a specific agent pool.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id",
+        method = "get",
+        tag = "ApiTags::Pools"
+    )]
+    async fn get_pool_details(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+    ) -> Json<ApiResponse<AgentPoolWithStats>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // This is not the most efficient way, but list_agent_pools_with_stats is what we have.
+        // A dedicated get_pool_with_stats(pool_id) would be better.
+        match db.list_agent_pools_with_stats(&provider_pubkey).await {
+            Ok(pools) => {
+                if let Some(pool) = pools.into_iter().find(|p| p.pool.pool_id == pool_id.0) {
+                    Json(ApiResponse {
+                        success: true,
+                        data: Some(pool),
+                        error: None,
+                    })
+                } else {
+                    Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Pool not found or does not belong to this provider".to_string()),
+                    })
+                }
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// List agents in a pool
+    ///
+    /// Returns all active agent delegations for a specific pool.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id/agents",
+        method = "get",
+        tag = "ApiTags::Pools"
+    )]
+    async fn list_agents_in_pool(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::agent_delegations::AgentDelegation>>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Optional: Check if pool belongs to this provider
+        match db.get_agent_pool(&pool_id.0).await {
+            Ok(Some(pool)) => {
+                if hex::decode(pool.provider_pubkey).unwrap_or_default() != provider_pubkey {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Pool does not belong to this provider".to_string()),
+                    });
+                }
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Pool not found".to_string()),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                });
+            }
+        }
+
+        match db.list_agents_in_pool(&pool_id.0).await {
+            Ok(agents) => Json(ApiResponse {
+                success: true,
+                data: Some(agents),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

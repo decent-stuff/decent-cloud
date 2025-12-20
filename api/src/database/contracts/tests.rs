@@ -1585,7 +1585,7 @@ async fn test_cancel_active_contract_with_prorated_refund() {
 
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     // Use recent start time and future end time for clearer refund calculation
-    let start_ns = now_ns - (1 * 3600 * 1_000_000_000i64); // Started 1 hour ago
+    let start_ns = now_ns - (3600 * 1_000_000_000i64); // Started 1 hour ago
     let end_ns = now_ns + (23 * 3600 * 1_000_000_000i64); // 24 hour contract, 23 hours left
 
     // Set ICPay payment and instance details
@@ -1803,7 +1803,7 @@ async fn test_get_contract_returns_end_timestamp_for_active() {
     let contract_id = vec![80u8; 32];
 
     let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    let future = now + 3600_000_000_000; // 1 hour in future
+    let future = now + 3_600_000_000_000; // 1 hour in future
 
     insert_stripe_contract_with_timestamps(
         &db,
@@ -1845,7 +1845,7 @@ async fn test_get_contract_returns_end_timestamp_for_expired() {
     let contract_id = vec![81u8; 32];
 
     let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    let past = now - 3600_000_000_000; // 1 hour ago
+    let past = now - 3_600_000_000_000; // 1 hour ago
 
     insert_stripe_contract_with_timestamps(
         &db,
@@ -1857,7 +1857,7 @@ async fn test_get_contract_returns_end_timestamp_for_expired() {
             payment_intent_id: "pi_test2".to_string(),
             payment_status: "succeeded".to_string(),
             payment_amount_e9s: 1000,
-            start_timestamp_ns: past - 7200_000_000_000, // 2 hours before end
+            start_timestamp_ns: past - 7_200_000_000_000, // 2 hours before end
             end_timestamp_ns: past,
         },
     )
@@ -1933,4 +1933,216 @@ async fn test_get_contract_not_found() {
     let contract = db.get_contract(&non_existent_id).await.unwrap();
 
     assert!(contract.is_none());
+}
+
+#[tokio::test]
+async fn test_provisioning_lock_race_condition() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![1u8; 32];
+    let requester_pk = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // 1. Create a contract ready for provisioning
+    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk, "off-race", 0, "accepted").await;
+
+    // 2. Create two agents
+    let agent1_pk = vec![101u8; 32];
+    let agent2_pk = vec![102u8; 32];
+    let lock_duration_ns = 5 * 60 * 1_000_000_000; // 5 minutes
+
+    // 3. Simulate race condition
+    let db_clone1 = db.clone();
+    let db_clone2 = db.clone();
+    let contract_id_clone1 = contract_id.clone();
+    let contract_id_clone2 = contract_id.clone();
+    let agent1_pk_clone = agent1_pk.clone();
+    let agent2_pk_clone = agent2_pk.clone();
+
+    let task1: tokio::task::JoinHandle<Result<bool>> = tokio::spawn(async move {
+        db_clone1.acquire_provisioning_lock(&contract_id_clone1, &agent1_pk_clone, lock_duration_ns).await
+    });
+    let task2: tokio::task::JoinHandle<Result<bool>> = tokio::spawn(async move {
+        db_clone2.acquire_provisioning_lock(&contract_id_clone2, &agent2_pk_clone, lock_duration_ns).await
+    });
+
+    let (result1, result2) = tokio::join!(task1, task2);
+    let result1 = result1.unwrap().unwrap();
+    let result2 = result2.unwrap().unwrap();
+
+    // 4. Assert that only one agent got the lock
+    assert_ne!(result1, result2, "One agent must win, the other must lose");
+    assert!(result1 || result2, "At least one agent must acquire the lock");
+
+    // 5. Verify lock state in DB
+    let winner = if result1 { &agent1_pk } else { &agent2_pk };
+    let c: (Option<Vec<u8>>,) = sqlx::query_as("SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?")
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(c.0.as_deref(), Some(winner.as_slice()));
+
+    // 6. Test that the loser cannot acquire the lock now
+    let loser_pk = if result1 { &agent2_pk } else { &agent1_pk };
+    let loser_can_lock = db.acquire_provisioning_lock(&contract_id, loser_pk, lock_duration_ns).await.unwrap();
+    assert!(!loser_can_lock, "Loser should not be able to acquire the lock while it's held");
+
+    // 7. Test that winner can re-acquire (idempotency)
+    let winner_can_relock = db.acquire_provisioning_lock(&contract_id, winner, lock_duration_ns).await.unwrap();
+    assert!(winner_can_relock, "Winner should be able to re-acquire their own lock");
+
+    // 8. Test that winner can release the lock
+    let released = db.release_provisioning_lock(&contract_id, winner).await.unwrap();
+    assert!(released, "Winner should be able to release the lock");
+
+    // 9. Verify lock is released in DB
+    let c: (Option<Vec<u8>>,) = sqlx::query_as("SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?")
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert!(c.0.is_none(), "Lock should be released in the database");
+
+    // 10. Test that the loser can now acquire the lock
+    let loser_can_lock_now = db.acquire_provisioning_lock(&contract_id, loser_pk, lock_duration_ns).await.unwrap();
+    assert!(loser_can_lock_now, "Loser should be able to acquire the lock after it was released");
+}
+
+#[tokio::test]
+async fn test_provisioning_lock_expiration() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![1u8; 32];
+    let requester_pk = vec![2u8; 32];
+    let contract_id = vec![4u8; 32];
+
+    // Create a contract ready for provisioning
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-expire",
+        0,
+        "accepted",
+    )
+    .await;
+
+    let agent1_pk = vec![101u8; 32];
+    let agent2_pk = vec![102u8; 32];
+
+    // Agent 1 acquires lock with very short duration (1 nanosecond - effectively expired immediately)
+    let lock_duration_ns = 1i64;
+    let result1 = db
+        .acquire_provisioning_lock(&contract_id, &agent1_pk, lock_duration_ns)
+        .await
+        .unwrap();
+    assert!(result1, "Agent 1 should acquire the lock");
+
+    // Simulate time passing - manually set expires_ns to past
+    let past_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 1_000_000_000;
+    sqlx::query("UPDATE contract_sign_requests SET provisioning_lock_expires_ns = ? WHERE contract_id = ?")
+        .bind(past_ns)
+        .bind(&contract_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // Agent 2 should be able to acquire the expired lock
+    let lock_duration_ns = 5 * 60 * 1_000_000_000i64;
+    let result2 = db
+        .acquire_provisioning_lock(&contract_id, &agent2_pk, lock_duration_ns)
+        .await
+        .unwrap();
+    assert!(
+        result2,
+        "Agent 2 should acquire the lock since Agent 1's lock expired"
+    );
+
+    // Verify agent 2 now holds the lock
+    let c: (Option<Vec<u8>>,) = sqlx::query_as(
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.0.as_deref(), Some(agent2_pk.as_slice()));
+}
+
+
+#[tokio::test]
+async fn test_cleanup_expired_provisioning_locks() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![1u8; 32];
+    let requester_pk = vec![2u8; 32];
+    let agent_pk = vec![101u8; 32];
+
+    // Create two contracts with locks
+    let contract_id_1 = vec![10u8; 32];
+    let contract_id_2 = vec![11u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id_1,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "accepted",
+    )
+    .await;
+    insert_contract_request(
+        &db,
+        &contract_id_2,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "accepted",
+    )
+    .await;
+
+    // Acquire locks on both
+    let lock_duration_ns = 5 * 60 * 1_000_000_000i64;
+    db.acquire_provisioning_lock(&contract_id_1, &agent_pk, lock_duration_ns)
+        .await
+        .unwrap();
+    db.acquire_provisioning_lock(&contract_id_2, &agent_pk, lock_duration_ns)
+        .await
+        .unwrap();
+
+    // Set contract_id_1's lock to expired (in the past)
+    let past_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 1_000_000_000;
+    sqlx::query(
+        "UPDATE contract_sign_requests SET provisioning_lock_expires_ns = ? WHERE contract_id = ?",
+    )
+    .bind(past_ns)
+    .bind(&contract_id_1)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Run cleanup
+    let cleaned = db.clear_expired_provisioning_locks().await.unwrap();
+    assert_eq!(cleaned, 1, "Should clean up exactly 1 expired lock");
+
+    // Verify contract_id_1's lock is cleared
+    let c1: (Option<Vec<u8>>,) = sqlx::query_as(
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+    )
+    .bind(&contract_id_1)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert!(c1.0.is_none(), "Expired lock should be cleared");
+
+    // Verify contract_id_2's lock is still held
+    let c2: (Option<Vec<u8>>,) = sqlx::query_as(
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+    )
+    .bind(&contract_id_2)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert!(c2.0.is_some(), "Non-expired lock should still be held");
 }

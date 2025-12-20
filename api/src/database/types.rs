@@ -10,6 +10,7 @@ pub struct LedgerEntryData {
     pub block_offset: u64,
 }
 
+#[derive(Clone)]
 pub struct Database {
     pub(crate) pool: SqlitePool,
 }
