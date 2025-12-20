@@ -24,6 +24,7 @@ pub fn is_valid_region(region: &str) -> bool {
 }
 
 /// Get the display name for a region identifier.
+#[allow(dead_code)]
 pub fn region_display_name(region: &str) -> Option<&'static str> {
     REGIONS
         .iter()
@@ -92,6 +93,7 @@ pub fn is_valid_country_code(country: &str) -> bool {
 }
 
 /// Get all valid country codes for a specific region.
+#[allow(dead_code)]
 pub fn countries_in_region(region: &str) -> Vec<&'static str> {
     // This is a bit inefficient but rarely called
     let all_countries = [

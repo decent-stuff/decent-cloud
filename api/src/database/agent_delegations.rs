@@ -381,38 +381,6 @@ impl Database {
         Ok(result.rows_affected())
     }
 
-    /// Verify a delegation signature.
-    /// Message format: agent_pubkey || provider_pubkey || permissions_json || expires_at_ns || label
-    pub fn verify_delegation_signature(
-        provider_pubkey: &[u8],
-        agent_pubkey: &[u8],
-        permissions: &[AgentPermission],
-        expires_at_ns: Option<i64>,
-        label: Option<&str>,
-        signature: &[u8],
-    ) -> Result<()> {
-        use dcc_common::DccIdentity;
-
-        // Build message to verify
-        let mut message = Vec::new();
-        message.extend_from_slice(agent_pubkey);
-        message.extend_from_slice(provider_pubkey);
-        let permissions_json =
-            serde_json::to_string(&permissions.iter().map(|p| p.as_str()).collect::<Vec<_>>())?;
-        message.extend_from_slice(permissions_json.as_bytes());
-        if let Some(exp) = expires_at_ns {
-            message.extend_from_slice(&exp.to_le_bytes());
-        }
-        if let Some(lbl) = label {
-            message.extend_from_slice(lbl.as_bytes());
-        }
-
-        // Verify signature
-        let identity = DccIdentity::new_verifying_from_bytes(provider_pubkey)?;
-        identity.verify_bytes(&message, signature)?;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

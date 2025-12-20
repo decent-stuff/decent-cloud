@@ -7,13 +7,9 @@ use dc_agent::{
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
         ProvisionRequest, Provisioner,
     },
-    registration::{
-        default_agent_dir, generate_agent_keypair, load_agent_pubkey, load_provider_identity,
-        register_agent_with_api, DEFAULT_PERMISSIONS,
-    },
+    registration::{default_agent_dir, generate_agent_keypair},
     setup::{proxmox::OsTemplate, ProxmoxSetup},
 };
-use dcc_common::DccIdentity;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -36,38 +32,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new agent keypair (use 'setup' for automatic registration)
-    Init {
-        /// Output directory for keys (default: ~/.dc-agent)
-        #[arg(long)]
-        output: Option<PathBuf>,
-
-        /// Force overwrite existing keys
-        #[arg(long, default_value = "false")]
-        force: bool,
-    },
-    /// Register agent with API (use 'setup' for automatic registration)
-    Register {
-        /// Provider's main public key (hex)
-        #[arg(long)]
-        provider_pubkey: String,
-
-        /// Provider's main secret key (hex) - for signing the delegation
-        #[arg(long)]
-        provider_secret_key: Option<String>,
-
-        /// API endpoint (default: https://api.decent-cloud.org)
-        #[arg(long, default_value = "https://api.decent-cloud.org")]
-        api_endpoint: String,
-
-        /// Human-readable label for this agent
-        #[arg(long)]
-        label: Option<String>,
-
-        /// Agent keys directory (default: ~/.dc-agent)
-        #[arg(long)]
-        keys_dir: Option<PathBuf>,
-    },
     /// Start the agent polling loop
     Run,
     /// Check agent configuration and connectivity
@@ -116,8 +80,14 @@ enum SetupProvisioner {
         /// Output config file path
         #[arg(long, default_value = "dc-agent.toml")]
         output: PathBuf,
+
+        /// Force registration even if detected location doesn't match pool location
+        #[arg(long, default_value = "false")]
+        force: bool,
     },
-    /// Set up Proxmox VE provisioner (creates templates and API token)
+    /// Set up Proxmox VE provisioner (creates templates and API token).
+    /// Note: Agent registration now requires a setup token from a pool.
+    /// Create a pool via the provider dashboard, then run: dc-agent setup token --token <TOKEN>
     Proxmox {
         /// Proxmox host IP or hostname
         #[arg(long)]
@@ -147,18 +117,6 @@ enum SetupProvisioner {
         /// Output config file path
         #[arg(long, default_value = "dc-agent.toml")]
         output: PathBuf,
-
-        /// Decent Cloud API endpoint
-        #[arg(long, default_value = "https://api.decent-cloud.org")]
-        api_endpoint: String,
-
-        /// Provider identity name or path (default: auto-detect from ~/.dcc/identity/)
-        #[arg(long)]
-        identity: Option<String>,
-
-        /// Skip agent registration (for offline setup)
-        #[arg(long, default_value = "false")]
-        skip_registration: bool,
     },
 }
 
@@ -174,23 +132,6 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { output, force } => run_init(output, force),
-        Commands::Register {
-            provider_pubkey,
-            provider_secret_key,
-            api_endpoint,
-            label,
-            keys_dir,
-        } => {
-            run_register(
-                provider_pubkey,
-                provider_secret_key,
-                api_endpoint,
-                label,
-                keys_dir,
-            )
-            .await
-        }
         Commands::Run | Commands::Doctor { .. } | Commands::TestProvision { .. } => {
             let config = Config::load(&cli.config)?;
             match cli.command {
@@ -212,18 +153,49 @@ async fn main() -> Result<()> {
 }
 
 /// Setup agent using a one-time setup token.
-async fn run_setup_token(token: &str, api_url: &str, output: &std::path::Path) -> Result<()> {
+async fn run_setup_token(
+    token: &str,
+    api_url: &str,
+    output: &std::path::Path,
+    force: bool,
+) -> Result<()> {
+    use dc_agent::geolocation::{country_to_region, detect_country, region_display_name};
     use std::io::Write;
 
     println!("dc-agent setup token");
     println!("====================\n");
 
-    // Step 1: Generate agent keypair
+    // Step 1: Detect agent's location via IP geolocation
+    println!("Detecting agent location...");
+    let detected_country = match detect_country().await {
+        Ok(Some(country)) => {
+            let region = country_to_region(&country);
+            let region_name = region
+                .and_then(region_display_name)
+                .unwrap_or("Unknown region");
+            println!(
+                "[ok] Detected location: {} ({})",
+                country,
+                region_name
+            );
+            Some((country, region))
+        }
+        Ok(None) => {
+            println!("[warn] Could not determine country from IP address");
+            None
+        }
+        Err(e) => {
+            println!("[warn] Failed to detect location: {}", e);
+            None
+        }
+    };
+
+    // Step 2: Generate agent keypair
     let agent_dir = default_agent_dir()?;
     let (key_path, agent_pubkey) = generate_agent_keypair(&agent_dir, false)?;
     println!("[ok] Agent keypair generated: {}", key_path.display());
 
-    // Step 2: Register with API using token
+    // Step 3: Register with API using token
     println!("\nRegistering with API...");
     let response = setup_agent(api_url, token, &agent_pubkey).await?;
 
@@ -231,10 +203,41 @@ async fn run_setup_token(token: &str, api_url: &str, output: &std::path::Path) -
     println!();
     println!("Pool: {} ({})", response.pool_name, response.pool_id);
     println!("Location: {}", response.pool_location);
+
+    // Step 4: Check if detected location matches pool location
+    if let Some((country, detected_region)) = detected_country {
+        if let Some(detected) = detected_region {
+            if detected != response.pool_location {
+                let detected_name = region_display_name(detected).unwrap_or(detected);
+                let pool_name =
+                    region_display_name(&response.pool_location).unwrap_or(&response.pool_location);
+
+                println!();
+                println!("WARNING: Location mismatch detected!");
+                println!("  Detected region: {} ({})", detected_name, country);
+                println!("  Pool region: {}", pool_name);
+                println!();
+
+                if !force {
+                    anyhow::bail!(
+                        "Agent location ({}) does not match pool location ({}). \
+                         Use --force to override this check.",
+                        detected,
+                        response.pool_location
+                    );
+                }
+
+                println!("[forced] Proceeding despite location mismatch (--force specified)");
+            } else {
+                println!("[ok] Location matches pool: {}", detected);
+            }
+        }
+    }
+
     println!("Provisioner type: {}", response.provisioner_type);
     println!("Permissions: {}", response.permissions.join(", "));
 
-    // Step 3: Write config file
+    // Step 5: Write config file
     let config_content = format!(
         r#"# DC-Agent Configuration
 # Generated by: dc-agent setup token
@@ -278,130 +281,14 @@ type = "{provisioner_type}"
     Ok(())
 }
 
-/// Initialize a new agent keypair.
-fn run_init(output: Option<PathBuf>, force: bool) -> Result<()> {
-    println!("dc-agent init");
-    println!("=============\n");
-
-    let agent_dir = match output {
-        Some(path) => path,
-        None => default_agent_dir()?,
-    };
-    let private_key_path = agent_dir.join("agent.key");
-
-    // Check if key exists without force flag
-    if private_key_path.exists() && !force {
-        anyhow::bail!(
-            "Agent key already exists at {}. Use --force to overwrite.",
-            private_key_path.display()
-        );
-    }
-
-    println!("Generating new Ed25519 keypair...");
-    let (key_path, pubkey_hex) = generate_agent_keypair(&agent_dir, force)?;
-
-    println!("Agent keypair generated successfully\n");
-    println!("Keys directory: {}", agent_dir.display());
-    println!("Private key: {}", key_path.display());
-    println!("Public key:  {}", agent_dir.join("agent.pub").display());
-    println!();
-    println!("Agent public key (hex): {}", pubkey_hex);
-    println!();
-    println!("Next steps:");
-    println!("1. Register this agent with your provider identity:");
-    println!("   dc-agent register --provider-pubkey <YOUR_PROVIDER_PUBKEY> --provider-secret-key <YOUR_PROVIDER_SECRET>");
-    println!();
-    println!("Or provide the provider secret key interactively for security.");
-
-    Ok(())
-}
-
-/// Register agent with the Decent Cloud API.
-async fn run_register(
-    provider_pubkey: String,
-    provider_secret_key: Option<String>,
-    api_endpoint: String,
-    label: Option<String>,
-    keys_dir: Option<PathBuf>,
-) -> Result<()> {
-    println!("dc-agent register");
-    println!("=================\n");
-
-    let agent_dir = match keys_dir.as_deref() {
-        Some(path) => path.to_path_buf(),
-        None => default_agent_dir()?,
-    };
-    let private_key_path = agent_dir.join("agent.key");
-    let agent_pubkey_hex = load_agent_pubkey(keys_dir.as_deref())?;
-
-    println!("Agent public key: {}", agent_pubkey_hex);
-    println!("Provider public key: {}", provider_pubkey);
-    println!("API endpoint: {}", api_endpoint);
-    if let Some(lbl) = &label {
-        println!("Label: {}", lbl);
-    }
-    println!();
-
-    // Get provider secret key (prompt if not provided)
-    let provider_secret = match provider_secret_key {
-        Some(key) => key,
-        None => rpassword::prompt_password("Provider secret key (hex): ")?,
-    };
-
-    let provider_secret_bytes = hex::decode(&provider_secret)
-        .map_err(|e| anyhow::anyhow!("Invalid provider secret key: {}", e))?;
-
-    if provider_secret_bytes.len() != 32 {
-        anyhow::bail!("Provider secret key must be 32 bytes");
-    }
-
-    // Create provider identity and verify it matches the provided pubkey
-    let provider_identity = DccIdentity::new_signing_from_bytes(&provider_secret_bytes)?;
-    let derived_pubkey = hex::encode(provider_identity.to_bytes_verifying());
-
-    if derived_pubkey != provider_pubkey {
-        anyhow::bail!(
-            "Provider secret key does not match the provided public key.\n\
-             Expected: {}\n\
-             Derived:  {}",
-            provider_pubkey,
-            derived_pubkey
-        );
-    }
-
-    println!("Signing delegation and registering with API...");
-    register_agent_with_api(
-        &provider_identity,
-        &agent_pubkey_hex,
-        &api_endpoint,
-        label.as_deref(),
-    )
-    .await?;
-
-    println!("\nAgent registered successfully!\n");
-    println!("Agent public key: {}", agent_pubkey_hex);
-    println!("Permissions: {}", DEFAULT_PERMISSIONS.join(", "));
-    println!();
-    println!("Next steps:");
-    println!("1. Update your dc-agent.toml with:");
-    println!("   [api]");
-    println!("   endpoint = \"{}\"", api_endpoint);
-    println!("   provider_pubkey = \"{}\"", provider_pubkey);
-    println!("   agent_secret_key = \"{}\"", private_key_path.display());
-    println!();
-    println!("2. Run: dc-agent doctor");
-    println!("3. Run: dc-agent run");
-
-    Ok(())
-}
-
 async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
     match provisioner {
         SetupProvisioner::Token {
             token,
             api_url,
             output,
-        } => run_setup_token(&token, &api_url, &output).await,
+            force,
+        } => run_setup_token(&token, &api_url, &output, force).await,
         SetupProvisioner::Proxmox {
             host,
             ssh_port,
@@ -410,50 +297,9 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             storage,
             templates,
             output,
-            api_endpoint,
-            identity,
-            skip_registration,
         } => {
             println!("Decent Cloud Agent - Proxmox Setup");
             println!("===================================\n");
-
-            // Step 1: Load provider identity (if not skipping registration)
-            let provider_identity = if skip_registration {
-                println!("[skip] Agent registration skipped (--skip-registration)");
-                None
-            } else {
-                match load_provider_identity(identity.as_deref()) {
-                    Ok(id) => {
-                        println!(
-                            "[ok] Provider identity loaded: {}",
-                            hex::encode(id.to_bytes_verifying())
-                        );
-                        Some(id)
-                    }
-                    Err(e) => {
-                        // Check if this is "no identities" vs "multiple identities" or other error
-                        let err_str = e.to_string();
-                        if err_str.contains("Multiple identities") {
-                            // User has identities but we can't pick - this is a user error, fail
-                            return Err(e);
-                        } else if err_str.contains("No identities found") {
-                            // No identity at all - proceed without registration
-                            println!("[skip] {}", e);
-                            println!("       Proxmox setup will continue, but agent won't be registered.");
-                            println!();
-                            None
-                        } else {
-                            // Other error (e.g., corrupted key) - fail
-                            return Err(e);
-                        }
-                    }
-                }
-            };
-
-            let provider_pubkey = provider_identity
-                .as_ref()
-                .map(|id| hex::encode(id.to_bytes_verifying()))
-                .unwrap_or_else(|| "YOUR_PROVIDER_PUBKEY_HERE".to_string());
 
             // Parse templates
             let template_list: Vec<OsTemplate> = templates
@@ -516,98 +362,22 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
 
             let result = setup.run().await?;
 
-            // Step 2: Generate agent keypair and register (if identity available)
-            let agent_key_path = if let Some(ref provider_id) = provider_identity {
-                println!();
-                println!("Agent Registration");
-                println!("------------------");
-
-                let agent_dir = default_agent_dir()?;
-                let (key_path, agent_pubkey) = generate_agent_keypair(&agent_dir, false)?;
-                println!("[ok] Agent keypair: {}", key_path.display());
-
-                // Register with API
-                let label = Some(format!("proxmox-{}", host));
-                let registration_ok = match register_agent_with_api(
-                    provider_id,
-                    &agent_pubkey,
-                    &api_endpoint,
-                    label.as_deref(),
-                )
-                .await
-                {
-                    Ok(()) => {
-                        println!("[ok] Agent registered with API");
-                        true
-                    }
-                    Err(e) => {
-                        let err_str = e.to_string();
-                        println!("[FAILED] Agent registration failed: {}", e);
-                        println!();
-                        if err_str.contains("404") || err_str.contains("not found") {
-                            println!("       Your identity may not be registered as a provider.");
-                            println!("       Register as provider first: dc provider register");
-                        } else if err_str.contains("401") || err_str.contains("403") {
-                            println!("       Authentication failed. Check your identity key.");
-                        } else {
-                            println!("       Check your network connection and API endpoint.");
-                        }
-                        println!();
-                        println!(
-                            "       Config will be written, but you must register before running."
-                        );
-                        println!("       After fixing the issue, run: dc-agent register --provider-pubkey {}", hex::encode(provider_id.to_bytes_verifying()));
-                        false
-                    }
-                };
-
-                // Return key path and registration status
-                Some((key_path.to_string_lossy().to_string(), registration_ok))
-            } else {
-                None
-            };
-
-            // Step 3: Write config file
-            result.write_config(
-                &output,
-                &api_endpoint,
-                &provider_pubkey,
-                agent_key_path.as_ref().map(|(p, _)| p.as_str()),
-            )?;
-
-            let registration_failed = agent_key_path.as_ref().map(|(_, ok)| !ok).unwrap_or(false);
+            // Write partial config file (without API credentials - those come from token setup)
+            result.write_proxmox_config(&output)?;
 
             println!();
             println!("===================================");
-            if registration_failed {
-                println!("Setup incomplete - agent registration failed!");
-            } else {
-                println!("Setup complete!");
-            }
+            println!("Proxmox setup complete!");
             println!();
-            println!("Configuration: {}", output.display());
-
-            if provider_identity.is_some() {
-                println!();
-                if registration_failed {
-                    println!("After fixing registration, run:");
-                    println!("  dc-agent register --provider-pubkey {}", provider_pubkey);
-                    println!();
-                    println!("Then verify with:");
-                } else {
-                    println!("Next steps:");
-                }
-                println!("  dc-agent --config {} doctor", output.display());
-                println!("  dc-agent --config {} run", output.display());
-            } else {
-                println!();
-                println!("Next steps:");
-                println!("  1. Create provider identity: dc identity new provider");
-                println!(
-                    "  2. Re-run setup: dc-agent setup proxmox --host {} --identity provider",
-                    host
-                );
-            }
+            println!("Proxmox configuration written to: {}", output.display());
+            println!();
+            println!("Next steps:");
+            println!("  1. Create an agent pool in the provider dashboard");
+            println!("  2. Generate a setup token for the pool");
+            println!("  3. Run: dc-agent setup token --token <YOUR_TOKEN>");
+            println!("     This will register the agent and add API credentials to the config.");
+            println!("  4. Run: dc-agent --config {} doctor", output.display());
+            println!("  5. Run: dc-agent --config {} run", output.display());
 
             Ok(())
         }

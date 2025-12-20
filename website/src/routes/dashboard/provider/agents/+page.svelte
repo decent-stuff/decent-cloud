@@ -144,36 +144,40 @@
 		try {
 			if (editingPool) {
 				// Update existing pool
+				const poolData = {
+					name: formName.trim(),
+					location: formLocation,
+					provisionerType: formProvisionerType,
+				};
 				const signed = await signRequest(
 					activeIdentity.identity,
 					"PUT",
 					`/api/v1/providers/${providerHex}/pools/${editingPool.poolId}`,
+					poolData,
 				);
 				await updateAgentPool(
 					providerHex,
 					editingPool.poolId,
-					{
-						name: formName.trim(),
-						location: formLocation,
-						provisionerType: formProvisionerType,
-					},
+					poolData,
 					signed.headers,
 				);
 				actionMessage = `Pool "${formName}" updated`;
 			} else {
 				// Create new pool
+				const poolData = {
+					name: formName.trim(),
+					location: formLocation,
+					provisionerType: formProvisionerType,
+				};
 				const signed = await signRequest(
 					activeIdentity.identity,
 					"POST",
 					`/api/v1/providers/${providerHex}/pools`,
+					poolData,
 				);
 				await createAgentPool(
 					providerHex,
-					{
-						name: formName.trim(),
-						location: formLocation,
-						provisionerType: formProvisionerType,
-					},
+					poolData,
 					signed.headers,
 				);
 				actionMessage = `Pool "${formName}" created`;

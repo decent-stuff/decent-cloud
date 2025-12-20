@@ -151,7 +151,7 @@ mod tests {
     #[tokio::test]
     async fn test_both_invoice_types_coexist() {
         let _temp = setup_test_env();
-        let contract_id = vec![5u8; 32];
+        let contract_id = vec![15u8; 32];
         let stripe_pdf = b"stripe invoice";
         let typst_pdf = b"typst invoice";
 

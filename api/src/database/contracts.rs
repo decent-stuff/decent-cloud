@@ -279,39 +279,6 @@ impl Database {
         Ok(contracts)
     }
 
-    /// Get contracts pending provisioning with offering specs
-    /// Returns contracts with status='accepted' or 'provisioning' AND payment_status='succeeded',
-    /// joined with offering specs. Includes 'provisioning' to handle dc-agent restarts.
-    pub async fn get_pending_provision_contracts_with_specs(
-        &self,
-        provider_pubkey: &[u8],
-    ) -> Result<Vec<ContractWithSpecs>> {
-        let contracts = sqlx::query_as!(
-            ContractWithSpecs,
-            r#"SELECT
-               lower(hex(c.contract_id)) as "contract_id!: String",
-               c.offering_id as "offering_id!",
-               c.requester_ssh_pubkey as "requester_ssh_pubkey!",
-               c.instance_config,
-               o.processor_cores as "cpu_cores: i64",
-               o.memory_amount,
-               o.total_ssd_capacity as storage_capacity,
-               o.provisioner_type,
-               o.provisioner_config
-               FROM contract_sign_requests c
-               LEFT JOIN provider_offerings o ON c.offering_id = o.offering_id AND c.provider_pubkey = o.pubkey
-               WHERE c.provider_pubkey = ?
-               AND c.status IN ('accepted', 'provisioning')
-               AND c.payment_status = 'succeeded'
-               ORDER BY c.created_at_ns ASC"#,
-            provider_pubkey
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(contracts)
-    }
-
     /// Get cancelled contracts pending termination
     ///
     /// Returns contracts that are cancelled, have instance details (were provisioned),
@@ -1780,7 +1747,7 @@ impl Database {
     /// - Are not locked by another agent (or lock is expired)
     /// - Have status 'accepted' or 'provisioning' with payment succeeded
     ///
-    /// If pool_id is None, returns all pending contracts (legacy behavior).
+    /// Pool ID and location are now required parameters.
     pub async fn get_pending_provision_contracts_for_pool(
         &self,
         provider_pubkey: &[u8],
@@ -1791,14 +1758,7 @@ impl Database {
 
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
-        // If no pool specified, use legacy behavior (all contracts)
-        if pool_id.is_none() {
-            return self
-                .get_pending_provision_contracts_with_specs(provider_pubkey)
-                .await;
-        }
-
-        let pool_id = pool_id.unwrap();
+        let pool_id = pool_id.ok_or_else(|| anyhow::anyhow!("pool_id is required"))?;
         let pool_location = pool_location.unwrap_or("default");
 
         // Internal struct to include country for location matching

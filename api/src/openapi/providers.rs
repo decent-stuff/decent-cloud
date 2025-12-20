@@ -392,23 +392,18 @@ impl ProvidersApi {
             });
         }
 
-        // Get agent's pool info for filtering (if they belong to a pool)
-        let pool_info = match db.get_agent_pool_id(&auth.agent_pubkey).await {
-            Ok(Some(pool_id)) => {
-                // Get pool location for location-based matching
-                match db.get_agent_pool(&pool_id).await {
-                    Ok(Some(pool)) => Some((pool_id, pool.location)),
-                    Ok(None) => None,
-                    Err(e) => {
-                        return Json(ApiResponse {
-                            success: false,
-                            data: None,
-                            error: Some(format!("Failed to get pool info: {}", e)),
-                        });
-                    }
-                }
+        // Get agent's pool info - pool membership is now required
+        let pool_id = match db.get_agent_pool_id(&auth.agent_pubkey).await {
+            Ok(Some(pool_id)) => pool_id,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(
+                        "Agent must belong to a pool. Re-register using a setup token.".to_string(),
+                    ),
+                });
             }
-            Ok(None) => None, // Legacy agent without pool
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
@@ -418,21 +413,28 @@ impl ProvidersApi {
             }
         };
 
-        // Use pool-filtered query if agent belongs to a pool, otherwise all contracts
-        let result = match pool_info {
-            Some((pool_id, location)) => {
-                db.get_pending_provision_contracts_for_pool(
-                    &pubkey_bytes,
-                    Some(&pool_id),
-                    Some(&location),
-                )
-                .await
+        // Get pool location for location-based matching
+        let location = match db.get_agent_pool(&pool_id).await {
+            Ok(Some(pool)) => pool.location,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Pool {} not found", pool_id)),
+                });
             }
-            None => {
-                db.get_pending_provision_contracts_with_specs(&pubkey_bytes)
-                    .await
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get pool info: {}", e)),
+                });
             }
         };
+
+        let result = db
+            .get_pending_provision_contracts_for_pool(&pubkey_bytes, Some(&pool_id), Some(&location))
+            .await;
 
         match result {
             Ok(contracts) => Json(ApiResponse {

@@ -92,12 +92,13 @@
 		const activeIdentity = signingIdentityInfo;
 		if (!activeIdentity) throw new Error("Not authenticated");
 
+		const params: CreateSetupTokenParams = { label, expiresInHours: expiresHours };
 		const signed = await signRequest(
 			activeIdentity.identity,
 			"POST",
-			`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens`
+			`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens`,
+			params
 		);
-		const params: CreateSetupTokenParams = { label, expiresInHours: expiresHours };
 		await createSetupToken(providerHex, poolId, params, signed.headers);
 		tokens = await listSetupTokens(providerHex, poolId, signed.headers);
 	}
