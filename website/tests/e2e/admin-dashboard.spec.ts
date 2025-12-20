@@ -56,7 +56,7 @@ test.describe('Admin Dashboard - Authenticated Non-Admin', () => {
 		// Should NOT show admin-only sections
 		await expect(page.locator('h2:has-text("Email Queue Statistics")')).not.toBeVisible();
 		await expect(page.locator('h2:has-text("Send Test Email")')).not.toBeVisible();
-		await expect(page.locator('h2:has-text("Account Lookup")')).not.toBeVisible();
+		await expect(page.locator('h2:has-text("All Accounts")')).not.toBeVisible();
 		await expect(page.locator('h2:has-text("Failed Emails")')).not.toBeVisible();
 	});
 
@@ -97,7 +97,7 @@ adminTest.describe('Admin Dashboard - Authenticated Admin', () => {
 		// Should show admin-only sections
 		await baseExpect(page.locator('h2:has-text("Email Queue Statistics")')).toBeVisible();
 		await baseExpect(page.locator('h2:has-text("Send Test Email")')).toBeVisible();
-		await baseExpect(page.locator('h2:has-text("Account Lookup")')).toBeVisible();
+		await baseExpect(page.locator('h2:has-text("All Accounts")')).toBeVisible();
 		await baseExpect(page.locator('h2:has-text("Failed Emails")')).toBeVisible();
 	});
 });

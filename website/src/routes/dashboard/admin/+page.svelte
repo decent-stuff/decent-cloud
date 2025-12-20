@@ -38,10 +38,10 @@
 	let sendingTestEmail = $state(false);
 	let testEmailResult = $state<{ success: boolean; message: string } | null>(null);
 
-	// Account lookup state
-	let lookupUsername = $state("");
-	let lookingUpAccount = $state(false);
-	let accountInfo = $state<AdminAccountInfo | null>(null);
+	// Expanded account state (for inline details)
+	let expandedAccountUsername = $state<string | null>(null);
+	let expandedAccountInfo = $state<AdminAccountInfo | null>(null);
+	let loadingAccountDetails = $state(false);
 	let accountError = $state<string | null>(null);
 	let updatingEmailVerified = $state(false);
 
@@ -71,6 +71,7 @@
 			currentIdentity = value;
 			if (value?.account?.isAdmin) {
 				loadData();
+				loadAccounts();
 			}
 		});
 	});
@@ -170,35 +171,48 @@
 		}
 	}
 
-	async function handleLookupAccount() {
-		if (!currentIdentity?.identity || !lookupUsername.trim()) return;
+	async function toggleAccountDetails(username: string) {
+		if (expandedAccountUsername === username) {
+			// Collapse
+			expandedAccountUsername = null;
+			expandedAccountInfo = null;
+			editingEmail = false;
+			showDeleteConfirm = false;
+			deletionResult = null;
+			return;
+		}
 
-		lookingUpAccount = true;
-		accountInfo = null;
+		// Expand and load details
+		expandedAccountUsername = username;
+		expandedAccountInfo = null;
 		accountError = null;
+		editingEmail = false;
+		showDeleteConfirm = false;
+		deletionResult = null;
+		loadingAccountDetails = true;
 
 		try {
-			accountInfo = await getAccount(currentIdentity.identity, lookupUsername.trim());
+			expandedAccountInfo = await getAccount(currentIdentity!.identity!, username);
 		} catch (err) {
-			accountError = err instanceof Error ? err.message : "Failed to lookup account";
+			accountError = err instanceof Error ? err.message : "Failed to load account details";
 		} finally {
-			lookingUpAccount = false;
+			loadingAccountDetails = false;
 		}
 	}
 
 	async function handleToggleEmailVerified() {
-		if (!currentIdentity?.identity || !accountInfo) return;
+		if (!currentIdentity?.identity || !expandedAccountInfo) return;
 
 		updatingEmailVerified = true;
 
 		try {
 			await setEmailVerified(
 				currentIdentity.identity,
-				accountInfo.username,
-				!accountInfo.emailVerified
+				expandedAccountInfo.username,
+				!expandedAccountInfo.emailVerified
 			);
 			// Refresh account info
-			accountInfo = await getAccount(currentIdentity.identity, accountInfo.username);
+			expandedAccountInfo = await getAccount(currentIdentity.identity, expandedAccountInfo.username);
 		} catch (err) {
 			accountError = err instanceof Error ? err.message : "Failed to update email verification";
 		} finally {
@@ -208,7 +222,7 @@
 
 	function startEditingEmail() {
 		editingEmail = true;
-		newEmail = accountInfo?.email || "";
+		newEmail = expandedAccountInfo?.email || "";
 	}
 
 	function cancelEditingEmail() {
@@ -217,16 +231,16 @@
 	}
 
 	async function handleUpdateEmail() {
-		if (!currentIdentity?.identity || !accountInfo) return;
+		if (!currentIdentity?.identity || !expandedAccountInfo) return;
 
 		updatingEmail = true;
 		accountError = null;
 
 		try {
 			const emailToSet = newEmail.trim() || null;
-			await setAccountEmail(currentIdentity.identity, accountInfo.username, emailToSet);
+			await setAccountEmail(currentIdentity.identity, expandedAccountInfo.username, emailToSet);
 			// Refresh account info
-			accountInfo = await getAccount(currentIdentity.identity, accountInfo.username);
+			expandedAccountInfo = await getAccount(currentIdentity.identity, expandedAccountInfo.username);
 			editingEmail = false;
 			newEmail = "";
 		} catch (err) {
@@ -248,21 +262,20 @@
 	}
 
 	async function handleDeleteAccount() {
-		if (!currentIdentity?.identity || !accountInfo) return;
-		if (deleteConfirmUsername !== accountInfo.username) return;
+		if (!currentIdentity?.identity || !expandedAccountInfo) return;
+		if (deleteConfirmUsername !== expandedAccountInfo.username) return;
 
 		deletingAccount = true;
 		accountError = null;
 
 		try {
-			const result = await deleteAccount(currentIdentity.identity, accountInfo.username);
+			const result = await deleteAccount(currentIdentity.identity, expandedAccountInfo.username);
 			deletionResult = result;
-			accountInfo = null;
+			expandedAccountInfo = null;
+			expandedAccountUsername = null;
 			showDeleteConfirm = false;
-			// Refresh accounts list if loaded
-			if (accountsList) {
-				await loadAccounts();
-			}
+			// Refresh accounts list
+			await loadAccounts();
 		} catch (err) {
 			accountError = err instanceof Error ? err.message : "Failed to delete account";
 		} finally {
@@ -289,7 +302,8 @@
 		}
 	}
 
-	async function handleToggleAdmin(account: AdminAccountInfo) {
+	async function handleToggleAdmin(account: AdminAccountInfo, event: Event) {
+		event.stopPropagation();
 		if (!currentIdentity?.identity) return;
 
 		togglingAdminFor = account.username;
@@ -299,6 +313,10 @@
 			await setAdminStatus(currentIdentity.identity, account.username, !account.isAdmin);
 			// Refresh the list
 			await loadAccounts();
+			// If this account is expanded, refresh its details too
+			if (expandedAccountUsername === account.username) {
+				expandedAccountInfo = await getAccount(currentIdentity.identity, account.username);
+			}
 		} catch (err) {
 			accountsError = err instanceof Error ? err.message : "Failed to update admin status";
 		} finally {
@@ -308,6 +326,9 @@
 
 	function goToAccountsPage(page: number) {
 		accountsPage = page;
+		// Collapse any expanded account when changing pages
+		expandedAccountUsername = null;
+		expandedAccountInfo = null;
 		loadAccounts();
 	}
 </script>
@@ -406,17 +427,7 @@
 
 			<!-- Accounts List -->
 			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-				<div class="flex items-center justify-between mb-4">
-					<h2 class="text-2xl font-bold text-white">All Accounts</h2>
-					<button
-						type="button"
-						onclick={loadAccounts}
-						disabled={loadingAccounts}
-						class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-					>
-						{loadingAccounts ? "Loading..." : accountsList ? "Refresh" : "Load Accounts"}
-					</button>
-				</div>
+				<h2 class="text-2xl font-bold text-white mb-4">All Accounts</h2>
 
 				{#if accountsError}
 					<div class="p-3 rounded-lg bg-red-500/20 text-red-200 mb-4">
@@ -424,7 +435,22 @@
 					</div>
 				{/if}
 
-				{#if accountsList}
+				{#if deletionResult}
+					<div class="p-4 rounded-lg bg-green-500/20 text-green-200 mb-4">
+						<p class="font-medium mb-2">Account deleted successfully</p>
+						<ul class="text-sm space-y-1">
+							<li>Offerings deleted: {deletionResult.offeringsDeleted}</li>
+							<li>Contracts as requester: {deletionResult.contractsAsRequester} (nullified)</li>
+							<li>Contracts as provider: {deletionResult.contractsAsProvider} (nullified)</li>
+							<li>Public keys deleted: {deletionResult.publicKeysDeleted}</li>
+							<li>Provider profile deleted: {deletionResult.providerProfileDeleted ? "Yes" : "No"}</li>
+						</ul>
+					</div>
+				{/if}
+
+				{#if loadingAccounts && !accountsList}
+					<div class="text-white/60 text-center py-8">Loading accounts...</div>
+				{:else if accountsList}
 					<div class="mb-4 text-white/60 text-sm">
 						Showing {accountsList.accounts.length} of {accountsList.total} accounts
 					</div>
@@ -443,8 +469,20 @@
 							</thead>
 							<tbody>
 								{#each accountsList.accounts as account}
-									<tr class="border-b border-white/10 hover:bg-white/5">
-										<td class="py-3 px-2 font-medium">@{account.username}</td>
+									<tr
+										class="border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors"
+										onclick={() => toggleAccountDetails(account.username)}
+									>
+										<td class="py-3 px-2 font-medium">
+											<span class="inline-flex items-center gap-1">
+												{#if expandedAccountUsername === account.username}
+													<span class="text-white/50">▼</span>
+												{:else}
+													<span class="text-white/50">▶</span>
+												{/if}
+												@{account.username}
+											</span>
+										</td>
 										<td class="py-3 px-2 text-sm">{account.email || "-"}</td>
 										<td class="py-3 px-2">
 											<span class="{account.emailVerified ? 'text-green-400' : 'text-white/40'}">
@@ -462,7 +500,7 @@
 										<td class="py-3 px-2">
 											<button
 												type="button"
-												onclick={() => handleToggleAdmin(account)}
+												onclick={(e) => handleToggleAdmin(account, e)}
 												disabled={togglingAdminFor === account.username}
 												class="px-3 py-1 text-sm rounded transition-colors {account.isAdmin
 													? 'bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30'
@@ -476,6 +514,159 @@
 											</button>
 										</td>
 									</tr>
+
+									<!-- Expanded account details row -->
+									{#if expandedAccountUsername === account.username}
+										<tr class="bg-white/5">
+											<td colspan="6" class="p-4">
+												{#if loadingAccountDetails}
+													<div class="text-white/60 text-center py-4">Loading details...</div>
+												{:else if accountError}
+													<div class="p-3 rounded-lg bg-red-500/20 text-red-200">
+														{accountError}
+													</div>
+												{:else if expandedAccountInfo}
+													<div class="space-y-4">
+														<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+															<div>
+																<p class="text-white/50 text-sm">Account ID</p>
+																<p class="text-white font-mono text-sm">{expandedAccountInfo.id.slice(0, 8)}...{expandedAccountInfo.id.slice(-8)}</p>
+															</div>
+															<div>
+																<p class="text-white/50 text-sm">Last Login</p>
+																<p class="text-white">
+																	{expandedAccountInfo.lastLoginAt ? formatTimestamp(expandedAccountInfo.lastLoginAt) : "Never"}
+																</p>
+															</div>
+															<div>
+																<p class="text-white/50 text-sm">Active Keys</p>
+																<p class="text-white">{expandedAccountInfo.activeKeys} / {expandedAccountInfo.totalKeys}</p>
+															</div>
+															<div>
+																<p class="text-white/50 text-sm">Admin Status</p>
+																<p class="{expandedAccountInfo.isAdmin ? 'text-yellow-400' : 'text-white'}">
+																	{expandedAccountInfo.isAdmin ? "Yes" : "No"}
+																</p>
+															</div>
+														</div>
+
+														<!-- Email Management -->
+														<div class="border-t border-white/10 pt-4">
+															<div class="flex items-center gap-4">
+																<div class="flex-1">
+																	<p class="text-white/50 text-sm mb-1">Email</p>
+																	{#if editingEmail}
+																		<div class="flex items-center gap-2">
+																			<input
+																				type="email"
+																				bind:value={newEmail}
+																				placeholder="email@example.com (leave empty to clear)"
+																				class="flex-1 px-3 py-1 bg-white/5 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+																			/>
+																			<button
+																				type="button"
+																				onclick={handleUpdateEmail}
+																				disabled={updatingEmail}
+																				class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+																			>
+																				{updatingEmail ? "..." : "Save"}
+																			</button>
+																			<button
+																				type="button"
+																				onclick={cancelEditingEmail}
+																				disabled={updatingEmail}
+																				class="px-3 py-1 text-sm bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+																			>
+																				Cancel
+																			</button>
+																		</div>
+																	{:else}
+																		<div class="flex items-center gap-2">
+																			<span class="text-white">{expandedAccountInfo.email || "Not set"}</span>
+																			<button
+																				type="button"
+																				onclick={startEditingEmail}
+																				class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+																			>
+																				Edit
+																			</button>
+																		</div>
+																	{/if}
+																</div>
+																<div>
+																	<p class="text-white/50 text-sm mb-1">Verified</p>
+																	<div class="flex items-center gap-2">
+																		<span class="{expandedAccountInfo.emailVerified ? 'text-green-400' : 'text-red-400'}">
+																			{expandedAccountInfo.emailVerified ? "Yes" : "No"}
+																		</span>
+																		<button
+																			type="button"
+																			onclick={handleToggleEmailVerified}
+																			disabled={updatingEmailVerified}
+																			class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+																		>
+																			{updatingEmailVerified ? "..." : expandedAccountInfo.emailVerified ? "Unverify" : "Verify"}
+																		</button>
+																	</div>
+																</div>
+															</div>
+														</div>
+
+														<!-- Delete Account Section -->
+														{#if !expandedAccountInfo.isAdmin}
+															<div class="border-t border-white/10 pt-4">
+																{#if showDeleteConfirm}
+																	<div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
+																		<p class="text-red-200 font-medium">Delete Account @{expandedAccountInfo.username}?</p>
+																		<p class="text-white/60 text-sm">
+																			This will permanently delete the account and all associated resources:
+																			offerings, provider profile, public keys, and email tokens.
+																			Contracts will be preserved but account references will be nullified.
+																		</p>
+																		<p class="text-white/60 text-sm">
+																			Type <span class="font-mono text-white">{expandedAccountInfo.username}</span> to confirm:
+																		</p>
+																		<div class="flex items-center gap-2">
+																			<input
+																				type="text"
+																				bind:value={deleteConfirmUsername}
+																				placeholder="username"
+																				class="flex-1 px-3 py-1 bg-white/5 border border-red-500/30 rounded text-white placeholder-white/40 focus:outline-none focus:border-red-500"
+																			/>
+																			<button
+																				type="button"
+																				onclick={handleDeleteAccount}
+																				disabled={deletingAccount || deleteConfirmUsername !== expandedAccountInfo.username}
+																				class="px-4 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+																			>
+																				{deletingAccount ? "Deleting..." : "Delete"}
+																			</button>
+																			<button
+																				type="button"
+																				onclick={cancelDeleteAccount}
+																				disabled={deletingAccount}
+																				class="px-4 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+																			>
+																				Cancel
+																			</button>
+																		</div>
+																	</div>
+																{:else}
+																	<button
+																		type="button"
+																		onclick={showDeleteAccountConfirm}
+																		class="px-4 py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition-colors"
+																	>
+																		Delete Account
+																	</button>
+																{/if}
+															</div>
+														{/if}
+													</div>
+												{/if}
+											</td>
+										</tr>
+									{/if}
 								{/each}
 							</tbody>
 						</table>
@@ -506,195 +697,6 @@
 							</button>
 						</div>
 					{/if}
-				{:else if !loadingAccounts}
-					<p class="text-white/60 text-center py-8">
-						Click "Load Accounts" to view all accounts
-					</p>
-				{/if}
-			</div>
-
-			<!-- Account Lookup -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-				<h2 class="text-2xl font-bold text-white mb-4">Account Lookup</h2>
-				<p class="text-white/60 mb-4">
-					Search for an account by username to view details and manage settings.
-				</p>
-				<form onsubmit={(e) => { e.preventDefault(); handleLookupAccount(); }} class="flex gap-4 mb-4">
-					<input
-						type="text"
-						bind:value={lookupUsername}
-						placeholder="username"
-						class="flex-1 px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
-						required
-					/>
-					<button
-						type="submit"
-						disabled={lookingUpAccount || !lookupUsername.trim()}
-						class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-					>
-						{lookingUpAccount ? "Searching..." : "Lookup"}
-					</button>
-				</form>
-
-				{#if accountError}
-					<div class="p-3 rounded-lg bg-red-500/20 text-red-200 mb-4">
-						{accountError}
-					</div>
-				{/if}
-
-				{#if deletionResult}
-					<div class="p-4 rounded-lg bg-green-500/20 text-green-200 mb-4">
-						<p class="font-medium mb-2">Account deleted successfully</p>
-						<ul class="text-sm space-y-1">
-							<li>Offerings deleted: {deletionResult.offeringsDeleted}</li>
-							<li>Contracts as requester: {deletionResult.contractsAsRequester} (nullified)</li>
-							<li>Contracts as provider: {deletionResult.contractsAsProvider} (nullified)</li>
-							<li>Public keys deleted: {deletionResult.publicKeysDeleted}</li>
-							<li>Provider profile deleted: {deletionResult.providerProfileDeleted ? "Yes" : "No"}</li>
-						</ul>
-					</div>
-				{/if}
-
-				{#if accountInfo}
-					<div class="bg-white/5 rounded-lg p-4 space-y-4">
-						<div class="grid grid-cols-2 gap-4">
-							<div>
-								<p class="text-white/50 text-sm">Username</p>
-								<p class="text-white font-medium">@{accountInfo.username}</p>
-							</div>
-							<div>
-								<p class="text-white/50 text-sm">Account ID</p>
-								<p class="text-white font-mono text-sm">{accountInfo.id.slice(0, 8)}...{accountInfo.id.slice(-8)}</p>
-							</div>
-							<div class="col-span-2">
-								<p class="text-white/50 text-sm">Email</p>
-								{#if editingEmail}
-									<div class="flex items-center gap-2 mt-1">
-										<input
-											type="email"
-											bind:value={newEmail}
-											placeholder="email@example.com (leave empty to clear)"
-											class="flex-1 px-3 py-1 bg-white/5 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
-										/>
-										<button
-											type="button"
-											onclick={handleUpdateEmail}
-											disabled={updatingEmail}
-											class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
-										>
-											{updatingEmail ? "..." : "Save"}
-										</button>
-										<button
-											type="button"
-											onclick={cancelEditingEmail}
-											disabled={updatingEmail}
-											class="px-3 py-1 text-sm bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
-										>
-											Cancel
-										</button>
-									</div>
-								{:else}
-									<div class="flex items-center gap-2">
-										<span class="text-white">{accountInfo.email || "Not set"}</span>
-										<button
-											type="button"
-											onclick={startEditingEmail}
-											class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
-										>
-											Edit
-										</button>
-									</div>
-								{/if}
-							</div>
-							<div>
-								<p class="text-white/50 text-sm">Email Verified</p>
-								<div class="flex items-center gap-2">
-									<span class="{accountInfo.emailVerified ? 'text-green-400' : 'text-red-400'}">
-										{accountInfo.emailVerified ? "Yes" : "No"}
-									</span>
-									<button
-										type="button"
-										onclick={handleToggleEmailVerified}
-										disabled={updatingEmailVerified}
-										class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
-									>
-										{updatingEmailVerified ? "..." : accountInfo.emailVerified ? "Unverify" : "Verify"}
-									</button>
-								</div>
-							</div>
-							<div>
-								<p class="text-white/50 text-sm">Created</p>
-								<p class="text-white">{formatTimestamp(accountInfo.createdAt)}</p>
-							</div>
-							<div>
-								<p class="text-white/50 text-sm">Last Login</p>
-								<p class="text-white">
-									{accountInfo.lastLoginAt ? formatTimestamp(accountInfo.lastLoginAt) : "Never"}
-								</p>
-							</div>
-							<div>
-								<p class="text-white/50 text-sm">Active Keys</p>
-								<p class="text-white">{accountInfo.activeKeys} / {accountInfo.totalKeys}</p>
-							</div>
-							<div>
-								<p class="text-white/50 text-sm">Admin</p>
-								<p class="{accountInfo.isAdmin ? 'text-yellow-400' : 'text-white'}">
-									{accountInfo.isAdmin ? "Yes" : "No"}
-								</p>
-							</div>
-						</div>
-
-						<!-- Delete Account Section -->
-						{#if !accountInfo.isAdmin}
-							<div class="border-t border-white/10 pt-4 mt-4">
-								{#if showDeleteConfirm}
-									<div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
-										<p class="text-red-200 font-medium">Delete Account @{accountInfo.username}?</p>
-										<p class="text-white/60 text-sm">
-											This will permanently delete the account and all associated resources:
-											offerings, provider profile, public keys, and email tokens.
-											Contracts will be preserved but account references will be nullified.
-										</p>
-										<p class="text-white/60 text-sm">
-											Type <span class="font-mono text-white">{accountInfo.username}</span> to confirm:
-										</p>
-										<div class="flex items-center gap-2">
-											<input
-												type="text"
-												bind:value={deleteConfirmUsername}
-												placeholder="username"
-												class="flex-1 px-3 py-1 bg-white/5 border border-red-500/30 rounded text-white placeholder-white/40 focus:outline-none focus:border-red-500"
-											/>
-											<button
-												type="button"
-												onclick={handleDeleteAccount}
-												disabled={deletingAccount || deleteConfirmUsername !== accountInfo.username}
-												class="px-4 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-											>
-												{deletingAccount ? "Deleting..." : "Delete"}
-											</button>
-											<button
-												type="button"
-												onclick={cancelDeleteAccount}
-												disabled={deletingAccount}
-												class="px-4 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
-											>
-												Cancel
-											</button>
-										</div>
-									</div>
-								{:else}
-									<button
-										type="button"
-										onclick={showDeleteAccountConfirm}
-										class="px-4 py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition-colors"
-									>
-										Delete Account
-									</button>
-								{/if}
-							</div>
-						{/if}
-					</div>
 				{/if}
 			</div>
 

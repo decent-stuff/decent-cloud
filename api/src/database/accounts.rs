@@ -1156,9 +1156,15 @@ impl Database {
                 .fetch_all(&mut *tx)
                 .await?;
 
-        // Delete offerings for each pubkey
+        // Delete offerings (by account_id - covers both pubkey and account_id FK)
+        let result = sqlx::query("DELETE FROM provider_offerings WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
+        summary.offerings_deleted += result.rows_affected() as i64;
+        // Also delete any offerings by pubkey (for backwards compatibility / incomplete backfill)
         for pubkey in &pubkeys {
-            let result = sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ?")
+            let result = sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ? AND account_id IS NULL")
                 .bind(pubkey)
                 .execute(&mut *tx)
                 .await?;
@@ -1199,9 +1205,17 @@ impl Database {
         .execute(&mut *tx)
         .await?;
 
-        // Delete provider profiles for each pubkey
+        // Delete provider profiles (by account_id - covers both pubkey and account_id FK)
+        let result = sqlx::query("DELETE FROM provider_profiles WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
+        if result.rows_affected() > 0 {
+            summary.provider_profile_deleted = true;
+        }
+        // Also delete any profiles by pubkey (for backwards compatibility / incomplete backfill)
         for pubkey in &pubkeys {
-            let result = sqlx::query("DELETE FROM provider_profiles WHERE pubkey = ?")
+            let result = sqlx::query("DELETE FROM provider_profiles WHERE pubkey = ? AND account_id IS NULL")
                 .bind(pubkey)
                 .execute(&mut *tx)
                 .await?;
@@ -1261,6 +1275,12 @@ impl Database {
             .execute(&mut *tx)
             .await
             .ok();
+
+        // Delete signature audit records (FK without cascade)
+        sqlx::query("DELETE FROM signature_audit WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
 
         // Finally delete the account itself
         let result = sqlx::query("DELETE FROM accounts WHERE id = ?")

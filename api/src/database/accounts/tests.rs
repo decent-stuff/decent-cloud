@@ -1813,3 +1813,109 @@ async fn test_list_all_accounts_includes_admin_status() {
     assert_eq!(admin.is_admin, 1);
     assert_eq!(regular.is_admin, 0);
 }
+
+/// Test that admin_delete_account properly handles accounts with offerings and profiles
+/// that have account_id set (the new foreign key from migration 050).
+#[tokio::test]
+async fn test_admin_delete_account_with_offerings_and_profile() {
+    let db = create_test_db().await;
+    let pubkey = [80u8; 32];
+
+    // Create account
+    let account = db
+        .create_account("provider_user", &pubkey, "provider@example.com")
+        .await
+        .unwrap();
+
+    // Create provider profile with account_id set
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, account_id, name, description, api_version, profile_version, updated_at_ns)
+         VALUES (?, ?, 'Test Provider', 'Test description', '1.0', '1.0', 0)",
+    )
+    .bind(&pubkey[..])
+    .bind(&account.id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create provider offering with account_id set
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, account_id, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns)
+         VALUES (?, ?, 'test-offer-1', 'Test Offer', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+    )
+    .bind(&pubkey[..])
+    .bind(&account.id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create signature audit record with account_id set
+    let signature = [0u8; 64];
+    let nonce = uuid::Uuid::new_v4();
+    db.insert_signature_audit(
+        Some(&account.id),
+        "test_action",
+        "{}",
+        &signature,
+        &pubkey,
+        chrono::Utc::now().timestamp_nanos_opt().unwrap(),
+        &nonce,
+        false,
+    )
+    .await
+    .unwrap();
+
+    // Verify data was created
+    let profile_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM provider_profiles WHERE account_id = ?")
+            .bind(&account.id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(profile_count.0, 1, "Profile should exist before deletion");
+
+    let offering_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE account_id = ?")
+            .bind(&account.id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(offering_count.0, 1, "Offering should exist before deletion");
+
+    // Delete account - this should NOT fail with FK constraint error
+    let summary = db.admin_delete_account(&account.id).await.unwrap();
+
+    // Verify summary
+    assert_eq!(summary.offerings_deleted, 1);
+    assert!(summary.provider_profile_deleted);
+    assert_eq!(summary.public_keys_deleted, 1);
+
+    // Verify account is gone
+    let fetched = db.get_account(&account.id).await.unwrap();
+    assert!(fetched.is_none());
+
+    // Verify all related data is deleted
+    let profile_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM provider_profiles WHERE pubkey = ?")
+            .bind(&pubkey[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(profile_count.0, 0, "Profile should be deleted");
+
+    let offering_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE pubkey = ?")
+            .bind(&pubkey[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(offering_count.0, 0, "Offering should be deleted");
+
+    let audit_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM signature_audit WHERE account_id = ?")
+            .bind(&account.id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(audit_count.0, 0, "Signature audit should be deleted");
+}
