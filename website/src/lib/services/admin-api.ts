@@ -228,3 +228,45 @@ export async function deleteAccount(
 		`/api/v1/admin/accounts/${encodeURIComponent(username)}`
 	);
 }
+
+/**
+ * Paginated list of accounts
+ */
+export interface AdminAccountListResponse {
+	accounts: AdminAccountInfo[];
+	total: number;
+	limit: number;
+	offset: number;
+}
+
+/**
+ * List all accounts with pagination
+ */
+export async function listAccounts(
+	identity: Ed25519KeyIdentity,
+	limit?: number,
+	offset?: number
+): Promise<AdminAccountListResponse> {
+	const params = new URLSearchParams();
+	if (limit !== undefined) params.set('limit', limit.toString());
+	if (offset !== undefined) params.set('offset', offset.toString());
+	const query = params.toString();
+	const path = query ? `/api/v1/admin/accounts?${query}` : '/api/v1/admin/accounts';
+	return authenticatedFetch<AdminAccountListResponse>(identity, 'GET', path);
+}
+
+/**
+ * Set admin status for an account
+ */
+export async function setAdminStatus(
+	identity: Ed25519KeyIdentity,
+	username: string,
+	isAdmin: boolean
+): Promise<string> {
+	return authenticatedFetch<string>(
+		identity,
+		'POST',
+		`/api/v1/admin/accounts/${encodeURIComponent(username)}/admin-status`,
+		{ isAdmin }
+	);
+}

@@ -163,6 +163,7 @@ pub struct ApiAuthenticatedUser {
 #[derive(Debug, Clone)]
 pub struct AdminAuthenticatedUser {
     pub pubkey: Vec<u8>,
+    pub account_id: Vec<u8>,
 }
 
 /// Agent authenticated user (signature-based with delegated permissions)
@@ -408,7 +409,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
         // Restore body for downstream handlers
         *body = poem::RequestBody::new(poem::Body::from(body_bytes));
 
-        Ok(AdminAuthenticatedUser { pubkey })
+        Ok(AdminAuthenticatedUser { pubkey, account_id })
     }
 }
 

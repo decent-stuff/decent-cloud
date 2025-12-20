@@ -1,7 +1,7 @@
 use super::common::{
     AdminAccountDeletionSummary, AdminAddRecoveryKeyRequest, AdminDisableKeyRequest,
     AdminProcessPayoutRequest, AdminSendTestEmailRequest, AdminSetAccountEmailRequest,
-    AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
+    AdminSetAdminStatusRequest, AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
 };
 use crate::{
     auth::AdminAuthenticatedUser,
@@ -30,6 +30,17 @@ pub struct AdminAccountInfo {
     pub is_admin: bool,
     pub active_keys: i64,
     pub total_keys: i64,
+}
+
+/// Paginated list of accounts for admin listing
+#[derive(Debug, Clone, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminAccountListResponse {
+    pub accounts: Vec<AdminAccountInfo>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 pub struct AdminApi;
@@ -855,11 +866,7 @@ impl AdminApi {
         // Delete account
         match db.admin_delete_account(&account.id).await {
             Ok(summary) => {
-                tracing::info!(
-                    "Admin deleted account '{}': {:?}",
-                    username.0,
-                    summary
-                );
+                tracing::info!("Admin deleted account '{}': {:?}", username.0, summary);
                 Json(ApiResponse {
                     success: true,
                     data: Some(AdminAccountDeletionSummary {
@@ -869,6 +876,139 @@ impl AdminApi {
                         public_keys_deleted: summary.public_keys_deleted,
                         provider_profile_deleted: summary.provider_profile_deleted,
                     }),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: List all accounts
+    ///
+    /// Returns a paginated list of all accounts with their admin status.
+    #[oai(path = "/admin/accounts", method = "get", tag = "ApiTags::Admin")]
+    async fn admin_list_accounts(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        limit: Query<Option<i64>>,
+        offset: Query<Option<i64>>,
+    ) -> Json<ApiResponse<AdminAccountListResponse>> {
+        let limit = limit.0.unwrap_or(50).min(200); // Cap at 200
+        let offset = offset.0.unwrap_or(0);
+
+        // Get total count
+        let total = match db.count_accounts().await {
+            Ok(t) => t,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Get accounts
+        let accounts = match db.list_all_accounts(limit, offset).await {
+            Ok(a) => a,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Convert to AdminAccountInfo (without key counts for efficiency)
+        let account_infos: Vec<AdminAccountInfo> = accounts
+            .into_iter()
+            .map(|a| AdminAccountInfo {
+                id: hex::encode(&a.id),
+                username: a.username,
+                email: a.email,
+                email_verified: a.email_verified != 0,
+                created_at: a.created_at,
+                last_login_at: a.last_login_at,
+                is_admin: a.is_admin != 0,
+                active_keys: 0, // Not fetched for efficiency
+                total_keys: 0,  // Not fetched for efficiency
+            })
+            .collect();
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(AdminAccountListResponse {
+                accounts: account_infos,
+                total,
+                limit,
+                offset,
+            }),
+            error: None,
+        })
+    }
+
+    /// Admin: Set admin status for an account
+    ///
+    /// Promotes or demotes a user's admin privileges.
+    #[oai(
+        path = "/admin/accounts/:username/admin-status",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_set_admin_status(
+        &self,
+        db: Data<&Arc<Database>>,
+        admin: AdminAuthenticatedUser,
+        username: Path<String>,
+        req: Json<AdminSetAdminStatusRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Get account to check it exists and get current state
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Prevent admin from demoting themselves
+        if !req.is_admin && account.id == admin.account_id {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Cannot remove your own admin privileges".to_string()),
+            });
+        }
+
+        // Update admin status
+        match db.set_admin_status(&username.0, req.is_admin).await {
+            Ok(()) => {
+                let action = if req.is_admin { "granted" } else { "revoked" };
+                tracing::info!(
+                    "Admin {} {} admin privileges for {}",
+                    hex::encode(&admin.pubkey),
+                    action,
+                    username.0
+                );
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(format!("Admin privileges {} for {}", action, username.0)),
                     error: None,
                 })
             }

@@ -352,6 +352,13 @@ pub struct AdminAccountDeletionSummary {
     pub provider_profile_deleted: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminSetAdminStatusRequest {
+    pub is_admin: bool,
+}
+
 // Request/Response types for user notification config
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

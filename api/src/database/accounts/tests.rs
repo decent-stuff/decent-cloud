@@ -1615,7 +1615,10 @@ async fn test_admin_set_account_email_nonexistent() {
         .await;
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Account not found"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Account not found"));
 }
 
 #[tokio::test]
@@ -1652,7 +1655,10 @@ async fn test_admin_delete_account_nonexistent() {
     let result = db.admin_delete_account(&[0u8; 16]).await;
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Account not found"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Account not found"));
 }
 
 #[tokio::test]
@@ -1687,4 +1693,123 @@ async fn test_admin_delete_account_with_oauth() {
         .await
         .unwrap();
     assert!(oauth_fetched.is_none());
+}
+
+#[tokio::test]
+async fn test_count_accounts() {
+    let db = create_test_db().await;
+
+    // No accounts initially
+    let count = db.count_accounts().await.unwrap();
+    assert_eq!(count, 0);
+
+    // Create some accounts
+    db.create_account("user1", &[1u8; 32], "user1@example.com")
+        .await
+        .unwrap();
+    db.create_account("user2", &[2u8; 32], "user2@example.com")
+        .await
+        .unwrap();
+    db.create_account("user3", &[3u8; 32], "user3@example.com")
+        .await
+        .unwrap();
+
+    let count = db.count_accounts().await.unwrap();
+    assert_eq!(count, 3);
+}
+
+#[tokio::test]
+async fn test_list_all_accounts() {
+    let db = create_test_db().await;
+
+    // Create accounts
+    db.create_account("alice", &[1u8; 32], "alice@example.com")
+        .await
+        .unwrap();
+    db.create_account("bob", &[2u8; 32], "bob@example.com")
+        .await
+        .unwrap();
+    db.create_account("charlie", &[3u8; 32], "charlie@example.com")
+        .await
+        .unwrap();
+
+    // List all accounts
+    let accounts = db.list_all_accounts(10, 0).await.unwrap();
+    assert_eq!(accounts.len(), 3);
+
+    // Verify sorted by username
+    assert_eq!(accounts[0].username, "alice");
+    assert_eq!(accounts[1].username, "bob");
+    assert_eq!(accounts[2].username, "charlie");
+}
+
+#[tokio::test]
+async fn test_list_all_accounts_pagination() {
+    let db = create_test_db().await;
+
+    // Create 5 accounts
+    for i in 0..5 {
+        let mut pk = [0u8; 32];
+        pk[0] = i;
+        db.create_account(
+            &format!("user{}", i),
+            &pk,
+            &format!("user{}@example.com", i),
+        )
+        .await
+        .unwrap();
+    }
+
+    // First page (limit 2, offset 0)
+    let page1 = db.list_all_accounts(2, 0).await.unwrap();
+    assert_eq!(page1.len(), 2);
+    assert_eq!(page1[0].username, "user0");
+    assert_eq!(page1[1].username, "user1");
+
+    // Second page (limit 2, offset 2)
+    let page2 = db.list_all_accounts(2, 2).await.unwrap();
+    assert_eq!(page2.len(), 2);
+    assert_eq!(page2[0].username, "user2");
+    assert_eq!(page2[1].username, "user3");
+
+    // Third page (limit 2, offset 4)
+    let page3 = db.list_all_accounts(2, 4).await.unwrap();
+    assert_eq!(page3.len(), 1);
+    assert_eq!(page3[0].username, "user4");
+
+    // Empty page (offset beyond total)
+    let empty = db.list_all_accounts(2, 10).await.unwrap();
+    assert_eq!(empty.len(), 0);
+}
+
+#[tokio::test]
+async fn test_list_all_accounts_includes_admin_status() {
+    let db = create_test_db().await;
+
+    // Create accounts
+    db.create_account("admin_user", &[1u8; 32], "admin@example.com")
+        .await
+        .unwrap();
+    db.create_account("regular_user", &[2u8; 32], "regular@example.com")
+        .await
+        .unwrap();
+
+    // Make one an admin
+    db.set_admin_status("admin_user", true).await.unwrap();
+
+    // List accounts
+    let accounts = db.list_all_accounts(10, 0).await.unwrap();
+    assert_eq!(accounts.len(), 2);
+
+    let admin = accounts
+        .iter()
+        .find(|a| a.username == "admin_user")
+        .unwrap();
+    let regular = accounts
+        .iter()
+        .find(|a| a.username == "regular_user")
+        .unwrap();
+
+    assert_eq!(admin.is_admin, 1);
+    assert_eq!(regular.is_admin, 0);
 }

@@ -13,10 +13,13 @@
 		setEmailVerified,
 		setAccountEmail,
 		deleteAccount,
+		listAccounts,
+		setAdminStatus,
 		type EmailQueueEntry,
 		type EmailStats,
 		type AdminAccountInfo,
 		type AccountDeletionSummary,
+		type AdminAccountListResponse,
 	} from "$lib/services/admin-api";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -52,6 +55,14 @@
 	let deleteConfirmUsername = $state("");
 	let deletingAccount = $state(false);
 	let deletionResult = $state<AccountDeletionSummary | null>(null);
+
+	// Accounts list state
+	let accountsList = $state<AdminAccountListResponse | null>(null);
+	let loadingAccounts = $state(false);
+	let accountsError = $state<string | null>(null);
+	let accountsPage = $state(0);
+	let togglingAdminFor = $state<string | null>(null);
+	const ACCOUNTS_PER_PAGE = 20;
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
 
@@ -248,11 +259,56 @@
 			deletionResult = result;
 			accountInfo = null;
 			showDeleteConfirm = false;
+			// Refresh accounts list if loaded
+			if (accountsList) {
+				await loadAccounts();
+			}
 		} catch (err) {
 			accountError = err instanceof Error ? err.message : "Failed to delete account";
 		} finally {
 			deletingAccount = false;
 		}
+	}
+
+	async function loadAccounts() {
+		if (!currentIdentity?.identity) return;
+
+		loadingAccounts = true;
+		accountsError = null;
+
+		try {
+			accountsList = await listAccounts(
+				currentIdentity.identity,
+				ACCOUNTS_PER_PAGE,
+				accountsPage * ACCOUNTS_PER_PAGE
+			);
+		} catch (err) {
+			accountsError = err instanceof Error ? err.message : "Failed to load accounts";
+		} finally {
+			loadingAccounts = false;
+		}
+	}
+
+	async function handleToggleAdmin(account: AdminAccountInfo) {
+		if (!currentIdentity?.identity) return;
+
+		togglingAdminFor = account.username;
+		accountsError = null;
+
+		try {
+			await setAdminStatus(currentIdentity.identity, account.username, !account.isAdmin);
+			// Refresh the list
+			await loadAccounts();
+		} catch (err) {
+			accountsError = err instanceof Error ? err.message : "Failed to update admin status";
+		} finally {
+			togglingAdminFor = null;
+		}
+	}
+
+	function goToAccountsPage(page: number) {
+		accountsPage = page;
+		loadAccounts();
 	}
 </script>
 
@@ -345,6 +401,115 @@
 					<div class="mt-4 p-3 rounded-lg {testEmailResult.success ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}">
 						{testEmailResult.message}
 					</div>
+				{/if}
+			</div>
+
+			<!-- Accounts List -->
+			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+				<div class="flex items-center justify-between mb-4">
+					<h2 class="text-2xl font-bold text-white">All Accounts</h2>
+					<button
+						type="button"
+						onclick={loadAccounts}
+						disabled={loadingAccounts}
+						class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+					>
+						{loadingAccounts ? "Loading..." : accountsList ? "Refresh" : "Load Accounts"}
+					</button>
+				</div>
+
+				{#if accountsError}
+					<div class="p-3 rounded-lg bg-red-500/20 text-red-200 mb-4">
+						{accountsError}
+					</div>
+				{/if}
+
+				{#if accountsList}
+					<div class="mb-4 text-white/60 text-sm">
+						Showing {accountsList.accounts.length} of {accountsList.total} accounts
+					</div>
+
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-white/90">
+							<thead class="text-white/70 border-b border-white/20">
+								<tr>
+									<th class="pb-3 px-2">Username</th>
+									<th class="pb-3 px-2">Email</th>
+									<th class="pb-3 px-2">Verified</th>
+									<th class="pb-3 px-2">Role</th>
+									<th class="pb-3 px-2">Created</th>
+									<th class="pb-3 px-2">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each accountsList.accounts as account}
+									<tr class="border-b border-white/10 hover:bg-white/5">
+										<td class="py-3 px-2 font-medium">@{account.username}</td>
+										<td class="py-3 px-2 text-sm">{account.email || "-"}</td>
+										<td class="py-3 px-2">
+											<span class="{account.emailVerified ? 'text-green-400' : 'text-white/40'}">
+												{account.emailVerified ? "Yes" : "No"}
+											</span>
+										</td>
+										<td class="py-3 px-2">
+											<span class="{account.isAdmin ? 'text-yellow-400 font-medium' : 'text-white/60'}">
+												{account.isAdmin ? "Admin" : "User"}
+											</span>
+										</td>
+										<td class="py-3 px-2 text-sm">
+											{formatTimestamp(account.createdAt)}
+										</td>
+										<td class="py-3 px-2">
+											<button
+												type="button"
+												onclick={() => handleToggleAdmin(account)}
+												disabled={togglingAdminFor === account.username}
+												class="px-3 py-1 text-sm rounded transition-colors {account.isAdmin
+													? 'bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30'
+													: 'bg-yellow-600/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-600/30'} disabled:opacity-50 disabled:cursor-not-allowed"
+											>
+												{#if togglingAdminFor === account.username}
+													...
+												{:else}
+													{account.isAdmin ? "Revoke Admin" : "Make Admin"}
+												{/if}
+											</button>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<!-- Pagination -->
+					{#if accountsList.total > ACCOUNTS_PER_PAGE}
+						{@const totalPages = Math.ceil(accountsList.total / ACCOUNTS_PER_PAGE)}
+						<div class="flex items-center justify-center gap-2 mt-4">
+							<button
+								type="button"
+								onclick={() => goToAccountsPage(accountsPage - 1)}
+								disabled={accountsPage === 0 || loadingAccounts}
+								class="px-3 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							>
+								Previous
+							</button>
+							<span class="text-white/60 text-sm">
+								Page {accountsPage + 1} of {totalPages}
+							</span>
+							<button
+								type="button"
+								onclick={() => goToAccountsPage(accountsPage + 1)}
+								disabled={accountsPage >= totalPages - 1 || loadingAccounts}
+								class="px-3 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							>
+								Next
+							</button>
+						</div>
+					{/if}
+				{:else if !loadingAccounts}
+					<p class="text-white/60 text-center py-8">
+						Click "Load Accounts" to view all accounts
+					</p>
 				{/if}
 			</div>
 

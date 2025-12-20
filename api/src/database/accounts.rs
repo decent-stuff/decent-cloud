@@ -867,7 +867,6 @@ impl Database {
     }
 
     /// Set admin status for an account by username
-    #[allow(dead_code)]
     pub async fn set_admin_status(&self, username: &str, is_admin: bool) -> Result<()> {
         let is_admin_value = if is_admin { 1 } else { 0 };
         let result =
@@ -882,6 +881,29 @@ impl Database {
         }
 
         Ok(())
+    }
+
+    /// List all accounts with pagination
+    /// Returns accounts ordered by username, with basic pagination support
+    pub async fn list_all_accounts(&self, limit: i64, offset: i64) -> Result<Vec<Account>> {
+        let accounts = sqlx::query_as::<_, Account>(
+            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
+             FROM accounts ORDER BY username ASC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(accounts)
+    }
+
+    /// Get total count of all accounts
+    pub async fn count_accounts(&self) -> Result<i64> {
+        let result: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM accounts")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(result.0)
     }
 
     /// List all admin accounts
@@ -1108,13 +1130,11 @@ impl Database {
         account_id: &[u8],
         email: Option<&str>,
     ) -> Result<()> {
-        let result = sqlx::query(
-            "UPDATE accounts SET email = ?, email_verified = 0 WHERE id = ?",
-        )
-        .bind(email)
-        .bind(account_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("UPDATE accounts SET email = ?, email_verified = 0 WHERE id = ?")
+            .bind(email)
+            .bind(account_id)
+            .execute(&self.pool)
+            .await?;
 
         if result.rows_affected() == 0 {
             bail!("Account not found");
@@ -1130,12 +1150,11 @@ impl Database {
         let mut summary = AccountDeletionSummary::default();
 
         // Get all public keys for this account to find offerings
-        let pubkeys: Vec<Vec<u8>> = sqlx::query_scalar(
-            "SELECT public_key FROM account_public_keys WHERE account_id = ?",
-        )
-        .bind(account_id)
-        .fetch_all(&mut *tx)
-        .await?;
+        let pubkeys: Vec<Vec<u8>> =
+            sqlx::query_scalar("SELECT public_key FROM account_public_keys WHERE account_id = ?")
+                .bind(account_id)
+                .fetch_all(&mut *tx)
+                .await?;
 
         // Delete offerings for each pubkey
         for pubkey in &pubkeys {
@@ -1192,12 +1211,11 @@ impl Database {
         }
 
         // Delete public keys (count them first)
-        let keys_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM account_public_keys WHERE account_id = ?",
-        )
-        .bind(account_id)
-        .fetch_one(&mut *tx)
-        .await?;
+        let keys_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM account_public_keys WHERE account_id = ?")
+                .bind(account_id)
+                .fetch_one(&mut *tx)
+                .await?;
         summary.public_keys_deleted = keys_count.0;
 
         sqlx::query("DELETE FROM account_public_keys WHERE account_id = ?")
