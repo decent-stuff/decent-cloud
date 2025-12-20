@@ -9,6 +9,9 @@ use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+// Re-export region utilities for convenience
+pub use crate::regions::{country_to_region, is_valid_region, REGIONS};
+
 /// Agent pool for grouping agents by location and provisioner type
 #[derive(Debug, Clone, Serialize, Deserialize, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -113,69 +116,6 @@ struct SetupTokenRow {
     used_by_agent: Option<Vec<u8>>,
 }
 
-/// All supported region identifiers.
-/// Used for validation and UI display.
-pub const REGIONS: &[(&str, &str)] = &[
-    ("europe", "Europe"),
-    ("na", "North America"),
-    ("latam", "Latin America"),
-    ("apac", "Asia Pacific"),
-    ("mena", "Middle East & North Africa"),
-    ("ssa", "Sub-Saharan Africa"),
-    ("cis", "CIS (Russia & neighbors)"),
-];
-
-/// Normalize country code to region identifier.
-/// Returns a region string that can be used for location matching.
-/// Covers all ISO 3166-1 alpha-2 country codes.
-pub fn country_to_region(country: &str) -> &'static str {
-    match country.to_uppercase().as_str() {
-        // Europe (geographic, not EU political union)
-        // Western Europe
-        "AT" | "BE" | "FR" | "DE" | "LI" | "LU" | "MC" | "NL" | "CH" |
-        // Northern Europe
-        "DK" | "EE" | "FI" | "IS" | "IE" | "LV" | "LT" | "NO" | "SE" | "GB" | "UK" |
-        // Southern Europe
-        "AD" | "AL" | "BA" | "HR" | "CY" | "GR" | "IT" | "MT" | "ME" | "MK" | "PT" | "SM"
-        | "RS" | "SI" | "ES" | "VA" | "XK" |
-        // Eastern Europe (non-CIS)
-        "BG" | "CZ" | "HU" | "PL" | "RO" | "SK" => "europe",
-
-        // CIS - Commonwealth of Independent States and associated
-        "RU" | "BY" | "UA" | "MD" | "AM" | "AZ" | "GE" | "KZ" | "KG" | "TJ" | "TM" | "UZ" => "cis",
-
-        // North America (USA, Canada, Mexico, Central America, Caribbean)
-        "US" | "CA" | "MX" | "GT" | "BZ" | "HN" | "SV" | "NI" | "CR" | "PA" | "CU" | "JM"
-        | "HT" | "DO" | "PR" | "BS" | "BB" | "TT" | "LC" | "VC" | "GD" | "AG" | "DM" | "KN"
-        | "AW" | "CW" | "SX" | "BM" | "KY" | "VI" | "VG" | "TC" | "AI" | "MS" | "GP" | "MQ"
-        | "MF" | "BL" | "GL" | "PM" => "na",
-
-        // Latin America (South America + Central America Spanish/Portuguese speaking)
-        "AR" | "BO" | "BR" | "CL" | "CO" | "EC" | "GY" | "PY" | "PE" | "SR" | "UY" | "VE"
-        | "GF" | "FK" => "latam",
-
-        // Asia Pacific (East Asia, Southeast Asia, South Asia, Oceania)
-        "CN" | "JP" | "KR" | "KP" | "MN" | "TW" | "HK" | "MO" | "SG" | "MY" | "TH" | "VN"
-        | "PH" | "ID" | "MM" | "KH" | "LA" | "BN" | "TL" | "IN" | "PK" | "BD" | "LK" | "NP"
-        | "BT" | "MV" | "AF" | "AU" | "NZ" | "PG" | "FJ" | "SB" | "VU" | "NC" | "PF" | "WS"
-        | "TO" | "FM" | "PW" | "MH" | "KI" | "NR" | "TV" | "GU" | "MP" | "AS" | "CK" | "NU"
-        | "TK" | "WF" => "apac",
-
-        // MENA - Middle East and North Africa
-        "AE" | "SA" | "QA" | "KW" | "BH" | "OM" | "YE" | "IQ" | "IR" | "JO" | "LB" | "SY"
-        | "IL" | "PS" | "TR" | "EG" | "LY" | "TN" | "DZ" | "MA" | "EH" => "mena",
-
-        // Sub-Saharan Africa
-        "MR" | "ML" | "NE" | "TD" | "SD" | "SS" | "ER" | "DJ" | "SO" | "ET" | "KE" | "UG"
-        | "RW" | "BI" | "TZ" | "MZ" | "MW" | "ZM" | "ZW" | "BW" | "NA" | "SZ" | "LS" | "ZA"
-        | "MG" | "MU" | "SC" | "KM" | "RE" | "YT" | "AO" | "CD" | "CG" | "CF" | "CM" | "GA"
-        | "GQ" | "ST" | "NG" | "GH" | "CI" | "SN" | "GM" | "GN" | "GW" | "SL" | "LR" | "BF"
-        | "TG" | "BJ" | "CV" => "ssa",
-
-        // Fallback for unmapped territories
-        _ => "europe",
-    }
-}
 
 impl Database {
     // ==================== Pool CRUD ====================
@@ -189,6 +129,16 @@ impl Database {
         location: &str,
         provisioner_type: &str,
     ) -> Result<AgentPool> {
+        // Validate location is a known region identifier
+        if !is_valid_region(location) {
+            let valid_regions: Vec<&str> = REGIONS.iter().map(|(code, _)| *code).collect();
+            return Err(anyhow!(
+                "Invalid location '{}': must be one of: {}",
+                location,
+                valid_regions.join(", ")
+            ));
+        }
+
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         sqlx::query!(
@@ -287,6 +237,18 @@ impl Database {
         location: Option<&str>,
         provisioner_type: Option<&str>,
     ) -> Result<bool> {
+        // Validate location if provided
+        if let Some(loc) = location {
+            if !is_valid_region(loc) {
+                let valid_regions: Vec<&str> = REGIONS.iter().map(|(code, _)| *code).collect();
+                return Err(anyhow!(
+                    "Invalid location '{}': must be one of: {}",
+                    loc,
+                    valid_regions.join(", ")
+                ));
+            }
+        }
+
         // Build dynamic update - only update provided fields
         let mut updates = Vec::new();
         if name.is_some() {
@@ -546,133 +508,4 @@ impl Database {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_country_to_region_europe() {
-        // Western Europe
-        assert_eq!(country_to_region("DE"), "europe");
-        assert_eq!(country_to_region("de"), "europe"); // case insensitive
-        assert_eq!(country_to_region("FR"), "europe");
-        assert_eq!(country_to_region("NL"), "europe");
-        assert_eq!(country_to_region("CH"), "europe");
-        // Northern Europe
-        assert_eq!(country_to_region("GB"), "europe");
-        assert_eq!(country_to_region("UK"), "europe");
-        assert_eq!(country_to_region("SE"), "europe");
-        assert_eq!(country_to_region("NO"), "europe");
-        // Southern Europe
-        assert_eq!(country_to_region("IT"), "europe");
-        assert_eq!(country_to_region("ES"), "europe");
-        assert_eq!(country_to_region("RS"), "europe"); // Serbia
-        assert_eq!(country_to_region("HR"), "europe"); // Croatia
-        // Eastern Europe (non-CIS)
-        assert_eq!(country_to_region("PL"), "europe");
-        assert_eq!(country_to_region("CZ"), "europe");
-        assert_eq!(country_to_region("RO"), "europe");
-    }
-
-    #[test]
-    fn test_country_to_region_cis() {
-        // Russia separate from Europe
-        assert_eq!(country_to_region("RU"), "cis");
-        assert_eq!(country_to_region("BY"), "cis"); // Belarus
-        assert_eq!(country_to_region("UA"), "cis"); // Ukraine
-        assert_eq!(country_to_region("KZ"), "cis"); // Kazakhstan
-        assert_eq!(country_to_region("UZ"), "cis"); // Uzbekistan
-        assert_eq!(country_to_region("GE"), "cis"); // Georgia
-        assert_eq!(country_to_region("AM"), "cis"); // Armenia
-        assert_eq!(country_to_region("AZ"), "cis"); // Azerbaijan
-    }
-
-    #[test]
-    fn test_country_to_region_north_america() {
-        assert_eq!(country_to_region("US"), "na");
-        assert_eq!(country_to_region("us"), "na");
-        assert_eq!(country_to_region("CA"), "na");
-        assert_eq!(country_to_region("MX"), "na");
-        // Central America
-        assert_eq!(country_to_region("CR"), "na");
-        assert_eq!(country_to_region("PA"), "na");
-        // Caribbean
-        assert_eq!(country_to_region("JM"), "na");
-        assert_eq!(country_to_region("PR"), "na");
-    }
-
-    #[test]
-    fn test_country_to_region_latin_america() {
-        assert_eq!(country_to_region("BR"), "latam");
-        assert_eq!(country_to_region("AR"), "latam");
-        assert_eq!(country_to_region("CL"), "latam");
-        assert_eq!(country_to_region("CO"), "latam");
-        assert_eq!(country_to_region("PE"), "latam");
-        assert_eq!(country_to_region("VE"), "latam");
-    }
-
-    #[test]
-    fn test_country_to_region_asia_pacific() {
-        // East Asia
-        assert_eq!(country_to_region("CN"), "apac");
-        assert_eq!(country_to_region("JP"), "apac");
-        assert_eq!(country_to_region("KR"), "apac");
-        assert_eq!(country_to_region("TW"), "apac");
-        assert_eq!(country_to_region("HK"), "apac");
-        // Southeast Asia
-        assert_eq!(country_to_region("SG"), "apac");
-        assert_eq!(country_to_region("TH"), "apac");
-        assert_eq!(country_to_region("VN"), "apac");
-        // South Asia
-        assert_eq!(country_to_region("IN"), "apac");
-        assert_eq!(country_to_region("PK"), "apac");
-        // Oceania
-        assert_eq!(country_to_region("AU"), "apac");
-        assert_eq!(country_to_region("NZ"), "apac");
-        assert_eq!(country_to_region("FJ"), "apac");
-    }
-
-    #[test]
-    fn test_country_to_region_mena() {
-        // Middle East
-        assert_eq!(country_to_region("AE"), "mena");
-        assert_eq!(country_to_region("SA"), "mena");
-        assert_eq!(country_to_region("IL"), "mena");
-        assert_eq!(country_to_region("TR"), "mena");
-        assert_eq!(country_to_region("IR"), "mena");
-        // North Africa
-        assert_eq!(country_to_region("EG"), "mena");
-        assert_eq!(country_to_region("MA"), "mena");
-        assert_eq!(country_to_region("DZ"), "mena");
-        assert_eq!(country_to_region("TN"), "mena");
-    }
-
-    #[test]
-    fn test_country_to_region_sub_saharan_africa() {
-        assert_eq!(country_to_region("ZA"), "ssa");
-        assert_eq!(country_to_region("NG"), "ssa");
-        assert_eq!(country_to_region("KE"), "ssa");
-        assert_eq!(country_to_region("GH"), "ssa");
-        assert_eq!(country_to_region("ET"), "ssa");
-    }
-
-    #[test]
-    fn test_country_to_region_fallback() {
-        // Unknown codes fallback to Europe (most common datacenter region)
-        assert_eq!(country_to_region("XX"), "europe");
-        assert_eq!(country_to_region(""), "europe");
-        assert_eq!(country_to_region("ZZ"), "europe");
-    }
-
-    #[test]
-    fn test_regions_constant() {
-        assert_eq!(REGIONS.len(), 7);
-        assert!(REGIONS.iter().any(|(code, _)| *code == "europe"));
-        assert!(REGIONS.iter().any(|(code, _)| *code == "na"));
-        assert!(REGIONS.iter().any(|(code, _)| *code == "latam"));
-        assert!(REGIONS.iter().any(|(code, _)| *code == "apac"));
-        assert!(REGIONS.iter().any(|(code, _)| *code == "mena"));
-        assert!(REGIONS.iter().any(|(code, _)| *code == "ssa"));
-        assert!(REGIONS.iter().any(|(code, _)| *code == "cis"));
-    }
-}
+// Tests for region utilities are in api/src/regions.rs

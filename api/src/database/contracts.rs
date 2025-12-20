@@ -1859,7 +1859,7 @@ impl Database {
                 // Location auto-match: no explicit pool, country maps to pool location
                 if c.agent_pool_id.is_none() {
                     if let Some(country) = &c.datacenter_country {
-                        return country_to_region(country) == pool_location;
+                        return country_to_region(country) == Some(pool_location);
                     }
                 }
                 false

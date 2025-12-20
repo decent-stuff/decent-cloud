@@ -1,6 +1,7 @@
 pub mod chatwoot;
 pub mod database;
 pub mod helpcenter;
+pub mod regions;
 mod icpay_client;
 pub mod invoice_storage;
 pub mod invoices;

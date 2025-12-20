@@ -1,4 +1,5 @@
 use super::types::Database;
+use crate::regions::is_valid_country_code;
 use anyhow::Result;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
@@ -366,6 +367,15 @@ impl Database {
         if params.offer_name.trim().is_empty() {
             return Err(anyhow::anyhow!("offer_name is required"));
         }
+        // Validate datacenter_country is a known ISO country code
+        if !params.datacenter_country.is_empty()
+            && !is_valid_country_code(&params.datacenter_country)
+        {
+            return Err(anyhow::anyhow!(
+                "Invalid datacenter_country '{}': must be a valid ISO 3166-1 alpha-2 country code (e.g., US, DE, JP)",
+                params.datacenter_country
+            ));
+        }
 
         let Offering {
             id: _,
@@ -552,6 +562,16 @@ impl Database {
                 ))
             }
             _ => {}
+        }
+
+        // Validate datacenter_country is a known ISO country code
+        if !params.datacenter_country.is_empty()
+            && !is_valid_country_code(&params.datacenter_country)
+        {
+            return Err(anyhow::anyhow!(
+                "Invalid datacenter_country '{}': must be a valid ISO 3166-1 alpha-2 country code (e.g., US, DE, JP)",
+                params.datacenter_country
+            ));
         }
 
         let Offering {

@@ -17,6 +17,7 @@ mod oauth_simple;
 mod openapi;
 mod payment_release_service;
 mod receipts;
+mod regions;
 mod rental_notifications;
 mod request_logging;
 mod search;
