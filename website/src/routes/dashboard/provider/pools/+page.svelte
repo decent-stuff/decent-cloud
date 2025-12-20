@@ -160,7 +160,7 @@
 					{
 						name: formName.trim(),
 						location: formLocation,
-						provisioner_type: formProvisionerType,
+						provisionerType: formProvisionerType,
 					},
 					signed.headers,
 				);
@@ -177,8 +177,8 @@
 					{
 						name: formName.trim(),
 						location: formLocation,
-						provisioner_type: formProvisionerType,
-					} as CreatePoolParams,
+						provisionerType: formProvisionerType,
+					},
 					signed.headers,
 				);
 				actionMessage = `Pool "${formName}" created`;
@@ -269,7 +269,7 @@
 				`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens`,
 			);
 			const params: CreateSetupTokenParams = {
-				expires_in_hours: tokenExpiresHours,
+				expiresInHours: tokenExpiresHours,
 			};
 			if (tokenLabel.trim()) {
 				params.label = tokenLabel.trim();
@@ -517,7 +517,7 @@
 								<div class="border-t border-white/10 bg-white/5 p-5">
 									<h4 class="text-sm font-semibold text-white/80 mb-3">Setup Tokens</h4>
 									<p class="text-xs text-white/50 mb-4">
-										Generate one-time tokens to register new agents to this pool. Use with: <code class="bg-white/10 px-1 rounded">dc-agent setup --token TOKEN</code>
+										Generate one-time tokens to register new agents to this pool. Use with: <code class="bg-white/10 px-1 rounded">dc-agent setup token --token &lt;TOKEN&gt;</code>
 									</p>
 
 									<!-- Create Token Form -->
@@ -582,9 +582,16 @@
 													</div>
 													{#if !used}
 														<button
+															onclick={() => copyToClipboard(`dc-agent setup token --token ${token.token}`)}
+															class="px-2 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition-colors"
+															title="Copy setup command"
+														>
+															Copy cmd
+														</button>
+														<button
 															onclick={() => copyToClipboard(token.token)}
 															class="p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-															title="Copy token"
+															title="Copy token only"
 														>
 															<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />

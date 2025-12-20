@@ -226,6 +226,7 @@ enum Method {
     Get,
     Post,
     Put,
+    Delete,
 }
 
 impl Method {
@@ -234,6 +235,7 @@ impl Method {
             Method::Get => "GET",
             Method::Post => "POST",
             Method::Put => "PUT",
+            Method::Delete => "DELETE",
         }
     }
 }
@@ -338,6 +340,7 @@ impl ApiClient {
             Method::Get => self.client.get(&url),
             Method::Post => self.client.post(&url),
             Method::Put => self.client.put(&url),
+            Method::Delete => self.client.delete(&url),
         };
 
         // Add auth headers
@@ -547,6 +550,109 @@ impl ApiClient {
     pub fn auth_mode(&self) -> &AuthMode {
         &self.auth_mode
     }
+
+    /// Acquire a provisioning lock for a contract.
+    /// Returns Ok(true) if lock acquired, Ok(false) if already locked by another agent.
+    pub async fn acquire_lock(&self, contract_id: &str) -> Result<bool> {
+        let path = format!(
+            "/api/v1/providers/{}/contracts/{}/lock",
+            self.provider_pubkey, contract_id
+        );
+        let response: ApiResponse<LockResponse> =
+            self.request(Method::Post, &path, None).await?;
+        match Self::unwrap_response(response, "Failed to acquire lock") {
+            Ok(r) => Ok(r.acquired),
+            Err(e) => {
+                // 409 Conflict means locked by another agent
+                if e.to_string().contains("409") || e.to_string().contains("Conflict") {
+                    Ok(false)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Release a provisioning lock without provisioning (giving up).
+    pub async fn release_lock(&self, contract_id: &str) -> Result<()> {
+        let path = format!(
+            "/api/v1/providers/{}/contracts/{}/lock",
+            self.provider_pubkey, contract_id
+        );
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Delete, &path, None).await?;
+        Self::unwrap_response(response, "Failed to release lock").map(|_| ())
+    }
+}
+
+/// Response from lock acquisition
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LockResponse {
+    pub acquired: bool,
+    pub expires_at_ns: Option<i64>,
+}
+
+/// Response from agent setup
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupResponse {
+    pub provider_pubkey: String,
+    pub pool_id: String,
+    pub pool_name: String,
+    pub pool_location: String,
+    pub provisioner_type: String,
+    pub permissions: Vec<String>,
+}
+
+/// Register agent using a setup token (unauthenticated).
+pub async fn setup_agent(
+    api_endpoint: &str,
+    token: &str,
+    agent_pubkey: &str,
+) -> Result<SetupResponse> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .context("Failed to build HTTP client")?;
+
+    let url = format!("{}/api/v1/agents/setup", api_endpoint);
+    let body = serde_json::json!({
+        "token": token,
+        "agentPubkey": agent_pubkey
+    });
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_vec(&body)?)
+        .send()
+        .await
+        .context("Failed to send setup request")?;
+
+    let status = response.status();
+    let response_body = response
+        .text()
+        .await
+        .context("Failed to read response body")?;
+
+    if !status.is_success() {
+        bail!("Setup failed (HTTP {}): {}", status, response_body);
+    }
+
+    let api_response: ApiResponse<SetupResponse> = serde_json::from_str(&response_body)
+        .context("Failed to parse setup response")?;
+
+    if !api_response.success {
+        bail!(
+            "Setup failed: {}",
+            api_response.error.unwrap_or_else(|| "Unknown error".to_string())
+        );
+    }
+
+    api_response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("Setup response missing data"))
 }
 
 #[cfg(test)]

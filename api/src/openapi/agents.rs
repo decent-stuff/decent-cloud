@@ -11,6 +11,38 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use ts_rs::TS;
 
+/// Request to register agent using a setup token
+#[derive(Debug, Deserialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSetupRequest {
+    /// One-time setup token from the provider
+    pub token: String,
+    /// Agent's public key (hex, 32 bytes)
+    pub agent_pubkey: String,
+}
+
+/// Response from agent setup
+#[derive(Debug, Serialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSetupResponse {
+    /// Provider's public key (hex)
+    pub provider_pubkey: String,
+    /// Pool ID the agent was assigned to
+    pub pool_id: String,
+    /// Pool name
+    pub pool_name: String,
+    /// Pool location
+    pub pool_location: String,
+    /// Pool provisioner type
+    pub provisioner_type: String,
+    /// Permissions granted to the agent
+    pub permissions: Vec<String>,
+}
+
 /// Request to create a new agent delegation
 #[derive(Debug, Deserialize, Object, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -71,6 +103,92 @@ pub struct AgentsApi;
 
 #[OpenApi]
 impl AgentsApi {
+    /// Register agent using setup token
+    ///
+    /// Unauthenticated endpoint for agents to register themselves using a one-time setup token.
+    /// The token is consumed on successful registration and cannot be reused.
+    #[oai(path = "/agents/setup", method = "post", tag = "ApiTags::Agents")]
+    async fn setup_agent(
+        &self,
+        db: Data<&Arc<Database>>,
+        req: Json<AgentSetupRequest>,
+    ) -> Json<ApiResponse<AgentSetupResponse>> {
+        // Decode agent pubkey
+        let agent_pubkey = match decode_pubkey(&req.agent_pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid agent_pubkey: {}", e)),
+                })
+            }
+        };
+
+        // Validate and consume the setup token
+        let (pool, label) = match db.validate_and_use_setup_token(&req.token, &agent_pubkey).await {
+            Ok(result) => result,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Get provider pubkey from pool
+        let provider_pubkey = match hex::decode(&pool.provider_pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid provider pubkey in pool: {}", e)),
+                })
+            }
+        };
+
+        // Grant all standard permissions for pool-registered agents
+        let permissions = AgentPermission::all();
+
+        // Create the delegation with pool assignment
+        // Note: For token-based setup, we use a placeholder signature since the token itself
+        // proves the provider authorized this registration
+        let placeholder_signature = vec![0u8; 64];
+        if let Err(e) = db
+            .create_agent_delegation(
+                &provider_pubkey,
+                &agent_pubkey,
+                &permissions,
+                None, // No expiry for pool-registered agents
+                label.as_deref(),
+                &placeholder_signature,
+                Some(&pool.pool_id),
+            )
+            .await
+        {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to create delegation: {}", e)),
+            });
+        }
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(AgentSetupResponse {
+                provider_pubkey: pool.provider_pubkey.clone(),
+                pool_id: pool.pool_id.clone(),
+                pool_name: pool.name.clone(),
+                pool_location: pool.location.clone(),
+                provisioner_type: pool.provisioner_type.clone(),
+                permissions: permissions.iter().map(|p| p.as_str().to_string()).collect(),
+            }),
+            error: None,
+        })
+    }
+
     /// Create agent delegation
     ///
     /// Creates a new delegation from a provider to an agent keypair.

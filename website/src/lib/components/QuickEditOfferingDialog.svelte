@@ -109,7 +109,10 @@
 				external_checkout_url: offering.external_checkout_url || undefined,
 				reseller_name: undefined,
 				reseller_commission_percent: undefined,
-				owner_username: undefined
+				owner_username: undefined,
+				provisioner_type: offering.provisioner_type || undefined,
+				provisioner_config: offering.provisioner_config || undefined,
+				agent_pool_id: offering.agent_pool_id || undefined
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed

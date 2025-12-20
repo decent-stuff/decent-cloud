@@ -23,6 +23,9 @@ pub struct ApiConfig {
     /// Provider's secret key (legacy - use agent_secret_key instead)
     #[serde(default)]
     pub provider_secret_key: Option<String>,
+    /// Pool ID this agent belongs to (set via setup --token)
+    #[serde(default)]
+    pub pool_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
