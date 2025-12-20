@@ -1091,5 +1091,173 @@ pub struct OAuthAccount {
     pub created_at: i64,
 }
 
+/// Summary of resources deleted when deleting an account
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AccountDeletionSummary {
+    pub offerings_deleted: i64,
+    pub contracts_as_requester: i64,
+    pub contracts_as_provider: i64,
+    pub public_keys_deleted: i64,
+    pub provider_profile_deleted: bool,
+}
+
+impl Database {
+    /// Admin: Update email for an account (can set to new value or clear)
+    pub async fn admin_set_account_email(
+        &self,
+        account_id: &[u8],
+        email: Option<&str>,
+    ) -> Result<()> {
+        let result = sqlx::query(
+            "UPDATE accounts SET email = ?, email_verified = 0 WHERE id = ?",
+        )
+        .bind(email)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            bail!("Account not found");
+        }
+
+        Ok(())
+    }
+
+    /// Admin: Delete an account and all associated resources
+    /// Returns a summary of what was deleted
+    pub async fn admin_delete_account(&self, account_id: &[u8]) -> Result<AccountDeletionSummary> {
+        let mut tx = self.pool.begin().await?;
+        let mut summary = AccountDeletionSummary::default();
+
+        // Get all public keys for this account to find offerings
+        let pubkeys: Vec<Vec<u8>> = sqlx::query_scalar(
+            "SELECT public_key FROM account_public_keys WHERE account_id = ?",
+        )
+        .bind(account_id)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        // Delete offerings for each pubkey
+        for pubkey in &pubkeys {
+            let result = sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ?")
+                .bind(pubkey)
+                .execute(&mut *tx)
+                .await?;
+            summary.offerings_deleted += result.rows_affected() as i64;
+        }
+
+        // Count contracts where user is requester (contracts reference pubkeys)
+        let requester_contracts: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE requester_account_id = ?",
+        )
+        .bind(account_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        summary.contracts_as_requester = requester_contracts.0;
+
+        // Count contracts where user is provider
+        let provider_contracts: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_account_id = ?",
+        )
+        .bind(account_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        summary.contracts_as_provider = provider_contracts.0;
+
+        // Note: We don't delete contracts - they are historical records
+        // Instead, we nullify the account references
+        sqlx::query(
+            "UPDATE contract_sign_requests SET requester_account_id = NULL WHERE requester_account_id = ?",
+        )
+        .bind(account_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "UPDATE contract_sign_requests SET provider_account_id = NULL WHERE provider_account_id = ?",
+        )
+        .bind(account_id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Delete provider profiles for each pubkey
+        for pubkey in &pubkeys {
+            let result = sqlx::query("DELETE FROM provider_profiles WHERE pubkey = ?")
+                .bind(pubkey)
+                .execute(&mut *tx)
+                .await?;
+            if result.rows_affected() > 0 {
+                summary.provider_profile_deleted = true;
+            }
+        }
+
+        // Delete public keys (count them first)
+        let keys_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM account_public_keys WHERE account_id = ?",
+        )
+        .bind(account_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        summary.public_keys_deleted = keys_count.0;
+
+        sqlx::query("DELETE FROM account_public_keys WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Delete email verification tokens (CASCADE should handle, but be explicit)
+        sqlx::query("DELETE FROM email_verification_tokens WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Delete oauth accounts
+        sqlx::query("DELETE FROM oauth_accounts WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Delete account contacts, socials, external keys (if tables exist)
+        // These have ON DELETE CASCADE but we're explicit
+        sqlx::query("DELETE FROM account_contacts WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await
+            .ok(); // Ignore if table doesn't exist
+
+        sqlx::query("DELETE FROM account_socials WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await
+            .ok();
+
+        sqlx::query("DELETE FROM account_external_keys WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await
+            .ok();
+
+        // Delete recovery tokens
+        sqlx::query("DELETE FROM recovery_tokens WHERE account_id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await
+            .ok();
+
+        // Finally delete the account itself
+        let result = sqlx::query("DELETE FROM accounts WHERE id = ?")
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        if result.rows_affected() == 0 {
+            bail!("Account not found");
+        }
+
+        tx.commit().await?;
+        Ok(summary)
+    }
+}
+
 #[cfg(test)]
 mod tests;

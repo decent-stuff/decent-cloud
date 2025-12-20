@@ -1,6 +1,7 @@
 use super::common::{
-    AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, AdminProcessPayoutRequest,
-    AdminSendTestEmailRequest, AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
+    AdminAccountDeletionSummary, AdminAddRecoveryKeyRequest, AdminDisableKeyRequest,
+    AdminProcessPayoutRequest, AdminSendTestEmailRequest, AdminSetAccountEmailRequest,
+    AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
 };
 use crate::{
     auth::AdminAuthenticatedUser,
@@ -728,6 +729,153 @@ impl AdminApi {
                 success: false,
                 data: None,
                 error: Some(format!("Failed to mark releases as paid out: {}", e)),
+            }),
+        }
+    }
+
+    /// Admin: Set or clear account email
+    ///
+    /// Allows admin to set a new email or clear the email for an account.
+    /// Setting email resets email_verified to false.
+    #[oai(
+        path = "/admin/accounts/:username/email",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_set_account_email(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        username: Path<String>,
+        req: Json<AdminSetAccountEmailRequest>,
+    ) -> Json<ApiResponse<String>> {
+        // Validate email format if provided
+        if let Some(ref email) = req.email {
+            if let Err(e) = email_utils::validate_email(email) {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid email: {}", e)),
+                });
+            }
+        }
+
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Update email
+        match db
+            .admin_set_account_email(&account.id, req.email.as_deref())
+            .await
+        {
+            Ok(()) => {
+                let message = match &req.email {
+                    Some(email) => format!("Email set to {} for {}", email, username.0),
+                    None => format!("Email cleared for {}", username.0),
+                };
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(message),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Admin: Delete account and all associated resources
+    ///
+    /// Permanently deletes an account and all its associated resources including:
+    /// - All offerings
+    /// - Provider profile
+    /// - Public keys
+    /// - Email verification tokens
+    /// - OAuth accounts
+    ///
+    /// Contracts are preserved for historical records but account references are nullified.
+    #[oai(
+        path = "/admin/accounts/:username",
+        method = "delete",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_delete_account(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        username: Path<String>,
+    ) -> Json<ApiResponse<AdminAccountDeletionSummary>> {
+        // Get account
+        let account = match db.get_account_by_username(&username.0).await {
+            Ok(Some(acc)) => acc,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Account not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Prevent deleting admin accounts (safety check)
+        if account.is_admin != 0 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Cannot delete admin accounts".to_string()),
+            });
+        }
+
+        // Delete account
+        match db.admin_delete_account(&account.id).await {
+            Ok(summary) => {
+                tracing::info!(
+                    "Admin deleted account '{}': {:?}",
+                    username.0,
+                    summary
+                );
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(AdminAccountDeletionSummary {
+                        offerings_deleted: summary.offerings_deleted,
+                        contracts_as_requester: summary.contracts_as_requester,
+                        contracts_as_provider: summary.contracts_as_provider,
+                        public_keys_deleted: summary.public_keys_deleted,
+                        provider_profile_deleted: summary.provider_profile_deleted,
+                    }),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
             }),
         }
     }

@@ -187,3 +187,44 @@ export async function setEmailVerified(
 		{ verified }
 	);
 }
+
+/**
+ * Set or clear email for an account
+ */
+export async function setAccountEmail(
+	identity: Ed25519KeyIdentity,
+	username: string,
+	email: string | null
+): Promise<string> {
+	return authenticatedFetch<string>(
+		identity,
+		'POST',
+		`/api/v1/admin/accounts/${encodeURIComponent(username)}/email`,
+		{ email }
+	);
+}
+
+/**
+ * Summary of resources deleted when deleting an account
+ */
+export interface AccountDeletionSummary {
+	offeringsDeleted: number;
+	contractsAsRequester: number;
+	contractsAsProvider: number;
+	publicKeysDeleted: number;
+	providerProfileDeleted: boolean;
+}
+
+/**
+ * Delete an account and all associated resources
+ */
+export async function deleteAccount(
+	identity: Ed25519KeyIdentity,
+	username: string
+): Promise<AccountDeletionSummary> {
+	return authenticatedFetch<AccountDeletionSummary>(
+		identity,
+		'DELETE',
+		`/api/v1/admin/accounts/${encodeURIComponent(username)}`
+	);
+}

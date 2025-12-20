@@ -11,9 +11,12 @@
 		sendTestEmail,
 		getAccount,
 		setEmailVerified,
+		setAccountEmail,
+		deleteAccount,
 		type EmailQueueEntry,
 		type EmailStats,
 		type AdminAccountInfo,
+		type AccountDeletionSummary,
 	} from "$lib/services/admin-api";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -38,6 +41,17 @@
 	let accountInfo = $state<AdminAccountInfo | null>(null);
 	let accountError = $state<string | null>(null);
 	let updatingEmailVerified = $state(false);
+
+	// Email management state
+	let editingEmail = $state(false);
+	let newEmail = $state("");
+	let updatingEmail = $state(false);
+
+	// Account deletion state
+	let showDeleteConfirm = $state(false);
+	let deleteConfirmUsername = $state("");
+	let deletingAccount = $state(false);
+	let deletionResult = $state<AccountDeletionSummary | null>(null);
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
 
@@ -180,6 +194,66 @@
 			updatingEmailVerified = false;
 		}
 	}
+
+	function startEditingEmail() {
+		editingEmail = true;
+		newEmail = accountInfo?.email || "";
+	}
+
+	function cancelEditingEmail() {
+		editingEmail = false;
+		newEmail = "";
+	}
+
+	async function handleUpdateEmail() {
+		if (!currentIdentity?.identity || !accountInfo) return;
+
+		updatingEmail = true;
+		accountError = null;
+
+		try {
+			const emailToSet = newEmail.trim() || null;
+			await setAccountEmail(currentIdentity.identity, accountInfo.username, emailToSet);
+			// Refresh account info
+			accountInfo = await getAccount(currentIdentity.identity, accountInfo.username);
+			editingEmail = false;
+			newEmail = "";
+		} catch (err) {
+			accountError = err instanceof Error ? err.message : "Failed to update email";
+		} finally {
+			updatingEmail = false;
+		}
+	}
+
+	function showDeleteAccountConfirm() {
+		showDeleteConfirm = true;
+		deleteConfirmUsername = "";
+		deletionResult = null;
+	}
+
+	function cancelDeleteAccount() {
+		showDeleteConfirm = false;
+		deleteConfirmUsername = "";
+	}
+
+	async function handleDeleteAccount() {
+		if (!currentIdentity?.identity || !accountInfo) return;
+		if (deleteConfirmUsername !== accountInfo.username) return;
+
+		deletingAccount = true;
+		accountError = null;
+
+		try {
+			const result = await deleteAccount(currentIdentity.identity, accountInfo.username);
+			deletionResult = result;
+			accountInfo = null;
+			showDeleteConfirm = false;
+		} catch (err) {
+			accountError = err instanceof Error ? err.message : "Failed to delete account";
+		} finally {
+			deletingAccount = false;
+		}
+	}
 </script>
 
 <div class="space-y-8">
@@ -303,6 +377,19 @@
 					</div>
 				{/if}
 
+				{#if deletionResult}
+					<div class="p-4 rounded-lg bg-green-500/20 text-green-200 mb-4">
+						<p class="font-medium mb-2">Account deleted successfully</p>
+						<ul class="text-sm space-y-1">
+							<li>Offerings deleted: {deletionResult.offeringsDeleted}</li>
+							<li>Contracts as requester: {deletionResult.contractsAsRequester} (nullified)</li>
+							<li>Contracts as provider: {deletionResult.contractsAsProvider} (nullified)</li>
+							<li>Public keys deleted: {deletionResult.publicKeysDeleted}</li>
+							<li>Provider profile deleted: {deletionResult.providerProfileDeleted ? "Yes" : "No"}</li>
+						</ul>
+					</div>
+				{/if}
+
 				{#if accountInfo}
 					<div class="bg-white/5 rounded-lg p-4 space-y-4">
 						<div class="grid grid-cols-2 gap-4">
@@ -314,9 +401,45 @@
 								<p class="text-white/50 text-sm">Account ID</p>
 								<p class="text-white font-mono text-sm">{accountInfo.id.slice(0, 8)}...{accountInfo.id.slice(-8)}</p>
 							</div>
-							<div>
+							<div class="col-span-2">
 								<p class="text-white/50 text-sm">Email</p>
-								<p class="text-white">{accountInfo.email || "Not set"}</p>
+								{#if editingEmail}
+									<div class="flex items-center gap-2 mt-1">
+										<input
+											type="email"
+											bind:value={newEmail}
+											placeholder="email@example.com (leave empty to clear)"
+											class="flex-1 px-3 py-1 bg-white/5 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+										/>
+										<button
+											type="button"
+											onclick={handleUpdateEmail}
+											disabled={updatingEmail}
+											class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+										>
+											{updatingEmail ? "..." : "Save"}
+										</button>
+										<button
+											type="button"
+											onclick={cancelEditingEmail}
+											disabled={updatingEmail}
+											class="px-3 py-1 text-sm bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+										>
+											Cancel
+										</button>
+									</div>
+								{:else}
+									<div class="flex items-center gap-2">
+										<span class="text-white">{accountInfo.email || "Not set"}</span>
+										<button
+											type="button"
+											onclick={startEditingEmail}
+											class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+										>
+											Edit
+										</button>
+									</div>
+								{/if}
 							</div>
 							<div>
 								<p class="text-white/50 text-sm">Email Verified</p>
@@ -355,6 +478,57 @@
 								</p>
 							</div>
 						</div>
+
+						<!-- Delete Account Section -->
+						{#if !accountInfo.isAdmin}
+							<div class="border-t border-white/10 pt-4 mt-4">
+								{#if showDeleteConfirm}
+									<div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
+										<p class="text-red-200 font-medium">Delete Account @{accountInfo.username}?</p>
+										<p class="text-white/60 text-sm">
+											This will permanently delete the account and all associated resources:
+											offerings, provider profile, public keys, and email tokens.
+											Contracts will be preserved but account references will be nullified.
+										</p>
+										<p class="text-white/60 text-sm">
+											Type <span class="font-mono text-white">{accountInfo.username}</span> to confirm:
+										</p>
+										<div class="flex items-center gap-2">
+											<input
+												type="text"
+												bind:value={deleteConfirmUsername}
+												placeholder="username"
+												class="flex-1 px-3 py-1 bg-white/5 border border-red-500/30 rounded text-white placeholder-white/40 focus:outline-none focus:border-red-500"
+											/>
+											<button
+												type="button"
+												onclick={handleDeleteAccount}
+												disabled={deletingAccount || deleteConfirmUsername !== accountInfo.username}
+												class="px-4 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+											>
+												{deletingAccount ? "Deleting..." : "Delete"}
+											</button>
+											<button
+												type="button"
+												onclick={cancelDeleteAccount}
+												disabled={deletingAccount}
+												class="px-4 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+											>
+												Cancel
+											</button>
+										</div>
+									</div>
+								{:else}
+									<button
+										type="button"
+										onclick={showDeleteAccountConfirm}
+										class="px-4 py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition-colors"
+									>
+										Delete Account
+									</button>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>

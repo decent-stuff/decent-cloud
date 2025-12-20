@@ -332,6 +332,26 @@ pub struct AdminProcessPayoutRequest {
     pub wallet_address: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminSetAccountEmailRequest {
+    /// New email address, or null to clear
+    pub email: Option<String>,
+}
+
+/// Summary of resources deleted when deleting an account
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminAccountDeletionSummary {
+    pub offerings_deleted: i64,
+    pub contracts_as_requester: i64,
+    pub contracts_as_provider: i64,
+    pub public_keys_deleted: i64,
+    pub provider_profile_deleted: bool,
+}
+
 // Request/Response types for user notification config
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

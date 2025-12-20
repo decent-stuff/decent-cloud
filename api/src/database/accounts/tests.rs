@@ -1561,3 +1561,130 @@ async fn test_ensure_account_for_pubkey_handles_username_collision() {
         "Second account should have suffix"
     );
 }
+
+#[tokio::test]
+async fn test_admin_set_account_email() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db
+        .create_account("emailtest", &[60u8; 32], "original@example.com")
+        .await
+        .unwrap();
+
+    // Verify original email
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.email, Some("original@example.com".to_string()));
+
+    // Update email
+    db.admin_set_account_email(&account.id, Some("new@example.com"))
+        .await
+        .unwrap();
+
+    // Verify new email and that email_verified was reset
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.email, Some("new@example.com".to_string()));
+    assert_eq!(fetched.email_verified, 0);
+}
+
+#[tokio::test]
+async fn test_admin_set_account_email_clear() {
+    let db = create_test_db().await;
+
+    // Create account
+    let account = db
+        .create_account("clearemail", &[61u8; 32], "clear@example.com")
+        .await
+        .unwrap();
+
+    // Clear email
+    db.admin_set_account_email(&account.id, None).await.unwrap();
+
+    // Verify email is cleared
+    let fetched = db.get_account(&account.id).await.unwrap().unwrap();
+    assert_eq!(fetched.email, None);
+}
+
+#[tokio::test]
+async fn test_admin_set_account_email_nonexistent() {
+    let db = create_test_db().await;
+
+    // Try to update nonexistent account
+    let result = db
+        .admin_set_account_email(&[0u8; 16], Some("test@example.com"))
+        .await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Account not found"));
+}
+
+#[tokio::test]
+async fn test_admin_delete_account() {
+    let db = create_test_db().await;
+
+    // Create account with keys
+    let account = db
+        .create_account("todelete", &[70u8; 32], "delete@example.com")
+        .await
+        .unwrap();
+
+    // Add another key
+    db.add_account_key(&account.id, &[71u8; 32]).await.unwrap();
+
+    // Delete account
+    let summary = db.admin_delete_account(&account.id).await.unwrap();
+
+    // Verify summary
+    assert_eq!(summary.public_keys_deleted, 2);
+    assert_eq!(summary.offerings_deleted, 0);
+    assert!(!summary.provider_profile_deleted);
+
+    // Verify account is gone
+    let fetched = db.get_account(&account.id).await.unwrap();
+    assert!(fetched.is_none());
+}
+
+#[tokio::test]
+async fn test_admin_delete_account_nonexistent() {
+    let db = create_test_db().await;
+
+    // Try to delete nonexistent account
+    let result = db.admin_delete_account(&[0u8; 16]).await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Account not found"));
+}
+
+#[tokio::test]
+async fn test_admin_delete_account_with_oauth() {
+    let db = create_test_db().await;
+
+    // Create OAuth account
+    let (account, _oauth) = db
+        .create_oauth_linked_account(
+            "oauthdel",
+            &[72u8; 32],
+            "oauthdel@example.com",
+            "google_oauth",
+            "google_del_123",
+        )
+        .await
+        .unwrap();
+
+    // Delete account
+    let summary = db.admin_delete_account(&account.id).await.unwrap();
+
+    // Verify summary
+    assert_eq!(summary.public_keys_deleted, 1);
+
+    // Verify account is gone
+    let fetched = db.get_account(&account.id).await.unwrap();
+    assert!(fetched.is_none());
+
+    // Verify OAuth account is also gone
+    let oauth_fetched = db
+        .get_oauth_account_by_provider_and_external_id("google_oauth", "google_del_123")
+        .await
+        .unwrap();
+    assert!(oauth_fetched.is_none());
+}
