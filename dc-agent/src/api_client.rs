@@ -34,6 +34,7 @@ pub struct ApiResponse<T> {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PendingContract {
     pub contract_id: String,
     pub offering_id: String,
@@ -45,6 +46,11 @@ pub struct PendingContract {
     pub memory_amount: Option<String>,
     /// Storage capacity from offering (e.g. "100 GB")
     pub storage_capacity: Option<String>,
+    /// Provisioner type from offering (e.g. "proxmox", "script", "manual")
+    /// NULL = use agent's default provisioner
+    pub provisioner_type: Option<String>,
+    /// Provisioner config JSON from offering
+    pub provisioner_config: Option<String>,
 }
 
 /// Contract pending termination (cancelled with VM still running)
@@ -815,6 +821,8 @@ mod tests {
             cpu_cores: Some(4),
             memory_amount: Some("16 GB".to_string()),
             storage_capacity: Some("100 GB".to_string()),
+            provisioner_type: None,
+            provisioner_config: None,
         };
 
         assert_eq!(contract.memory_mb(), Some(16 * 1024));

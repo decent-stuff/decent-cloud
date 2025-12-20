@@ -203,6 +203,13 @@ pub struct ContractWithSpecs {
     /// Storage capacity from offering (e.g. "100 GB")
     #[oai(skip_serializing_if_is_none)]
     pub storage_capacity: Option<String>,
+    /// Provisioner type from offering (e.g. "proxmox", "script", "manual")
+    /// NULL = use agent's default provisioner
+    #[oai(skip_serializing_if_is_none)]
+    pub provisioner_type: Option<String>,
+    /// Provisioner config JSON from offering
+    #[oai(skip_serializing_if_is_none)]
+    pub provisioner_config: Option<String>,
 }
 
 /// Contract pending termination for dc-agent
@@ -288,7 +295,9 @@ impl Database {
                c.instance_config,
                o.processor_cores as "cpu_cores: i64",
                o.memory_amount,
-               o.total_ssd_capacity as storage_capacity
+               o.total_ssd_capacity as storage_capacity,
+               o.provisioner_type,
+               o.provisioner_config
                FROM contract_sign_requests c
                LEFT JOIN provider_offerings o ON c.offering_id = o.offering_id AND c.provider_pubkey = o.pubkey
                WHERE c.provider_pubkey = ?

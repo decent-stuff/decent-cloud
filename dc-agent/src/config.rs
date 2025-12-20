@@ -6,8 +6,12 @@ use std::path::Path;
 pub struct Config {
     pub api: ApiConfig,
     pub polling: PollingConfig,
+    /// Default provisioner (required)
     #[serde(deserialize_with = "deserialize_provisioner")]
     pub provisioner: ProvisionerConfig,
+    /// Additional provisioners (optional) for per-offering provisioner support
+    #[serde(default, deserialize_with = "deserialize_additional_provisioners")]
+    pub additional_provisioners: Vec<ProvisionerConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -236,6 +240,97 @@ fn default_verify_ssl() -> bool {
 
 fn default_script_timeout() -> u64 {
     300
+}
+
+/// Deserialize additional provisioners from [[additional_provisioners]] array
+fn deserialize_additional_provisioners<'de, D>(
+    deserializer: D,
+) -> Result<Vec<ProvisionerConfig>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw_list: Vec<RawProvisionerConfig> = Vec::deserialize(deserializer)?;
+    let mut result = Vec::with_capacity(raw_list.len());
+
+    for raw in raw_list {
+        let config = match raw.provisioner_type.as_str() {
+            "proxmox" => {
+                let config = if let Some(nested) = raw.proxmox {
+                    nested
+                } else {
+                    let api_url = raw
+                        .api_url
+                        .ok_or_else(|| serde::de::Error::missing_field("api_url"))?;
+                    let api_token_id = raw
+                        .api_token_id
+                        .ok_or_else(|| serde::de::Error::missing_field("api_token_id"))?;
+                    let api_token_secret = raw
+                        .api_token_secret
+                        .ok_or_else(|| serde::de::Error::missing_field("api_token_secret"))?;
+                    let node = raw
+                        .node
+                        .ok_or_else(|| serde::de::Error::missing_field("node"))?;
+                    let template_vmid = raw
+                        .template_vmid
+                        .ok_or_else(|| serde::de::Error::missing_field("template_vmid"))?;
+
+                    ProxmoxConfig {
+                        api_url,
+                        api_token_id,
+                        api_token_secret,
+                        node,
+                        template_vmid,
+                        storage: raw.storage,
+                        pool: raw.pool,
+                        verify_ssl: raw.verify_ssl,
+                    }
+                };
+                ProvisionerConfig::Proxmox(config)
+            }
+            "script" => {
+                let config = if let Some(nested) = raw.script {
+                    nested
+                } else {
+                    let provision = raw
+                        .provision
+                        .ok_or_else(|| serde::de::Error::missing_field("provision"))?;
+                    let terminate = raw
+                        .terminate
+                        .ok_or_else(|| serde::de::Error::missing_field("terminate"))?;
+                    let health_check = raw
+                        .health_check
+                        .ok_or_else(|| serde::de::Error::missing_field("health_check"))?;
+
+                    ScriptConfig {
+                        provision,
+                        terminate,
+                        health_check,
+                        timeout_seconds: raw.timeout_seconds,
+                    }
+                };
+                ProvisionerConfig::Script(config)
+            }
+            "manual" => {
+                let config = if let Some(nested) = raw.manual {
+                    nested
+                } else {
+                    ManualConfig {
+                        notification_webhook: raw.notification_webhook,
+                    }
+                };
+                ProvisionerConfig::Manual(config)
+            }
+            other => {
+                return Err(serde::de::Error::unknown_variant(
+                    other,
+                    &["proxmox", "script", "manual"],
+                ))
+            }
+        };
+        result.push(config);
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -712,5 +807,91 @@ type = "unknown"
             "Expected 'unknown variant' in error: {}",
             err_msg
         );
+    }
+
+    #[test]
+    fn test_load_with_additional_provisioners() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Config with default provisioner + additional provisioners
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "proxmox"
+api_url = "https://proxmox.local:8006"
+api_token_id = "root@pam!dc-agent"
+api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+node = "pve1"
+template_vmid = 9000
+
+[[additional_provisioners]]
+type = "script"
+provision = "/opt/dc-agent/provision.sh"
+terminate = "/opt/dc-agent/terminate.sh"
+health_check = "/opt/dc-agent/health.sh"
+
+[[additional_provisioners]]
+type = "manual"
+notification_webhook = "https://slack.webhook/xyz"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        // Check default provisioner is Proxmox
+        assert!(config.provisioner.as_proxmox().is_some());
+        assert_eq!(config.provisioner.type_name(), "proxmox");
+
+        // Check additional provisioners
+        assert_eq!(config.additional_provisioners.len(), 2);
+        assert_eq!(config.additional_provisioners[0].type_name(), "script");
+        assert_eq!(config.additional_provisioners[1].type_name(), "manual");
+
+        let script = config.additional_provisioners[0]
+            .as_script()
+            .expect("Should be Script");
+        assert_eq!(script.provision, "/opt/dc-agent/provision.sh");
+
+        let manual = config.additional_provisioners[1]
+            .as_manual()
+            .expect("Should be Manual");
+        assert_eq!(
+            manual.notification_webhook,
+            Some("https://slack.webhook/xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_load_without_additional_provisioners() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Standard config without additional provisioners - should work (backward compat)
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        assert!(config.provisioner.as_manual().is_some());
+        assert!(config.additional_provisioners.is_empty());
     }
 }

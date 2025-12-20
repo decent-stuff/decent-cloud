@@ -14,7 +14,11 @@ use dc_agent::{
     setup::{proxmox::OsTemplate, ProxmoxSetup},
 };
 use dcc_common::DccIdentity;
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+/// Map of provisioner type name to provisioner instance
+type ProvisionerMap = HashMap<String, Box<dyn Provisioner>>;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 
@@ -533,7 +537,8 @@ async fn run_test_provision(
     println!("dc-agent test-provision");
     println!("=======================\n");
 
-    let provisioner = create_provisioner(&config)?;
+    // For test-provision, use the default provisioner
+    let provisioner = create_provisioner_from_config(&config.provisioner)?;
 
     // Generate contract ID if not provided
     let contract_id = match contract_id {
@@ -613,8 +618,13 @@ async fn run_agent(config: Config) -> Result<()> {
     info!("Starting dc-agent");
 
     let api_client = ApiClient::new(&config.api)?;
-    let provisioner = create_provisioner(&config)?;
-    let provisioner_type = config.provisioner.type_name();
+    let (provisioners, default_provisioner_type) = create_provisioner_map(&config)?;
+
+    info!(
+        available_provisioners = ?provisioners.keys().collect::<Vec<_>>(),
+        default = %default_provisioner_type,
+        "Provisioner inventory loaded"
+    );
 
     let poll_interval = Duration::from_secs(config.polling.interval_seconds);
     let mut poll_ticker = interval(poll_interval);
@@ -639,7 +649,7 @@ async fn run_agent(config: Config) -> Result<()> {
     // Send initial heartbeat immediately
     send_heartbeat(
         &api_client,
-        provisioner_type,
+        &default_provisioner_type,
         active_contracts,
         &mut heartbeat_interval_secs,
         &mut heartbeat_ticker,
@@ -650,10 +660,10 @@ async fn run_agent(config: Config) -> Result<()> {
     loop {
         tokio::select! {
             _ = poll_ticker.tick() => {
-                active_contracts = poll_and_provision(&api_client, &*provisioner, &mut poll_failures).await;
+                active_contracts = poll_and_provision(&api_client, &provisioners, &default_provisioner_type, &mut poll_failures).await;
             }
             _ = heartbeat_ticker.tick() => {
-                send_heartbeat(&api_client, provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures).await;
+                send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures).await;
             }
         }
     }
@@ -719,7 +729,8 @@ async fn send_heartbeat(
 
 async fn poll_and_provision(
     api_client: &ApiClient,
-    provisioner: &dyn Provisioner,
+    provisioners: &ProvisionerMap,
+    default_provisioner_type: &str,
     consecutive_failures: &mut u32,
 ) -> i64 {
     let mut active_count: i64 = 0;
@@ -740,6 +751,62 @@ async fn poll_and_provision(
 
                 for contract in &contracts {
                     info!(contract_id = %contract.contract_id, "Processing contract");
+
+                    // Determine which provisioner to use (per-offering override or default)
+                    let provisioner_type = contract
+                        .provisioner_type
+                        .as_deref()
+                        .unwrap_or(default_provisioner_type);
+
+                    let provisioner = match provisioners.get(provisioner_type) {
+                        Some(p) => p.as_ref(),
+                        None => {
+                            error!(
+                                contract_id = %contract.contract_id,
+                                required_type = %provisioner_type,
+                                available = ?provisioners.keys().collect::<Vec<_>>(),
+                                "Offering requires provisioner type '{}' but agent only has: {:?}",
+                                provisioner_type,
+                                provisioners.keys().collect::<Vec<_>>()
+                            );
+
+                            // Report failure to API
+                            if let Err(e) = api_client
+                                .report_failed(
+                                    &contract.contract_id,
+                                    &format!(
+                                        "Agent lacks required provisioner type '{}'. Available: {:?}",
+                                        provisioner_type,
+                                        provisioners.keys().collect::<Vec<_>>()
+                                    ),
+                                )
+                                .await
+                            {
+                                error!(
+                                    contract_id = %contract.contract_id,
+                                    error = %e,
+                                    "Failed to report provisioner mismatch to API"
+                                );
+                            }
+                            continue;
+                        }
+                    };
+
+                    if contract.provisioner_type.is_some() {
+                        info!(
+                            contract_id = %contract.contract_id,
+                            provisioner_type = %provisioner_type,
+                            "Using offering-specific provisioner"
+                        );
+                    }
+
+                    // Log if offering has custom provisioner_config (not yet used)
+                    if contract.provisioner_config.is_some() {
+                        warn!(
+                            contract_id = %contract.contract_id,
+                            "Offering has provisioner_config but per-contract config override is not yet implemented"
+                        );
+                    }
 
                     // Parse instance_config if present - log warning if malformed
                     let instance_config: Option<serde_json::Value> = match &contract.instance_config
@@ -867,29 +934,48 @@ async fn poll_and_provision(
     }
 
     // Reconcile running instances - handles expired, cancelled, and orphan VMs
-    reconcile_instances(api_client, provisioner).await;
+    reconcile_instances(api_client, provisioners).await;
 
     active_count
 }
 
 /// Reconcile running instances with the API.
 /// Reports running VMs, terminates expired/cancelled contracts, warns about orphans.
-async fn reconcile_instances(api_client: &ApiClient, provisioner: &dyn Provisioner) {
-    // Get running instances from provisioner
-    let running_instances = match provisioner.list_running_instances().await {
-        Ok(instances) => instances,
-        Err(e) => {
-            warn!(error = %e, "Failed to list running instances, skipping reconciliation");
-            return;
+/// Collects instances from ALL provisioners and tries to terminate via the appropriate one.
+async fn reconcile_instances(
+    api_client: &ApiClient,
+    provisioners: &ProvisionerMap,
+) {
+    // Collect running instances from ALL provisioners
+    let mut all_running_instances = Vec::new();
+    for (ptype, provisioner) in provisioners {
+        match provisioner.list_running_instances().await {
+            Ok(instances) => {
+                if !instances.is_empty() {
+                    info!(
+                        provisioner_type = %ptype,
+                        count = instances.len(),
+                        "Found running instances"
+                    );
+                }
+                all_running_instances.extend(instances);
+            }
+            Err(e) => {
+                warn!(
+                    provisioner_type = %ptype,
+                    error = %e,
+                    "Failed to list running instances from this provisioner"
+                );
+            }
         }
-    };
+    }
 
-    if running_instances.is_empty() {
+    if all_running_instances.is_empty() {
         return;
     }
 
     // Call reconcile API
-    let response: ReconcileResponse = match api_client.reconcile(&running_instances).await {
+    let response: ReconcileResponse = match api_client.reconcile(&all_running_instances).await {
         Ok(r) => r,
         Err(e) => {
             warn!(error = %e, "Failed to reconcile with API");
@@ -897,7 +983,7 @@ async fn reconcile_instances(api_client: &ApiClient, provisioner: &dyn Provision
         }
     };
 
-    // Process terminations
+    // Process terminations - try each provisioner until one succeeds
     for vm in &response.terminate {
         info!(
             external_id = %vm.external_id,
@@ -906,29 +992,39 @@ async fn reconcile_instances(api_client: &ApiClient, provisioner: &dyn Provision
             "Terminating VM"
         );
 
-        match provisioner.terminate(&vm.external_id).await {
-            Ok(()) => {
-                info!(
-                    external_id = %vm.external_id,
-                    contract_id = %vm.contract_id,
-                    "VM terminated successfully"
-                );
-                if let Err(e) = api_client.report_terminated(&vm.contract_id).await {
-                    error!(
+        let mut terminated = false;
+        for (ptype, provisioner) in provisioners {
+            match provisioner.terminate(&vm.external_id).await {
+                Ok(()) => {
+                    info!(
+                        external_id = %vm.external_id,
                         contract_id = %vm.contract_id,
-                        error = %e,
-                        "Failed to report termination to API. May retry on next poll."
+                        provisioner_type = %ptype,
+                        "VM terminated successfully"
                     );
+                    if let Err(e) = api_client.report_terminated(&vm.contract_id).await {
+                        error!(
+                            contract_id = %vm.contract_id,
+                            error = %e,
+                            "Failed to report termination to API. May retry on next poll."
+                        );
+                    }
+                    terminated = true;
+                    break;
+                }
+                Err(_) => {
+                    // Try next provisioner
+                    continue;
                 }
             }
-            Err(e) => {
-                error!(
-                    external_id = %vm.external_id,
-                    contract_id = %vm.contract_id,
-                    error = ?e,
-                    "Termination failed"
-                );
-            }
+        }
+
+        if !terminated {
+            error!(
+                external_id = %vm.external_id,
+                contract_id = %vm.contract_id,
+                "Termination failed - no provisioner could terminate this instance"
+            );
         }
     }
 
@@ -942,8 +1038,11 @@ async fn reconcile_instances(api_client: &ApiClient, provisioner: &dyn Provision
     }
 }
 
-fn create_provisioner(config: &Config) -> Result<Box<dyn Provisioner>> {
-    match &config.provisioner {
+/// Create a single provisioner from config
+fn create_provisioner_from_config(
+    prov_config: &ProvisionerConfig,
+) -> Result<Box<dyn Provisioner>> {
+    match prov_config {
         ProvisionerConfig::Proxmox(proxmox) => {
             info!("Creating Proxmox provisioner");
             Ok(Box::new(ProxmoxProvisioner::new(proxmox.clone())?))
@@ -957,6 +1056,34 @@ fn create_provisioner(config: &Config) -> Result<Box<dyn Provisioner>> {
             Ok(Box::new(ManualProvisioner::new(manual.clone())))
         }
     }
+}
+
+/// Create a map of all configured provisioners and return the default type
+fn create_provisioner_map(
+    config: &Config,
+) -> Result<(ProvisionerMap, String)> {
+    let mut map: ProvisionerMap = HashMap::new();
+
+    // Add the default (required) provisioner
+    let default_type = config.provisioner.type_name().to_string();
+    let default_prov = create_provisioner_from_config(&config.provisioner)?;
+    map.insert(default_type.clone(), default_prov);
+
+    // Add any additional provisioners
+    for additional in &config.additional_provisioners {
+        let ptype = additional.type_name().to_string();
+        if map.contains_key(&ptype) {
+            warn!(
+                provisioner_type = %ptype,
+                "Duplicate provisioner type in additional_provisioners, skipping"
+            );
+            continue;
+        }
+        let prov = create_provisioner_from_config(additional)?;
+        map.insert(ptype, prov);
+    }
+
+    Ok((map, default_type))
 }
 
 async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> Result<()> {
@@ -986,7 +1113,19 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
     println!();
 
     // Check provisioner configuration and verify setup
-    let provisioner = create_provisioner(&config)?;
+    let provisioner = create_provisioner_from_config(&config.provisioner)?;
+
+    // Show provisioner inventory
+    println!("Provisioner Inventory:");
+    println!("  Default: {} (required)", config.provisioner.type_name());
+    if config.additional_provisioners.is_empty() {
+        println!("  Additional: none");
+    } else {
+        for ap in &config.additional_provisioners {
+            println!("  Additional: {}", ap.type_name());
+        }
+    }
+    println!();
 
     match &config.provisioner {
         ProvisionerConfig::Proxmox(proxmox) => {
