@@ -1,7 +1,22 @@
 use super::*;
 use crate::database::test_helpers::setup_test_db;
 
+/// Helper to register a provider (required due to foreign key constraint on agent_pools)
+async fn register_provider(db: &Database, pubkey: &[u8]) {
+    sqlx::query(
+        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, X'00', 0)",
+    )
+    .bind(pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+/// Helper to insert test offering. Also ensures provider is registered and has a pool for the region.
 async fn insert_test_offering(db: &Database, id: i64, pubkey: &[u8], country: &str, price: f64) {
+    // Ensure provider is registered and has a pool for the region
+    ensure_provider_with_pool(db, pubkey, country).await;
+
     // Use IDs starting from 100 to avoid conflicts with example data from migration 002
     let db_id = id + 100;
     let offering_id = format!("off-{}", id);
@@ -16,6 +31,35 @@ async fn insert_test_offering(db: &Database, id: i64, pubkey: &[u8], country: &s
     .execute(&db.pool)
     .await
     .unwrap();
+}
+
+/// Ensures provider is registered and has a pool for the country's region.
+/// Uses INSERT OR IGNORE to avoid conflicts if called multiple times for same provider.
+async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) {
+    use crate::regions::country_to_region;
+
+    // Register provider if not exists
+    sqlx::query("INSERT OR IGNORE INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, X'00', 0)")
+        .bind(pubkey)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // Get region for country - all test offerings need a matching pool for marketplace visibility
+    let region = country_to_region(country)
+        .unwrap_or_else(|| panic!("Test country '{}' has no region mapping", country));
+
+    // Create pool for region if not exists
+    let pool_id = format!("pool-{}-{}", region, hex::encode(&pubkey[..4]));
+    let pool_name = format!("Test Pool {}", region);
+    sqlx::query("INSERT OR IGNORE INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES (?, ?, ?, ?, 'manual', 0)")
+        .bind(&pool_id)
+        .bind(pubkey)
+        .bind(&pool_name)
+        .bind(region)
+        .execute(&db.pool)
+        .await
+        .unwrap();
 }
 
 // Helper to get the database ID from test ID (test IDs start from 1, DB IDs from 100)
@@ -42,7 +86,7 @@ async fn test_get_provider_offerings() {
     let pubkey = vec![1u8; 32];
 
     insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
-    insert_test_offering(&db, 2, &pubkey, "EU", 200.0).await;
+    insert_test_offering(&db, 2, &pubkey, "DE", 200.0).await;
 
     let offerings = db.get_provider_offerings(&pubkey).await.unwrap();
     assert_eq!(offerings.len(), 2);
@@ -70,7 +114,7 @@ async fn test_get_offering_not_found() {
 async fn test_count_offerings_no_filters() {
     let db = setup_test_db().await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
-    insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "DE", 200.0).await;
 
     let count = db.count_offerings(None).await.unwrap();
     // Count includes example offerings from migration 008
@@ -81,7 +125,7 @@ async fn test_count_offerings_no_filters() {
 async fn test_search_offerings_no_filters() {
     let db = setup_test_db().await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
-    insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "DE", 200.0).await;
 
     let results = db
         .search_offerings(SearchOfferingsParams {
@@ -150,7 +194,7 @@ async fn test_search_offerings_excludes_private() {
 async fn test_search_offerings_by_country() {
     let db = setup_test_db().await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
-    insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "DE", 200.0).await;
 
     let results = db
         .search_offerings(SearchOfferingsParams {
@@ -173,7 +217,7 @@ async fn test_search_offerings_price_range() {
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
 
-    // All offerings are fetched (3 test + 10 example offerings from migration)
+    // With pool filtering, only our 3 test offerings appear (example offerings have no pools)
     let results = db
         .search_offerings(SearchOfferingsParams {
             product_type: None,
@@ -184,41 +228,70 @@ async fn test_search_offerings_price_range() {
         })
         .await
         .unwrap();
-    assert_eq!(results.len(), 13);
-    // Results sorted by monthly_price ASC - first should be cheapest example offering (2.5)
-    assert_eq!(results[0].monthly_price, 2.5);
+    assert_eq!(results.len(), 3);
+    // Results sorted by monthly_price ASC
+    assert_eq!(results[0].monthly_price, 50.0);
+    assert_eq!(results[1].monthly_price, 150.0);
+    assert_eq!(results[2].monthly_price, 250.0);
 }
 
 #[tokio::test]
 async fn test_search_offerings_pagination() {
     let db = setup_test_db().await;
-    for i in 0..5 {
-        insert_test_offering(&db, i, &[i as u8; 32], "US", 100.0).await;
+
+    // Use a single provider with pool for all offerings (simpler setup)
+    let pubkey = vec![99u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    // Create 10 offerings with very LOW prices so they appear first in sort order
+    for i in 0..10 {
+        let db_id = 200 + i;
+        let offering_id = format!("pagination-{}", i);
+        sqlx::query(
+            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns) VALUES (?, ?, ?, 'Pagination Test', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0)"
+        )
+        .bind(db_id)
+        .bind(&pubkey)
+        .bind(&offering_id)
+        .bind(0.01 + i as f64 * 0.01)  // Very low prices: 0.01, 0.02, 0.03, ...
+        .execute(&db.pool)
+        .await
+        .unwrap();
     }
 
+    // Get all offerings with high limit - should get all 10 test offerings
+    // (example offerings have no pools so are filtered out)
+    let all = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    // Should have exactly our 10 test offerings (example offerings have no pools)
+    assert_eq!(all.len(), 10);
+
+    // Verify all results have our offering IDs
+    assert!(all.iter().all(|o| o.offering_id.starts_with("pagination-")));
+
+    // Test pagination - get first 3
     let page1 = db
         .search_offerings(SearchOfferingsParams {
             product_type: None,
             country: None,
             in_stock_only: false,
-            limit: 2,
+            limit: 3,
             offset: 0,
         })
         .await
         .unwrap();
-    assert_eq!(page1.len(), 2);
-
-    let page2 = db
-        .search_offerings(SearchOfferingsParams {
-            product_type: None,
-            country: None,
-            in_stock_only: false,
-            limit: 2,
-            offset: 2,
-        })
-        .await
-        .unwrap();
-    assert_eq!(page2.len(), 2);
+    assert_eq!(page1.len(), 3);
+    // Verify sorted by price (ascending)
+    assert!(page1[0].monthly_price <= page1[1].monthly_price);
+    assert!(page1[1].monthly_price <= page1[2].monthly_price);
 }
 
 // CRUD Tests
@@ -282,6 +355,8 @@ async fn test_create_offering_success() {
         provisioner_config: None,
         agent_pool_id: None,
         provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
     };
 
     let offering_id = db.create_offering(&pubkey, params).await.unwrap();
@@ -384,6 +459,8 @@ async fn test_create_offering_duplicate_id() {
         provisioner_config: None,
         agent_pool_id: None,
         provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
     };
 
     // First creation should succeed
@@ -456,6 +533,8 @@ async fn test_create_offering_missing_required_fields() {
         provisioner_config: None,
         agent_pool_id: None,
         provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
     };
 
     let result = db.create_offering(&pubkey, params).await;
@@ -479,7 +558,7 @@ async fn test_update_offering_success() {
         offer_name: "Updated Server".to_string(),
         description: Some("Updated description".to_string()),
         product_page_url: None,
-        currency: "EUR".to_string(),
+        currency: "DER".to_string(),
         monthly_price: 199.99,
         setup_fee: 50.0,
         visibility: "private".to_string(),
@@ -527,6 +606,8 @@ async fn test_update_offering_success() {
         provisioner_config: None,
         agent_pool_id: None,
         provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -537,7 +618,7 @@ async fn test_update_offering_success() {
     let offering = db.get_offering(db_id).await.unwrap().unwrap();
     assert_eq!(offering.offer_name, "Updated Server");
     assert_eq!(offering.monthly_price, 199.99);
-    assert_eq!(offering.currency, "EUR");
+    assert_eq!(offering.currency, "DER");
     assert_eq!(offering.payment_methods, Some("ETH".to_string()));
     assert_eq!(offering.features, Some("Backup".to_string()));
     assert_eq!(offering.operating_systems, Some("Debian 12".to_string()));
@@ -607,6 +688,8 @@ async fn test_update_offering_unauthorized() {
         provisioner_config: None,
         agent_pool_id: None,
         provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
     };
 
     let result = db.update_offering(&pubkey2, db_id, params).await;
@@ -776,7 +859,7 @@ async fn test_csv_import_success() {
 
     let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
 off-1,Test Server,Great server,https://example.com,USD,100.0,0.0,public,dedicated,,monthly,in_stock,Intel,2,8,3.5GHz,Xeon,ECC,DDR4,32GB,2,2TB,1,500GB,true,1Gbps,10000,US,New York,40.7128,-74.0060,cPanel,RTX 3090,1,720,BTC,SSD,Ubuntu
-off-2,Test Server 2,Another server,,EUR,200.0,50.0,public,vps,kvm,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,\"BTC,ETH\",\"SSD,NVMe\",\"Ubuntu,Debian\"";
+off-2,Test Server 2,Another server,,DER,200.0,50.0,public,vps,kvm,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,\"BTC,ETH\",\"SSD,NVMe\",\"Ubuntu,Debian\"";
 
     let (success_count, errors) = db
         .import_offerings_csv(&pubkey, csv_data, false)
@@ -867,7 +950,7 @@ async fn test_csv_import_upsert() {
 
     let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
 off-1,Updated Offer,Updated desc,,USD,200.0,10.0,public,dedicated,,monthly,out_of_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,
-off-2,New Offer,New desc,,EUR,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,,,";
+off-2,New Offer,New desc,,DER,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,,,";
 
     let (success_count, errors) = db
         .import_offerings_csv(&pubkey, csv_data, true)
@@ -992,7 +1075,7 @@ gpu-1,GPU Server,USD,500.0,0.0,public,gpu,monthly,in_stock,US,NYC,false,NVIDIA A
 async fn test_search_offerings_dsl_empty_query() {
     let db = setup_test_db().await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
-    insert_test_offering(&db, 2, &[2u8; 32], "EU", 200.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "DE", 200.0).await;
 
     // Empty query returns all public offerings (including examples)
     let results = db.search_offerings_dsl("", 100, 0).await.unwrap();
@@ -1070,34 +1153,37 @@ async fn test_search_offerings_dsl_combined_filters() {
 
     // Insert offerings with different attributes
     let pubkey1 = vec![1u8; 32];
-    sqlx::query!(
+    ensure_provider_with_pool(&db, &pubkey1, "US").await;
+    sqlx::query(
         "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'US Compute', 'USD', 80.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
-        101,
-        pubkey1,
-        "us-compute"
     )
+    .bind(101i64)
+    .bind(&pubkey1)
+    .bind("us-compute")
     .execute(&db.pool)
     .await
     .unwrap();
 
     let pubkey2 = vec![2u8; 32];
-    sqlx::query!(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'EU Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'EU', 'Berlin', 0, 0)",
-        102,
-        pubkey2,
-        "eu-compute"
+    ensure_provider_with_pool(&db, &pubkey2, "DE").await;
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'DE Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', 0, 0)",
     )
+    .bind(102i64)
+    .bind(&pubkey2)
+    .bind("eu-compute")
     .execute(&db.pool)
     .await
     .unwrap();
 
     let pubkey3 = vec![3u8; 32];
-    sqlx::query!(
+    ensure_provider_with_pool(&db, &pubkey3, "US").await;
+    sqlx::query(
         "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'US VPS', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
-        103,
-        pubkey3,
-        "us-vps"
     )
+    .bind(103i64)
+    .bind(&pubkey3)
+    .bind("us-vps")
     .execute(&db.pool)
     .await
     .unwrap();
@@ -1343,5 +1429,491 @@ seeded-3,Updated,USD,200.0,10.0,public,compute,monthly,in_stock,US,LA,false,http
     assert_eq!(
         offering.external_checkout_url,
         Some("https://example.com/new".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_get_provider_offerings_with_resolved_pool() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+    register_provider(&db, &pubkey).await;
+
+    // Create a pool for europe region
+    db.create_agent_pool("pool-eu-1", &pubkey, "DE Proxmox", "europe", "proxmox")
+        .await
+        .unwrap();
+
+    // Create offering with datacenter in DE (maps to europe region)
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "test-eu-1".to_string(),
+        offer_name: "German Server".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "DER".to_string(),
+        monthly_price: 99.99,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "dedicated_server".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: Some(4),
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: Some("16GB".to_string()),
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "DE".to_string(),
+        datacenter_city: "Frankfurt".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    db.create_offering(&pubkey, params).await.unwrap();
+
+    // Get provider offerings - should have resolved pool
+    let offerings = db.get_provider_offerings(&pubkey).await.unwrap();
+    assert_eq!(offerings.len(), 1);
+    assert_eq!(offerings[0].resolved_pool_id, Some("pool-eu-1".to_string()));
+    assert_eq!(
+        offerings[0].resolved_pool_name,
+        Some("DE Proxmox".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_get_provider_offerings_with_explicit_pool_id() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+    register_provider(&db, &pubkey).await;
+
+    // Create two pools
+    db.create_agent_pool("pool-eu-1", &pubkey, "DE Pool 1", "europe", "proxmox")
+        .await
+        .unwrap();
+    db.create_agent_pool("pool-eu-2", &pubkey, "DE Pool 2", "europe", "script")
+        .await
+        .unwrap();
+
+    // Create offering with explicit pool assignment (should use pool-eu-2 even though location matches pool-eu-1)
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "test-explicit".to_string(),
+        offer_name: "Server with Explicit Pool".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "DER".to_string(),
+        monthly_price: 99.99,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "dedicated_server".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "DE".to_string(),
+        datacenter_city: "Berlin".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: Some("pool-eu-2".to_string()),
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    db.create_offering(&pubkey, params).await.unwrap();
+
+    // Get provider offerings - should resolve to explicit pool
+    let offerings = db.get_provider_offerings(&pubkey).await.unwrap();
+    assert_eq!(offerings.len(), 1);
+    assert_eq!(offerings[0].resolved_pool_id, Some("pool-eu-2".to_string()));
+    assert_eq!(
+        offerings[0].resolved_pool_name,
+        Some("DE Pool 2".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_get_provider_offerings_no_matching_pool() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+    register_provider(&db, &pubkey).await;
+
+    // Create pool for north america
+    db.create_agent_pool("pool-na-1", &pubkey, "NA Pool", "na", "proxmox")
+        .await
+        .unwrap();
+
+    // Create offering in Europe (no matching pool)
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "test-no-match".to_string(),
+        offer_name: "Server without Pool".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "DER".to_string(),
+        monthly_price: 99.99,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "dedicated_server".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "DE".to_string(),
+        datacenter_city: "Frankfurt".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    db.create_offering(&pubkey, params).await.unwrap();
+
+    // Get provider offerings - should have no resolved pool
+    let offerings = db.get_provider_offerings(&pubkey).await.unwrap();
+    assert_eq!(offerings.len(), 1);
+    assert_eq!(offerings[0].resolved_pool_id, None);
+    assert_eq!(offerings[0].resolved_pool_name, None);
+}
+
+#[tokio::test]
+async fn test_search_offerings_filters_by_pool_existence() {
+    let db = setup_test_db().await;
+
+    // Provider with pool
+    let provider_with_pool = vec![10u8; 32];
+    // Provider without pool
+    let provider_without_pool = vec![20u8; 32];
+
+    // Register providers
+    register_provider(&db, &provider_with_pool).await;
+    register_provider(&db, &provider_without_pool).await;
+
+    // Create a pool for the first provider in US (na region)
+    let pool = db
+        .create_agent_pool("us-pool", &provider_with_pool, "US Pool", "na", "manual")
+        .await
+        .unwrap();
+
+    // Create offerings for both providers
+    // Offering 1: Provider with pool, in US (should be included - matches pool location)
+    let params1 = Offering {
+        id: None,
+        pubkey: hex::encode(&provider_with_pool),
+        offering_id: "test-with-pool-1".to_string(),
+        offer_name: "Offering with Pool".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 100.0,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(), // US -> na region
+        datacenter_city: "NYC".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None, // No explicit pool - should auto-match by location
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+    db.create_offering(&provider_with_pool, params1)
+        .await
+        .unwrap();
+
+    // Offering 2: Provider with pool, explicit pool_id (should be included)
+    let params2 = Offering {
+        id: None,
+        pubkey: hex::encode(&provider_with_pool),
+        offering_id: "test-with-pool-2".to_string(),
+        offer_name: "Offering with Explicit Pool".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 150.0,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "CA".to_string(), // Canada - doesn't matter, explicit pool
+        datacenter_city: "Toronto".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: Some(pool.pool_id.clone()), // Explicit pool
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+    db.create_offering(&provider_with_pool, params2)
+        .await
+        .unwrap();
+
+    // Offering 3: Provider without pool, in US (should be EXCLUDED)
+    let params3 = Offering {
+        id: None,
+        pubkey: hex::encode(&provider_without_pool),
+        offering_id: "test-no-pool".to_string(),
+        offer_name: "Offering without Pool".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 50.0, // Cheapest price
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "LA".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+    db.create_offering(&provider_without_pool, params3)
+        .await
+        .unwrap();
+
+    // Search all offerings
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+
+    // Should include offerings 1 and 2 (with pools), exclude offering 3 (no pool)
+    let offering_ids: Vec<&str> = results.iter().map(|o| o.offering_id.as_str()).collect();
+    assert!(
+        offering_ids.contains(&"test-with-pool-1"),
+        "Should include offering with auto-matched pool"
+    );
+    assert!(
+        offering_ids.contains(&"test-with-pool-2"),
+        "Should include offering with explicit pool"
+    );
+    assert!(
+        !offering_ids.contains(&"test-no-pool"),
+        "Should exclude offering without matching pool"
     );
 }

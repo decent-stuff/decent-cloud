@@ -52,6 +52,9 @@ pub struct AgentPoolWithStats {
     /// Total active contracts across all agents
     #[ts(type = "number")]
     pub active_contracts: i64,
+    /// Number of offerings using this pool (explicit + auto-matched)
+    #[ts(type = "number")]
+    pub offerings_count: i64,
 }
 
 /// Setup token for agent registration
@@ -209,20 +212,52 @@ impl Database {
         .fetch_all(&self.pool)
         .await?;
 
+        // Get all offerings for this provider to compute offerings count per pool
+        #[derive(sqlx::FromRow)]
+        struct OfferingRow {
+            agent_pool_id: Option<String>,
+            datacenter_country: String,
+        }
+        let offerings = sqlx::query_as::<_, OfferingRow>(
+            "SELECT agent_pool_id, datacenter_country FROM provider_offerings WHERE pubkey = ?"
+        )
+        .bind(provider_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
         Ok(rows
             .into_iter()
-            .map(|r| AgentPoolWithStats {
-                pool: AgentPool {
-                    pool_id: r.pool_id,
-                    provider_pubkey: hex::encode(&r.provider_pubkey),
-                    name: r.name,
-                    location: r.location,
-                    provisioner_type: r.provisioner_type,
-                    created_at_ns: r.created_at_ns,
-                },
-                agent_count: r.agent_count,
-                online_count: r.online_count,
-                active_contracts: r.active_contracts,
+            .map(|r| {
+                // Count offerings for this pool:
+                // 1. Explicit assignment: agent_pool_id = pool_id
+                // 2. Auto-match: agent_pool_id IS NULL AND country_to_region(datacenter_country) = location
+                let offerings_count = offerings
+                    .iter()
+                    .filter(|o| {
+                        // Explicit assignment
+                        if let Some(ref pool_id) = o.agent_pool_id {
+                            pool_id == &r.pool_id
+                        } else {
+                            // Auto-match by location
+                            country_to_region(&o.datacenter_country) == Some(&r.location[..])
+                        }
+                    })
+                    .count() as i64;
+
+                AgentPoolWithStats {
+                    pool: AgentPool {
+                        pool_id: r.pool_id,
+                        provider_pubkey: hex::encode(&r.provider_pubkey),
+                        name: r.name,
+                        location: r.location,
+                        provisioner_type: r.provisioner_type,
+                        created_at_ns: r.created_at_ns,
+                    },
+                    agent_count: r.agent_count,
+                    online_count: r.online_count,
+                    active_contracts: r.active_contracts,
+                    offerings_count,
+                }
             })
             .collect())
     }
@@ -462,6 +497,31 @@ impl Database {
 
     // ==================== Pool Matching ====================
 
+    /// Find pool matching a location for a provider.
+    /// Returns the first matching pool for the given provider and location.
+    pub async fn find_pool_by_location(
+        &self,
+        provider_pubkey: &[u8],
+        location: &str,
+    ) -> Result<Option<AgentPool>> {
+        let row = sqlx::query_as::<_, PoolRow>(
+            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns FROM agent_pools WHERE provider_pubkey = ? AND location = ? ORDER BY created_at_ns ASC LIMIT 1",
+        )
+        .bind(provider_pubkey)
+        .bind(location)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| AgentPool {
+            pool_id: r.pool_id,
+            provider_pubkey: hex::encode(&r.provider_pubkey),
+            name: r.name,
+            location: r.location,
+            provisioner_type: r.provisioner_type,
+            created_at_ns: r.created_at_ns,
+        }))
+    }
+
     /// Get agent's pool ID from their delegation.
     pub async fn get_agent_pool_id(&self, agent_pubkey: &[u8]) -> Result<Option<String>> {
         let pool_id: Option<String> = sqlx::query_scalar(
@@ -508,3 +568,218 @@ impl Database {
 }
 
 // Tests for region utilities are in api/src/regions.rs
+
+#[cfg(test)]
+mod tests {
+    use crate::database::test_helpers::setup_test_db;
+
+    /// Helper to register a provider (required due to foreign key constraint)
+    async fn register_provider(db: &crate::database::types::Database, pubkey: &[u8]) {
+        sqlx::query(
+            "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, X'00', 0)",
+        )
+        .bind(pubkey)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_list_agent_pools_with_stats_offerings_count() {
+        let db = setup_test_db().await;
+
+        // Create a provider - 32 bytes required
+        let provider_pubkey = vec![1u8; 32];
+        register_provider(&db, &provider_pubkey).await;
+
+        // Create pools with different locations
+        let pool_eu = db
+            .create_agent_pool("pool-eu", &provider_pubkey, "EU Pool", "europe", "proxmox")
+            .await
+            .unwrap();
+        let pool_na = db
+            .create_agent_pool("pool-na", &provider_pubkey, "NA Pool", "na", "proxmox")
+            .await
+            .unwrap();
+        let pool_apac = db
+            .create_agent_pool(
+                "pool-apac",
+                &provider_pubkey,
+                "APAC Pool",
+                "apac",
+                "proxmox",
+            )
+            .await
+            .unwrap();
+
+        // Create offerings:
+        // 1. Explicit assignment to pool-eu
+        sqlx::query(
+            r#"INSERT INTO provider_offerings
+               (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
+                product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
+               VALUES (?, 'off-1', 'Explicit EU', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'DE', 'Berlin', 0, ?)"#,
+        )
+        .bind(&provider_pubkey)
+        .bind(&pool_eu.pool_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // 2. Auto-match to pool-eu (datacenter_country = FR -> europe)
+        sqlx::query(
+            r#"INSERT INTO provider_offerings
+               (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
+                product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
+               VALUES (?, 'off-2', 'Auto EU', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'FR', 'Paris', 0, NULL)"#,
+        )
+        .bind(&provider_pubkey)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // 3. Auto-match to pool-na (datacenter_country = US -> na)
+        sqlx::query(
+            r#"INSERT INTO provider_offerings
+               (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
+                product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
+               VALUES (?, 'off-3', 'Auto NA', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, NULL)"#,
+        )
+        .bind(&provider_pubkey)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // 4. Explicit assignment to pool-na
+        sqlx::query(
+            r#"INSERT INTO provider_offerings
+               (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
+                product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
+               VALUES (?, 'off-4', 'Explicit NA', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'CA', 'Toronto', 0, ?)"#,
+        )
+        .bind(&provider_pubkey)
+        .bind(&pool_na.pool_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // 5. No match (datacenter_country = XX -> None)
+        sqlx::query(
+            r#"INSERT INTO provider_offerings
+               (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
+                product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
+               VALUES (?, 'off-5', 'No Match', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'XX', 'Unknown', 0, NULL)"#,
+        )
+        .bind(&provider_pubkey)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Get pools with stats
+        let stats = db
+            .list_agent_pools_with_stats(&provider_pubkey)
+            .await
+            .unwrap();
+
+        // Verify offerings count
+        assert_eq!(stats.len(), 3);
+
+        // Find pools by ID
+        let pool_eu_stats = stats
+            .iter()
+            .find(|s| s.pool.pool_id == pool_eu.pool_id)
+            .unwrap();
+        let pool_na_stats = stats
+            .iter()
+            .find(|s| s.pool.pool_id == pool_na.pool_id)
+            .unwrap();
+        let pool_apac_stats = stats
+            .iter()
+            .find(|s| s.pool.pool_id == pool_apac.pool_id)
+            .unwrap();
+
+        // pool-eu should have 2 offerings (1 explicit + 1 auto-match)
+        assert_eq!(
+            pool_eu_stats.offerings_count, 2,
+            "pool-eu should have 2 offerings (1 explicit + 1 auto-match)"
+        );
+
+        // pool-na should have 2 offerings (1 explicit + 1 auto-match)
+        assert_eq!(
+            pool_na_stats.offerings_count, 2,
+            "pool-na should have 2 offerings (1 explicit + 1 auto-match)"
+        );
+
+        // pool-apac should have 0 offerings
+        assert_eq!(
+            pool_apac_stats.offerings_count, 0,
+            "pool-apac should have 0 offerings"
+        );
+
+        // Verify other stats are still working
+        assert_eq!(pool_eu_stats.agent_count, 0);
+        assert_eq!(pool_eu_stats.online_count, 0);
+        assert_eq!(pool_eu_stats.active_contracts, 0);
+    }
+
+    #[tokio::test]
+    async fn test_offerings_count_explicit_override_auto_match() {
+        let db = setup_test_db().await;
+
+        // Create a provider - 32 bytes required
+        let provider_pubkey = vec![1u8; 32];
+        register_provider(&db, &provider_pubkey).await;
+
+        // Create two pools with different locations
+        let pool_eu = db
+            .create_agent_pool("pool-eu", &provider_pubkey, "EU Pool", "europe", "proxmox")
+            .await
+            .unwrap();
+        let pool_na = db
+            .create_agent_pool("pool-na", &provider_pubkey, "NA Pool", "na", "proxmox")
+            .await
+            .unwrap();
+
+        // Create offering with datacenter in EU (DE -> europe) but explicitly assigned to NA pool
+        // This tests that explicit assignment overrides auto-match
+        sqlx::query(
+            r#"INSERT INTO provider_offerings
+               (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
+                product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
+               VALUES (?, 'off-1', 'Explicit Override', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'DE', 'Berlin', 0, ?)"#,
+        )
+        .bind(&provider_pubkey)
+        .bind(&pool_na.pool_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Get pools with stats
+        let stats = db
+            .list_agent_pools_with_stats(&provider_pubkey)
+            .await
+            .unwrap();
+
+        // Find pools by ID
+        let pool_eu_stats = stats
+            .iter()
+            .find(|s| s.pool.pool_id == pool_eu.pool_id)
+            .unwrap();
+        let pool_na_stats = stats
+            .iter()
+            .find(|s| s.pool.pool_id == pool_na.pool_id)
+            .unwrap();
+
+        // pool-eu should have 0 offerings (would auto-match, but explicit assignment takes precedence)
+        assert_eq!(
+            pool_eu_stats.offerings_count, 0,
+            "pool-eu should have 0 offerings (explicit assignment overrides auto-match)"
+        );
+
+        // pool-na should have 1 offering (explicit assignment)
+        assert_eq!(
+            pool_na_stats.offerings_count, 1,
+            "pool-na should have 1 offering (explicit assignment)"
+        );
+    }
+}

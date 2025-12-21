@@ -357,10 +357,10 @@ async fn test_csv_template_data_retrieval() {
 }
 
 #[tokio::test]
-async fn test_example_offerings_included_in_search() {
+async fn test_offerings_with_pools_included_in_search() {
     let db = setup_test_db().await;
 
-    // Create a regular public offering
+    // Create a provider with pool (offerings without pools are filtered from marketplace)
     let pubkey = vec![1u8; 32];
     {
         let pubkey_ref = &pubkey;
@@ -374,6 +374,16 @@ async fn test_example_offerings_included_in_search() {
         .unwrap();
     }
 
+    // Create a pool for US region
+    sqlx::query(
+        "INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES (?, ?, 'Test Pool', 'na', 'manual', 0)"
+    )
+    .bind("test-pool-na")
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
@@ -385,7 +395,8 @@ async fn test_example_offerings_included_in_search() {
         .unwrap();
     }
 
-    // Search offerings - should return public offering + 10 example offerings from migration
+    // Search offerings - only offerings with matching pools appear
+    // (Example offerings from migration have no pools, so they're excluded)
     let search_params = crate::database::offerings::SearchOfferingsParams {
         product_type: None,
         country: None,
@@ -397,11 +408,11 @@ async fn test_example_offerings_included_in_search() {
     let search_results = db.search_offerings(search_params).await.unwrap();
     assert_eq!(
         search_results.len(),
-        11,
-        "Search should return 1 public offering + 10 example offerings"
+        1,
+        "Search should return only offerings with matching pools"
     );
 
-    // Find our test offering (example offerings are sorted first by price, test offering is $99.99)
+    // Find our test offering
     let test_offering = search_results
         .iter()
         .find(|o| o.offering_id == "test-public-001");
@@ -411,11 +422,11 @@ async fn test_example_offerings_included_in_search() {
     );
     assert_eq!(test_offering.unwrap().visibility, "public");
 
-    // Verify count_offerings includes examples
+    // count_offerings still counts ALL public offerings (no pool filter)
     let total_count = db.count_offerings(None).await.unwrap();
     assert_eq!(
         total_count, 11,
-        "Count should include public offerings + examples"
+        "Count should include all public offerings (no pool filter)"
     );
 }
 

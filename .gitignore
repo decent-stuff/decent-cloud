@@ -112,3 +112,4 @@ crash-*
 .venv/
 third_party/
 dc-agent.toml
+*.db

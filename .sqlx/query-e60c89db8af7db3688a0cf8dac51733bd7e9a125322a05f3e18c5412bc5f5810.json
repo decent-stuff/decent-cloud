@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO provider_offerings\n               (pubkey, offering_id, offer_name, currency, monthly_price, visibility,\n                product_type, billing_interval, stock_status, datacenter_country, agent_pool_id)\n               VALUES (?, 'off-4', 'Explicit NA', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'CA', ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e60c89db8af7db3688a0cf8dac51733bd7e9a125322a05f3e18c5412bc5f5810"
+}

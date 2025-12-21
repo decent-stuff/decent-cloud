@@ -17,6 +17,10 @@ onlineCount: number,
  */
 activeContracts: number, 
 /**
+ * Number of offerings using this pool (explicit + auto-matched)
+ */
+offeringsCount: number, 
+/**
  * Unique pool identifier
  */
 poolId: string, 
