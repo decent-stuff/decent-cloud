@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { API_BASE_URL } from "$lib/services/api";
 	import type { AgentPoolWithStats } from "$lib/types/generated/AgentPoolWithStats";
 	import type { SetupToken } from "$lib/types/generated/SetupToken";
 
@@ -125,7 +126,7 @@
 										</div>
 									</div>
 									<button
-										onclick={() => copyToClipboard(`dc-agent setup token --token ${token.token} --api-url ${window.location.origin}`)}
+										onclick={() => copyToClipboard(`dc-agent setup token --token ${token.token} --api-url ${API_BASE_URL}`)}
 										class="px-3 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-colors"
 										title="Copy setup command"
 									>
