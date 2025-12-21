@@ -84,6 +84,35 @@ enum SetupProvisioner {
         /// Force registration even if detected location doesn't match pool location
         #[arg(long, default_value = "false")]
         force: bool,
+
+        // === Optional: Automated Proxmox setup ===
+        /// Proxmox host IP or hostname (enables automatic Proxmox setup)
+        #[arg(long)]
+        proxmox_host: Option<String>,
+
+        /// Proxmox SSH port (default: 22)
+        #[arg(long, default_value = "22")]
+        proxmox_ssh_port: u16,
+
+        /// Proxmox SSH username (default: root)
+        #[arg(long, default_value = "root")]
+        proxmox_ssh_user: String,
+
+        /// Proxmox API username (default: root@pam)
+        #[arg(long, default_value = "root@pam")]
+        proxmox_user: String,
+
+        /// Storage for VM disks (default: local-lvm)
+        #[arg(long, default_value = "local-lvm")]
+        proxmox_storage: String,
+
+        /// OS templates to create (comma-separated: ubuntu-24.04,debian-12,rocky-9)
+        #[arg(long, default_value = "ubuntu-24.04")]
+        proxmox_templates: String,
+
+        /// Skip interactive prompts (use with --proxmox-host for non-interactive setup)
+        #[arg(long, default_value = "false")]
+        non_interactive: bool,
     },
     /// Set up Proxmox VE provisioner (creates templates and API token).
     /// Note: Agent registration now requires a setup token from a pool.
@@ -153,11 +182,19 @@ async fn main() -> Result<()> {
 }
 
 /// Setup agent using a one-time setup token.
+#[allow(clippy::too_many_arguments)]
 async fn run_setup_token(
     token: &str,
     api_url: &str,
     output: &std::path::Path,
     force: bool,
+    proxmox_host: Option<String>,
+    proxmox_ssh_port: u16,
+    proxmox_ssh_user: &str,
+    proxmox_user: &str,
+    proxmox_storage: &str,
+    proxmox_templates: &str,
+    non_interactive: bool,
 ) -> Result<()> {
     use dc_agent::geolocation::{country_to_region, detect_country, region_display_name};
     use std::io::Write;
@@ -233,9 +270,49 @@ async fn run_setup_token(
     println!("Provisioner type: {}", response.provisioner_type);
     println!("Permissions: {}", response.permissions.join(", "));
 
-    // Step 5: Write config file with appropriate template based on provisioner type
+    // Step 5: If pool uses Proxmox, optionally run automated setup
+    let proxmox_config = if response.provisioner_type == "proxmox" {
+        run_proxmox_setup_if_requested(
+            proxmox_host,
+            proxmox_ssh_port,
+            proxmox_ssh_user,
+            proxmox_user,
+            proxmox_storage,
+            proxmox_templates,
+            non_interactive,
+        )
+        .await?
+    } else {
+        None
+    };
+
+    // Step 6: Write config file with appropriate template based on provisioner type
     let provisioner_template = match response.provisioner_type.as_str() {
-        "proxmox" => r#"
+        "proxmox" => {
+            if let Some(ref pconfig) = proxmox_config {
+                // Use actual Proxmox config from automated setup
+                format!(
+                    r#"
+# Proxmox VE provisioner configuration (auto-configured)
+[provisioner.proxmox]
+api_url = "{}"
+api_token_id = "{}"
+api_token_secret = "{}"
+node = "{}"
+template_vmid = {}
+storage = "{}"
+verify_ssl = false
+"#,
+                    pconfig.api_url,
+                    pconfig.api_token_id,
+                    pconfig.api_token_secret,
+                    pconfig.node,
+                    pconfig.template_vmid,
+                    pconfig.storage
+                )
+            } else {
+                // Use placeholder template
+                r#"
 # Proxmox VE provisioner configuration
 [provisioner.proxmox]
 api_url = "https://YOUR-PROXMOX-HOST:8006"
@@ -246,7 +323,10 @@ template_vmid = 9000             # VM template ID to clone from
 storage = "local-lvm"            # Storage for VM disks
 # pool = "dc-vms"                # Optional: Resource pool for VMs
 verify_ssl = false               # Set to true if using valid SSL cert
-"#,
+"#
+                .to_string()
+            }
+        }
         "script" => r#"
 # Script-based provisioner configuration
 [provisioner.script]
@@ -254,15 +334,15 @@ provision = "/opt/dc-agent/provision.sh"      # Script to provision a VM
 terminate = "/opt/dc-agent/terminate.sh"      # Script to terminate a VM
 health_check = "/opt/dc-agent/health.sh"      # Script to check VM health
 timeout_seconds = 300
-"#,
+"#.to_string(),
         "manual" => r#"
 # Manual provisioner (notification-only)
 [provisioner.manual]
 # notification_webhook = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-"#,
+"#.to_string(),
         _ => r#"
 # Unknown provisioner type - please configure manually
-"#,
+"#.to_string(),
     };
 
     let config_content = format!(
@@ -300,19 +380,28 @@ type = "{provisioner_type}"
     // Provide type-specific next steps
     match response.provisioner_type.as_str() {
         "proxmox" => {
-            println!("IMPORTANT: You must configure Proxmox settings before running the agent!");
-            println!();
-            println!("Next steps:");
-            println!("  1. Edit {} and fill in:", output.display());
-            println!("     - api_url: Your Proxmox host URL");
-            println!("     - api_token_id and api_token_secret: Create in Proxmox UI");
-            println!("     - node: Your Proxmox node name");
-            println!("     - template_vmid: Create a template VM (e.g., Ubuntu 24.04)");
-            println!();
-            println!("  Alternative: Run 'dc-agent setup proxmox' to auto-configure Proxmox");
-            println!();
-            println!("  2. Verify: dc-agent --config {} doctor", output.display());
-            println!("  3. Start: dc-agent --config {} run", output.display());
+            if proxmox_config.is_some() {
+                println!("✓ Proxmox configured successfully!");
+                println!();
+                println!("Configuration is ready to use. Next steps:");
+                println!("  1. Verify: dc-agent --config {} doctor", output.display());
+                println!("  2. Start: dc-agent --config {} run", output.display());
+            } else {
+                println!("IMPORTANT: You must configure Proxmox settings before running the agent!");
+                println!();
+                println!("Next steps:");
+                println!("  1. Edit {} and fill in:", output.display());
+                println!("     - api_url: Your Proxmox host URL");
+                println!("     - api_token_id and api_token_secret: Create in Proxmox UI");
+                println!("     - node: Your Proxmox node name");
+                println!("     - template_vmid: Create a template VM (e.g., Ubuntu 24.04)");
+                println!();
+                println!("  Alternative: Run setup again with --proxmox-host flag");
+                println!("     dc-agent setup token --token {} --proxmox-host YOUR-HOST", token);
+                println!();
+                println!("  2. Verify: dc-agent --config {} doctor", output.display());
+                println!("  3. Start: dc-agent --config {} run", output.display());
+            }
         }
         "script" => {
             println!("IMPORTANT: You must configure script paths before running the agent!");
@@ -345,6 +434,148 @@ type = "{provisioner_type}"
     Ok(())
 }
 
+/// Optionally run Proxmox setup based on CLI args or interactive prompt.
+/// Returns Some(ProxmoxConfig) if setup was completed, None otherwise.
+async fn run_proxmox_setup_if_requested(
+    proxmox_host: Option<String>,
+    proxmox_ssh_port: u16,
+    proxmox_ssh_user: &str,
+    proxmox_user: &str,
+    proxmox_storage: &str,
+    proxmox_templates: &str,
+    non_interactive: bool,
+) -> Result<Option<dc_agent::config::ProxmoxConfig>> {
+    use dc_agent::config::ProxmoxConfig;
+    use dc_agent::setup::proxmox::{OsTemplate, ProxmoxSetup};
+
+    // Determine if we should run Proxmox setup
+    let host = if let Some(h) = proxmox_host {
+        // Host provided via CLI - run setup
+        h
+    } else if non_interactive {
+        // Non-interactive mode without host - skip setup
+        return Ok(None);
+    } else {
+        // Interactive mode - ask user
+        println!();
+        println!("This pool uses Proxmox VE provisioner.");
+        println!("Would you like to configure Proxmox automatically now?");
+        println!("(This will SSH into Proxmox, create API tokens, and download templates)");
+        print!("Configure Proxmox now? (y/n): ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("Skipping Proxmox setup. You'll need to configure it manually.");
+            return Ok(None);
+        }
+
+        // Prompt for Proxmox host
+        print!("Proxmox host (IP or hostname): ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+        let mut host_input = String::new();
+        std::io::stdin().read_line(&mut host_input)?;
+        let host = host_input.trim().to_string();
+
+        if host.is_empty() {
+            println!("No host provided. Skipping Proxmox setup.");
+            return Ok(None);
+        }
+
+        host
+    };
+
+    // Parse templates
+    let template_list: Vec<OsTemplate> = proxmox_templates
+        .split(',')
+        .filter_map(|s: &str| OsTemplate::parse(s.trim()))
+        .collect();
+
+    if template_list.is_empty() {
+        anyhow::bail!(
+            "No valid templates specified. Available: ubuntu-24.04, ubuntu-22.04, debian-12, rocky-9"
+        );
+    }
+
+    println!();
+    println!("Proxmox Auto-Configuration");
+    println!("==========================");
+    println!("  Host: {}", host);
+    println!("  SSH User: {}", proxmox_ssh_user);
+    println!("  Proxmox User: {}", proxmox_user);
+    println!("  Storage: {}", proxmox_storage);
+    println!(
+        "  Templates: {}",
+        template_list
+            .iter()
+            .map(|t: &OsTemplate| t.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    println!();
+
+    // Prompt for passwords
+    let ssh_password = rpassword::prompt_password(format!(
+        "SSH password for {}@{}: ",
+        proxmox_ssh_user, host
+    ))?;
+
+    // Extract user part from proxmox_user (e.g., "root" from "root@pam")
+    let proxmox_user_part = proxmox_user
+        .split_once('@')
+        .map(|(user, _)| user)
+        .unwrap_or(proxmox_user);
+
+    let proxmox_password = if proxmox_ssh_user == proxmox_user_part {
+        ssh_password.clone()
+    } else {
+        rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
+    };
+
+    println!();
+
+    let setup = ProxmoxSetup {
+        host: host.clone(),
+        port: proxmox_ssh_port,
+        ssh_user: proxmox_ssh_user.to_string(),
+        ssh_password,
+        proxmox_user: proxmox_user.to_string(),
+        proxmox_password,
+        storage: proxmox_storage.to_string(),
+        templates: template_list,
+    };
+
+    println!("Running Proxmox setup...");
+    let result = setup.run().await?;
+
+    println!();
+    println!("✓ Proxmox setup complete!");
+    println!();
+
+    // Convert SetupResult to ProxmoxConfig
+    let primary_vmid = result
+        .template_vmids
+        .get(&OsTemplate::Ubuntu2404)
+        .or_else(|| result.template_vmids.values().next())
+        .copied()
+        .unwrap_or(9000);
+
+    let config = ProxmoxConfig {
+        api_url: result.api_url,
+        api_token_id: result.api_token_id,
+        api_token_secret: result.api_token_secret,
+        node: result.node,
+        template_vmid: primary_vmid,
+        storage: result.storage,
+        pool: None,
+        verify_ssl: false,
+    };
+
+    Ok(Some(config))
+}
+
 async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
     match provisioner {
         SetupProvisioner::Token {
@@ -352,7 +583,29 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             api_url,
             output,
             force,
-        } => run_setup_token(&token, &api_url, &output, force).await,
+            proxmox_host,
+            proxmox_ssh_port,
+            proxmox_ssh_user,
+            proxmox_user,
+            proxmox_storage,
+            proxmox_templates,
+            non_interactive,
+        } => {
+            run_setup_token(
+                &token,
+                &api_url,
+                &output,
+                force,
+                proxmox_host,
+                proxmox_ssh_port,
+                &proxmox_ssh_user,
+                &proxmox_user,
+                &proxmox_storage,
+                &proxmox_templates,
+                non_interactive,
+            )
+            .await
+        }
         SetupProvisioner::Proxmox {
             host,
             ssh_port,
