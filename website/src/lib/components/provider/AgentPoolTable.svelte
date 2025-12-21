@@ -29,6 +29,7 @@
 		<thead class="bg-white/5 text-xs text-white/60 uppercase">
 			<tr>
 				<th scope="col" class="px-6 py-3">Pool</th>
+				<th scope="col" class="px-6 py-3">Pool ID</th>
 				<th scope="col" class="px-6 py-3">Region</th>
 				<th scope="col" class="px-6 py-3">Type</th>
 				<th scope="col" class="px-6 py-3">Agents</th>
@@ -40,7 +41,7 @@
 		<tbody>
 			{#if pools.length === 0}
 				<tr>
-					<td colspan="7" class="text-center py-8 text-white/50">
+					<td colspan="8" class="text-center py-8 text-white/50">
 						No agent pools configured yet.
 					</td>
 				</tr>
@@ -58,6 +59,9 @@
 							{pool.name}
 						</span>
 					</th>
+					<td class="px-6 py-4 font-mono text-white/60 text-xs">
+						{pool.poolId}
+					</td>
 					<td class="px-6 py-4">
 						<span class="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30">
 							{pool.location}
