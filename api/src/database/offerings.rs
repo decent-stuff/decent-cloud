@@ -118,6 +118,8 @@ pub struct SearchOfferingsParams<'a> {
     pub product_type: Option<&'a str>,
     pub country: Option<&'a str>,
     pub in_stock_only: bool,
+    pub min_price_monthly: Option<f64>,
+    pub max_price_monthly: Option<f64>,
     pub limit: i64,
     pub offset: i64,
 }
@@ -147,6 +149,12 @@ impl Database {
         if params.in_stock_only {
             query.push_str(" AND o.stock_status = ?");
         }
+        if params.min_price_monthly.is_some() {
+            query.push_str(" AND o.monthly_price >= ?");
+        }
+        if params.max_price_monthly.is_some() {
+            query.push_str(" AND o.monthly_price <= ?");
+        }
 
         query.push_str(" ORDER BY o.monthly_price ASC LIMIT ? OFFSET ?");
 
@@ -162,6 +170,12 @@ impl Database {
         }
         if params.in_stock_only {
             query_builder = query_builder.bind("in_stock");
+        }
+        if let Some(min_price) = params.min_price_monthly {
+            query_builder = query_builder.bind(min_price);
+        }
+        if let Some(max_price) = params.max_price_monthly {
+            query_builder = query_builder.bind(max_price);
         }
 
         // Fetch 3x the limit to account for filtering (offerings without pools)

@@ -132,6 +132,8 @@ async fn test_search_offerings_no_filters() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
             limit: 100,
             offset: 0,
         })
@@ -174,6 +176,8 @@ async fn test_search_offerings_excludes_private() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
             limit: 100,
             offset: 0,
         })
@@ -201,6 +205,8 @@ async fn test_search_offerings_by_country() {
             product_type: None,
             country: Some("US"),
             in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
             limit: 10,
             offset: 0,
         })
@@ -223,6 +229,8 @@ async fn test_search_offerings_price_range() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
             limit: 100,
             offset: 0,
         })
@@ -233,6 +241,80 @@ async fn test_search_offerings_price_range() {
     assert_eq!(results[0].monthly_price, 50.0);
     assert_eq!(results[1].monthly_price, 150.0);
     assert_eq!(results[2].monthly_price, 250.0);
+}
+
+#[tokio::test]
+async fn test_search_offerings_min_price_filter() {
+    let db = setup_test_db().await;
+    insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
+    insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
+
+    // Filter for offerings >= $100/month
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            min_price_monthly: Some(100.0),
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].monthly_price, 150.0);
+    assert_eq!(results[1].monthly_price, 250.0);
+}
+
+#[tokio::test]
+async fn test_search_offerings_max_price_filter() {
+    let db = setup_test_db().await;
+    insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
+    insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
+
+    // Filter for offerings <= $200/month
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: Some(200.0),
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].monthly_price, 50.0);
+    assert_eq!(results[1].monthly_price, 150.0);
+}
+
+#[tokio::test]
+async fn test_search_offerings_price_range_both() {
+    let db = setup_test_db().await;
+    insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
+    insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
+    insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
+
+    // Filter for offerings between $100 and $200/month
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            min_price_monthly: Some(100.0),
+            max_price_monthly: Some(200.0),
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].monthly_price, 150.0);
 }
 
 #[tokio::test]
@@ -266,6 +348,8 @@ async fn test_search_offerings_pagination() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
             limit: 100,
             offset: 0,
         })
@@ -283,6 +367,8 @@ async fn test_search_offerings_pagination() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
             limit: 3,
             offset: 0,
         })
@@ -1896,6 +1982,8 @@ async fn test_search_offerings_filters_by_pool_existence() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
             limit: 100,
             offset: 0,
         })

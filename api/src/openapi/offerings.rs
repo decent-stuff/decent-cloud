@@ -21,6 +21,8 @@ impl OfferingsApi {
         product_type: poem_openapi::param::Query<Option<String>>,
         country: poem_openapi::param::Query<Option<String>>,
         #[oai(default = "default_false")] in_stock_only: poem_openapi::param::Query<bool>,
+        min_price_monthly: poem_openapi::param::Query<Option<f64>>,
+        max_price_monthly: poem_openapi::param::Query<Option<f64>>,
         q: poem_openapi::param::Query<Option<String>>,
     ) -> Json<ApiResponse<Vec<crate::database::offerings::Offering>>> {
         // If DSL query is provided, use search_offerings_dsl
@@ -46,6 +48,8 @@ impl OfferingsApi {
             product_type: product_type.0.as_deref(),
             country: country.0.as_deref(),
             in_stock_only: in_stock_only.0,
+            min_price_monthly: min_price_monthly.0,
+            max_price_monthly: max_price_monthly.0,
             limit: limit.0,
             offset: offset.0,
         };
