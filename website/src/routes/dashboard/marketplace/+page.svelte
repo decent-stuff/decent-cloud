@@ -124,29 +124,29 @@
 			result = result.filter((o) => o.datacenter_city === selectedCity);
 		}
 
-		// Client-side cores filter
-		if (minCores !== null && minCores !== undefined) {
-			const threshold = minCores;
+		// Client-side cores filter (null = 0, no minimum)
+		const coresThreshold = minCores ?? 0;
+		if (coresThreshold > 0) {
 			result = result.filter(
-				(o) => (o.processor_cores ?? 0) >= threshold,
+				(o) => (o.processor_cores ?? 0) >= coresThreshold,
 			);
 		}
 
-		// Client-side memory filter (parse "32" or "32 GB" etc from memory_amount)
-		if (minMemoryGb !== null && minMemoryGb !== undefined) {
-			const threshold = minMemoryGb;
+		// Client-side memory filter (null = 0, no minimum)
+		const memoryThreshold = minMemoryGb ?? 0;
+		if (memoryThreshold > 0) {
 			result = result.filter((o) => {
 				const mem = o.memory_amount;
 				if (!mem) return false;
 				const match = mem.match(/(\d+)/);
 				if (!match) return false;
-				return parseInt(match[1], 10) >= threshold;
+				return parseInt(match[1], 10) >= memoryThreshold;
 			});
 		}
 
-		// Client-side SSD filter (parse from total_ssd_capacity)
-		if (minSsdGb !== null && minSsdGb !== undefined) {
-			const threshold = minSsdGb;
+		// Client-side SSD filter (null = 0, no minimum)
+		const ssdThreshold = minSsdGb ?? 0;
+		if (ssdThreshold > 0) {
 			result = result.filter((o) => {
 				const ssd = o.total_ssd_capacity;
 				if (!ssd) return false;
@@ -155,7 +155,7 @@
 				let value = parseInt(match[1], 10);
 				// Convert TB to GB if needed
 				if (ssd.toLowerCase().includes("tb")) value *= 1000;
-				return value >= threshold;
+				return value >= ssdThreshold;
 			});
 		}
 
@@ -173,10 +173,10 @@
 			result = result.filter((o) => o.unmetered_bandwidth);
 		}
 
-		// Client-side trust filter
-		if (minTrust !== null && minTrust !== undefined) {
-			const threshold = minTrust;
-			result = result.filter((o) => (o.trust_score ?? 0) >= threshold);
+		// Client-side trust filter (null = 0, no minimum)
+		const trustThreshold = minTrust ?? 0;
+		if (trustThreshold > 0) {
+			result = result.filter((o) => (o.trust_score ?? 0) >= trustThreshold);
 		}
 
 		// Hide demo offerings if toggle is off (non-demo always shown)
@@ -207,8 +207,10 @@
 				in_stock_only: true,
 				q: searchQuery.trim() || undefined,
 				country: selectedCountry || undefined,
-				min_price_monthly: minPrice,
-				max_price_monthly: maxPrice,
+				// null → undefined → omitted from API call → no constraint
+				// (effectively 0 for min, Infinity for max)
+				min_price_monthly: minPrice ?? undefined,
+				max_price_monthly: maxPrice ?? undefined,
 			});
 
 			// Update stable country list on initial load or when not filtering by country
