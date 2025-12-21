@@ -33,12 +33,12 @@ export interface ApiResponse<T> {
 
 // Offering search parameters
 export interface OfferingSearchParams {
-	limit?: number;
-	offset?: number;
+	limit?: number | null;
+	offset?: number | null;
 	product_type?: string;
 	country?: string;
-	min_price_monthly?: number;
-	max_price_monthly?: number;
+	min_price_monthly?: number | null;
+	max_price_monthly?: number | null;
 	in_stock_only?: boolean;
 	q?: string; // DSL query
 }
@@ -112,12 +112,12 @@ async function getErrorMessage(response: Response, defaultMessage: string): Prom
 
 export async function searchOfferings(params: OfferingSearchParams = {}): Promise<Offering[]> {
 	const searchParams = new URLSearchParams();
-	if (params.limit !== undefined) searchParams.set('limit', params.limit.toString());
-	if (params.offset !== undefined) searchParams.set('offset', params.offset.toString());
+	if (params.limit !== undefined && params.limit !== null) searchParams.set('limit', params.limit.toString());
+	if (params.offset !== undefined && params.offset !== null) searchParams.set('offset', params.offset.toString());
 	if (params.product_type) searchParams.set('product_type', params.product_type);
 	if (params.country) searchParams.set('country', params.country);
-	if (params.min_price_monthly !== undefined) searchParams.set('min_price_monthly', params.min_price_monthly.toString());
-	if (params.max_price_monthly !== undefined) searchParams.set('max_price_monthly', params.max_price_monthly.toString());
+	if (params.min_price_monthly !== undefined && params.min_price_monthly !== null) searchParams.set('min_price_monthly', params.min_price_monthly.toString());
+	if (params.max_price_monthly !== undefined && params.max_price_monthly !== null) searchParams.set('max_price_monthly', params.max_price_monthly.toString());
 	if (params.in_stock_only) searchParams.set('in_stock_only', 'true');
 	if (params.q) searchParams.set('q', params.q);
 

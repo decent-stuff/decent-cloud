@@ -22,17 +22,17 @@
 
 	// Filters
 	let selectedTypes = $state<Set<string>>(new Set());
-	let minPrice = $state<number | undefined>(undefined);
-	let maxPrice = $state<number | undefined>(undefined);
+	let minPrice = $state<number | null>(null);
+	let maxPrice = $state<number | null>(null);
 	let selectedRegion = $state<string>("");
 	let selectedCountry = $state<string>("");
 	let selectedCity = $state<string>("");
-	let minCores = $state<number | undefined>(undefined);
-	let minMemoryGb = $state<number | undefined>(undefined);
-	let minSsdGb = $state<number | undefined>(undefined);
+	let minCores = $state<number | null>(null);
+	let minMemoryGb = $state<number | null>(null);
+	let minSsdGb = $state<number | null>(null);
 	let selectedVirt = $state<string>("");
 	let unmeteredOnly = $state(false);
-	let minTrust = $state<number | undefined>(undefined);
+	let minTrust = $state<number | null>(null);
 	let showDemoOfferings = $state(true);
 
 	// Region definitions (matching dc-agent geolocation.rs)
@@ -125,7 +125,7 @@
 		}
 
 		// Client-side cores filter
-		if (minCores !== undefined) {
+		if (minCores !== null && minCores !== undefined) {
 			const threshold = minCores;
 			result = result.filter(
 				(o) => (o.processor_cores ?? 0) >= threshold,
@@ -133,7 +133,7 @@
 		}
 
 		// Client-side memory filter (parse "32" or "32 GB" etc from memory_amount)
-		if (minMemoryGb !== undefined) {
+		if (minMemoryGb !== null && minMemoryGb !== undefined) {
 			const threshold = minMemoryGb;
 			result = result.filter((o) => {
 				const mem = o.memory_amount;
@@ -145,7 +145,7 @@
 		}
 
 		// Client-side SSD filter (parse from total_ssd_capacity)
-		if (minSsdGb !== undefined) {
+		if (minSsdGb !== null && minSsdGb !== undefined) {
 			const threshold = minSsdGb;
 			result = result.filter((o) => {
 				const ssd = o.total_ssd_capacity;
@@ -174,7 +174,7 @@
 		}
 
 		// Client-side trust filter
-		if (minTrust !== undefined) {
+		if (minTrust !== null && minTrust !== undefined) {
 			const threshold = minTrust;
 			result = result.filter((o) => (o.trust_score ?? 0) >= threshold);
 		}
@@ -249,17 +249,17 @@
 
 	function clearFilters() {
 		selectedTypes = new Set();
-		minPrice = undefined;
-		maxPrice = undefined;
+		minPrice = null;
+		maxPrice = null;
 		selectedRegion = "";
 		selectedCountry = "";
 		selectedCity = "";
-		minCores = undefined;
-		minMemoryGb = undefined;
-		minSsdGb = undefined;
+		minCores = null;
+		minMemoryGb = null;
+		minSsdGb = null;
 		selectedVirt = "";
 		unmeteredOnly = false;
-		minTrust = undefined;
+		minTrust = null;
 		showDemoOfferings = true;
 		searchQuery = "";
 		fetchOfferings();
