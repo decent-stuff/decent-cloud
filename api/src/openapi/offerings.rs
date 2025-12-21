@@ -149,6 +149,7 @@ impl OfferingsApi {
             "payment_methods",
             "features",
             "operating_systems",
+            "agent_pool_id",
         ]);
 
         // Get example offerings for the specified product type from database
@@ -234,6 +235,7 @@ impl OfferingsApi {
                 &offering.payment_methods.unwrap_or_default(),
                 &offering.features.unwrap_or_default(),
                 &offering.operating_systems.unwrap_or_default(),
+                &offering.agent_pool_id.unwrap_or_default(),
             ]);
         }
 
