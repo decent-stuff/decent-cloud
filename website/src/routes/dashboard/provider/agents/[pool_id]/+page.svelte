@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from "$app/stores";
-	import { onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
 	import {
 		getAgentPoolDetails,
 		listAgentsInPool,
@@ -35,6 +35,7 @@
 
 	let signingIdentityInfo = $state<SigningIdentity | null>(null);
 	let providerHex = $state("");
+	let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Get pool_id from route params, ensuring it's defined
 	let poolId = $derived($page.params.pool_id ?? "");
@@ -43,11 +44,21 @@
 		const unsubscribe = authStore.isAuthenticated.subscribe((isAuth) => {
 			if (isAuth && poolId) {
 				loadData();
+				// Auto-refresh agent status every 30 seconds
+				refreshInterval = setInterval(() => {
+					refreshAgentData();
+				}, 30000);
 			} else {
 				loading = false;
 			}
 		});
 		return unsubscribe;
+	});
+
+	onDestroy(() => {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+		}
 	});
 
 	async function loadData() {
@@ -88,6 +99,29 @@
 			error = e instanceof Error ? e.message : "Failed to load pool details.";
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function refreshAgentData() {
+		// Silently refresh agent data without showing loading spinner
+		if (!signingIdentityInfo || !poolId) return;
+
+		try {
+			const [signedPoolDetails, signedAgents] = await Promise.all([
+				signRequest(signingIdentityInfo.identity, "GET", `/api/v1/providers/${providerHex}/pools/${poolId}`),
+				signRequest(signingIdentityInfo.identity, "GET", `/api/v1/providers/${providerHex}/pools/${poolId}/agents`)
+			]);
+
+			const [updatedPool, updatedDelegations] = await Promise.all([
+				getAgentPoolDetails(providerHex, poolId, signedPoolDetails.headers),
+				listAgentsInPool(providerHex, poolId, signedAgents.headers)
+			]);
+
+			pool = updatedPool;
+			delegations = updatedDelegations;
+		} catch (e) {
+			// Silently fail refresh - don't interrupt user experience
+			console.error("Failed to refresh agent data:", e);
 		}
 	}
 
@@ -145,13 +179,8 @@
 			);
 			await revokeAgentDelegation(providerHex, agentPubkey, signed.headers);
 
-			// Reload delegations
-			const signedAgents = await signRequest(
-				activeIdentity.identity,
-				"GET",
-				`/api/v1/providers/${providerHex}/pools/${poolId}/agents`
-			);
-			delegations = await listAgentsInPool(providerHex, poolId, signedAgents.headers);
+			// Refresh agent data
+			await refreshAgentData();
 		} catch (e) {
 			alert(e instanceof Error ? e.message : "Failed to revoke agent");
 		}
@@ -176,13 +205,8 @@
 			);
 			await updateAgentDelegationLabel(providerHex, agentPubkey, newLabel, signed.headers);
 
-			// Reload delegations
-			const signedAgents = await signRequest(
-				activeIdentity.identity,
-				"GET",
-				`/api/v1/providers/${providerHex}/pools/${poolId}/agents`
-			);
-			delegations = await listAgentsInPool(providerHex, poolId, signedAgents.headers);
+			// Refresh agent data
+			await refreshAgentData();
 		} catch (e) {
 			alert(e instanceof Error ? e.message : "Failed to update agent label");
 		}
@@ -338,7 +362,11 @@
 			{tokens}
 			onCreate={handleCreateToken}
 			onDelete={handleDeleteToken}
-			onClose={() => showTokenDialog = false}
+			onClose={() => {
+				showTokenDialog = false;
+				// Refresh agent data in case a token was used to add an agent
+				refreshAgentData();
+			}}
 		/>
 	{/if}
 </div>
