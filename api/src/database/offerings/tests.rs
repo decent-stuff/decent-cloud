@@ -33,7 +33,7 @@ async fn insert_test_offering(db: &Database, id: i64, pubkey: &[u8], country: &s
     .unwrap();
 }
 
-/// Ensures provider is registered and has a pool for the country's region.
+/// Ensures provider is registered and has a pool for the country's region with an online agent.
 /// Uses INSERT OR IGNORE to avoid conflicts if called multiple times for same provider.
 async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) {
     use crate::regions::country_to_region;
@@ -57,6 +57,34 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
         .bind(pubkey)
         .bind(&pool_name)
         .bind(region)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // Add an online agent to the pool for marketplace visibility
+    // Use deterministic agent pubkey based on provider pubkey and region
+    let mut agent_pubkey = [0u8; 32];
+    let pubkey_len = pubkey.len().min(16);
+    agent_pubkey[..pubkey_len].copy_from_slice(&pubkey[..pubkey_len]);
+    let region_bytes = region.as_bytes();
+    let region_len = region_bytes.len().min(16);
+    agent_pubkey[16..16 + region_len].copy_from_slice(&region_bytes[..region_len]);
+
+    // Register agent delegation
+    sqlx::query("INSERT OR IGNORE INTO agent_delegations (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, pool_id) VALUES (?, ?, '[]', NULL, 'Test Agent', X'00', 0, ?)")
+        .bind(pubkey)
+        .bind(&agent_pubkey[..])
+        .bind(&pool_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // Mark agent as online (recent heartbeat)
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    sqlx::query("INSERT OR REPLACE INTO provider_agent_status (provider_pubkey, agent_pubkey, online, last_heartbeat_ns, status_message) VALUES (?, ?, 1, ?, 'Test agent online')")
+        .bind(pubkey)
+        .bind(&agent_pubkey[..])
+        .bind(now_ns)
         .execute(&db.pool)
         .await
         .unwrap();
@@ -1176,6 +1204,7 @@ async fn test_search_offerings_dsl_basic_type_filter() {
 
     // Insert offerings with different product types
     let pubkey1 = vec![1u8; 32];
+    ensure_provider_with_pool(&db, &pubkey1, "US").await;
     sqlx::query!(
         "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'VPS Server', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
         101,
@@ -1187,6 +1216,7 @@ async fn test_search_offerings_dsl_basic_type_filter() {
     .unwrap();
 
     let pubkey2 = vec![2u8; 32];
+    ensure_provider_with_pool(&db, &pubkey2, "US").await;
     sqlx::query!(
         "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'Compute Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
         102,

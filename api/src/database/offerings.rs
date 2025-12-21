@@ -194,7 +194,8 @@ impl Database {
         Ok(filtered.into_iter().take(params.limit as usize).collect())
     }
 
-    /// Filter offerings to only include those that have a matching agent pool.
+    /// Update offerings with pool-specific online status.
+    /// Sets provider_online based on whether the offering's pool has online agents.
     /// This is done in Rust because country_to_region mapping can't be done in SQL.
     async fn filter_offerings_with_pools(&self, offerings: Vec<Offering>) -> Result<Vec<Offering>> {
         // Group offerings by provider to minimize database queries
@@ -208,7 +209,7 @@ impl Database {
 
         let mut result = Vec::new();
 
-        // For each provider, fetch their pools and filter offerings
+        // For each provider, fetch their pools and update offering online status
         for (provider_pubkey_hex, provider_offerings) in by_provider {
             // Decode hex pubkey
             let provider_pubkey = hex::decode(&provider_pubkey_hex)?;
@@ -216,28 +217,47 @@ impl Database {
             // Fetch all pools for this provider
             let pools = self.list_agent_pools_with_stats(&provider_pubkey).await?;
 
-            // Build sets for efficient lookup
+            // Build maps for efficient lookup
             let pool_ids: HashSet<String> = pools.iter().map(|p| p.pool.pool_id.clone()).collect();
             let pool_locations: HashSet<String> =
                 pools.iter().map(|p| p.pool.location.clone()).collect();
 
-            // Filter offerings that have a matching pool
-            for offering in provider_offerings {
-                let has_pool = if let Some(pool_id) = &offering.agent_pool_id {
-                    // Explicit pool_id - check if it exists
-                    !pool_id.is_empty() && pool_ids.contains(pool_id)
+            // Build map of pool_id -> online status
+            let pool_online_by_id: HashMap<String, bool> = pools.iter()
+                .map(|p| (p.pool.pool_id.clone(), p.online_count > 0))
+                .collect();
+
+            // Build map of location -> online status (any pool in that location with online agents)
+            let pool_online_by_location: HashMap<String, bool> = pools.iter()
+                .fold(HashMap::new(), |mut acc, p| {
+                    acc.entry(p.pool.location.clone())
+                        .and_modify(|online| *online = *online || p.online_count > 0)
+                        .or_insert(p.online_count > 0);
+                    acc
+                });
+
+            // Update all offerings with pool-specific online status
+            for mut offering in provider_offerings {
+                let (has_pool, pool_is_online) = if let Some(pool_id) = &offering.agent_pool_id {
+                    // Explicit pool_id - check if it exists and is online
+                    let has_pool = !pool_id.is_empty() && pool_ids.contains(pool_id);
+                    let is_online = pool_online_by_id.get(pool_id).copied().unwrap_or(false);
+                    (has_pool, is_online)
                 } else {
                     // No explicit pool - check if location matches a pool
                     if let Some(region) = country_to_region(&offering.datacenter_country) {
-                        pool_locations.contains(region)
+                        let has_pool = pool_locations.contains(region);
+                        let is_online = pool_online_by_location.get(region).copied().unwrap_or(false);
+                        (has_pool, is_online)
                     } else {
-                        false
+                        (false, false)
                     }
                 };
 
-                if has_pool {
-                    result.push(offering);
-                }
+                // Set provider_online based on whether the pool exists and has online agents
+                // If no pool exists for this offering, mark as offline
+                offering.provider_online = Some(has_pool && pool_is_online);
+                result.push(offering);
             }
         }
 
@@ -454,7 +474,10 @@ impl Database {
         query_builder = query_builder.bind(limit).bind(offset);
 
         let offerings = query_builder.fetch_all(&self.pool).await?;
-        Ok(offerings)
+
+        // Filter offerings with pool check and update provider_online
+        let filtered = self.filter_offerings_with_pools(offerings).await?;
+        Ok(filtered)
     }
 }
 
