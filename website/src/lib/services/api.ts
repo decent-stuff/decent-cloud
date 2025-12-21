@@ -1354,6 +1354,38 @@ export async function revokeAgentDelegation(
 	return payload.data ?? false;
 }
 
+export async function updateAgentDelegationLabel(
+	providerPubkey: string | Uint8Array,
+	agentPubkey: string,
+	label: string,
+	headers: SignedRequestHeaders
+): Promise<boolean> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/agent-delegations/${agentPubkey}/label`;
+
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers: {
+			...headers,
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ label })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to update agent label: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<boolean>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update agent label');
+	}
+
+	return payload.data ?? false;
+}
+
 // ==================== Agent Pool APIs ====================
 
 import type { AgentPool } from '$lib/types/generated/AgentPool';

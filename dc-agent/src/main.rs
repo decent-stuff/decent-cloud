@@ -10,13 +10,21 @@ use dc_agent::{
     registration::{default_agent_dir, generate_agent_keypair},
     setup::{proxmox::OsTemplate, ProxmoxSetup},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Map of provisioner type name to provisioner instance
 type ProvisionerMap = HashMap<String, Box<dyn Provisioner>>;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
+
+/// Tracks when orphan VMs were first detected for automatic pruning
+#[derive(Debug, Default)]
+struct OrphanTracker {
+    /// Map of external_id -> timestamp when first detected
+    first_seen: HashMap<String, u64>,
+}
 
 #[derive(Parser)]
 #[command(name = "dc-agent")]
@@ -238,32 +246,30 @@ async fn run_setup_token(
     println!("Location: {}", response.pool_location);
 
     // Step 4: Check if detected location matches pool location
-    if let Some((country, detected_region)) = detected_country {
-        if let Some(detected) = detected_region {
-            if detected != response.pool_location {
-                let detected_name = region_display_name(detected).unwrap_or(detected);
-                let pool_name =
-                    region_display_name(&response.pool_location).unwrap_or(&response.pool_location);
+    if let Some((country, Some(detected))) = detected_country {
+        if detected != response.pool_location {
+            let detected_name = region_display_name(detected).unwrap_or(detected);
+            let pool_name =
+                region_display_name(&response.pool_location).unwrap_or(&response.pool_location);
 
-                println!();
-                println!("WARNING: Location mismatch detected!");
-                println!("  Detected region: {} ({})", detected_name, country);
-                println!("  Pool region: {}", pool_name);
-                println!();
+            println!();
+            println!("WARNING: Location mismatch detected!");
+            println!("  Detected region: {} ({})", detected_name, country);
+            println!("  Pool region: {}", pool_name);
+            println!();
 
-                if !force {
-                    anyhow::bail!(
-                        "Agent location ({}) does not match pool location ({}). \
-                         Use --force to override this check.",
-                        detected,
-                        response.pool_location
-                    );
-                }
-
-                println!("[forced] Proceeding despite location mismatch (--force specified)");
-            } else {
-                println!("[ok] Location matches pool: {}", detected);
+            if !force {
+                anyhow::bail!(
+                    "Agent location ({}) does not match pool location ({}). \
+                     Use --force to override this check.",
+                    detected,
+                    response.pool_location
+                );
             }
+
+            println!("[forced] Proceeding despite location mismatch (--force specified)");
+        } else {
+            println!("[ok] Location matches pool: {}", detected);
         }
     }
 
@@ -809,6 +815,9 @@ async fn run_agent(config: Config) -> Result<()> {
     // Track active contracts for heartbeat reporting
     let mut active_contracts: i64 = 0;
 
+    // Track orphan VMs for automatic cleanup
+    let mut orphan_tracker = OrphanTracker::default();
+
     // Track consecutive failures for escalating log levels
     let mut heartbeat_failures: u32 = 0;
     let mut poll_failures: u32 = 0;
@@ -816,6 +825,7 @@ async fn run_agent(config: Config) -> Result<()> {
     info!(
         poll_interval_seconds = config.polling.interval_seconds,
         heartbeat_interval_seconds = heartbeat_interval_secs,
+        orphan_grace_period_seconds = config.polling.orphan_grace_period_seconds,
         "Agent started"
     );
 
@@ -833,7 +843,7 @@ async fn run_agent(config: Config) -> Result<()> {
     loop {
         tokio::select! {
             _ = poll_ticker.tick() => {
-                active_contracts = poll_and_provision(&api_client, &provisioners, &default_provisioner_type, &mut poll_failures).await;
+                active_contracts = poll_and_provision(&api_client, &provisioners, &default_provisioner_type, config.polling.orphan_grace_period_seconds, &mut orphan_tracker, &mut poll_failures).await;
             }
             _ = heartbeat_ticker.tick() => {
                 send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures).await;
@@ -904,6 +914,8 @@ async fn poll_and_provision(
     api_client: &ApiClient,
     provisioners: &ProvisionerMap,
     default_provisioner_type: &str,
+    orphan_grace_period_seconds: u64,
+    orphan_tracker: &mut OrphanTracker,
     consecutive_failures: &mut u32,
 ) -> i64 {
     let mut active_count: i64 = 0;
@@ -1132,15 +1144,20 @@ async fn poll_and_provision(
     }
 
     // Reconcile running instances - handles expired, cancelled, and orphan VMs
-    reconcile_instances(api_client, provisioners).await;
+    reconcile_instances(api_client, provisioners, orphan_grace_period_seconds, orphan_tracker).await;
 
     active_count
 }
 
 /// Reconcile running instances with the API.
-/// Reports running VMs, terminates expired/cancelled contracts, warns about orphans.
+/// Reports running VMs, terminates expired/cancelled contracts, and prunes orphans after grace period.
 /// Collects instances from ALL provisioners and tries to terminate via the appropriate one.
-async fn reconcile_instances(api_client: &ApiClient, provisioners: &ProvisionerMap) {
+async fn reconcile_instances(
+    api_client: &ApiClient,
+    provisioners: &ProvisionerMap,
+    orphan_grace_period_seconds: u64,
+    orphan_tracker: &mut OrphanTracker,
+) {
     // Collect running instances from ALL provisioners
     let mut all_running_instances = Vec::new();
     for (ptype, provisioner) in provisioners {
@@ -1223,14 +1240,106 @@ async fn reconcile_instances(api_client: &ApiClient, provisioners: &ProvisionerM
         }
     }
 
-    // Warn about orphan VMs
+    // Track and prune orphan VMs after grace period
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // Collect current orphan external IDs
+    let current_orphans: HashSet<String> = response
+        .unknown
+        .iter()
+        .map(|vm| vm.external_id.clone())
+        .collect();
+
+    // Track new orphans and check grace period for existing ones
+    let mut to_prune = Vec::new();
     for vm in &response.unknown {
+        let first_seen = *orphan_tracker
+            .first_seen
+            .entry(vm.external_id.clone())
+            .or_insert(now);
+
+        let age_seconds = now.saturating_sub(first_seen);
+
+        if age_seconds >= orphan_grace_period_seconds {
+            // Grace period exceeded - prune this orphan
+            to_prune.push(vm);
+        } else if age_seconds == 0 || first_seen == now {
+            // Newly detected orphan
+            info!(
+                external_id = %vm.external_id,
+                message = %vm.message,
+                grace_period_seconds = orphan_grace_period_seconds,
+                "Orphan VM detected - will auto-prune after grace period if not resolved"
+            );
+        } else {
+            // Existing orphan still in grace period
+            warn!(
+                external_id = %vm.external_id,
+                message = %vm.message,
+                age_seconds = age_seconds,
+                remaining_seconds = orphan_grace_period_seconds.saturating_sub(age_seconds),
+                "Orphan VM still present - will auto-prune if not resolved"
+            );
+        }
+    }
+
+    // Prune orphans that exceeded grace period
+    for vm in &to_prune {
         warn!(
             external_id = %vm.external_id,
             message = %vm.message,
-            "Orphan VM detected - no matching contract"
+            grace_period_seconds = orphan_grace_period_seconds,
+            "Pruning orphan VM - grace period exceeded"
         );
+
+        let mut pruned = false;
+        for (ptype, provisioner) in provisioners {
+            match provisioner.terminate(&vm.external_id).await {
+                Ok(()) => {
+                    info!(
+                        external_id = %vm.external_id,
+                        provisioner_type = %ptype,
+                        "Orphan VM pruned successfully"
+                    );
+                    pruned = true;
+                    break;
+                }
+                Err(_) => {
+                    // Try next provisioner
+                    continue;
+                }
+            }
+        }
+
+        if !pruned {
+            error!(
+                external_id = %vm.external_id,
+                "Orphan pruning failed - no provisioner could terminate this instance"
+            );
+        } else {
+            // Remove from tracker after successful pruning
+            orphan_tracker.first_seen.remove(&vm.external_id);
+        }
     }
+
+    // Clean up tracker - remove orphans that are no longer present (resolved)
+    orphan_tracker.first_seen.retain(|external_id, first_seen_ts| {
+        if current_orphans.contains(external_id) {
+            true // Still an orphan, keep tracking
+        } else {
+            // Orphan resolved (contract fixed or VM removed manually)
+            let age_seconds = now.saturating_sub(*first_seen_ts);
+            info!(
+                external_id = %external_id,
+                was_tracked_for_seconds = age_seconds,
+                "Orphan VM resolved - no longer present"
+            );
+            false // Remove from tracker
+        }
+    });
 }
 
 /// Create a single provisioner from config

@@ -34,6 +34,10 @@ pub struct PollingConfig {
     pub interval_seconds: u64,
     #[serde(default = "default_health_interval")]
     pub health_check_interval_seconds: u64,
+    /// Grace period (in seconds) before orphan VMs are automatically terminated.
+    /// Orphans are VMs without valid contract IDs. Default: 3600 (1 hour)
+    #[serde(default = "default_orphan_grace_period")]
+    pub orphan_grace_period_seconds: u64,
 }
 
 /// Provisioner configuration enum.
@@ -231,6 +235,10 @@ fn default_interval() -> u64 {
 
 fn default_health_interval() -> u64 {
     300
+}
+
+fn default_orphan_grace_period() -> u64 {
+    3600 // 1 hour
 }
 
 fn default_storage() -> String {

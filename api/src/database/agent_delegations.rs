@@ -296,6 +296,27 @@ impl Database {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Update agent delegation label.
+    pub async fn update_agent_delegation_label(
+        &self,
+        provider_pubkey: &[u8],
+        agent_pubkey: &[u8],
+        label: &str,
+    ) -> Result<bool> {
+        let result = sqlx::query!(
+            r#"UPDATE provider_agent_delegations
+               SET label = ?
+               WHERE provider_pubkey = ? AND agent_pubkey = ?"#,
+            label,
+            provider_pubkey,
+            agent_pubkey
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
     /// Update agent heartbeat status.
     pub async fn update_agent_heartbeat(
         &self,
@@ -375,8 +396,7 @@ impl Database {
     }
 
     /// Mark agents as offline if no heartbeat in last 5 minutes.
-    /// This should be called periodically (e.g., every minute) by a background job.
-    #[allow(dead_code)]
+    /// Called periodically by CleanupService background job.
     pub async fn mark_stale_agents_offline(&self) -> Result<u64> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let five_mins_ns = 5 * 60 * 1_000_000_000i64;

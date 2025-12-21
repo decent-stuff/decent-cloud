@@ -61,6 +61,16 @@ pub struct HeartbeatRequest {
     pub active_contracts: i64,
 }
 
+/// Request to update agent delegation label
+#[derive(Debug, Deserialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLabelRequest {
+    /// New label for the agent
+    pub label: String,
+}
+
 /// Response for heartbeat
 #[derive(Debug, Serialize, Object, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -283,6 +293,73 @@ impl AgentsApi {
                     None
                 } else {
                     Some("No active delegation found to revoke".to_string())
+                },
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update agent delegation label
+    ///
+    /// Updates the label for an existing agent delegation.
+    #[oai(
+        path = "/providers/:pubkey/agent-delegations/:agent_pubkey/label",
+        method = "put",
+        tag = "ApiTags::Agents"
+    )]
+    async fn update_delegation_label(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        agent_pubkey: Path<String>,
+        Json(payload): Json<UpdateLabelRequest>,
+    ) -> Json<ApiResponse<bool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        let agent_pk = match decode_pubkey(&agent_pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Invalid agent_pubkey: {}", e)),
+                })
+            }
+        };
+
+        match db
+            .update_agent_delegation_label(&provider_pubkey, &agent_pk, &payload.label)
+            .await
+        {
+            Ok(updated) => Json(ApiResponse {
+                success: true,
+                data: Some(updated),
+                error: if updated {
+                    None
+                } else {
+                    Some("No delegation found to update".to_string())
                 },
             }),
             Err(e) => Json(ApiResponse {

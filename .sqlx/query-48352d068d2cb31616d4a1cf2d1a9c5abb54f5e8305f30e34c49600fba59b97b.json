@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_agent_delegations\n               SET label = ?\n               WHERE provider_pubkey = ? AND agent_pubkey = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "48352d068d2cb31616d4a1cf2d1a9c5abb54f5e8305f30e34c49600fba59b97b"
+}

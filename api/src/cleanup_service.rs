@@ -79,6 +79,19 @@ impl CleanupService {
             }
         }
 
+        // Mark stale agents as offline (no heartbeat in last 5 minutes)
+        match self.database.mark_stale_agents_offline().await {
+            Ok(count) if count > 0 => {
+                tracing::info!("Marked {} stale agents as offline", count);
+            }
+            Ok(_) => {
+                tracing::debug!("No stale agents to mark offline");
+            }
+            Err(e) => {
+                tracing::error!("Failed to mark stale agents offline: {:#}", e);
+            }
+        }
+
         Ok(())
     }
 }

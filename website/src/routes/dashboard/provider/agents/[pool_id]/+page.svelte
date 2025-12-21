@@ -7,6 +7,8 @@
 		listSetupTokens,
 		createSetupToken,
 		deleteSetupToken,
+		revokeAgentDelegation,
+		updateAgentDelegationLabel,
 		hexEncode,
 		type CreateSetupTokenParams,
 		type AgentDelegation,
@@ -129,6 +131,63 @@
 		tokens = await listSetupTokens(providerHex, poolId, signedList.headers);
 	}
 
+	async function handleRevokeAgent(agentPubkey: string) {
+		if (!confirm("Are you sure you want to revoke this agent's access?")) return;
+
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) throw new Error("Not authenticated");
+
+		try {
+			const signed = await signRequest(
+				activeIdentity.identity,
+				"DELETE",
+				`/api/v1/providers/${providerHex}/agent-delegations/${agentPubkey}`
+			);
+			await revokeAgentDelegation(providerHex, agentPubkey, signed.headers);
+
+			// Reload delegations
+			const signedAgents = await signRequest(
+				activeIdentity.identity,
+				"GET",
+				`/api/v1/providers/${providerHex}/pools/${poolId}/agents`
+			);
+			delegations = await listAgentsInPool(providerHex, poolId, signedAgents.headers);
+		} catch (e) {
+			alert(e instanceof Error ? e.message : "Failed to revoke agent");
+		}
+	}
+
+	async function handleUpdateLabel(agentPubkey: string) {
+		const delegation = delegations.find(d => d.agentPubkey === agentPubkey);
+		const currentLabel = delegation?.label || "";
+		const newLabel = prompt("Enter new label for this agent:", currentLabel);
+
+		if (newLabel === null || newLabel === currentLabel) return;
+
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) throw new Error("Not authenticated");
+
+		try {
+			const signed = await signRequest(
+				activeIdentity.identity,
+				"PUT",
+				`/api/v1/providers/${providerHex}/agent-delegations/${agentPubkey}/label`,
+				{ label: newLabel }
+			);
+			await updateAgentDelegationLabel(providerHex, agentPubkey, newLabel, signed.headers);
+
+			// Reload delegations
+			const signedAgents = await signRequest(
+				activeIdentity.identity,
+				"GET",
+				`/api/v1/providers/${providerHex}/pools/${poolId}/agents`
+			);
+			delegations = await listAgentsInPool(providerHex, poolId, signedAgents.headers);
+		} catch (e) {
+			alert(e instanceof Error ? e.message : "Failed to update agent label");
+		}
+	}
+
 	function formatPubkey(hex: string): string {
 		if (hex.length <= 16) return hex;
 		return hex.slice(0, 8) + "..." + hex.slice(-8);
@@ -202,12 +261,13 @@
 						<th scope="col" class="px-6 py-3">Permissions</th>
 						<th scope="col" class="px-6 py-3">Created</th>
 						<th scope="col" class="px-6 py-3">Status</th>
+						<th scope="col" class="px-6 py-3">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#if delegations.length === 0}
 						<tr>
-							<td colspan="5" class="text-center py-8 text-white/50">
+							<td colspan="6" class="text-center py-8 text-white/50">
 								No agents delegated to this pool yet.
 							</td>
 						</tr>
@@ -244,6 +304,26 @@
 										Revoked
 									</span>
 								{/if}
+							</td>
+							<td class="px-6 py-4">
+								<div class="flex gap-2">
+									<button
+										onclick={() => handleUpdateLabel(delegation.agentPubkey)}
+										class="px-3 py-1 text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded hover:bg-blue-500/30 transition-colors"
+										title="Edit label"
+									>
+										Edit
+									</button>
+									{#if delegation.active}
+										<button
+											onclick={() => handleRevokeAgent(delegation.agentPubkey)}
+											class="px-3 py-1 text-xs bg-red-500/20 text-red-300 border border-red-500/30 rounded hover:bg-red-500/30 transition-colors"
+											title="Revoke agent access"
+										>
+											Revoke
+										</button>
+									{/if}
+								</div>
 							</td>
 						</tr>
 					{/each}
