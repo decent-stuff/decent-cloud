@@ -54,8 +54,8 @@ export interface CsvImportResult {
 	errors: CsvImportError[];
 }
 
-// Create offering params (omit id and pubkey for creation)
-export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey'>;
+// Create offering params (omit id, pubkey, and computed fields)
+export type CreateOfferingParams = Omit<Offering, 'id' | 'pubkey' | 'resolved_pool_id' | 'resolved_pool_name'>;
 
 // API URLs for different environments
 const DEV_API_BASE_URL = 'http://dev-api.decent-cloud.org';

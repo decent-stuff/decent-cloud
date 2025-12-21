@@ -273,6 +273,21 @@
 		</div>
 	{/if}
 
+	{#if offerings.filter(o => !o.resolved_pool_id).length > 0}
+		{@const offeringsWithoutPool = offerings.filter(o => !o.resolved_pool_id)}
+		<div class="bg-amber-500/20 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
+			<span class="text-2xl">⚠️</span>
+			<div>
+				<p class="text-amber-400 font-semibold">
+					{offeringsWithoutPool.length} offering{offeringsWithoutPool.length !== 1 ? 's' : ''} without matching pool
+				</p>
+				<p class="text-amber-400/80 text-sm mt-1">
+					These offerings are hidden from the public marketplace. Create agent pools or assign pools via CSV to enable provisioning.
+				</p>
+			</div>
+		</div>
+	{/if}
+
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
 			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"></div>
@@ -367,6 +382,14 @@
 								<span class="text-white font-medium">{offering.datacenter_city}, {offering.datacenter_country}</span>
 							</div>
 						{/if}
+						<div class="flex items-center justify-between text-white/70">
+							<span>Pool</span>
+							{#if offering.resolved_pool_name}
+								<span class="text-blue-400 font-medium">→ {offering.resolved_pool_name}</span>
+							{:else}
+								<span class="text-amber-400 font-medium">⚠️ No pool</span>
+							{/if}
+						</div>
 						{#if offering.description}
 							<div class="text-white/60 text-xs mt-3 line-clamp-2">{offering.description}</div>
 						{/if}

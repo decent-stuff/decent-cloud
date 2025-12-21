@@ -35,13 +35,14 @@
 				<th scope="col" class="px-6 py-3">Agents</th>
 				<th scope="col" class="px-6 py-3">Online</th>
 				<th scope="col" class="px-6 py-3">Active Contracts</th>
+				<th scope="col" class="px-6 py-3">Offerings</th>
 				<th scope="col" class="px-6 py-3 text-right hidden sm:table-cell">Actions</th>
 			</tr>
 		</thead>
 		<tbody>
 			{#if pools.length === 0}
 				<tr>
-					<td colspan="8" class="text-center py-8 text-white/50">
+					<td colspan="9" class="text-center py-8 text-white/50">
 						No agent pools configured yet.
 					</td>
 				</tr>
@@ -79,6 +80,7 @@
 						</span>
 					</td>
 					<td class="px-6 py-4 text-white/80">{pool.activeContracts}</td>
+					<td class="px-6 py-4 text-white/80">{pool.offeringsCount}</td>
 					<td class="px-6 py-4 text-right space-x-2 hidden sm:table-cell">
 						<button
 							onclick={(e) => handleAddAgent(e, pool)}

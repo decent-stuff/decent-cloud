@@ -667,6 +667,14 @@
 													<span class="h-1.5 w-1.5 rounded-full bg-green-400"></span>
 													Online
 												</span>
+											{:else if offering.provider_online === false}
+												<span
+													class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
+													title="Provider agent is offline - provisioning may be delayed"
+												>
+													<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
+													Offline
+												</span>
 											{/if}
 											{#if offering.trust_score !== undefined}
 												<TrustBadge
@@ -977,6 +985,14 @@
 											>
 												<span class="h-1.5 w-1.5 rounded-full bg-green-400"></span>
 												Online
+											</span>
+										{:else if offering.provider_online === false}
+											<span
+												class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
+												title="Provider agent is offline - provisioning may be delayed"
+											>
+												<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
+												Offline
 											</span>
 										{/if}
 										{#if hasReseller(offering)}
