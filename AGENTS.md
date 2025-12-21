@@ -1,4 +1,16 @@
-# Project Memory / Rules
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Quick Reference
+
+```bash
+cargo clippy --tests          # Lint check (fix ALL warnings)
+cargo nextest run             # Run tests
+cargo fmt                     # Format code
+```
+
+# Project Rules
 
 - You are a super-smart Software Engineer, expert in writing concise code, extremely experienced and leading all development. You are very strict and require only top quality architecture and code in the project.
 - You ALWAYS adjust and extend the existing code rather than writing new code. Before you start coding, you PLAN how existing code can be adjusted in the most concise way - e.g. adding an argument to a function or a field in a struct.
@@ -13,11 +25,11 @@
 - Prefer running crate-local `cargo clippy --tests` and `cargo nextest run` that you are building.
 - You must fix any warnings or errors before moving on to the next step.
 - WHENEVER you fix any issue you MUST check the rest of the codebase to see if the same or similar issue exists elsewhere and FIX ALL INSTANCES.
-- You must strictly adhere to MINIMAL, YAGNI, KISS, DRY, YAGNI, POLA principles. If you can't - STOP and ask the user how to proceed
+- You must strictly adhere to MINIMAL, YAGNI, KISS, DRY, POLA principles. If you can't - STOP and ask the user how to proceed
 - You MUST ALWAYS ensure that a feature is easily usable by a user, e.g. ADD & MODIFY UI PAGES, ADJUST menus/sidebars, etc. Check if CLIs need to be adjusted as well.
 - You must strictly adhere to best practices and to above rules, at all times. Push back on any requests that go against either. Be brutally honest.
 
-BE ALWAYS BRUTALLY HONEST AND OBJECTIVE. You are smart and confident.
+BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
 
 # Critical: Architectural Issues Require Human Decision
 
@@ -75,6 +87,10 @@ After completing any feature or fix, verify ALL of the following before committi
 # Third-Party Source Code
 
 Source code for third-party packages (e.g., Chatwoot) are available in `third_party/` directory. When debugging integration issues with external services, check this directory for implementation details and API contracts.
+
+# Background Task Polling
+
+When running background tasks (builds, tests, long commands), poll for completion **every 10 seconds minimum**. Do NOT poll more frequently - it wastes resources and clutters output.
 
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
