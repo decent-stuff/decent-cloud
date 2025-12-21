@@ -24,6 +24,7 @@
 	let selectedTypes = $state<Set<string>>(new Set());
 	let minPrice = $state<number | undefined>(undefined);
 	let maxPrice = $state<number | undefined>(undefined);
+	let selectedRegion = $state<string>("");
 	let selectedCountry = $state<string>("");
 	let selectedCity = $state<string>("");
 	let minCores = $state<number | undefined>(undefined);
@@ -33,6 +34,37 @@
 	let unmeteredOnly = $state(false);
 	let minTrust = $state<number | undefined>(undefined);
 	let showDemoOfferings = $state(true);
+
+	// Region definitions (matching dc-agent geolocation.rs)
+	const REGIONS = [
+		{ code: "europe", name: "Europe" },
+		{ code: "na", name: "North America" },
+		{ code: "latam", name: "Latin America" },
+		{ code: "apac", name: "Asia Pacific" },
+		{ code: "mena", name: "Middle East & North Africa" },
+		{ code: "ssa", name: "Sub-Saharan Africa" },
+		{ code: "cis", name: "CIS (Russia & neighbors)" },
+	] as const;
+
+	// Country to region mapping (subset of most common countries)
+	const COUNTRY_TO_REGION: Record<string, string> = {
+		// Europe
+		DE: "europe", FR: "europe", GB: "europe", UK: "europe", NL: "europe", PL: "europe",
+		IT: "europe", ES: "europe", SE: "europe", NO: "europe", FI: "europe", DK: "europe",
+		AT: "europe", BE: "europe", CH: "europe", IE: "europe", PT: "europe", GR: "europe",
+		CZ: "europe", HU: "europe", RO: "europe", BG: "europe", HR: "europe", SI: "europe",
+		// North America
+		US: "na", CA: "na", MX: "na",
+		// Latin America
+		BR: "latam", AR: "latam", CL: "latam", CO: "latam", PE: "latam", VE: "latam",
+		// Asia Pacific
+		CN: "apac", JP: "apac", SG: "apac", AU: "apac", NZ: "apac", IN: "apac",
+		KR: "apac", TH: "apac", MY: "apac", PH: "apac", ID: "apac", VN: "apac",
+		// MENA
+		AE: "mena", SA: "mena", IL: "mena", TR: "mena", EG: "mena",
+		// CIS
+		RU: "cis", UA: "cis", BY: "cis", KZ: "cis",
+	};
 
 	// Derived: unique virtualization types from offerings
 	let virtTypes = $derived(
@@ -45,14 +77,16 @@
 		].sort(),
 	);
 
-	// Derived: unique countries and cities from offerings
-	let countries = $derived(
-		[
-			...new Set(
-				offerings.map((o) => o.datacenter_country).filter(Boolean),
-			),
-		].sort(),
-	);
+	// Keep a stable list of all countries (doesn't change with filtering)
+	let allCountries = $state<string[]>([]);
+
+	// Derived: countries for current region filter
+	let countries = $derived(() => {
+		if (!selectedRegion) return allCountries;
+		// Filter countries by selected region
+		return allCountries.filter(c => COUNTRY_TO_REGION[c] === selectedRegion);
+	});
+
 	let cities = $derived(() => {
 		const filtered = selectedCountry
 			? offerings.filter((o) => o.datacenter_country === selectedCountry)
@@ -74,6 +108,14 @@
 					if (type.includes(t)) return true;
 				}
 				return false;
+			});
+		}
+
+		// Client-side region filter
+		if (selectedRegion) {
+			result = result.filter((o) => {
+				const country = o.datacenter_country;
+				return country && COUNTRY_TO_REGION[country] === selectedRegion;
 			});
 		}
 
@@ -168,6 +210,18 @@
 				min_price_monthly: minPrice,
 				max_price_monthly: maxPrice,
 			});
+
+			// Update stable country list on initial load or when not filtering by country
+			// This keeps all countries available in the dropdown even when filtering
+			if (!selectedCountry || allCountries.length === 0) {
+				const uniqueCountries = [...new Set(
+					offerings.map((o) => o.datacenter_country).filter(Boolean)
+				)].sort();
+				// Only update if we got more countries (initial load or expansion)
+				if (uniqueCountries.length >= allCountries.length) {
+					allCountries = uniqueCountries;
+				}
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load offerings";
 		} finally {
@@ -197,6 +251,7 @@
 		selectedTypes = new Set();
 		minPrice = undefined;
 		maxPrice = undefined;
+		selectedRegion = "";
 		selectedCountry = "";
 		selectedCity = "";
 		minCores = undefined;
@@ -436,6 +491,28 @@
 						</div>
 					</div>
 
+					<!-- Region Filter -->
+					<div>
+						<div
+							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+						>
+							Region
+						</div>
+						<select
+							bind:value={selectedRegion}
+							onchange={() => {
+								selectedCountry = "";
+								selectedCity = "";
+							}}
+							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+						>
+							<option value="">All regions</option>
+							{#each REGIONS as region}
+								<option value={region.code}>{region.name}</option>
+							{/each}
+						</select>
+					</div>
+
 					<!-- Country Filter -->
 					<div>
 						<div
@@ -452,7 +529,7 @@
 							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
 						>
 							<option value="">All countries</option>
-							{#each countries as country}
+							{#each countries() as country}
 								<option value={country}>{country}</option>
 							{/each}
 						</select>
