@@ -317,7 +317,7 @@
 			{/if}
 
 			<!-- Pool List -->
-			<AgentPoolTable {pools} />
+			<AgentPoolTable {pools} onEdit={startEdit} />
 
 		{/if}
 	{/if}

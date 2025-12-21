@@ -69,16 +69,17 @@
 			};
 			providerHex = hexEncode(signingIdentityInfo.publicKeyBytes);
 
-			const signed = await signRequest(
-				signingIdentityInfo.identity,
-				"GET",
-				`/api/v1/providers/${providerHex}/pools/${poolId}`
-			);
+			// Each API call needs its own signature (path is part of signed message)
+			const [signedPoolDetails, signedAgents, signedTokens] = await Promise.all([
+				signRequest(signingIdentityInfo.identity, "GET", `/api/v1/providers/${providerHex}/pools/${poolId}`),
+				signRequest(signingIdentityInfo.identity, "GET", `/api/v1/providers/${providerHex}/pools/${poolId}/agents`),
+				signRequest(signingIdentityInfo.identity, "GET", `/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens`)
+			]);
 
 			[pool, delegations, tokens] = await Promise.all([
-				getAgentPoolDetails(providerHex, poolId, signed.headers),
-				listAgentsInPool(providerHex, poolId, signed.headers),
-				listSetupTokens(providerHex, poolId, signed.headers)
+				getAgentPoolDetails(providerHex, poolId, signedPoolDetails.headers),
+				listAgentsInPool(providerHex, poolId, signedAgents.headers),
+				listSetupTokens(providerHex, poolId, signedTokens.headers)
 			]);
 
 		} catch (e) {
@@ -100,7 +101,13 @@
 			params
 		);
 		await createSetupToken(providerHex, poolId, params, signed.headers);
-		tokens = await listSetupTokens(providerHex, poolId, signed.headers);
+		// Need fresh signature for the list call (different path/method)
+		const signedList = await signRequest(
+			activeIdentity.identity,
+			"GET",
+			`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens`
+		);
+		tokens = await listSetupTokens(providerHex, poolId, signedList.headers);
 	}
 
 	async function handleDeleteToken(token: string) {
@@ -113,7 +120,13 @@
 			`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens/${token}`
 		);
 		await deleteSetupToken(providerHex, poolId, token, signed.headers);
-		tokens = await listSetupTokens(providerHex, poolId, signed.headers);
+		// Need fresh signature for the list call (different path/method)
+		const signedList = await signRequest(
+			activeIdentity.identity,
+			"GET",
+			`/api/v1/providers/${providerHex}/pools/${poolId}/setup-tokens`
+		);
+		tokens = await listSetupTokens(providerHex, poolId, signedList.headers);
 	}
 
 	function formatPubkey(hex: string): string {
