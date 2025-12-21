@@ -659,15 +659,7 @@
 											<span class="font-medium text-white"
 												>{offering.offer_name}</span
 											>
-											{#if offering.provider_online}
-												<span
-													class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-green-500/20 text-green-400 rounded"
-													title="Provider agent is online - fast provisioning"
-												>
-													<span class="h-1.5 w-1.5 rounded-full bg-green-400"></span>
-													Online
-												</span>
-											{:else if offering.provider_online === false}
+											{#if offering.provider_online === false}
 												<span
 													class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
 													title="Provider agent is offline - provisioning may be delayed"
@@ -978,15 +970,7 @@
 										<span class="font-medium text-white"
 											>{offering.offer_name}</span
 										>
-										{#if offering.provider_online}
-											<span
-												class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-green-500/20 text-green-400 rounded"
-												title="Provider agent is online - fast provisioning"
-											>
-												<span class="h-1.5 w-1.5 rounded-full bg-green-400"></span>
-												Online
-											</span>
-										{:else if offering.provider_online === false}
+										{#if offering.provider_online === false}
 											<span
 												class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
 												title="Provider agent is offline - provisioning may be delayed"
