@@ -44,6 +44,17 @@ impl AgentPermission {
     }
 }
 
+/// Parameters for creating an agent delegation
+pub struct CreateAgentDelegationParams<'a> {
+    pub provider_pubkey: &'a [u8],
+    pub agent_pubkey: &'a [u8],
+    pub permissions: &'a [AgentPermission],
+    pub expires_at_ns: Option<i64>,
+    pub label: Option<&'a str>,
+    pub signature: &'a [u8],
+    pub pool_id: Option<&'a str>,
+}
+
 impl std::str::FromStr for AgentPermission {
     type Err = ();
 
@@ -143,14 +154,17 @@ impl Database {
     /// The signature must be verified by the caller before calling this function.
     pub async fn create_agent_delegation(
         &self,
-        provider_pubkey: &[u8],
-        agent_pubkey: &[u8],
-        permissions: &[AgentPermission],
-        expires_at_ns: Option<i64>,
-        label: Option<&str>,
-        signature: &[u8],
-        pool_id: Option<&str>,
+        params: CreateAgentDelegationParams<'_>,
     ) -> Result<()> {
+        let CreateAgentDelegationParams {
+            provider_pubkey,
+            agent_pubkey,
+            permissions,
+            expires_at_ns,
+            label,
+            signature,
+            pool_id,
+        } = params;
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let permissions_json =
             serde_json::to_string(&permissions.iter().map(|p| p.as_str()).collect::<Vec<_>>())?;

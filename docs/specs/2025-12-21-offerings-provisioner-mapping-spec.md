@@ -10,14 +10,14 @@ Enable providers to explicitly map offerings to provisioner pools via CSV, and a
 ## Requirements
 
 ### Must-have
-- [ ] Add `agent_pool_id` column to CSV export and templates
-- [ ] Show Pool ID in AgentPoolTable so providers can copy it for CSV editing
-- [ ] Validate `agent_pool_id` during CSV import (error if pool doesn't exist or wrong provider)
-- [ ] Show resolved pool name on offering cards in provider dashboard ("→ eu-proxmox" or "⚠️ No pool")
-- [ ] Show warning banner on offerings page if any offerings lack a matching pool
-- [ ] Add "Offerings" count column to Agent Pools table
-- [ ] Exclude offerings without matching pool from public marketplace (API filter)
-- [ ] Show "Provider offline" indicator in marketplace when pool exists but has no online agents
+- [x] Add `agent_pool_id` column to CSV export and templates
+- [x] Show Pool ID in AgentPoolTable so providers can copy it for CSV editing
+- [x] Validate `agent_pool_id` during CSV import (error if pool doesn't exist or wrong provider)
+- [x] Show resolved pool name on offering cards in provider dashboard ("→ eu-proxmox" or "⚠️ No pool")
+- [x] Show warning banner on offerings page if any offerings lack a matching pool
+- [x] Add "Offerings" count column to Agent Pools table
+- [x] Exclude offerings without matching pool from public marketplace (API filter)
+- [x] Show "Provider offline" indicator in marketplace when pool exists but has no online agents
 
 ### Nice-to-have
 - [ ] Click on pool name in offerings card to navigate to pool detail page

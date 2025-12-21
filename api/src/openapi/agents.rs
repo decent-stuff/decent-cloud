@@ -4,6 +4,7 @@
 
 use super::common::{check_authorization, decode_pubkey, ApiResponse};
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
+use crate::database::agent_delegations::CreateAgentDelegationParams;
 use crate::database::{AgentDelegation, AgentPermission, AgentStatus, Database};
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
@@ -147,15 +148,15 @@ impl AgentsApi {
         // proves the provider authorized this registration
         let placeholder_signature = vec![0u8; 64];
         if let Err(e) = db
-            .create_agent_delegation(
-                &provider_pubkey,
-                &agent_pubkey,
-                &permissions,
-                None, // No expiry for pool-registered agents
-                label.as_deref(),
-                &placeholder_signature,
-                Some(&pool.pool_id),
-            )
+            .create_agent_delegation(CreateAgentDelegationParams {
+                provider_pubkey: &provider_pubkey,
+                agent_pubkey: &agent_pubkey,
+                permissions: &permissions,
+                expires_at_ns: None, // No expiry for pool-registered agents
+                label: label.as_deref(),
+                signature: &placeholder_signature,
+                pool_id: Some(&pool.pool_id),
+            })
             .await
         {
             return Json(ApiResponse {
