@@ -63,6 +63,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/052_per_offering_provisioner.sql"),
         include_str!("../../migrations/053_agent_pools.sql"),
         include_str!("../../migrations/054_example_provider_pools.sql"),
+        include_str!("../../migrations/055_fix_example_offering_countries.sql"),
     ];
 
     for migration in &migrations {

@@ -187,17 +187,30 @@ impl Database {
             .fetch_all(&self.pool)
             .await?;
 
-        // Filter offerings to only include those with matching pools
-        let filtered = self.filter_offerings_with_pools(offerings).await?;
+        // Compute online status for all offerings
+        let with_status = self.compute_provider_online_status(offerings).await?;
 
-        // Return only the requested limit
-        Ok(filtered.into_iter().take(params.limit as usize).collect())
+        // Filter to only include offerings that have a matching pool
+        // Offerings without pools have provider_online = Some(false) due to has_pool = false
+        let filtered: Vec<Offering> = with_status
+            .into_iter()
+            .filter(|o| {
+                // Include if provider_online is Some(true) OR Some(false) where the pool exists but is offline
+                // Exclude if provider_online is Some(false) and has_pool was false (no pool)
+                // We can detect "no pool" by checking if resolved_pool_id is None
+                o.resolved_pool_id.is_some()
+            })
+            .take(params.limit as usize)
+            .collect();
+
+        Ok(filtered)
     }
 
-    /// Update offerings with pool-specific online status.
+    /// Compute provider_online status and resolved pool info for offerings.
     /// Sets provider_online based on whether the offering's pool has online agents.
+    /// Also sets resolved_pool_id and resolved_pool_name.
     /// This is done in Rust because country_to_region mapping can't be done in SQL.
-    async fn filter_offerings_with_pools(&self, offerings: Vec<Offering>) -> Result<Vec<Offering>> {
+    async fn compute_provider_online_status(&self, offerings: Vec<Offering>) -> Result<Vec<Offering>> {
         // Group offerings by provider to minimize database queries
         let mut by_provider: HashMap<String, Vec<Offering>> = HashMap::new();
         for offering in offerings {
@@ -222,41 +235,61 @@ impl Database {
             let pool_locations: HashSet<String> =
                 pools.iter().map(|p| p.pool.location.clone()).collect();
 
-            // Build map of pool_id -> online status
-            let pool_online_by_id: HashMap<String, bool> = pools.iter()
-                .map(|p| (p.pool.pool_id.clone(), p.online_count > 0))
+            // Build map of pool_id -> (pool, online status)
+            let pool_info_by_id: HashMap<String, (&super::agent_pools::AgentPoolWithStats, bool)> = pools.iter()
+                .map(|p| (p.pool.pool_id.clone(), (p, p.online_count > 0)))
                 .collect();
 
-            // Build map of location -> online status (any pool in that location with online agents)
-            let pool_online_by_location: HashMap<String, bool> = pools.iter()
+            // Build map of location -> (pool, online status) (first online pool in location, or first pool if none online)
+            let pool_info_by_location: HashMap<String, (&super::agent_pools::AgentPoolWithStats, bool)> = pools.iter()
                 .fold(HashMap::new(), |mut acc, p| {
+                    let is_online = p.online_count > 0;
                     acc.entry(p.pool.location.clone())
-                        .and_modify(|online| *online = *online || p.online_count > 0)
-                        .or_insert(p.online_count > 0);
+                        .and_modify(|(existing_pool, existing_online)| {
+                            // Prefer online pools
+                            if !*existing_online && is_online {
+                                *existing_pool = p;
+                                *existing_online = is_online;
+                            }
+                        })
+                        .or_insert((p, is_online));
                     acc
                 });
 
             // Update all offerings with pool-specific online status
             for mut offering in provider_offerings {
-                let (has_pool, pool_is_online) = if let Some(pool_id) = &offering.agent_pool_id {
+                let (has_pool, pool_is_online, resolved_pool) = if let Some(pool_id) = &offering.agent_pool_id {
                     // Explicit pool_id - check if it exists and is online
                     let has_pool = !pool_id.is_empty() && pool_ids.contains(pool_id);
-                    let is_online = pool_online_by_id.get(pool_id).copied().unwrap_or(false);
-                    (has_pool, is_online)
+                    if let Some((pool_info, is_online)) = pool_info_by_id.get(pool_id) {
+                        (has_pool, *is_online, Some(&pool_info.pool))
+                    } else {
+                        (false, false, None)
+                    }
                 } else {
                     // No explicit pool - check if location matches a pool
                     if let Some(region) = country_to_region(&offering.datacenter_country) {
                         let has_pool = pool_locations.contains(region);
-                        let is_online = pool_online_by_location.get(region).copied().unwrap_or(false);
-                        (has_pool, is_online)
+                        if let Some((pool_info, is_online)) = pool_info_by_location.get(region) {
+                            (has_pool, *is_online, Some(&pool_info.pool))
+                        } else {
+                            (false, false, None)
+                        }
                     } else {
-                        (false, false)
+                        (false, false, None)
                     }
                 };
 
                 // Set provider_online based on whether the pool exists and has online agents
                 // If no pool exists for this offering, mark as offline
                 offering.provider_online = Some(has_pool && pool_is_online);
+
+                // Set resolved pool info
+                if let Some(pool) = resolved_pool {
+                    offering.resolved_pool_id = Some(pool.pool_id.clone());
+                    offering.resolved_pool_name = Some(pool.name.clone());
+                }
+
                 result.push(offering);
             }
         }
@@ -271,10 +304,10 @@ impl Database {
         Ok(result)
     }
 
-    /// Get offerings by provider with resolved pool information
+    /// Get offerings by provider with resolved pool information and online status
     pub async fn get_provider_offerings(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
-        let mut offerings = sqlx::query_as::<_, Offering>(
+        let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
@@ -292,16 +325,11 @@ impl Database {
         .fetch_all(&self.pool)
         .await?;
 
-        // Compute resolved pool for each offering
-        for offering in &mut offerings {
-            let pool = self.resolve_pool_for_offering(pubkey, offering).await?;
-            if let Some(pool) = pool {
-                offering.resolved_pool_id = Some(pool.pool_id);
-                offering.resolved_pool_name = Some(pool.name);
-            }
-        }
+        // Compute resolved pool and online status for each offering
+        // This uses the same logic as marketplace to ensure consistency
+        let result = self.compute_provider_online_status(offerings).await?;
 
-        Ok(offerings)
+        Ok(result)
     }
 
     /// Resolve which pool an offering maps to.
@@ -475,8 +503,15 @@ impl Database {
 
         let offerings = query_builder.fetch_all(&self.pool).await?;
 
-        // Filter offerings with pool check and update provider_online
-        let filtered = self.filter_offerings_with_pools(offerings).await?;
+        // Compute online status for all offerings
+        let with_status = self.compute_provider_online_status(offerings).await?;
+
+        // Filter to only include offerings that have a matching pool
+        let filtered: Vec<Offering> = with_status
+            .into_iter()
+            .filter(|o| o.resolved_pool_id.is_some())
+            .collect();
+
         Ok(filtered)
     }
 }

@@ -71,7 +71,7 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
     agent_pubkey[16..16 + region_len].copy_from_slice(&region_bytes[..region_len]);
 
     // Register agent delegation
-    sqlx::query("INSERT OR IGNORE INTO agent_delegations (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, pool_id) VALUES (?, ?, '[]', NULL, 'Test Agent', X'00', 0, ?)")
+    sqlx::query("INSERT OR IGNORE INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, pool_id) VALUES (?, ?, '[]', NULL, 'Test Agent', X'00', 0, ?)")
         .bind(pubkey)
         .bind(&agent_pubkey[..])
         .bind(&pool_id)
@@ -79,11 +79,11 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
         .await
         .unwrap();
 
-    // Mark agent as online (recent heartbeat)
+    // Mark provider as online (recent heartbeat)
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    sqlx::query("INSERT OR REPLACE INTO provider_agent_status (provider_pubkey, agent_pubkey, online, last_heartbeat_ns, status_message) VALUES (?, ?, 1, ?, 'Test agent online')")
+    sqlx::query("INSERT OR REPLACE INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES (?, 1, ?, ?)")
         .bind(pubkey)
-        .bind(&agent_pubkey[..])
+        .bind(now_ns)
         .bind(now_ns)
         .execute(&db.pool)
         .await
