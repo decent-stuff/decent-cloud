@@ -34,6 +34,7 @@
 	let unmeteredOnly = $state(false);
 	let minTrust = $state<number | null>(null);
 	let showDemoOfferings = $state(true);
+	let showOfflineOfferings = $state(false);
 
 	// Region definitions (matching dc-agent geolocation.rs)
 	const REGIONS = [
@@ -184,6 +185,11 @@
 			result = result.filter((o) => !o.is_example);
 		}
 
+		// Hide offline offerings if toggle is off (online always shown)
+		if (!showOfflineOfferings) {
+			result = result.filter((o) => o.provider_online);
+		}
+
 		// Sort by price
 		result.sort((a, b) => {
 			const priceA = a.monthly_price ?? Infinity;
@@ -263,6 +269,7 @@
 		unmeteredOnly = false;
 		minTrust = null;
 		showDemoOfferings = true;
+		showOfflineOfferings = false;
 		searchQuery = "";
 		fetchOfferings();
 	}
@@ -670,6 +677,23 @@
 							<span
 								class="text-sm text-white/80 group-hover:text-white"
 								>Show demo offerings</span
+							>
+						</label>
+					</div>
+
+					<!-- Show Offline Offerings Filter -->
+					<div>
+						<label
+							class="flex items-center gap-2 cursor-pointer group"
+						>
+							<input
+								type="checkbox"
+								bind:checked={showOfflineOfferings}
+								class="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
+							/>
+							<span
+								class="text-sm text-white/80 group-hover:text-white"
+								>Show offline offerings</span
 							>
 						</label>
 					</div>

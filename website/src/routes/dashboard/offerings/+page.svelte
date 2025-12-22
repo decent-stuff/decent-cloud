@@ -336,7 +336,17 @@
 					<!-- Header: Icon and Badges -->
 					<div class="flex items-start justify-between mb-4">
 						<span class="text-4xl">{getTypeIcon(offering.product_type)}</span>
-						<div class="flex items-center gap-2">
+						<div class="flex items-center gap-2 flex-wrap justify-end">
+							<!-- Offline indicator -->
+							{#if !offering.provider_online}
+								<span
+									class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30"
+									title="Provider agent is offline - provisioning will not work until agent comes online"
+								>
+									<span class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span>
+									Offline
+								</span>
+							{/if}
 							<!-- Visibility toggle -->
 							<button
 								onclick={(e) => handleVisibilityToggle(offering, e)}
