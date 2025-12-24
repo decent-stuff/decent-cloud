@@ -1,7 +1,7 @@
 use super::common::{
     default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
-    ExtendContractResponse, RecordUsageRequest, RentalRequestResponse, UpdateIcpayTransactionRequest,
-    VerifyCheckoutSessionRequest, VerifyCheckoutSessionResponse,
+    ExtendContractResponse, RecordUsageRequest, RentalRequestResponse,
+    UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest, VerifyCheckoutSessionResponse,
 };
 use crate::auth::{AdminAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
@@ -255,12 +255,26 @@ impl ContractsApi {
         };
 
         // Check subscription rental limits
-        if let Some(account_id) = db.get_account_id_by_public_key(&auth.pubkey).await.ok().flatten() {
-            let has_unlimited = db.account_has_feature(&account_id, "unlimited_rentals").await.unwrap_or(false);
+        if let Some(account_id) = db
+            .get_account_id_by_public_key(&auth.pubkey)
+            .await
+            .ok()
+            .flatten()
+        {
+            let has_unlimited = db
+                .account_has_feature(&account_id, "unlimited_rentals")
+                .await
+                .unwrap_or(false);
             if !has_unlimited {
-                let has_one_rental = db.account_has_feature(&account_id, "one_rental").await.unwrap_or(false);
+                let has_one_rental = db
+                    .account_has_feature(&account_id, "one_rental")
+                    .await
+                    .unwrap_or(false);
                 if has_one_rental {
-                    let active_count = db.count_active_contracts_for_account(&account_id).await.unwrap_or(0);
+                    let active_count = db
+                        .count_active_contracts_for_account(&account_id)
+                        .await
+                        .unwrap_or(0);
                     if active_count >= 1 {
                         return Json(ApiResponse {
                             success: false,
@@ -754,7 +768,11 @@ impl ContractsApi {
     ///
     /// Records a usage event (heartbeat, session start/end) for billing purposes.
     /// User must be the provider or an authorized agent.
-    #[oai(path = "/contracts/:id/usage", method = "post", tag = "ApiTags::Contracts")]
+    #[oai(
+        path = "/contracts/:id/usage",
+        method = "post",
+        tag = "ApiTags::Contracts"
+    )]
     async fn record_usage(
         &self,
         db: Data<&Arc<Database>>,
@@ -830,7 +848,11 @@ impl ContractsApi {
     ///
     /// Returns the current billing period usage for a contract.
     /// User must be the requester or provider.
-    #[oai(path = "/contracts/:id/usage", method = "get", tag = "ApiTags::Contracts")]
+    #[oai(
+        path = "/contracts/:id/usage",
+        method = "get",
+        tag = "ApiTags::Contracts"
+    )]
     async fn get_usage(
         &self,
         db: Data<&Arc<Database>>,

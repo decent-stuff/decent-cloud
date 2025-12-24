@@ -2310,7 +2310,10 @@ async fn test_update_usage_from_heartbeats() {
 
     // 2 intervals of 60 seconds each = 120 seconds = 1/30 hour ≈ 0.0333 hours
     assert!(total_units > 0.0, "Should have calculated some usage");
-    assert!(total_units < 0.1, "Usage should be reasonable (under 0.1 hours)");
+    assert!(
+        total_units < 0.1,
+        "Usage should be reasonable (under 0.1 hours)"
+    );
 
     // Verify usage was updated
     let usage = db.get_current_usage(&contract_id).await.unwrap().unwrap();
@@ -2349,7 +2352,10 @@ async fn test_mark_usage_reported() {
     // Verify
     let usage = db.get_current_usage(&contract_id).await.unwrap().unwrap();
     assert!(usage.reported_to_stripe);
-    assert_eq!(usage.stripe_usage_record_id, Some("usage_record_123".to_string()));
+    assert_eq!(
+        usage.stripe_usage_record_id,
+        Some("usage_record_123".to_string())
+    );
 }
 
 #[tokio::test]
@@ -2474,7 +2480,8 @@ async fn test_update_contract_subscription() {
     .unwrap();
 
     // Update subscription status
-    let new_period_end = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) + 30 * 86400 * 1_000_000_000i64;
+    let new_period_end =
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) + 30 * 86400 * 1_000_000_000i64;
     db.update_contract_subscription(subscription_id, "active", new_period_end, false)
         .await
         .unwrap();
@@ -2535,7 +2542,10 @@ async fn test_update_contract_subscription_cancel_at_period_end() {
 
     assert_eq!(contract.subscription_status, Some("active".to_string()));
     assert_eq!(contract.current_period_end_ns, Some(period_end));
-    assert!(contract.cancel_at_period_end, "cancel_at_period_end should be true");
+    assert!(
+        contract.cancel_at_period_end,
+        "cancel_at_period_end should be true"
+    );
 }
 
 #[tokio::test]
@@ -2564,5 +2574,8 @@ async fn test_contract_subscription_fields_default_values() {
     assert_eq!(contract.stripe_subscription_id, None);
     assert_eq!(contract.subscription_status, None);
     assert_eq!(contract.current_period_end_ns, None);
-    assert!(!contract.cancel_at_period_end, "cancel_at_period_end should default to false");
+    assert!(
+        !contract.cancel_at_period_end,
+        "cancel_at_period_end should default to false"
+    );
 }

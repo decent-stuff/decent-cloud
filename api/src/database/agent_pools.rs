@@ -219,7 +219,7 @@ impl Database {
             datacenter_country: String,
         }
         let offerings = sqlx::query_as::<_, OfferingRow>(
-            "SELECT agent_pool_id, datacenter_country FROM provider_offerings WHERE pubkey = ?"
+            "SELECT agent_pool_id, datacenter_country FROM provider_offerings WHERE pubkey = ?",
         )
         .bind(provider_pubkey)
         .fetch_all(&self.pool)

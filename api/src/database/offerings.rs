@@ -28,7 +28,7 @@ pub struct Offering {
     pub virtualization_type: Option<String>,
     pub billing_interval: String,
     // Usage-based billing fields
-    pub billing_unit: String, // 'minute', 'hour', 'day', 'month'
+    pub billing_unit: String,          // 'minute', 'hour', 'day', 'month'
     pub pricing_model: Option<String>, // 'flat', 'usage_overage'
     #[ts(type = "number | undefined")]
     pub price_per_unit: Option<f64>,
@@ -227,7 +227,10 @@ impl Database {
     /// Sets provider_online based on whether the offering's pool has online agents.
     /// Also sets resolved_pool_id and resolved_pool_name.
     /// This is done in Rust because country_to_region mapping can't be done in SQL.
-    async fn compute_provider_online_status(&self, offerings: Vec<Offering>) -> Result<Vec<Offering>> {
+    async fn compute_provider_online_status(
+        &self,
+        offerings: Vec<Offering>,
+    ) -> Result<Vec<Offering>> {
         // Group offerings by provider to minimize database queries
         let mut by_provider: HashMap<String, Vec<Offering>> = HashMap::new();
         for offering in offerings {
@@ -253,29 +256,35 @@ impl Database {
                 pools.iter().map(|p| p.pool.location.clone()).collect();
 
             // Build map of pool_id -> (pool, online status)
-            let pool_info_by_id: HashMap<String, (&super::agent_pools::AgentPoolWithStats, bool)> = pools.iter()
-                .map(|p| (p.pool.pool_id.clone(), (p, p.online_count > 0)))
-                .collect();
+            let pool_info_by_id: HashMap<String, (&super::agent_pools::AgentPoolWithStats, bool)> =
+                pools
+                    .iter()
+                    .map(|p| (p.pool.pool_id.clone(), (p, p.online_count > 0)))
+                    .collect();
 
             // Build map of location -> (pool, online status) (first online pool in location, or first pool if none online)
-            let pool_info_by_location: HashMap<String, (&super::agent_pools::AgentPoolWithStats, bool)> = pools.iter()
-                .fold(HashMap::new(), |mut acc, p| {
-                    let is_online = p.online_count > 0;
-                    acc.entry(p.pool.location.clone())
-                        .and_modify(|(existing_pool, existing_online)| {
-                            // Prefer online pools
-                            if !*existing_online && is_online {
-                                *existing_pool = p;
-                                *existing_online = is_online;
-                            }
-                        })
-                        .or_insert((p, is_online));
-                    acc
-                });
+            let pool_info_by_location: HashMap<
+                String,
+                (&super::agent_pools::AgentPoolWithStats, bool),
+            > = pools.iter().fold(HashMap::new(), |mut acc, p| {
+                let is_online = p.online_count > 0;
+                acc.entry(p.pool.location.clone())
+                    .and_modify(|(existing_pool, existing_online)| {
+                        // Prefer online pools
+                        if !*existing_online && is_online {
+                            *existing_pool = p;
+                            *existing_online = is_online;
+                        }
+                    })
+                    .or_insert((p, is_online));
+                acc
+            });
 
             // Update all offerings with pool-specific online status
             for mut offering in provider_offerings {
-                let (has_pool, pool_is_online, resolved_pool) = if let Some(pool_id) = &offering.agent_pool_id {
+                let (has_pool, pool_is_online, resolved_pool) = if let Some(pool_id) =
+                    &offering.agent_pool_id
+                {
                     // Explicit pool_id - check if it exists and is online
                     let has_pool = !pool_id.is_empty() && pool_ids.contains(pool_id);
                     if let Some((pool_info, is_online)) = pool_info_by_id.get(pool_id) {
@@ -1357,7 +1366,11 @@ impl Database {
             billing_interval: get_str("billing_interval"),
             billing_unit: {
                 let unit = get_str("billing_unit");
-                if unit.is_empty() { "month".to_string() } else { unit }
+                if unit.is_empty() {
+                    "month".to_string()
+                } else {
+                    unit
+                }
             },
             pricing_model: get_opt_str("pricing_model"),
             price_per_unit: get_opt_f64("price_per_unit"),

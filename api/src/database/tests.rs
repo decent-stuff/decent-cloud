@@ -449,10 +449,7 @@ async fn test_offerings_with_pools_included_in_search() {
 
     // count_offerings counts all public offerings (example data was deleted)
     let total_count = db.count_offerings(None).await.unwrap();
-    assert_eq!(
-        total_count, 1,
-        "Count should include all public offerings"
-    );
+    assert_eq!(total_count, 1, "Count should include all public offerings");
 }
 
 // Validator tests

@@ -2414,7 +2414,10 @@ async fn test_get_subscription_offering_fields() {
         .unwrap();
 
     let found = results.iter().find(|o| o.offering_id == "sub-get-test");
-    assert!(found.is_some(), "Subscription offering should be in search results");
+    assert!(
+        found.is_some(),
+        "Subscription offering should be in search results"
+    );
     let found = found.unwrap();
     assert!(found.is_subscription);
     assert_eq!(found.subscription_interval_days, Some(30));

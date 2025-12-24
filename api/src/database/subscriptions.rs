@@ -124,10 +124,7 @@ impl Database {
     }
 
     /// Get account subscription details
-    pub async fn get_account_subscription(
-        &self,
-        account_id: &[u8],
-    ) -> Result<AccountSubscription> {
+    pub async fn get_account_subscription(&self, account_id: &[u8]) -> Result<AccountSubscription> {
         // First get account subscription fields
         let account_row = sqlx::query!(
             r#"SELECT subscription_plan_id, subscription_status,
@@ -202,11 +199,7 @@ impl Database {
     }
 
     /// Link Stripe customer ID to account
-    pub async fn set_stripe_customer_id(
-        &self,
-        account_id: &[u8],
-        customer_id: &str,
-    ) -> Result<()> {
+    pub async fn set_stripe_customer_id(&self, account_id: &[u8], customer_id: &str) -> Result<()> {
         sqlx::query!(
             r#"UPDATE accounts SET stripe_customer_id = ?,
                updated_at = strftime('%s', 'now') * 1000000000
@@ -442,7 +435,8 @@ mod tests {
         insert_contract_for_account(&db, &[3u8; 32], &pubkey, &provider_pubkey, "active").await;
 
         // Insert provisioned contract
-        insert_contract_for_account(&db, &[4u8; 32], &pubkey, &provider_pubkey, "provisioned").await;
+        insert_contract_for_account(&db, &[4u8; 32], &pubkey, &provider_pubkey, "provisioned")
+            .await;
 
         // Insert cancelled contract (should not be counted)
         insert_contract_for_account(&db, &[5u8; 32], &pubkey, &provider_pubkey, "cancelled").await;
@@ -466,9 +460,18 @@ mod tests {
             .unwrap();
 
         // Free tier has one_rental but not unlimited_rentals
-        assert!(db.account_has_feature(&account.id, "one_rental").await.unwrap());
-        assert!(db.account_has_feature(&account.id, "marketplace_browse").await.unwrap());
-        assert!(!db.account_has_feature(&account.id, "unlimited_rentals").await.unwrap());
+        assert!(db
+            .account_has_feature(&account.id, "one_rental")
+            .await
+            .unwrap());
+        assert!(db
+            .account_has_feature(&account.id, "marketplace_browse")
+            .await
+            .unwrap());
+        assert!(!db
+            .account_has_feature(&account.id, "unlimited_rentals")
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
@@ -488,8 +491,17 @@ mod tests {
             .unwrap();
 
         // Pro tier has unlimited_rentals
-        assert!(db.account_has_feature(&account.id, "unlimited_rentals").await.unwrap());
-        assert!(db.account_has_feature(&account.id, "marketplace_browse").await.unwrap());
-        assert!(!db.account_has_feature(&account.id, "one_rental").await.unwrap()); // Pro doesn't have one_rental, it has unlimited
+        assert!(db
+            .account_has_feature(&account.id, "unlimited_rentals")
+            .await
+            .unwrap());
+        assert!(db
+            .account_has_feature(&account.id, "marketplace_browse")
+            .await
+            .unwrap());
+        assert!(!db
+            .account_has_feature(&account.id, "one_rental")
+            .await
+            .unwrap()); // Pro doesn't have one_rental, it has unlimited
     }
 }

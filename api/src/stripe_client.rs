@@ -487,7 +487,8 @@ impl StripeClient {
             })
         } else {
             // Cancel immediately
-            let subscription = Subscription::cancel(&self.client, &sub_id, Default::default()).await?;
+            let subscription =
+                Subscription::cancel(&self.client, &sub_id, Default::default()).await?;
 
             Ok(SubscriptionInfo {
                 id: subscription.id.to_string(),

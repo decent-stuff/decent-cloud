@@ -40,8 +40,15 @@ impl SubscriptionsApi {
     /// List subscription plans
     ///
     /// Returns all available subscription plans with their features and pricing
-    #[oai(path = "/subscriptions/plans", method = "get", tag = "ApiTags::Subscriptions")]
-    async fn list_plans(&self, db: Data<&Arc<Database>>) -> Json<ApiResponse<Vec<SubscriptionPlan>>> {
+    #[oai(
+        path = "/subscriptions/plans",
+        method = "get",
+        tag = "ApiTags::Subscriptions"
+    )]
+    async fn list_plans(
+        &self,
+        db: Data<&Arc<Database>>,
+    ) -> Json<ApiResponse<Vec<SubscriptionPlan>>> {
         match db.list_subscription_plans().await {
             Ok(plans) => Json(ApiResponse {
                 success: true,
@@ -59,7 +66,11 @@ impl SubscriptionsApi {
     /// Get current subscription
     ///
     /// Returns the authenticated user's current subscription details
-    #[oai(path = "/subscriptions/current", method = "get", tag = "ApiTags::Subscriptions")]
+    #[oai(
+        path = "/subscriptions/current",
+        method = "get",
+        tag = "ApiTags::Subscriptions"
+    )]
     async fn get_current(
         &self,
         db: Data<&Arc<Database>>,
@@ -102,7 +113,11 @@ impl SubscriptionsApi {
     ///
     /// Creates a Stripe Checkout session for subscribing to a plan.
     /// Returns a URL to redirect the user to.
-    #[oai(path = "/subscriptions/checkout", method = "post", tag = "ApiTags::Subscriptions")]
+    #[oai(
+        path = "/subscriptions/checkout",
+        method = "post",
+        tag = "ApiTags::Subscriptions"
+    )]
     async fn create_checkout(
         &self,
         db: Data<&Arc<Database>>,
@@ -242,7 +257,12 @@ impl SubscriptionsApi {
         };
 
         match stripe
-            .create_subscription_checkout(&customer_id, stripe_price_id, trial_days, &account_id_hex)
+            .create_subscription_checkout(
+                &customer_id,
+                stripe_price_id,
+                trial_days,
+                &account_id_hex,
+            )
             .await
         {
             Ok(url) => Json(ApiResponse {
@@ -262,7 +282,11 @@ impl SubscriptionsApi {
     ///
     /// Creates a Stripe Billing Portal session for managing subscription.
     /// Returns a URL to redirect the user to.
-    #[oai(path = "/subscriptions/portal", method = "post", tag = "ApiTags::Subscriptions")]
+    #[oai(
+        path = "/subscriptions/portal",
+        method = "post",
+        tag = "ApiTags::Subscriptions"
+    )]
     async fn create_portal(
         &self,
         db: Data<&Arc<Database>>,
@@ -323,7 +347,10 @@ impl SubscriptionsApi {
             std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
         let return_url = format!("{}/dashboard/account/subscription", frontend_url);
 
-        match stripe.create_portal_session(&customer_id, &return_url).await {
+        match stripe
+            .create_portal_session(&customer_id, &return_url)
+            .await
+        {
             Ok(url) => Json(ApiResponse {
                 success: true,
                 data: Some(PortalUrlResponse { portal_url: url }),
@@ -340,7 +367,11 @@ impl SubscriptionsApi {
     /// Cancel subscription
     ///
     /// Cancels the user's current subscription.
-    #[oai(path = "/subscriptions/cancel", method = "post", tag = "ApiTags::Subscriptions")]
+    #[oai(
+        path = "/subscriptions/cancel",
+        method = "post",
+        tag = "ApiTags::Subscriptions"
+    )]
     async fn cancel(
         &self,
         db: Data<&Arc<Database>>,

@@ -392,8 +392,8 @@ pub async fn stripe_webhook(
         }
         // Subscription lifecycle events
         "customer.subscription.created" | "customer.subscription.updated" => {
-            let subscription: StripeSubscription =
-                serde_json::from_value(event.data.object).map_err(|e| {
+            let subscription: StripeSubscription = serde_json::from_value(event.data.object)
+                .map_err(|e| {
                     tracing::error!("Failed to parse subscription: {:#}", e);
                     PoemError::from_string(
                         format!("Invalid subscription data: {}", e),
@@ -526,8 +526,8 @@ pub async fn stripe_webhook(
         }
 
         "customer.subscription.deleted" => {
-            let subscription: StripeSubscription =
-                serde_json::from_value(event.data.object).map_err(|e| {
+            let subscription: StripeSubscription = serde_json::from_value(event.data.object)
+                .map_err(|e| {
                     tracing::error!("Failed to parse subscription: {:#}", e);
                     PoemError::from_string(
                         format!("Invalid subscription data: {}", e),
@@ -606,8 +606,8 @@ pub async fn stripe_webhook(
 
         "invoice.payment_failed" => {
             // Check if this is a subscription invoice
-            let invoice: StripeInvoice =
-                serde_json::from_value(event.data.object.clone()).map_err(|e| {
+            let invoice: StripeInvoice = serde_json::from_value(event.data.object.clone())
+                .map_err(|e| {
                     tracing::error!("Failed to parse invoice: {:#}", e);
                     PoemError::from_string(
                         format!("Invalid invoice data: {}", e),

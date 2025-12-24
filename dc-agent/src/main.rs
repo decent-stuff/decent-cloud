@@ -340,15 +340,18 @@ provision = "/opt/dc-agent/provision.sh"      # Script to provision a VM
 terminate = "/opt/dc-agent/terminate.sh"      # Script to terminate a VM
 health_check = "/opt/dc-agent/health.sh"      # Script to check VM health
 timeout_seconds = 300
-"#.to_string(),
+"#
+        .to_string(),
         "manual" => r#"
 # Manual provisioner (notification-only)
 [provisioner.manual]
 # notification_webhook = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-"#.to_string(),
+"#
+        .to_string(),
         _ => r#"
 # Unknown provisioner type - please configure manually
-"#.to_string(),
+"#
+        .to_string(),
     };
 
     let config_content = format!(
@@ -393,7 +396,9 @@ type = "{provisioner_type}"
                 println!("  1. Verify: dc-agent --config {} doctor", output.display());
                 println!("  2. Start: dc-agent --config {} run", output.display());
             } else {
-                println!("IMPORTANT: You must configure Proxmox settings before running the agent!");
+                println!(
+                    "IMPORTANT: You must configure Proxmox settings before running the agent!"
+                );
                 println!();
                 println!("Next steps:");
                 println!("  1. Edit {} and fill in:", output.display());
@@ -403,7 +408,10 @@ type = "{provisioner_type}"
                 println!("     - template_vmid: Create a template VM (e.g., Ubuntu 24.04)");
                 println!();
                 println!("  Alternative: Run setup again with --proxmox-host flag");
-                println!("     dc-agent setup token --token {} --proxmox-host YOUR-HOST", token);
+                println!(
+                    "     dc-agent setup token --token {} --proxmox-host YOUR-HOST",
+                    token
+                );
                 println!();
                 println!("  2. Verify: dc-agent --config {} doctor", output.display());
                 println!("  3. Start: dc-agent --config {} run", output.display());
@@ -425,13 +433,19 @@ type = "{provisioner_type}"
             println!("Manual provisioner configured - no additional setup required!");
             println!();
             println!("Next steps:");
-            println!("  1. Optional: Edit {} to add notification webhook", output.display());
+            println!(
+                "  1. Optional: Edit {} to add notification webhook",
+                output.display()
+            );
             println!("  2. Verify: dc-agent --config {} doctor", output.display());
             println!("  3. Start: dc-agent --config {} run", output.display());
         }
         _ => {
             println!("Next steps:");
-            println!("  1. Edit {} and configure provisioner settings", output.display());
+            println!(
+                "  1. Edit {} and configure provisioner settings",
+                output.display()
+            );
             println!("  2. Run: dc-agent --config {} doctor", output.display());
             println!("  3. Run: dc-agent --config {} run", output.display());
         }
@@ -523,10 +537,8 @@ async fn run_proxmox_setup_if_requested(
     println!();
 
     // Prompt for passwords
-    let ssh_password = rpassword::prompt_password(format!(
-        "SSH password for {}@{}: ",
-        proxmox_ssh_user, host
-    ))?;
+    let ssh_password =
+        rpassword::prompt_password(format!("SSH password for {}@{}: ", proxmox_ssh_user, host))?;
 
     // Extract user part from proxmox_user (e.g., "root" from "root@pam")
     let proxmox_user_part = proxmox_user
@@ -1144,7 +1156,13 @@ async fn poll_and_provision(
     }
 
     // Reconcile running instances - handles expired, cancelled, and orphan VMs
-    reconcile_instances(api_client, provisioners, orphan_grace_period_seconds, orphan_tracker).await;
+    reconcile_instances(
+        api_client,
+        provisioners,
+        orphan_grace_period_seconds,
+        orphan_tracker,
+    )
+    .await;
 
     active_count
 }
@@ -1326,20 +1344,22 @@ async fn reconcile_instances(
     }
 
     // Clean up tracker - remove orphans that are no longer present (resolved)
-    orphan_tracker.first_seen.retain(|external_id, first_seen_ts| {
-        if current_orphans.contains(external_id) {
-            true // Still an orphan, keep tracking
-        } else {
-            // Orphan resolved (contract fixed or VM removed manually)
-            let age_seconds = now.saturating_sub(*first_seen_ts);
-            info!(
-                external_id = %external_id,
-                was_tracked_for_seconds = age_seconds,
-                "Orphan VM resolved - no longer present"
-            );
-            false // Remove from tracker
-        }
-    });
+    orphan_tracker
+        .first_seen
+        .retain(|external_id, first_seen_ts| {
+            if current_orphans.contains(external_id) {
+                true // Still an orphan, keep tracking
+            } else {
+                // Orphan resolved (contract fixed or VM removed manually)
+                let age_seconds = now.saturating_sub(*first_seen_ts);
+                info!(
+                    external_id = %external_id,
+                    was_tracked_for_seconds = age_seconds,
+                    "Orphan VM resolved - no longer present"
+                );
+                false // Remove from tracker
+            }
+        });
 }
 
 /// Create a single provisioner from config

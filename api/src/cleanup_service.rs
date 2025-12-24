@@ -117,11 +117,7 @@ impl CleanupService {
             let contract_id_bytes = match hex::decode(&usage.contract_id) {
                 Ok(bytes) => bytes,
                 Err(e) => {
-                    tracing::error!(
-                        "Invalid contract_id hex {}: {:#}",
-                        usage.contract_id,
-                        e
-                    );
+                    tracing::error!("Invalid contract_id hex {}: {:#}", usage.contract_id, e);
                     continue;
                 }
             };
