@@ -9,26 +9,32 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CI_IMAGE: ghcr.io/${{ github.repository }}/ci-image@sha256:0f2daecabee202c1cb4269b9c66f4288bf87e018fb37211f0d70f98e7b94a250
 
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository }}/ci-image@sha256:0f2daecabee202c1cb4269b9c66f4288bf87e018fb37211f0d70f98e7b94a250
 
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - uses: actions/checkout@v4
-      - name: Configure git safe directory
+
+      - name: Build and test in container
         run: |
-          git config --global --add safe.directory /__w/decent-cloud/decent-cloud
-          git config --global --add safe.directory $GITHUB_WORKSPACE
-      - name: dfxvm init
-        run: |
-          echo "dfxvm requires the default version to be set once after starting the container (bug!)"
-          dfxvm default 0.28.0
-          dfx --version
-      - name: Build and test
-        env:
-          # dfx requires XDG_DATA_HOME to be set
-          XDG_DATA_HOME: /usr/local
-        run: /tini -s -- cargo make
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e XDG_DATA_HOME=/usr/local \
+            -e CARGO_TERM_COLOR=always \
+            $CI_IMAGE \
+            /bin/bash -c "git config --global --add safe.directory /workspace && dfxvm default 0.28.0 && dfx --version && /tini -s -- cargo make"
