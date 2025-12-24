@@ -108,7 +108,7 @@ jobs:
       - name: Install build dependencies
         run: |
           apt-get update
-          apt-get install -y curl gcc pkg-config libssl-dev ca-certificates
+          apt-get install -y curl gcc clang pkg-config libssl-dev ca-certificates
 
       - name: Install Rust
         run: |
