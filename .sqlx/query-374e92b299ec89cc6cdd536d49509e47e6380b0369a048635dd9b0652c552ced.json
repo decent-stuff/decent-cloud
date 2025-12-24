@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO subscription_events\n               (account_id, event_type, stripe_event_id, old_plan_id, new_plan_id,\n                stripe_subscription_id, stripe_invoice_id, amount_cents, metadata)\n               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "374e92b299ec89cc6cdd536d49509e47e6380b0369a048635dd9b0652c552ced"
+}

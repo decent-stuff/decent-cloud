@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,\n               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns\n               FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC",
+  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,\n               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,\n               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as \"cancel_at_period_end!: bool\"\n               FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?",
   "describe": {
     "columns": [
       {
@@ -212,10 +212,30 @@
         "name": "receipt_sent_at_ns",
         "ordinal": 41,
         "type_info": "Integer"
+      },
+      {
+        "name": "stripe_subscription_id",
+        "ordinal": 42,
+        "type_info": "Text"
+      },
+      {
+        "name": "subscription_status",
+        "ordinal": 43,
+        "type_info": "Text"
+      },
+      {
+        "name": "current_period_end_ns",
+        "ordinal": 44,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cancel_at_period_end!: bool",
+        "ordinal": 45,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       null,
@@ -259,8 +279,12 @@
       true,
       true,
       true,
-      true
+      true,
+      true,
+      true,
+      true,
+      false
     ]
   },
-  "hash": "acba9e8318b9a89bea2a7fc1690c1ecfc372488b26b1b81468fdeefe3ba72d00"
+  "hash": "77a9e36f2c2efb7871e118639acd983b234808e3e406d86878d1ee32e124a924"
 }

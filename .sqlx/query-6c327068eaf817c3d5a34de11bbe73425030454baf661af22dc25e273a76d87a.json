@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_usage SET reported_to_stripe = 1, stripe_usage_record_id = ?, updated_at = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6c327068eaf817c3d5a34de11bbe73425030454baf661af22dc25e273a76d87a"
+}

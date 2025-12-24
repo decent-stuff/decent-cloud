@@ -48,6 +48,12 @@
 			description: "Edit your public profile information",
 		},
 		{
+			href: "/dashboard/account/subscription",
+			label: "Subscription",
+			icon: "⭐",
+			description: "Manage your subscription plan",
+		},
+		{
 			href: "/dashboard/account/billing",
 			label: "Billing",
 			icon: "💳",

@@ -95,6 +95,28 @@ fn test_id_to_db_id(test_id: i64) -> i64 {
     test_id + 100
 }
 
+/// Delete example provider data so tests get clean counts.
+/// Migration 054 creates pools for example provider, making example offerings visible in search.
+async fn delete_example_data(db: &Database) {
+    let example_pubkey = Database::example_provider_pubkey();
+    // Delete in correct order to respect foreign key constraints
+    sqlx::query("DELETE FROM provider_agent_delegations WHERE provider_pubkey = ?")
+        .bind(&example_pubkey[..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM agent_pools WHERE provider_pubkey = ?")
+        .bind(&example_pubkey[..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ?")
+        .bind(&example_pubkey[..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+}
+
 #[test]
 fn export_typescript_types() {
     // This test ensures TypeScript types are exported
@@ -225,6 +247,7 @@ async fn test_search_offerings_excludes_private() {
 #[tokio::test]
 async fn test_search_offerings_by_country() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "DE", 200.0).await;
 
@@ -247,11 +270,11 @@ async fn test_search_offerings_by_country() {
 #[tokio::test]
 async fn test_search_offerings_price_range() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
 
-    // With pool filtering, only our 3 test offerings appear (example offerings have no pools)
     let results = db
         .search_offerings(SearchOfferingsParams {
             product_type: None,
@@ -274,6 +297,7 @@ async fn test_search_offerings_price_range() {
 #[tokio::test]
 async fn test_search_offerings_min_price_filter() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
@@ -299,6 +323,7 @@ async fn test_search_offerings_min_price_filter() {
 #[tokio::test]
 async fn test_search_offerings_max_price_filter() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
@@ -324,6 +349,7 @@ async fn test_search_offerings_max_price_filter() {
 #[tokio::test]
 async fn test_search_offerings_price_range_both() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
@@ -348,6 +374,7 @@ async fn test_search_offerings_price_range_both() {
 #[tokio::test]
 async fn test_search_offerings_pagination() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
 
     // Use a single provider with pool for all offerings (simpler setup)
     let pubkey = vec![99u8; 32];
@@ -370,7 +397,6 @@ async fn test_search_offerings_pagination() {
     }
 
     // Get all offerings with high limit - should get all 10 test offerings
-    // (example offerings have no pools so are filtered out)
     let all = db
         .search_offerings(SearchOfferingsParams {
             product_type: None,
@@ -428,6 +454,14 @@ async fn test_create_offering_success() {
         product_type: "dedicated_server".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: Some("Intel".to_string()),
         processor_amount: Some(2),
@@ -532,6 +566,14 @@ async fn test_create_offering_duplicate_id() {
         product_type: "vps".to_string(),
         virtualization_type: Some("kvm".to_string()),
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -606,6 +648,14 @@ async fn test_create_offering_missing_required_fields() {
         product_type: "vps".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -679,6 +729,12 @@ async fn test_update_offering_success() {
         product_type: "vps".to_string(),
         virtualization_type: Some("kvm".to_string()),
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
         stock_status: "out_of_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -722,6 +778,8 @@ async fn test_update_offering_success() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        is_subscription: false,
+        subscription_interval_days: None,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -761,6 +819,14 @@ async fn test_update_offering_unauthorized() {
         product_type: "vps".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -1240,24 +1306,25 @@ async fn test_search_offerings_dsl_basic_type_filter() {
 #[tokio::test]
 async fn test_search_offerings_dsl_price_range() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
     insert_test_offering(&db, 1, &[1u8; 32], "US", 50.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "US", 150.0).await;
     insert_test_offering(&db, 3, &[3u8; 32], "US", 250.0).await;
 
-    // Search for price range [0 TO 100] (1 test @ 50.0 + 7 example offerings <= 100)
+    // Search for price range [0 TO 100]
     let results = db
         .search_offerings_dsl("price:[0 TO 100]", 10, 0)
         .await
         .unwrap();
-    assert_eq!(results.len(), 8);
+    assert_eq!(results.len(), 1);
     assert!(results.iter().all(|r| r.monthly_price <= 100.0));
 
-    // Search for price range [100 TO 200] (1 test @ 150.0 + 1 example @ 150.0)
+    // Search for price range [100 TO 200]
     let results = db
         .search_offerings_dsl("price:[100 TO 200]", 10, 0)
         .await
         .unwrap();
-    assert_eq!(results.len(), 2);
+    assert_eq!(results.len(), 1);
     assert!(results
         .iter()
         .all(|r| r.monthly_price >= 100.0 && r.monthly_price <= 200.0));
@@ -1266,6 +1333,7 @@ async fn test_search_offerings_dsl_price_range() {
 #[tokio::test]
 async fn test_search_offerings_dsl_combined_filters() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
 
     // Insert offerings with different attributes
     let pubkey1 = vec![1u8; 32];
@@ -1318,49 +1386,53 @@ async fn test_search_offerings_dsl_combined_filters() {
 #[tokio::test]
 async fn test_search_offerings_dsl_comparison_operators() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
 
-    // Insert offerings with different core counts
+    // Insert offerings with different core counts (ensure providers have pools)
     let pubkey1 = vec![1u8; 32];
-    sqlx::query!(
+    ensure_provider_with_pool(&db, &pubkey1, "US").await;
+    sqlx::query(
         "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '4 Core Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 4, 0)",
-        101,
-        pubkey1,
-        "server-4core"
     )
+    .bind(101i64)
+    .bind(&pubkey1)
+    .bind("server-4core")
     .execute(&db.pool)
     .await
     .unwrap();
 
     let pubkey2 = vec![2u8; 32];
-    sqlx::query!(
+    ensure_provider_with_pool(&db, &pubkey2, "US").await;
+    sqlx::query(
         "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '8 Core Server', 'USD', 150.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 8, 0)",
-        102,
-        pubkey2,
-        "server-8core"
     )
+    .bind(102i64)
+    .bind(&pubkey2)
+    .bind("server-8core")
     .execute(&db.pool)
     .await
     .unwrap();
 
     let pubkey3 = vec![3u8; 32];
-    sqlx::query!(
+    ensure_provider_with_pool(&db, &pubkey3, "US").await;
+    sqlx::query(
         "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '16 Core Server', 'USD', 200.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 16, 0)",
-        103,
-        pubkey3,
-        "server-16core"
     )
+    .bind(103i64)
+    .bind(&pubkey3)
+    .bind("server-16core")
     .execute(&db.pool)
     .await
     .unwrap();
 
-    // Test >= operator (2 test offerings + 4 example offerings with cores >= 8)
+    // Test >= operator (2 test offerings with cores >= 8)
     let results = db.search_offerings_dsl("cores:>=8", 10, 0).await.unwrap();
-    assert_eq!(results.len(), 6);
+    assert_eq!(results.len(), 2);
     assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) >= 8));
 
-    // Test < operator (1 test offering with 4 cores + example offerings with cores < 8)
+    // Test < operator (1 test offering with 4 cores)
     let results = db.search_offerings_dsl("cores:<8", 10, 0).await.unwrap();
-    assert!(!results.is_empty());
+    assert_eq!(results.len(), 1);
     assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) < 8));
 }
 
@@ -1410,21 +1482,22 @@ async fn test_search_offerings_dsl_invalid_query() {
 #[tokio::test]
 async fn test_search_offerings_dsl_pagination() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
     for i in 0..5 {
         insert_test_offering(&db, i, &[i as u8; 32], "US", 100.0 + i as f64).await;
     }
 
-    // First page (sorted by price ASC, starts with cheapest example offering at 2.5)
+    // First page (sorted by price ASC)
     let page1 = db.search_offerings_dsl("", 2, 0).await.unwrap();
     assert_eq!(page1.len(), 2);
-    assert_eq!(page1[0].monthly_price, 2.5);
-    assert_eq!(page1[1].monthly_price, 5.0);
+    assert_eq!(page1[0].monthly_price, 100.0);
+    assert_eq!(page1[1].monthly_price, 101.0);
 
     // Second page
     let page2 = db.search_offerings_dsl("", 2, 2).await.unwrap();
     assert_eq!(page2.len(), 2);
-    assert_eq!(page2[0].monthly_price, 10.0);
-    assert_eq!(page2[1].monthly_price, 15.0);
+    assert_eq!(page2[0].monthly_price, 102.0);
+    assert_eq!(page2[1].monthly_price, 103.0);
 }
 
 #[tokio::test]
@@ -1574,6 +1647,14 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         product_type: "dedicated_server".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -1660,6 +1741,14 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         product_type: "dedicated_server".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -1743,6 +1832,14 @@ async fn test_get_provider_offerings_no_matching_pool() {
         product_type: "dedicated_server".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -1832,6 +1929,14 @@ async fn test_search_offerings_filters_by_pool_existence() {
         product_type: "compute".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -1895,6 +2000,14 @@ async fn test_search_offerings_filters_by_pool_existence() {
         product_type: "compute".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -1958,6 +2071,14 @@ async fn test_search_offerings_filters_by_pool_existence() {
         product_type: "compute".to_string(),
         virtualization_type: None,
         billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
         stock_status: "in_stock".to_string(),
         processor_brand: None,
         processor_amount: None,
@@ -2034,4 +2155,349 @@ async fn test_search_offerings_filters_by_pool_existence() {
         !offering_ids.contains(&"test-no-pool"),
         "Should exclude offering without matching pool"
     );
+}
+
+#[tokio::test]
+async fn test_create_subscription_offering() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "subscription-monthly".to_string(),
+        offer_name: "Monthly Subscription".to_string(),
+        description: Some("A monthly subscription offering".to_string()),
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 49.99,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: true,
+        subscription_interval_days: Some(30),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: Some(4),
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: Some("8GB".to_string()),
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: Some("100GB".to_string()),
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "NYC".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    let db_id = db.create_offering(&pubkey, params).await.unwrap();
+    let offering = db.get_offering(db_id).await.unwrap().unwrap();
+
+    assert!(offering.is_subscription);
+    assert_eq!(offering.subscription_interval_days, Some(30));
+    assert_eq!(offering.offer_name, "Monthly Subscription");
+}
+
+#[tokio::test]
+async fn test_create_yearly_subscription_offering() {
+    let db = setup_test_db().await;
+    let pubkey = vec![2u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "DE").await;
+
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "subscription-yearly".to_string(),
+        offer_name: "Yearly Subscription".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "EUR".to_string(),
+        monthly_price: 399.99,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "yearly".to_string(),
+        billing_unit: "year".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: true,
+        subscription_interval_days: Some(365),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "DE".to_string(),
+        datacenter_city: "Berlin".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    let db_id = db.create_offering(&pubkey, params).await.unwrap();
+    let offering = db.get_offering(db_id).await.unwrap().unwrap();
+
+    assert!(offering.is_subscription);
+    assert_eq!(offering.subscription_interval_days, Some(365));
+}
+
+#[tokio::test]
+async fn test_get_subscription_offering_fields() {
+    let db = setup_test_db().await;
+    let pubkey = vec![3u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    // Create a subscription offering
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "sub-get-test".to_string(),
+        offer_name: "Get Test Sub".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 29.99,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: true,
+        subscription_interval_days: Some(30),
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "NYC".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    let db_id = db.create_offering(&pubkey, params).await.unwrap();
+
+    // Get the offering by ID and verify subscription fields
+    let retrieved = db.get_offering(db_id).await.unwrap().unwrap();
+    assert!(retrieved.is_subscription);
+    assert_eq!(retrieved.subscription_interval_days, Some(30));
+
+    // Also verify via search
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .unwrap();
+
+    let found = results.iter().find(|o| o.offering_id == "sub-get-test");
+    assert!(found.is_some(), "Subscription offering should be in search results");
+    let found = found.unwrap();
+    assert!(found.is_subscription);
+    assert_eq!(found.subscription_interval_days, Some(30));
+}
+
+#[tokio::test]
+async fn test_one_time_offering_default_subscription_fields() {
+    let db = setup_test_db().await;
+    let pubkey = vec![4u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    // Create a one-time (non-subscription) offering
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "one-time-test".to_string(),
+        offer_name: "One-Time Offering".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 99.99,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false, // One-time, not subscription
+        subscription_interval_days: None,
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "NYC".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    let db_id = db.create_offering(&pubkey, params).await.unwrap();
+    let offering = db.get_offering(db_id).await.unwrap().unwrap();
+
+    // One-time offerings should have is_subscription = false and no interval
+    assert!(!offering.is_subscription);
+    assert_eq!(offering.subscription_interval_days, None);
 }

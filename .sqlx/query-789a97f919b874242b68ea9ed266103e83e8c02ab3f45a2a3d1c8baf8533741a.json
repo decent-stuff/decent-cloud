@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE contract_sign_requests SET stripe_subscription_id = ? WHERE contract_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "789a97f919b874242b68ea9ed266103e83e8c02ab3f45a2a3d1c8baf8533741a"
+}

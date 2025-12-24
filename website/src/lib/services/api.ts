@@ -7,6 +7,7 @@ import type { UserProfile as UserProfileRaw } from '$lib/types/generated/UserPro
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 import type { ProviderTrustMetrics as ProviderTrustMetricsRaw } from '$lib/types/generated/ProviderTrustMetrics';
 import type { ProviderOnboarding as ProviderOnboardingRaw } from '$lib/types/generated/ProviderOnboarding';
+import type { ContractUsage } from '$lib/types/generated/ContractUsage';
 import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
@@ -565,8 +566,14 @@ export interface Contract {
 	currency: string;
 	refund_amount_e9s?: number;
 	stripe_refund_id?: string;
+	icpay_refund_id?: string;
 	refund_created_at_ns?: number;
 	status_updated_at_ns?: number;
+	// Subscription fields
+	stripe_subscription_id?: string;
+	subscription_status?: string;
+	current_period_end_ns?: number;
+	cancel_at_period_end?: boolean;
 }
 
 export interface RentalRequestParams {
@@ -856,6 +863,41 @@ export async function verifyCheckoutSession(sessionId: string): Promise<VerifyCh
 
 	return payload.data;
 }
+
+/**
+ * Get current usage for a contract
+ */
+export async function getContractUsage(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<ContractUsage | null> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/usage`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		if (response.status === 404) {
+			return null;
+		}
+		throw new Error(`Failed to fetch contract usage: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractUsage>;
+
+	if (!payload.success) {
+		// No usage data is not an error for contracts without usage tracking
+		if (payload.error?.includes('No active billing period')) {
+			return null;
+		}
+		throw new Error(payload.error ?? 'Failed to fetch contract usage');
+	}
+
+	return payload.data ?? null;
+}
+
+export { type ContractUsage };
 
 export async function getProviderOnboarding(pubkey: string): Promise<ProviderOnboarding | null> {
 	const pubkeyHex = normalizePubkey(pubkey);
@@ -1662,4 +1704,181 @@ export async function deleteSetupToken(
 	}
 
 	return payload.data ?? false;
+}
+
+// ==================== Subscription API ====================
+
+/** Subscription plan definition */
+export interface SubscriptionPlan {
+	id: string;
+	name: string;
+	description?: string;
+	stripe_price_id?: string;
+	monthlyPriceCents: number;
+	trialDays: number;
+	features?: string; // JSON array stored as string
+}
+
+/** Account subscription details */
+export interface AccountSubscription {
+	plan_id: string;
+	plan_name: string;
+	status: string;
+	stripe_subscription_id?: string;
+	current_period_end?: number;
+	cancel_at_period_end: boolean;
+	features: string[];
+}
+
+/** Checkout URL response */
+export interface CheckoutUrlResponse {
+	checkout_url: string;
+}
+
+/** Portal URL response */
+export interface PortalUrlResponse {
+	portal_url: string;
+}
+
+/**
+ * List all available subscription plans
+ * No authentication required
+ */
+export async function listSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+	const url = `${API_BASE_URL}/api/v1/subscriptions/plans`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch plans: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<SubscriptionPlan[]>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch subscription plans');
+	}
+
+	return payload.data;
+}
+
+/**
+ * Get current user's subscription details
+ */
+export async function getCurrentSubscription(
+	headers: SignedRequestHeaders
+): Promise<AccountSubscription> {
+	const url = `${API_BASE_URL}/api/v1/subscriptions/current`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to get subscription: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AccountSubscription>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to get subscription');
+	}
+
+	return payload.data;
+}
+
+/**
+ * Create a Stripe Checkout session to subscribe to a plan
+ * Returns checkout URL to redirect user to
+ */
+export async function createSubscriptionCheckout(
+	planId: string,
+	headers: SignedRequestHeaders
+): Promise<string> {
+	const url = `${API_BASE_URL}/api/v1/subscriptions/checkout`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ plan_id: planId })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to create checkout: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<CheckoutUrlResponse>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to create checkout session');
+	}
+
+	return payload.data.checkout_url;
+}
+
+/**
+ * Create a Stripe Billing Portal session for self-service subscription management
+ * Returns portal URL to redirect user to
+ */
+export async function createBillingPortal(headers: SignedRequestHeaders): Promise<string> {
+	const url = `${API_BASE_URL}/api/v1/subscriptions/portal`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to create portal session: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<PortalUrlResponse>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to create billing portal session');
+	}
+
+	return payload.data.portal_url;
+}
+
+/**
+ * Cancel subscription
+ * @param atPeriodEnd If true, cancel at end of billing period; if false, cancel immediately
+ */
+export async function cancelSubscription(
+	atPeriodEnd: boolean,
+	headers: SignedRequestHeaders
+): Promise<AccountSubscription> {
+	const url = `${API_BASE_URL}/api/v1/subscriptions/cancel`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ at_period_end: atPeriodEnd })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to cancel subscription: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AccountSubscription>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to cancel subscription');
+	}
+
+	return payload.data;
 }

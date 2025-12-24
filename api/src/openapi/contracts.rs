@@ -1,6 +1,6 @@
 use super::common::{
     default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
-    ExtendContractResponse, RentalRequestResponse, UpdateIcpayTransactionRequest,
+    ExtendContractResponse, RecordUsageRequest, RentalRequestResponse, UpdateIcpayTransactionRequest,
     VerifyCheckoutSessionRequest, VerifyCheckoutSessionResponse,
 };
 use crate::auth::{AdminAuthenticatedUser, ApiAuthenticatedUser};
@@ -253,6 +253,32 @@ impl ContractsApi {
                 })
             }
         };
+
+        // Check subscription rental limits
+        if let Some(account_id) = db.get_account_id_by_public_key(&auth.pubkey).await.ok().flatten() {
+            let has_unlimited = db.account_has_feature(&account_id, "unlimited_rentals").await.unwrap_or(false);
+            if !has_unlimited {
+                let has_one_rental = db.account_has_feature(&account_id, "one_rental").await.unwrap_or(false);
+                if has_one_rental {
+                    let active_count = db.count_active_contracts_for_account(&account_id).await.unwrap_or(0);
+                    if active_count >= 1 {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("Rental limit reached. Your subscription allows 1 active rental. Upgrade to Pro for unlimited rentals.".to_string()),
+                        });
+                    }
+                } else {
+                    // No rental feature at all - shouldn't happen but fail safe
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Your subscription does not include rental access. Please upgrade your plan.".to_string()),
+                    });
+                }
+            }
+        }
+        // If no account found, allow rental (legacy behavior for users without accounts)
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
@@ -722,5 +748,150 @@ impl ContractsApi {
             }),
             error: None,
         })
+    }
+
+    /// Record usage event for a contract
+    ///
+    /// Records a usage event (heartbeat, session start/end) for billing purposes.
+    /// User must be the provider or an authorized agent.
+    #[oai(path = "/contracts/:id/usage", method = "post", tag = "ApiTags::Contracts")]
+    async fn record_usage(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+        req: Json<RecordUsageRequest>,
+    ) -> Json<ApiResponse<i64>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: verify user is the provider
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.provider_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: only provider can record usage".to_string()),
+            });
+        }
+
+        // Record the usage event
+        match db
+            .record_usage_event(
+                &contract_id,
+                &req.event_type,
+                req.units_delta,
+                req.heartbeat_at,
+                req.source.as_deref(),
+                req.metadata.as_deref(),
+            )
+            .await
+        {
+            Ok(event_id) => Json(ApiResponse {
+                success: true,
+                data: Some(event_id),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get current usage for a contract
+    ///
+    /// Returns the current billing period usage for a contract.
+    /// User must be the requester or provider.
+    #[oai(path = "/contracts/:id/usage", method = "get", tag = "ApiTags::Contracts")]
+    async fn get_usage(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<crate::database::contracts::ContractUsage>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: verify user is a party to this contract
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey && contract.provider_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: you are not a party to this contract".to_string()),
+            });
+        }
+
+        match db.get_current_usage(&contract_id).await {
+            Ok(Some(usage)) => Json(ApiResponse {
+                success: true,
+                data: Some(usage),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("No active billing period for this contract".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
     }
 }

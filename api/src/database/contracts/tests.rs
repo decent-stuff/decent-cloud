@@ -2188,3 +2188,381 @@ async fn test_cleanup_expired_provisioning_locks() {
     .unwrap();
     assert!(c2.0.is_some(), "Non-expired lock should still be held");
 }
+
+// === Contract Usage Tracking Tests ===
+
+#[tokio::test]
+async fn test_create_contract_usage() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    let now = chrono::Utc::now().timestamp();
+    let period_end = now + 86400; // 24 hours
+    let usage_id = db
+        .create_contract_usage(&contract_id, now, period_end, Some(10.0))
+        .await
+        .unwrap();
+
+    assert!(usage_id > 0, "Should return a valid usage ID");
+
+    // Verify it was created
+    let usage = db.get_current_usage(&contract_id).await.unwrap();
+    assert!(usage.is_some());
+    let u = usage.unwrap();
+    assert_eq!(u.units_included, Some(10.0));
+    assert_eq!(u.units_used, 0.0);
+    assert_eq!(u.overage_units, 0.0);
+}
+
+#[tokio::test]
+async fn test_record_usage_event() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    let now = chrono::Utc::now().timestamp();
+    let event_id = db
+        .record_usage_event(
+            &contract_id,
+            "heartbeat",
+            None,
+            Some(now),
+            Some("dc-agent"),
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert!(event_id > 0, "Should return a valid event ID");
+}
+
+#[tokio::test]
+async fn test_update_usage_from_heartbeats() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    // Create usage period
+    let now = chrono::Utc::now().timestamp();
+    let period_end = now + 86400;
+    let usage_id = db
+        .create_contract_usage(&contract_id, now - 3600, period_end, Some(1.0))
+        .await
+        .unwrap();
+
+    // Record some heartbeats (60 seconds apart = 1 minute of usage)
+    for i in 0..3 {
+        let hb_time = now - 3600 + (i * 60); // Start 1 hour ago, 60 second intervals
+        db.record_usage_event(
+            &contract_id,
+            "heartbeat",
+            None,
+            Some(hb_time),
+            Some("dc-agent"),
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    // Update usage from heartbeats (hourly billing)
+    let total_units = db
+        .update_usage_from_heartbeats(&contract_id, usage_id, "hour")
+        .await
+        .unwrap();
+
+    // 2 intervals of 60 seconds each = 120 seconds = 1/30 hour ≈ 0.0333 hours
+    assert!(total_units > 0.0, "Should have calculated some usage");
+    assert!(total_units < 0.1, "Usage should be reasonable (under 0.1 hours)");
+
+    // Verify usage was updated
+    let usage = db.get_current_usage(&contract_id).await.unwrap().unwrap();
+    assert!(usage.units_used > 0.0);
+}
+
+#[tokio::test]
+async fn test_mark_usage_reported() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    let now = chrono::Utc::now().timestamp();
+    let usage_id = db
+        .create_contract_usage(&contract_id, now, now + 86400, None)
+        .await
+        .unwrap();
+
+    // Mark as reported
+    db.mark_usage_reported(usage_id, "usage_record_123")
+        .await
+        .unwrap();
+
+    // Verify
+    let usage = db.get_current_usage(&contract_id).await.unwrap().unwrap();
+    assert!(usage.reported_to_stripe);
+    assert_eq!(usage.stripe_usage_record_id, Some("usage_record_123".to_string()));
+}
+
+#[tokio::test]
+async fn test_get_unreported_usage() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    let now = chrono::Utc::now().timestamp();
+    // Create a past billing period (ended 1 hour ago)
+    db.create_contract_usage(&contract_id, now - 7200, now - 3600, None)
+        .await
+        .unwrap();
+
+    // Get unreported
+    let unreported = db.get_unreported_usage().await.unwrap();
+    assert_eq!(unreported.len(), 1);
+    assert!(!unreported[0].reported_to_stripe);
+}
+
+// === Subscription Management Tests ===
+
+#[tokio::test]
+async fn test_get_contract_by_subscription_id_found() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    // Create contract with subscription ID
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "active",
+    )
+    .await;
+
+    // Set subscription ID
+    let subscription_id = "sub_test_123456";
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET stripe_subscription_id = ?, subscription_status = ?, current_period_end_ns = ?, cancel_at_period_end = ? WHERE contract_id = ?",
+        subscription_id,
+        "active",
+        1234567890i64,
+        0,
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Retrieve by subscription ID
+    let contract = db
+        .get_contract_by_subscription_id(subscription_id)
+        .await
+        .unwrap();
+
+    assert!(contract.is_some());
+    let c = contract.unwrap();
+    assert_eq!(c.contract_id, hex::encode(&contract_id));
+    assert_eq!(c.stripe_subscription_id, Some(subscription_id.to_string()));
+    assert_eq!(c.subscription_status, Some("active".to_string()));
+    assert_eq!(c.current_period_end_ns, Some(1234567890));
+    assert!(!c.cancel_at_period_end);
+}
+
+#[tokio::test]
+async fn test_get_contract_by_subscription_id_not_found() {
+    let db = setup_test_db().await;
+
+    let contract = db
+        .get_contract_by_subscription_id("sub_nonexistent")
+        .await
+        .unwrap();
+
+    assert!(contract.is_none());
+}
+
+#[tokio::test]
+async fn test_update_contract_subscription() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    // Create contract with subscription ID
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "active",
+    )
+    .await;
+
+    let subscription_id = "sub_update_test";
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET stripe_subscription_id = ? WHERE contract_id = ?",
+        subscription_id,
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Update subscription status
+    let new_period_end = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) + 30 * 86400 * 1_000_000_000i64;
+    db.update_contract_subscription(subscription_id, "active", new_period_end, false)
+        .await
+        .unwrap();
+
+    // Verify update
+    let contract = db
+        .get_contract_by_subscription_id(subscription_id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(contract.subscription_status, Some("active".to_string()));
+    assert_eq!(contract.current_period_end_ns, Some(new_period_end));
+    assert!(!contract.cancel_at_period_end);
+}
+
+#[tokio::test]
+async fn test_update_contract_subscription_cancel_at_period_end() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    // Create contract with subscription ID
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "active",
+    )
+    .await;
+
+    let subscription_id = "sub_cancel_test";
+    sqlx::query!(
+        "UPDATE contract_sign_requests SET stripe_subscription_id = ? WHERE contract_id = ?",
+        subscription_id,
+        contract_id
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Update with cancel_at_period_end = true
+    let period_end = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    db.update_contract_subscription(subscription_id, "active", period_end, true)
+        .await
+        .unwrap();
+
+    // Verify boolean is correctly stored as 1 in SQLite
+    let contract = db
+        .get_contract_by_subscription_id(subscription_id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(contract.subscription_status, Some("active".to_string()));
+    assert_eq!(contract.current_period_end_ns, Some(period_end));
+    assert!(contract.cancel_at_period_end, "cancel_at_period_end should be true");
+}
+
+#[tokio::test]
+async fn test_contract_subscription_fields_default_values() {
+    let db = setup_test_db().await;
+    let contract_id = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let provider_pubkey = vec![3u8; 32];
+
+    // Create contract without subscription fields
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pubkey,
+        &provider_pubkey,
+        "offering-1",
+        0,
+        "active",
+    )
+    .await;
+
+    // Retrieve contract
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+
+    // Verify default values
+    assert_eq!(contract.stripe_subscription_id, None);
+    assert_eq!(contract.subscription_status, None);
+    assert_eq!(contract.current_period_end_ns, None);
+    assert!(!contract.cancel_at_period_end, "cancel_at_period_end should default to false");
+}

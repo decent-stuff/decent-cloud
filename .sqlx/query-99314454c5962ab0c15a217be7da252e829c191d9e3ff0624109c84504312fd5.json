@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", name as \"name!\", description, stripe_price_id,\n                      monthly_price_cents as \"monthly_price_cents!\",\n                      trial_days as \"trial_days!\", features\n               FROM subscription_plans\n               WHERE stripe_price_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_price_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "monthly_price_cents!",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "trial_days!",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "features",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "99314454c5962ab0c15a217be7da252e829c191d9e3ff0624109c84504312fd5"
+}

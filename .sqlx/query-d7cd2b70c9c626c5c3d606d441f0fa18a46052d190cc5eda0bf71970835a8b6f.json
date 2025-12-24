@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT stripe_customer_id FROM accounts WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "stripe_customer_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "d7cd2b70c9c626c5c3d606d441f0fa18a46052d190cc5eda0bf71970835a8b6f"
+}

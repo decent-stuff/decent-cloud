@@ -186,9 +186,158 @@ All billing features implemented:
 - ✅ Reverse charge logic for B2B EU transactions
 - ✅ User billing settings API (`GET/PUT /api/v1/accounts/billing`)
 - ✅ Frontend redirects to Stripe Checkout
+- ✅ Account subscription plans (Free/Pro/Enterprise) with Stripe Billing
 
 **Remaining (nice-to-have):**
 - Frontend billing settings UI (backend API ready)
+
+---
+
+## Usage-Based Billing for Rentals
+
+**Priority:** HIGH - Enables flexible pricing models for different workloads
+**Status:** Planned
+
+### Overview
+
+Extend the fixed-price subscription system to support usage-based billing per rental/offering. This enables:
+- **Flat monthly fees** for dedicated servers (current model)
+- **Per-minute billing** for ephemeral workloads (CI runners, burst compute)
+- **Hourly/daily billing** for development environments
+- **Overage charges** for exceeding included quotas
+
+### Billing Units
+
+Each offering specifies its billing unit:
+| Unit | Use Case | Example |
+|------|----------|---------|
+| `month` | Dedicated servers, long-term VPS | $99/month flat |
+| `day` | Development environments | $5/day |
+| `hour` | GPU compute, batch jobs | $2.50/hour |
+| `minute` | CI runners, serverless | $0.05/minute |
+
+### Pricing Models
+
+1. **Flat Fee** (`flat`) - Fixed price for the billing period, no usage tracking
+2. **Usage + Overage** (`usage_overage`) - Base included usage + per-unit overage charges
+
+Example overage model:
+```
+Base: $50/month includes 100 hours
+Overage: $0.75/hour after 100 hours
+User uses 150 hours → $50 + (50 × $0.75) = $87.50
+```
+
+### Implementation Plan
+
+#### Phase 1: Schema Changes
+
+**Migration: Add billing fields to offerings**
+```sql
+ALTER TABLE provider_offerings ADD COLUMN billing_unit TEXT DEFAULT 'month';
+  -- 'minute', 'hour', 'day', 'month'
+
+ALTER TABLE provider_offerings ADD COLUMN pricing_model TEXT DEFAULT 'flat';
+  -- 'flat', 'usage_overage'
+
+ALTER TABLE provider_offerings ADD COLUMN price_per_unit REAL;
+  -- Price per billing_unit (e.g., $0.05 per minute)
+
+ALTER TABLE provider_offerings ADD COLUMN included_units INTEGER;
+  -- For overage model: units included in base price (NULL = unlimited for flat)
+
+ALTER TABLE provider_offerings ADD COLUMN overage_price_per_unit REAL;
+  -- Price per unit after included_units exhausted
+```
+
+**Migration: Usage tracking table**
+```sql
+CREATE TABLE contract_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id BLOB NOT NULL,
+    billing_period_start INTEGER NOT NULL,  -- Unix timestamp
+    billing_period_end INTEGER NOT NULL,
+    units_used REAL NOT NULL DEFAULT 0,     -- Accumulated usage
+    units_included REAL,                    -- Snapshot from offering
+    overage_units REAL DEFAULT 0,           -- units_used - units_included (if positive)
+    reported_to_stripe INTEGER DEFAULT 0,   -- Boolean: usage reported to Stripe
+    stripe_usage_record_id TEXT,            -- Stripe usage record ID
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id)
+);
+```
+
+#### Phase 2: Stripe Metered Billing Integration
+
+**Stripe Setup:**
+1. Create metered prices in Stripe Dashboard with `recurring.usage_type = metered`
+2. Store `stripe_metered_price_id` in offerings table
+3. Use `aggregate_usage = sum` for cumulative billing
+
+**Usage Reporting Flow:**
+```
+Contract Active
+    ↓
+dc-agent reports uptime/usage → API stores in contract_usage
+    ↓
+End of billing period (cron job or Stripe invoice.created webhook)
+    ↓
+API calls stripe.subscription_items.create_usage_record()
+    ↓
+Stripe generates invoice with usage charges
+```
+
+#### Phase 3: API Endpoints
+
+```
+POST /contracts/{id}/usage
+  - dc-agent reports usage (minutes/hours active)
+  - Body: { "units": 60, "timestamp": 1703001234 }
+
+GET /contracts/{id}/usage
+  - Get current billing period usage
+  - Response: { "units_used": 120, "units_included": 100, "overage": 20, "estimated_charge": 15.00 }
+
+POST /internal/billing/report-usage (cron job)
+  - Aggregate and report usage to Stripe for all active contracts
+  - Called at end of each billing period
+```
+
+#### Phase 4: Frontend Changes
+
+**Offering Creation UI:**
+- Add billing_unit dropdown (minute/hour/day/month)
+- Add pricing_model toggle (flat vs usage+overage)
+- Conditional fields for overage pricing
+
+**Rental Dashboard:**
+- Show current usage for active contracts
+- Display "X of Y hours used" progress bar
+- Show estimated charges for overage
+
+### Files to Modify
+
+**Backend:**
+- `api/migrations/059_usage_billing.sql` - Schema changes
+- `api/src/database/offerings.rs` - Add billing fields
+- `api/src/database/contracts.rs` - Add usage tracking
+- `api/src/stripe_client.rs` - Add `create_usage_record()` method
+- `api/src/openapi/contracts.rs` - Add usage reporting endpoints
+- `api/src/cleanup_service.rs` - Add end-of-period usage aggregation job
+
+**Frontend:**
+- `website/src/lib/services/api.ts` - Usage API functions
+- `website/src/routes/dashboard/provider/offerings/` - Billing config UI
+- `website/src/routes/dashboard/rentals/` - Usage display
+
+### Design Decisions
+
+1. **Usage source:** Heartbeat-based - API calculates usage duration from existing agent heartbeats (no new agent changes needed)
+
+2. **Billing period alignment:** Per-contract - Period starts at contract creation (simpler implementation)
+
+3. **Grace period:** 24-hour grace window for late reports, then estimate from last known heartbeat state
 
 ---
 

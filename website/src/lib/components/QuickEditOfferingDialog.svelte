@@ -113,7 +113,16 @@
 				provisioner_type: offering.provisioner_type || undefined,
 				provisioner_config: offering.provisioner_config || undefined,
 				agent_pool_id: offering.agent_pool_id || undefined,
-				provider_online: undefined
+				provider_online: undefined,
+				// Subscription fields
+				billing_unit: offering.billing_unit || 'month',
+				pricing_model: offering.pricing_model || undefined,
+				price_per_unit: offering.price_per_unit || undefined,
+				included_units: offering.included_units || undefined,
+				overage_price_per_unit: offering.overage_price_per_unit || undefined,
+				stripe_metered_price_id: offering.stripe_metered_price_id || undefined,
+				is_subscription: offering.is_subscription || false,
+				subscription_interval_days: offering.subscription_interval_days || undefined
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed

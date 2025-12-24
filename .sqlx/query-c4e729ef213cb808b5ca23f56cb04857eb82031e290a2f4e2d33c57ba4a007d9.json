@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE subscription_plans SET stripe_price_id = ?,\n               updated_at = strftime('%s', 'now') * 1000000000\n               WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c4e729ef213cb808b5ca23f56cb04857eb82031e290a2f4e2d33c57ba4a007d9"
+}

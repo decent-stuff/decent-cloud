@@ -396,6 +396,16 @@
 		if (interval.includes("year")) return "Yearly";
 		return offering.billing_interval || "—";
 	}
+
+	function getSubscriptionBadge(offering: Offering): string | null {
+		if (!offering.is_subscription) return null;
+		const days = offering.subscription_interval_days;
+		if (!days) return "Recurring";
+		if (days <= 31) return "Monthly";
+		if (days <= 93) return "Quarterly";
+		if (days <= 366) return "Yearly";
+		return `${days}d`;
+	}
 </script>
 
 <div class="space-y-4">
@@ -797,6 +807,13 @@
 													>Demo</span
 												>
 											{/if}
+											{#if getSubscriptionBadge(offering)}
+												<span
+													class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
+													title="Recurring subscription"
+													>↻ {getSubscriptionBadge(offering)}</span
+												>
+											{/if}
 										</div>
 										<a
 											href="/dashboard/reputation/{offering.owner_username ||
@@ -1098,6 +1115,13 @@
 											<span
 												class="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded"
 												>Demo</span
+											>
+										{/if}
+										{#if getSubscriptionBadge(offering)}
+											<span
+												class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
+												title="Recurring subscription"
+												>↻ {getSubscriptionBadge(offering)}</span
 											>
 										{/if}
 									</div>

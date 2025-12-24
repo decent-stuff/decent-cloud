@@ -92,7 +92,67 @@ impl CleanupService {
             }
         }
 
+        // Report metered usage to Stripe for completed billing periods
+        self.report_metered_usage().await;
+
         Ok(())
+    }
+
+    /// Process unreported metered usage - update from heartbeats and mark as reported
+    async fn report_metered_usage(&self) {
+        let unreported = match self.database.get_unreported_usage().await {
+            Ok(usage) => usage,
+            Err(e) => {
+                tracing::error!("Failed to get unreported usage: {:#}", e);
+                return;
+            }
+        };
+
+        if unreported.is_empty() {
+            tracing::debug!("No unreported usage to process");
+            return;
+        }
+
+        for usage in unreported {
+            let contract_id_bytes = match hex::decode(&usage.contract_id) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    tracing::error!(
+                        "Invalid contract_id hex {}: {:#}",
+                        usage.contract_id,
+                        e
+                    );
+                    continue;
+                }
+            };
+
+            // Update usage from heartbeats to get final count
+            if let Err(e) = self
+                .database
+                .update_usage_from_heartbeats(&contract_id_bytes, usage.id, "hour")
+                .await
+            {
+                tracing::error!(
+                    "Failed to update usage from heartbeats for {}: {:#}",
+                    usage.contract_id,
+                    e
+                );
+                continue;
+            }
+
+            // Mark usage as reported.
+            // TODO: When Stripe subscription billing is integrated with contracts,
+            // fetch the subscription item ID and call stripe_client.create_usage_record()
+            if let Err(e) = self.database.mark_usage_reported(usage.id, "").await {
+                tracing::error!("Failed to mark usage {} as reported: {:#}", usage.id, e);
+            } else {
+                tracing::debug!(
+                    "Processed usage {} for contract {}",
+                    usage.id,
+                    usage.contract_id
+                );
+            }
+        }
     }
 }
 

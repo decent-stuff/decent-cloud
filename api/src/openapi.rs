@@ -9,6 +9,7 @@ pub mod offerings;
 pub mod providers;
 pub mod resellers;
 pub mod stats;
+pub mod subscriptions;
 pub mod system;
 pub mod transfers;
 pub mod users;
@@ -26,6 +27,7 @@ pub use offerings::OfferingsApi;
 pub use providers::ProvidersApi;
 pub use resellers::ResellersApi;
 pub use stats::StatsApi;
+pub use subscriptions::SubscriptionsApi;
 pub use system::SystemApi;
 pub use transfers::TransfersApi;
 pub use users::UsersApi;
@@ -51,6 +53,7 @@ pub fn create_combined_api() -> impl OpenApi {
         TransfersApi,
         StatsApi,
         ResellersApi,
+        SubscriptionsApi,
         VatApi,
     )
 }

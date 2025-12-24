@@ -7,7 +7,9 @@
 		getUserContracts,
 		cancelRentalRequest,
 		downloadContractInvoice,
+		getContractUsage,
 		type Contract,
+		type ContractUsage,
 		hexEncode,
 	} from "$lib/services/api";
 	import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
@@ -22,6 +24,7 @@
 	const contractId = $page.params.contract_id ?? "";
 
 	let contract = $state<Contract | null>(null);
+	let usage = $state<ContractUsage | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let cancelling = $state(false);
@@ -133,6 +136,15 @@
 				hexEncode(signingIdentityInfo.publicKeyBytes),
 			);
 			contract = contracts.find((c) => c.contract_id === contractId) ?? null;
+
+			// Refresh usage data
+			if (contract) {
+				try {
+					usage = await getContractUsage(contractId, headers);
+				} catch (e) {
+					console.debug("No usage data for contract:", e);
+				}
+			}
 			lastRefresh = Date.now();
 		} catch (e) {
 			console.error("Error refreshing contract:", e);
@@ -169,6 +181,14 @@
 
 			if (!contract) {
 				error = "Contract not found";
+			} else {
+				// Try to fetch usage data (may not exist for all contracts)
+				try {
+					usage = await getContractUsage(contractId, headers);
+				} catch (e) {
+					// Usage not available is not an error
+					console.debug("No usage data for contract:", e);
+				}
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -411,8 +431,12 @@
 					<div class="text-2xl font-bold text-white">
 						{formatPrice(contract.payment_amount_e9s, contract.currency)}
 					</div>
-					{#if contract.duration_hours}
-						<div class="text-white/60 text-sm">{contract.duration_hours} hours</div>
+					{#if contract.stripe_subscription_id}
+						<div class="text-purple-400 text-sm flex items-center gap-1 justify-end">
+							<span class="text-xs">↻</span> Subscription
+						</div>
+					{:else if contract.duration_hours}
+						<div class="text-white/60 text-sm">{contract.duration_hours} hours (one-time)</div>
 					{/if}
 				</div>
 			</div>
@@ -472,6 +496,14 @@
 					<div class="text-white/60 text-xs mb-1">Created</div>
 					<div class="text-white text-sm">{formatDate(contract.created_at_ns)}</div>
 				</div>
+				{#if contract.end_timestamp_ns}
+					{@const endDate = new Date(contract.end_timestamp_ns / 1_000_000)}
+					{@const isExpired = endDate < new Date()}
+					<div class="bg-white/5 rounded-lg p-3 border {isExpired ? 'border-red-500/30' : 'border-white/10'}">
+						<div class="text-white/60 text-xs mb-1">{isExpired ? 'Expired' : 'Expires'}</div>
+						<div class="text-sm {isExpired ? 'text-red-400' : 'text-white'}">{endDate.toLocaleString()}</div>
+					</div>
+				{/if}
 				{#if contract.region_name}
 					<div class="bg-white/5 rounded-lg p-3 border border-white/10">
 						<div class="text-white/60 text-xs mb-1">Region</div>
@@ -515,6 +547,114 @@
 							Provisioned: {formatDate(contract.provisioning_completed_at_ns)}
 						</div>
 					{/if}
+				</div>
+			{/if}
+
+			<!-- Subscription information (shown for subscription-based contracts) -->
+			{#if contract.stripe_subscription_id}
+				{@const isActive = contract.subscription_status === 'active' || contract.subscription_status === 'trialing'}
+				{@const renewalDate = contract.current_period_end_ns ? new Date(contract.current_period_end_ns / 1_000_000) : null}
+				<div class="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 mt-4">
+					<div class="flex items-center justify-between mb-2">
+						<div class="text-purple-400 font-semibold">Subscription</div>
+						<span class="px-2 py-0.5 rounded text-xs font-medium {
+							contract.subscription_status === 'active' ? 'bg-green-500/20 text-green-400' :
+							contract.subscription_status === 'trialing' ? 'bg-blue-500/20 text-blue-400' :
+							contract.subscription_status === 'past_due' ? 'bg-amber-500/20 text-amber-400' :
+							contract.subscription_status === 'cancelled' ? 'bg-red-500/20 text-red-400' :
+							'bg-white/10 text-white/60'
+						}">
+							{contract.subscription_status || 'Unknown'}
+						</span>
+					</div>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+						{#if renewalDate}
+							<div>
+								<span class="text-white/60">{contract.cancel_at_period_end ? 'Ends on:' : 'Renews on:'}</span>
+								<span class="text-white ml-2">{renewalDate.toLocaleDateString()}</span>
+							</div>
+						{/if}
+						{#if contract.cancel_at_period_end}
+							<div class="col-span-full">
+								<span class="text-amber-400 text-sm">Subscription will not renew after the current period.</span>
+							</div>
+						{/if}
+					</div>
+					{#if isActive && !contract.cancel_at_period_end}
+						<p class="text-purple-400/70 text-xs mt-3">
+							Your subscription will automatically renew. To cancel, use the Cancel button above.
+						</p>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Refund information (shown when cancelled/refunded) -->
+			{#if contract.payment_status === "refunded" || contract.refund_amount_e9s}
+				<div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mt-4">
+					<div class="text-amber-400 font-semibold mb-2">Refund Information</div>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+						{#if contract.refund_amount_e9s}
+							<div>
+								<span class="text-white/60">Refund Amount:</span>
+								<span class="text-white ml-2 font-medium">{formatPrice(contract.refund_amount_e9s, contract.currency)}</span>
+							</div>
+						{/if}
+						{#if contract.refund_created_at_ns}
+							<div>
+								<span class="text-white/60">Refund Date:</span>
+								<span class="text-white ml-2">{formatDate(contract.refund_created_at_ns)}</span>
+							</div>
+						{/if}
+						{#if contract.stripe_refund_id}
+							<div>
+								<span class="text-white/60">Stripe Refund ID:</span>
+								<span class="text-white/80 ml-2 font-mono text-xs">{contract.stripe_refund_id}</span>
+							</div>
+						{/if}
+						{#if contract.icpay_refund_id}
+							<div>
+								<span class="text-white/60">ICPay Refund ID:</span>
+								<span class="text-white/80 ml-2 font-mono text-xs">{contract.icpay_refund_id}</span>
+							</div>
+						{/if}
+					</div>
+					<p class="text-amber-400/70 text-xs mt-3">
+						Refunds typically appear on your original payment method within 5-10 business days.
+					</p>
+				</div>
+			{/if}
+
+			<!-- Usage information (shown for contracts with usage tracking) -->
+			{#if usage}
+				<div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mt-4">
+					<div class="text-blue-400 font-semibold mb-2">Current Billing Period Usage</div>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+						<div>
+							<span class="text-white/60">Billing Period:</span>
+							<span class="text-white ml-2">
+								{new Date(usage.billing_period_start * 1000).toLocaleDateString()} - {new Date(usage.billing_period_end * 1000).toLocaleDateString()}
+							</span>
+						</div>
+						<div>
+							<span class="text-white/60">Usage:</span>
+							<span class="text-white ml-2 font-medium">{usage.units_used.toFixed(2)} hours</span>
+							{#if usage.units_included}
+								<span class="text-white/50">/ {usage.units_included} included</span>
+							{/if}
+						</div>
+						{#if usage.overage_units > 0}
+							<div>
+								<span class="text-white/60">Overage:</span>
+								<span class="text-amber-400 ml-2 font-medium">{usage.overage_units.toFixed(2)} hours</span>
+							</div>
+						{/if}
+						{#if usage.estimated_charge_cents}
+							<div>
+								<span class="text-white/60">Estimated Charge:</span>
+								<span class="text-white ml-2 font-medium">${(usage.estimated_charge_cents / 100).toFixed(2)}</span>
+							</div>
+						{/if}
+					</div>
 				</div>
 			{/if}
 		</div>

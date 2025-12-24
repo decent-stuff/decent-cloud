@@ -64,6 +64,13 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/053_agent_pools.sql"),
         include_str!("../../migrations/054_example_provider_pools.sql"),
         include_str!("../../migrations/055_fix_example_offering_countries.sql"),
+        include_str!("../../migrations/056_subscription_plans.sql"),
+        include_str!("../../migrations/057_account_subscriptions.sql"),
+        include_str!("../../migrations/058_subscription_events.sql"),
+        include_str!("../../migrations/059_usage_billing_offerings.sql"),
+        include_str!("../../migrations/060_contract_usage.sql"),
+        include_str!("../../migrations/061_offering_subscriptions.sql"),
+        include_str!("../../migrations/062_contract_subscriptions.sql"),
     ];
 
     for migration in &migrations {

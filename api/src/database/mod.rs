@@ -14,6 +14,7 @@ pub mod reputation;
 pub mod reseller;
 pub mod rewards;
 pub mod stats;
+pub mod subscriptions;
 pub mod telegram_tracking;
 pub mod tokens;
 pub mod types;
@@ -23,6 +24,7 @@ pub mod users;
 pub use agent_delegations::{AgentDelegation, AgentPermission, AgentStatus};
 pub use agent_pools::{AgentPool, AgentPoolWithStats, SetupToken};
 pub use notification_config::UserNotificationConfig;
+pub use subscriptions::{AccountSubscription, SubscriptionEventInput, SubscriptionPlan};
 pub use types::{Database, LedgerEntryData};
 
 // Import all handler implementations

@@ -94,6 +94,28 @@ async fn assert_table_count(db: &Database, table: &str, expected: i64) {
     assert_eq!(count_table_rows(db, table).await, expected);
 }
 
+/// Delete example provider data so tests get clean counts.
+/// Migration 054 creates pools for example provider, making example offerings visible in search.
+async fn delete_example_data(db: &Database) {
+    let example_pubkey = Database::example_provider_pubkey();
+    // Delete in correct order to respect foreign key constraints
+    sqlx::query("DELETE FROM provider_agent_delegations WHERE provider_pubkey = ?")
+        .bind(&example_pubkey[..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM agent_pools WHERE provider_pubkey = ?")
+        .bind(&example_pubkey[..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ?")
+        .bind(&example_pubkey[..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+}
+
 // Core functionality tests
 // Test database setup - using shared helper that runs all migrations
 use crate::database::test_helpers::setup_test_db;
@@ -359,6 +381,7 @@ async fn test_csv_template_data_retrieval() {
 #[tokio::test]
 async fn test_offerings_with_pools_included_in_search() {
     let db = setup_test_db().await;
+    delete_example_data(&db).await;
 
     // Create a provider with pool (offerings without pools are filtered from marketplace)
     let pubkey = vec![1u8; 32];
@@ -424,11 +447,11 @@ async fn test_offerings_with_pools_included_in_search() {
     );
     assert_eq!(test_offering.unwrap().visibility, "public");
 
-    // count_offerings still counts ALL public offerings (no pool filter)
+    // count_offerings counts all public offerings (example data was deleted)
     let total_count = db.count_offerings(None).await.unwrap();
     assert_eq!(
-        total_count, 11,
-        "Count should include all public offerings (no pool filter)"
+        total_count, 1,
+        "Count should include all public offerings"
     );
 }
 

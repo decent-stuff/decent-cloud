@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO contract_usage (contract_id, billing_period_start, billing_period_end, units_included)\n               VALUES (?, ?, ?, ?)\n               RETURNING id as \"id!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "63cb9d8f7d89fcfc2138e8322af717589e0f0fd435790a376d5846b4ba6201eb"
+}

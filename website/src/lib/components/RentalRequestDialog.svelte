@@ -54,6 +54,17 @@
 	// Reactive validation
 	let sshKeyValidation = $derived(validateSshKey(sshKey));
 	let paymentMethod = $state<"icpay" | "stripe">("icpay");
+
+	// Subscription offering helpers
+	let isSubscriptionOffering = $derived(offering?.is_subscription ?? false);
+	let subscriptionIntervalLabel = $derived(() => {
+		const days = offering?.subscription_interval_days;
+		if (!days) return "Recurring";
+		if (days <= 31) return "Monthly";
+		if (days <= 93) return "Quarterly";
+		if (days <= 366) return "Yearly";
+		return `Every ${days} days`;
+	});
 	let stripe: Stripe | null = null;
 	let walletConnected = $state(false);
 	let pendingContractId = $state<string | null>(null);
@@ -408,27 +419,32 @@
 					</div>
 				</div>
 
-				<!-- Duration -->
-				<div>
-					<label
-						for="duration"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Rental Duration
-					</label>
-					<select
-						id="duration"
-						bind:value={durationHours}
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
-					>
-						<option value={24}>1 Day (24 hours)</option>
-						<option value={168}>1 Week (7 days)</option>
-						<option value={720}>1 Month (30 days)</option>
-						<option value={2160}>3 Months (90 days)</option>
-						<option value={4320}>6 Months (180 days)</option>
-						<option value={8760}>1 Year (365 days)</option>
-					</select>
-				</div>
+				<!-- Duration (hidden for subscription offerings) -->
+				{#if !isSubscriptionOffering}
+					<div>
+						<label
+							for="duration"
+							class="block text-sm font-medium text-white mb-2"
+						>
+							Rental Duration
+						</label>
+						<select
+							id="duration"
+							bind:value={durationHours}
+							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400 transition-colors"
+						>
+							<option value={24}>1 Day (24 hours)</option>
+							<option value={168}>1 Week (7 days)</option>
+							<option value={720}>1 Month (30 days)</option>
+							<option value={2160}>3 Months (90 days)</option>
+							<option value={4320}>6 Months (180 days)</option>
+							<option value={8760}>1 Year (365 days)</option>
+						</select>
+						<p class="text-xs text-white/50 mt-1">
+							Ends: {new Date(Date.now() + durationHours * 60 * 60 * 1000).toLocaleString()}
+						</p>
+					</div>
+				{/if}
 
 				<!-- Payment Method -->
 				<fieldset>
@@ -655,24 +671,40 @@
 				<div
 					class="bg-blue-500/10 rounded-lg p-4 border border-blue-500/30"
 				>
-					<div class="flex justify-between items-center">
+					<div class="flex justify-between items-center mb-3">
 						<div>
-							<span class="text-white/70 text-sm"
-								>Estimated Cost</span
-							>
-							<p class="text-xs text-white/50 mt-1">
-								{durationHours} hours @ {offering.monthly_price.toFixed(
-									2,
-								)}
-								{offering.currency}/mo
-							</p>
+							{#if isSubscriptionOffering}
+								<span class="text-white/70 text-sm">{subscriptionIntervalLabel()} Subscription</span>
+								<p class="text-xs text-white/50 mt-1">
+									Billed {subscriptionIntervalLabel().toLowerCase()}
+								</p>
+							{:else}
+								<span class="text-white/70 text-sm">One-Time Payment</span>
+								<p class="text-xs text-white/50 mt-1">
+									{durationHours} hours @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
+								</p>
+							{/if}
 						</div>
 						<div class="text-right">
 							<span class="text-2xl font-bold text-white">
-								{calculatePrice()}
+								{#if isSubscriptionOffering}
+									{offering.monthly_price.toFixed(2)}
+								{:else}
+									{calculatePrice()}
+								{/if}
 								<span class="text-lg">{offering.currency}</span>
 							</span>
+							{#if isSubscriptionOffering}
+								<p class="text-xs text-white/50">/{subscriptionIntervalLabel().toLowerCase().replace('ly', '')}</p>
+							{/if}
 						</div>
+					</div>
+					<div class="text-xs text-white/50 border-t border-white/10 pt-2 space-y-1">
+						{#if isSubscriptionOffering}
+							<p>Recurring subscription. Cancel anytime from your rentals dashboard.</p>
+						{:else}
+							<p>No recurring charges. You can cancel anytime for a prorated refund.</p>
+						{/if}
 					</div>
 				</div>
 

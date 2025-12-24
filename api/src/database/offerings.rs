@@ -27,6 +27,23 @@ pub struct Offering {
     pub product_type: String,
     pub virtualization_type: Option<String>,
     pub billing_interval: String,
+    // Usage-based billing fields
+    pub billing_unit: String, // 'minute', 'hour', 'day', 'month'
+    pub pricing_model: Option<String>, // 'flat', 'usage_overage'
+    #[ts(type = "number | undefined")]
+    pub price_per_unit: Option<f64>,
+    #[ts(type = "number | undefined")]
+    pub included_units: Option<i64>,
+    #[ts(type = "number | undefined")]
+    pub overage_price_per_unit: Option<f64>,
+    pub stripe_metered_price_id: Option<String>,
+    // Subscription billing fields
+    #[ts(type = "boolean")]
+    #[sqlx(default)]
+    pub is_subscription: bool,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub subscription_interval_days: Option<i64>,
     pub stock_status: String,
     pub processor_brand: Option<String>,
     #[ts(type = "number | undefined")]
@@ -137,7 +154,7 @@ impl Database {
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
         let mut query = String::from(
-            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id, COALESCE(pas.online = 1 AND pas.last_heartbeat_ns > ?, 0) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey WHERE LOWER(o.visibility) = 'public'"
+            "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id, COALESCE(pas.online = 1 AND pas.last_heartbeat_ns > ?, 0) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey WHERE LOWER(o.visibility) = 'public'"
         );
 
         if params.product_type.is_some() {
@@ -309,8 +326,10 @@ impl Database {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval,
+               billing_unit, pricing_model, price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
+               is_subscription, subscription_interval_days,
+               stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
@@ -359,8 +378,10 @@ impl Database {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offering =
             sqlx::query_as::<_, Offering>(r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
-                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
-                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+                setup_fee, visibility, product_type, virtualization_type, billing_interval,
+                billing_unit, pricing_model, price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
+                is_subscription, subscription_interval_days,
+                stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                 memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
@@ -383,8 +404,10 @@ impl Database {
         let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval,
+               billing_unit, pricing_model, price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
+               is_subscription, subscription_interval_days,
+               stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
@@ -408,8 +431,10 @@ impl Database {
         let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval,
+               billing_unit, pricing_model, price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
+               is_subscription, subscription_interval_days,
+               stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
@@ -442,7 +467,7 @@ impl Database {
     }
 
     /// Returns the example provider pubkey for identifying example offerings
-    fn example_provider_pubkey() -> Vec<u8> {
+    pub fn example_provider_pubkey() -> Vec<u8> {
         hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
             .expect("Example provider pubkey hex should always decode successfully")
     }
@@ -468,7 +493,7 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("SQL build error: {}", e))?;
 
         // Base SELECT with same fields as search_offerings
-        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id, COALESCE(pas.online = 1 AND pas.last_heartbeat_ns > ?, 0) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey";
+        let base_select = "SELECT o.id, lower(hex(o.pubkey)) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags = 1 THEN 1 ELSE 0 END as has_critical_flags, CASE WHEN lower(hex(o.pubkey)) = ? THEN 1 ELSE 0 END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.agent_pool_id, COALESCE(pas.online = 1 AND pas.last_heartbeat_ns > ?, 0) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = 1 LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey";
 
         // Build WHERE clause: base filters + DSL filters
         let where_clause = if dsl_where.is_empty() {
@@ -567,6 +592,14 @@ impl Database {
             product_type,
             virtualization_type,
             billing_interval,
+            billing_unit,
+            pricing_model,
+            price_per_unit,
+            included_units,
+            overage_price_per_unit,
+            stripe_metered_price_id,
+            is_subscription,
+            subscription_interval_days,
             stock_status,
             processor_brand,
             processor_amount,
@@ -637,7 +670,10 @@ impl Database {
             r#"INSERT INTO provider_offerings (
                 pubkey, offering_id, offer_name, description, product_page_url,
                 currency, monthly_price, setup_fee, visibility, product_type,
-                virtualization_type, billing_interval, stock_status, processor_brand,
+                virtualization_type, billing_interval, billing_unit, pricing_model,
+                price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
+                is_subscription, subscription_interval_days,
+                stock_status, processor_brand,
                 processor_amount, processor_cores, processor_speed, processor_name,
                 memory_error_correction, memory_type, memory_amount, hdd_amount,
                 total_hdd_capacity, ssd_amount, total_ssd_capacity, unmetered_bandwidth,
@@ -650,6 +686,9 @@ impl Database {
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?,
+                ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?,
@@ -672,6 +711,14 @@ impl Database {
             product_type,
             virtualization_type,
             billing_interval,
+            billing_unit,
+            pricing_model,
+            price_per_unit,
+            included_units,
+            overage_price_per_unit,
+            stripe_metered_price_id,
+            is_subscription,
+            subscription_interval_days,
             stock_status,
             processor_brand,
             processor_amount,
@@ -766,6 +813,14 @@ impl Database {
             product_type,
             virtualization_type,
             billing_interval,
+            billing_unit,
+            pricing_model,
+            price_per_unit,
+            included_units,
+            overage_price_per_unit,
+            stripe_metered_price_id,
+            is_subscription,
+            subscription_interval_days,
             stock_status,
             processor_brand,
             processor_amount,
@@ -815,7 +870,11 @@ impl Database {
             r#"UPDATE provider_offerings SET
                 offering_id = ?, offer_name = ?, description = ?, product_page_url = ?,
                 currency = ?, monthly_price = ?, setup_fee = ?, visibility = ?, product_type = ?,
-                virtualization_type = ?, billing_interval = ?, stock_status = ?,
+                virtualization_type = ?, billing_interval = ?,
+                billing_unit = ?, pricing_model = ?, price_per_unit = ?,
+                included_units = ?, overage_price_per_unit = ?, stripe_metered_price_id = ?,
+                is_subscription = ?, subscription_interval_days = ?,
+                stock_status = ?,
                 processor_brand = ?, processor_amount = ?, processor_cores = ?, processor_speed = ?,
                 processor_name = ?, memory_error_correction = ?, memory_type = ?, memory_amount = ?,
                 hdd_amount = ?, total_hdd_capacity = ?, ssd_amount = ?, total_ssd_capacity = ?,
@@ -838,6 +897,14 @@ impl Database {
             product_type,
             virtualization_type,
             billing_interval,
+            billing_unit,
+            pricing_model,
+            price_per_unit,
+            included_units,
+            overage_price_per_unit,
+            stripe_metered_price_id,
+            is_subscription,
+            subscription_interval_days,
             stock_status,
             processor_brand,
             processor_amount,
@@ -952,6 +1019,14 @@ impl Database {
             product_type: source.product_type,
             virtualization_type: source.virtualization_type,
             billing_interval: source.billing_interval,
+            billing_unit: source.billing_unit,
+            pricing_model: source.pricing_model,
+            price_per_unit: source.price_per_unit,
+            included_units: source.included_units,
+            overage_price_per_unit: source.overage_price_per_unit,
+            stripe_metered_price_id: source.stripe_metered_price_id,
+            is_subscription: source.is_subscription,
+            subscription_interval_days: source.subscription_interval_days,
             stock_status: source.stock_status,
             processor_brand: source.processor_brand,
             processor_amount: source.processor_amount,
@@ -1280,6 +1355,17 @@ impl Database {
             product_type: get_str("product_type"),
             virtualization_type: get_opt_str("virtualization_type"),
             billing_interval: get_str("billing_interval"),
+            billing_unit: {
+                let unit = get_str("billing_unit");
+                if unit.is_empty() { "month".to_string() } else { unit }
+            },
+            pricing_model: get_opt_str("pricing_model"),
+            price_per_unit: get_opt_f64("price_per_unit"),
+            included_units: get_opt_i64("included_units"),
+            overage_price_per_unit: get_opt_f64("overage_price_per_unit"),
+            stripe_metered_price_id: get_opt_str("stripe_metered_price_id"),
+            is_subscription: get_bool("is_subscription"),
+            subscription_interval_days: get_opt_i64("subscription_interval_days"),
             stock_status: get_str("stock_status"),
             processor_brand: get_opt_str("processor_brand"),
             processor_amount: get_opt_i64("processor_amount"),

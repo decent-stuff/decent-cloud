@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT subscription_plan_id, subscription_status,\n                      subscription_stripe_id, subscription_current_period_end,\n                      subscription_cancel_at_period_end\n               FROM accounts WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "subscription_plan_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "subscription_status",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "subscription_stripe_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "subscription_current_period_end",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "subscription_cancel_at_period_end",
+        "ordinal": 4,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "d0d0799d2284e1e9e521a8274f47234160503c1d649f73a882fd0b413328f01f"
+}

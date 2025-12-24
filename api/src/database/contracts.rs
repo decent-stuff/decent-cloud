@@ -103,6 +103,17 @@ pub struct Contract {
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
     pub receipt_sent_at_ns: Option<i64>,
+    // Subscription tracking (for recurring billing)
+    #[oai(skip_serializing_if_is_none)]
+    pub stripe_subscription_id: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub subscription_status: Option<String>,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub current_period_end_ns: Option<i64>,
+    #[ts(type = "boolean")]
+    #[sqlx(default)]
+    pub cancel_at_period_end: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -231,7 +242,8 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool"
                FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -250,7 +262,8 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool"
                FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -269,7 +282,8 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool"
                FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -337,7 +351,8 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool"
                FROM contract_sign_requests WHERE contract_id = ?"#,
             contract_id
         )
@@ -384,7 +399,8 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool"
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
             limit,
             offset
@@ -1318,7 +1334,8 @@ impl Database {
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool"
                FROM contract_sign_requests
                WHERE payment_method = 'icpay'
                AND payment_status = 'succeeded'
@@ -1839,6 +1856,296 @@ impl Database {
 
         Ok(contracts)
     }
+
+    // === Subscription Management ===
+
+    /// Get contract by Stripe subscription ID
+    pub async fn get_contract_by_subscription_id(
+        &self,
+        subscription_id: &str,
+    ) -> Result<Option<Contract>> {
+        let contract = sqlx::query_as!(
+            Contract,
+            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool"
+               FROM contract_sign_requests WHERE stripe_subscription_id = ?"#,
+            subscription_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(contract)
+    }
+
+    /// Update subscription status from Stripe webhooks
+    pub async fn update_contract_subscription(
+        &self,
+        stripe_subscription_id: &str,
+        status: &str,
+        current_period_end_ns: i64,
+        cancel_at_period_end: bool,
+    ) -> Result<()> {
+        let cancel_flag = if cancel_at_period_end { 1i32 } else { 0i32 };
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET subscription_status = ?, current_period_end_ns = ?, cancel_at_period_end = ? WHERE stripe_subscription_id = ?",
+            status,
+            current_period_end_ns,
+            cancel_flag,
+            stripe_subscription_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    // === Contract Usage Tracking ===
+
+    /// Create a new billing period for a contract
+    pub async fn create_contract_usage(
+        &self,
+        contract_id: &[u8],
+        billing_period_start: i64,
+        billing_period_end: i64,
+        units_included: Option<f64>,
+    ) -> Result<i64> {
+        let result = sqlx::query!(
+            r#"INSERT INTO contract_usage (contract_id, billing_period_start, billing_period_end, units_included)
+               VALUES (?, ?, ?, ?)
+               RETURNING id as "id!: i64""#,
+            contract_id,
+            billing_period_start,
+            billing_period_end,
+            units_included
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(result.id)
+    }
+
+    /// Record a usage event for a contract
+    pub async fn record_usage_event(
+        &self,
+        contract_id: &[u8],
+        event_type: &str,
+        units_delta: Option<f64>,
+        heartbeat_at: Option<i64>,
+        source: Option<&str>,
+        metadata: Option<&str>,
+    ) -> Result<i64> {
+        let result = sqlx::query!(
+            r#"INSERT INTO contract_usage_events (contract_id, event_type, units_delta, heartbeat_at, source, metadata)
+               VALUES (?, ?, ?, ?, ?, ?)
+               RETURNING id as "id!: i64""#,
+            contract_id,
+            event_type,
+            units_delta,
+            heartbeat_at,
+            source,
+            metadata
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(result.id)
+    }
+
+    /// Get current billing period usage for a contract
+    pub async fn get_current_usage(&self, contract_id: &[u8]) -> Result<Option<ContractUsage>> {
+        let now = chrono::Utc::now().timestamp();
+        let usage = sqlx::query_as!(
+            ContractUsage,
+            r#"SELECT
+                id as "id!: i64",
+                lower(hex(contract_id)) as "contract_id!: String",
+                billing_period_start as "billing_period_start!: i64",
+                billing_period_end as "billing_period_end!: i64",
+                units_used as "units_used!: f64",
+                units_included,
+                overage_units as "overage_units!: f64",
+                estimated_charge_cents,
+                reported_to_stripe as "reported_to_stripe!: bool",
+                stripe_usage_record_id,
+                created_at as "created_at!: i64",
+                updated_at as "updated_at!: i64"
+            FROM contract_usage
+            WHERE contract_id = ? AND billing_period_start <= ? AND billing_period_end > ?
+            ORDER BY billing_period_start DESC
+            LIMIT 1"#,
+            contract_id,
+            now,
+            now
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(usage)
+    }
+
+    /// Update usage from heartbeat events for a contract
+    /// Calculates units_used based on heartbeat intervals
+    pub async fn update_usage_from_heartbeats(
+        &self,
+        contract_id: &[u8],
+        usage_id: i64,
+        billing_unit: &str,
+    ) -> Result<f64> {
+        // Get the billing period
+        let usage = sqlx::query!(
+            r#"SELECT billing_period_start as "billing_period_start!: i64",
+                      billing_period_end as "billing_period_end!: i64",
+                      units_included
+               FROM contract_usage WHERE id = ?"#,
+            usage_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Get heartbeat events in this billing period
+        let heartbeats = sqlx::query!(
+            r#"SELECT heartbeat_at as "heartbeat_at!: i64"
+               FROM contract_usage_events
+               WHERE contract_id = ?
+                 AND event_type = 'heartbeat'
+                 AND heartbeat_at >= ?
+                 AND heartbeat_at < ?
+               ORDER BY heartbeat_at ASC"#,
+            contract_id,
+            usage.billing_period_start,
+            usage.billing_period_end
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Calculate total units based on billing_unit
+        let units_per_second = match billing_unit {
+            "minute" => 1.0 / 60.0,
+            "hour" => 1.0 / 3600.0,
+            "day" => 1.0 / 86400.0,
+            "month" => 1.0 / (30.0 * 86400.0),
+            _ => 1.0 / 3600.0, // Default to hourly
+        };
+
+        let mut total_units = 0.0;
+        let mut prev_ts: Option<i64> = None;
+
+        for hb in &heartbeats {
+            if let Some(prev) = prev_ts {
+                let interval_seconds = (hb.heartbeat_at - prev) as f64;
+                // Cap interval at 10 minutes (600 seconds) - if no heartbeat for longer, assume offline
+                let capped_interval = interval_seconds.min(600.0);
+                total_units += capped_interval * units_per_second;
+            }
+            prev_ts = Some(hb.heartbeat_at);
+        }
+
+        // Calculate overage
+        let overage = if let Some(included) = usage.units_included {
+            (total_units - included).max(0.0)
+        } else {
+            0.0
+        };
+
+        // Update the usage record
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        sqlx::query!(
+            "UPDATE contract_usage SET units_used = ?, overage_units = ?, updated_at = ? WHERE id = ?",
+            total_units,
+            overage,
+            now_ns,
+            usage_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(total_units)
+    }
+
+    /// Mark usage as reported to Stripe
+    pub async fn mark_usage_reported(
+        &self,
+        usage_id: i64,
+        stripe_usage_record_id: &str,
+    ) -> Result<()> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        sqlx::query!(
+            "UPDATE contract_usage SET reported_to_stripe = 1, stripe_usage_record_id = ?, updated_at = ? WHERE id = ?",
+            stripe_usage_record_id,
+            now_ns,
+            usage_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get unreported usage records that are past their billing period end
+    pub async fn get_unreported_usage(&self) -> Result<Vec<ContractUsage>> {
+        let now = chrono::Utc::now().timestamp();
+        let usage = sqlx::query_as!(
+            ContractUsage,
+            r#"SELECT
+                id as "id!: i64",
+                lower(hex(contract_id)) as "contract_id!: String",
+                billing_period_start as "billing_period_start!: i64",
+                billing_period_end as "billing_period_end!: i64",
+                units_used as "units_used!: f64",
+                units_included,
+                overage_units as "overage_units!: f64",
+                estimated_charge_cents,
+                reported_to_stripe as "reported_to_stripe!: bool",
+                stripe_usage_record_id,
+                created_at as "created_at!: i64",
+                updated_at as "updated_at!: i64"
+            FROM contract_usage
+            WHERE reported_to_stripe = 0 AND billing_period_end <= ?
+            ORDER BY billing_period_end ASC"#,
+            now
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(usage)
+    }
+}
+
+/// Contract usage tracking for billing periods
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(skip_serializing_if_is_none)]
+pub struct ContractUsage {
+    #[ts(type = "number")]
+    pub id: i64,
+    #[ts(type = "string")]
+    pub contract_id: String,
+    #[ts(type = "number")]
+    pub billing_period_start: i64,
+    #[ts(type = "number")]
+    pub billing_period_end: i64,
+    #[ts(type = "number")]
+    pub units_used: f64,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub units_included: Option<f64>,
+    #[ts(type = "number")]
+    pub overage_units: f64,
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub estimated_charge_cents: Option<i64>,
+    pub reported_to_stripe: bool,
+    #[oai(skip_serializing_if_is_none)]
+    pub stripe_usage_record_id: Option<String>,
+    #[ts(type = "number")]
+    pub created_at: i64,
+    #[ts(type = "number")]
+    pub updated_at: i64,
 }
 
 /// Pending Stripe receipt for background processing

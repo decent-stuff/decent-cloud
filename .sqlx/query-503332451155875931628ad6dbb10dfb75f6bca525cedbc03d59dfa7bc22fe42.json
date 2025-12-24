@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as \"count!: i64\" FROM contract_sign_requests\n               WHERE requester_pubkey IN (\n                   SELECT public_key FROM account_public_keys WHERE account_id = ? AND is_active = 1\n               )\n               AND status IN ('active', 'provisioned', 'provisioning', 'accepted', 'pending')",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "503332451155875931628ad6dbb10dfb75f6bca525cedbc03d59dfa7bc22fe42"
+}

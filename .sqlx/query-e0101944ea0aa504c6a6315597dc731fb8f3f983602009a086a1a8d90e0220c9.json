@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE accounts SET\n               subscription_plan_id = ?,\n               subscription_status = ?,\n               subscription_stripe_id = ?,\n               subscription_current_period_end = ?,\n               subscription_cancel_at_period_end = ?,\n               updated_at = strftime('%s', 'now') * 1000000000\n               WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "e0101944ea0aa504c6a6315597dc731fb8f3f983602009a086a1a8d90e0220c9"
+}

@@ -52,6 +52,34 @@ struct StripeInvoice {
     metadata: Option<serde_json::Value>,
 }
 
+// Subscription webhook types
+#[derive(Debug, Deserialize)]
+struct StripeSubscription {
+    id: String,
+    customer: String,
+    status: String,
+    current_period_end: i64,
+    cancel_at_period_end: bool,
+    items: StripeSubscriptionItems,
+    #[allow(dead_code)]
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeSubscriptionItems {
+    data: Vec<StripeSubscriptionItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeSubscriptionItem {
+    price: StripePrice,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripePrice {
+    id: String,
+}
+
 /// Verify Stripe webhook signature
 fn verify_signature(payload: &str, signature: &str, secret: &str) -> Result<()> {
     use hmac::{Hmac, Mac};
@@ -362,6 +390,249 @@ pub async fn stripe_webhook(
                 );
             }
         }
+        // Subscription lifecycle events
+        "customer.subscription.created" | "customer.subscription.updated" => {
+            let subscription: StripeSubscription =
+                serde_json::from_value(event.data.object).map_err(|e| {
+                    tracing::error!("Failed to parse subscription: {:#}", e);
+                    PoemError::from_string(
+                        format!("Invalid subscription data: {}", e),
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            tracing::info!(
+                "Subscription {}: {} (status: {}, customer: {})",
+                event.event_type,
+                subscription.id,
+                subscription.status,
+                subscription.customer
+            );
+
+            // Find account by Stripe customer ID
+            let account_id = match db
+                .get_account_id_by_stripe_customer(&subscription.customer)
+                .await
+            {
+                Ok(Some(id)) => id,
+                Ok(None) => {
+                    tracing::warn!(
+                        "No account found for Stripe customer {}, skipping subscription update",
+                        subscription.customer
+                    );
+                    return Ok(Response::builder()
+                        .status(poem::http::StatusCode::OK)
+                        .body(""));
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to lookup account for customer {}: {}",
+                        subscription.customer,
+                        e
+                    );
+                    return Err(PoemError::from_string(
+                        format!("Database error: {}", e),
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    ));
+                }
+            };
+
+            // Get price ID from subscription items
+            let price_id = subscription
+                .items
+                .data
+                .first()
+                .map(|item| item.price.id.as_str());
+
+            // Find plan by Stripe price ID
+            let plan_id = if let Some(price_id) = price_id {
+                match db.get_subscription_plan_by_stripe_price(price_id).await {
+                    Ok(Some(plan)) => plan.id,
+                    Ok(None) => {
+                        tracing::warn!(
+                            "No plan found for Stripe price {}, using 'pro' as default",
+                            price_id
+                        );
+                        "pro".to_string()
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to lookup plan by price {}: {}", price_id, e);
+                        "pro".to_string()
+                    }
+                }
+            } else {
+                tracing::warn!("Subscription {} has no price items", subscription.id);
+                "pro".to_string()
+            };
+
+            // Map Stripe status to our status
+            let status = match subscription.status.as_str() {
+                "active" => "active",
+                "trialing" => "trialing",
+                "past_due" => "past_due",
+                "canceled" | "unpaid" | "incomplete_expired" => "canceled",
+                "incomplete" | "paused" => "past_due",
+                other => {
+                    tracing::warn!("Unknown subscription status: {}", other);
+                    "active"
+                }
+            };
+
+            // Convert current_period_end to nanoseconds
+            let period_end_ns = subscription.current_period_end * 1_000_000_000;
+
+            // Update account subscription
+            if let Err(e) = db
+                .update_account_subscription(
+                    &account_id,
+                    &plan_id,
+                    status,
+                    Some(&subscription.id),
+                    Some(period_end_ns),
+                    subscription.cancel_at_period_end,
+                )
+                .await
+            {
+                tracing::error!(
+                    "Failed to update account subscription for customer {}: {}",
+                    subscription.customer,
+                    e
+                );
+                return Err(PoemError::from_string(
+                    format!("Database error: {}", e),
+                    poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                ));
+            }
+
+            // Record event for audit trail
+            let _ = db
+                .insert_subscription_event(
+                    &account_id,
+                    crate::database::SubscriptionEventInput {
+                        event_type: &event.event_type,
+                        new_plan_id: Some(&plan_id),
+                        stripe_subscription_id: Some(&subscription.id),
+                        ..Default::default()
+                    },
+                )
+                .await;
+
+            tracing::info!(
+                "Updated subscription for customer {}: plan={}, status={}",
+                subscription.customer,
+                plan_id,
+                status
+            );
+        }
+
+        "customer.subscription.deleted" => {
+            let subscription: StripeSubscription =
+                serde_json::from_value(event.data.object).map_err(|e| {
+                    tracing::error!("Failed to parse subscription: {:#}", e);
+                    PoemError::from_string(
+                        format!("Invalid subscription data: {}", e),
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            tracing::info!(
+                "Subscription deleted: {} (customer: {})",
+                subscription.id,
+                subscription.customer
+            );
+
+            // Find account by Stripe customer ID
+            let account_id = match db
+                .get_account_id_by_stripe_customer(&subscription.customer)
+                .await
+            {
+                Ok(Some(id)) => id,
+                Ok(None) => {
+                    tracing::warn!(
+                        "No account found for Stripe customer {}, skipping subscription delete",
+                        subscription.customer
+                    );
+                    return Ok(Response::builder()
+                        .status(poem::http::StatusCode::OK)
+                        .body(""));
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to lookup account for customer {}: {}",
+                        subscription.customer,
+                        e
+                    );
+                    return Err(PoemError::from_string(
+                        format!("Database error: {}", e),
+                        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    ));
+                }
+            };
+
+            // Reset to free tier
+            if let Err(e) = db
+                .update_account_subscription(&account_id, "free", "active", None, None, false)
+                .await
+            {
+                tracing::error!(
+                    "Failed to reset subscription to free for customer {}: {}",
+                    subscription.customer,
+                    e
+                );
+                return Err(PoemError::from_string(
+                    format!("Database error: {}", e),
+                    poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                ));
+            }
+
+            // Record event for audit trail
+            let _ = db
+                .insert_subscription_event(
+                    &account_id,
+                    crate::database::SubscriptionEventInput {
+                        event_type: "deleted",
+                        new_plan_id: Some("free"),
+                        stripe_subscription_id: Some(&subscription.id),
+                        ..Default::default()
+                    },
+                )
+                .await;
+
+            tracing::info!(
+                "Subscription deleted for customer {}, reset to free tier",
+                subscription.customer
+            );
+        }
+
+        "invoice.payment_failed" => {
+            // Check if this is a subscription invoice
+            let invoice: StripeInvoice =
+                serde_json::from_value(event.data.object.clone()).map_err(|e| {
+                    tracing::error!("Failed to parse invoice: {:#}", e);
+                    PoemError::from_string(
+                        format!("Invalid invoice data: {}", e),
+                        poem::http::StatusCode::BAD_REQUEST,
+                    )
+                })?;
+
+            tracing::warn!("Invoice payment failed: {}", invoice.id);
+
+            // Check if there's a subscription field in the raw data
+            if let Some(subscription_id) = event
+                .data
+                .object
+                .get("subscription")
+                .and_then(|v| v.as_str())
+            {
+                tracing::warn!(
+                    "Subscription {} invoice payment failed - user should update payment method",
+                    subscription_id
+                );
+                // The subscription status will be updated by customer.subscription.updated webhook
+                // which Stripe sends when a subscription enters past_due status
+            }
+        }
+
         // Note: payment_intent.succeeded and payment_intent.payment_failed webhooks are NOT used.
         // We use checkout.session.completed which already sets payment_status and has the contract_id.
         // Stripe Checkout generates its own PaymentIntent internally, but we link contracts by

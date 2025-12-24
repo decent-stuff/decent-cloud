@@ -179,6 +179,23 @@ pub struct CancelContractRequest {
     pub memo: Option<String>,
 }
 
+/// Request to record a usage event for a contract
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct RecordUsageRequest {
+    /// Type of event: "heartbeat", "session_start", "session_end"
+    pub event_type: String,
+    /// Optional units delta (e.g., hours of usage)
+    pub units_delta: Option<f64>,
+    /// Optional timestamp override (Unix seconds)
+    pub heartbeat_at: Option<i64>,
+    /// Optional source identifier (e.g., agent ID)
+    pub source: Option<String>,
+    /// Optional metadata JSON
+    pub metadata: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
@@ -626,4 +643,6 @@ pub enum ApiTags {
     Resellers,
     /// Agent pool operations endpoints
     Pools,
+    /// Subscription management endpoints
+    Subscriptions,
 }
