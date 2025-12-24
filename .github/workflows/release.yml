@@ -118,7 +118,7 @@ jobs:
       - name: Build dc-agent
         run: |
           . "$HOME/.cargo/env"
-          cargo build --release --bin dc-agent
+          ./scripts/build-dc-agent.sh --direct
 
       - name: Prepare binary
         run: cp target/release/dc-agent dc-agent-linux-amd64
