@@ -43,10 +43,9 @@ for toml in $(find . -name "Cargo.toml" -not -path "./target/*"); do
     sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$VERSION_NUM\"/" "$toml"
 done
 
-# Build (updates Cargo.lock with new version)
+# Build in Debian 11 container (updates Cargo.lock)
 echo ""
-echo "==> Building dc-agent..."
-"$SCRIPT_DIR/build-dc-agent.sh" --direct
+"$SCRIPT_DIR/build-dc-agent.sh"
 
 # Commit version bump (Cargo.toml + Cargo.lock)
 echo "==> Committing version bump..."

@@ -100,25 +100,11 @@ jobs:
   build-dc-agent:
     needs: create-release
     runs-on: ubuntu-latest
-    container:
-      image: debian:11
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build dependencies
-        run: |
-          apt-get update
-          apt-get install -y curl gcc clang pkg-config libssl-dev ca-certificates
-
-      - name: Install Rust
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
       - name: Build dc-agent
-        run: |
-          . "$HOME/.cargo/env"
-          ./scripts/build-dc-agent.sh --direct
+        run: ./scripts/build-dc-agent.sh
 
       - name: Prepare binary
         run: cp target/release/dc-agent dc-agent-linux-amd64
