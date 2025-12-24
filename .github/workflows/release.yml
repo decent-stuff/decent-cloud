@@ -97,8 +97,41 @@ jobs:
           draft: false
           prerelease: false
 
+  build-dc-agent:
+    needs: create-release
+    runs-on: ubuntu-latest
+    container:
+      image: debian:11
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y curl gcc pkg-config libssl-dev ca-certificates
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Build dc-agent
+        run: |
+          . "$HOME/.cargo/env"
+          cargo build --release --bin dc-agent
+
+      - name: Prepare binary
+        run: cp target/release/dc-agent dc-agent-linux-amd64
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: dc-agent-linux-amd64
+
   update-version:
-    needs: [create-release, build-release]
+    needs: [create-release, build-release, build-dc-agent]
     runs-on: ubuntu-latest
     permissions:
       contents: write

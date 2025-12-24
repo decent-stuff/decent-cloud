@@ -40,6 +40,10 @@
 		actionMessage = "Copied to clipboard";
 	}
 
+	function getInstallCommand(token: string): string {
+		return `curl -sSL https://raw.githubusercontent.com/decent-stuff/decent-cloud/main/scripts/install-dc-agent.sh | sudo bash -s ${token}`;
+	}
+
 	function formatTimestamp(ns: number): string {
 		const date = new Date(ns / 1_000_000);
 		return date.toLocaleString();
@@ -115,30 +119,48 @@
 					{:else}
 						<div class="space-y-3">
 							{#each tokens as token}
-								<div class="flex items-center gap-3 p-3 bg-white/10 rounded-lg">
-									<div class="flex-1 min-w-0">
-										<div class="font-mono text-sm text-emerald-300 truncate" title={token.token}>
-											{token.token}
+								<div class="p-4 bg-white/10 rounded-lg space-y-3">
+									<div class="flex items-center justify-between gap-3">
+										<div class="min-w-0">
+											<div class="font-mono text-sm text-emerald-300 truncate" title={token.token}>
+												{token.token}
+											</div>
+											<div class="text-xs text-white/50 mt-1">
+												{#if token.label}{token.label} &bull; {/if}
+												Expires: {formatTimestamp(token.expiresAtNs)}
+											</div>
 										</div>
-										<div class="text-xs text-white/50 mt-1">
-											{#if token.label}{token.label} &bull; {/if}
-											Expires: {formatTimestamp(token.expiresAtNs)}
+										<button
+											onclick={() => onDelete(token.token)}
+											class="p-2 rounded-full hover:bg-red-500/20 text-white/60 hover:text-red-300 transition-colors shrink-0"
+											title="Delete token"
+										>
+											<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+										</button>
+									</div>
+									<!-- One-liner install command -->
+									<div class="bg-black/30 rounded-lg p-3">
+										<div class="text-xs text-white/50 mb-2">Run on your server:</div>
+										<div class="font-mono text-xs text-blue-300 break-all select-all">
+											{getInstallCommand(token.token)}
 										</div>
 									</div>
-									<button
-										onclick={() => copyToClipboard(`dc-agent setup token --token ${token.token} --api-url ${API_BASE_URL}`)}
-										class="px-3 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-colors"
-										title="Copy setup command"
-									>
-										Copy Cmd
-									</button>
-									<button
-										onclick={() => onDelete(token.token)}
-										class="p-2 rounded-full hover:bg-red-500/20 text-white/60 hover:text-red-300 transition-colors"
-										title="Delete token"
-									>
-										<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-									</button>
+									<div class="flex gap-2">
+										<button
+											onclick={() => copyToClipboard(getInstallCommand(token.token))}
+											class="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
+											title="Copy one-liner install command"
+										>
+											Copy Install Command
+										</button>
+										<button
+											onclick={() => copyToClipboard(`dc-agent setup token --token ${token.token} --api-url ${API_BASE_URL}`)}
+											class="px-3 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+											title="Copy manual setup command (if dc-agent already installed)"
+										>
+											Manual
+										</button>
+									</div>
 								</div>
 							{/each}
 						</div>
