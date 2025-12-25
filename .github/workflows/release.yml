@@ -66,6 +66,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64
 
+      - name: Remove local linker config
+        run: rm -f .cargo/config.toml
+
       - name: Build Release Binary
         run: |
           if [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ]; then
