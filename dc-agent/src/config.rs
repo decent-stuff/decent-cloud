@@ -12,6 +12,59 @@ pub struct Config {
     /// Additional provisioners (optional) for per-offering provisioner support
     #[serde(default, deserialize_with = "deserialize_additional_provisioners")]
     pub additional_provisioners: Vec<ProvisionerConfig>,
+    /// Gateway configuration for DC-level reverse proxy (optional)
+    #[serde(default)]
+    pub gateway: Option<GatewayConfig>,
+}
+
+/// Gateway configuration for per-host reverse proxy (Traefik)
+#[derive(Debug, Clone, Deserialize)]
+pub struct GatewayConfig {
+    /// Datacenter identifier (e.g., "dc-lk" for Sri Lanka)
+    pub datacenter: String,
+    /// Base domain (e.g., "decent-cloud.org")
+    pub domain: String,
+    /// This host's public IPv4 address
+    pub public_ip: String,
+    /// Start of port range for TCP/UDP mapping (default: 20000)
+    #[serde(default = "default_port_range_start")]
+    pub port_range_start: u16,
+    /// End of port range for TCP/UDP mapping (default: 59999)
+    #[serde(default = "default_port_range_end")]
+    pub port_range_end: u16,
+    /// Number of ports to allocate per VM (default: 10)
+    #[serde(default = "default_ports_per_vm")]
+    pub ports_per_vm: u16,
+    /// Directory for Traefik dynamic configuration files
+    #[serde(default = "default_traefik_dynamic_dir")]
+    pub traefik_dynamic_dir: String,
+    /// Cloudflare API token for DNS management (Zone.DNS edit permission)
+    pub cloudflare_api_token: String,
+    /// Cloudflare Zone ID for the domain
+    pub cloudflare_zone_id: String,
+    /// Path to port allocations state file
+    #[serde(default = "default_port_allocations_path")]
+    pub port_allocations_path: String,
+}
+
+fn default_port_range_start() -> u16 {
+    20000
+}
+
+fn default_port_range_end() -> u16 {
+    59999
+}
+
+fn default_ports_per_vm() -> u16 {
+    10
+}
+
+fn default_traefik_dynamic_dir() -> String {
+    "/etc/traefik/dynamic".to_string()
+}
+
+fn default_port_allocations_path() -> String {
+    "/var/lib/dc-agent/port-allocations.json".to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -904,5 +957,116 @@ type = "manual"
 
         assert!(config.provisioner.as_manual().is_some());
         assert!(config.additional_provisioners.is_empty());
+    }
+
+    #[test]
+    fn test_load_with_gateway_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+datacenter = "dc-lk"
+domain = "decent-cloud.org"
+public_ip = "203.0.113.1"
+cloudflare_api_token = "test_token"
+cloudflare_zone_id = "test_zone_id"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        let gateway = config.gateway.expect("Gateway should be configured");
+        assert_eq!(gateway.datacenter, "dc-lk");
+        assert_eq!(gateway.domain, "decent-cloud.org");
+        assert_eq!(gateway.public_ip, "203.0.113.1");
+        assert_eq!(gateway.port_range_start, 20000);
+        assert_eq!(gateway.port_range_end, 59999);
+        assert_eq!(gateway.ports_per_vm, 10);
+        assert_eq!(gateway.traefik_dynamic_dir, "/etc/traefik/dynamic");
+        assert_eq!(gateway.cloudflare_api_token, "test_token");
+        assert_eq!(gateway.cloudflare_zone_id, "test_zone_id");
+        assert_eq!(
+            gateway.port_allocations_path,
+            "/var/lib/dc-agent/port-allocations.json"
+        );
+    }
+
+    #[test]
+    fn test_load_with_gateway_custom_ports() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+datacenter = "dc-us"
+domain = "example.org"
+public_ip = "10.0.0.1"
+port_range_start = 30000
+port_range_end = 40000
+ports_per_vm = 5
+traefik_dynamic_dir = "/custom/traefik"
+cloudflare_api_token = "custom_token"
+cloudflare_zone_id = "custom_zone"
+port_allocations_path = "/custom/allocations.json"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        let gateway = config.gateway.expect("Gateway should be configured");
+        assert_eq!(gateway.datacenter, "dc-us");
+        assert_eq!(gateway.port_range_start, 30000);
+        assert_eq!(gateway.port_range_end, 40000);
+        assert_eq!(gateway.ports_per_vm, 5);
+        assert_eq!(gateway.traefik_dynamic_dir, "/custom/traefik");
+        assert_eq!(gateway.port_allocations_path, "/custom/allocations.json");
+    }
+
+    #[test]
+    fn test_load_without_gateway_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Config without gateway section should still work (backward compat)
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        assert!(config.gateway.is_none());
     }
 }

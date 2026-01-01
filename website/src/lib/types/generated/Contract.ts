@@ -12,4 +12,20 @@ stripe_invoice_id: string | null,
 /**
  * Receipt tracking
  */
-receipt_number: number | undefined, receipt_sent_at_ns: number | undefined, stripe_subscription_id: string | null, subscription_status: string | null, current_period_end_ns: number | undefined, cancel_at_period_end: boolean, };
+receipt_number: number | undefined, receipt_sent_at_ns: number | undefined, stripe_subscription_id: string | null, subscription_status: string | null, current_period_end_ns: number | undefined, cancel_at_period_end: boolean, 
+/**
+ * Gateway slug (6-char alphanumeric) for subdomain routing
+ */
+gateway_slug: string | null, 
+/**
+ * SSH port accessible via gateway
+ */
+gateway_ssh_port: number | undefined, 
+/**
+ * Start of allocated port range
+ */
+gateway_port_range_start: number | undefined, 
+/**
+ * End of allocated port range
+ */
+gateway_port_range_end: number | undefined, };

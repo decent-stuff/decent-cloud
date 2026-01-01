@@ -15,6 +15,21 @@ pub struct Instance {
     pub ssh_port: u16,
     pub root_password: Option<String>,
     pub additional_details: Option<serde_json::Value>,
+    /// Gateway slug (6-char alphanumeric identifier for subdomain)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_slug: Option<String>,
+    /// Full gateway subdomain (e.g., "k7m2p4.dc-lk.decent-cloud.org")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_subdomain: Option<String>,
+    /// SSH port accessible via gateway (external port)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_ssh_port: Option<u16>,
+    /// Start of allocated port range
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_port_range_start: Option<u16>,
+    /// End of allocated port range
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_port_range_end: Option<u16>,
 }
 
 /// Running instance for reconciliation reporting

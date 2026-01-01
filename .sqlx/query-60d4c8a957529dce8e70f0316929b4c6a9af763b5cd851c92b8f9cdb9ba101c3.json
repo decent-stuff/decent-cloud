@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,\n               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,\n               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as \"cancel_at_period_end!: bool\"\n               FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC",
+  "query": "SELECT lower(hex(contract_id)) as \"contract_id!: String\", lower(hex(requester_pubkey)) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(hex(provider_pubkey)) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,\n               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,\n               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as \"cancel_at_period_end!: bool\",\n               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end\n               FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -232,6 +232,26 @@
         "name": "cancel_at_period_end!: bool",
         "ordinal": 45,
         "type_info": "Null"
+      },
+      {
+        "name": "gateway_slug",
+        "ordinal": 46,
+        "type_info": "Text"
+      },
+      {
+        "name": "gateway_ssh_port",
+        "ordinal": 47,
+        "type_info": "Integer"
+      },
+      {
+        "name": "gateway_port_range_start",
+        "ordinal": 48,
+        "type_info": "Integer"
+      },
+      {
+        "name": "gateway_port_range_end",
+        "ordinal": 49,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -283,8 +303,12 @@
       true,
       true,
       true,
-      null
+      null,
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "a9c2331a053bc063358f6a3b62df6b77486ed872bf75a64f037ffdfe6a139c80"
+  "hash": "60d4c8a957529dce8e70f0316929b4c6a9af763b5cd851c92b8f9cdb9ba101c3"
 }

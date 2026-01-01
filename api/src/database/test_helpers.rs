@@ -71,6 +71,7 @@ pub async fn setup_test_db() -> Database {
         include_str!("../../migrations/060_contract_usage.sql"),
         include_str!("../../migrations/061_offering_subscriptions.sql"),
         include_str!("../../migrations/062_contract_subscriptions.sql"),
+        include_str!("../../migrations/063_gateway_configuration.sql"),
     ];
 
     for migration in &migrations {

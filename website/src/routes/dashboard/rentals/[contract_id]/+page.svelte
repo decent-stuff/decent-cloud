@@ -537,13 +537,64 @@
 			{/if}
 
 			{#if contract.provisioning_instance_details}
+				{@const instanceDetails = (() => {
+					try { return JSON.parse(contract.provisioning_instance_details); } catch { return null; }
+				})()}
 				<div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-					<div class="text-green-400 font-semibold mb-2">Instance Details</div>
-					<div class="text-white text-sm whitespace-pre-wrap">
-						{contract.provisioning_instance_details}
-					</div>
+					<div class="text-green-400 font-semibold mb-3">Connection Details</div>
+
+					{#if contract.gateway_slug && contract.gateway_ssh_port}
+						<!-- Gateway-accessible VM -->
+						<div class="space-y-3">
+							<div class="bg-black/20 rounded-lg p-3">
+								<div class="text-white/60 text-xs mb-1">SSH Command</div>
+								<code class="text-green-300 text-sm font-mono break-all select-all">
+									ssh -p {contract.gateway_ssh_port} root@{instanceDetails?.gateway_subdomain || `${contract.gateway_slug}.decent-cloud.org`}
+								</code>
+							</div>
+							{#if instanceDetails?.gateway_subdomain}
+								<div class="bg-black/20 rounded-lg p-3">
+									<div class="text-white/60 text-xs mb-1">Host</div>
+									<code class="text-white text-sm font-mono select-all">{instanceDetails.gateway_subdomain}</code>
+								</div>
+							{/if}
+							{#if contract.gateway_port_range_start && contract.gateway_port_range_end}
+								<div class="bg-black/20 rounded-lg p-3">
+									<div class="text-white/60 text-xs mb-1">Available Ports</div>
+									<code class="text-white text-sm font-mono">{contract.gateway_port_range_start} - {contract.gateway_port_range_end}</code>
+									<div class="text-white/40 text-xs mt-1">Use these ports for custom services</div>
+								</div>
+							{/if}
+						</div>
+					{:else if instanceDetails?.ip_address}
+						<!-- Direct IP access VM -->
+						<div class="space-y-3">
+							<div class="bg-black/20 rounded-lg p-3">
+								<div class="text-white/60 text-xs mb-1">SSH Command</div>
+								<code class="text-green-300 text-sm font-mono break-all select-all">
+									ssh root@{instanceDetails.ip_address}
+								</code>
+							</div>
+							<div class="bg-black/20 rounded-lg p-3">
+								<div class="text-white/60 text-xs mb-1">IP Address</div>
+								<code class="text-white text-sm font-mono select-all">{instanceDetails.ip_address}</code>
+							</div>
+							{#if instanceDetails.ipv6_address}
+								<div class="bg-black/20 rounded-lg p-3">
+									<div class="text-white/60 text-xs mb-1">IPv6 Address</div>
+									<code class="text-white text-sm font-mono select-all">{instanceDetails.ipv6_address}</code>
+								</div>
+							{/if}
+						</div>
+					{:else}
+						<!-- Raw JSON fallback -->
+						<div class="text-white text-sm whitespace-pre-wrap font-mono">
+							{contract.provisioning_instance_details}
+						</div>
+					{/if}
+
 					{#if contract.provisioning_completed_at_ns}
-						<div class="text-green-400/60 text-xs mt-2">
+						<div class="text-green-400/60 text-xs mt-3">
 							Provisioned: {formatDate(contract.provisioning_completed_at_ns)}
 						</div>
 					{/if}

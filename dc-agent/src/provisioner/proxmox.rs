@@ -621,6 +621,11 @@ impl Provisioner for ProxmoxProvisioner {
                     "name": vm_name,
                     "reused": true,
                 })),
+                gateway_slug: None,
+                gateway_subdomain: None,
+                gateway_ssh_port: None,
+                gateway_port_range_start: None,
+                gateway_port_range_end: None,
             });
         }
 
@@ -696,6 +701,11 @@ impl Provisioner for ProxmoxProvisioner {
                 "node": self.config.node,
                 "name": vm_name,
             })),
+            gateway_slug: None,
+            gateway_subdomain: None,
+            gateway_ssh_port: None,
+            gateway_port_range_start: None,
+            gateway_port_range_end: None,
         };
 
         tracing::info!(
@@ -793,6 +803,11 @@ impl Provisioner for ProxmoxProvisioner {
                         "status": status.status,
                         "uptime": status.uptime,
                     })),
+                    gateway_slug: None,
+                    gateway_subdomain: None,
+                    gateway_ssh_port: None,
+                    gateway_port_range_start: None,
+                    gateway_port_range_end: None,
                 }))
             }
             Err(e) => {
