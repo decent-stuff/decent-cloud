@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use dc_agent::{
     api_client::{setup_agent, ApiClient, ReconcileResponse},
     config::{Config, ProvisionerConfig},
+    gateway::GatewayManager,
     provisioner::{
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
         ProvisionRequest, Provisioner,
@@ -16,6 +17,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Map of provisioner type name to provisioner instance
 type ProvisionerMap = HashMap<String, Box<dyn Provisioner>>;
+/// Optional gateway manager wrapped in Arc<Mutex> for shared async access
+type OptionalGatewayManager = Option<std::sync::Arc<tokio::sync::Mutex<GatewayManager>>>;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 
@@ -811,6 +814,35 @@ async fn run_agent(config: Config) -> Result<()> {
     let api_client = ApiClient::new(&config.api)?;
     let (provisioners, default_provisioner_type) = create_provisioner_map(&config)?;
 
+    // Initialize gateway manager if configured
+    let gateway_manager = match &config.gateway {
+        Some(gw_config) => {
+            match GatewayManager::new(gw_config.clone()) {
+                Ok(gm) => {
+                    info!(
+                        datacenter = %gw_config.datacenter,
+                        domain = %gw_config.domain,
+                        public_ip = %gw_config.public_ip,
+                        port_range = %format!("{}-{}", gw_config.port_range_start, gw_config.port_range_end),
+                        "Gateway manager initialized"
+                    );
+                    Some(std::sync::Arc::new(tokio::sync::Mutex::new(gm)))
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        "Gateway configured but failed to initialize - gateway features disabled"
+                    );
+                    None
+                }
+            }
+        }
+        None => {
+            info!("Gateway not configured - VMs will not get public subdomains");
+            None
+        }
+    };
+
     info!(
         available_provisioners = ?provisioners.keys().collect::<Vec<_>>(),
         default = %default_provisioner_type,
@@ -855,7 +887,7 @@ async fn run_agent(config: Config) -> Result<()> {
     loop {
         tokio::select! {
             _ = poll_ticker.tick() => {
-                active_contracts = poll_and_provision(&api_client, &provisioners, &default_provisioner_type, config.polling.orphan_grace_period_seconds, &mut orphan_tracker, &mut poll_failures).await;
+                active_contracts = poll_and_provision(&api_client, &provisioners, &default_provisioner_type, config.polling.orphan_grace_period_seconds, &mut orphan_tracker, &mut poll_failures, gateway_manager.clone()).await;
             }
             _ = heartbeat_ticker.tick() => {
                 send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures).await;
@@ -929,6 +961,7 @@ async fn poll_and_provision(
     orphan_grace_period_seconds: u64,
     orphan_tracker: &mut OrphanTracker,
     consecutive_failures: &mut u32,
+    gateway_manager: OptionalGatewayManager,
 ) -> i64 {
     let mut active_count: i64 = 0;
 
@@ -1086,13 +1119,42 @@ async fn poll_and_provision(
                     }
 
                     match provisioner.provision(&request).await {
-                        Ok(instance) => {
+                        Ok(mut instance) => {
                             info!(
                                 contract_id = %contract.contract_id,
                                 external_id = %instance.external_id,
                                 ip_address = ?instance.ip_address,
                                 "Provisioned successfully"
                             );
+
+                            // Setup gateway (subdomain, ports, DNS) if configured
+                            if let Some(ref gw) = gateway_manager {
+                                let mut gw_lock = gw.lock().await;
+                                match gw_lock
+                                    .setup_gateway(instance.clone(), &contract.contract_id)
+                                    .await
+                                {
+                                    Ok(updated_instance) => {
+                                        instance = updated_instance;
+                                        info!(
+                                            contract_id = %contract.contract_id,
+                                            gateway_subdomain = ?instance.gateway_subdomain,
+                                            gateway_ssh_port = ?instance.gateway_ssh_port,
+                                            "Gateway setup complete"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        // Gateway setup failed - log but continue
+                                        // VM is usable via internal IP even without gateway
+                                        warn!(
+                                            contract_id = %contract.contract_id,
+                                            error = %e,
+                                            "Gateway setup failed - VM accessible via internal IP only"
+                                        );
+                                    }
+                                }
+                            }
+
                             if let Err(e) = api_client
                                 .report_provisioned(&contract.contract_id, &instance)
                                 .await
@@ -1161,6 +1223,7 @@ async fn poll_and_provision(
         provisioners,
         orphan_grace_period_seconds,
         orphan_tracker,
+        gateway_manager,
     )
     .await;
 
@@ -1175,6 +1238,7 @@ async fn reconcile_instances(
     provisioners: &ProvisionerMap,
     orphan_grace_period_seconds: u64,
     orphan_tracker: &mut OrphanTracker,
+    gateway_manager: OptionalGatewayManager,
 ) {
     // Collect running instances from ALL provisioners
     let mut all_running_instances = Vec::new();
@@ -1232,6 +1296,22 @@ async fn reconcile_instances(
                         provisioner_type = %ptype,
                         "VM terminated successfully"
                     );
+
+                    // Cleanup gateway (DNS, Traefik config, port allocation) if configured
+                    if let Some(ref gw) = gateway_manager {
+                        let mut gw_lock = gw.lock().await;
+                        if let Some(slug) = gw_lock.find_slug_by_contract(&vm.contract_id) {
+                            if let Err(e) = gw_lock.cleanup_gateway(&slug).await {
+                                warn!(
+                                    contract_id = %vm.contract_id,
+                                    slug = %slug,
+                                    error = %e,
+                                    "Gateway cleanup failed"
+                                );
+                            }
+                        }
+                    }
+
                     if let Err(e) = api_client.report_terminated(&vm.contract_id).await {
                         error!(
                             contract_id = %vm.contract_id,

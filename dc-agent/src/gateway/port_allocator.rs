@@ -91,7 +91,9 @@ impl PortAllocator {
             contract_id: contract_id.to_string(),
         };
 
-        self.allocations.allocations.insert(slug.to_string(), allocation.clone());
+        self.allocations
+            .allocations
+            .insert(slug.to_string(), allocation.clone());
         self.save()?;
 
         Ok(allocation)
@@ -148,6 +150,15 @@ impl PortAllocator {
     /// Get allocation for a specific slug.
     pub fn get(&self, slug: &str) -> Option<&PortAllocation> {
         self.allocations.allocations.get(slug)
+    }
+
+    /// Find slug by contract_id (for cleanup during termination).
+    pub fn find_slug_by_contract(&self, contract_id: &str) -> Option<String> {
+        self.allocations
+            .allocations
+            .iter()
+            .find(|(_, alloc)| alloc.contract_id == contract_id)
+            .map(|(slug, _)| slug.clone())
     }
 }
 

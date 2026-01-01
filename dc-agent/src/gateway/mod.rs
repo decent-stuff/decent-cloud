@@ -39,10 +39,8 @@ impl GatewayManager {
 
         let traefik_manager = TraefikConfigManager::new(&config.traefik_dynamic_dir);
 
-        let cloudflare = CloudflareClient::new(
-            &config.cloudflare_api_token,
-            &config.cloudflare_zone_id,
-        );
+        let cloudflare =
+            CloudflareClient::new(&config.cloudflare_api_token, &config.cloudflare_zone_id);
 
         Ok(Self {
             config,
@@ -99,7 +97,10 @@ impl GatewayManager {
 
         // Create DNS record
         self.cloudflare
-            .create_a_record(&format!("{}.{}", slug, self.config.datacenter), &self.config.public_ip)
+            .create_a_record(
+                &format!("{}.{}", slug, self.config.datacenter),
+                &self.config.public_ip,
+            )
             .await
             .context("Failed to create DNS record")?;
 
@@ -152,6 +153,11 @@ impl GatewayManager {
     pub fn port_allocations(&self) -> &port_allocator::PortAllocations {
         self.port_allocator.allocations()
     }
+
+    /// Find gateway slug by contract_id (for cleanup during termination).
+    pub fn find_slug_by_contract(&self, contract_id: &str) -> Option<String> {
+        self.port_allocator.find_slug_by_contract(contract_id)
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +169,9 @@ mod tests {
         let slug = GatewayManager::generate_slug();
         assert_eq!(slug.len(), 6);
         // Slug contains only lowercase letters and digits
-        assert!(slug.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        assert!(slug
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     }
 
     #[test]

@@ -93,7 +93,11 @@ impl CloudflareClient {
             serde_json::from_str(&body).context("Failed to parse Cloudflare response")?;
 
         if !cf_response.success {
-            let errors: Vec<String> = cf_response.errors.iter().map(|e| e.message.clone()).collect();
+            let errors: Vec<String> = cf_response
+                .errors
+                .iter()
+                .map(|e| e.message.clone())
+                .collect();
             bail!("Cloudflare API errors: {}", errors.join(", "));
         }
 
@@ -166,11 +170,17 @@ impl CloudflareClient {
             serde_json::from_str(&body).context("Failed to parse Cloudflare response")?;
 
         if !cf_response.success {
-            let errors: Vec<String> = cf_response.errors.iter().map(|e| e.message.clone()).collect();
+            let errors: Vec<String> = cf_response
+                .errors
+                .iter()
+                .map(|e| e.message.clone())
+                .collect();
             bail!("Cloudflare API errors: {}", errors.join(", "));
         }
 
-        Ok(cf_response.result.and_then(|records| records.into_iter().next().map(|r| r.id)))
+        Ok(cf_response
+            .result
+            .and_then(|records| records.into_iter().next().map(|r| r.id)))
     }
 }
 
