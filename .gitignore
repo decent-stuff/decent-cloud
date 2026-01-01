@@ -113,3 +113,4 @@ crash-*
 third_party/
 dc-agent.toml
 *.db
+/.claude/orchestrator/
