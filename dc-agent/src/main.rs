@@ -1597,6 +1597,44 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
     }
     println!();
 
+    // Check gateway configuration
+    match &config.gateway {
+        Some(gw) => {
+            println!("Gateway:");
+            println!("  Datacenter: {}", gw.datacenter);
+            println!("  Domain: {}", gw.domain);
+            println!("  Public IP: {}", gw.public_ip);
+            println!(
+                "  Port range: {}-{} ({} ports/VM)",
+                gw.port_range_start, gw.port_range_end, gw.ports_per_vm
+            );
+            println!("  Traefik config dir: {}", gw.traefik_dynamic_dir);
+            println!("  Port allocations: {}", gw.port_allocations_path);
+            println!("  Cloudflare Zone ID: {}", gw.cloudflare_zone_id);
+
+            // Verify paths exist
+            if std::path::Path::new(&gw.traefik_dynamic_dir).exists() {
+                println!("  [ok] Traefik config directory exists");
+            } else {
+                println!(
+                    "  [WARN] Traefik config directory does not exist: {}",
+                    gw.traefik_dynamic_dir
+                );
+            }
+
+            // Verify GatewayManager can be initialized
+            match GatewayManager::new(gw.clone()) {
+                Ok(_) => println!("  [ok] Gateway manager initialized"),
+                Err(e) => println!("  [FAILED] Gateway initialization: {}", e),
+            }
+        }
+        None => {
+            println!("Gateway: Not configured");
+            println!("  VMs will not get public subdomains");
+        }
+    }
+    println!();
+
     let provisioner_type = config.provisioner.type_name();
 
     let api_client = ApiClient::new(&config.api)?;

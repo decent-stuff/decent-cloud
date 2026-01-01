@@ -19,10 +19,6 @@ pub struct PortAllocation {
 /// Persistent port allocations state.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PortAllocations {
-    /// Next base port hint (legacy, kept for backward compat with saved state)
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub next_base: u16,
     /// Allocated port ranges by gateway slug
     pub allocations: HashMap<String, PortAllocation>,
 }
@@ -257,5 +253,24 @@ mod tests {
         let result = allocator.allocate("slug3", "contract-3");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("exhausted"));
+    }
+
+    #[test]
+    fn test_find_slug_by_contract() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut allocator = create_allocator(&temp_dir);
+
+        allocator.allocate("slug1", "contract-1").unwrap();
+        allocator.allocate("slug2", "contract-2").unwrap();
+
+        assert_eq!(
+            allocator.find_slug_by_contract("contract-1"),
+            Some("slug1".to_string())
+        );
+        assert_eq!(
+            allocator.find_slug_by_contract("contract-2"),
+            Some("slug2".to_string())
+        );
+        assert_eq!(allocator.find_slug_by_contract("nonexistent"), None);
     }
 }
