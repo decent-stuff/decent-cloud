@@ -112,8 +112,13 @@ impl RecentCache {
         RECENT_CACHE.with(|cache| {
             for entry in ledger_block.entries() {
                 if entry.label() == LABEL_DC_TOKEN_TRANSFER {
-                    let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
-                        .expect("Failed to deserialize funds transfer");
+                    let transfer: FundsTransfer = match BorshDeserialize::try_from_slice(entry.value()) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            crate::info!("Failed to deserialize funds transfer at tx_num {}: {}. Skipping this transaction.", tx_num, e);
+                            continue;
+                        }
+                    };
                     let tx: Transaction = transfer.into();
                     Self::_add_entry(&mut cache.borrow_mut(), tx_num, tx.clone());
                     tx_num += 1;
@@ -266,7 +271,7 @@ mod tests {
             let entry = ledger_map::LedgerEntry::new(
                 LABEL_DC_TOKEN_TRANSFER,
                 transfer.to_tx_id(),
-                borsh::to_vec(&transfer).unwrap(),
+                borsh::to_vec(&transfer).expect("Failed to serialize test funds transfer"),
                 ledger_map::Operation::Upsert,
             );
             entries.push(entry);

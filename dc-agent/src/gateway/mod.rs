@@ -124,14 +124,14 @@ impl GatewayManager {
 
         // Update instance with gateway info
         instance.gateway_slug = Some(slug);
-        instance.gateway_subdomain = Some(subdomain);
+        instance.gateway_subdomain = Some(subdomain.clone());
         instance.gateway_ssh_port = Some(allocation.base);
         instance.gateway_port_range_start = Some(allocation.base);
         instance.gateway_port_range_end = Some(allocation.base + allocation.count - 1);
 
         tracing::info!(
             "Gateway setup complete: {} -> {}:{} (ports {}-{})",
-            instance.gateway_subdomain.as_ref().unwrap(),
+            subdomain,
             internal_ip,
             instance.ssh_port,
             allocation.base,

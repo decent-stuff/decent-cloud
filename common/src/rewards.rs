@@ -108,11 +108,13 @@ pub fn blocks_until_next_halving() -> u64 {
 
 pub fn get_last_rewards_distribution_ts(ledger: &LedgerMap) -> Result<u64, String> {
     match ledger.get(LABEL_REWARD_DISTRIBUTION, KEY_LAST_REWARD_DISTRIBUTION_TS) {
-        Ok(value_bytes) => Ok(u64::from_le_bytes(
-            value_bytes.as_slice()[..8]
+        Ok(value_bytes) => {
+            let bytes: [u8; 8] = value_bytes
+                .as_slice()[..8]
                 .try_into()
-                .expect("slice with incorrect length"),
-        )),
+                .map_err(|_| "Stored timestamp is not 8 bytes".to_string())?;
+            Ok(u64::from_le_bytes(bytes))
+        }
         Err(_) => {
             let latest_block_ts = ledger.get_latest_block_timestamp_ns();
             if latest_block_ts > 0 {
@@ -178,7 +180,9 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
         eligible_providers.len(),
         amount_as_string(token_rewards_per_provider)
     ));
-    info!("{}", response_text.iter().last().unwrap());
+    if let Some(msg) = response_text.last() {
+        info!("{}", msg);
+    }
 
     ledger
         .upsert(
@@ -211,7 +215,9 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
             ),
         )?;
     }
-    info!("rewards distributed: {}", response_text.last().unwrap());
+    if let Some(msg) = response_text.last() {
+        info!("rewards distributed: {}", msg);
+    }
     serde_json::to_string_pretty(&response_text).map_err(|e| TransferError::GenericError {
         error_code: 10112u64.into(),
         message: e.to_string(),
@@ -251,14 +257,14 @@ pub fn do_provider_check_in(
             amount_as_string(amount as TokenAmountE9s),
             dcc_id.to_ic_principal()
         );
+        let dcc_id_text = dcc_id.to_ic_principal().to_text();
+        let dcc_id_short = dcc_id_text
+            .split_once('-')
+            .map(|(first, _)| first)
+            .unwrap_or(&dcc_id_text);
         let mut fee_memo = format!(
             "check-in-{}-{}-{}",
-            dcc_id
-                .to_ic_principal()
-                .to_text()
-                .split_once('-')
-                .expect("Invalid principal")
-                .0,
+            dcc_id_short,
             ledger.get_blocks_count(),
             memo
         );
@@ -275,7 +281,13 @@ pub fn do_provider_check_in(
     };
 
     let payload = CheckInPayload::new(memo, nonce_signature);
-    let payload_bytes = payload.to_bytes().unwrap();
+    let payload_bytes = payload.to_bytes().map_err(|e| {
+        format!(
+            "Failed to serialize check-in payload: {}. {}",
+            e,
+            "This is an internal error and should not happen"
+        )
+    })?;
 
     Ok(ledger
         .upsert(LABEL_PROV_CHECK_IN, pubkey_bytes, &payload_bytes)

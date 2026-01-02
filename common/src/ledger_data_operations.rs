@@ -78,7 +78,8 @@ where
     );
 
     // Parse the returned cursor to get the actual position (same as CLI)
-    let cursor_remote = LedgerCursor::new_from_string(new_cursor_str);
+    let cursor_remote = LedgerCursor::new_from_string(new_cursor_str)
+        .map_err(|e| anyhow::anyhow!("Failed to parse remote cursor: {}", e))?;
     let data_start = cursor_remote.position;
     let data_end = cursor_remote.position + cursor_remote.response_bytes;
 

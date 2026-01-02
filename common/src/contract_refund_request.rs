@@ -33,7 +33,8 @@ pub fn do_contract_refund_request(
     payload_serialized: Vec<u8>,
     crypto_signature: Vec<u8>,
 ) -> Result<String, String> {
-    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
+    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes)
+        .map_err(|e| format!("Failed to create identity from public key: {}. The public key may be invalid or corrupted.", e))?;
     dcc_id.verify_bytes(&payload_serialized, &crypto_signature)?;
 
     fn_info!("{}", dcc_id);

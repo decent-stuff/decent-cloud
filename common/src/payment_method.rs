@@ -79,6 +79,7 @@ mod tests {
 
     #[test]
     fn test_payment_method_from_str_valid() {
+        // unwrap() is acceptable here: these are test cases with known valid inputs
         assert_eq!(
             "icpay".parse::<PaymentMethod>().unwrap(),
             PaymentMethod::ICPay

@@ -333,7 +333,7 @@ impl IcrcCompatibleAccount {
 impl From<&str> for IcrcCompatibleAccount {
     fn from(owner: &str) -> Self {
         IcrcCompatibleAccount {
-            owner: Principal::from_text(owner).unwrap(),
+            owner: Principal::from_text(owner).expect("Invalid principal string in IcrcCompatibleAccount::from"),
             subaccount: None,
         }
     }
@@ -360,7 +360,7 @@ impl From<IcrcCompatibleAccount> for Icrc1Account {
             owner: account.owner,
             subaccount: account
                 .subaccount
-                .map(|s| *slice_to_32_bytes_array(&s).unwrap()),
+                .map(|s| *slice_to_32_bytes_array(&s).expect("Subaccount must be exactly 32 bytes")),
         }
     }
 }
@@ -372,7 +372,7 @@ impl From<&IcrcCompatibleAccount> for Icrc1Account {
             subaccount: account
                 .subaccount
                 .as_ref()
-                .map(|s| *slice_to_32_bytes_array(s).unwrap()),
+                .map(|s| *slice_to_32_bytes_array(s).expect("Subaccount must be exactly 32 bytes")),
         }
     }
 }

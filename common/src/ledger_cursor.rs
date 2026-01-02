@@ -158,8 +158,8 @@ impl LedgerCursor {
         }
     }
 
-    pub fn new_from_string(s: String) -> Self {
-        s.parse().unwrap()
+    pub fn new_from_string(s: String) -> Result<Self, String> {
+        s.parse()
     }
 
     pub fn to_request_string(&self) -> String {
@@ -227,7 +227,8 @@ mod tests {
     #[test]
     fn test_parse_ledger_cursor() {
         let input = "data_begin_position=0&position=123&data_end_position=579&response_bytes=456&direction=Forward&more=true";
-        let cursor: LedgerCursor = input.parse().unwrap();
+        let cursor: LedgerCursor = input.parse()
+            .expect("Failed to parse valid cursor string in test");
 
         assert_eq!(
             cursor,
@@ -253,7 +254,8 @@ mod tests {
     fn test_parse_ledger_cursor_missing_key() {
         let cursor = LedgerCursor::new_from_string(
             "position=123&data_end_position=579&response_bytes=456&more=true".to_string(),
-        );
+        )
+        .expect("Failed to parse valid cursor with missing optional keys");
         assert_eq!(
             cursor,
             LedgerCursor {
