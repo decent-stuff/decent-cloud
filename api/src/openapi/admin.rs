@@ -137,7 +137,7 @@ impl AdminApi {
                         id: hex::encode(&k.id),
                         public_key: hex::encode(&k.public_key),
                         added_at: k.added_at,
-                        is_active: k.is_active != 0,
+                        is_active: k.is_active,
                         device_name: k.device_name.clone(),
                         disabled_at: k.disabled_at,
                         disabled_by_key_id: k.disabled_by_key_id.as_ref().map(hex::encode),
@@ -237,7 +237,7 @@ impl AdminApi {
                         id: hex::encode(&key.id),
                         public_key: hex::encode(&key.public_key),
                         added_at: key.added_at,
-                        is_active: key.is_active != 0,
+                        is_active: key.is_active,
                         device_name: key.device_name,
                         disabled_at: key.disabled_at,
                         disabled_by_key_id: key.disabled_by_key_id.map(hex::encode),
@@ -557,7 +557,7 @@ impl AdminApi {
             }
         };
 
-        let active_keys = keys.iter().filter(|k| k.is_active != 0).count() as i64;
+        let active_keys = keys.iter().filter(|k| k.is_active).count() as i64;
 
         Json(ApiResponse {
             success: true,
@@ -565,10 +565,10 @@ impl AdminApi {
                 id: hex::encode(&account.id),
                 username: account.username,
                 email: account.email,
-                email_verified: account.email_verified != 0,
+                email_verified: account.email_verified,
                 created_at: account.created_at,
                 last_login_at: account.last_login_at,
-                is_admin: account.is_admin != 0,
+                is_admin: account.is_admin,
                 active_keys,
                 total_keys: keys.len() as i64,
             }),
@@ -855,7 +855,7 @@ impl AdminApi {
         };
 
         // Prevent deleting admin accounts (safety check)
-        if account.is_admin != 0 {
+        if account.is_admin {
             return Json(ApiResponse {
                 success: false,
                 data: None,
@@ -932,10 +932,10 @@ impl AdminApi {
                 id: hex::encode(&a.id),
                 username: a.username,
                 email: a.email,
-                email_verified: a.email_verified != 0,
+                email_verified: a.email_verified,
                 created_at: a.created_at,
                 last_login_at: a.last_login_at,
-                is_admin: a.is_admin != 0,
+                is_admin: a.is_admin,
                 active_keys: 0, // Not fetched for efficiency
                 total_keys: 0,  // Not fetched for efficiency
             })

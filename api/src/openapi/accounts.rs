@@ -472,7 +472,7 @@ impl AccountsApi {
                     id: hex::encode(&key.id),
                     public_key: hex::encode(&key.public_key),
                     added_at: key.added_at,
-                    is_active: key.is_active != 0,
+                    is_active: key.is_active,
                     device_name: key.device_name,
                     disabled_at: key.disabled_at,
                     disabled_by_key_id: key.disabled_by_key_id.map(|id| hex::encode(&id)),
@@ -603,7 +603,7 @@ impl AccountsApi {
                             id: hex::encode(&key.id),
                             public_key: hex::encode(&key.public_key),
                             added_at: key.added_at,
-                            is_active: key.is_active != 0,
+                            is_active: key.is_active,
                             device_name: key.device_name.clone(),
                             disabled_at: key.disabled_at,
                             disabled_by_key_id: key.disabled_by_key_id.as_ref().map(hex::encode),
@@ -729,7 +729,7 @@ impl AccountsApi {
                     id: hex::encode(&key.id),
                     public_key: hex::encode(&key.public_key),
                     added_at: key.added_at,
-                    is_active: key.is_active != 0,
+                    is_active: key.is_active,
                     device_name: key.device_name,
                     disabled_at: key.disabled_at,
                     disabled_by_key_id: key.disabled_by_key_id.map(|id| hex::encode(&id)),
@@ -1933,7 +1933,7 @@ impl AccountsApi {
         };
 
         // Check if already verified
-        if account.email_verified != 0 {
+        if account.email_verified {
             return Json(ApiResponse {
                 success: false,
                 data: None,

@@ -45,22 +45,17 @@ pub async fn setup_test_db() -> Database {
         .await
         .expect("Failed to connect to test database");
 
-    // Run migrations from consolidated PostgreSQL files
+    // Run migrations from consolidated PostgreSQL files using raw_sql for multi-statement execution
     let migrations = [
         include_str!("../../migrations_pg/001_schema.sql"),
         include_str!("../../migrations_pg/002_seed_data.sql"),
     ];
 
     for migration in &migrations {
-        // Split by semicolon and execute each statement (PostgreSQL requires this)
-        for statement in migration.split(';') {
-            let stmt = statement.trim();
-            if !stmt.is_empty() && !stmt.starts_with("--") {
-                if let Err(e) = sqlx::query(stmt).execute(&pool).await {
-                    panic!("Migration statement failed: {}\nStatement: {}", e, stmt);
-                }
-            }
-        }
+        sqlx::raw_sql(migration)
+            .execute(&pool)
+            .await
+            .expect("Migration failed");
     }
 
     Database { pool }

@@ -9,7 +9,7 @@ pub trait EmailServiceExt {
 
 impl EmailServiceExt for EmailService {
     async fn send_queued_email(&self, email: &EmailQueueEntry) -> Result<()> {
-        let is_html = email.is_html != 0;
+        let is_html = email.is_html;
         self.send_email(
             &email.from_addr,
             &email.to_addr,

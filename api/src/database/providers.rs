@@ -423,9 +423,9 @@ impl Database {
             // Store raw Ed25519 public key (32 bytes) and signature
             let timestamp_i64 = entry.block_timestamp_ns as i64;
             sqlx::query!(
-                "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, $3) ON CONFLICT (pubkey) DO UPDATE SET signature = EXCLUDED.signature, created_at_ns = EXCLUDED.created_at_ns",
-                entry.key,
-                entry.value,
+                "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, $3) ON CONFLICT (pubkey) DO UPDATE SET signature = excluded.signature, created_at_ns = excluded.created_at_ns",
+                &entry.key,
+                &entry.value,
                 timestamp_i64
             )
             .execute(&mut **tx)
@@ -464,7 +464,7 @@ impl Database {
             let nonce_signature = check_in.nonce_signature();
             sqlx::query!(
                 "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, $2, $3, $4)",
-                entry.key,
+                &entry.key,
                 memo,
                 nonce_signature,
                 timestamp_i64

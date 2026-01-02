@@ -41,19 +41,15 @@ impl Database {
     pub async fn get_platform_stats(&self) -> Result<PlatformStats> {
         // Total providers = all who have ever checked in or created a profile
         // Exclude the example provider used for template generation
-        let example_provider_hash =
-            hex::decode("6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572")
-                .unwrap();
-        let example_provider_hash_for_profiles = example_provider_hash.clone();
-        let example_provider_hash_for_checkins = example_provider_hash.clone();
+        let example_provider_hash = Self::example_provider_pubkey();
         let total_providers: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM (
                 SELECT pubkey FROM provider_profiles WHERE pubkey != $1
                 UNION
                 SELECT pubkey FROM provider_check_ins WHERE pubkey != $2
             ) AS combined"#,
-            example_provider_hash_for_profiles,
-            example_provider_hash_for_checkins
+            &example_provider_hash,
+            &example_provider_hash
         )
         .fetch_one(&self.pool)
         .await?;
@@ -61,19 +57,17 @@ impl Database {
         // Active in the last year
         let cutoff_ns =
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 365 * 24 * 3600 * 1_000_000_000;
-        let example_provider_hash_active = example_provider_hash.clone();
         let active_providers: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM provider_check_ins WHERE block_timestamp_ns > $1 AND (pubkey) != $2"#,
             cutoff_ns,
-            example_provider_hash_active
+            &example_provider_hash
         )
         .fetch_one(&self.pool)
         .await?;
 
-        let example_provider_hash_offerings = example_provider_hash.clone();
         let total_offerings: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(*) as "count!" FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != $1"#,
-            example_provider_hash_offerings
+            &example_provider_hash
         )
         .fetch_one(&self.pool)
         .await?;
@@ -727,7 +721,7 @@ impl Database {
                 FROM provider_offerings
                 GROUP BY pubkey
             ) offerings ON apk.public_key = offerings.pubkey
-            WHERE apk.is_active = 1
+            WHERE apk.is_active = TRUE
               AND (
                 lower(a.username) LIKE $1
                 OR lower(a.display_name) LIKE $2

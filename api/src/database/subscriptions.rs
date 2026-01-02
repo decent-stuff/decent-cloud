@@ -271,7 +271,7 @@ impl Database {
         let row = sqlx::query!(
             r#"SELECT COUNT(*) as "count!: i64" FROM contract_sign_requests
                WHERE requester_pubkey IN (
-                   SELECT public_key FROM account_public_keys WHERE account_id = $1 AND is_active = 1
+                   SELECT public_key FROM account_public_keys WHERE account_id = $1 AND is_active = TRUE
                )
                AND status IN ('active', 'provisioned', 'provisioning', 'accepted', 'pending')"#,
             account_id

@@ -618,7 +618,7 @@ impl EmailProcessor {
         };
 
         // Return email only if verified
-        if account.email_verified != 0 {
+        if account.email_verified {
             Ok(account.email)
         } else {
             Ok(None)

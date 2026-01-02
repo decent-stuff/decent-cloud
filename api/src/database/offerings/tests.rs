@@ -81,7 +81,7 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
 
     // Mark provider as online (recent heartbeat)
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    sqlx::query("INSERT INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, 1, $2, $3) ON CONFLICT (provider_pubkey) DO UPDATE SET online = 1, last_heartbeat_ns = EXCLUDED.last_heartbeat_ns, updated_at_ns = EXCLUDED.updated_at_ns")
+    sqlx::query("INSERT INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, TRUE, $2, $3) ON CONFLICT (provider_pubkey) DO UPDATE SET online = TRUE, last_heartbeat_ns = excluded.last_heartbeat_ns, updated_at_ns = excluded.updated_at_ns")
         .bind(pubkey)
         .bind(now_ns)
         .bind(now_ns)

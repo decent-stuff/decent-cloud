@@ -56,7 +56,7 @@ pub struct EmailQueueEntry {
     pub from_addr: String,
     pub subject: String,
     pub body: String,
-    pub is_html: i64,
+    pub is_html: bool,
     pub email_type: String,
     pub status: String,
     pub attempts: i64,
@@ -70,9 +70,9 @@ pub struct EmailQueueEntry {
     #[serde(skip)]
     pub related_account_id: Option<Vec<u8>>,
     /// Whether we've notified the user about retry
-    pub user_notified_retry: i64,
+    pub user_notified_retry: bool,
     /// Whether we've notified the user about permanent failure
-    pub user_notified_gave_up: i64,
+    pub user_notified_gave_up: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object)]
@@ -114,7 +114,6 @@ impl Database {
         related_account_id: Option<&[u8]>,
     ) -> Result<Vec<u8>> {
         let id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        let is_html_int = if is_html { 1 } else { 0 };
         let created_at = chrono::Utc::now().timestamp();
         let email_type_str = email_type.as_str();
 
@@ -127,7 +126,7 @@ impl Database {
             from_addr,
             subject,
             body,
-            is_html_int,
+            is_html,
             email_type_str,
             created_at,
             related_account_id
@@ -203,7 +202,7 @@ impl Database {
         // Reset status, attempts, and also update created_at to restart the 7-day window
         let now = chrono::Utc::now().timestamp();
         sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = $2 AND status = 'failed'",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = FALSE, user_notified_gave_up = FALSE WHERE id = $2 AND status = 'failed'",
             now,
             id
         )
@@ -219,7 +218,7 @@ impl Database {
     pub async fn reset_email_for_retry(&self, id: &[u8]) -> Result<bool> {
         let now = chrono::Utc::now().timestamp();
         let result = sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = $2",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = FALSE, user_notified_gave_up = FALSE WHERE id = $2",
             now,
             id
         )
@@ -234,7 +233,7 @@ impl Database {
     pub async fn retry_all_failed_emails(&self) -> Result<u64> {
         let now = chrono::Utc::now().timestamp();
         let result = sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = 0, user_notified_gave_up = 0 WHERE status = 'failed'",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = FALSE, user_notified_gave_up = FALSE WHERE status = 'failed'",
             now
         )
         .execute(&self.pool)
@@ -347,7 +346,7 @@ impl Database {
                       status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
                       related_account_id, user_notified_retry, user_notified_gave_up
                FROM email_queue
-               WHERE status = 'pending' AND attempts > 0 AND related_account_id IS NOT NULL AND user_notified_retry = 0
+               WHERE status = 'pending' AND attempts > 0 AND related_account_id IS NOT NULL AND user_notified_retry = FALSE
                ORDER BY last_attempted_at ASC
                LIMIT $1"#,
             limit
@@ -369,7 +368,7 @@ impl Database {
                       status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
                       related_account_id, user_notified_retry, user_notified_gave_up
                FROM email_queue
-               WHERE status = 'failed' AND related_account_id IS NOT NULL AND user_notified_gave_up = 0
+               WHERE status = 'failed' AND related_account_id IS NOT NULL AND user_notified_gave_up = FALSE
                ORDER BY last_attempted_at ASC
                LIMIT $1"#,
             limit
@@ -383,7 +382,7 @@ impl Database {
     /// Mark that we've notified the user about email retry
     pub async fn mark_retry_notified(&self, id: &[u8]) -> Result<()> {
         sqlx::query!(
-            "UPDATE email_queue SET user_notified_retry = 1 WHERE id = $1",
+            "UPDATE email_queue SET user_notified_retry = TRUE WHERE id = $1",
             id
         )
         .execute(&self.pool)
@@ -395,7 +394,7 @@ impl Database {
     /// Mark that we've notified the user about permanent failure
     pub async fn mark_gave_up_notified(&self, id: &[u8]) -> Result<()> {
         sqlx::query!(
-            "UPDATE email_queue SET user_notified_gave_up = 1 WHERE id = $1",
+            "UPDATE email_queue SET user_notified_gave_up = TRUE WHERE id = $1",
             id
         )
         .execute(&self.pool)

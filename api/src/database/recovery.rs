@@ -117,7 +117,7 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO account_public_keys
                (id, account_id, public_key, is_active, added_at)
-               VALUES ($1, $2, $3, 1, $4)"#,
+               VALUES ($1, $2, $3, TRUE, $4)"#,
             key_id,
             row.account_id,
             new_public_key,

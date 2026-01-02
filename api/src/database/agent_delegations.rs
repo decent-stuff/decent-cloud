@@ -337,9 +337,9 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO provider_agent_status
                (provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, updated_at_ns)
-               VALUES ($1, 1, $2, $3, $4, $5, $6, $7)
+               VALUES ($1, TRUE, $2, $3, $4, $5, $6, $7)
                ON CONFLICT(provider_pubkey) DO UPDATE SET
-                   online = 1,
+                   online = TRUE,
                    last_heartbeat_ns = excluded.last_heartbeat_ns,
                    version = COALESCE(excluded.version, provider_agent_status.version),
                    provisioner_type = COALESCE(excluded.provisioner_type, provider_agent_status.provisioner_type),
@@ -409,8 +409,8 @@ impl Database {
 
         let result = sqlx::query!(
             r#"UPDATE provider_agent_status
-               SET online = 0, updated_at_ns = $1
-               WHERE online = 1 AND (last_heartbeat_ns IS NULL OR last_heartbeat_ns < $2)"#,
+               SET online = FALSE, updated_at_ns = $1
+               WHERE online = TRUE AND (last_heartbeat_ns IS NULL OR last_heartbeat_ns < $2)"#,
             now_ns,
             cutoff_ns
         )

@@ -15,7 +15,7 @@ pub struct Account {
     // Email for account linking (nullable for backward compatibility)
     pub email: Option<String>,
     // Email verification status
-    pub email_verified: i64,
+    pub email_verified: bool,
     // Profile fields (nullable)
     pub display_name: Option<String>,
     pub bio: Option<String>,
@@ -24,7 +24,7 @@ pub struct Account {
     // Last login timestamp for activity tracking
     pub last_login_at: Option<i64>,
     // Admin flag for admin access control
-    pub is_admin: i64,
+    pub is_admin: bool,
     // Chatwoot Platform API user ID for support portal management
     pub chatwoot_user_id: Option<i64>,
     // Billing settings (nullable)
@@ -39,7 +39,7 @@ pub struct AccountPublicKey {
     pub id: Vec<u8>,
     pub account_id: Vec<u8>,
     pub public_key: Vec<u8>,
-    pub is_active: i64,
+    pub is_active: bool,
     pub added_at: i64,
     pub disabled_at: Option<i64>,
     pub disabled_by_key_id: Option<Vec<u8>>,
@@ -269,7 +269,7 @@ impl Database {
 
         // Update email_verified flag on account
         sqlx::query!(
-            "UPDATE accounts SET email_verified = 1 WHERE id = $1",
+            "UPDATE accounts SET email_verified = TRUE WHERE id = $1",
             row.account_id
         )
         .execute(&mut *tx)
@@ -328,14 +328,14 @@ impl Database {
                         id: hex::encode(&k.id),
                         public_key: hex::encode(&k.public_key),
                         added_at: k.added_at,
-                        is_active: k.is_active != 0,
+                        is_active: k.is_active,
                         device_name: k.device_name,
                         disabled_at: k.disabled_at,
                         disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
                     })
                     .collect(),
-                is_admin: account.is_admin != 0,
-                email_verified: account.email_verified != 0,
+                is_admin: account.is_admin,
+                email_verified: account.email_verified,
                 email: account.email.clone(),
             }))
         } else {
@@ -377,7 +377,7 @@ impl Database {
         let keys = sqlx::query_as::<_, AccountPublicKey>(
             "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
-             WHERE account_id = $1 AND is_active = 1
+             WHERE account_id = $1 AND is_active = TRUE
              ORDER BY added_at ASC"
         )
         .bind(account_id)
@@ -390,7 +390,7 @@ impl Database {
     /// Get account ID by public key
     pub async fn get_account_id_by_public_key(&self, public_key: &[u8]) -> Result<Option<Vec<u8>>> {
         let result: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT account_id FROM account_public_keys WHERE public_key = $1 AND is_active = 1",
+            "SELECT account_id FROM account_public_keys WHERE public_key = $1 AND is_active = TRUE",
         )
         .bind(public_key)
         .fetch_optional(&self.pool)
@@ -465,7 +465,7 @@ impl Database {
         // Disable the key
         sqlx::query(
             "UPDATE account_public_keys
-             SET is_active = 0, disabled_at = $1, disabled_by_key_id = $2
+             SET is_active = FALSE, disabled_at = $1, disabled_by_key_id = $2
              WHERE id = $3",
         )
         .bind(now)
@@ -514,7 +514,6 @@ impl Database {
         is_admin_action: bool,
     ) -> Result<()> {
         let nonce_bytes = nonce.as_bytes().to_vec();
-        let is_admin = if is_admin_action { 1 } else { 0 };
 
         sqlx::query(
             "INSERT INTO signature_audit
@@ -528,7 +527,7 @@ impl Database {
         .bind(public_key)
         .bind(timestamp)
         .bind(&nonce_bytes)
-        .bind(is_admin)
+        .bind(is_admin_action)
         .execute(&self.pool)
         .await?;
 
@@ -587,14 +586,14 @@ impl Database {
                     id: hex::encode(&k.id),
                     public_key: hex::encode(&k.public_key),
                     added_at: k.added_at,
-                    is_active: k.is_active != 0,
+                    is_active: k.is_active,
                     device_name: k.device_name,
                     disabled_at: k.disabled_at,
                     disabled_by_key_id: k.disabled_by_key_id.map(|id| hex::encode(&id)),
                 })
                 .collect(),
-            is_admin: account.is_admin != 0,
-            email_verified: account.email_verified != 0,
+            is_admin: account.is_admin,
+            email_verified: account.email_verified,
             email: account.email.clone(),
         }))
     }
@@ -657,7 +656,7 @@ impl Database {
     pub async fn update_account_email(&self, account_id: &[u8], email: &str) -> Result<Account> {
         sqlx::query(
             "UPDATE accounts
-             SET email = $1, email_verified = 0
+             SET email = $1, email_verified = FALSE
              WHERE id = $2",
         )
         .bind(email)
@@ -768,7 +767,7 @@ impl Database {
         let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let result = sqlx::query(
             "UPDATE accounts SET last_login_at = $1
-             WHERE id IN (SELECT account_id FROM account_public_keys WHERE public_key = $2 AND is_active = 1)",
+             WHERE id IN (SELECT account_id FROM account_public_keys WHERE public_key = $2 AND is_active = TRUE)",
         )
         .bind(now)
         .bind(public_key)
@@ -797,7 +796,7 @@ impl Database {
         // Insert account with email and verified status (OAuth providers have already verified the email)
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO accounts (id, username, email, auth_provider, email_verified) VALUES ($1, $2, $3, $4, 1)",
+            "INSERT INTO accounts (id, username, email, auth_provider, email_verified) VALUES ($1, $2, $3, $4, TRUE)",
         )
         .bind(&account_id)
         .bind(username)
@@ -868,10 +867,9 @@ impl Database {
 
     /// Set admin status for an account by username
     pub async fn set_admin_status(&self, username: &str, is_admin: bool) -> Result<()> {
-        let is_admin_value = if is_admin { 1 } else { 0 };
         let result =
             sqlx::query("UPDATE accounts SET is_admin = $1 WHERE LOWER(username) = LOWER($2)")
-                .bind(is_admin_value)
+                .bind(is_admin)
                 .bind(username)
                 .execute(&self.pool)
                 .await?;
@@ -911,7 +909,7 @@ impl Database {
     pub async fn list_admins(&self) -> Result<Vec<Account>> {
         let admins = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
-             FROM accounts WHERE is_admin = 1 ORDER BY username ASC"
+             FROM accounts WHERE is_admin = TRUE ORDER BY username ASC"
         )
         .fetch_all(&self.pool)
         .await?;
@@ -921,9 +919,8 @@ impl Database {
 
     /// Admin: Set email verification status for an account
     pub async fn set_email_verified(&self, account_id: &[u8], verified: bool) -> Result<()> {
-        let verified_value = if verified { 1 } else { 0 };
         let result = sqlx::query("UPDATE accounts SET email_verified = $1 WHERE id = $2")
-            .bind(verified_value)
+            .bind(verified)
             .bind(account_id)
             .execute(&self.pool)
             .await?;
@@ -963,7 +960,7 @@ impl Database {
             r#"SELECT a.chatwoot_user_id as "chatwoot_user_id: i64"
                FROM accounts a
                JOIN account_public_keys pk ON pk.account_id = a.id
-               WHERE pk.public_key = $1 AND pk.is_active = 1"#,
+               WHERE pk.public_key = $1 AND pk.is_active = TRUE"#,
             public_key
         )
         .fetch_optional(&self.pool)
@@ -1130,7 +1127,7 @@ impl Database {
         account_id: &[u8],
         email: Option<&str>,
     ) -> Result<()> {
-        let result = sqlx::query("UPDATE accounts SET email = $1, email_verified = 0 WHERE id = $2")
+        let result = sqlx::query("UPDATE accounts SET email = $1, email_verified = FALSE WHERE id = $2")
             .bind(email)
             .bind(account_id)
             .execute(&self.pool)

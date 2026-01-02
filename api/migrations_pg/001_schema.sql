@@ -273,7 +273,7 @@ CREATE TABLE accounts (
     auth_provider TEXT DEFAULT 'seed_phrase',
     email TEXT,
     -- Email verification (migration 020)
-    email_verified INTEGER NOT NULL DEFAULT 0,
+    email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     -- Last login tracking (migration 019)
     last_login_at BIGINT,
     -- Chatwoot user ID (migration 027)
@@ -286,7 +286,11 @@ CREATE TABLE accounts (
     subscription_current_period_end BIGINT,
     subscription_cancel_at_period_end BOOLEAN DEFAULT FALSE,
     -- Admin flag
-    is_admin INTEGER NOT NULL DEFAULT 0,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Billing info
+    billing_address TEXT,
+    billing_vat_id TEXT,
+    billing_country_code TEXT,
     -- Username validation (allows alphanumeric, dots, underscores, @, hyphens)
     CONSTRAINT username_format CHECK (
         username ~ '^[a-zA-Z0-9][a-zA-Z0-9._@-]*[a-zA-Z0-9]$'
@@ -310,7 +314,7 @@ CREATE TABLE account_public_keys (
     id BYTEA PRIMARY KEY DEFAULT gen_random_bytes(16),
     account_id BYTEA NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     public_key BYTEA UNIQUE NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     added_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT,
     disabled_at BIGINT,
     disabled_by_key_id BYTEA REFERENCES account_public_keys(id),
@@ -333,7 +337,7 @@ CREATE TABLE signature_audit (
     public_key BYTEA NOT NULL,
     timestamp BIGINT NOT NULL,
     nonce BYTEA NOT NULL,
-    is_admin_action INTEGER NOT NULL DEFAULT 0,
+    is_admin_action BOOLEAN NOT NULL DEFAULT FALSE,
     created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT,
     CONSTRAINT signature_length CHECK (LENGTH(signature) = 64),
     CONSTRAINT audit_public_key_length CHECK (LENGTH(public_key) = 32),
@@ -653,7 +657,7 @@ CREATE INDEX idx_agent_delegations_provider ON provider_agent_delegations(provid
 -- Provider agent status
 CREATE TABLE provider_agent_status (
     provider_pubkey BYTEA PRIMARY KEY,
-    online INTEGER NOT NULL DEFAULT 0,
+    online BOOLEAN NOT NULL DEFAULT FALSE,
     last_heartbeat_ns BIGINT,
     version TEXT,
     provisioner_type TEXT,
@@ -931,7 +935,7 @@ CREATE TABLE email_queue (
     from_addr TEXT NOT NULL,
     subject TEXT NOT NULL,
     body TEXT NOT NULL,
-    is_html BIGINT NOT NULL DEFAULT 0,
+    is_html BOOLEAN NOT NULL DEFAULT FALSE,
     email_type TEXT NOT NULL DEFAULT 'general',
     status TEXT NOT NULL DEFAULT 'pending',
     attempts BIGINT NOT NULL DEFAULT 0,
@@ -941,8 +945,8 @@ CREATE TABLE email_queue (
     last_attempted_at BIGINT,
     sent_at BIGINT,
     related_account_id BYTEA,
-    user_notified_retry BIGINT NOT NULL DEFAULT 0,
-    user_notified_gave_up BIGINT NOT NULL DEFAULT 0
+    user_notified_retry BOOLEAN NOT NULL DEFAULT FALSE,
+    user_notified_gave_up BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX idx_email_queue_status ON email_queue(status);

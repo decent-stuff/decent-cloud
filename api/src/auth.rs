@@ -398,7 +398,7 @@ impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
         })?;
 
         // Check is_admin flag
-        if account.is_admin != 1 {
+        if !account.is_admin {
             return Err(poem::Error::from_string(
                 format!(
                     "Admin access denied. Account '{}' does not have admin privileges",

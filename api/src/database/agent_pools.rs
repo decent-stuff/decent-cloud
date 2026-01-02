@@ -558,9 +558,19 @@ impl Database {
         let delegations = rows
             .into_iter()
             .map(|row| {
-                let perms: Vec<String> = serde_json::from_str(&row.permissions).unwrap_or_default();
+                let perms: Vec<String> = match serde_json::from_str(&row.permissions) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to parse permissions for agent {}: {:#}",
+                            hex::encode(&row.agent_pubkey),
+                            e
+                        );
+                        Vec::new()
+                    }
+                };
                 let active = row.revoked_at_ns.is_none()
-                    && (row.expires_at_ns.is_none() || row.expires_at_ns.unwrap() > now_ns);
+                    && row.expires_at_ns.map_or(true, |expires| expires > now_ns);
                 AgentDelegation {
                     agent_pubkey: hex::encode(row.agent_pubkey),
                     provider_pubkey: hex::encode(row.provider_pubkey),

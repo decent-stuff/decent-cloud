@@ -75,13 +75,11 @@ impl Database {
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
-            let pubkey = entry.key.clone();
-            let signature = entry.value.clone();
             let created_at_ns = entry.block_timestamp_ns as i64;
             sqlx::query!(
-                "INSERT INTO user_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, $3) ON CONFLICT (pubkey) DO UPDATE SET signature = EXCLUDED.signature, created_at_ns = EXCLUDED.created_at_ns",
-                pubkey,
-                signature,
+                "INSERT INTO user_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, $3) ON CONFLICT (pubkey) DO UPDATE SET signature = excluded.signature, created_at_ns = excluded.created_at_ns",
+                &entry.key,
+                &entry.value,
                 created_at_ns
             )
             .execute(&mut **tx)

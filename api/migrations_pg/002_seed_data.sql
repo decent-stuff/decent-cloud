@@ -46,13 +46,13 @@ ON CONFLICT (agent_pubkey) DO NOTHING;
 INSERT INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns)
 VALUES (
     E'\\x6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
-    1,
+    TRUE,
     (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT,
     (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT
 ) ON CONFLICT (provider_pubkey) DO UPDATE SET
-    online = EXCLUDED.online,
-    last_heartbeat_ns = EXCLUDED.last_heartbeat_ns,
-    updated_at_ns = EXCLUDED.updated_at_ns;
+    online = excluded.online,
+    last_heartbeat_ns = excluded.last_heartbeat_ns,
+    updated_at_ns = excluded.updated_at_ns;
 
 -- Example compute offerings
 INSERT INTO provider_offerings (
