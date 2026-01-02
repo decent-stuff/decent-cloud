@@ -23,6 +23,36 @@ To develop locally:
    dfx deploy
    ```
 
+### Development Tasks
+
+The IC canister code is **completely independent** from the API server and does not use PostgreSQL or any other database. It runs entirely on the Internet Computer blockchain.
+
+#### Running Clippy
+
+To run clippy on the canister code (checks wasm32 compilation):
+```bash
+# From project root (uses makers)
+makers clippy-canister
+
+# Or directly from ic-canister directory
+cargo clippy --target=wasm32-unknown-unknown
+```
+
+**Important Notes:**
+- The canister code does NOT use `sqlx` or PostgreSQL
+- It compiles to `wasm32-unknown-unknown` for the Internet Computer
+- Test dependencies (like `pocket-ic`) are NOT checked with `--tests` flag since they run on host architecture
+
+#### Running Tests
+
+Canister tests use `pocket-ic` to simulate the Internet Computer environment:
+```bash
+# Tests run on host architecture, not wasm32
+cargo test --package decent_cloud_canister
+```
+
+These tests are also checked by the regular `makers clippy` task.
+
 ## Mainnet Deployment
 
 For production deployments on the Internet Computer mainnet:
