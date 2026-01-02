@@ -5,14 +5,15 @@ use std::collections::HashMap;
 
 pub async fn get_ledger_metadata(
     ledger_canister: &LedgerCanister,
-) -> HashMap<String, MetadataValue> {
-    let no_args = encode_one(()).expect("Failed to encode empty tuple");
+) -> Result<HashMap<String, MetadataValue>, Box<dyn std::error::Error>> {
+    let no_args = encode_one(())
+        .map_err(|e| anyhow::anyhow!("Failed to encode metadata query arguments: {}", e))?;
     let response = ledger_canister
         .call_query("metadata", &no_args)
         .await
-        .expect("Failed to call ledger canister");
-    candid::decode_one::<Vec<(String, MetadataValue)>>(&response)
-        .expect("Failed to decode metadata")
-        .into_iter()
-        .collect()
+        .map_err(|e| anyhow::anyhow!("Failed to query ledger metadata: {}", e))?;
+    let metadata_vec = candid::decode_one::<Vec<(String, MetadataValue)>>(&response)
+        .map_err(|e| anyhow::anyhow!("Failed to decode metadata response: {}", e))?;
+
+    Ok(metadata_vec.into_iter().collect())
 }

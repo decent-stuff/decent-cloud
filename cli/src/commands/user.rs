@@ -22,8 +22,9 @@ pub async fn handle_user_command(
             }
         }
         UserCommands::Register => {
-            let identity =
-                identity.expect("Identity must be specified for this command, use --identity");
+            let identity = identity.ok_or_else(|| {
+                "Identity must be specified for this command. Use --identity <name>".to_string()
+            })?;
             let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
             let canister =

@@ -9,7 +9,9 @@ pub async fn handle_keygen_command(
     keygen_args: KeygenArgs,
     identity: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let identity = identity.expect("Identity must be specified for this command, use --identity");
+    let identity = identity.ok_or_else(|| {
+        "Identity must be specified for this command. Use --identity <name>".to_string()
+    })?;
     let mnemonic = if keygen_args.generate {
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         info!("Generated mnemonic: {}", mnemonic);
@@ -29,7 +31,9 @@ pub async fn handle_keygen_command(
             mnemonic_from_strings(mnemonic_string)?
         }
     } else {
-        panic!("Neither mnemonic nor generate specified");
+        return Err(
+            "Missing mnemonic source: specify --mnemonic '<words>' to use an existing mnemonic phrase or --generate to create a new one".into(),
+        );
     };
 
     let seed = bip39::Seed::new(&mnemonic, "");

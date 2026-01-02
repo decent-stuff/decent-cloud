@@ -52,14 +52,16 @@ pub fn list_identities(
     if identity_type == ListIdentityType::Providers || identity_type == ListIdentityType::All {
         println!("\n# Registered providers");
         for entry in ledger.iter(Some(LABEL_PROV_REGISTER)) {
-            let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
+            let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key())
+                .map_err(|e| format!("Failed to parse provider identity: {}", e))?;
             println_identity(&dcc_id, show_balances);
         }
     }
     if identity_type == ListIdentityType::Users || identity_type == ListIdentityType::All {
         println!("\n# Registered users");
         for entry in ledger.iter(Some(LABEL_USER_REGISTER)) {
-            let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
+            let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key())
+                .map_err(|e| format!("Failed to parse user identity: {}", e))?;
             println_identity(&dcc_id, show_balances);
         }
     }

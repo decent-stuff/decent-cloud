@@ -9,6 +9,7 @@ pub enum CliError {
     HomeDirNotFound,
     LedgerLoad(anyhow::Error),
     CacheRefresh(anyhow::Error),
+    InvalidNetwork(String),
 }
 
 impl std::fmt::Display for CliError {
@@ -32,11 +33,27 @@ impl std::fmt::Display for CliError {
                     "Failed to refresh caches from ledger: {e}\n\nThis may indicate a corrupted ledger. Try:\n  - Delete the ledger file and let it recreate: rm ~/.dcc/ledger/main.bin\n  - Use --local-ledger-dir to point to a backup ledger"
                 )
             }
+            CliError::InvalidNetwork(network) => {
+                write!(
+                    f,
+                    "Invalid network: '{}'\n\nValid networks are: local, mainnet-eu, mainnet-01, mainnet-02, ic\n\nUse --network <name> to specify the network.",
+                    network
+                )
+            }
         }
     }
 }
 
-impl std::error::Error for CliError {}
+impl std::error::Error for CliError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CliError::HomeDirNotFound => None,
+            CliError::LedgerLoad(e) => Some(e.as_ref()),
+            CliError::CacheRefresh(e) => Some(e.as_ref()),
+            CliError::InvalidNetwork(_) => None,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -143,6 +160,32 @@ mod tests {
     }
 
     #[test]
+    fn test_cli_error_invalid_network_display() {
+        let network = "invalid-network";
+        let error = CliError::InvalidNetwork(network.to_string());
+        let display_msg = format!("{}", error);
+
+        assert!(display_msg.contains("Invalid network"));
+        assert!(display_msg.contains(network));
+        assert!(display_msg.contains("local"));
+        assert!(display_msg.contains("mainnet-eu"));
+        assert!(display_msg.contains("mainnet-01"));
+        assert!(display_msg.contains("mainnet-02"));
+        assert!(display_msg.contains("ic"));
+        assert!(display_msg.contains("--network"));
+    }
+
+    #[test]
+    fn test_cli_error_invalid_network_debug() {
+        let network = "testnet";
+        let error = CliError::InvalidNetwork(network.to_string());
+        let debug_msg = format!("{:?}", error);
+
+        assert!(debug_msg.contains("InvalidNetwork"));
+        assert!(debug_msg.contains(network));
+    }
+
+    #[test]
     fn test_cli_error_messages_are_actionable() {
         // HomeDirNotFound should provide actionable steps
         let home_error = CliError::HomeDirNotFound;
@@ -158,6 +201,12 @@ mod tests {
         let cache_error = CliError::CacheRefresh(anyhow::anyhow!("test"));
         let cache_msg = format!("{}", cache_error);
         assert!(cache_msg.contains("rm ") || cache_msg.contains("--local-ledger-dir"));
+
+        // InvalidNetwork should list valid options
+        let network_error = CliError::InvalidNetwork("foo".to_string());
+        let network_msg = format!("{}", network_error);
+        assert!(network_msg.contains("Valid networks are"));
+        assert!(network_msg.contains("--network"));
     }
 }
 

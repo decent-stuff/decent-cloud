@@ -52,7 +52,13 @@ pub async fn handle_ledger_remote_command(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let local_ledger_path = ledger_local
         .get_file_path()
-        .expect("Failed to get local ledger path");
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Failed to get local ledger path. The ledger may not be initialized. \
+                 Try using --local-ledger-dir flag to specify the ledger directory, \
+                 or run 'ledger remote data-fetch' to initialize the local ledger."
+            )
+        })?;
 
     match subcmd {
         LedgerRemoteCommands::DataFetch => {
@@ -62,8 +68,9 @@ pub async fn handle_ledger_remote_command(
         }
         #[allow(clippy::double_parens)]
         LedgerRemoteCommands::DataPushAuthorize | LedgerRemoteCommands::DataPush => {
-            let identity =
-                identity.expect("Identity must be specified for this command, use --identity");
+            let identity = identity.ok_or_else(|| {
+                "Identity must be specified for this command. Use --identity <name>".to_string()
+            })?;
 
             let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
@@ -95,7 +102,8 @@ pub async fn handle_ledger_remote_command(
             let mut table = Table::new("{:<}  {:<}")
                 .with_row(Row::from_cells(["Key", "Value"].iter().cloned()));
 
-            for md_entry in crate::ledger::get_ledger_metadata(&canister).await {
+            let metadata = crate::ledger::get_ledger_metadata(&canister).await?;
+            for md_entry in metadata {
                 let md_entry_val = match md_entry.1 {
                     MetadataValue::Nat(v) => v.to_string(),
                     MetadataValue::Int(v) => v.to_string(),
@@ -109,7 +117,8 @@ pub async fn handle_ledger_remote_command(
         LedgerRemoteCommands::GetRegistrationFee => {
             let canister =
                 LedgerCanister::new_without_identity(network_url, ledger_canister_id).await?;
-            let noargs = Encode!(&()).expect("Failed to encode args");
+            let noargs = Encode!(&())
+                .map_err(|e| anyhow::anyhow!("Failed to encode registration fee query arguments: {}", e))?;
             let response = canister.call_query("get_registration_fee", &noargs).await?;
             #[allow(clippy::double_parens)]
             let fee_e9s = Decode!(response.as_slice(), u64).map_err(|e| e.to_string())?;
@@ -122,7 +131,8 @@ pub async fn handle_ledger_remote_command(
             let nonce_bytes = LedgerCanister::new_without_identity(network_url, ledger_canister_id)
                 .await?
                 .get_check_in_nonce()
-                .await;
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to get check-in nonce: {}", e))?;
             println!("{}", hex::encode(nonce_bytes));
         }
         LedgerRemoteCommands::GetLogsDebug => {

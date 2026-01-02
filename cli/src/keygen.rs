@@ -114,7 +114,9 @@ mod tests {
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         let seed = Seed::new(&mnemonic, "");
         let seed_bip39 = bip39::Seed::new(&mnemonic, "");
-        let expected_seed: [u8; 32] = seed_bip39.as_bytes()[..32].try_into().unwrap();
+        let expected_seed: [u8; 32] = seed_bip39.as_bytes()[..32]
+            .try_into()
+            .expect("BIP39 seed should be at least 32 bytes");
         assert_eq!(seed.as_bytes()[..32], expected_seed);
     }
 
@@ -152,7 +154,7 @@ mod tests {
         prehashed.update(message);
         let signature = signing_key
             .sign_prehashed(prehashed.clone(), Some(ED25519_SIGN_CONTEXT))
-            .unwrap();
+            .expect("Prehashed signing should not fail with valid context");
         assert!(verifying_key
             .verify_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT), &signature)
             .is_ok());

@@ -62,7 +62,7 @@ impl LedgerCanister {
         canister_id: Principal,
         dcc_id: &DccIdentity,
     ) -> anyhow::Result<Self> {
-        let ic_auth = dcc_to_ic_auth(dcc_id).unwrap();
+        let ic_auth = dcc_to_ic_auth(dcc_id)?;
         Self::new_with_identity(network_url, canister_id, ic_auth).await
     }
 
@@ -129,14 +129,12 @@ impl LedgerCanister {
         Decode!(response.as_slice(), ResultString).map_err(|e| e.to_string())?
     }
 
-    pub async fn get_check_in_nonce(&self) -> Vec<u8> {
-        let args = Encode!(&()).expect("Failed to encode args");
-        let response = self
-            .call_query("get_check_in_nonce", &args)
-            .await
-            .expect("Failed to call get_check_in_nonce");
+    pub async fn get_check_in_nonce(&self) -> Result<Vec<u8>, String> {
+        let args = Encode!(&()).map_err(|e| format!("Failed to encode args: {}", e))?;
+        let response = self.call_query("get_check_in_nonce", &args).await?;
         #[allow(clippy::double_parens)]
-        Decode!(response.as_slice(), Vec<u8>).expect("Failed to decode response")
+        Decode!(response.as_slice(), Vec<u8>)
+            .map_err(|e| format!("Failed to decode response: {}", e))
     }
 
     pub async fn data_fetch(

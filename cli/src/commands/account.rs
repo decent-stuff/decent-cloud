@@ -20,7 +20,9 @@ pub async fn handle_account_command(
         return list_identities(ledger_local, ListIdentityType::All, true);
     }
 
-    let identity = identity.expect("Identity must be specified for this command, use --identity");
+    let identity = identity.ok_or_else(|| {
+        "Identity must be specified for this command. Use --identity <name>".to_string()
+    })?;
     let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
     println!("Account Principal ID: {}", dcc_id);
@@ -40,7 +42,9 @@ pub async fn handle_account_command(
             None => match &account_args.amount_e9s {
                 Some(value) => value.parse::<TokenAmountE9s>()?,
                 None => {
-                    panic!("You must specify either --amount-dct or --amount-e9s")
+                    return Err(
+                        "Missing transfer amount: specify --amount-dct (e.g., --amount-dct 1.5) or --amount-e9s (e.g., --amount-e9s 150000000)".into(),
+                    )
                 }
             },
         };

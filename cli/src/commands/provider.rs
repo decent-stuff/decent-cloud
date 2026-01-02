@@ -28,8 +28,9 @@ pub async fn handle_provider_command(
             }
         }
         ProviderCommands::Register => {
-            let identity =
-                identity.expect("Identity must be specified for this command, use --identity");
+            let identity = identity.ok_or_else(|| {
+                "Identity must be specified for this command. Use --identity <name>".to_string()
+            })?;
             let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
             info!("Registering principal: {} as {}", identity, dcc_id);
@@ -48,20 +49,28 @@ pub async fn handle_provider_command(
                     LedgerCanister::new_without_identity(network_url, ledger_canister_id)
                         .await?
                         .get_check_in_nonce()
-                        .await;
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to get check-in nonce: {}", e))?;
                 let nonce_string = hex::encode(&nonce_bytes);
 
                 println!("0x{}", nonce_string);
             } else {
-                let identity =
-                    identity.expect("Identity must be specified for this command, use --identity");
+                let identity = identity.ok_or_else(|| {
+                    "Identity must be specified for this command. Use --identity <name>".to_string()
+                })?;
 
                 let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
                 // Check the local ledger timestamp
                 let local_ledger_path = ledger_local
                     .get_file_path()
-                    .expect("Failed to get local ledger path");
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Failed to get local ledger path. The ledger may not be initialized. \
+                             Try using --local-ledger-dir flag to specify the ledger directory, \
+                             or run 'ledger remote data-fetch' to initialize the local ledger."
+                        )
+                    })?;
                 let local_ledger_file_mtime = local_ledger_path.metadata()?.modified()?;
 
                 // If the local ledger is older than 1 minute, refresh it automatically before proceeding
@@ -75,7 +84,7 @@ pub async fn handle_provider_command(
                     ledger_data_fetch(&canister, &mut ledger_local).await?;
 
                     dcc_common::refresh_caches_from_ledger(&ledger_local)
-                        .expect("Loading balances from ledger failed");
+                        .map_err(|e| anyhow::anyhow!("Failed to load balances from ledger: {}", e))?;
                 }
                 // The local ledger needs to be refreshed to get the latest nonce
                 // This provides the incentive to clone and frequently re-fetch the ledger
@@ -111,16 +120,18 @@ pub async fn handle_provider_command(
             }
         }
         ProviderCommands::UpdateProfile(_update_profile_args) => {
-            let identity =
-                identity.expect("Identity must be specified for this command, use --identity");
+            let identity = identity.ok_or_else(|| {
+                "Identity must be specified for this command. Use --identity <name>".to_string()
+            })?;
 
             let _dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
             todo!("Update the profile in the decent-cloud api server, and sign it with the local identity");
         }
         ProviderCommands::UpdateOffering(_update_offering_args) => {
-            let identity =
-                identity.expect("Identity must be specified for this command, use --identity");
+            let identity = identity.ok_or_else(|| {
+                "Identity must be specified for this command. Use --identity <name>".to_string()
+            })?;
             let _dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
             todo!("Update the offering in the decent-cloud api server, and sign it with the local identity");

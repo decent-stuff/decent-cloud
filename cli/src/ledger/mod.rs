@@ -22,7 +22,7 @@ pub async fn handle_funds_transfer(
     transfer_amount_e9s: TokenAmountE9s,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let from_icrc1_account = from_dcc_id.as_icrc_compatible_account();
-    let from_ic_auth = dcc_to_ic_auth(from_dcc_id);
+    let from_ic_auth = Some(dcc_to_ic_auth(from_dcc_id)?);
 
     println!(
         "Transferring {} tokens from {} \t to account {}",

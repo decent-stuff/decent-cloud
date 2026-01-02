@@ -55,7 +55,7 @@ pub async fn ledger_data_push(
     local_ledger_path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let ledger_local = LedgerMap::new_with_path(Some(vec![]), Some(local_ledger_path))
-        .expect("Failed to create LedgerMap");
+        .map_err(|e| anyhow::anyhow!("Failed to create local ledger map: {}", e))?;
     let cursor_local = cursor_from_data(
         ledger_map::partition_table::get_data_partition().start_lba,
         ledger_map::platform_specific::persistent_storage_size_bytes(),
@@ -63,7 +63,7 @@ pub async fn ledger_data_push(
         ledger_local.get_next_block_start_pos(),
     );
 
-    let remote_metadata = get_ledger_metadata(ledger_canister).await;
+    let remote_metadata = get_ledger_metadata(ledger_canister).await?;
     let cursor_remote: LedgerCursor = remote_metadata.into();
 
     if cursor_local.data_end_position <= cursor_remote.data_end_position {
