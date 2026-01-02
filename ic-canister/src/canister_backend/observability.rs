@@ -57,14 +57,23 @@ pub fn _http_request(request: HttpRequest) -> HttpResponse {
 
     match path {
         "/metrics" => serve_metrics(),
-        "/logs" => HttpResponse {
-            status_code: 200u16,
-            body: ByteBuf::from(
-                serde_json::to_string_pretty(&export_info())
-                    .map_err(|e| format!("{:?}", e))
-                    .unwrap(),
-            ),
-            ..Default::default()
+        "/logs" => {
+            let body = match serde_json::to_string_pretty(&export_info()) {
+                Ok(json) => json,
+                Err(e) => {
+                    return HttpResponse {
+                        status_code: 500,
+                        headers: vec![],
+                        body: ByteBuf::from(format!("Failed to serialize logs: {:?}", e)),
+                        upgrade: None,
+                    }
+                }
+            };
+            HttpResponse {
+                status_code: 200,
+                body: ByteBuf::from(body),
+                ..Default::default()
+            }
         },
         _ => HttpResponse {
             status_code: 404u16,

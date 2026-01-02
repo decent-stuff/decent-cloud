@@ -44,7 +44,9 @@ pub fn _icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
     let hash_tree = LEDGER_MAP.with(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
-    ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
+    ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap_or_else(|e| {
+        ic_cdk::trap(&format!("CRITICAL: Failed to serialize hash tree for ICRC-3 certificate: {}", e))
+    });
     Some(icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate {
         certificate,
         hash_tree: ByteBuf::from(tree_buf),

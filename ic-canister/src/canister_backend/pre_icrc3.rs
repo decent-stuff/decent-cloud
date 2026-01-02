@@ -97,7 +97,12 @@ fn _get_committed_transactions(start: u64, max_length: u64) -> Vec<Transaction> 
                         continue;
                     }
                     let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
-                        .expect("Failed to deserialize funds transfer");
+                        .unwrap_or_else(|e| {
+                            ic_cdk::trap(&format!(
+                                "CRITICAL: Failed to deserialize funds transfer at tx_num {}: {}",
+                                tx_num, e
+                            ))
+                        });
                     txs_result.push(transfer.into());
                     tx_num += 1;
 

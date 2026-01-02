@@ -43,12 +43,19 @@ pub struct LedgerEntriesResult {
 
 thread_local! {
     // Ledger that indexes only specific labels, to save on memory
-    pub(crate) static LEDGER_MAP: RefCell<LedgerMap> = RefCell::new(LedgerMap::new(Some(vec![
-        LABEL_PROV_REGISTER.to_string(),
-        LABEL_PROV_CHECK_IN.to_string(),
-        LABEL_USER_REGISTER.to_string(),
-        LABEL_REWARD_DISTRIBUTION.to_string(),
-    ])).expect("Failed to create LedgerMap"));
+    // CRITICAL: LedgerMap creation is essential for canister operation.
+    // If it fails, the canister cannot function and must trap.
+    pub(crate) static LEDGER_MAP: RefCell<LedgerMap> = {
+        match LedgerMap::new(Some(vec![
+            LABEL_PROV_REGISTER.to_string(),
+            LABEL_PROV_CHECK_IN.to_string(),
+            LABEL_USER_REGISTER.to_string(),
+            LABEL_REWARD_DISTRIBUTION.to_string(),
+        ])) {
+            Ok(ledger) => RefCell::new(ledger),
+            Err(e) => ic_cdk::trap(&format!("CRITICAL: Failed to create LedgerMap: {}", e)),
+        }
+    };
     pub(crate) static AUTHORIZED_PUSHER: RefCell<Option<Principal>> = const { RefCell::new(None) };
     #[cfg(target_arch = "wasm32")]
     static TIMER_IDS: RefCell<Vec<ic_cdk_timers::TimerId>> = const { RefCell::new(Vec::new()) };
@@ -103,7 +110,9 @@ fn ledger_periodic_task() {
 
 pub fn encode_to_cbor_bytes(obj: &impl Serialize) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::new();
-    ciborium::into_writer(obj, &mut buf).expect("failed to encode to CBOR");
+    ciborium::into_writer(obj, &mut buf).unwrap_or_else(|e| {
+        ic_cdk::trap(&format!("CRITICAL: Failed to encode to CBOR: {}", e))
+    });
     buf
 }
 
@@ -129,7 +138,9 @@ fn start_periodic_ledger_task() {
 pub fn _init(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
-        refresh_caches_from_ledger(&ledger.borrow()).expect("Loading balances from ledger failed");
+        if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
+            ic_cdk::trap(&format!("CRITICAL: _init failed to load caches from ledger: {}", e));
+        }
     });
     println!(
         "init: test_config = {}",
@@ -155,7 +166,9 @@ pub fn _pre_upgrade() {
 pub fn _post_upgrade(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
-        refresh_caches_from_ledger(&ledger.borrow()).expect("Loading balances from ledger failed");
+        if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
+            ic_cdk::trap(&format!("CRITICAL: _post_upgrade failed to load caches from ledger: {}", e));
+        }
         reward_e9s_per_block_recalculate();
     });
     set_test_config(enable_test_config.unwrap_or_default());
@@ -240,7 +253,8 @@ pub(crate) fn _data_fetch(
             cursor.as_ref().unwrap_or(&String::new()),
             hex::encode(bytes_before.as_ref().unwrap_or(&vec![]))
         );
-        let req_cursor = LedgerCursor::new_from_string(cursor.unwrap_or_default());
+        let req_cursor = LedgerCursor::new_from_string(cursor.unwrap_or_default())
+            .map_err(|e| format!("Failed to parse cursor: {}", e))?;
         let req_position_start = req_cursor.position;
         let local_cursor = cursor_from_data(
             ledger_map::partition_table::get_data_partition().start_lba,
@@ -328,7 +342,8 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
                 data.len(),
                 cursor
             );
-            let cursor = LedgerCursor::new_from_string(cursor);
+            let cursor = LedgerCursor::new_from_string(cursor)
+                .map_err(|e| format!("Failed to parse cursor: {}", e))?;
             persistent_storage_write(cursor.position, &data);
             persistent_storage_write(
                 cursor.position + data.len() as u64,
@@ -338,15 +353,20 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
             let refresh = if cursor.more {
                 "; ledger NOT refreshed".to_string()
             } else {
-                LEDGER_MAP.with(|ledger| {
+                let refresh_result = LEDGER_MAP.with(|ledger| {
                     // TODO: Entire ledger is iterated twice, effectively. It should be possible to do this in a single go.
                     if let Err(e) = ledger.borrow_mut().refresh_ledger() {
                         error!("Failed to refresh ledger: {}", e)
                     }
                     refresh_caches_from_ledger(&ledger.borrow())
-                        .expect("Loading balances from ledger failed");
-                    reward_e9s_per_block_recalculate();
+                        .map_err(|e| format!("Failed to refresh caches from ledger: {}", e))
+                        .map(|_| {
+                            reward_e9s_per_block_recalculate();
+                        })
                 });
+                if let Err(e) = refresh_result {
+                    return Err(e);
+                }
                 "; ledger refreshed".to_string()
             };
             let response = format!(
