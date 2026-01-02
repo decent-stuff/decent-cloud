@@ -15,6 +15,7 @@
 	import { signRequest } from '$lib/services/auth-api';
 	import OfferingsEditor from '$lib/components/OfferingsEditor.svelte';
 	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
+	import Icon, { type IconName } from '$lib/components/Icons.svelte';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
 	let offerings = $state<Offering[]>([]);
@@ -202,12 +203,13 @@
 		}
 	}
 
-	function getTypeIcon(productType: string) {
+	function getTypeIcon(productType: string): IconName {
 		const type = productType.toLowerCase();
-		if (type.includes('compute') || type.includes('vm')) return '💻';
-		if (type.includes('storage')) return '💾';
-		if (type.includes('network') || type.includes('cdn')) return '🌐';
-		return '📦';
+		if (type.includes('gpu')) return 'gpu';
+		if (type.includes('compute') || type.includes('vm')) return 'cpu';
+		if (type.includes('storage')) return 'hard-drive';
+		if (type.includes('network') || type.includes('cdn')) return 'globe';
+		return 'package';
 	}
 
 	function formatPrice(offering: Offering): string {
@@ -261,7 +263,7 @@
 		<div
 			class="bg-green-500/20 border border-green-500/30  p-4 flex items-center gap-2 animate-fade-in"
 		>
-			<span class="text-2xl">✅</span>
+			<Icon name="check" size={24} class="text-green-400" />
 			<p class="text-green-400 font-semibold">{importSuccess}</p>
 		</div>
 	{/if}
@@ -276,7 +278,7 @@
 	{#if offerings.filter(o => !o.resolved_pool_id).length > 0}
 		{@const offeringsWithoutPool = offerings.filter(o => !o.resolved_pool_id)}
 		<div class="bg-amber-500/20 border border-amber-500/30  p-4 flex items-start gap-3">
-			<span class="text-2xl">⚠️</span>
+			<Icon name="alert" size={24} class="text-amber-400 shrink-0" />
 			<div>
 				<p class="text-amber-400 font-semibold">
 					{offeringsWithoutPool.length} offering{offeringsWithoutPool.length !== 1 ? 's' : ''} without matching pool
@@ -298,7 +300,7 @@
 			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-neutral-400 text-sm font-medium">Active Offerings</h3>
-					<span class="text-2xl">📦</span>
+					<Icon name="package" size={24} class="text-primary-400" />
 				</div>
 				<p class="text-3xl font-bold text-white">
 					{offerings.filter((o) => o.stock_status === 'in_stock').length}
@@ -308,7 +310,7 @@
 			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-neutral-400 text-sm font-medium">Total Offerings</h3>
-					<span class="text-2xl">📊</span>
+					<Icon name="chart" size={24} class="text-primary-400" />
 				</div>
 				<p class="text-3xl font-bold text-white">{offerings.length}</p>
 			</div>
@@ -316,7 +318,7 @@
 			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-neutral-400 text-sm font-medium">Product Types</h3>
-					<span class="text-2xl">🏷️</span>
+					<Icon name="grid" size={24} class="text-primary-400" />
 				</div>
 				<p class="text-3xl font-bold text-white">
 					{new Set(offerings.map((o) => o.product_type)).size}
@@ -335,7 +337,7 @@
 				>
 					<!-- Header: Icon and Badges -->
 					<div class="flex items-start justify-between mb-4">
-						<span class="text-4xl">{getTypeIcon(offering.product_type)}</span>
+						<Icon name={getTypeIcon(offering.product_type)} size={36} class="text-primary-400" />
 						<div class="flex items-center gap-2 flex-wrap justify-end">
 							<!-- Offline indicator -->
 							{#if !offering.provider_online}
@@ -397,7 +399,7 @@
 							{#if offering.resolved_pool_name}
 								<span class="text-primary-400 font-medium">→ {offering.resolved_pool_name}</span>
 							{:else}
-								<span class="text-amber-400 font-medium">⚠️ No pool</span>
+								<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><Icon name="alert" size={12} /> No pool</span>
 							{/if}
 						</div>
 						{#if offering.description}
@@ -411,7 +413,9 @@
 		<!-- Empty State (if no offerings) -->
 		{#if offerings.length === 0}
 			<div class="text-center py-16">
-				<span class="text-6xl mb-4 block">📦</span>
+				<div class="flex justify-center mb-4 text-neutral-600">
+					<Icon name="package" size={56} />
+				</div>
 				<h3 class="text-2xl font-bold text-white mb-2">No Offerings Yet</h3>
 				<p class="text-neutral-500 mb-6">Create your first cloud service offering to get started</p>
 				<button

@@ -4,6 +4,7 @@
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
 	import TrustBadge from "$lib/components/TrustBadge.svelte";
+	import Icon, { type IconName } from "$lib/components/Icons.svelte";
 	import { authStore } from "$lib/stores/auth";
 	import { truncatePubkey } from "$lib/utils/identity";
 
@@ -298,13 +299,13 @@
 		setTimeout(() => (successMessage = null), 5000);
 	}
 
-	function getTypeIcon(productType: string) {
+	function getTypeIcon(productType: string): IconName {
 		const type = productType.toLowerCase();
-		if (type.includes("gpu")) return "🎮";
-		if (type.includes("compute") || type.includes("vm")) return "💻";
-		if (type.includes("storage")) return "💾";
-		if (type.includes("network") || type.includes("cdn")) return "🌐";
-		return "📦";
+		if (type.includes("gpu")) return "gpu";
+		if (type.includes("compute") || type.includes("vm")) return "cpu";
+		if (type.includes("storage")) return "hard-drive";
+		if (type.includes("network") || type.includes("cdn")) return "globe";
+		return "package";
 	}
 
 	function formatPrice(offering: Offering): string {
@@ -364,11 +365,11 @@
 		return offering.datacenter_country || "—";
 	}
 
-	const typeOptions = [
-		{ key: "compute", label: "Compute", icon: "💻" },
-		{ key: "gpu", label: "GPU", icon: "🎮" },
-		{ key: "storage", label: "Storage", icon: "💾" },
-		{ key: "network", label: "Network", icon: "🌐" },
+	const typeOptions: { key: string; label: string; icon: IconName }[] = [
+		{ key: "compute", label: "Compute", icon: "cpu" },
+		{ key: "gpu", label: "GPU", icon: "gpu" },
+		{ key: "storage", label: "Storage", icon: "hard-drive" },
+		{ key: "network", label: "Network", icon: "globe" },
 	];
 
 	function formatContractTerms(offering: Offering): string {
@@ -436,7 +437,13 @@
 						class="flex items-center gap-2 md:cursor-default"
 					>
 						<span class="text-white font-medium text-sm">Filters</span>
-						<span class="md:hidden text-neutral-500 text-sm">{showFilters ? "▲" : "▼"}</span>
+						<span class="md:hidden text-neutral-500">
+							{#if showFilters}
+								<Icon name="chevron-up" size={14} />
+							{:else}
+								<Icon name="chevron-down" size={14} />
+							{/if}
+						</span>
 					</button>
 					<button
 						onclick={clearFilters}
@@ -468,8 +475,8 @@
 										class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 									/>
 									<span
-										class="text-sm text-neutral-400 group-hover:text-white"
-										>{opt.icon} {opt.label}</span
+										class="flex items-center gap-1.5 text-sm text-neutral-400 group-hover:text-white"
+										><Icon name={opt.icon} size={14} /> {opt.label}</span
 									>
 								</label>
 							{/each}
@@ -704,18 +711,36 @@
 
 		<!-- Main Content -->
 		<div class="flex-1 min-w-0 space-y-4">
-			<!-- Search -->
-			<input
-				type="text"
-				placeholder="Search (e.g., type:gpu price:<=100)..."
-				bind:value={searchQuery}
-				oninput={handleSearchInput}
-				class="w-full px-4 py-2.5 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
-			/>
+			<!-- Search Bar with Icon -->
+			<div class="relative">
+				<div class="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none">
+					<Icon name="search" size={18} />
+				</div>
+				<input
+					type="text"
+					placeholder="Search offerings (e.g., type:gpu, price:<=100)..."
+					bind:value={searchQuery}
+					oninput={handleSearchInput}
+					class="w-full pl-11 pr-4 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-neutral-500 focus:outline-none focus:border-primary-400 transition-colors"
+				/>
+			</div>
 
-			<!-- Results count -->
-			<div class="text-neutral-500 text-sm">
-				{filteredOfferings.length} offerings
+			<!-- Results bar with count and sort -->
+			<div class="flex items-center justify-between">
+				<div class="text-neutral-500 text-sm">
+					{filteredOfferings.length} offerings found
+				</div>
+				<button
+					onclick={toggleSort}
+					class="hidden md:inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-white transition-colors"
+				>
+					<span>Price</span>
+					{#if sortDir === "asc"}
+						<Icon name="chevron-up" size={14} />
+					{:else}
+						<Icon name="chevron-down" size={14} />
+					{/if}
+				</button>
 			</div>
 
 			{#if loading}
@@ -726,7 +751,9 @@
 				</div>
 			{:else if filteredOfferings.length === 0}
 				<div class="text-center py-12">
-					<span class="text-5xl block mb-3">🔍</span>
+					<div class="flex justify-center mb-3 text-neutral-600">
+						<Icon name="search" size={48} />
+					</div>
 					<p class="text-neutral-500">No offerings found</p>
 				</div>
 			{:else}
@@ -745,7 +772,14 @@
 									class="pb-3 font-medium cursor-pointer hover:text-white"
 									onclick={toggleSort}
 								>
-									Price {sortDir === "asc" ? "↑" : "↓"}
+									<span class="inline-flex items-center gap-1">
+										Price
+										{#if sortDir === "asc"}
+											<Icon name="chevron-up" size={14} />
+										{:else}
+											<Icon name="chevron-down" size={14} />
+										{/if}
+									</span>
 								</th>
 								<th class="pb-3 font-medium"></th>
 							</tr>
@@ -800,9 +834,9 @@
 											{/if}
 											{#if getSubscriptionBadge(offering)}
 												<span
-													class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
+													class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
 													title="Recurring subscription"
-													>↻ {getSubscriptionBadge(offering)}</span
+													><Icon name="repeat" size={10} /> {getSubscriptionBadge(offering)}</span
 												>
 											{/if}
 										</div>
@@ -821,10 +855,8 @@
 										>
 									</td>
 									<td class="py-3 pr-4">
-										<span class="whitespace-nowrap"
-											>{getTypeIcon(
-												offering.product_type,
-											)}
+										<span class="inline-flex items-center gap-1.5 whitespace-nowrap"
+											><Icon name={getTypeIcon(offering.product_type)} size={14} class="text-neutral-400" />
 											{offering.product_type}</span
 										>
 									</td>
@@ -855,8 +887,8 @@
 												rel="noopener noreferrer"
 												onclick={(e) =>
 													e.stopPropagation()}
-												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap inline-block"
-												>Visit Provider ↗</a
+												class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
+												>Visit Provider <Icon name="external" size={12} /></a
 											>
 										{:else}
 											<button
@@ -1110,14 +1142,14 @@
 										{/if}
 										{#if getSubscriptionBadge(offering)}
 											<span
-												class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
+												class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
 												title="Recurring subscription"
-												>↻ {getSubscriptionBadge(offering)}</span
+												><Icon name="repeat" size={10} /> {getSubscriptionBadge(offering)}</span
 											>
 										{/if}
 									</div>
-									<div class="text-xs text-neutral-500">
-										{getTypeIcon(offering.product_type)}
+									<div class="flex items-center gap-1 text-xs text-neutral-500">
+										<Icon name={getTypeIcon(offering.product_type)} size={12} />
 										{offering.product_type}
 									</div>
 									<a
@@ -1168,8 +1200,8 @@
 										target="_blank"
 										rel="noopener noreferrer"
 										onclick={(e) => e.stopPropagation()}
-										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
-										>Visit Provider ↗</a
+										class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
+										>Visit Provider <Icon name="external" size={12} /></a
 									>
 								{:else}
 									<button

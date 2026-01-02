@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { generateMnemonic, validateMnemonic } from 'bip39';
+	import Icon from './Icons.svelte';
 
 	let {
 		initialMode = 'choose',
@@ -100,7 +101,9 @@
 				onclick={() => chooseMode('generate')}
 				class="p-6 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500  text-left transition-all group"
 			>
-				<div class="text-3xl mb-2">✨</div>
+				<div class="mb-2 text-white">
+					<Icon name="sparkles" size={28} />
+				</div>
 				<h4 class="text-xl font-bold text-white mb-1">Generate New</h4>
 				<p class="text-neutral-300 text-sm">Create a new 12-word seed phrase</p>
 			</button>
@@ -110,7 +113,9 @@
 				onclick={() => chooseMode('import')}
 				class="p-6 bg-surface-elevated hover:bg-surface-elevated border border-neutral-800  text-left transition-all group"
 			>
-				<div class="text-3xl mb-2">🔑</div>
+				<div class="mb-2 text-primary-400">
+					<Icon name="key" size={28} />
+				</div>
 				<h4 class="text-xl font-bold text-white mb-1">Import Existing</h4>
 				<p class="text-neutral-500 text-sm">Use an existing seed phrase</p>
 			</button>
@@ -154,14 +159,16 @@
 			onclick={copySeedPhrase}
 			class="w-full px-4 py-3 bg-surface-elevated hover:bg-surface-elevated border border-neutral-800  text-white transition-colors flex items-center justify-center gap-2"
 		>
-			<span>📋</span>
+			<Icon name="copy" size={16} />
 			<span>Copy to Clipboard</span>
 		</button>
 
 		<!-- Warning -->
 		<div class="p-4 bg-yellow-500/10 border border-yellow-500/30 ">
 			<div class="flex gap-3">
-				<span class="text-yellow-400 text-xl">⚠️</span>
+				<div class="text-yellow-400 shrink-0">
+					<Icon name="alert" size={20} />
+				</div>
 				<div class="flex-1 space-y-2">
 					<p class="text-sm text-yellow-400 font-medium">Never share your seed phrase!</p>
 					<ul class="text-xs text-yellow-400/80 space-y-1 list-disc list-inside">
@@ -251,9 +258,13 @@
 				<button
 					type="button"
 					onclick={() => (showSeedEntry = !showSeedEntry)}
-					class="absolute top-3 right-3 px-3 py-1 bg-surface-elevated hover:bg-surface-elevated rounded text-xs text-white transition-colors"
+					class="absolute top-3 right-3 px-3 py-1 bg-surface-elevated hover:bg-surface-elevated rounded text-xs text-white transition-colors flex items-center gap-1"
 				>
-					{showSeedEntry ? '🙈 Hide' : '👁️ Show'}
+					{#if showSeedEntry}
+						<Icon name="eye" size={12} /> Hide
+					{:else}
+						<Icon name="eye" size={12} /> Show
+					{/if}
 				</button>
 			</div>
 

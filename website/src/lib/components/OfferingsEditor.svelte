@@ -4,6 +4,7 @@
 	import { signRequest } from '$lib/services/auth-api';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 	import SpreadsheetEditor from './SpreadsheetEditor.svelte';
+	import Icon, { type IconName } from './Icons.svelte';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -34,28 +35,45 @@
 	// Resource type definitions with key columns (keeping for reference, but will fetch from backend)
 	const RESOURCE_TYPES = {
 		compute: {
-			label: '💻 Compute / VPS',
+			label: 'Compute / VPS',
 			columns: ['processor_brand', 'processor_cores', 'processor_speed', 'memory_amount', 'total_ssd_capacity']
 		},
 		gpu: {
-			label: '🎮 GPU / AI',
+			label: 'GPU / AI',
 			columns: ['gpu_name', 'gpu_count', 'gpu_memory_gb', 'processor_cores', 'memory_amount']
 		},
 		storage: {
-			label: '💾 Storage',
+			label: 'Storage',
 			columns: ['total_hdd_capacity', 'total_ssd_capacity', 'uplink_speed', 'traffic']
 		},
 		network: {
-			label: '🌐 Network / CDN',
+			label: 'Network / CDN',
 			columns: ['uplink_speed', 'traffic', 'unmetered_bandwidth', 'datacenter_country']
 		},
 		dedicated: {
-			label: '🖥️ Dedicated Server',
+			label: 'Dedicated Server',
 			columns: ['processor_brand', 'processor_name', 'processor_cores', 'memory_amount', 'total_hdd_capacity', 'total_ssd_capacity']
 		}
 	} as const;
 
 	type ResourceTypeKey = keyof typeof RESOURCE_TYPES;
+
+	// Get icon for product type key
+	function getProductTypeIcon(key: string): IconName {
+		switch (key) {
+			case 'compute': return 'cpu';
+			case 'gpu': return 'gpu';
+			case 'storage': return 'hard-drive';
+			case 'network': return 'globe';
+			case 'dedicated': return 'server';
+			default: return 'package';
+		}
+	}
+
+	// Strip leading emoji from label for clean display
+	function stripEmoji(label: string): string {
+		return label.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]\s*/u, '');
+	}
 
 	// Fetch product types on mount
 	onMount(async () => {
@@ -65,11 +83,11 @@
 			console.error('Failed to fetch product types:', e);
 			// Fallback to hardcoded types
 			productTypes = [
-				{ key: 'compute', label: '💻 Compute / VPS' },
-				{ key: 'gpu', label: '🎮 GPU / AI' },
-				{ key: 'storage', label: '💾 Storage' },
-				{ key: 'network', label: '🌐 Network / CDN' },
-				{ key: 'dedicated', label: '🖥️ Dedicated Server' }
+				{ key: 'compute', label: 'Compute / VPS' },
+				{ key: 'gpu', label: 'GPU / AI' },
+				{ key: 'storage', label: 'Storage' },
+				{ key: 'network', label: 'Network / CDN' },
+				{ key: 'dedicated', label: 'Dedicated Server' }
 			];
 		}
 	});
@@ -406,7 +424,7 @@
 					</div>
 					{#if selectedFile}
 						<div class="flex items-center gap-2 text-sm text-neutral-400">
-							<span class="text-lg">📄</span>
+							<Icon name="file" size={18} />
 							<span>{selectedFile.name}</span>
 						</div>
 					{/if}
@@ -420,12 +438,13 @@
 							{#each productTypes as { key, label }}
 								<button
 									onclick={() => handleProductTypeClick(key)}
-									class="px-4 py-3  font-medium transition-all {selectedResourceType === key
+									class="inline-flex items-center gap-2 px-4 py-3 font-medium transition-all {selectedResourceType === key
 										? 'bg-primary-600 text-white'
 										: 'bg-surface-elevated text-neutral-400 hover:bg-surface-elevated'}"
 									disabled={importing || loadingExample}
 								>
-									{label}
+									<Icon name={getProductTypeIcon(key)} size={16} />
+									{stripEmoji(label)}
 								</button>
 							{/each}
 						</div>
@@ -500,7 +519,9 @@
 						ondrop={handleDrop}
 					>
 						<div class="text-center">
-							<div class="text-6xl mb-4">📄</div>
+							<div class="flex justify-center mb-4 text-primary-400">
+								<Icon name="file" size={64} />
+							</div>
 							<p class="text-white text-2xl font-bold">Drop CSV file here</p>
 						</div>
 					</div>
@@ -520,7 +541,7 @@
 						class="bg-green-500/20 border border-green-500/30  p-4 space-y-3"
 					>
 						<div class="flex items-center gap-2">
-							<span class="text-2xl">✅</span>
+							<Icon name="check" size={24} class="text-green-400" />
 							<p class="text-green-400 font-semibold">
 								Successfully saved {result.success_count} offering{result.success_count !== 1
 									? 's'
@@ -530,8 +551,8 @@
 
 						{#if result.errors.length > 0}
 							<div class="mt-4 pt-4 border-t border-green-500/30">
-								<p class="text-yellow-400 font-semibold mb-2">
-									⚠️ {result.errors.length} row{result.errors.length !== 1 ? 's' : ''} had errors:
+								<p class="flex items-center gap-2 text-yellow-400 font-semibold mb-2">
+									<Icon name="alert" size={16} /> {result.errors.length} row{result.errors.length !== 1 ? 's' : ''} had errors:
 								</p>
 								<div class="max-h-48 overflow-y-auto space-y-2">
 									{#each result.errors as err}
@@ -548,7 +569,9 @@
 
 				<!-- Instructions -->
 				<div class="bg-primary-500/10 border border-primary-500/30  p-4 space-y-2">
-					<p class="text-primary-400 font-semibold mb-2">📋 How to Edit Offerings</p>
+					<p class="flex items-center gap-2 text-primary-400 font-semibold mb-2">
+						<Icon name="file" size={16} /> How to Edit Offerings
+					</p>
 					<ul class="text-neutral-400 text-sm space-y-1 list-disc list-inside">
 						<li>Edit offerings directly in the spreadsheet above</li>
 						<li>Click "Download CSV" to export your offerings for editing in Excel or Google Sheets</li>

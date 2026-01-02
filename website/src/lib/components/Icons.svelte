@@ -55,7 +55,14 @@
 		| 'database'
 		| 'cloud'
 		| 'terminal'
-		| 'activity';
+		| 'activity'
+		| 'gpu'
+		| 'chevron-up'
+		| 'repeat'
+		| 'hard-drive'
+		| 'sparkles'
+		| 'key'
+		| 'arrow-left';
 </script>
 
 <script lang="ts">
@@ -279,5 +286,32 @@
 		<line x1="12" y1="19" x2="20" y2="19" />
 	{:else if name === 'activity'}
 		<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+	{:else if name === 'gpu'}
+		<rect x="2" y="6" width="20" height="12" rx="2" />
+		<line x1="6" y1="10" x2="6" y2="14" />
+		<line x1="10" y1="10" x2="10" y2="14" />
+		<line x1="14" y1="10" x2="14" y2="14" />
+		<line x1="18" y1="10" x2="18" y2="14" />
+	{:else if name === 'chevron-up'}
+		<polyline points="18 15 12 9 6 15" />
+	{:else if name === 'repeat'}
+		<polyline points="17 1 21 5 17 9" />
+		<path d="M3 11V9a4 4 0 0 1 4-4h14" />
+		<polyline points="7 23 3 19 7 15" />
+		<path d="M21 13v2a4 4 0 0 1-4 4H3" />
+	{:else if name === 'hard-drive'}
+		<line x1="22" y1="12" x2="2" y2="12" />
+		<path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+		<line x1="6" y1="16" x2="6.01" y2="16" />
+		<line x1="10" y1="16" x2="10.01" y2="16" />
+	{:else if name === 'sparkles'}
+		<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+		<path d="M5 19l.5 1.5L7 21l-1.5.5L5 23l-.5-1.5L3 21l1.5-.5L5 19z" />
+		<path d="M19 13l.5 1.5L21 15l-1.5.5L19 17l-.5-1.5L17 15l1.5-.5L19 13z" />
+	{:else if name === 'key'}
+		<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+	{:else if name === 'arrow-left'}
+		<line x1="19" y1="12" x2="5" y2="12" />
+		<polyline points="12 19 5 12 12 5" />
 	{/if}
 </svg>
