@@ -80,7 +80,7 @@
 				class="btn-primary inline-flex items-center gap-2"
 			>
 				<span>View My Reputation</span>
-				<Icon name="arrow-right" size={14} />
+				<Icon name="arrow-right" size={20} />
 			</button>
 		</div>
 	{/if}

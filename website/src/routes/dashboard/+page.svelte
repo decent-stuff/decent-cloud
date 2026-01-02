@@ -80,7 +80,7 @@
 		<div class="card-accent p-5">
 			<div class="flex items-center gap-4">
 				<div class="icon-box-accent">
-					<Icon name="key" size={18} />
+					<Icon name="key" size={20} />
 				</div>
 				<div class="flex-1 min-w-0">
 					<h2 class="text-lg font-semibold text-white">
@@ -113,7 +113,7 @@
 					class="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
 				>
 					<span>View full profile</span>
-					<Icon name="arrow-right" size={12} />
+					<Icon name="arrow-right" size={20} />
 				</a>
 			</div>
 			<TrustDashboard metrics={trustMetrics} {responseMetrics} />
@@ -137,7 +137,7 @@
 	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
 		<div class="metric-card">
 			<div class="flex items-center gap-2 mb-3">
-				<Icon name="server" size={14} class="text-neutral-600" />
+				<Icon name="server" size={20} class="text-neutral-600" />
 				<span class="metric-label mb-0">Providers</span>
 			</div>
 			<p class="metric-value">{dashboardData.totalProviders.toLocaleString()}</p>
@@ -146,7 +146,7 @@
 
 		<div class="metric-card">
 			<div class="flex items-center gap-2 mb-3">
-				<Icon name="check" size={14} class="text-success" />
+				<Icon name="check" size={20} class="text-success" />
 				<span class="metric-label mb-0">Active</span>
 			</div>
 			<p class="metric-value">{dashboardData.activeProviders.toLocaleString()}</p>
@@ -155,7 +155,7 @@
 
 		<div class="metric-card">
 			<div class="flex items-center gap-2 mb-3">
-				<Icon name="package" size={14} class="text-neutral-600" />
+				<Icon name="package" size={20} class="text-neutral-600" />
 				<span class="metric-label mb-0">Offerings</span>
 			</div>
 			<p class="metric-value">{dashboardData.totalOfferings.toLocaleString()}</p>
@@ -164,7 +164,7 @@
 
 		<div class="metric-card">
 			<div class="flex items-center gap-2 mb-3">
-				<Icon name="file" size={14} class="text-neutral-600" />
+				<Icon name="file" size={20} class="text-neutral-600" />
 				<span class="metric-label mb-0">Contracts</span>
 			</div>
 			<p class="metric-value">{dashboardData.totalContracts.toLocaleString()}</p>
@@ -173,7 +173,7 @@
 
 		<div class="metric-card">
 			<div class="flex items-center gap-2 mb-3">
-				<Icon name="shield" size={14} class="text-neutral-600" />
+				<Icon name="shield" size={20} class="text-neutral-600" />
 				<span class="metric-label mb-0">Validators</span>
 			</div>
 			<p class="metric-value">{dashboardData.activeValidators.toLocaleString()}</p>
@@ -190,7 +190,7 @@
 				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
 				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-					<Icon name="cart" size={16} />
+					<Icon name="cart" size={20} />
 				</div>
 				<div>
 					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
@@ -205,7 +205,7 @@
 				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
 				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-					<Icon name="package" size={16} />
+					<Icon name="package" size={20} />
 				</div>
 				<div>
 					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
@@ -220,7 +220,7 @@
 				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
 				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-					<Icon name="file" size={16} />
+					<Icon name="file" size={20} />
 				</div>
 				<div>
 					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
@@ -235,7 +235,7 @@
 				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
 				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-					<Icon name="shield" size={16} />
+					<Icon name="shield" size={20} />
 				</div>
 				<div>
 					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">

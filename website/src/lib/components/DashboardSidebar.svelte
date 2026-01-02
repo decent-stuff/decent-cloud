@@ -158,7 +158,7 @@
 				onclick={closeSidebar}
 				class="nav-item {isActive ? 'nav-item-active' : ''}"
 			>
-				<Icon name={item.icon} size={16} />
+				<Icon name={item.icon} size={20} />
 				<span class="text-sm">{item.label}</span>
 			</a>
 		{/each}
@@ -175,7 +175,7 @@
 					onclick={closeSidebar}
 					class="nav-item {isActive ? 'nav-item-active' : ''}"
 				>
-					<Icon name={item.icon} size={16} />
+					<Icon name={item.icon} size={20} />
 					<span class="text-sm">{item.label}</span>
 				</a>
 			{/each}
@@ -194,7 +194,7 @@
 				onclick={closeSidebar}
 				class="nav-item {setupActive ? 'nav-item-active' : ''}"
 			>
-				<Icon name={providerSetupItem.icon} size={16} />
+				<Icon name={providerSetupItem.icon} size={20} />
 				<span class="text-sm">{providerSetupItem.label}</span>
 				{#if hasOfferings && !onboardingCompleted}
 					<span class="ml-auto status-dot status-dot-warning" title="Setup incomplete"></span>
@@ -212,7 +212,7 @@
 					onclick={closeSidebar}
 					class="nav-item {offeringsActive ? 'nav-item-active' : ''}"
 				>
-					<Icon name="package" size={16} />
+					<Icon name="package" size={20} />
 					<span class="text-sm">My Offerings</span>
 				</a>
 
@@ -223,7 +223,7 @@
 						onclick={closeSidebar}
 						class="nav-item {isActive ? 'nav-item-active' : ''}"
 					>
-						<Icon name={item.icon} size={16} />
+						<Icon name={item.icon} size={20} />
 						<span class="text-sm">{item.label}</span>
 					</a>
 				{/each}
@@ -237,9 +237,9 @@
 						class="nav-item"
 						title="Open Chatwoot support dashboard"
 					>
-						<Icon name="headphones" size={16} />
+						<Icon name="headphones" size={20} />
 						<span class="text-sm">Support Dashboard</span>
-						<Icon name="external" size={10} class="ml-auto text-neutral-600" />
+						<Icon name="external" size={20} class="ml-auto text-neutral-600" />
 					</a>
 				{/if}
 			{/if}
@@ -255,7 +255,7 @@
 				onclick={closeSidebar}
 				class="nav-item {currentPath.startsWith('/dashboard/admin') ? 'nav-item-active' : ''}"
 			>
-				<Icon name="wrench" size={16} />
+				<Icon name="wrench" size={20} />
 				<span class="text-sm">Admin</span>
 			</a>
 		{/if}
@@ -279,7 +279,7 @@
 				onclick={closeSidebar}
 				class="nav-item {currentPath.startsWith('/dashboard/account') ? 'nav-item-active' : ''}"
 			>
-				<Icon name="user" size={16} />
+				<Icon name="user" size={20} />
 				<span class="text-sm">Account</span>
 			</a>
 			<button
@@ -287,7 +287,7 @@
 				onclick={handleLogout}
 				class="nav-item w-full"
 			>
-				<Icon name="logout" size={16} />
+				<Icon name="logout" size={20} />
 				<span class="text-sm">Logout</span>
 			</button>
 		{:else}
@@ -296,7 +296,7 @@
 				onclick={handleLogin}
 				class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 			>
-				<Icon name="login" size={16} />
+				<Icon name="login" size={20} />
 				<span>Sign In</span>
 			</button>
 		{/if}

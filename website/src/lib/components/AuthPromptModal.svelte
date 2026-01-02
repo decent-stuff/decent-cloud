@@ -52,7 +52,7 @@
 					onclick={handleAuth}
 					class="w-full px-6 py-3 bg-primary-500 hover:bg-primary-400 font-semibold text-base transition-colors flex items-center justify-center gap-2"
 				>
-					<Icon name="login" size={18} />
+					<Icon name="login" size={20} />
 					<span>Sign In</span>
 				</button>
 				<button

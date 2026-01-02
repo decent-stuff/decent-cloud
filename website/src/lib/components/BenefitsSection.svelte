@@ -71,7 +71,7 @@
 					<!-- Header -->
 					<div class="flex items-center gap-3 mb-5 pb-5 border-b border-neutral-800/80">
 						<div class="icon-box">
-							<Icon name={benefit.icon} size={18} />
+							<Icon name={benefit.icon} size={20} />
 						</div>
 						<div>
 							<h3 class="text-base font-semibold text-white">
@@ -87,7 +87,7 @@
 					<ul class="space-y-2.5">
 						{#each benefit.items as item}
 							<li class="flex items-start gap-2.5">
-								<Icon name="check" size={14} class="text-primary-500 shrink-0 mt-0.5" />
+								<Icon name="check" size={20} class="text-primary-500 shrink-0 mt-0.5" />
 								<span class="text-sm text-neutral-400">{item}</span>
 							</li>
 						{/each}
@@ -97,7 +97,7 @@
 					{#if benefit.note}
 						<div class="mt-5 pt-4 border-t border-neutral-800/80">
 							<div class="flex items-start gap-2.5">
-								<Icon name="alert" size={12} class="text-warning shrink-0 mt-0.5" />
+								<Icon name="alert" size={20} class="text-warning shrink-0 mt-0.5" />
 								<p class="text-xs text-neutral-500">{benefit.note}</p>
 							</div>
 						</div>

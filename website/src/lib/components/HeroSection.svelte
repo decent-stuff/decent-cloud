@@ -82,7 +82,7 @@
 					class="inline-flex items-center gap-2.5 px-5 py-2.5 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 				>
 					<span>Open Marketplace</span>
-					<Icon name="arrow-right" size={16} />
+					<Icon name="arrow-right" size={20} />
 				</a>
 				<a
 					href="#features"
@@ -117,7 +117,7 @@
 				<div class="flex items-center justify-between pb-4 border-b border-neutral-800/80">
 					<div class="flex items-center gap-3">
 						<div class="icon-box">
-							<Icon name="server" size={18} />
+							<Icon name="server" size={20} />
 						</div>
 						<div>
 							<div class="font-semibold text-white text-sm">provider_alpha</div>
@@ -134,28 +134,28 @@
 				<div class="grid grid-cols-2 gap-3">
 					<div class="bg-surface-elevated p-4 border border-neutral-800">
 						<div class="flex items-center gap-2 mb-2">
-							<Icon name="clock" size={12} class="text-neutral-600" />
+							<Icon name="clock" size={20} class="text-neutral-600" />
 							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Response</span>
 						</div>
 						<div class="text-lg font-semibold text-white font-mono">2.3h</div>
 					</div>
 					<div class="bg-surface-elevated p-4 border border-neutral-800">
 						<div class="flex items-center gap-2 mb-2">
-							<Icon name="check" size={12} class="text-neutral-600" />
+							<Icon name="check" size={20} class="text-neutral-600" />
 							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Completion</span>
 						</div>
 						<div class="text-lg font-semibold text-white font-mono">98.2%</div>
 					</div>
 					<div class="bg-surface-elevated p-4 border border-neutral-800">
 						<div class="flex items-center gap-2 mb-2">
-							<Icon name="users" size={12} class="text-neutral-600" />
+							<Icon name="users" size={20} class="text-neutral-600" />
 							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Repeat</span>
 						</div>
 						<div class="text-lg font-semibold text-white font-mono">73%</div>
 					</div>
 					<div class="bg-surface-elevated p-4 border border-neutral-800">
 						<div class="flex items-center gap-2 mb-2">
-							<Icon name="file" size={12} class="text-neutral-600" />
+							<Icon name="file" size={20} class="text-neutral-600" />
 							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Contracts</span>
 						</div>
 						<div class="text-lg font-semibold text-white font-mono">1,247</div>
@@ -178,7 +178,7 @@
 	<div class="absolute bottom-8 left-1/2 -translate-x-1/2">
 		<a href="#features" class="flex flex-col items-center gap-1.5 text-neutral-600 hover:text-neutral-400 transition-colors group">
 			<span class="text-[10px] uppercase tracking-[0.2em]">Scroll</span>
-			<Icon name="arrow-down" size={14} class="group-hover:translate-y-0.5 transition-transform" />
+			<Icon name="arrow-down" size={20} class="group-hover:translate-y-0.5 transition-transform" />
 		</a>
 	</div>
 </section>

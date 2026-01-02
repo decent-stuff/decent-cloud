@@ -159,7 +159,7 @@
 			onclick={copySeedPhrase}
 			class="w-full px-4 py-3 bg-surface-elevated hover:bg-surface-elevated border border-neutral-800  text-white transition-colors flex items-center justify-center gap-2"
 		>
-			<Icon name="copy" size={16} class="text-white" />
+			<Icon name="copy" size={20} class="text-white" />
 			<span>Copy to Clipboard</span>
 		</button>
 
@@ -261,9 +261,9 @@
 					class="absolute top-3 right-3 px-3 py-1 bg-surface-elevated hover:bg-surface-elevated rounded text-xs text-white transition-colors flex items-center gap-1"
 				>
 					{#if showSeedEntry}
-						<Icon name="eye" size={12} class="text-white" /> Hide
+						<Icon name="eye" size={20} class="text-white" /> Hide
 					{:else}
-						<Icon name="eye" size={12} class="text-white" /> Show
+						<Icon name="eye" size={20} class="text-white" /> Show
 					{/if}
 				</button>
 			</div>

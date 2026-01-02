@@ -18,15 +18,15 @@
 
 				<ul class="space-y-3">
 					<li class="flex items-center gap-2.5">
-						<Icon name="check" size={14} class="text-primary-500 shrink-0" />
+						<Icon name="check" size={20} class="text-primary-500 shrink-0" />
 						<span class="text-sm text-neutral-300">Direct connections - choose your provider</span>
 					</li>
 					<li class="flex items-center gap-2.5">
-						<Icon name="check" size={14} class="text-primary-500 shrink-0" />
+						<Icon name="check" size={20} class="text-primary-500 shrink-0" />
 						<span class="text-sm text-neutral-300">Transparent pricing and reputation system</span>
 					</li>
 					<li class="flex items-center gap-2.5">
-						<Icon name="check" size={14} class="text-primary-500 shrink-0" />
+						<Icon name="check" size={20} class="text-primary-500 shrink-0" />
 						<span class="text-sm text-neutral-300">Community-driven marketplace</span>
 					</li>
 				</ul>
@@ -36,7 +36,7 @@
 					class="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-neutral-900 text-sm font-semibold hover:bg-neutral-100 transition-colors"
 				>
 					<span>Get Started Now</span>
-					<Icon name="arrow-right" size={14} />
+					<Icon name="arrow-right" size={20} />
 				</a>
 			</div>
 

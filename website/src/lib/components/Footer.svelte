@@ -43,13 +43,13 @@
 					<li>
 						<a href="/docs/decent-cloud-whitepaper.pdf" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
 							Whitepaper
-							<Icon name="external" size={10} class="text-neutral-600" />
+							<Icon name="external" size={20} class="text-neutral-600" />
 						</a>
 					</li>
 					<li>
 						<a href="https://github.com/decent-stuff/decent-cloud" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
 							GitHub
-							<Icon name="external" size={10} class="text-neutral-600" />
+							<Icon name="external" size={20} class="text-neutral-600" />
 						</a>
 					</li>
 				</ul>
@@ -62,13 +62,13 @@
 					<li>
 						<a href="https://discord.gg/decentcloud" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
 							Discord
-							<Icon name="external" size={10} class="text-neutral-600" />
+							<Icon name="external" size={20} class="text-neutral-600" />
 						</a>
 					</li>
 					<li>
 						<a href="https://twitter.com/decentcloud" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
 							Twitter
-							<Icon name="external" size={10} class="text-neutral-600" />
+							<Icon name="external" size={20} class="text-neutral-600" />
 						</a>
 					</li>
 				</ul>

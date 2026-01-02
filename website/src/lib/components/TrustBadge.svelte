@@ -34,7 +34,7 @@
 		title="Trust Score: {score}/100{hasFlags ? ' (has warnings)' : ''}"
 	>
 		{#if hasFlags}
-			<Icon name="alert" size={12} class="text-red-400" />
+			<Icon name="alert" size={20} class="text-red-400" />
 		{/if}
 		<span class={getScoreColor(score)}>{score}</span>
 	</div>
@@ -43,7 +43,7 @@
 		class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium border {getBgColor(score)}"
 	>
 		{#if hasFlags}
-			<Icon name="alert" size={14} class="text-red-400" />
+			<Icon name="alert" size={20} class="text-red-400" />
 		{/if}
 		<span class={getScoreColor(score)}>{score}</span>
 		<span class="text-neutral-500">{getLabel(score)}</span>

@@ -399,7 +399,7 @@
 							{#if offering.resolved_pool_name}
 								<span class="text-primary-400 font-medium">→ {offering.resolved_pool_name}</span>
 							{:else}
-								<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><Icon name="alert" size={12} class="text-amber-400" /> No pool</span>
+								<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><Icon name="alert" size={20} class="text-amber-400" /> No pool</span>
 							{/if}
 						</div>
 						{#if offering.description}

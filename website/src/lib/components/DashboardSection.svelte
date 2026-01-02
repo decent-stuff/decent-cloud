@@ -52,7 +52,7 @@
 				>
 					<div class="flex justify-center mb-3">
 						<div class="icon-box">
-							<Icon name={stat.icon} size={16} />
+							<Icon name={stat.icon} size={20} />
 						</div>
 					</div>
 					<div class="metric-value mb-1">
@@ -72,7 +72,7 @@
 				class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 			>
 				<span>View Full Dashboard</span>
-				<Icon name="arrow-right" size={14} />
+				<Icon name="arrow-right" size={20} />
 			</a>
 		</div>
 	</div>

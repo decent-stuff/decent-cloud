@@ -71,7 +71,7 @@
 					<div class="flex gap-3">
 						<!-- Icon -->
 						<div class="feature-card-icon shrink-0 w-10 h-10 mb-0">
-							<Icon name={item.icon} size={16} class="text-primary-400" />
+							<Icon name={item.icon} size={20} class="text-primary-400" />
 						</div>
 
 						<!-- Content -->
@@ -97,7 +97,7 @@
 		<!-- Bottom badge -->
 		<div class="mt-14 text-center">
 			<div class="inline-flex items-center gap-2.5 px-4 py-2.5 bg-surface border border-neutral-800">
-				<Icon name="check" size={14} class="text-primary-500" />
+				<Icon name="check" size={20} class="text-primary-500" />
 				<span class="text-neutral-400 text-xs">
 					All provider metrics are calculated from real data, not self-reported
 				</span>

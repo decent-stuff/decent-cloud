@@ -95,7 +95,7 @@
 					<!-- Category header -->
 					<div class="flex items-center gap-3 mb-6 pb-5 border-b border-neutral-800/80">
 						<div class="icon-box">
-							<Icon name={category.icon} size={18} />
+							<Icon name={category.icon} size={20} />
 						</div>
 						<h3 class="text-lg font-semibold text-white">
 							{category.category}

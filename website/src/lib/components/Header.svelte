@@ -68,7 +68,7 @@
 					class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 				>
 					<span>Dashboard</span>
-					<Icon name="arrow-right" size={14} />
+					<Icon name="arrow-right" size={20} />
 				</a>
 			{:else}
 				<a

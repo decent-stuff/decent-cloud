@@ -322,7 +322,7 @@
 				</ul>
 				<div class="mt-6">
 					<a href="/dashboard/marketplace" class="btn-secondary inline-flex items-center gap-2">
-						<Icon name="arrow-left" size={14} />
+						<Icon name="arrow-left" size={20} />
 						<span>Back to Marketplace</span>
 					</a>
 				</div>
@@ -380,7 +380,7 @@
 											<span class="text-neutral-500 capitalize">{contact.contactType}:</span>
 											<span class="text-neutral-200">{contact.contactValue}</span>
 											{#if contact.verified}
-												<Icon name="check" size={12} class="text-success" />
+												<Icon name="check" size={20} class="text-success" />
 											{/if}
 										</div>
 									{/each}
@@ -403,7 +403,7 @@
 													class="text-primary-400 hover:text-primary-300"
 												>
 													@{social.username}
-													<Icon name="external" size={10} class="inline ml-1" />
+													<Icon name="external" size={20} class="inline ml-1" />
 												</a>
 											{:else}
 												<span class="text-neutral-200">@{social.username}</span>

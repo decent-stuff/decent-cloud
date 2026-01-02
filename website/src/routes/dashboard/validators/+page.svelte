@@ -68,7 +68,7 @@
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">
-					<Icon name="check" size={14} class="text-success" />
+					<Icon name="check" size={20} class="text-success" />
 					<span class="metric-label mb-0">Active (24h)</span>
 				</div>
 				<div class="metric-value">{activeIn24h}</div>
@@ -77,7 +77,7 @@
 
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">
-					<Icon name="activity" size={14} class="text-neutral-600" />
+					<Icon name="activity" size={20} class="text-neutral-600" />
 					<span class="metric-label mb-0">Active (7d)</span>
 				</div>
 				<div class="metric-value">{activeIn7d}</div>
@@ -86,7 +86,7 @@
 
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">
-					<Icon name="globe" size={14} class="text-neutral-600" />
+					<Icon name="globe" size={20} class="text-neutral-600" />
 					<span class="metric-label mb-0">Total (30d)</span>
 				</div>
 				<div class="metric-value">{validators.length}</div>
@@ -165,7 +165,7 @@
 												class="text-primary-400 hover:text-primary-300 text-xs ml-2 inline-flex items-center gap-1"
 											>
 												website
-												<Icon name="external" size={10} />
+												<Icon name="external" size={20} />
 											</a>
 										{/if}
 									</td>
@@ -196,7 +196,7 @@
 					class="btn-primary inline-flex items-center gap-2"
 				>
 					<span>Learn More</span>
-					<Icon name="external" size={14} />
+					<Icon name="external" size={20} />
 				</a>
 			</div>
 		</div>

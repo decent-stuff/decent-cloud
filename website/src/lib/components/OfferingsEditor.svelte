@@ -424,7 +424,7 @@
 					</div>
 					{#if selectedFile}
 						<div class="flex items-center gap-2 text-sm text-neutral-400">
-							<Icon name="file" size={18} class="text-neutral-400" />
+							<Icon name="file" size={20} class="text-neutral-400" />
 							<span>{selectedFile.name}</span>
 						</div>
 					{/if}
@@ -443,7 +443,7 @@
 										: 'bg-surface-elevated text-neutral-400 hover:bg-surface-elevated'}"
 									disabled={importing || loadingExample}
 								>
-									<Icon name={getProductTypeIcon(key)} size={16} class={selectedResourceType === key ? 'text-white' : 'text-neutral-400'} />
+									<Icon name={getProductTypeIcon(key)} size={20} class={selectedResourceType === key ? 'text-white' : 'text-neutral-400'} />
 									{stripEmoji(label)}
 								</button>
 							{/each}
@@ -552,7 +552,7 @@
 						{#if result.errors.length > 0}
 							<div class="mt-4 pt-4 border-t border-green-500/30">
 								<p class="flex items-center gap-2 text-yellow-400 font-semibold mb-2">
-									<Icon name="alert" size={16} class="text-yellow-400" /> {result.errors.length} row{result.errors.length !== 1 ? 's' : ''} had errors:
+									<Icon name="alert" size={20} class="text-yellow-400" /> {result.errors.length} row{result.errors.length !== 1 ? 's' : ''} had errors:
 								</p>
 								<div class="max-h-48 overflow-y-auto space-y-2">
 									{#each result.errors as err}
@@ -570,7 +570,7 @@
 				<!-- Instructions -->
 				<div class="bg-primary-500/10 border border-primary-500/30  p-4 space-y-2">
 					<p class="flex items-center gap-2 text-primary-400 font-semibold mb-2">
-						<Icon name="file" size={16} class="text-primary-400" /> How to Edit Offerings
+						<Icon name="file" size={20} class="text-primary-400" /> How to Edit Offerings
 					</p>
 					<ul class="text-neutral-400 text-sm space-y-1 list-disc list-inside">
 						<li>Edit offerings directly in the spreadsheet above</li>

@@ -26,7 +26,7 @@
 			onclick={handleAuth}
 			class="inline-flex items-center gap-2 px-4 py-2 bg-base hover:bg-surface text-white text-sm font-medium transition-colors shrink-0"
 		>
-			<Icon name="login" size={16} />
+			<Icon name="login" size={20} />
 			<span>Sign In</span>
 		</button>
 	</div>
