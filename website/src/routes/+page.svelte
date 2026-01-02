@@ -43,7 +43,7 @@
 	});
 </script>
 
-<div class="min-h-screen bg-gradient-to-b from-base via-surface to-surface text-white">
+<div class="min-h-screen bg-base text-white">
 	<Header />
 	<HeroSection />
 	<FeaturesSection />

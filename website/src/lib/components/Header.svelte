@@ -3,6 +3,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { navigateToLogin } from '$lib/utils/navigation';
 	import type { IdentityInfo } from '$lib/stores/auth';
+	import Icon from './Icons.svelte';
 
 	let isAuthenticated = $state(false);
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -33,12 +34,10 @@
 	}
 </script>
 
-<header
-	class="fixed top-0 left-0 right-0 z-50 bg-surface/40 backdrop-blur-md border-b border-glass/10"
->
-	<div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+<header class="fixed top-0 left-0 right-0 z-50 bg-base/90 backdrop-blur-md border-b border-neutral-800">
+	<div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
 		<!-- Logo -->
-		<a href="/" class="text-2xl font-bold text-white hover:text-primary-400 transition-colors">
+		<a href="/" class="text-xl font-bold text-white hover:text-primary-400 transition-colors tracking-tight">
 			Decent Cloud
 		</a>
 
@@ -48,39 +47,40 @@
 				{#if currentIdentity?.account}
 					<a
 						href="/dashboard/account"
-						class="text-white/70 hover:text-white transition-colors"
+						class="text-neutral-400 hover:text-white transition-colors text-sm font-medium"
 						title="Account Settings"
 					>
-						<span class="font-medium">@{currentIdentity.account.username}</span>
+						@{currentIdentity.account.username}
 					</a>
 				{:else if currentIdentity?.displayName}
-					<span class="text-white/70 text-sm">
+					<span class="text-neutral-400 text-sm">
 						{currentIdentity.displayName}
 					</span>
 				{:else if currentIdentity?.principal}
-					<span class="text-white/70 text-sm font-mono" title={currentIdentity.principal.toString()}>
+					<span class="text-neutral-500 text-sm font-mono" title={currentIdentity.principal.toString()}>
 						{truncate(currentIdentity.principal.toString())}
 					</span>
 				{/if}
 				<a
 					href="/dashboard/marketplace"
-					class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full font-semibold hover:brightness-110 hover:scale-105 transition-all"
+					class="inline-flex items-center gap-2 px-5 py-2 bg-primary-500 text-base font-semibold hover:bg-primary-400 transition-colors"
 				>
-					Dashboard →
+					<span>Dashboard</span>
+					<Icon name="arrow-right" size={16} />
 				</a>
 			{:else}
 				<a
 					href="/dashboard/marketplace"
-					class="px-6 py-2 text-white/70 hover:text-white transition-colors font-medium"
+					class="text-neutral-400 hover:text-white transition-colors text-sm font-medium"
 				>
 					Dashboard
 				</a>
 				<button
 					type="button"
 					onclick={handleConnect}
-					class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full font-semibold hover:brightness-110 hover:scale-105 transition-all"
+					class="inline-flex items-center gap-2 px-5 py-2 bg-primary-500 text-base font-semibold hover:bg-primary-400 transition-colors"
 				>
-					Sign In
+					<span>Sign In</span>
 				</button>
 			{/if}
 		</div>

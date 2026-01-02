@@ -1,50 +1,69 @@
 <script lang="ts">
-	const features = [
+	import Icon from './Icons.svelte';
+	import type { IconName } from './Icons.svelte';
+
+	const features: { icon: IconName; title: string; description: string }[] = [
 		{
-			icon: "🛡️",
-			title: "Trust Score System",
+			icon: 'shield',
+			title: 'Trust Score System',
 			description:
-				"Every provider has a 0-100 trust score calculated from real data: delivery speed, completion rate, response time, and customer patterns.",
+				'Every provider has a 0-100 trust score calculated from real data: delivery speed, completion rate, response time, and customer patterns.'
 		},
 		{
-			icon: "🚨",
-			title: "Red Flag Detection",
+			icon: 'alert',
+			title: 'Red Flag Detection',
 			description:
-				"Get warned before contracting: high cancellation rates, slow responses, low satisfaction, ...",
+				'Get warned before contracting: high cancellation rates, slow responses, low satisfaction, and more.'
 		},
 		{
-			icon: "💸",
-			title: "Escrow & Refunds",
+			icon: 'wallet',
+			title: 'Escrow & Refunds',
 			description:
-				"Your payments are safe in escrow, and are released incrementally. Cancel anytime with prorated refunds.",
+				'Your payments are safe in escrow, and are released incrementally. Cancel anytime with prorated refunds.'
 		},
 		{
-			icon: "👁️",
-			title: "Full Transparency",
+			icon: 'eye',
+			title: 'Full Transparency',
 			description:
-				"See every provider's contract history, repeat customer count, and time-to-delivery. All based on objective metrics, from real transactions.",
-		},
+				'See every provider\'s contract history, repeat customer count, and time-to-delivery. All based on objective metrics, from real transactions.'
+		}
 	];
 </script>
 
-<section id="features" class="py-20 px-4">
-	<div class="max-w-7xl mx-auto">
-		<h2 class="text-4xl md:text-5xl font-bold text-center mb-4">
-			Why Decent Cloud?
-		</h2>
-		<p class="text-xl text-white/70 text-center mb-16">
-			A marketplace where trust is earned, not claimed. Every metric you
-			see is calculated from real transactions.
-		</p>
+<section id="features" class="py-24 px-6">
+	<div class="max-w-6xl mx-auto">
+		<!-- Section header -->
+		<div class="text-center mb-16">
+			<div class="inline-block px-3 py-1 mb-4 text-xs uppercase tracking-widest text-primary-400 border border-primary-500/30 bg-primary-500/5">
+				Features
+			</div>
+			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">
+				Why Decent Cloud?
+			</h2>
+			<p class="text-neutral-400 max-w-2xl mx-auto">
+				A marketplace where trust is earned, not claimed. Every metric you see is calculated from real transactions.
+			</p>
+		</div>
 
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-			{#each features as feature}
+		<!-- Features grid -->
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+			{#each features as feature, i}
 				<div
-					class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 hover:bg-glass/15 transition-all hover:scale-105"
+					class="group bg-surface border border-neutral-800 p-6 hover:border-neutral-700 transition-colors"
+					style="animation: slide-up 0.5s ease-out {i * 0.1}s both"
 				>
-					<div class="text-6xl mb-4">{feature.icon}</div>
-					<h3 class="text-xl font-bold mb-3">{feature.title}</h3>
-					<p class="text-white/70">{feature.description}</p>
+					<!-- Icon -->
+					<div class="w-12 h-12 bg-surface-elevated border border-neutral-700 flex items-center justify-center mb-5 group-hover:border-primary-500/50 transition-colors">
+						<Icon name={feature.icon} size={22} class="text-primary-400" />
+					</div>
+
+					<!-- Content -->
+					<h3 class="text-lg font-semibold text-white mb-2">
+						{feature.title}
+					</h3>
+					<p class="text-sm text-neutral-400 leading-relaxed">
+						{feature.description}
+					</p>
 				</div>
 			{/each}
 		</div>

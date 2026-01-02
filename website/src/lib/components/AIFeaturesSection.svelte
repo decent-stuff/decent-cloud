@@ -1,8 +1,22 @@
 <script lang="ts">
-	const aiFeatures = [
+	import Icon from './Icons.svelte';
+	import type { IconName } from './Icons.svelte';
+
+	interface Feature {
+		title: string;
+		description: string;
+	}
+
+	interface Category {
+		category: string;
+		icon: IconName;
+		features: Feature[];
+	}
+
+	const aiFeatures: Category[] = [
 		{
 			category: 'For Users',
-			icon: '🤖',
+			icon: 'cpu',
 			features: [
 				{
 					title: 'AI Architecture Advisor',
@@ -12,7 +26,7 @@
 				{
 					title: 'Intelligent Provider Matching',
 					description:
-						"Compare providers intelligently with AI-powered ranking that considers performance, reputation, pricing, and your specific requirements."
+						'Compare providers intelligently with AI-powered ranking that considers performance, reputation, pricing, and your specific requirements.'
 				},
 				{
 					title: 'Cost Optimization',
@@ -28,7 +42,7 @@
 		},
 		{
 			category: 'For Providers',
-			icon: '🎯',
+			icon: 'target',
 			features: [
 				{
 					title: 'Dynamic Pricing Intelligence',
@@ -55,29 +69,49 @@
 	];
 </script>
 
-<section class="py-20 px-4 bg-gradient-to-b from-surface/30 to-surface/30">
-	<div class="max-w-7xl mx-auto">
+<section class="py-24 px-6 bg-surface/50">
+	<div class="max-w-6xl mx-auto">
+		<!-- Section header -->
 		<div class="text-center mb-16">
-			<h2 class="text-4xl md:text-5xl font-bold mb-4">AI-Powered Cloud Intelligence</h2>
-			<p class="text-xl text-white/70 max-w-3xl mx-auto">
-				Soon: Transform how you interact with cloud infrastructure and services. Our AI assistant eliminates
-				complexity, uncertainty, and manual decision-making.
+			<div class="inline-block px-3 py-1 mb-4 text-xs uppercase tracking-widest text-primary-400 border border-primary-500/30 bg-primary-500/5">
+				Coming Soon
+			</div>
+			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">
+				AI-Powered Cloud Intelligence
+			</h2>
+			<p class="text-neutral-400 max-w-2xl mx-auto">
+				Transform how you interact with cloud infrastructure and services.
+				Our AI assistant eliminates complexity, uncertainty, and manual decision-making.
 			</p>
 		</div>
 
-		<div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-			{#each aiFeatures as category}
-				<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8">
-					<div class="flex items-center gap-4 mb-6">
-						<div class="text-5xl">{category.icon}</div>
-						<h3 class="text-3xl font-bold">{category.category}</h3>
+		<!-- Two-column layout -->
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+			{#each aiFeatures as category, catIndex}
+				<div
+					class="bg-surface border border-neutral-800 p-8"
+					style="animation: slide-up 0.5s ease-out {catIndex * 0.15}s both"
+				>
+					<!-- Category header -->
+					<div class="flex items-center gap-4 mb-8 pb-6 border-b border-neutral-800">
+						<div class="w-12 h-12 bg-surface-elevated border border-neutral-700 flex items-center justify-center">
+							<Icon name={category.icon} size={22} class="text-primary-400" />
+						</div>
+						<h3 class="text-2xl font-semibold text-white">
+							{category.category}
+						</h3>
 					</div>
 
+					<!-- Features list -->
 					<div class="space-y-6">
 						{#each category.features as feature}
-							<div class="border-l-4 border-purple-400 pl-4">
-								<h4 class="text-lg font-semibold mb-2 text-purple-200">{feature.title}</h4>
-								<p class="text-white/70 text-sm">{feature.description}</p>
+							<div class="border-l-2 border-primary-500/30 pl-4 hover:border-primary-500 transition-colors">
+								<h4 class="text-base font-semibold text-white mb-1">
+									{feature.title}
+								</h4>
+								<p class="text-sm text-neutral-400 leading-relaxed">
+									{feature.description}
+								</p>
 							</div>
 						{/each}
 					</div>
@@ -85,15 +119,19 @@
 			{/each}
 		</div>
 
-		<div class="mt-16 bg-glass/5 backdrop-blur-lg rounded-xl p-8 border border-purple-400/30">
+		<!-- GPU callout -->
+		<div class="mt-8 bg-surface border border-neutral-800 p-8">
 			<div class="flex flex-col md:flex-row items-center gap-6">
-				<div class="text-6xl">⚡</div>
-				<div class="flex-1 text-center md:text-left">
-					<h3 class="text-2xl font-bold mb-2">Coming Soon: GPU & AI Workloads</h3>
-					<p class="text-white/70">
-						Access high-performance GPUs for machine learning, AI inference, and compute-intensive
-						workloads. AI-powered workload optimization ensures you get the right GPU at the right
-						price.
+				<div class="w-16 h-16 bg-surface-elevated border border-neutral-700 flex items-center justify-center shrink-0">
+					<Icon name="zap" size={28} class="text-primary-400" />
+				</div>
+				<div class="text-center md:text-left">
+					<h3 class="text-xl font-semibold text-white mb-2">
+						Coming Soon: GPU & AI Workloads
+					</h3>
+					<p class="text-neutral-400">
+						Access high-performance GPUs for machine learning, AI inference, and compute-intensive workloads.
+						AI-powered workload optimization ensures you get the right GPU at the right price.
 					</p>
 				</div>
 			</div>
