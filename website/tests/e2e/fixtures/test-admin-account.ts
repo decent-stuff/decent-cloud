@@ -14,8 +14,8 @@ const execAsync = promisify(exec);
  * Grant admin status to a user via api-cli
  */
 async function grantAdminStatus(username: string): Promise<void> {
-	const dbPath = 'sqlite:../api/e2e-test.db';
-	const cmd = `DATABASE_URL="${dbPath}" SQLX_OFFLINE=true cargo run --bin api-cli -- admin grant ${username}`;
+	const dbUrl = 'postgres://test:test@localhost:5432/test';
+	const cmd = `DATABASE_URL="${dbUrl}" SQLX_OFFLINE=true cargo run --bin api-cli -- admin grant ${username}`;
 	await execAsync(cmd, { cwd: process.cwd() });
 }
 

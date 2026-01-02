@@ -58,7 +58,7 @@ npm run test:e2e
 Or manually with SQL:
 ```bash
 # Delete test accounts directly
-sqlite3 /data/api-data-dev/ledger.db "DELETE FROM accounts WHERE username GLOB 't[0-9]*';"
+psql "$DATABASE_URL" -c "DELETE FROM accounts WHERE username ~ '^t[0-9]'
 ```
 
 **Alternative: Full Reset**
@@ -66,9 +66,8 @@ sqlite3 /data/api-data-dev/ledger.db "DELETE FROM accounts WHERE username GLOB '
 If you need a completely fresh database:
 
 ```bash
-# Stop containers, remove database, restart
-docker compose -f ../cf/docker-compose.dev.yml down
-rm -f /data/api-data-dev/ledger.db
+# Stop containers, remove database volume, restart
+docker compose -f ../cf/docker-compose.dev.yml down -v
 cd ../cf && ./deploy.py deploy dev
 ```
 

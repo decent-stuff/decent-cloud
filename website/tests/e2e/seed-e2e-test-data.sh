@@ -4,26 +4,25 @@
 
 set -e
 
-# Get the repo root (2 levels up from tests/e2e/)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-DB_PATH="$REPO_ROOT/data/api-data-dev/ledger.db"
+# Database connection
+DATABASE_URL="${DATABASE_URL:-postgres://test:test@localhost:5432/test}"
 
 echo "🌱 Seeding E2E test data..."
 
-if [ ! -f "$DB_PATH" ]; then
-    echo "⚠️  Database not found at $DB_PATH"
+# Check if PostgreSQL is running
+if ! psql "$DATABASE_URL" -c "SELECT 1;" > /dev/null 2>&1; then
+    echo "⚠️  Cannot connect to database at $DATABASE_URL"
     exit 1
 fi
 
 # E2E test provider pubkey (hex: "e2e-test-provider-for-dsl-search-testing")
-PROVIDER_PUBKEY="6532652d746573742d70726f76696465722d666f722d64736c2d7365617263682d74657374696e67"
+PROVIDER_PUBKEY="\\x6532652d746573742d70726f76696465722d666f722d64736c2d7365617263682d74657374696e67"
 
 # Delete existing E2E test offerings (idempotent)
-sqlite3 "$DB_PATH" "DELETE FROM provider_offerings WHERE pubkey = x'$PROVIDER_PUBKEY';"
+psql "$DATABASE_URL" -c "DELETE FROM provider_offerings WHERE pubkey = '$PROVIDER_PUBKEY';"
 
 # Insert test offerings
-sqlite3 "$DB_PATH" <<EOF
+psql "$DATABASE_URL" <<EOF
 -- Compute offerings
 INSERT INTO provider_offerings (
     pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee,
@@ -36,7 +35,7 @@ INSERT INTO provider_offerings (
     payment_methods, features, operating_systems, created_at_ns
 ) VALUES
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-compute-001', 'E2E Compute Low', 'E2E test offering - compute low price', NULL,
     'ICP', 25.0, 0.0, 'public', 'compute', 'KVM', 'monthly', 'in_stock',
     'AMD', 1, 2, '3.5 GHz', 'EPYC 7763', 'DDR4', '4 GB', 1, '50 GB',
@@ -44,7 +43,7 @@ INSERT INTO provider_offerings (
     'cPanel', 720, 8760, 'ICP', 'E2E Test', 'Ubuntu 22.04', 1700000000000000000
 ),
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-compute-002', 'E2E Compute High', 'E2E test offering - compute high price', NULL,
     'ICP', 75.0, 0.0, 'public', 'compute', 'KVM', 'monthly', 'in_stock',
     'Intel', 1, 4, '4.0 GHz', 'Xeon E-2388G', 'DDR4', '8 GB', 1, '100 GB',
@@ -64,7 +63,7 @@ INSERT INTO provider_offerings (
     payment_methods, features, operating_systems, created_at_ns
 ) VALUES
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-gpu-001', 'E2E GPU Mid', 'E2E test offering - gpu mid price', NULL,
     'ICP', 100.0, 0.0, 'public', 'gpu', 'Bare Metal', 'monthly', 'in_stock',
     'AMD', 1, 16, '3.7 GHz', 'Ryzen 9 7950X', 'DDR5', '64 GB', 1, '1 TB',
@@ -73,7 +72,7 @@ INSERT INTO provider_offerings (
     'ICP', 'E2E Test', 'Ubuntu 22.04 LTS', 1700000000000000000
 ),
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-gpu-002', 'E2E GPU High', 'E2E test offering - gpu high price', NULL,
     'ICP', 500.0, 0.0, 'public', 'gpu', 'Bare Metal', 'monthly', 'in_stock',
     'AMD', 2, 64, '2.9 GHz', 'EPYC 7763', 'DDR4', '512 GB', 2, '4 TB',
@@ -93,7 +92,7 @@ INSERT INTO provider_offerings (
     payment_methods, features, created_at_ns
 ) VALUES
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-storage-001', 'E2E Storage Low', 'E2E test offering - storage low price', NULL,
     'ICP', 10.0, 0.0, 'public', 'storage', 'monthly', 'in_stock',
     4, '4 TB', NULL, NULL, 0, '1 Gbps', 500,
@@ -102,7 +101,7 @@ INSERT INTO provider_offerings (
     'ICP', 'E2E Test', 1700000000000000000
 ),
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-storage-002', 'E2E Storage Mid', 'E2E test offering - storage mid price', NULL,
     'ICP', 50.0, 0.0, 'public', 'storage', 'monthly', 'in_stock',
     NULL, NULL, 2, '2 TB', 0, '10 Gbps', 2000,
@@ -121,7 +120,7 @@ INSERT INTO provider_offerings (
     payment_methods, features, created_at_ns
 ) VALUES
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-network-001', 'E2E Network Low', 'E2E test offering - network low price', NULL,
     'ICP', 15.0, 0.0, 'public', 'network', 'monthly', 'in_stock',
     0, '10 Gbps', 5000, 'USA', 'Seattle', 47.6062, -122.3321,
@@ -129,7 +128,7 @@ INSERT INTO provider_offerings (
     'ICP', 'E2E Test', 1700000000000000000
 ),
 (
-    x'$PROVIDER_PUBKEY',
+    '$PROVIDER_PUBKEY',
     'e2e-network-002', 'E2E Network High', 'E2E test offering - network high price', NULL,
     'ICP', 80.0, 0.0, 'public', 'network', 'monthly', 'in_stock',
     1, '10 Gbps', NULL, 'Japan', 'Tokyo', 35.6762, 139.6503,
@@ -138,7 +137,7 @@ INSERT INTO provider_offerings (
 );
 EOF
 
-INSERTED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM provider_offerings WHERE pubkey = x'$PROVIDER_PUBKEY';")
+INSERTED=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM provider_offerings WHERE pubkey = '$PROVIDER_PUBKEY';" 2>/dev/null | tr -d ' ')
 
 echo "✅ Seeded $INSERTED E2E test offering(s)"
 echo "   Provider pubkey: e2e-test-provider-for-dsl-search-testing"

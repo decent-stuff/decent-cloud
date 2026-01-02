@@ -15,7 +15,7 @@ const apiURL = autoStartServers ? 'http://localhost:59011' : 'http://localhost:5
  *   npm run test:e2e:docker  - Expect Docker containers running (ports 59000/59001)
  *   PLAYWRIGHT_BASE_URL=http://localhost:5173 npm run test:e2e:docker - Custom servers
  *
- * The API server is built with SQLX_OFFLINE=true and uses a fresh e2e-test.db.
+ * The API server is built with SQLX_OFFLINE=true and uses PostgreSQL.
  */
 export default defineConfig({
 	testDir: './tests/e2e',
@@ -47,7 +47,7 @@ export default defineConfig({
 		? [
 			{
 				command:
-					'DATABASE_URL="sqlite:./e2e-test.db?mode=rwc" API_SERVER_PORT=59011 CANISTER_ID=ggi4a-wyaaa-aaaai-actqq-cai FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true cargo run --bin api-server -- serve',
+					'DATABASE_URL="postgres://test:test@localhost:5432/test" API_SERVER_PORT=59011 CANISTER_ID=ggi4a-wyaaa-aaaai-actqq-cai FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true cargo run --bin api-server -- serve',
 				cwd: '../api',
 				url: apiURL,
 				reuseExistingServer: !process.env.CI,

@@ -65,7 +65,7 @@ STRIPE_WEBHOOK_SECRET="whsec_test_secret"
 echo "📝 Creating API .env at $API_DIR/.env"
 cat > "$API_DIR/.env" << EOF
 # Database Configuration
-DATABASE_URL=sqlite:./data/ledger.db?mode=rwc
+DATABASE_URL=postgres://test:test@localhost:5432/test
 
 # Frontend URL (required for recovery emails)
 FRONTEND_URL=http://localhost:59000
