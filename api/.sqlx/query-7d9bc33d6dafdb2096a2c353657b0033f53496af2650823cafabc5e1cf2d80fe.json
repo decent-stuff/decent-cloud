@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = FALSE, user_notified_gave_up = FALSE WHERE status = 'failed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7d9bc33d6dafdb2096a2c353657b0033f53496af2650823cafabc5e1cf2d80fe"
+}

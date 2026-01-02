@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE reseller_relationships SET commission_percent = $1, status = $2, updated_at_ns = $3 WHERE id = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bd95a9ede7453863dcc52c7df47d74348b7b26b2a1aba123e3d229cd352fc3a9"
+}

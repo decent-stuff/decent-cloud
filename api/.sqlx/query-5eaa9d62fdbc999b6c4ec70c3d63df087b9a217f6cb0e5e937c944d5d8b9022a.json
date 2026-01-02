@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id as \"id!\", key_type, key_data, key_fingerprint, label\n               FROM account_external_keys\n               WHERE account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "key_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "key_data",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "key_fingerprint",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "label",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "5eaa9d62fdbc999b6c4ec70c3d63df087b9a217f6cb0e5e937c944d5d8b9022a"
+}

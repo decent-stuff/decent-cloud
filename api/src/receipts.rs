@@ -525,6 +525,9 @@ mod tests {
         let contract_id = vec![1u8; 32];
         let requester_pk = vec![2u8; 32];
         let provider_pk = vec![3u8; 32];
+        let contract_id_ref: &[u8] = &contract_id;
+        let requester_pk_ref: &[u8] = &requester_pk;
+        let provider_pk_ref: &[u8] = &provider_pk;
 
         sqlx::query!(
             r#"INSERT INTO contract_sign_requests
@@ -532,11 +535,11 @@ mod tests {
                 provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
                 payment_method, payment_status, currency)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
-            contract_id,
-            requester_pk,
+            contract_id_ref,
+            requester_pk_ref,
             "ssh-key",
             "test@example.com",
-            provider_pk,
+            provider_pk_ref,
             "off-1",
             1000000000i64,
             "test",
@@ -579,6 +582,8 @@ mod tests {
     async fn create_test_contract(db: &Database, contract_id: &[u8], payment_method: &str) {
         let requester_pk = vec![2u8; 32];
         let provider_pk = vec![3u8; 32];
+        let requester_pk_ref: &[u8] = &requester_pk;
+        let provider_pk_ref: &[u8] = &provider_pk;
 
         sqlx::query!(
             r#"INSERT INTO contract_sign_requests
@@ -587,10 +592,10 @@ mod tests {
                 payment_method, payment_status, currency)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
             contract_id,
-            requester_pk,
+            requester_pk_ref,
             "ssh-key",
             "email:user@test.example",
-            provider_pk,
+            provider_pk_ref,
             "off-1",
             1000000000i64,
             "test",

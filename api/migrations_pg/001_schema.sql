@@ -533,7 +533,7 @@ CREATE TABLE contract_sign_requests (
     tax_type TEXT,
     tax_jurisdiction TEXT,
     customer_tax_id TEXT,
-    reverse_charge BIGINT DEFAULT 0,
+    reverse_charge BOOLEAN DEFAULT FALSE,
     -- Added: buyer address (migration 041)
     buyer_address TEXT,
     -- Added: receipt tracking (migration 038)

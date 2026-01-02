@@ -142,7 +142,7 @@ pub struct DelegationRow {
 #[derive(Debug, sqlx::FromRow)]
 struct AgentStatusRow {
     provider_pubkey: Vec<u8>,
-    online: i64,
+    online: bool,
     last_heartbeat_ns: Option<i64>,
     version: Option<String>,
     provisioner_type: Option<String>,
@@ -381,7 +381,7 @@ impl Database {
                 // Check if agent is still online (heartbeat within last 5 minutes)
                 let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
                 let five_mins_ns = 5 * 60 * 1_000_000_000i64;
-                let online = r.online == 1
+                let online = r.online
                     && r.last_heartbeat_ns
                         .map(|h| now_ns - h < five_mins_ns)
                         .unwrap_or(false);

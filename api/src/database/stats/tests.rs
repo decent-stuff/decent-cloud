@@ -19,7 +19,7 @@ async fn test_get_platform_stats_with_data() {
     let pubkey = vec![1u8; 32];
 
     {
-        let pubkey_ref = &pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         sqlx::query!(
             "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
             pubkey_ref
@@ -29,7 +29,7 @@ async fn test_get_platform_stats_with_data() {
         .unwrap();
     }
     {
-        let pubkey_ref = &pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         sqlx::query!(
             "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
             pubkey_ref
@@ -41,9 +41,9 @@ async fn test_get_platform_stats_with_data() {
     let contract_id = vec![1u8; 32];
     let requester_pubkey = vec![2u8; 32];
     {
-        let contract_id_ref = &contract_id;
-        let requester_pubkey_ref = &requester_pubkey;
-        let pubkey_ref = &pubkey;
+        let contract_id_ref: &[u8] = &contract_id;
+        let requester_pubkey_ref: &[u8] = &requester_pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
@@ -70,8 +70,8 @@ async fn test_get_platform_stats_with_data() {
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let nonce_signature = vec![0u8; 64];
     {
-        let pubkey_ref = &pubkey;
-        let nonce_signature_ref = &nonce_signature;
+        let pubkey_ref: &[u8] = &pubkey;
+        let nonce_signature_ref: &[u8] = &nonce_signature;
         sqlx::query!(
             "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'test', $2, $3)",
             pubkey_ref,
@@ -105,7 +105,7 @@ async fn test_get_reputation_with_changes() {
     let pubkey = vec![1u8; 32];
 
     {
-        let pubkey_ref = &pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         sqlx::query!(
             "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 10, 'test', 0)",
             pubkey_ref
@@ -115,7 +115,7 @@ async fn test_get_reputation_with_changes() {
         .unwrap();
     }
     {
-        let pubkey_ref = &pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         sqlx::query!(
             "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, -5, 'penalty', 1000)",
             pubkey_ref
@@ -137,7 +137,7 @@ async fn test_get_top_providers_by_reputation() {
     let pk2 = vec![2u8; 32];
 
     {
-        let pk1_ref = &pk1;
+        let pk1_ref: &[u8] = &pk1;
         sqlx::query!(
             "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 100, 'good', 0)",
             pk1_ref
@@ -147,7 +147,7 @@ async fn test_get_top_providers_by_reputation() {
         .unwrap();
     }
     {
-        let pk2_ref = &pk2;
+        let pk2_ref: &[u8] = &pk2;
         sqlx::query!(
             "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 50, 'ok', 0)",
             pk2_ref
@@ -179,7 +179,7 @@ async fn test_get_provider_stats_with_data() {
     let pubkey = vec![1u8; 32];
 
     {
-        let pubkey_ref = &pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         sqlx::query!(
             "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
             pubkey_ref
@@ -191,9 +191,9 @@ async fn test_get_provider_stats_with_data() {
     let pending_contract_id = vec![1u8; 32];
     let pending_requester = vec![2u8; 32];
     {
-        let contract_id_ref = &pending_contract_id;
-        let requester_ref = &pending_requester;
-        let pubkey_ref = &pubkey;
+        let contract_id_ref: &[u8] = &pending_contract_id;
+        let requester_ref: &[u8] = &pending_requester;
+        let pubkey_ref: &[u8] = &pubkey;
         let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
@@ -213,9 +213,9 @@ async fn test_get_provider_stats_with_data() {
     let active_contract_id = vec![2u8; 32];
     let active_requester = vec![2u8; 32];
     {
-        let contract_id_ref = &active_contract_id;
-        let requester_ref = &active_requester;
-        let pubkey_ref = &pubkey;
+        let contract_id_ref: &[u8] = &active_contract_id;
+        let requester_ref: &[u8] = &active_requester;
+        let pubkey_ref: &[u8] = &pubkey;
         let payment_method = "icpay";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
@@ -256,8 +256,8 @@ async fn test_get_latest_block_timestamp_ns_with_data() {
 
     let nonce_signature1 = vec![0u8; 64];
     {
-        let pubkey_ref = &pubkey;
-        let nonce_ref = &nonce_signature1;
+        let pubkey_ref: &[u8] = &pubkey;
+        let nonce_ref: &[u8] = &nonce_signature1;
         sqlx::query!(
             "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'test1', $2, $3)",
             pubkey_ref,
@@ -270,8 +270,8 @@ async fn test_get_latest_block_timestamp_ns_with_data() {
     }
     let nonce_signature2 = vec![1u8; 64];
     {
-        let pubkey_ref = &pubkey;
-        let nonce_ref = &nonce_signature2;
+        let pubkey_ref: &[u8] = &pubkey;
+        let nonce_ref: &[u8] = &nonce_signature2;
         sqlx::query!(
             "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'test2', $2, $3)",
             pubkey_ref,

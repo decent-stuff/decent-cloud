@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE chatwoot_message_events SET sla_alert_sent = 1 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7d62b8f25410d7e1166ce1f07006177e0aba0eaef1091e95c1a5c7161d4513bf"
+}

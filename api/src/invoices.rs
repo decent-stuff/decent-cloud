@@ -314,7 +314,7 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     let price = invoice.subtotal_e9s as f64 / 1_000_000_000.0;
 
     // Determine invoice note based on VAT status, reverse charge, and payment method
-    let note = if contract.reverse_charge.unwrap_or(0) == 1 {
+    let note = if contract.reverse_charge.unwrap_or(false) {
         // Reverse charge applies - B2B cross-border EU transaction
         Some("Reverse charge - VAT to be accounted for by the recipient as per Article 196 of Council Directive 2006/112/EC.".to_string())
     } else if invoice.seller_vat_id.is_none() && invoice.vat_rate_percent == 0 {

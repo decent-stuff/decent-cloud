@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id as \"id!\", contract_id, extended_by_pubkey, extension_hours as \"extension_hours!\",\n               extension_payment_e9s as \"extension_payment_e9s!\", previous_end_timestamp_ns as \"previous_end_timestamp_ns!\",\n               new_end_timestamp_ns as \"new_end_timestamp_ns!\", extension_memo, created_at_ns as \"created_at_ns!\"\n               FROM contract_extensions WHERE contract_id = $1 ORDER BY created_at_ns DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "extended_by_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "extension_hours!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "extension_payment_e9s!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "previous_end_timestamp_ns!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "new_end_timestamp_ns!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "extension_memo",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at_ns!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "70d05533b4b962bce002d48683c77701679478b6b7e3f4c3c4b8ca641642d4ac"
+}

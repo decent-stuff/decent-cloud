@@ -87,9 +87,8 @@ pub struct Contract {
     pub tax_jurisdiction: Option<String>,
     #[oai(skip_serializing_if_is_none)]
     pub customer_tax_id: Option<String>,
-    #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
-    pub reverse_charge: Option<i64>,
+    pub reverse_charge: Option<bool>,
     /// Buyer address for B2B invoices
     #[oai(skip_serializing_if_is_none)]
     pub buyer_address: Option<String>,
@@ -984,7 +983,7 @@ impl Database {
         .bind("succeeded")
         .bind(tax_amount_e9s)
         .bind(customer_tax_id)
-        .bind(if reverse_charge { 1 } else { 0 })
+        .bind(reverse_charge)
         .bind(stripe_invoice_id)
         .bind(contract_id)
         .execute(&self.pool)

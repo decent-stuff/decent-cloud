@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id as \"id!\", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as \"offering_id!\", base_price_e9s as \"base_price_e9s!\", commission_e9s as \"commission_e9s!\", total_paid_e9s as \"total_paid_e9s!\", external_order_id, external_order_details, status as \"status!\", created_at_ns as \"created_at_ns!\", fulfilled_at_ns FROM reseller_orders WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "reseller_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "external_provider_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "offering_id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "base_price_e9s!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "commission_e9s!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "total_paid_e9s!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "external_order_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "external_order_details",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at_ns!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "fulfilled_at_ns",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9ca0d2fe76776e3b4fa6fcdd47fc6bf502dcdedef6593db9262c299b019ba536"
+}

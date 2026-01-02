@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE subscription_plans SET stripe_price_id = $1,\n               updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT\n               WHERE id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9c6c58964502928c7dc1539eab7507fa168b3597b154c24e08bb6e9f11e171e9"
+}

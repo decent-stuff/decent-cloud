@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE reseller_orders SET external_order_id = $1, external_order_details = $2, status = 'fulfilled', fulfilled_at_ns = $3 WHERE contract_id = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "544701c3dfa7264f6f2047d4101d1d668b60af5fdc97daa7d3f448d57f96251f"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(a.id, oa.account_id) as \"id!\"\n               FROM accounts a\n               LEFT JOIN oauth_accounts oa ON a.id = oa.account_id\n               WHERE a.email = $1 OR oa.email = $2\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "09c3488c89a169370423db2a08962631ca54faa975778947f50f93f0e087643e"
+}

@@ -386,7 +386,7 @@ async fn test_offerings_with_pools_included_in_search() {
     // Create a provider with pool (offerings without pools are filtered from marketplace)
     let pubkey = vec![1u8; 32];
     {
-        let pubkey_ref = &pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         sqlx::query!(
             "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, 0)",
             pubkey_ref,
@@ -408,7 +408,7 @@ async fn test_offerings_with_pools_included_in_search() {
     .unwrap();
 
     {
-        let pubkey_ref = &pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
         sqlx::query!(
             "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', FALSE, 0)",
             pubkey_ref
@@ -639,7 +639,7 @@ async fn test_get_active_validators_with_profile() {
 
     // Add profile for this validator
     {
-        let validator_key_ref = &validator_key[..];
+        let validator_key_ref: &[u8] = &validator_key[..];
         sqlx::query!(
             "INSERT INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",

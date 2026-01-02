@@ -102,8 +102,9 @@ async fn main() -> Result<()> {
 
 async fn handle_admin_action(action: AdminAction) -> Result<()> {
     // Get database URL from environment or use default
+    // Note: DATABASE_URL should be set via environment variable or .env file
     let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./data/ledger.db?mode=rwc".to_string());
+        env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://test:test@localhost:5432/test".to_string());
 
     // Connect to database
     let db = Database::new(&database_url).await?;
@@ -287,8 +288,9 @@ async fn handle_seed_provider(
     println!("========================================\n");
 
     // Get database URL from environment or use default
+    // Note: DATABASE_URL should be set via environment variable or .env file
     let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./data/ledger.db?mode=rwc".to_string());
+        env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://test:test@localhost:5432/test".to_string());
 
     // Connect to database
     let db = Database::new(&database_url).await?;

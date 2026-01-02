@@ -99,8 +99,9 @@ struct AppContext {
 
 async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     // Database setup
+    // Note: DATABASE_URL should be set via environment variable or .env file
     let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./ledger.db?mode=rwc".to_string());
+        env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://test:test@localhost:5432/test".to_string());
     let database = match Database::new(&database_url).await {
         Ok(db) => {
             tracing::info!("Database initialized at {}", database_url);
@@ -265,6 +266,21 @@ async fn sync_docs_command(portal: &str, dry_run: bool) -> Result<(), std::io::E
     }
 }
 
+/// Check if database schema has been applied by verifying key tables exist
+pub async fn check_schema_applied(database_url: &str) -> Result<bool, sqlx::Error> {
+    let pool = sqlx::PgPool::connect(database_url).await?;
+
+    // Check for a core table that exists in 001_schema.sql
+    // Using provider_registrations as it's created in the initial schema
+    let result = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'provider_registrations'"
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    Ok(result > 0)
+}
+
 /// Check configuration and external service connectivity
 async fn doctor_command() -> Result<(), std::io::Error> {
     println!("=== Decent Cloud API Doctor ===\n");
@@ -296,7 +312,74 @@ async fn doctor_command() -> Result<(), std::io::Error> {
 
     // === Database ===
     println!("Database:");
-    check_env!("DATABASE_URL", required);
+
+    let database_url = match env::var("DATABASE_URL") {
+        Ok(url) => {
+            println!("  [OK] DATABASE_URL = {}...", &url[..url.len().min(20)]);
+            url
+        }
+        Err(_) => {
+            println!("  [ERROR] DATABASE_URL - NOT SET (required)");
+            errors += 1;
+            println!("\n  Set DATABASE_URL in your .env file or environment:");
+            println!("    - Local dev (with docker compose): postgres://test:test@localhost:5432/test");
+            println!("    - Production: postgres://user:password@host:5432/database");
+            println!("\n  To start PostgreSQL locally:");
+            println!("    docker compose up -d postgres");
+            return Err(std::io::Error::other(format!(
+                "{} configuration errors found",
+                errors
+            )));
+        }
+    };
+
+    // Check PostgreSQL connectivity
+    print!("  Checking PostgreSQL connection... ");
+    match Database::new(&database_url).await {
+        Ok(_) => {
+            println!("[OK] connected");
+        }
+        Err(e) => {
+            println!("[ERROR] failed to connect");
+            errors += 1;
+            println!("\n  PostgreSQL connection error: {:#}", e);
+            println!("\n  Troubleshooting:");
+            println!("    1. Ensure PostgreSQL is running: docker compose ps");
+            println!("    2. Start PostgreSQL if needed: docker compose up -d postgres");
+            println!("    3. Check DATABASE_URL is correct: {}", database_url);
+            println!("    4. Verify PostgreSQL is ready: docker compose logs postgres | grep 'ready to accept connections'");
+            println!("\n  If using remote PostgreSQL:");
+            println!("    - Verify network connectivity");
+            println!("    - Check firewall rules");
+            println!("    - Ensure database exists");
+        }
+    }
+
+    // Check migrations_pg/001_schema.sql has been run
+    print!("  Checking database schema... ");
+    match check_schema_applied(&database_url).await {
+        Ok(true) => {
+            println!("[OK] schema applied");
+        }
+        Ok(false) => {
+            println!("[ERROR] schema not found");
+            errors += 1;
+            println!("\n  Database schema migrations_pg/001_schema.sql has not been applied!");
+            println!("\n  To apply migrations:");
+            println!("    - The API server auto-runs migrations on startup");
+            println!("    - Or run manually: sqlx migrate run --source-url migrations_pg");
+            println!("\n  Ensure the migrations_pg/001_schema.sql file exists in the api/ directory.");
+        }
+        Err(e) => {
+            println!("[ERROR] failed to check schema");
+            errors += 1;
+            println!("\n  Schema check error: {:#}", e);
+            println!("\n  This could mean:");
+            println!("    - Database connection failed (see connection error above)");
+            println!("    - Insufficient permissions to check schema");
+            println!("    - Database tables are missing or corrupted");
+        }
+    }
 
     // === Chatwoot Integration ===
     println!("\nChatwoot Integration:");
@@ -702,4 +785,4 @@ async fn sync_command() -> Result<(), std::io::Error> {
 }
 
 #[cfg(test)]
-mod tests;
+mod main_tests;

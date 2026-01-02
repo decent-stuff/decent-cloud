@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.chatwoot_user_id as \"chatwoot_user_id: i64\"\n               FROM accounts a\n               JOIN account_public_keys pk ON pk.account_id = a.id\n               WHERE pk.public_key = $1 AND pk.is_active = TRUE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "chatwoot_user_id: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "abcdf6bbb0ad3304408fc8536e925e7aba7aa5769a31957a595632c8a6f95430"
+}

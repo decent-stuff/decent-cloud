@@ -198,7 +198,7 @@ impl Database {
             r#"SELECT
                 p.pool_id, p.provider_pubkey, p.name, p.location, p.provisioner_type, p.created_at_ns,
                 COUNT(DISTINCT d.agent_pubkey) as agent_count,
-                COUNT(DISTINCT CASE WHEN s.online = 1 AND s.last_heartbeat_ns > $1 THEN d.agent_pubkey END) as online_count,
+                COUNT(DISTINCT CASE WHEN s.online = TRUE AND s.last_heartbeat_ns > $1 THEN d.agent_pubkey END) as online_count,
                 COALESCE(SUM(s.active_contracts), 0) as active_contracts
             FROM agent_pools p
             LEFT JOIN provider_agent_delegations d ON d.pool_id = p.pool_id AND d.revoked_at_ns IS NULL

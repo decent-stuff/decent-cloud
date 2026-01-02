@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT commission_percent, status FROM reseller_relationships WHERE reseller_pubkey = $1 AND external_provider_pubkey = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "commission_percent",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "fb17358af184b342ac6000159860cbe704616af17e17e702e8ae6955b5e313fc"
+}

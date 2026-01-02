@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                cm.id as \"id!\",\n                cm.contract_id as \"contract_id!\",\n                cm.chatwoot_conversation_id as \"conversation_id!\",\n                c.provider_pubkey as \"provider_pubkey!\",\n                cm.created_at as \"created_at!\"\n            FROM chatwoot_message_events cm\n            JOIN contract_sign_requests c ON encode(c.contract_id, 'hex') = cm.contract_id\n            LEFT JOIN provider_sla_config sla ON sla.provider_pubkey = c.provider_pubkey\n            WHERE cm.sender_type = 'customer'\n              AND cm.sla_breached = 0\n              AND cm.sla_alert_sent = 0\n              AND NOT EXISTS (\n                  SELECT 1 FROM chatwoot_message_events response\n                  WHERE response.chatwoot_conversation_id = cm.chatwoot_conversation_id\n                    AND response.sender_type = 'provider'\n                    AND response.created_at > cm.created_at\n              )\n              AND ($1 - cm.created_at) > COALESCE(sla.response_time_seconds, 14400)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "conversation_id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "provider_pubkey!",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9ffe5462e707784cd4e618c67300be857ba2ea26f1f3f1159ef95ec4435e6711"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE receipt_sequence SET next_number = next_number + 1 WHERE id = 1 RETURNING next_number - 1 as receipt_number",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "receipt_number",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9126124c2a79ebf6126827ede4ccec7821e6d9be776f9488e1df951f38225dda"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET icpay_transaction_id = $1 WHERE contract_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "42124b5ffd5a67b88ec1a3d89a75da393b6fae60abc673adb49fe01def2881d0"
+}
