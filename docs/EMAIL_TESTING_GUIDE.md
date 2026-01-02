@@ -120,7 +120,7 @@ Test that welcome emails are sent when creating accounts:
 2. Complete OAuth registration via the frontend
 3. Check database for queued email:
    ```bash
-   sqlite3 api/test.db "SELECT subject, to_addr, status FROM email_queue ORDER BY created_at DESC LIMIT 1"
+   psql postgres://test:test@localhost:5432/test -c "SELECT subject, to_addr, status FROM email_queue ORDER BY created_at DESC LIMIT 1"
    ```
 
 **Verify:**
@@ -168,12 +168,12 @@ This will:
 
 2. **Check Email Queue:**
    ```bash
-   sqlite3 api/test.db "SELECT subject, email_type, status FROM email_queue WHERE email_type='recovery' ORDER BY created_at DESC LIMIT 1"
+   psql postgres://test:test@localhost:5432/test -c "SELECT subject, email_type, status FROM email_queue WHERE email_type='recovery' ORDER BY created_at DESC LIMIT 1"
    ```
 
 3. **Get Token from Database** (simulating email click):
    ```bash
-   sqlite3 api/test.db "SELECT hex(token) FROM recovery_tokens ORDER BY created_at DESC LIMIT 1"
+   psql postgres://test:test@localhost:5432/test -t -c "SELECT encode(token, 'hex') FROM recovery_tokens ORDER BY created_at DESC LIMIT 1"
    ```
 
 4. **Complete Recovery:**
@@ -267,7 +267,7 @@ cargo run --bin test-email -- --to admin@decent-cloud.org --with-dkim
 
 3. Check email queue for errors:
    ```bash
-   sqlite3 api/test.db "SELECT subject, status, attempts, last_error FROM email_queue WHERE status='pending' OR status='failed'"
+   psql postgres://test:test@localhost:5432/test -c "SELECT subject, status, attempts, last_error FROM email_queue WHERE status='pending' OR status='failed'"
    ```
 
 ### DKIM Not Validating
@@ -307,18 +307,18 @@ Before deploying to production:
 After deployment, monitor:
 
 1. **Email Queue Status:**
-   ```sql
-   SELECT status, COUNT(*) FROM email_queue GROUP BY status;
+   ```bash
+   psql $DATABASE_URL -c "SELECT status, COUNT(*) FROM email_queue GROUP BY status;"
    ```
 
 2. **Failed Emails:**
-   ```sql
-   SELECT subject, to_addr, last_error FROM email_queue WHERE status='failed';
+   ```bash
+   psql $DATABASE_URL -c "SELECT subject, to_addr, last_error FROM email_queue WHERE status='failed';"
    ```
 
 3. **Email Send Rate:**
-   ```sql
-   SELECT COUNT(*) FROM email_queue WHERE sent_at > datetime('now', '-1 hour');
+   ```bash
+   psql $DATABASE_URL -c "SELECT COUNT(*) FROM email_queue WHERE sent_at > NOW() - INTERVAL '1 hour';"
    ```
 
 Set up alerts for:

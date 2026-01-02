@@ -727,6 +727,129 @@ All core features have been implemented and tested. See below for actual file lo
 
 ## Task Log
 
+### 2026-01-03: Update test scripts and documentation to use PostgreSQL
+
+**Artifacts:**
+- `scripts/test-account-recovery.sh` - Account recovery E2E test script
+- `docs/development.md` - PostgreSQL setup section
+- `website/tests/e2e/README.md` - E2E test database setup
+
+**Changes:**
+- Updated test scripts to use PostgreSQL connection string: `postgres://test:test@localhost:5432/test`
+- Documented PostgreSQL local development setup in development guide (lines 95-162)
+- Added database cleanup instructions for E2E tests using `psql` commands
+- Documented automatic PostgreSQL startup via `docker compose up -d postgres`
+- Added test data cleanup: `DELETE FROM accounts WHERE username ~ '^t[0-9]'`
+- Added migration run command: `DATABASE_URL=... sqlx migrate run --source api/migrations_pg`
+
+**Impact:**
+- Clear PostgreSQL setup path for local development and testing
+- Consistent database connection strings across all scripts
+- Easy test data cleanup between runs
+- Standardized database reset procedures
+
+### 2026-01-03: Create docker-compose-health.sh helper script
+
+**Artifact:** `scripts/docker-compose-health.sh`
+
+**Changes:**
+- Created health check script for Docker Compose services
+- Waits for service to become healthy with configurable timeout (default 60s)
+- PostgreSQL-specific check: uses `pg_isready -U test -d test`
+- Generic fallback: checks container health status via docker compose ps
+- Validates service is running before polling
+- Returns 0 on healthy, 1 on timeout/failure with helpful error messages
+
+**Usage:**
+```bash
+./scripts/docker-compose-health.sh postgres 30  # Wait 30s for postgres
+```
+
+**Impact:**
+- Improves local development DX: scripts can wait for PostgreSQL before proceeding
+- Makesfile integration: replaces inline health checks with reusable script
+- Better error messages: guides users to check logs/status on failure
+
+### 2026-01-03: Document PostgreSQL requirement in API .env.example
+
+**Artifact:** `api/.env.example`
+
+**Changes:**
+- Added comprehensive PostgreSQL documentation header with local development setup instructions
+- Documented docker compose workflow: `docker compose up -d postgres` connects to `postgres://test:test@localhost:5432/test`
+- Added hostname guidance: use `postgres` (not `localhost`) when running API from within Docker
+- Provided clear connection string format and production example
+
+**Impact:**
+- Clear setup path for local development (docker compose)
+- Production-ready example format
+- Prevents connection errors from incorrect hostnames
+
+### 2026-01-03: Add postgres-start task to Makefile.toml
+
+**Artifacts:**
+- `Makefile.toml`
+
+**Changes:**
+- Added `[tasks.postgres-start]` task with robust Docker Compose integration
+- Starts PostgreSQL with port conflict detection (clear error if port 5432 in use)
+- Waits for PostgreSQL to be healthy (30s timeout with pg_isready checks)
+- Integrated as `init_task` - runs automatically before any cargo command
+- Integrated into `dfx-start` dependencies (ensures DB ready before DFX)
+- Integrated into build/test dependencies (format, clippy, build, test)
+
+**Implementation Details:**
+- Starts postgres via `docker compose up -d postgres`
+- Port conflict detection: catches "port is already allocated" errors
+- Health check: loops with `pg_isready -U test -d test` until ready
+- Timeout: 30 seconds with helpful error message on failure
+- Exit codes: proper error propagation for failures
+
+**Impact:**
+- Zero-configuration local development - PostgreSQL starts automatically
+- No manual `docker compose up` needed before running tests
+- Better DX: `makers clippy` just works
+- Prevents "connection refused" errors in tests
+- Automatic cleanup via existing `cleanup` task (dfx-stop + postgres-stop)
+
+### 2026-01-03: Add postgres-stop task to Makefile.toml
+
+**Artifacts:**
+- `Makefile.toml`
+
+**Changes:**
+- Added `[tasks.postgres-stop]` task to stop PostgreSQL via `docker compose down`
+- Integrated into `cleanup` task (runs after dfx-stop)
+- Configured `end_task` and `on_error_task` to use cleanup for automatic teardown
+
+**Impact:**
+- Automatic PostgreSQL cleanup on build completion/error
+- Prevents orphaned Docker containers
+- Complements postgres-start/dfx-start/dfx-stop lifecycle
+
+### 2026-01-03: Create docker-compose.yml for local development with PostgreSQL
+
+**Artifacts:**
+- `docker-compose.yml`
+
+**Changes:**
+Added PostgreSQL 16-alpine service for local development:
+- Port 5432 exposed (test/test/test credentials)
+- Health check with pg_isready
+- Persistent volume for data
+- Custom bridge network for service isolation
+
+**Usage:**
+```bash
+docker-compose up -d  # Start PostgreSQL
+# Connect: postgresql://test:test@localhost:5432/test
+```
+
+**Impact:**
+- Local development environment standardized
+- No external PostgreSQL dependency
+- Easy testing with `docker-compose up`
+
 ### 2026-01-02: Replace identity.expect() with proper error handling in CLI commands
 
 **Artifacts:**
@@ -885,6 +1008,48 @@ Removed unnecessary `.clone()` operations in performance-critical database funct
 - Improved cache locality and reduced heap allocations
 - No clippy clone warnings
 - No consecutive `.clone().clone()` patterns in codebase
+
+### 2026-01-03: Fix clippy-canister task to work independently of postgres
+
+**Artifacts:**
+- `Makefile.toml` - Updated clippy-canister task
+- `ic-canister/Cargo.toml` - Added getrandom dependency with js feature
+- `.cargo/config.toml` - Removed incorrect SQLX_OFFLINE config
+- `ic-canister/README.md` - Added development tasks documentation
+
+**Changes:**
+- Removed `--tests` flag from clippy-canister task (tests run on host, not wasm32)
+- Added `getrandom = { version = "0.2", features = ["js"] }` to ic-canister dependencies
+- Removed incorrect `SQLX_OFFLINE=true` from `.cargo/config.toml` [profile.release] section
+- Documented that IC canister code is completely independent from API server and PostgreSQL
+- Added clippy and test usage instructions to ic-canister README
+
+**Technical Details:**
+The clippy-canister task had two issues:
+1. **Transitive dependency conflict**: Test dependencies like `pocket-ic` pull in `tokio`, which doesn't support wasm32
+2. **getrandom wasm32 incompatibility**: Multiple dependencies (ring, rand_core) use getrandom without js feature
+
+**Solution:**
+- Removed `--tests` flag since canister tests run on host architecture via pocket-ic
+- Added getrandom with js feature to satisfy wasm32 compilation requirements
+- Task now depends only on `dfx-start`, not `sqlx-prepare` (unlike regular `clippy` task)
+
+**Verification:**
+```bash
+# Task works independently
+makers clippy-canister
+# Output: Finished `dev` profile [unoptimized + debuginfo] target(s)
+
+# Dependency chain is clean
+# clippy-canister → dfx-start → postgres-start (for dfx environment only)
+# clippy → sqlx-prepare + dfx-start (needs postgres for API code)
+```
+
+**Impact:**
+- clippy-canister task now works correctly for wasm32 target
+- Clear separation: canister code (no DB) vs API server code (PostgreSQL)
+- Developers can lint canister code without postgres running (only dfx needed)
+- Proper documentation prevents confusion about canister dependencies
 
 ---
 

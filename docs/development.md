@@ -92,9 +92,78 @@ python3 scripts/setup-python-env.py
 
 This will create a virtual environment and install all necessary dependencies.
 
+7. **PostgreSQL Database**
+
+PostgreSQL is required for local development and is automatically started when running `cargo make` tasks.
+
+**Automatic Startup (Recommended):**
+
+PostgreSQL is started automatically via `docker compose up postgres` by the Makefile.toml `postgres-start` task. This is configured as the `init_task`, so it runs before any development tasks.
+
+```bash
+# PostgreSQL starts automatically when you run:
+cargo make
+# Or any cargo make task like:
+cargo make clippy
+cargo make test
+```
+
+**Manual PostgreSQL Control:**
+
+```bash
+# Start PostgreSQL manually
+docker compose up -d postgres
+
+# Check if PostgreSQL is running
+docker compose ps postgres
+
+# Stop PostgreSQL
+docker compose down
+```
+
+**Connection Details:**
+
+- Host: `localhost`
+- Port: `5432`
+- User: `test`
+- Password: `test`
+- Database: `test`
+- Connection URL: `postgres://test:test@localhost:5432/test`
+
+**Verify Connection:**
+
+```bash
+psql postgres://test:test@localhost:5432/test -c "SELECT 1;"
+```
+
+**Run Migrations:**
+
+```bash
+DATABASE_URL=postgres://test:test@localhost:5432/test sqlx migrate run --source api/migrations_pg
+```
+
+**Troubleshooting PostgreSQL:**
+
+- **Port already in use**: Check if another PostgreSQL instance is running on port 5432
+  ```bash
+  # Check what's using port 5432
+  sudo lsof -i :5432
+  ```
+
+- **Connection refused**: Ensure PostgreSQL container is running
+  ```bash
+  docker compose ps postgres
+  # Should show "Up" status
+  ```
+
+- **Reset database**: Drop and recreate schema
+  ```bash
+  psql postgres://test:test@localhost:5432/test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+  ```
+
 ### Docker Setup for Volume Permissions
 
-The API service uses Docker volumes to persist the SQLite database. To ensure proper file permissions, the container's `appuser` UID/GID can be configured at build time.
+The API service can use Docker volumes to persist the PostgreSQL database data. To ensure proper file permissions, the container's UID/GID can be configured at build time.
 
 **Default Configuration:**
 By default, the API container uses UID/GID 1000:1000, which matches most single-user Linux systems.
@@ -296,7 +365,7 @@ During development, emails are queued in the database but won't be sent unless y
 
 ```bash
 # Check queued emails in the database
-sqlite3 data/api-data-dev/ledger.db "SELECT * FROM email_queue;"
+psql postgres://test:test@localhost:5432/test -c "SELECT * FROM email_queue;"
 ```
 
 ## Stripe Configuration
