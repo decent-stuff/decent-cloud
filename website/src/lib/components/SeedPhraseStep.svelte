@@ -98,7 +98,7 @@
 			<button
 				type="button"
 				onclick={() => chooseMode('generate')}
-				class="p-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-xl text-left transition-all group"
+				class="p-6 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-xl text-left transition-all group"
 			>
 				<div class="text-3xl mb-2">✨</div>
 				<h4 class="text-xl font-bold text-white mb-1">Generate New</h4>
@@ -108,7 +108,7 @@
 			<button
 				type="button"
 				onclick={() => chooseMode('import')}
-				class="p-6 bg-white/5 hover:bg-white/10 border border-white/20 rounded-xl text-left transition-all group"
+				class="p-6 bg-glass/5 hover:bg-glass/10 border border-glass/15 rounded-xl text-left transition-all group"
 			>
 				<div class="text-3xl mb-2">🔑</div>
 				<h4 class="text-xl font-bold text-white mb-1">Import Existing</h4>
@@ -120,7 +120,7 @@
 			<button
 				type="button"
 				onclick={onBack}
-				class="w-full px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+				class="w-full px-4 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
 			>
 				Back
 			</button>
@@ -137,10 +137,10 @@
 		</p>
 
 		<!-- Seed phrase display with 12 boxes -->
-		<div class="p-4 bg-black/40 border border-white/20 rounded-lg">
+		<div class="p-4 bg-black/40 border border-glass/15 rounded-lg">
 			<div class="grid grid-cols-3 gap-2 text-sm">
 				{#each seedPhrase.split(' ') as word, i}
-					<div class="flex items-center gap-2 p-2 bg-white/5 rounded">
+					<div class="flex items-center gap-2 p-2 bg-glass/5 rounded">
 						<span class="text-white/40 text-xs w-4">{i + 1}.</span>
 						<span class="text-white font-mono">{word}</span>
 					</div>
@@ -152,7 +152,7 @@
 		<button
 			type="button"
 			onclick={copySeedPhrase}
-			class="w-full px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white transition-colors flex items-center justify-center gap-2"
+			class="w-full px-4 py-3 bg-glass/10 hover:bg-glass/15 border border-glass/15 rounded-lg text-white transition-colors flex items-center justify-center gap-2"
 		>
 			<span>📋</span>
 			<span>Copy to Clipboard</span>
@@ -184,7 +184,7 @@
 					type="text"
 					bind:value={deviceName}
 					placeholder="e.g., Laptop, Phone, Work Computer"
-					class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+					class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
 				/>
 			</div>
 		{/if}
@@ -194,7 +194,7 @@
 			<input
 				type="checkbox"
 				bind:checked={seedBackedUp}
-				class="mt-1 w-5 h-5 rounded border-white/20 bg-white/5 text-blue-600 focus:ring-2 focus:ring-blue-500/50"
+				class="mt-1 w-5 h-5 rounded border-glass/15 bg-glass/5 text-primary-600 focus:ring-2 focus:ring-primary-500/50"
 			/>
 			<span class="text-sm text-white/80">
 				I have saved my seed phrase in a secure location
@@ -211,14 +211,14 @@
 			<button
 				type="button"
 				onclick={handleBackClick}
-				class="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+				class="flex-1 px-4 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
 			>
 				Back
 			</button>
 			<button
 				type="button"
 				onclick={confirmSeedBackup}
-				class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 				disabled={!seedBackedUp}
 			>
 				Continue
@@ -244,14 +244,14 @@
 					onpaste={handlePaste}
 					placeholder="word1 word2 word3 ..."
 					rows="4"
-					class="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all font-mono text-sm {showSeedEntry
+					class="w-full px-4 py-3 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all font-mono text-sm {showSeedEntry
 						? ''
 						: 'blur-sm'}"
 				></textarea>
 				<button
 					type="button"
 					onclick={() => (showSeedEntry = !showSeedEntry)}
-					class="absolute top-3 right-3 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs text-white transition-colors"
+					class="absolute top-3 right-3 px-3 py-1 bg-glass/10 hover:bg-glass/15 rounded text-xs text-white transition-colors"
 				>
 					{showSeedEntry ? '🙈 Hide' : '👁️ Show'}
 				</button>
@@ -277,7 +277,7 @@
 					type="text"
 					bind:value={deviceName}
 					placeholder="e.g., Laptop, Phone, Work Computer"
-					class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+					class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
 				/>
 			</div>
 		{/if}
@@ -292,14 +292,14 @@
 			<button
 				type="button"
 				onclick={handleBackClick}
-				class="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+				class="flex-1 px-4 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
 			>
 				Back
 			</button>
 			<button
 				type="button"
 				onclick={continueWithSeed}
-				class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all"
+				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
 			>
 				Continue
 			</button>

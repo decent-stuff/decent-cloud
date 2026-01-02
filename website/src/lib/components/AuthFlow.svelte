@@ -207,10 +207,10 @@
 
 			<div class="relative">
 				<div class="absolute inset-0 flex items-center">
-					<div class="w-full border-t border-white/20"></div>
+					<div class="w-full border-t border-glass/15"></div>
 				</div>
 				<div class="relative flex justify-center text-sm">
-					<span class="px-2 bg-gray-900 text-white/60">OR</span>
+					<span class="px-2 bg-surface text-white/60">OR</span>
 				</div>
 			</div>
 
@@ -230,7 +230,7 @@
 			<p class="text-white/60">Looking up your account...</p>
 			<div class="flex justify-center">
 				<div
-					class="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"
+					class="w-8 h-8 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin"
 				></div>
 			</div>
 		</div>
@@ -259,7 +259,7 @@
 					bind:value={email}
 					oninput={validateEmail}
 					placeholder="you@example.com"
-					class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+					class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
 					required
 				/>
 				{#if email && !emailValid}
@@ -279,14 +279,14 @@
 				<button
 					type="button"
 					onclick={goBack}
-					class="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+					class="flex-1 px-4 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
 				>
 					Back
 				</button>
 				<button
 					type="button"
 					onclick={registerAndLogin}
-					class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+					class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!usernameValid || !emailValid}
 				>
 					Create Account
@@ -319,7 +319,7 @@
 			<button
 				type="button"
 				onclick={submitOAuthUsername}
-				class="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+				class="w-full px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 				disabled={!usernameValid}
 			>
 				Create Account
@@ -337,7 +337,7 @@
 			<p class="text-white/60">Please wait...</p>
 			<div class="flex justify-center">
 				<div
-					class="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"
+					class="w-8 h-8 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin"
 				></div>
 			</div>
 		</div>
@@ -358,7 +358,7 @@
 			{#if email}
 				<div class="p-4 bg-purple-500/20 border border-purple-500/30 rounded-lg">
 					<p class="text-purple-200 text-sm font-medium">Check your email to verify your account</p>
-					<p class="text-purple-300/80 text-xs mt-1">We sent a verification link to <span class="font-medium">{email}</span></p>
+					<p class="text-primary-300/80 text-xs mt-1">We sent a verification link to <span class="font-medium">{email}</span></p>
 				</div>
 			{/if}
 
@@ -366,7 +366,7 @@
 				<button
 					type="button"
 					onclick={handleSuccess}
-					class="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
 				>
 					Go to Dashboard
 				</button>

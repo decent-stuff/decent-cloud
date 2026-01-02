@@ -1,4 +1,4 @@
-<footer class="py-12 px-4 border-t border-white/10">
+<footer class="py-12 px-4 border-t border-glass/10">
 	<div class="max-w-7xl mx-auto">
 		<div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
 			<div>
@@ -58,7 +58,7 @@
 				</ul>
 			</div>
 		</div>
-		<div class="border-t border-white/10 pt-8 text-center text-white/60">
+		<div class="border-t border-glass/10 pt-8 text-center text-white/60">
 			<p>&copy; 2025 Decent Cloud. Liberal Open Source License.</p>
 		</div>
 	</div>

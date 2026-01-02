@@ -24,9 +24,9 @@
 	}
 </script>
 
-<div class="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+<div class="bg-glass/5 border border-glass/10 rounded-xl overflow-hidden">
 	<table class="w-full text-sm text-left">
-		<thead class="bg-white/5 text-xs text-white/60 uppercase">
+		<thead class="bg-glass/5 text-xs text-white/60 uppercase">
 			<tr>
 				<th scope="col" class="px-6 py-3">Pool</th>
 				<th scope="col" class="px-6 py-3">Pool ID</th>
@@ -51,12 +51,12 @@
 				<tr
 					onclick={() => handleRowClick(pool)}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleRowClick(pool); }}
-					class="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors cursor-pointer"
+					class="border-b border-glass/10 last:border-b-0 hover:bg-glass/5 transition-colors cursor-pointer"
 					role="button"
 					tabindex="0"
 				>
 					<th scope="row" class="px-6 py-4 font-medium text-white whitespace-nowrap">
-						<span class="text-blue-400">
+						<span class="text-primary-400">
 							{pool.name}
 						</span>
 					</th>
@@ -64,12 +64,12 @@
 						{pool.poolId}
 					</td>
 					<td class="px-6 py-4">
-						<span class="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30">
+						<span class="px-2 py-0.5 rounded text-xs bg-primary-500/20 text-primary-300 border border-primary-500/30">
 							{pool.location}
 						</span>
 					</td>
 					<td class="px-6 py-4">
-						<span class="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
+						<span class="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-primary-300 border border-purple-500/30">
 							{pool.provisionerType}
 						</span>
 					</td>
@@ -91,7 +91,7 @@
 						</button>
 						<button
 							onclick={(e) => handleEdit(e, pool)}
-							class="px-3 py-1.5 rounded-lg text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20 transition-colors"
+							class="px-3 py-1.5 rounded-lg text-sm font-medium bg-glass/10 text-white/80 hover:bg-glass/15 transition-colors"
 							title="Edit Pool"
 						>
 							Edit

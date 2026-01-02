@@ -138,7 +138,7 @@
 					<div class="mt-6">
 						<a
 							href="/dashboard/marketplace"
-							class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+							class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
 						>
 							← Back to Marketplace
 						</a>
@@ -154,7 +154,7 @@
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
 			<div
-				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"
+				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
 	{:else if activity}
@@ -171,7 +171,7 @@
 				>
 					{#each activity.offerings_provided as offering}
 						<div
-							class="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20"
+							class="bg-glass/10 backdrop-blur-lg rounded-xl p-4 border border-glass/15"
 						>
 							<h3 class="text-lg font-semibold text-white mb-2">
 								{offering.offer_name}
@@ -208,7 +208,7 @@
 				<div class="space-y-3">
 					{#each activity.rentals_as_requester as contract}
 						<div
-							class="bg-white/10 backdrop-blur-lg rounded-lg p-4 border border-white/20"
+							class="bg-glass/10 backdrop-blur-lg rounded-lg p-4 border border-glass/15"
 						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
@@ -219,7 +219,7 @@
 										Provider:
 										<a
 											href="/dashboard/reputation/{contract.provider_pubkey}"
-											class="text-blue-400 hover:text-blue-300"
+											class="text-primary-400 hover:text-primary-300"
 										>
 											{truncatePubkey(
 												contract.provider_pubkey,
@@ -228,7 +228,7 @@
 									</p>
 								</div>
 								<span
-									class="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400"
+									class="px-3 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400"
 								>
 									{contract.status}
 								</span>
@@ -260,7 +260,7 @@
 				<div class="space-y-3">
 					{#each activity.rentals_as_provider as contract}
 						<div
-							class="bg-white/10 backdrop-blur-lg rounded-lg p-4 border border-white/20"
+							class="bg-glass/10 backdrop-blur-lg rounded-lg p-4 border border-glass/15"
 						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
@@ -271,7 +271,7 @@
 										Requester:
 										<a
 											href="/dashboard/reputation/{contract.requester_pubkey}"
-											class="text-blue-400 hover:text-blue-300"
+											class="text-primary-400 hover:text-primary-300"
 										>
 											{truncatePubkey(
 												contract.requester_pubkey,

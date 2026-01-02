@@ -135,13 +135,13 @@
 			case "active":
 				return { text: "Active", class: "bg-green-500/20 text-green-300 border-green-500/50" };
 			case "trialing":
-				return { text: "Trial", class: "bg-blue-500/20 text-blue-300 border-blue-500/50" };
+				return { text: "Trial", class: "bg-primary-500/20 text-primary-300 border-primary-500/50" };
 			case "past_due":
 				return { text: "Past Due", class: "bg-yellow-500/20 text-yellow-300 border-yellow-500/50" };
 			case "canceled":
 				return { text: "Canceled", class: "bg-red-500/20 text-red-300 border-red-500/50" };
 			default:
-				return { text: status, class: "bg-white/20 text-white/70 border-white/30" };
+				return { text: status, class: "bg-glass/15 text-white/70 border-white/30" };
 		}
 	}
 
@@ -169,7 +169,7 @@
 	{/if}
 
 	{#if !isAuthenticated}
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">⭐</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
@@ -178,21 +178,21 @@
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
 			</div>
 		</div>
 	{:else if loading}
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<p class="text-white/60">Loading subscription...</p>
 		</div>
 	{:else}
 		<!-- Current Subscription -->
 		{#if subscription}
 			{@const badge = getStatusBadge(subscription.status)}
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<div class="flex items-center justify-between mb-4">
 					<h2 class="text-xl font-semibold text-white">Current Plan</h2>
 					<span class="px-3 py-1 rounded-full text-sm border {badge.class}">
@@ -228,11 +228,11 @@
 				</div>
 
 				{#if subscription.stripe_subscription_id}
-					<div class="mt-6 pt-4 border-t border-white/10">
+					<div class="mt-6 pt-4 border-t border-glass/10">
 						<button
 							onclick={handleManageSubscription}
 							disabled={openingPortal}
-							class="px-6 py-2 bg-white/10 border border-white/20 rounded-lg text-white hover:bg-white/20 disabled:opacity-50 transition-colors"
+							class="px-6 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white hover:bg-glass/15 disabled:opacity-50 transition-colors"
 						>
 							{openingPortal ? "Opening..." : "Manage Subscription"}
 						</button>
@@ -245,7 +245,7 @@
 		{/if}
 
 		<!-- Available Plans -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 			<h2 class="text-xl font-semibold text-white mb-6">
 				{subscription?.plan_id === "free" ? "Upgrade Your Plan" : "Available Plans"}
 			</h2>
@@ -259,8 +259,8 @@
 						{@const features = parseFeatures(plan.features)}
 						<div
 							class="p-6 rounded-xl border transition-all {isCurrentPlan
-								? 'bg-blue-500/10 border-blue-500/50'
-								: 'bg-white/5 border-white/20 hover:border-white/40'}"
+								? 'bg-primary-500/10 border-primary-500/50'
+								: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
 						>
 							<h3 class="text-xl font-bold text-white">{plan.name}</h3>
 							{#if plan.description}
@@ -277,7 +277,7 @@
 							</div>
 
 							{#if plan.trialDays > 0}
-								<p class="text-blue-400 text-sm mt-2">
+								<p class="text-primary-400 text-sm mt-2">
 									{plan.trialDays}-day free trial
 								</p>
 							{/if}
@@ -293,7 +293,7 @@
 
 							<div class="mt-6">
 								{#if isCurrentPlan}
-									<span class="inline-block px-4 py-2 bg-blue-500/20 text-blue-300 rounded-lg text-sm">
+									<span class="inline-block px-4 py-2 bg-primary-500/20 text-primary-300 rounded-lg text-sm">
 										Current Plan
 									</span>
 								{:else if plan.id === "free"}
@@ -302,7 +302,7 @@
 										<button
 											onclick={handleManageSubscription}
 											disabled={openingPortal}
-											class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white hover:bg-white/20 disabled:opacity-50 transition-colors"
+											class="w-full px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white hover:bg-glass/15 disabled:opacity-50 transition-colors"
 										>
 											Manage Plan
 										</button>
@@ -311,12 +311,12 @@
 									<button
 										onclick={() => handleUpgrade(plan.id)}
 										disabled={upgrading !== null}
-										class="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-50 transition-all"
+										class="w-full px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-50 transition-all"
 									>
 										{upgrading === plan.id ? "Processing..." : subscription?.plan_id === "free" ? "Upgrade" : "Switch Plan"}
 									</button>
 								{:else}
-									<span class="inline-block px-4 py-2 bg-white/5 text-white/40 rounded-lg text-sm">
+									<span class="inline-block px-4 py-2 bg-glass/5 text-white/40 rounded-lg text-sm">
 										Contact Sales
 									</span>
 								{/if}
@@ -328,7 +328,7 @@
 		</div>
 
 		<!-- Help Section -->
-		<div class="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+		<div class="bg-glass/5 backdrop-blur-lg rounded-xl p-6 border border-glass/10">
 			<h3 class="text-lg font-semibold text-white/80 mb-3">Need Help?</h3>
 			<ul class="text-white/60 text-sm space-y-2">
 				<li>Plans can be upgraded or downgraded at any time.</li>

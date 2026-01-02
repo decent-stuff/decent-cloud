@@ -131,7 +131,7 @@
 	}
 </script>
 
-<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 	<h2 class="text-2xl font-semibold text-white mb-6">Account Overview</h2>
 
 	<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -198,13 +198,13 @@
 
 	<!-- Device Keys Section -->
 	{#if account.publicKeys.length > 0}
-		<div class="mt-6 pt-6 border-t border-white/10">
+		<div class="mt-6 pt-6 border-t border-glass/10">
 			<div class="flex items-center justify-between mb-4">
 				<h3 class="text-lg font-semibold text-white">Devices</h3>
 				<button
 					type="button"
 					onclick={() => (showAddDeviceModal = true)}
-					class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
+					class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-sm rounded-lg transition-colors"
 				>
 					+ Add Device
 				</button>
@@ -212,7 +212,7 @@
 			<div class="space-y-3">
 				{#each account.publicKeys as key}
 					<div
-						class="flex items-center justify-between p-3 bg-white/5 rounded-lg"
+						class="flex items-center justify-between p-3 bg-glass/5 rounded-lg"
 					>
 						<div class="flex items-center gap-3">
 							<span class="text-xl"
@@ -225,7 +225,7 @@
 											type="text"
 											bind:value={editingName}
 											placeholder="Device name"
-											class="px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm w-40"
+											class="px-2 py-1 bg-glass/10 border border-glass/15 rounded text-white text-sm w-40"
 											disabled={saving}
 										/>
 										<button
@@ -241,7 +241,7 @@
 											type="button"
 											onclick={cancelEdit}
 											disabled={saving}
-											class="px-2 py-1 bg-white/10 hover:bg-white/20 text-white text-xs rounded disabled:opacity-50"
+											class="px-2 py-1 bg-glass/10 hover:bg-glass/15 text-white text-xs rounded disabled:opacity-50"
 										>
 											Cancel
 										</button>
@@ -255,7 +255,7 @@
 									<button
 										type="button"
 										onclick={() => startEdit(key)}
-										class="text-white font-medium hover:text-purple-300 transition-colors text-left"
+										class="text-white font-medium hover:text-primary-300 transition-colors text-left"
 										title="Click to edit device name"
 									>
 										{getDeviceName(key)}

@@ -24,7 +24,7 @@ const STATUS_BADGES: Record<string, ContractStatusBadge> = {
 	},
 	pending: {
 		text: 'Pending',
-		class: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+		class: 'bg-primary-500/20 text-primary-400 border-primary-500/30',
 		icon: '🔵'
 	},
 	accepted: {

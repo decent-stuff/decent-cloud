@@ -41,16 +41,16 @@
 	const showEmailVerificationBanner = $derived(isAuthenticated && account && !account.emailVerified);
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
+<div class="min-h-screen bg-base">
 	<!-- Sidebar - always visible -->
 	<DashboardSidebar bind:isOpen={isSidebarOpen} {isAuthenticated} />
 
 	<!-- Mobile header with menu button - always visible -->
-	<header class="fixed top-0 left-0 right-0 h-16 bg-gray-900/95 backdrop-blur-lg border-b border-white/10 flex items-center px-4 md:hidden z-30">
+	<header class="fixed top-0 left-0 right-0 h-16 bg-surface/95 backdrop-blur-lg border-b border-glass/10 flex items-center px-4 md:hidden z-30">
 		<button
 			type="button"
 			onclick={toggleSidebar}
-			class="text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
+			class="text-white p-2 hover:bg-glass/10 rounded-lg transition-colors"
 			aria-label="Toggle menu"
 		>
 			<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

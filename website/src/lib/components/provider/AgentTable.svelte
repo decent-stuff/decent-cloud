@@ -18,12 +18,12 @@
 	}
 </script>
 
-<div class="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-	<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-white/10">
+<div class="bg-glass/5 border border-glass/10 rounded-xl overflow-hidden">
+	<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-glass/10">
 		Agents
 	</h3>
 	<table class="w-full text-sm text-left">
-		<thead class="bg-white/5 text-xs text-white/60 uppercase">
+		<thead class="bg-glass/5 text-xs text-white/60 uppercase">
 			<tr>
 				<th scope="col" class="px-6 py-3">Label</th>
 				<th scope="col" class="px-6 py-3">Status</th>
@@ -42,7 +42,7 @@
 				</tr>
 			{/if}
 			{#each agents as agent (agent.label)}
-				<tr class="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
+				<tr class="border-b border-glass/10 last:border-b-0 hover:bg-glass/5 transition-colors">
 					<th scope="row" class="px-6 py-4 font-medium text-white whitespace-nowrap">
 						{agent.label}
 					</th>

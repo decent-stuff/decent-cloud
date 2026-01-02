@@ -41,7 +41,7 @@
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🔐</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
@@ -50,7 +50,7 @@
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>

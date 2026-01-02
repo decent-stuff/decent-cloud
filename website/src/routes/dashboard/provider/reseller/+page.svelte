@@ -374,7 +374,7 @@
 	</header>
 
 	{#if !isAuthenticated}
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">💼</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
@@ -383,7 +383,7 @@
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
@@ -403,7 +403,7 @@
 
 		{#if loading}
 			<div class="flex justify-center items-center py-12">
-				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"></div>
+				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 			</div>
 		{:else}
 			<!-- Your Reseller Relationships -->
@@ -414,13 +414,13 @@
 				</div>
 
 				{#if relationships.length === 0}
-					<div class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70">
+					<div class="bg-glass/5 border border-glass/10 rounded-xl p-6 text-white/70">
 						You are not reselling for any providers yet. Browse the available providers below to get started.
 					</div>
 				{:else}
 					<div class="space-y-3">
 						{#each relationships as relationship}
-							<div class="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-colors">
+							<div class="bg-glass/5 border border-glass/10 rounded-xl p-6 hover:bg-glass/10 transition-colors">
 								<div class="flex items-center justify-between">
 									<div class="flex-1">
 										<h3 class="text-lg font-semibold text-white">{getProviderName(relationship.external_provider_pubkey)}</h3>
@@ -431,7 +431,7 @@
 													min="0"
 													max="50"
 													bind:value={editCommissionInputs[relationship.external_provider_pubkey]}
-													class="w-24 px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+													class="w-24 px-3 py-1.5 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
 												/>
 												<span class="text-white/70">% commission</span>
 											</div>
@@ -449,14 +449,14 @@
 											</button>
 											<button
 												onclick={() => cancelEdit(relationship.external_provider_pubkey)}
-												class="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white/70 hover:bg-white/20 transition-colors"
+												class="px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white/70 hover:bg-glass/15 transition-colors"
 											>
 												Cancel
 											</button>
 										{:else}
 											<button
 												onclick={() => startEdit(relationship)}
-												class="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-300 hover:bg-blue-500/30 transition-colors"
+												class="px-4 py-2 bg-primary-500/20 border border-primary-500/30 rounded-lg text-primary-300 hover:bg-primary-500/30 transition-colors"
 											>
 												Edit
 											</button>
@@ -485,7 +485,7 @@
 						<select
 							bind:value={orderStatusFilter}
 							onchange={() => handleStatusFilterChange(orderStatusFilter)}
-							class="px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:border-blue-400"
+							class="px-3 py-1.5 bg-glass/10 border border-glass/15 rounded-lg text-white text-sm focus:outline-none focus:border-primary-400"
 						>
 							<option value="pending">Pending</option>
 							<option value="fulfilled">Fulfilled</option>
@@ -495,7 +495,7 @@
 				</div>
 
 				{#if orders.length === 0}
-					<div class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70">
+					<div class="bg-glass/5 border border-glass/10 rounded-xl p-6 text-white/70">
 						No {orderStatusFilter === 'all' ? '' : orderStatusFilter} orders found.
 					</div>
 				{:else}
@@ -503,7 +503,7 @@
 						{#each orders as order}
 							{@const offering = offerings[order.offering_id]}
 							{@const providerName = getProviderName(order.external_provider_pubkey)}
-							<div class="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-colors">
+							<div class="bg-glass/5 border border-glass/10 rounded-xl p-6 hover:bg-glass/10 transition-colors">
 								<div class="flex items-start justify-between">
 									<div class="flex-1 space-y-2">
 										<div class="flex items-center gap-2">
@@ -533,7 +533,7 @@
 										{#if order.status === 'pending'}
 											<button
 												onclick={() => openFulfillModal(order)}
-												class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold hover:brightness-110 transition-all"
+												class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white font-semibold hover:brightness-110 transition-all"
 											>
 												Fulfill Order
 											</button>
@@ -544,7 +544,7 @@
 													externalOrderDetails = order.external_order_details || '';
 													fulfillModalOpen = true;
 												}}
-												class="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white/70 hover:bg-white/20 transition-colors"
+												class="px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white/70 hover:bg-glass/15 transition-colors"
 											>
 												View Details
 											</button>
@@ -565,14 +565,14 @@
 				</div>
 
 				{#if externalProviders.length === 0}
-					<div class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70">
+					<div class="bg-glass/5 border border-glass/10 rounded-xl p-6 text-white/70">
 						No external providers available at this time.
 					</div>
 				{:else}
 					<div class="space-y-3">
 						{#each externalProviders as provider}
 							{@const alreadyReseller = isAlreadyReseller(provider.pubkey)}
-							<div class="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-colors">
+							<div class="bg-glass/5 border border-glass/10 rounded-xl p-6 hover:bg-glass/10 transition-colors">
 								<div class="flex items-center justify-between">
 									<div class="flex-1">
 										<div class="flex items-center gap-3">
@@ -585,7 +585,7 @@
 											{provider.offerings_count} offerings · {provider.domain}
 										</p>
 										{#if provider.website_url}
-											<a href={provider.website_url} target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 text-sm mt-1 inline-block">
+											<a href={provider.website_url} target="_blank" rel="noopener noreferrer" class="text-primary-400 hover:text-primary-300 text-sm mt-1 inline-block">
 												{provider.website_url} ↗
 											</a>
 										{/if}
@@ -599,14 +599,14 @@
 													max="50"
 													bind:value={commissionInputs[provider.pubkey]}
 													placeholder="10"
-													class="w-20 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+													class="w-20 px-3 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
 												/>
 												<span class="text-white/70 text-sm">%</span>
 											</div>
 											<button
 												onclick={() => handleBecomeReseller(provider)}
 												disabled={creatingRelationship[provider.pubkey]}
-												class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold hover:brightness-110 transition-all disabled:opacity-50"
+												class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white font-semibold hover:brightness-110 transition-all disabled:opacity-50"
 											>
 												{creatingRelationship[provider.pubkey] ? "Creating..." : "Become Reseller"}
 											</button>
@@ -630,10 +630,10 @@
 {#if fulfillModalOpen && selectedOrder}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onclick={closeFulfillModal}>
+	<div class="fixed inset-0 bg-base/70 backdrop-blur-sm flex items-center justify-center z-50" onclick={closeFulfillModal}>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="bg-gradient-to-br from-slate-900 to-slate-800 border border-white/20 rounded-2xl p-8 max-w-2xl w-full mx-4 shadow-2xl" onclick={(e) => e.stopPropagation()}>
+		<div class="bg-gradient-to-br from-slate-900 to-slate-800 border border-glass/15 rounded-2xl p-8 max-w-2xl w-full mx-4 shadow-2xl" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center justify-between mb-6">
 				<h3 class="text-2xl font-bold text-white">
 					{selectedOrder.status === 'pending' ? 'Fulfill Order' : 'Order Details'}
@@ -647,7 +647,7 @@
 
 			<div class="space-y-6">
 				<!-- Order Summary -->
-				<div class="bg-white/5 border border-white/10 rounded-lg p-4">
+				<div class="bg-glass/5 border border-glass/10 rounded-lg p-4">
 					<p class="text-white/60 text-sm mb-1">Order ID</p>
 					<p class="text-white font-mono">{selectedOrder.contract_id}</p>
 				</div>
@@ -663,7 +663,7 @@
 							type="text"
 							bind:value={externalOrderId}
 							placeholder="e.g., HZN-12345678"
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-400 transition-colors"
+							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-400 transition-colors"
 						/>
 					</div>
 
@@ -677,7 +677,7 @@
 							bind:value={externalOrderDetails}
 							placeholder={'{\n  "ip": "1.2.3.4",\n  "username": "root",\n  "password": "..."\n}'}
 							rows="8"
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-400 transition-colors font-mono text-sm"
+							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-400 transition-colors font-mono text-sm"
 						></textarea>
 						<p class="text-white/50 text-xs mt-1">Optional: Add instance details like IP, credentials, etc. in JSON format</p>
 					</div>
@@ -687,14 +687,14 @@
 						<button
 							onclick={closeFulfillModal}
 							disabled={fulfillingOrder}
-							class="px-6 py-3 bg-white/10 border border-white/20 rounded-lg text-white/70 hover:bg-white/20 transition-colors disabled:opacity-50"
+							class="px-6 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white/70 hover:bg-glass/15 transition-colors disabled:opacity-50"
 						>
 							Cancel
 						</button>
 						<button
 							onclick={handleFulfillOrder}
 							disabled={fulfillingOrder || !externalOrderId.trim()}
-							class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+							class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 						>
 							{fulfillingOrder ? "Fulfilling..." : "Mark as Fulfilled"}
 						</button>
@@ -704,21 +704,21 @@
 					{#if selectedOrder.external_order_id}
 						<div>
 							<p class="block text-white/80 text-sm font-semibold mb-2">External Order ID</p>
-							<p class="px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white">{selectedOrder.external_order_id}</p>
+							<p class="px-4 py-3 bg-glass/5 border border-glass/10 rounded-lg text-white">{selectedOrder.external_order_id}</p>
 						</div>
 					{/if}
 
 					{#if externalOrderDetails}
 						<div>
 							<p class="block text-white/80 text-sm font-semibold mb-2">Instance Details</p>
-							<pre class="px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white font-mono text-sm overflow-auto max-h-64">{externalOrderDetails}</pre>
+							<pre class="px-4 py-3 bg-glass/5 border border-glass/10 rounded-lg text-white font-mono text-sm overflow-auto max-h-64">{externalOrderDetails}</pre>
 						</div>
 					{/if}
 
 					<div class="flex justify-end pt-4">
 						<button
 							onclick={closeFulfillModal}
-							class="px-6 py-3 bg-white/10 border border-white/20 rounded-lg text-white/70 hover:bg-white/20 transition-colors"
+							class="px-6 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white/70 hover:bg-glass/15 transition-colors"
 						>
 							Close
 						</button>

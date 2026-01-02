@@ -49,7 +49,7 @@
 	<div class="max-w-7xl mx-auto">
 		<h2 class="text-4xl md:text-5xl font-bold text-center mb-4">
 			Your Fears.
-			<span class="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
+			<span class="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-primary-400">
 				Our Guarantees.
 			</span>
 		</h2>
@@ -61,7 +61,7 @@
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 			{#each userFears as item}
 				<div
-					class="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10 hover:border-green-400/50 transition-all"
+					class="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-lg rounded-xl p-6 border border-glass/10 hover:border-green-400/50 transition-all"
 				>
 					<div class="flex items-start gap-4">
 						<div class="text-4xl">{item.icon}</div>

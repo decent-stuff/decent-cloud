@@ -49,8 +49,8 @@
 	// Provider tenure badge helpers
 	function getTenureBadgeColor(tenure: string): string {
 		if (tenure === 'established') return 'bg-green-500/20 border-green-500/50 text-green-300';
-		if (tenure === 'growing') return 'bg-blue-500/20 border-blue-500/50 text-blue-300';
-		return 'bg-purple-500/20 border-purple-500/50 text-purple-300';
+		if (tenure === 'growing') return 'bg-primary-500/20 border-primary-500/50 text-primary-300';
+		return 'bg-purple-500/20 border-purple-500/50 text-primary-300';
 	}
 
 	function getTenureLabel(tenure: string): string {
@@ -94,7 +94,7 @@
 	}
 </script>
 
-<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/10">
 	<!-- Trust Score Header -->
 	<div class="flex items-center justify-between mb-6">
 		<h3 class="text-xl font-bold">Trust Score</h3>
@@ -110,7 +110,7 @@
 
 	<!-- Core Metrics Grid -->
 	<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-		<div class="bg-white/5 rounded-lg p-3">
+		<div class="bg-glass/5 rounded-lg p-3">
 			<div class="text-xs text-white/50 mb-1">Time to Delivery</div>
 			<div class="text-lg font-semibold">
 				{#if metrics.time_to_delivery_hours}
@@ -123,27 +123,27 @@
 			</div>
 		</div>
 
-		<div class="bg-white/5 rounded-lg p-3">
+		<div class="bg-glass/5 rounded-lg p-3">
 			<div class="text-xs text-white/50 mb-1">Completion Rate</div>
 			<div class="text-lg font-semibold">{metrics.completion_rate_pct.toFixed(0)}%</div>
 		</div>
 
-		<div class="bg-white/5 rounded-lg p-3">
+		<div class="bg-glass/5 rounded-lg p-3">
 			<div class="text-xs text-white/50 mb-1">Repeat Customers</div>
 			<div class="text-lg font-semibold">{metrics.repeat_customer_count}</div>
 		</div>
 
-		<div class="bg-white/5 rounded-lg p-3">
+		<div class="bg-glass/5 rounded-lg p-3">
 			<div class="text-xs text-white/50 mb-1">Total Contracts</div>
 			<div class="text-lg font-semibold">{metrics.total_contracts}</div>
 		</div>
 
-		<div class="bg-white/5 rounded-lg p-3">
+		<div class="bg-glass/5 rounded-lg p-3">
 			<div class="text-xs text-white/50 mb-1">Active Value</div>
 			<div class="text-lg font-semibold">{formatValue(metrics.active_contract_value_e9s)}</div>
 		</div>
 
-		<div class="bg-white/5 rounded-lg p-3">
+		<div class="bg-glass/5 rounded-lg p-3">
 			<div class="text-xs text-white/50 mb-1">Last Active</div>
 			<div class="text-lg font-semibold">{formatLastActive(metrics.last_active_ns)}</div>
 		</div>
@@ -167,7 +167,7 @@
 
 	<!-- Critical Flags Section -->
 	{#if metrics.has_critical_flags && metrics.critical_flag_reasons.length > 0}
-		<div class="border-t border-white/10 pt-4">
+		<div class="border-t border-glass/10 pt-4">
 			<h4 class="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
 				<span>&#x26A0;</span> Red Flags Detected
 			</h4>
@@ -186,7 +186,7 @@
 
 	<!-- Response Time Details -->
 	{#if metrics.avg_response_time_hours}
-		<div class="border-t border-white/10 pt-4 mt-4">
+		<div class="border-t border-glass/10 pt-4 mt-4">
 			<div class="text-xs text-white/50 mb-1">Average Response Time</div>
 			<div class="text-sm">
 				{metrics.avg_response_time_hours < 1
@@ -198,7 +198,7 @@
 
 	<!-- Contract Duration Ratio -->
 	{#if metrics.avg_contract_duration_ratio !== undefined}
-		<div class="border-t border-white/10 pt-4 mt-4">
+		<div class="border-t border-glass/10 pt-4 mt-4">
 			<div class="text-xs text-white/50 mb-1">Contract Duration Performance</div>
 			<div class="text-sm">{formatDurationRatio(metrics.avg_contract_duration_ratio)}</div>
 		</div>
@@ -206,7 +206,7 @@
 
 	<!-- No Response Rate with Warning -->
 	{#if metrics.no_response_rate_pct !== undefined}
-		<div class="border-t border-white/10 pt-4 mt-4">
+		<div class="border-t border-glass/10 pt-4 mt-4">
 			<div class="text-xs text-white/50 mb-1">No Response Rate</div>
 			<div class="flex items-center gap-2">
 				<div class="text-sm">{metrics.no_response_rate_pct.toFixed(1)}%</div>
@@ -222,7 +222,7 @@
 
 	<!-- Abandonment Velocity -->
 	{#if metrics.abandonment_velocity !== undefined}
-		<div class="border-t border-white/10 pt-4 mt-4">
+		<div class="border-t border-glass/10 pt-4 mt-4">
 			<div class="text-xs text-white/50 mb-1">Abandonment Velocity</div>
 			<div class="text-xs text-white/40 mb-2">
 				Ratio of recent (30d) to baseline (31-90d) cancellation rate
@@ -254,16 +254,16 @@
 
 	<!-- Support Response Metrics -->
 	{#if responseMetrics}
-		<div class="border-t border-white/10 pt-4 mt-4">
+		<div class="border-t border-glass/10 pt-4 mt-4">
 			<h4 class="text-sm font-semibold mb-3">Support Response</h4>
 			<div class="grid grid-cols-2 gap-3">
-				<div class="bg-white/5 rounded-lg p-3">
+				<div class="bg-glass/5 rounded-lg p-3">
 					<div class="text-xs text-white/50 mb-1">Avg Response Time</div>
 					<div class="text-lg font-semibold">
 						{formatResponseTime(responseMetrics.avgResponseHours)}
 					</div>
 				</div>
-				<div class="bg-white/5 rounded-lg p-3">
+				<div class="bg-glass/5 rounded-lg p-3">
 					<div class="text-xs text-white/50 mb-1">SLA Compliance</div>
 					<div class="text-lg font-semibold {getSlaComplianceColor(responseMetrics.slaCompliancePercent)}">
 						{responseMetrics.slaCompliancePercent.toFixed(0)}%
@@ -290,7 +290,7 @@
 						] as bucket}
 							<div class="flex items-center gap-2">
 								<div class="w-10 text-xs text-white/60">{bucket.label}</div>
-								<div class="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+								<div class="flex-1 h-2 bg-glass/10 rounded-full overflow-hidden">
 									<div
 										class="h-full rounded-full {bucket.pct >= 80 ? 'bg-green-500' : bucket.pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}"
 										style="width: {bucket.pct}%"

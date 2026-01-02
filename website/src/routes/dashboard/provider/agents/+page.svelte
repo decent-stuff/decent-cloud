@@ -207,7 +207,7 @@
 		{#if isAuthenticated && !loading && !showCreateForm}
 			<button
 				onclick={() => { showCreateForm = true; }}
-				class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
+				class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
 			>
 				+ New Pool
 			</button>
@@ -215,7 +215,7 @@
 	</header>
 
 	{#if !isAuthenticated}
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🤖</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
@@ -224,7 +224,7 @@
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
@@ -244,12 +244,12 @@
 
 		{#if loading}
 			<div class="flex justify-center items-center py-12">
-				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"></div>
+				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 			</div>
 		{:else}
 			<!-- Create/Edit Form -->
 			{#if showCreateForm}
-				<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+				<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 					<h2 class="text-xl font-semibold text-white mb-4">
 						{editingPool ? "Edit Pool" : "Create Agent Pool"}
 					</h2>
@@ -261,7 +261,7 @@
 								type="text"
 								bind:value={formName}
 								placeholder="e.g., eu-proxmox"
-								class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+								class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 							/>
 						</div>
 						<div class="grid grid-cols-2 gap-4">
@@ -270,7 +270,7 @@
 								<select
 									id="location"
 									bind:value={formLocation}
-									class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+									class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
 								>
 									{#each LOCATIONS as loc}
 										<option value={loc.code}>{loc.name}</option>
@@ -282,7 +282,7 @@
 								<select
 									id="provisionerType"
 									bind:value={formProvisionerType}
-									class="w-full px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+									class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
 								>
 									{#each PROVISIONER_TYPES as ptype}
 										<option value={ptype}>{ptype}</option>
@@ -294,14 +294,14 @@
 							<button
 								type="button"
 								onclick={resetForm}
-								class="px-4 py-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+								class="px-4 py-2 rounded-lg text-white/70 hover:text-white hover:bg-glass/10 transition-colors"
 							>
 								Cancel
 							</button>
 							<button
 								type="submit"
 								disabled={formSubmitting}
-								class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+								class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
 							>
 								{#if formSubmitting}
 									Saving...

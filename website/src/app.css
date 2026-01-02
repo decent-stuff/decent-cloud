@@ -1,41 +1,45 @@
 @import "tailwindcss";
 
+@theme {
+	/* === Base Colors === */
+	--color-base: #0a0a0a;
+	--color-surface: #141414;
+	--color-surface-elevated: #1e1e1e;
+
+	/* === Primary (Gold/Amber Accent) === */
+	--color-primary-50: #fffbeb;
+	--color-primary-100: #fef3c7;
+	--color-primary-200: #fde68a;
+	--color-primary-300: #fcd34d;
+	--color-primary-400: #fbbf24;
+	--color-primary-500: #f59e0b;
+	--color-primary-600: #d97706;
+	--color-primary-700: #b45309;
+	--color-primary-800: #92400e;
+	--color-primary-900: #78350f;
+
+	/* === Glass === */
+	--color-glass: #ffffff;
+}
+
 @layer base {
 	body {
-		@apply bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 text-white min-h-screen;
+		@apply bg-base text-white min-h-screen;
 	}
 }
 
 @layer utilities {
 	.feature-card {
-		@apply bg-white bg-white/10 p-6 rounded-lg transition-all duration-300;
+		@apply bg-glass/10 p-6 rounded-lg transition-all duration-300;
 	}
 
 	.feature-card:hover {
-		@apply bg-white/20 transform -translate-y-1;
+		@apply bg-glass/15 transform -translate-y-1;
 	}
 
 	.feature-card.active {
-		@apply ring-2 ring-purple-400;
+		@apply ring-2 ring-primary-400;
 	}
-}
-
-@keyframes gradientAnimation {
-	0% {
-		background-position: 0% 50%;
-	}
-	50% {
-		background-position: 100% 50%;
-	}
-	100% {
-		background-position: 0% 50%;
-	}
-}
-
-.bg-animated {
-	background: linear-gradient(135deg, #4c1d95, #312e81, #1e3a8a);
-	background-size: 200% 200%;
-	animation: gradientAnimation 15s ease infinite;
 }
 
 /* Custom scrollbar styles */
@@ -45,30 +49,30 @@
 }
 
 ::-webkit-scrollbar-track {
-	background: rgba(15, 23, 42, 0.6);
+	background: var(--color-surface);
 	border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-	background: rgba(59, 130, 246, 0.5);
+	background: color-mix(in srgb, var(--color-primary-600) 50%, transparent);
 	border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-	background: rgba(59, 130, 246, 0.8);
+	background: color-mix(in srgb, var(--color-primary-500) 80%, transparent);
 }
 
-/* Select dropdown styling - use solid color for cross-browser reliability */
+/* Select dropdown styling */
 select {
 	appearance: none;
-	background-color: #1e1b4b;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' fill-opacity='0.6' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+	background-color: var(--color-surface);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23A3A3A3' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
 	background-repeat: no-repeat;
 	background-position: right 12px center;
 	padding-right: 36px;
 }
 
 select option {
-	background-color: #1e1b4b;
-	color: #fff;
+	background-color: var(--color-surface);
+	color: white;
 }

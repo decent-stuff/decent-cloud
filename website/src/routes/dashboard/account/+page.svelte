@@ -73,7 +73,7 @@
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
 		>
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🔐</span>
@@ -84,7 +84,7 @@
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
@@ -93,7 +93,7 @@
 	{:else if currentIdentity?.account}
 		<!-- Account Overview Card -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<h2 class="text-2xl font-bold text-white mb-4">Account Overview</h2>
 			<div class="space-y-3">
@@ -107,7 +107,7 @@
 					<p class="text-white/70 text-sm">Public Profile</p>
 					<a
 						href="/dashboard/reputation/{currentIdentity.account.username}"
-						class="text-blue-400 hover:text-blue-300 text-sm transition-colors"
+						class="text-primary-400 hover:text-primary-300 text-sm transition-colors"
 					>
 						View My Reputation →
 					</a>
@@ -142,19 +142,19 @@
 
 		<!-- Settings -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<h2 class="text-xl font-semibold text-white mb-4">Settings</h2>
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{#each settingsTabs as tab}
 					<a
 						href={tab.href}
-						class="flex items-center gap-4 p-6 bg-white/5 rounded-lg border border-white/20 hover:bg-white/10 hover:border-blue-500/50 transition-all group"
+						class="flex items-center gap-4 p-6 bg-glass/5 rounded-lg border border-glass/15 hover:bg-glass/10 hover:border-primary-500/50 transition-all group"
 					>
 						<span class="text-4xl">{tab.icon}</span>
 						<div>
 							<h3
-								class="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors"
+								class="text-lg font-semibold text-white group-hover:text-primary-400 transition-colors"
 							>
 								{tab.label}
 							</h3>

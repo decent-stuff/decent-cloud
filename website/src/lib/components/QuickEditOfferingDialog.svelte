@@ -160,17 +160,17 @@
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-base/70 backdrop-blur-sm p-4"
 		onclick={(e) => e.target === e.currentTarget && handleClose()}
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
 	>
 		<div
-			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-white/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-glass/15 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
 		>
 			<!-- Header -->
-			<div class="flex items-center justify-between p-6 border-b border-white/10">
+			<div class="flex items-center justify-between p-6 border-b border-glass/10">
 				<div>
 					<h2 class="text-2xl font-bold text-white">Quick Edit Offering</h2>
 					<p class="text-white/60 text-sm mt-1">
@@ -204,7 +204,7 @@
 						id="offer-name"
 						type="text"
 						bind:value={offerName}
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 						placeholder="e.g. Basic Virtual Machine"
 						disabled={saving}
 					/>
@@ -219,7 +219,7 @@
 						id="description"
 						bind:value={description}
 						rows="3"
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+						class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
 						placeholder="Describe your offering..."
 						disabled={saving}
 					></textarea>
@@ -237,7 +237,7 @@
 							bind:value={monthlyPrice}
 							step="0.01"
 							min="0"
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 							disabled={saving}
 						/>
 					</div>
@@ -251,7 +251,7 @@
 							bind:value={setupFee}
 							step="0.01"
 							min="0"
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 							disabled={saving}
 						/>
 					</div>
@@ -266,7 +266,7 @@
 						<select
 							id="stock-status"
 							bind:value={stockStatus}
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 							disabled={saving}
 						>
 							<option value="in_stock">In Stock</option>
@@ -281,7 +281,7 @@
 						<select
 							id="visibility"
 							bind:value={visibility}
-							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 							disabled={saving}
 						>
 							<option value="public">Public</option>
@@ -299,8 +299,8 @@
 				{/if}
 
 				<!-- Info Note -->
-				<div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-					<p class="text-blue-400 text-sm">
+				<div class="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4">
+					<p class="text-primary-400 text-sm">
 						<strong>Note:</strong> This quick editor only shows common fields. To edit all fields
 						(hardware specs, location, etc.), use the "Edit Offerings" spreadsheet editor.
 					</p>
@@ -308,17 +308,17 @@
 			</div>
 
 			<!-- Footer Actions -->
-			<div class="flex items-center justify-end gap-3 p-6 border-t border-white/10">
+			<div class="flex items-center justify-end gap-3 p-6 border-t border-glass/10">
 				<button
 					onclick={handleClose}
-					class="px-6 py-3 bg-white/10 rounded-lg font-medium hover:bg-white/20 transition-all"
+					class="px-6 py-3 bg-glass/10 rounded-lg font-medium hover:bg-glass/15 transition-all"
 					disabled={saving}
 				>
 					Cancel
 				</button>
 				<button
 					onclick={handleSave}
-					class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 					disabled={saving}
 				>
 					{#if saving}

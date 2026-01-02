@@ -50,7 +50,7 @@
 				class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold leading-tight animate-fade-in"
 			>
 				Welcome to <br />
-				<span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+				<span class="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-primary-500">
 					Decent Cloud
 				</span>
 			</h1>
@@ -69,7 +69,7 @@
 			<div class="mt-8 justify-center md:justify-start">
 				<a
 					href="/dashboard/marketplace"
-					class="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full font-extrabold text-lg md:text-xl hover:brightness-110 hover:shadow-2xl hover:scale-105 transition-all"
+					class="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full font-extrabold text-lg md:text-xl hover:brightness-110 hover:shadow-2xl hover:scale-105 transition-all"
 				>
 					<span>🚀 Open Marketplace</span>
 				</a>

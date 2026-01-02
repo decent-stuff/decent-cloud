@@ -70,14 +70,14 @@
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
 			<div
-				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"
+				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
 	{:else}
 		<!-- Stats Summary -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-white/70 text-sm font-medium">
@@ -92,7 +92,7 @@
 			</div>
 
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-white/70 text-sm font-medium">
@@ -107,7 +107,7 @@
 			</div>
 
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-white/70 text-sm font-medium">
@@ -124,11 +124,11 @@
 
 		<!-- Validators Table -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 overflow-hidden"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl border border-glass/15 overflow-hidden"
 		>
 			<div class="overflow-x-auto">
 				<table class="w-full">
-					<thead class="bg-white/5 border-b border-white/10">
+					<thead class="bg-glass/5 border-b border-glass/10">
 						<tr>
 							<th
 								class="px-6 py-4 text-left text-sm font-semibold text-white"
@@ -160,11 +160,11 @@
 							</tr>
 						{:else}
 							{#each validators as validator}
-								<tr class="hover:bg-white/5 transition-colors">
+								<tr class="hover:bg-glass/5 transition-colors">
 									<td class="px-6 py-4">
 										<div class="flex items-center gap-3">
 											<div
-												class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold"
+												class="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold"
 											>
 												{validator.name
 													? validator.name
@@ -183,7 +183,7 @@
 													href="/dashboard/reputation/{getPubkeyString(
 														validator.pubkey,
 													)}"
-													class="text-white/50 hover:text-blue-400 text-sm font-mono transition-colors"
+													class="text-white/50 hover:text-primary-400 text-sm font-mono transition-colors"
 												>
 													{formatPubkey(
 														validator.pubkey,
@@ -249,7 +249,7 @@
 												href={validator.websiteUrl}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="text-blue-400 hover:text-blue-300 text-xs ml-2"
+												class="text-primary-400 hover:text-primary-300 text-xs ml-2"
 											>
 												website →
 											</a>
@@ -265,7 +265,7 @@
 
 		<!-- Become a Validator CTA -->
 		<div
-			class="bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-xl p-8 border border-blue-500/30"
+			class="bg-gradient-to-r from-primary-500/20 to-primary-600/20 rounded-xl p-8 border border-primary-500/30"
 		>
 			<h2 class="text-2xl font-bold text-white mb-2">
 				Become a Validator
@@ -277,7 +277,7 @@
 				href="https://decent-stuff.github.io/decent-cloud/mining-and-validation.html"
 				target="_blank"
 				rel="noopener noreferrer"
-				class="inline-block px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
+				class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
 			>
 				Learn More →
 			</a>

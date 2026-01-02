@@ -20,7 +20,7 @@
 {#if open}
 	<!-- Backdrop -->
 	<div
-		class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+		class="fixed inset-0 bg-base/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
 		onclick={(e) => {
 			if (e.target === e.currentTarget) handleClose();
 		}}
@@ -30,7 +30,7 @@
 	>
 		<!-- Dialog -->
 		<div
-			class="bg-gray-900/95 rounded-2xl p-6 md:p-8 max-w-lg w-full border border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto"
+			class="bg-surface/95 rounded-2xl p-6 md:p-8 max-w-lg w-full border border-glass/15 shadow-2xl max-h-[90vh] overflow-y-auto"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"

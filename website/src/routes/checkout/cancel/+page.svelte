@@ -18,8 +18,8 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
-	<div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl max-w-2xl w-full border border-white/20 shadow-2xl p-8">
+<div class="min-h-screen bg-gradient-to-br from-base via-surface to-surface flex items-center justify-center p-4">
+	<div class="bg-gradient-to-br from-base to-gray-800 rounded-2xl max-w-2xl w-full border border-glass/15 shadow-2xl p-8">
 		<div class="text-center">
 			<div class="flex justify-center mb-6">
 				<div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center">
@@ -38,14 +38,14 @@
 			<div class="flex flex-col sm:flex-row gap-3 justify-center">
 				<button
 					onclick={navigateToMarketplace}
-					class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 transition-all text-white"
+					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 transition-all text-white"
 				>
 					Browse Marketplace
 				</button>
 				{#if contractId}
 					<button
 						onclick={navigateToRentals}
-						class="px-6 py-3 bg-white/10 text-white rounded-lg font-semibold hover:bg-white/20 transition-all"
+						class="px-6 py-3 bg-glass/10 text-white rounded-lg font-semibold hover:bg-glass/15 transition-all"
 					>
 						View My Rentals
 					</button>

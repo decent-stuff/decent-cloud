@@ -227,7 +227,7 @@
 		<div class="flex gap-3">
 			<button
 				onclick={() => (showTemplateDialog = true)}
-				class="px-6 py-3 bg-white/10 backdrop-blur rounded-lg font-semibold hover:bg-white/20 transition-all flex items-center gap-2"
+				class="px-6 py-3 bg-glass/10 backdrop-blur rounded-lg font-semibold hover:bg-glass/15 transition-all flex items-center gap-2"
 				title="Download CSV template with example offerings"
 			>
 				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -242,7 +242,7 @@
 			</button>
 			<button
 				onclick={openEditor}
-				class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
+				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
 			>
 				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path
@@ -290,12 +290,12 @@
 
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
-			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"></div>
+			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 		</div>
 	{:else}
 		<!-- Stats Summary -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-white/70 text-sm font-medium">Active Offerings</h3>
 					<span class="text-2xl">📦</span>
@@ -305,7 +305,7 @@
 				</p>
 			</div>
 
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-white/70 text-sm font-medium">Total Offerings</h3>
 					<span class="text-2xl">📊</span>
@@ -313,7 +313,7 @@
 				<p class="text-3xl font-bold text-white">{offerings.length}</p>
 			</div>
 
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<div class="flex items-center justify-between mb-2">
 					<h3 class="text-white/70 text-sm font-medium">Product Types</h3>
 					<span class="text-2xl">🏷️</span>
@@ -330,7 +330,7 @@
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-white/40 transition-all group cursor-pointer"
+					class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 hover:border-white/40 transition-all group cursor-pointer"
 					onclick={() => handleEditClick(offering)}
 				>
 					<!-- Header: Icon and Badges -->
@@ -372,7 +372,7 @@
 					</div>
 
 					<!-- Title -->
-					<h3 class="text-xl font-bold text-white mb-3 group-hover:text-blue-400 transition-colors">
+					<h3 class="text-xl font-bold text-white mb-3 group-hover:text-primary-400 transition-colors">
 						{offering.offer_name}
 					</h3>
 
@@ -395,7 +395,7 @@
 						<div class="flex items-center justify-between text-white/70">
 							<span>Pool</span>
 							{#if offering.resolved_pool_name}
-								<span class="text-blue-400 font-medium">→ {offering.resolved_pool_name}</span>
+								<span class="text-primary-400 font-medium">→ {offering.resolved_pool_name}</span>
 							{:else}
 								<span class="text-amber-400 font-medium">⚠️ No pool</span>
 							{/if}
@@ -416,7 +416,7 @@
 				<p class="text-white/60 mb-6">Create your first cloud service offering to get started</p>
 				<button
 					onclick={openEditor}
-					class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
+					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Create Your First Offering
 				</button>
@@ -445,12 +445,12 @@
 {#if showTemplateDialog}
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div
-		class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+		class="fixed inset-0 bg-base/70 backdrop-blur-sm flex items-center justify-center z-50"
 		onclick={() => (showTemplateDialog = false)}
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div
-			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 max-w-2xl w-full mx-4 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto"
+			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 max-w-2xl w-full mx-4 border border-glass/10 shadow-2xl max-h-[90vh] overflow-y-auto"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<h2 class="text-2xl font-bold text-white mb-4">Select Product Type</h2>
@@ -459,10 +459,10 @@
 				{#each productTypes as productType}
 					<button
 						onclick={() => downloadTemplate(productType.key)}
-						class="p-4 bg-white/10 backdrop-blur rounded-lg border border-white/20 hover:border-white/40 hover:bg-white/20 transition-all text-left group"
+						class="p-4 bg-glass/10 backdrop-blur rounded-lg border border-glass/15 hover:border-white/40 hover:bg-glass/15 transition-all text-left group"
 					>
 						<div class="text-2xl mb-2">{productType.label.split(' ')[0]}</div>
-						<div class="text-white font-medium group-hover:text-blue-400 transition-colors">
+						<div class="text-white font-medium group-hover:text-primary-400 transition-colors">
 							{productType.label.substring(productType.label.indexOf(' ') + 1)}
 						</div>
 						<div class="text-white/50 text-sm mt-1">Download template</div>
@@ -470,15 +470,15 @@
 				{/each}
 			</div>
 			{#if offerings.length === 0}
-				<div class="border-t border-white/10 pt-6">
+				<div class="border-t border-glass/10 pt-6">
 					<p class="text-white/60 mb-4 text-sm">Or start editing with a template:</p>
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 						{#each productTypes as productType}
 							<button
 								onclick={() => openEditorWithTemplate(productType.key)}
-								class="p-3 bg-blue-500/20 backdrop-blur rounded-lg border border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/30 transition-all text-left"
+								class="p-3 bg-primary-500/20 backdrop-blur rounded-lg border border-primary-500/30 hover:border-primary-500/50 hover:bg-primary-500/30 transition-all text-left"
 							>
-								<div class="text-sm text-blue-400 font-medium">
+								<div class="text-sm text-primary-400 font-medium">
 									Edit {productType.label.substring(productType.label.indexOf(' ') + 1)}
 								</div>
 							</button>
@@ -489,7 +489,7 @@
 			<div class="flex justify-end mt-6">
 				<button
 					onclick={() => (showTemplateDialog = false)}
-					class="px-6 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
+					class="px-6 py-2 bg-glass/10 rounded-lg hover:bg-glass/15 transition-colors"
 				>
 					Cancel
 				</button>

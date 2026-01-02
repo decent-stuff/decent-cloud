@@ -56,7 +56,7 @@
 
 {#if isOpen}
 	<div
-		class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center"
+		class="fixed inset-0 bg-base/80 backdrop-blur-sm z-50 flex items-center justify-center"
 		onclick={onClose}
 		onkeydown={(e) => e.key === 'Escape' && onClose()}
 		role="dialog"
@@ -64,7 +64,7 @@
 		tabindex="-1"
 	>
 		<div
-			class="bg-gray-900 border border-white/20 rounded-2xl shadow-lg w-full max-w-2xl m-4 text-white"
+			class="bg-surface border border-glass/15 rounded-2xl shadow-lg w-full max-w-2xl m-4 text-white"
 			onclick={stopPropagation}
 			onkeydown={stopPropagation}
 			role="dialog"
@@ -72,7 +72,7 @@
 			aria-describedby="dialog-description"
 			tabindex="-1"
 		>
-			<header class="p-6 border-b border-white/10">
+			<header class="p-6 border-b border-glass/10">
 				<h2 id="dialog-title" class="text-2xl font-bold">Add Agent to {pool.name}</h2>
 				<p id="dialog-description" class="text-sm text-white/60 mt-1">
 					Generate a one-time setup token for a new agent.
@@ -88,11 +88,11 @@
 							type="text"
 							bind:value={label}
 							placeholder="Optional label (e.g., proxmox-node-5)"
-							class="flex-1 min-w-48 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-sm placeholder-white/40 focus:outline-none focus:border-blue-400"
+							class="flex-1 min-w-48 px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-sm placeholder-white/40 focus:outline-none focus:border-primary-400"
 						/>
 						<select
 							bind:value={expiresHours}
-							class="px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+							class="px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-sm focus:outline-none focus:border-primary-400"
 						>
 							<option value={1}>Expires in 1 hour</option>
 							<option value={6}>Expires in 6 hours</option>
@@ -113,13 +113,13 @@
 				<div>
 					<div class="text-sm font-medium text-white/80 mb-3">Pending Tokens</div>
 					{#if tokens.length === 0}
-						<div class="text-center py-6 text-white/50 text-sm border-2 border-dashed border-white/10 rounded-lg">
+						<div class="text-center py-6 text-white/50 text-sm border-2 border-dashed border-glass/10 rounded-lg">
 							No pending setup tokens for this pool.
 						</div>
 					{:else}
 						<div class="space-y-3">
 							{#each tokens as token}
-								<div class="p-4 bg-white/10 rounded-lg space-y-3">
+								<div class="p-4 bg-glass/10 rounded-lg space-y-3">
 									<div class="flex items-center justify-between gap-3">
 										<div class="min-w-0">
 											<div class="font-mono text-sm text-emerald-300 truncate" title={token.token}>
@@ -141,7 +141,7 @@
 									<!-- One-liner install command -->
 									<div class="bg-black/30 rounded-lg p-3">
 										<div class="text-xs text-white/50 mb-2">Run on your server:</div>
-										<div class="font-mono text-xs text-blue-300 break-all select-all">
+										<div class="font-mono text-xs text-primary-300 break-all select-all">
 											{getInstallCommand(token.token)}
 										</div>
 									</div>
@@ -155,7 +155,7 @@
 										</button>
 										<button
 											onclick={() => copyToClipboard(`dc-agent setup token --token ${token.token} --api-url ${API_BASE_URL}`)}
-											class="px-3 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/70 hover:bg-white/20 transition-colors"
+											class="px-3 py-2 rounded-lg text-sm font-medium bg-glass/10 text-white/70 hover:bg-glass/15 transition-colors"
 											title="Copy manual setup command (if dc-agent already installed)"
 										>
 											Manual
@@ -173,10 +173,10 @@
 
 			</div>
 
-			<footer class="p-4 bg-white/5 text-right">
+			<footer class="p-4 bg-glass/5 text-right">
 				<button
 					onclick={onClose}
-					class="px-6 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors font-medium"
+					class="px-6 py-2 rounded-lg text-white/80 hover:text-white hover:bg-glass/10 transition-colors font-medium"
 				>
 					Close
 				</button>

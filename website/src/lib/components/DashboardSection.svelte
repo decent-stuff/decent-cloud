@@ -60,7 +60,7 @@
 		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
 			{#each stats as stat}
 				<div
-					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-center hover:bg-white/20 transition-all"
+					class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 text-center hover:bg-glass/15 transition-all"
 				>
 					<div class="text-4xl mb-2">{stat.icon}</div>
 					<div class="text-2xl font-bold mb-1">{stat.value}</div>
@@ -72,7 +72,7 @@
 		<div class="mt-12 text-center">
 			<a
 				href="/dashboard/marketplace"
-				class="inline-block px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all"
+				class="inline-block px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all"
 			>
 				View Full Dashboard
 			</a>

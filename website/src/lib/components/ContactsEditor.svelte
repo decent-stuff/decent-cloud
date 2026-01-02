@@ -113,7 +113,7 @@
 	}
 </script>
 
-<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 	<h2 class="text-2xl font-bold text-white mb-4">Contact Information</h2>
 
 	<!-- Contact list -->
@@ -125,7 +125,7 @@
 		{/if}
 		{#each contacts as contact}
 			<div
-				class="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+				class="flex items-center justify-between p-3 bg-glass/5 rounded-lg border border-glass/10"
 			>
 				<div class="text-white">
 					<span class="font-medium text-white/70"
@@ -155,7 +155,7 @@
 	<div class="flex gap-2">
 		<select
 			bind:value={newContact.type}
-			class="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+			class="px-3 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 		>
 			<option value="phone">Phone</option>
 			<option value="telegram">Telegram</option>
@@ -163,13 +163,13 @@
 		<input
 			type="text"
 			bind:value={newContact.value}
-			class="flex-1 px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+			class="flex-1 px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 			placeholder="Contact value"
 		/>
 		<button
 			onclick={handleAdd}
 			disabled={!newContact.value.trim() || loading}
-			class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+			class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 		>
 			Add
 		</button>

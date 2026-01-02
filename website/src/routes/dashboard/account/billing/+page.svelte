@@ -144,7 +144,7 @@
 	</div>
 
 	{#if !isAuthenticated}
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">💳</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
@@ -153,18 +153,18 @@
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
 			</div>
 		</div>
 	{:else if loading}
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<p class="text-white/60">Loading billing settings...</p>
 		</div>
 	{:else}
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 			<h2 class="text-xl font-semibold text-white mb-6">Invoice Information</h2>
 			<p class="text-white/60 text-sm mb-6">
 				This information will be used on your invoices. For businesses, provide your company details and VAT ID to receive proper B2B invoices.
@@ -192,7 +192,7 @@
 						bind:value={billingAddress}
 						rows="3"
 						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
-						class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+						class="w-full px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 					></textarea>
 					<p class="text-white/40 text-xs mt-1">
 						Include company name (if applicable), street, city, postal code, and country
@@ -207,7 +207,7 @@
 						<select
 							id="billingCountryCode"
 							bind:value={billingCountryCode}
-							class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+							class="w-full px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-500"
 						>
 							<option value="">Select country...</option>
 							{#each euCountries as country}
@@ -227,12 +227,12 @@
 								type="text"
 								bind:value={billingVatId}
 								placeholder="123456789"
-								class="flex-1 px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+								class="flex-1 px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 							/>
 							<button
 								onclick={handleValidateVat}
 								disabled={validating || !billingCountryCode || !billingVatId}
-								class="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								class="px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white hover:bg-glass/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								{validating ? "..." : "Verify"}
 							</button>
@@ -256,11 +256,11 @@
 					</div>
 				{/if}
 
-				<div class="pt-4 border-t border-white/10">
+				<div class="pt-4 border-t border-glass/10">
 					<button
 						onclick={handleSave}
 						disabled={saving}
-						class="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+						class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 					>
 						{saving ? "Saving..." : "Save Billing Settings"}
 					</button>
@@ -268,7 +268,7 @@
 			</div>
 		</div>
 
-		<div class="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
+		<div class="bg-glass/5 backdrop-blur-lg rounded-xl p-6 border border-glass/10">
 			<h3 class="text-lg font-semibold text-white/80 mb-3">About VAT and Invoices</h3>
 			<ul class="text-white/60 text-sm space-y-2">
 				<li>Your billing information will appear on all invoices for your purchases.</li>

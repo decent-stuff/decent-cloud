@@ -43,7 +43,7 @@
 	});
 </script>
 
-<div class="min-h-screen bg-gradient-to-b from-gray-900 via-blue-900 to-purple-900 text-white">
+<div class="min-h-screen bg-gradient-to-b from-base via-surface to-surface text-white">
 	<Header />
 	<HeroSection />
 	<FeaturesSection />

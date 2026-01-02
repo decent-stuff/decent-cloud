@@ -226,7 +226,7 @@
 <div class="space-y-6">
 	{#if loading}
 		<div class="text-center py-16">
-			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400 mx-auto"></div>
+			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400 mx-auto"></div>
 		</div>
 	{:else if error}
 		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-300">
@@ -236,13 +236,13 @@
 	{:else if pool}
 		<!-- Header -->
 		<header>
-			<a href="/dashboard/provider/agents" class="text-sm text-blue-400 hover:underline mb-2 block">&larr; Back to all pools</a>
+			<a href="/dashboard/provider/agents" class="text-sm text-primary-400 hover:underline mb-2 block">&larr; Back to all pools</a>
 			<div class="flex flex-wrap items-center justify-between gap-4">
 				<div>
 					<h1 class="text-3xl font-bold text-white">{pool.name}</h1>
 					<div class="flex items-center gap-3 text-sm mt-2">
-						<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">{pool.location}</span>
-						<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">{pool.provisionerType}</span>
+						<span class="px-2 py-0.5 rounded bg-primary-500/20 text-primary-300 border border-primary-500/30">{pool.location}</span>
+						<span class="px-2 py-0.5 rounded bg-purple-500/20 text-primary-300 border border-purple-500/30">{pool.provisionerType}</span>
 					</div>
 				</div>
 				<div>
@@ -258,27 +258,27 @@
 
 		<!-- Stats Cards -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			<div class="bg-white/5 border border-white/10 rounded-xl p-5">
+			<div class="bg-glass/5 border border-glass/10 rounded-xl p-5">
 				<div class="text-sm text-white/60 mb-1">Agents</div>
 				<div class="text-2xl font-semibold text-white">{pool.agentCount}</div>
 			</div>
-			<div class="bg-white/5 border border-white/10 rounded-xl p-5">
+			<div class="bg-glass/5 border border-glass/10 rounded-xl p-5">
 				<div class="text-sm text-white/60 mb-1">Online</div>
 				<div class="text-2xl font-semibold text-green-400">{pool.onlineCount} / {pool.agentCount}</div>
 			</div>
-			<div class="bg-white/5 border border-white/10 rounded-xl p-5">
+			<div class="bg-glass/5 border border-glass/10 rounded-xl p-5">
 				<div class="text-sm text-white/60 mb-1">Active Contracts</div>
 				<div class="text-2xl font-semibold text-white">{pool.activeContracts}</div>
 			</div>
 		</div>
 
 		<!-- Agent Delegations Table -->
-		<div class="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-			<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-white/10">
+		<div class="bg-glass/5 border border-glass/10 rounded-xl overflow-hidden">
+			<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-glass/10">
 				Agent Delegations
 			</h3>
 			<table class="w-full text-sm text-left">
-				<thead class="bg-white/5 text-xs text-white/60 uppercase">
+				<thead class="bg-glass/5 text-xs text-white/60 uppercase">
 					<tr>
 						<th scope="col" class="px-6 py-3">Label</th>
 						<th scope="col" class="px-6 py-3">Agent Pubkey</th>
@@ -297,7 +297,7 @@
 						</tr>
 					{/if}
 					{#each delegations as delegation (delegation.agentPubkey)}
-						<tr class="border-b border-white/10 last:border-b-0 hover:bg-white/5 transition-colors">
+						<tr class="border-b border-glass/10 last:border-b-0 hover:bg-glass/5 transition-colors">
 							<th scope="row" class="px-6 py-4 font-medium text-white whitespace-nowrap">
 								{delegation.label || "No label"}
 							</th>
@@ -307,7 +307,7 @@
 							<td class="px-6 py-4">
 								<div class="flex flex-wrap gap-1">
 									{#each delegation.permissions as perm}
-										<span class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded">
+										<span class="px-1.5 py-0.5 text-xs bg-primary-500/20 text-primary-300 rounded">
 											{perm}
 										</span>
 									{/each}
@@ -333,7 +333,7 @@
 								<div class="flex gap-2">
 									<button
 										onclick={() => handleUpdateLabel(delegation.agentPubkey)}
-										class="px-3 py-1 text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded hover:bg-blue-500/30 transition-colors"
+										class="px-3 py-1 text-xs bg-primary-500/20 text-primary-300 border border-primary-500/30 rounded hover:bg-primary-500/30 transition-colors"
 										title="Edit label"
 									>
 										Edit

@@ -97,7 +97,7 @@
 
 <div class="space-y-6">
 	<div
-		class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+		class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 	>
 		<h2 class="text-2xl font-bold text-white mb-4">Basic Information</h2>
 
@@ -113,7 +113,7 @@
 					id="display-name"
 					type="text"
 					bind:value={profile.displayName}
-					class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 					placeholder="Your display name"
 				/>
 			</div>
@@ -127,7 +127,7 @@
 				<textarea
 					id="bio"
 					bind:value={profile.bio}
-					class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 					rows={4}
 					placeholder="Tell us about yourself"
 				></textarea>
@@ -144,7 +144,7 @@
 					id="avatar-url"
 					type="url"
 					bind:value={profile.avatarUrl}
-					class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 					placeholder="https://example.com/avatar.png"
 				/>
 			</div>
@@ -169,7 +169,7 @@
 		<button
 			onclick={handleSave}
 			disabled={loading}
-			class="mt-6 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+			class="mt-6 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 		>
 			{loading ? "Saving..." : "Save Profile"}
 		</button>

@@ -128,22 +128,22 @@
 {#if isOpen}
 	<button
 		type="button"
-		class="fixed inset-0 bg-black/50 z-40 md:hidden"
+		class="fixed inset-0 bg-base/70 z-40 md:hidden"
 		onclick={closeSidebar}
 		aria-label="Close sidebar"
 	></button>
 {/if}
 
 <aside
-	class="fixed left-0 top-0 h-screen w-64 bg-gray-900/95 backdrop-blur-lg border-r border-white/10 flex flex-col z-50 transition-transform duration-300 {isOpen
+	class="fixed left-0 top-0 h-screen w-64 bg-surface/95 backdrop-blur-lg border-r border-glass/10 flex flex-col z-50 transition-transform duration-300 {isOpen
 		? 'translate-x-0'
 		: '-translate-x-full md:translate-x-0'}"
 >
 	<!-- Logo -->
-	<div class="p-6 border-b border-white/10">
+	<div class="p-6 border-b border-glass/10">
 		<a
 			href="/"
-			class="text-2xl font-bold text-white hover:text-blue-400 transition-colors"
+			class="text-2xl font-bold text-white hover:text-primary-400 transition-colors"
 		>
 			Decent Cloud
 		</a>
@@ -154,7 +154,7 @@
 		<!-- Browse section -->
 		<div class="pb-1 px-3">
 			<div
-				class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+				class="text-xs font-semibold text-glass/40 uppercase tracking-wider"
 			>
 				Browse
 			</div>
@@ -168,8 +168,8 @@
 				href={item.href}
 				onclick={closeSidebar}
 				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
-					? 'bg-blue-600 text-white'
-					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+					? 'bg-primary-600 text-white'
+					: 'text-white/70 hover:bg-glass/10 hover:text-white'}"
 			>
 				<span class="text-lg">{item.icon}</span>
 				<span class="font-medium text-sm">{item.label}</span>
@@ -180,7 +180,7 @@
 			<!-- My Activity section -->
 			<div class="pt-4 pb-1 px-3">
 				<div
-					class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+					class="text-xs font-semibold text-glass/40 uppercase tracking-wider"
 				>
 					My Activity
 				</div>
@@ -193,8 +193,8 @@
 					href={item.href}
 					onclick={closeSidebar}
 					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
-						? 'bg-blue-600 text-white'
-						: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+						? 'bg-primary-600 text-white'
+						: 'text-white/70 hover:bg-glass/10 hover:text-white'}"
 				>
 					<span class="text-lg">{item.icon}</span>
 					<span class="font-medium text-sm">{item.label}</span>
@@ -204,7 +204,7 @@
 			<!-- Provider section - always visible for authenticated users -->
 			<div class="pt-4 pb-1 px-3">
 				<div
-					class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+					class="text-xs font-semibold text-glass/40 uppercase tracking-wider"
 				>
 					Provider
 				</div>
@@ -217,8 +217,8 @@
 				href={providerSetupItem.href}
 				onclick={closeSidebar}
 				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {setupActive
-					? 'bg-blue-600 text-white'
-					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+					? 'bg-primary-600 text-white'
+					: 'text-white/70 hover:bg-glass/10 hover:text-white'}"
 			>
 				<span class="text-lg">{providerSetupItem.icon}</span>
 				<span class="font-medium text-sm"
@@ -241,8 +241,8 @@
 					href="/dashboard/offerings"
 					onclick={closeSidebar}
 					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {offeringsActive
-						? 'bg-blue-600 text-white'
-						: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+						? 'bg-primary-600 text-white'
+						: 'text-white/70 hover:bg-glass/10 hover:text-white'}"
 				>
 					<span class="text-lg">📦</span>
 					<span class="font-medium text-sm">My Offerings</span>
@@ -256,8 +256,8 @@
 						href={item.href}
 						onclick={closeSidebar}
 						class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {isActive
-							? 'bg-blue-600 text-white'
-							: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+							? 'bg-primary-600 text-white'
+							: 'text-white/70 hover:bg-glass/10 hover:text-white'}"
 					>
 						<span class="text-lg">{item.icon}</span>
 						<span class="font-medium text-sm">{item.label}</span>
@@ -270,7 +270,7 @@
 						target="_blank"
 						rel="noopener noreferrer"
 						onclick={closeSidebar}
-						class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-white/70 hover:bg-white/10 hover:text-white"
+						class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-white/70 hover:bg-glass/10 hover:text-white"
 						title="Open Chatwoot support dashboard"
 					>
 						<span class="text-lg">🎧</span>
@@ -287,7 +287,7 @@
 			<!-- Admin section -->
 			<div class="pt-4 pb-1 px-3">
 				<div
-					class="text-xs font-semibold text-white/40 uppercase tracking-wider"
+					class="text-xs font-semibold text-glass/40 uppercase tracking-wider"
 				>
 					Admin
 				</div>
@@ -298,8 +298,8 @@
 				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all {currentPath.startsWith(
 					'/dashboard/admin',
 				)
-					? 'bg-blue-600 text-white'
-					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+					? 'bg-primary-600 text-white'
+					: 'text-white/70 hover:bg-glass/10 hover:text-white'}"
 			>
 				<span class="text-lg">🔧</span>
 				<span class="font-medium text-sm">Admin</span>
@@ -308,13 +308,13 @@
 	</nav>
 
 	<!-- User Section -->
-	<div class="p-4 border-t border-white/10 space-y-2">
+	<div class="p-4 border-t border-glass/10 space-y-2">
 		{#if isAuthenticated}
 			{#if currentIdentity?.account}
 				<a
 					href="/dashboard/account"
 					onclick={closeSidebar}
-					class="block px-4 py-2 text-white/90 hover:text-white transition-colors text-center border-b border-white/10 mb-2"
+					class="block px-4 py-2 text-white/90 hover:text-white transition-colors text-center border-b border-glass/10 mb-2"
 					title="View account settings"
 				>
 					<span class="font-medium"
@@ -328,8 +328,8 @@
 				class="flex items-center gap-3 px-4 py-3 rounded-lg transition-all {currentPath.startsWith(
 					'/dashboard/account',
 				)
-					? 'bg-blue-600 text-white'
-					: 'text-white/70 hover:bg-white/10 hover:text-white'}"
+					? 'bg-primary-600 text-white'
+					: 'text-white/70 hover:bg-glass/10 hover:text-white'}"
 			>
 				<span class="text-xl">⚙️</span>
 				<span class="font-medium">Account</span>
@@ -337,7 +337,7 @@
 			<button
 				type="button"
 				onclick={handleLogout}
-				class="w-full px-4 py-3 text-left rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-all flex items-center gap-3"
+				class="w-full px-4 py-3 text-left rounded-lg text-white/70 hover:bg-glass/10 hover:text-white transition-all flex items-center gap-3"
 			>
 				<span class="text-xl">🚪</span>
 				<span class="font-medium">Logout</span>
@@ -346,7 +346,7 @@
 			<button
 				type="button"
 				onclick={handleLogin}
-				class="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold hover:brightness-110 transition-all flex items-center gap-3 justify-center"
+				class="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold hover:brightness-110 transition-all flex items-center gap-3 justify-center"
 			>
 				<span class="text-xl">🔐</span>
 				<span class="font-medium">Login / Create Account</span>

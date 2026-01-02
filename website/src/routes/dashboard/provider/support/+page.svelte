@@ -447,20 +447,20 @@
 	</div>
 
 	<!-- Section Navigation -->
-	<nav class="flex flex-wrap gap-2 bg-white/5 rounded-lg p-2">
+	<nav class="flex flex-wrap gap-2 bg-glass/5 rounded-lg p-2">
 		<a
 			href="#support"
-			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-glass/10 hover:text-white transition-colors"
 			>Support Portal</a
 		>
 		<a
 			href="#notifications"
-			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-glass/10 hover:text-white transition-colors"
 			>Notifications</a
 		>
 		<a
 			href="#helpcenter"
-			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-glass/10 hover:text-white transition-colors"
 			>Help Center Profile</a
 		>
 	</nav>
@@ -492,7 +492,7 @@
 
 	{#if !isAuthenticated}
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
 		>
 			<span class="text-6xl">⚙️</span>
 			<h2 class="text-2xl font-bold text-white mt-4">Login Required</h2>
@@ -501,7 +501,7 @@
 			</p>
 			<button
 				onclick={handleLogin}
-				class="mt-4 px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
+				class="mt-4 px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
 			>
 				Login / Create Account
 			</button>
@@ -509,14 +509,14 @@
 	{:else if loading}
 		<div class="flex justify-center p-8">
 			<div
-				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"
+				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
 	{:else}
 		<!-- Support Portal Section (moved to top - most frequently accessed) -->
 		<section
 			id="support"
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6 scroll-mt-4"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 space-y-6 scroll-mt-4"
 		>
 			<h2 class="text-2xl font-bold text-white">Support Portal</h2>
 			<p class="text-white/60 text-sm">
@@ -529,12 +529,12 @@
 					href={supportDashboardUrl}
 					target="_blank"
 					rel="noopener noreferrer"
-					class="flex items-start gap-4 p-4 rounded-lg bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 hover:border-blue-400/50 transition-colors group"
+					class="flex items-start gap-4 p-4 rounded-lg bg-gradient-to-br from-primary-500/20 to-primary-600/20 border border-primary-500/30 hover:border-primary-400/50 transition-colors group"
 				>
 					<span class="text-3xl">🎧</span>
 					<div>
 						<h3
-							class="text-white font-semibold group-hover:text-blue-300 transition-colors"
+							class="text-white font-semibold group-hover:text-primary-300 transition-colors"
 						>
 							Support Dashboard <span class="text-xs opacity-50"
 								>↗</span
@@ -570,7 +570,7 @@
 					</a>
 				{:else}
 					<div
-						class="flex items-start gap-4 p-4 rounded-lg bg-white/5 border border-white/10"
+						class="flex items-start gap-4 p-4 rounded-lg bg-glass/5 border border-glass/10"
 					>
 						<span class="text-3xl opacity-50">📝</span>
 						<div>
@@ -587,7 +587,7 @@
 			</div>
 
 			<!-- Portal Account Status -->
-			<div class="bg-white/5 rounded-lg p-4 space-y-4">
+			<div class="bg-glass/5 rounded-lg p-4 space-y-4">
 				<h3 class="text-white font-medium">Portal Account</h3>
 				{#if newPassword}
 					<div
@@ -603,7 +603,7 @@
 							>
 							<button
 								onclick={copyPassword}
-								class="px-4 py-2 bg-white/10 rounded hover:bg-white/20 text-white transition-colors text-sm"
+								class="px-4 py-2 bg-glass/10 rounded hover:bg-glass/15 text-white transition-colors text-sm"
 								>Copy</button
 							>
 						</div>
@@ -637,7 +637,7 @@
 							<button
 								onclick={handlePortalReset}
 								disabled={resetting}
-								class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors disabled:opacity-50"
+								class="px-4 py-2 bg-glass/10 hover:bg-glass/15 rounded-lg text-white text-sm transition-colors disabled:opacity-50"
 								>{resetting
 									? "Resetting..."
 									: "Reset Password"}</button
@@ -646,7 +646,7 @@
 							<button
 								onclick={handlePortalCreate}
 								disabled={creating}
-								class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
+								class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
 								>{creating
 									? "Creating..."
 									: "Create Account"}</button
@@ -661,9 +661,9 @@
 			</div>
 
 			<!-- How to use the support portal -->
-			<details class="bg-white/5 rounded-lg">
+			<details class="bg-glass/5 rounded-lg">
 				<summary
-					class="cursor-pointer p-4 text-white font-medium hover:bg-white/5 rounded-lg transition-colors"
+					class="cursor-pointer p-4 text-white font-medium hover:bg-glass/5 rounded-lg transition-colors"
 					>How to use the Support Portal</summary
 				>
 				<div class="px-4 pb-4 space-y-3 text-white/70 text-sm">
@@ -732,7 +732,7 @@
 									href="https://apps.apple.com/app/chatwoot/id1495796682"
 									target="_blank"
 									rel="noopener"
-									class="text-blue-400 hover:underline"
+									class="text-primary-400 hover:underline"
 									>iOS App Store</a
 								>
 							</li>
@@ -741,7 +741,7 @@
 									href="https://play.google.com/store/apps/details?id=com.chatwoot.app"
 									target="_blank"
 									rel="noopener"
-									class="text-blue-400 hover:underline"
+									class="text-primary-400 hover:underline"
 									>Android Play Store</a
 								>
 							</li>
@@ -760,7 +760,7 @@
 		<!-- Notifications Section -->
 		<section
 			id="notifications"
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6 scroll-mt-4"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 space-y-6 scroll-mt-4"
 		>
 			<h2 class="text-2xl font-bold text-white">Notifications</h2>
 			<p class="text-white/60 text-sm">
@@ -770,8 +770,8 @@
 			<div class="space-y-4">
 				<label
 					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyEmail
-						? 'bg-blue-500/20 border-blue-500/50'
-						: 'bg-white/5 border-white/20 hover:border-white/40'}"
+						? 'bg-primary-500/20 border-primary-500/50'
+						: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
 				>
 					<input
 						type="checkbox"
@@ -801,7 +801,7 @@
 										handleTestChannel("email");
 									}}
 									disabled={testingChannel === "email"}
-									class="mt-2 px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded border border-white/20 text-white/80 disabled:opacity-50"
+									class="mt-2 px-3 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded border border-glass/15 text-white/80 disabled:opacity-50"
 									>{testingChannel === "email"
 										? "Sending..."
 										: "Send Test"}</button
@@ -817,8 +817,8 @@
 
 				<label
 					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyTelegram
-						? 'bg-blue-500/20 border-blue-500/50'
-						: 'bg-white/5 border-white/20 hover:border-white/40'}"
+						? 'bg-primary-500/20 border-primary-500/50'
+						: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
 				>
 					<input
 						type="checkbox"
@@ -846,13 +846,13 @@
 									type="text"
 									bind:value={telegramChatId}
 									placeholder="Chat ID"
-									class="w-full px-3 py-2 bg-black/30 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+									class="w-full px-3 py-2 bg-black/30 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 								/>
 								<p class="text-xs text-white/50">
 									Message <a
 										href="https://t.me/{botUsername}"
 										target="_blank"
-										class="text-blue-400 hover:underline"
+										class="text-primary-400 hover:underline"
 										>@{botUsername}</a
 									> with /start
 								</p>
@@ -864,7 +864,7 @@
 											handleTestChannel("telegram");
 										}}
 										disabled={testingChannel === "telegram"}
-										class="mt-2 px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded border border-white/20 text-white/80 disabled:opacity-50"
+										class="mt-2 px-3 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded border border-glass/15 text-white/80 disabled:opacity-50"
 										>{testingChannel === "telegram"
 											? "Sending..."
 											: "Send Test"}</button
@@ -876,8 +876,8 @@
 
 				<label
 					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifySms
-						? 'bg-blue-500/20 border-blue-500/50'
-						: 'bg-white/5 border-white/20 hover:border-white/40'}"
+						? 'bg-primary-500/20 border-primary-500/50'
+						: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
 				>
 					<input
 						type="checkbox"
@@ -902,7 +902,7 @@
 									type="tel"
 									bind:value={notifyPhone}
 									placeholder="+1 555-123-4567"
-									class="w-full px-3 py-2 bg-black/30 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+									class="w-full px-3 py-2 bg-black/30 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 								/>
 								{#if notifyPhone}<button
 										type="button"
@@ -912,7 +912,7 @@
 											handleTestChannel("sms");
 										}}
 										disabled={testingChannel === "sms"}
-										class="mt-2 px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded border border-white/20 text-white/80 disabled:opacity-50"
+										class="mt-2 px-3 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded border border-glass/15 text-white/80 disabled:opacity-50"
 										>{testingChannel === "sms"
 											? "Sending..."
 											: "Send Test"}</button
@@ -925,7 +925,7 @@
 
 			{#if usage}
 				<div
-					class="grid grid-cols-3 gap-4 text-center bg-white/5 rounded-lg p-4"
+					class="grid grid-cols-3 gap-4 text-center bg-glass/5 rounded-lg p-4"
 				>
 					<div>
 						<div class="text-xl font-bold text-white">
@@ -951,7 +951,7 @@
 			<button
 				onclick={saveNotifications}
 				disabled={savingNotif}
-				class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
 				>{savingNotif ? "Saving..." : "Save Notifications"}</button
 			>
 		</section>
@@ -960,7 +960,7 @@
 		<section id="helpcenter" class="scroll-mt-4">
 			<form onsubmit={saveOnboarding} class="space-y-6">
 				<div
-					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 space-y-6"
+					class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 space-y-6"
 				>
 					<div>
 						<h2 class="text-2xl font-bold text-white">
@@ -981,14 +981,14 @@
 							>
 							{#if accountEmail}
 								<div
-									class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white/80"
+									class="w-full px-4 py-3 bg-glass/5 border border-glass/10 rounded-lg text-white/80"
 								>
 									{accountEmail}
 								</div>
 								<p class="text-white/50 text-xs mt-1">
 									Using your account email. <a
 										href="/dashboard/account/profile"
-										class="text-blue-400 hover:underline"
+										class="text-primary-400 hover:underline"
 										>Change in Profile</a
 									>
 								</p>
@@ -1018,7 +1018,7 @@
 								id="support-hours"
 								bind:value={supportHours}
 								required
-								class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
 							>
 								<option value="">Select...</option>
 								{#each supportHoursOptions as opt}<option
@@ -1032,7 +1032,7 @@
 									type="text"
 									bind:value={customSupportHours}
 									placeholder="e.g., Mon-Fri 9-17 PST"
-									class="w-full mt-2 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+									class="w-full mt-2 px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								/>{/if}
 						</div>
 					</div>
@@ -1110,7 +1110,7 @@
 							<select
 								id="refund-policy"
 								bind:value={refundPolicy}
-								class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
 							>
 								<option value="">Select...</option>
 								{#each refundPolicyOptions as opt}<option
@@ -1124,7 +1124,7 @@
 									type="text"
 									bind:value={customRefundPolicy}
 									placeholder="Describe policy"
-									class="w-full mt-2 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+									class="w-full mt-2 px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								/>{/if}
 						</div>
 						<div>
@@ -1136,7 +1136,7 @@
 							<select
 								id="sla-guarantee"
 								bind:value={slaGuarantee}
-								class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-400"
+								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
 							>
 								<option value="">Select...</option>
 								{#each slaGuaranteeOptions as opt}<option
@@ -1158,21 +1158,21 @@
 								bind:value={usp1}
 								maxlength="200"
 								placeholder="Key differentiator #1"
-								class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 							/>
 							<input
 								type="text"
 								bind:value={usp2}
 								maxlength="200"
 								placeholder="Key differentiator #2"
-								class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 							/>
 							<input
 								type="text"
 								bind:value={usp3}
 								maxlength="200"
 								placeholder="Key differentiator #3"
-								class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 							/>
 						</div>
 					</div>
@@ -1185,13 +1185,13 @@
 							{#if commonIssues.length < 10}<button
 									type="button"
 									onclick={addCommonIssue}
-									class="text-sm px-3 py-1 bg-blue-600 rounded hover:bg-blue-700 text-white"
+									class="text-sm px-3 py-1 bg-primary-600 rounded hover:bg-primary-700 text-white"
 									>Add</button
 								>{/if}
 						</div>
 						{#each commonIssues as issue, i}
 							<div
-								class="border border-white/20 rounded-lg p-3 mb-2 space-y-2"
+								class="border border-glass/15 rounded-lg p-3 mb-2 space-y-2"
 							>
 								<div class="flex justify-between">
 									<span class="text-white/50 text-sm"
@@ -1207,13 +1207,13 @@
 									type="text"
 									bind:value={issue.question}
 									placeholder="Question"
-									class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+									class="w-full px-3 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								/>
 								<textarea
 									bind:value={issue.answer}
 									rows="2"
 									placeholder="Answer"
-									class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+									class="w-full px-3 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								></textarea>
 							</div>
 						{/each}
@@ -1222,7 +1222,7 @@
 					<button
 						type="submit"
 						disabled={savingOnboarding}
-						class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+						class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
 						>{savingOnboarding
 							? "Saving & Publishing..."
 							: "Save & Publish"}</button

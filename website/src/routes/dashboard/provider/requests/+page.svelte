@@ -264,7 +264,7 @@
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->
-		<div class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center">
+		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🤝</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
@@ -273,7 +273,7 @@
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
@@ -294,12 +294,12 @@
 	{#if loading}
 		<div class="flex justify-center items-center py-12">
 			<div
-				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"
+				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
 	{:else}
 		<!-- Auto-Accept Settings Card -->
-		<section class="bg-white/5 border border-white/10 rounded-xl p-6">
+		<section class="bg-glass/5 border border-glass/10 rounded-xl p-6">
 			<div class="flex items-center justify-between">
 				<div>
 					<h3 class="text-lg font-semibold text-white">Auto-Accept Rentals</h3>
@@ -312,7 +312,7 @@
 					onclick={handleAutoAcceptToggle}
 					disabled={autoAcceptUpdating}
 					aria-label={autoAcceptEnabled ? 'Disable auto-accept rentals' : 'Enable auto-accept rentals'}
-					class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed {autoAcceptEnabled ? 'bg-emerald-500' : 'bg-white/20'}"
+					class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed {autoAcceptEnabled ? 'bg-emerald-500' : 'bg-glass/15'}"
 				>
 					<span
 						class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {autoAcceptEnabled ? 'translate-x-5' : 'translate-x-0'}"
@@ -341,7 +341,7 @@
 
 			{#if pendingRequests.length === 0}
 				<div
-					class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70"
+					class="bg-glass/5 border border-glass/10 rounded-xl p-6 text-white/70"
 				>
 					{#if autoAcceptEnabled}
 						No pending requests - auto-accept is handling new rentals automatically.
@@ -381,7 +381,7 @@
 
 			{#if managedContracts.length === 0}
 				<div
-					class="bg-white/5 border border-white/10 rounded-xl p-6 text-white/70"
+					class="bg-glass/5 border border-glass/10 rounded-xl p-6 text-white/70"
 				>
 					No contracts in provisioning stages.
 				</div>
@@ -417,10 +417,10 @@
 					>
 				</div>
 
-				<div class="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+				<div class="bg-glass/5 border border-glass/10 rounded-xl overflow-hidden">
 					<table class="w-full text-sm">
 						<thead>
-							<tr class="border-b border-white/10 text-left">
+							<tr class="border-b border-glass/10 text-left">
 								<th class="px-4 py-3 text-white/60 font-medium">Contract</th>
 								<th class="px-4 py-3 text-white/60 font-medium">Gateway</th>
 								<th class="px-4 py-3 text-white/60 font-medium text-right">Inbound</th>
@@ -430,7 +430,7 @@
 						</thead>
 						<tbody>
 							{#each bandwidthStats as stat}
-								<tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+								<tr class="border-b border-white/5 hover:bg-glass/5 transition-colors">
 									<td class="px-4 py-3 font-mono text-white/80">
 										{stat.contractId.substring(0, 12)}...
 									</td>
@@ -440,7 +440,7 @@
 									<td class="px-4 py-3 text-right text-emerald-400">
 										↓ {formatBytes(stat.bytesIn)}
 									</td>
-									<td class="px-4 py-3 text-right text-blue-400">
+									<td class="px-4 py-3 text-right text-primary-400">
 										↑ {formatBytes(stat.bytesOut)}
 									</td>
 									<td class="px-4 py-3 text-right text-white font-medium">
@@ -450,12 +450,12 @@
 							{/each}
 						</tbody>
 						<tfoot>
-							<tr class="bg-white/5">
+							<tr class="bg-glass/5">
 								<td colspan="2" class="px-4 py-3 text-white/60 font-medium">Total</td>
 								<td class="px-4 py-3 text-right text-emerald-400 font-medium">
 									↓ {formatBytes(bandwidthStats.reduce((sum, s) => sum + s.bytesIn, 0))}
 								</td>
-								<td class="px-4 py-3 text-right text-blue-400 font-medium">
+								<td class="px-4 py-3 text-right text-primary-400 font-medium">
 									↑ {formatBytes(bandwidthStats.reduce((sum, s) => sum + s.bytesOut, 0))}
 								</td>
 								<td class="px-4 py-3 text-right text-white font-bold">

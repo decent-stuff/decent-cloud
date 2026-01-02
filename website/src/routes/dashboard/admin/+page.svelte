@@ -363,30 +363,30 @@
 		{:else}
 			<!-- Email Queue Stats -->
 			{#if stats}
-				<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+				<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 					<h2 class="text-2xl font-bold text-white mb-4">
 						Email Queue Statistics
 					</h2>
 					<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-						<div class="bg-white/5 rounded-lg p-4">
+						<div class="bg-glass/5 rounded-lg p-4">
 							<p class="text-white/70 text-sm">Total</p>
 							<p class="text-white font-bold text-2xl">
 								{stats.total}
 							</p>
 						</div>
-						<div class="bg-white/5 rounded-lg p-4">
+						<div class="bg-glass/5 rounded-lg p-4">
 							<p class="text-white/70 text-sm">Pending</p>
 							<p class="text-yellow-400 font-bold text-2xl">
 								{stats.pending}
 							</p>
 						</div>
-						<div class="bg-white/5 rounded-lg p-4">
+						<div class="bg-glass/5 rounded-lg p-4">
 							<p class="text-white/70 text-sm">Sent</p>
 							<p class="text-green-400 font-bold text-2xl">
 								{stats.sent}
 							</p>
 						</div>
-						<div class="bg-white/5 rounded-lg p-4">
+						<div class="bg-glass/5 rounded-lg p-4">
 							<p class="text-white/70 text-sm">Failed</p>
 							<p class="text-red-400 font-bold text-2xl">
 								{stats.failed}
@@ -397,7 +397,7 @@
 			{/if}
 
 			<!-- Test Email -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<h2 class="text-2xl font-bold text-white mb-4">Send Test Email</h2>
 				<p class="text-white/60 mb-4">
 					Test your email configuration by sending a test email.
@@ -407,13 +407,13 @@
 						type="email"
 						bind:value={testEmailAddress}
 						placeholder="recipient@example.com"
-						class="flex-1 px-4 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+						class="flex-1 px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 						required
 					/>
 					<button
 						type="submit"
 						disabled={sendingTestEmail || !testEmailAddress.trim()}
-						class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+						class="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 					>
 						{sendingTestEmail ? "Sending..." : "Send Test"}
 					</button>
@@ -426,7 +426,7 @@
 			</div>
 
 			<!-- Accounts List -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<h2 class="text-2xl font-bold text-white mb-4">All Accounts</h2>
 
 				{#if accountsError}
@@ -457,7 +457,7 @@
 
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-white/90">
-							<thead class="text-white/70 border-b border-white/20">
+							<thead class="text-white/70 border-b border-glass/15">
 								<tr>
 									<th class="pb-3 px-2">Username</th>
 									<th class="pb-3 px-2">Email</th>
@@ -470,7 +470,7 @@
 							<tbody>
 								{#each accountsList.accounts as account}
 									<tr
-										class="border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors"
+										class="border-b border-glass/10 hover:bg-glass/5 cursor-pointer transition-colors"
 										onclick={() => toggleAccountDetails(account.username)}
 									>
 										<td class="py-3 px-2 font-medium">
@@ -517,7 +517,7 @@
 
 									<!-- Expanded account details row -->
 									{#if expandedAccountUsername === account.username}
-										<tr class="bg-white/5">
+										<tr class="bg-glass/5">
 											<td colspan="6" class="p-4">
 												{#if loadingAccountDetails}
 													<div class="text-white/60 text-center py-4">Loading details...</div>
@@ -551,7 +551,7 @@
 														</div>
 
 														<!-- Email Management -->
-														<div class="border-t border-white/10 pt-4">
+														<div class="border-t border-glass/10 pt-4">
 															<div class="flex items-center gap-4">
 																<div class="flex-1">
 																	<p class="text-white/50 text-sm mb-1">Email</p>
@@ -561,7 +561,7 @@
 																				type="email"
 																				bind:value={newEmail}
 																				placeholder="email@example.com (leave empty to clear)"
-																				class="flex-1 px-3 py-1 bg-white/5 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-500"
+																				class="flex-1 px-3 py-1 bg-glass/5 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 																			/>
 																			<button
 																				type="button"
@@ -575,7 +575,7 @@
 																				type="button"
 																				onclick={cancelEditingEmail}
 																				disabled={updatingEmail}
-																				class="px-3 py-1 text-sm bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+																				class="px-3 py-1 text-sm bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 transition-colors"
 																			>
 																				Cancel
 																			</button>
@@ -586,7 +586,7 @@
 																			<button
 																				type="button"
 																				onclick={startEditingEmail}
-																				class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+																				class="px-2 py-1 text-xs bg-glass/10 text-white rounded hover:bg-glass/15 transition-colors"
 																			>
 																				Edit
 																			</button>
@@ -603,7 +603,7 @@
 																			type="button"
 																			onclick={handleToggleEmailVerified}
 																			disabled={updatingEmailVerified}
-																			class="px-2 py-1 text-xs bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+																			class="px-2 py-1 text-xs bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 transition-colors"
 																		>
 																			{updatingEmailVerified ? "..." : expandedAccountInfo.emailVerified ? "Unverify" : "Verify"}
 																		</button>
@@ -614,7 +614,7 @@
 
 														<!-- Delete Account Section -->
 														{#if !expandedAccountInfo.isAdmin}
-															<div class="border-t border-white/10 pt-4">
+															<div class="border-t border-glass/10 pt-4">
 																{#if showDeleteConfirm}
 																	<div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
 																		<p class="text-red-200 font-medium">Delete Account @{expandedAccountInfo.username}?</p>
@@ -631,7 +631,7 @@
 																				type="text"
 																				bind:value={deleteConfirmUsername}
 																				placeholder="username"
-																				class="flex-1 px-3 py-1 bg-white/5 border border-red-500/30 rounded text-white placeholder-white/40 focus:outline-none focus:border-red-500"
+																				class="flex-1 px-3 py-1 bg-glass/5 border border-red-500/30 rounded text-white placeholder-white/40 focus:outline-none focus:border-red-500"
 																			/>
 																			<button
 																				type="button"
@@ -645,7 +645,7 @@
 																				type="button"
 																				onclick={cancelDeleteAccount}
 																				disabled={deletingAccount}
-																				class="px-4 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 transition-colors"
+																				class="px-4 py-1 bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 transition-colors"
 																			>
 																				Cancel
 																			</button>
@@ -680,7 +680,7 @@
 								type="button"
 								onclick={() => goToAccountsPage(accountsPage - 1)}
 								disabled={accountsPage === 0 || loadingAccounts}
-								class="px-3 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								class="px-3 py-1 bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								Previous
 							</button>
@@ -691,7 +691,7 @@
 								type="button"
 								onclick={() => goToAccountsPage(accountsPage + 1)}
 								disabled={accountsPage >= totalPages - 1 || loadingAccounts}
-								class="px-3 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								class="px-3 py-1 bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								Next
 							</button>
@@ -701,7 +701,7 @@
 			</div>
 
 			<!-- Sent Emails -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<h2 class="text-2xl font-bold text-white mb-4">Sent Emails</h2>
 
 				{#if sentEmails.length === 0}
@@ -711,7 +711,7 @@
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-white/90">
-							<thead class="text-white/70 border-b border-white/20">
+							<thead class="text-white/70 border-b border-glass/15">
 								<tr>
 									<th class="pb-3 px-2">To</th>
 									<th class="pb-3 px-2">Subject</th>
@@ -721,7 +721,7 @@
 							</thead>
 							<tbody>
 								{#each sentEmails as email}
-									<tr class="border-b border-white/10 hover:bg-white/5">
+									<tr class="border-b border-glass/10 hover:bg-glass/5">
 										<td class="py-3 px-2 font-mono text-sm">
 											{email.toAddr}
 										</td>
@@ -741,7 +741,7 @@
 			</div>
 
 			<!-- Failed Emails -->
-			<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 				<div class="flex items-center justify-between mb-4">
 					<h2 class="text-2xl font-bold text-white">Failed Emails</h2>
 					{#if failedEmails.length > 0}
@@ -749,7 +749,7 @@
 							type="button"
 							onclick={handleRetryAll}
 							disabled={retryingAll}
-							class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
 							{retryingAll ? "Retrying..." : "Retry All"}
 						</button>
@@ -763,7 +763,7 @@
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-white/90">
-							<thead class="text-white/70 border-b border-white/20">
+							<thead class="text-white/70 border-b border-glass/15">
 								<tr>
 									<th class="pb-3 px-2">To</th>
 									<th class="pb-3 px-2">Subject</th>
@@ -776,7 +776,7 @@
 							<tbody>
 								{#each failedEmails as email}
 									{@const emailId = computeEmailId(email)}
-									<tr class="border-b border-white/10 hover:bg-white/5">
+									<tr class="border-b border-glass/10 hover:bg-glass/5">
 										<td class="py-3 px-2 font-mono text-sm">
 											{email.toAddr}
 										</td>

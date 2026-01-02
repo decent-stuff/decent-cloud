@@ -40,7 +40,7 @@
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
 			{#each features as feature}
 				<div
-					class="bg-white/10 backdrop-blur-lg rounded-xl p-6 hover:bg-white/20 transition-all hover:scale-105"
+					class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 hover:bg-glass/15 transition-all hover:scale-105"
 				>
 					<div class="text-6xl mb-4">{feature.icon}</div>
 					<h3 class="text-xl font-bold mb-3">{feature.title}</h3>

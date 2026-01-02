@@ -41,7 +41,7 @@
 	<title>Verify Email - Decent Cloud</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
+<div class="min-h-screen bg-gradient-to-br from-base via-surface to-surface flex items-center justify-center p-4">
 	<div class="w-full max-w-lg">
 		<!-- Header -->
 		<div class="text-center mb-8">
@@ -52,7 +52,7 @@
 		</div>
 
 		<!-- Verification Card -->
-		<div class="bg-gray-900/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/20 shadow-2xl">
+		<div class="bg-surface/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-glass/15 shadow-2xl">
 			<!-- Verifying -->
 			{#if currentState === 'verifying'}
 				<div class="space-y-4 text-center py-8">
@@ -61,7 +61,7 @@
 					<p class="text-white/60">Please wait...</p>
 					<div class="flex justify-center">
 						<div
-							class="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"
+							class="w-8 h-8 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin"
 						></div>
 					</div>
 				</div>
@@ -85,7 +85,7 @@
 						<button
 							type="button"
 							onclick={handleGoToDashboard}
-							class="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all"
+							class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
 						>
 							Go to Dashboard
 						</button>
@@ -116,7 +116,7 @@
 						<button
 							type="button"
 							onclick={handleGoToLogin}
-							class="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg text-white font-medium transition-all"
+							class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
 						>
 							Go to Login
 						</button>

@@ -41,7 +41,7 @@
 	<title>Login - Decent Cloud</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center p-4">
+<div class="min-h-screen bg-gradient-to-br from-base via-surface to-surface flex items-center justify-center p-4">
 	<div class="w-full max-w-lg">
 		<!-- Header -->
 		<div class="text-center mb-8">
@@ -52,7 +52,7 @@
 		</div>
 
 		<!-- Auth Flow Card -->
-		<div class="bg-gray-900/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/20 shadow-2xl">
+		<div class="bg-surface/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-glass/15 shadow-2xl">
 			<AuthFlow onSuccess={handleSuccess} />
 		</div>
 

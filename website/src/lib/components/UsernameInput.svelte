@@ -131,8 +131,8 @@
 			: validationState === 'invalid' || validationState === 'taken'
 				? 'text-red-400 border-red-500/30'
 				: validationState === 'validating'
-					? 'text-blue-400 border-blue-500/30'
-					: 'border-white/20'
+					? 'text-primary-400 border-primary-500/30'
+					: 'border-glass/15'
 	);
 </script>
 
@@ -151,7 +151,7 @@
 			autocomplete="off"
 			autocapitalize="off"
 			spellcheck="false"
-			class="w-full px-4 py-3 bg-white/5 border {stateColor} rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+			class="w-full px-4 py-3 bg-glass/5 border {stateColor} rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
 		/>
 
 		{#if stateIcon}
@@ -194,7 +194,7 @@
 					<button
 						type="button"
 						onclick={() => selectSuggestion(suggestion)}
-						class="px-3 py-1 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-sm text-white transition-colors"
+						class="px-3 py-1 bg-glass/10 hover:bg-glass/15 border border-glass/15 rounded-lg text-sm text-white transition-colors"
 					>
 						{suggestion}
 					</button>

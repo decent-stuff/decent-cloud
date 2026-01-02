@@ -13,7 +13,7 @@
 	const normalizedStatus = contract.status.toLowerCase();
 </script>
 
-<div class="bg-white/10 border border-white/15 rounded-xl p-6 space-y-4">
+<div class="bg-glass/10 border border-white/15 rounded-xl p-6 space-y-4">
 	<div class="flex items-start justify-between gap-4">
 		<div>
 			<div class="flex items-center gap-3 mb-1">
@@ -48,7 +48,7 @@
 		<div class="space-y-3">
 			{#if normalizedStatus === "provisioning"}
 				<textarea
-					class="w-full bg-white/10 border border-white/20 rounded-lg text-white p-3"
+					class="w-full bg-glass/10 border border-glass/15 rounded-lg text-white p-3"
 					rows="3"
 					placeholder="Include IP, credentials, and instructions"
 					value={note}
@@ -58,7 +58,7 @@
 			<div class="flex flex-wrap gap-3">
 				{#if normalizedStatus === "accepted"}
 					<button
-						class="px-4 py-2 rounded-lg bg-blue-500/80 text-white font-semibold disabled:opacity-60"
+						class="px-4 py-2 rounded-lg bg-primary-500/80 text-white font-semibold disabled:opacity-60"
 						onclick={() => onUpdateStatus("provisioning")}
 						disabled={busy}
 					>

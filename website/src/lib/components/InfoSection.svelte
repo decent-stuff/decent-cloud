@@ -23,7 +23,7 @@
 				</ul>
 				<a
 					href="/dashboard/marketplace"
-					class="inline-block px-8 py-3 bg-white text-purple-900 rounded-lg font-semibold hover:bg-gray-100 transition-all"
+					class="inline-block px-8 py-3 bg-white text-base rounded-lg font-semibold hover:bg-gray-100 transition-all"
 				>
 					Get Started Now
 				</a>

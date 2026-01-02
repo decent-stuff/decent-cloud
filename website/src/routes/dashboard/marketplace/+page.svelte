@@ -433,7 +433,7 @@
 	<div class="flex flex-col md:flex-row gap-6">
 		<!-- Filters: collapsible on mobile, sidebar on desktop -->
 		<aside class="w-full md:w-56 shrink-0">
-			<div class="bg-white/5 rounded-lg p-4">
+			<div class="bg-glass/5 rounded-lg p-4">
 				<div class="flex items-center justify-between">
 					<button
 						onclick={() => (showFilters = !showFilters)}
@@ -448,7 +448,7 @@
 					</button>
 					<button
 						onclick={clearFilters}
-						class="text-xs text-blue-400 hover:text-blue-300"
+						class="text-xs text-primary-400 hover:text-primary-300"
 						>Clear</button
 					>
 				</div>
@@ -474,7 +474,7 @@
 										type="checkbox"
 										checked={selectedTypes.has(opt.key)}
 										onchange={() => toggleType(opt.key)}
-										class="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
+										class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
 									/>
 									<span
 										class="text-sm text-white/80 group-hover:text-white"
@@ -498,14 +498,14 @@
 								placeholder="Min"
 								bind:value={minPrice}
 								onchange={handleFilterChange}
-								class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+								class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 							/>
 							<input
 								type="number"
 								placeholder="Max"
 								bind:value={maxPrice}
 								onchange={handleFilterChange}
-								class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+								class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 							/>
 						</div>
 					</div>
@@ -523,7 +523,7 @@
 								selectedCountry = "";
 								selectedCity = "";
 							}}
-							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
 						>
 							<option value="">All regions</option>
 							{#each REGIONS as region}
@@ -545,7 +545,7 @@
 								selectedCity = "";
 								handleFilterChange();
 							}}
-							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
 						>
 							<option value="">All countries</option>
 							{#each countries() as country}
@@ -563,7 +563,7 @@
 						</div>
 						<select
 							bind:value={selectedCity}
-							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
 						>
 							<option value="">All cities</option>
 							{#each cities() as city}
@@ -584,7 +584,7 @@
 							placeholder="e.g., 4"
 							bind:value={minCores}
 							min="1"
-							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
@@ -600,7 +600,7 @@
 							placeholder="e.g., 8"
 							bind:value={minMemoryGb}
 							min="1"
-							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
@@ -616,7 +616,7 @@
 							placeholder="e.g., 100"
 							bind:value={minSsdGb}
 							min="1"
-							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
@@ -630,7 +630,7 @@
 							</div>
 							<select
 								bind:value={selectedVirt}
-								class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-blue-400"
+								class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
 							>
 								<option value="">All types</option>
 								{#each virtTypes as vt}
@@ -653,7 +653,7 @@
 							bind:value={minTrust}
 							min="0"
 							max="100"
-							class="w-full px-2 py-1.5 text-sm bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
@@ -665,7 +665,7 @@
 							<input
 								type="checkbox"
 								bind:checked={unmeteredOnly}
-								class="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
+								class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
 							/>
 							<span
 								class="text-sm text-white/80 group-hover:text-white"
@@ -682,7 +682,7 @@
 							<input
 								type="checkbox"
 								bind:checked={showDemoOfferings}
-								class="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
+								class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
 							/>
 							<span
 								class="text-sm text-white/80 group-hover:text-white"
@@ -699,7 +699,7 @@
 							<input
 								type="checkbox"
 								bind:checked={showOfflineOfferings}
-								class="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-500"
+								class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
 							/>
 							<span
 								class="text-sm text-white/80 group-hover:text-white"
@@ -719,7 +719,7 @@
 				placeholder="Search (e.g., type:gpu price:<=100)..."
 				bind:value={searchQuery}
 				oninput={handleSearchInput}
-				class="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-blue-400"
+				class="w-full px-4 py-2.5 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 			/>
 
 			<!-- Results count -->
@@ -730,7 +730,7 @@
 			{#if loading}
 				<div class="flex justify-center py-12">
 					<div
-						class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-400"
+						class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary-400"
 					></div>
 				</div>
 			{:else if filteredOfferings.length === 0}
@@ -744,7 +744,7 @@
 					<table class="w-full text-sm">
 						<thead>
 							<tr
-								class="text-left text-white/60 border-b border-white/10"
+								class="text-left text-white/60 border-b border-glass/10"
 							>
 								<th class="pb-3 font-medium">Offering</th>
 								<th class="pb-3 font-medium">Type</th>
@@ -764,7 +764,7 @@
 								{@const isExpanded =
 									expandedRow === offering.id}
 								<tr
-									class="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
+									class="border-b border-white/5 hover:bg-glass/5 cursor-pointer transition-colors"
 									onclick={() => toggleRow(offering.id)}
 								>
 									<td class="py-3 pr-4">
@@ -791,7 +791,7 @@
 											{/if}
 											{#if hasReseller(offering)}
 												<span
-													class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded"
+													class="px-1.5 py-0.5 text-xs bg-primary-500/20 text-primary-400 rounded"
 													>{getResellerBadgeText(
 														offering,
 													)}</span
@@ -819,7 +819,7 @@
 											href="/dashboard/reputation/{offering.owner_username ||
 												offering.pubkey}"
 											onclick={(e) => e.stopPropagation()}
-											class="text-xs text-white/50 hover:text-blue-400 {offering.owner_username
+											class="text-xs text-white/50 hover:text-primary-400 {offering.owner_username
 												? ''
 												: 'font-mono'}"
 											>{offering.owner_username
@@ -854,7 +854,7 @@
 														e,
 														offering,
 													)}
-												class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium whitespace-nowrap"
+												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
 												>Rent</button
 											>
 										{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
@@ -864,7 +864,7 @@
 												rel="noopener noreferrer"
 												onclick={(e) =>
 													e.stopPropagation()}
-												class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-medium whitespace-nowrap inline-block"
+												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap inline-block"
 												>Visit Provider ↗</a
 											>
 										{:else}
@@ -875,14 +875,14 @@
 														offering,
 													)}
 												disabled={offering.is_example}
-												class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
 												>Rent</button
 											>
 										{/if}
 									</td>
 								</tr>
 								{#if isExpanded}
-									<tr class="bg-white/5">
+									<tr class="bg-glass/5">
 										<td colspan="6" class="p-4">
 											<div
 												class="grid grid-cols-3 gap-4 text-sm"
@@ -1079,7 +1079,7 @@
 						<div
 							role="button"
 							tabindex="0"
-							class="bg-white/5 rounded-lg p-4 border border-white/10"
+							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
 							onclick={() => toggleRow(offering.id)}
 							onkeydown={(e) =>
 								e.key === "Enter" && toggleRow(offering.id)}
@@ -1101,7 +1101,7 @@
 										{/if}
 										{#if hasReseller(offering)}
 											<span
-												class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded"
+												class="px-1.5 py-0.5 text-xs bg-primary-500/20 text-primary-400 rounded"
 												>{getResellerBadgeText(
 													offering,
 												)}</span
@@ -1133,7 +1133,7 @@
 										href="/dashboard/reputation/{offering.owner_username ||
 											offering.pubkey}"
 										onclick={(e) => e.stopPropagation()}
-										class="text-xs text-white/50 hover:text-blue-400 {offering.owner_username
+										class="text-xs text-white/50 hover:text-primary-400 {offering.owner_username
 											? ''
 											: 'font-mono'}"
 										>{offering.owner_username
@@ -1168,7 +1168,7 @@
 									<button
 										onclick={(e) =>
 											handleRentClick(e, offering)}
-										class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium"
+										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
 										>Rent</button
 									>
 								{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
@@ -1177,7 +1177,7 @@
 										target="_blank"
 										rel="noopener noreferrer"
 										onclick={(e) => e.stopPropagation()}
-										class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-xs font-medium"
+										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
 										>Visit Provider ↗</a
 									>
 								{:else}
@@ -1185,14 +1185,14 @@
 										onclick={(e) =>
 											handleRentClick(e, offering)}
 										disabled={offering.is_example}
-										class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium disabled:opacity-50"
+										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium disabled:opacity-50"
 										>Rent</button
 									>
 								{/if}
 							</div>
 							{#if expandedRow === offering.id}
 								<div
-									class="mt-3 pt-3 border-t border-white/10 text-sm space-y-2"
+									class="mt-3 pt-3 border-t border-glass/10 text-sm space-y-2"
 								>
 									<div class="text-white/70">
 										{offering.description ||

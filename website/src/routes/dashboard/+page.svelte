@@ -77,7 +77,7 @@
 	<!-- User Info Section -->
 	{#if currentIdentity}
 		<div
-			class="bg-gradient-to-r from-blue-500/20 to-purple-600/20 backdrop-blur-lg rounded-xl p-6 border border-blue-500/30"
+			class="bg-gradient-to-r from-primary-500/20 to-primary-600/20 backdrop-blur-lg rounded-xl p-6 border border-primary-500/30"
 		>
 			<div class="flex items-center gap-4">
 				<div class="text-4xl">
@@ -111,14 +111,14 @@
 		<!-- User's Trust Metrics -->
 		{#if trustMetricsLoading}
 			<div class="flex justify-center items-center p-8">
-				<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-400"></div>
+				<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-400"></div>
 			</div>
 		{:else if trustMetrics}
 			<div class="flex items-center justify-between mb-2">
 				<h2 class="text-2xl font-bold text-white">Your Trust Score</h2>
 				<a
 					href="/dashboard/reputation/{computePubkey(currentIdentity.publicKeyBytes!)}"
-					class="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+					class="text-sm text-primary-400 hover:text-primary-300 transition-colors"
 				>
 					View full profile &rarr;
 				</a>
@@ -145,7 +145,7 @@
 	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 		<!-- Total Providers -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<div class="flex items-center justify-between mb-2">
 				<h3 class="text-white/70 text-sm font-medium">Total Providers</h3>
@@ -159,7 +159,7 @@
 
 		<!-- Active Providers -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<div class="flex items-center justify-between mb-2">
 				<h3 class="text-white/70 text-sm font-medium">Active Providers</h3>
@@ -173,7 +173,7 @@
 
 		<!-- Total Offerings -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<div class="flex items-center justify-between mb-2">
 				<h3 class="text-white/70 text-sm font-medium">Available Offerings</h3>
@@ -187,7 +187,7 @@
 
 		<!-- Total Contracts -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<div class="flex items-center justify-between mb-2">
 				<h3 class="text-white/70 text-sm font-medium">
@@ -203,7 +203,7 @@
 
 		<!-- Active Validators -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<div class="flex items-center justify-between mb-2">
 				<h3 class="text-white/70 text-sm font-medium">Active Validators</h3>
@@ -218,17 +218,17 @@
 
 	<!-- Quick Actions -->
 	<div
-		class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+		class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 	>
 		<h2 class="text-2xl font-bold text-white mb-4">Quick Actions</h2>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			<a
 				href="/dashboard/marketplace"
-				class="p-4 bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-lg border border-blue-500/30 hover:border-blue-400 transition-all group"
+				class="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/20 rounded-lg border border-primary-500/30 hover:border-primary-400 transition-all group"
 			>
 				<span class="text-3xl mb-2 block">🛒</span>
 				<h3
-					class="text-white font-semibold mb-1 group-hover:text-blue-400"
+					class="text-white font-semibold mb-1 group-hover:text-primary-400"
 				>
 					Browse Marketplace
 				</h3>
@@ -237,11 +237,11 @@
 
 			<a
 				href="/dashboard/offerings"
-				class="p-4 bg-gradient-to-r from-purple-500/20 to-pink-600/20 rounded-lg border border-purple-500/30 hover:border-purple-400 transition-all group"
+				class="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/20 rounded-lg border border-primary-500/30 hover:border-primary-400 transition-all group"
 			>
 				<span class="text-3xl mb-2 block">📦</span>
 				<h3
-					class="text-white font-semibold mb-1 group-hover:text-purple-400"
+					class="text-white font-semibold mb-1 group-hover:text-primary-400"
 				>
 					Manage Offerings
 				</h3>

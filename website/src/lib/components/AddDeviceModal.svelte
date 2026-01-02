@@ -74,14 +74,14 @@
 
 {#if open}
 	<div
-		class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+		class="fixed inset-0 bg-base/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
 		onclick={handleClose}
 		onkeydown={(e) => e.key === 'Escape' && handleClose()}
 		role="button"
 		tabindex="0"
 	>
 		<div
-			class="bg-gray-900 rounded-2xl p-8 max-w-2xl w-full border border-white/20 shadow-2xl"
+			class="bg-surface rounded-2xl p-8 max-w-2xl w-full border border-glass/15 shadow-2xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
@@ -113,7 +113,7 @@
 					<button
 						type="button"
 						onclick={handleClose}
-						class="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg text-white font-medium"
+						class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white font-medium"
 					>
 						Done
 					</button>
@@ -128,14 +128,14 @@
 						<button
 							type="button"
 							onclick={handleClose}
-							class="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+							class="px-6 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
 						>
 							Cancel
 						</button>
 						<button
 							type="button"
 							onclick={() => (step = 'seed')}
-							class="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg text-white font-medium"
+							class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white font-medium"
 						>
 							Try Again
 						</button>

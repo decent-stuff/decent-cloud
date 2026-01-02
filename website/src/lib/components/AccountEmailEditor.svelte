@@ -63,7 +63,7 @@
 				type="email"
 				bind:value={newEmail}
 				placeholder="you@example.com"
-				class="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+				class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 			/>
 			{#if newEmail && !emailValid}
 				<p class="text-xs text-red-400">Please enter a valid email address</p>
@@ -72,14 +72,14 @@
 				<button
 					onclick={handleSubmit}
 					disabled={!emailValid || !hasChanged || isSubmitting}
-					class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-white text-sm font-medium transition-colors"
+					class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-white text-sm font-medium transition-colors"
 				>
 					{isSubmitting ? 'Saving...' : 'Save'}
 				</button>
 				<button
 					onclick={handleCancel}
 					disabled={isSubmitting}
-					class="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-white text-sm transition-colors"
+					class="px-3 py-1.5 bg-glass/10 hover:bg-glass/15 rounded text-white text-sm transition-colors"
 				>
 					Cancel
 				</button>
@@ -90,7 +90,7 @@
 			<span class="text-white/90">{email || 'Not set'}</span>
 			<button
 				onclick={() => { isEditing = true; error = null; success = null; }}
-				class="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 rounded text-white/70 hover:text-white transition-colors"
+				class="px-2 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded text-white/70 hover:text-white transition-colors"
 			>
 				{email ? 'Change' : 'Add Email'}
 			</button>

@@ -78,7 +78,7 @@
 		<div class="flex gap-4">
 			<button
 				onclick={() => navigateToProfile(myUsername!)}
-				class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 			>
 				View My Reputation
 			</button>
@@ -86,7 +86,7 @@
 	{/if}
 
 	<!-- Search Box -->
-	<div class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+	<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
 		<label for="search" class="block text-sm font-medium text-white/80 mb-2">
 			Search Accounts
 		</label>
@@ -96,12 +96,12 @@
 			bind:value={searchQuery}
 			oninput={handleInput}
 			placeholder="Enter username, display name, or public key..."
-			class="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+			class="w-full px-4 py-3 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 		/>
 		{#if loading}
 			<div class="mt-4 flex items-center gap-2 text-white/60">
 				<div
-					class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-400"
+					class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-primary-400"
 				></div>
 				<span class="text-sm">Searching...</span>
 			</div>
@@ -121,7 +121,7 @@
 				{#each results as result}
 					<button
 						onclick={() => navigateToProfile(result.username)}
-						class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:bg-white/15 hover:border-white/30 transition-all text-left"
+						class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 hover:bg-white/15 hover:border-white/30 transition-all text-left"
 					>
 						<div class="flex items-start justify-between gap-4 mb-3">
 							<div class="flex-1">
@@ -162,7 +162,7 @@
 		</div>
 	{:else if searchQuery && !loading && !error}
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
 		>
 			<div class="text-6xl mb-4">🔍</div>
 			<h2 class="text-2xl font-bold text-white mb-2">No Results Found</h2>
@@ -177,7 +177,7 @@
 		</div>
 	{:else if !searchQuery && !loading}
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-white/20 text-center"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
 		>
 			<div class="text-6xl mb-4">⭐</div>
 			<h2 class="text-2xl font-bold text-white mb-2">Search Reputation</h2>

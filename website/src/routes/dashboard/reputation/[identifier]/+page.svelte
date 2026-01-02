@@ -329,7 +329,7 @@
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
 			<div
-				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400"
+				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
 	{:else if error && isNotFound}
@@ -353,7 +353,7 @@
 				<div class="mt-6">
 					<a
 						href="/dashboard/marketplace"
-						class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+						class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
 					>
 						← Back to Marketplace
 					</a>
@@ -363,7 +363,7 @@
 	{:else}
 		<!-- Page Header -->
 		<div
-			class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 		>
 			<div class="flex items-start justify-between gap-4 mb-4">
 				<div class="flex-1">
@@ -378,7 +378,7 @@
 					<img
 						src={profile.avatarUrl}
 						alt="Avatar"
-						class="w-20 h-20 rounded-full border-2 border-white/20"
+						class="w-20 h-20 rounded-full border-2 border-glass/15"
 					/>
 				{/if}
 			</div>
@@ -401,7 +401,7 @@
 
 			<!-- Contact Information & Socials -->
 			{#if filteredContacts.length > 0 || socials.length > 0 || accountInfo?.emailVerified}
-				<div class="mt-4 pt-4 border-t border-white/10">
+				<div class="mt-4 pt-4 border-t border-glass/10">
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 						<!-- Contacts -->
 						{#if filteredContacts.length > 0 || accountInfo?.emailVerified}
@@ -462,7 +462,7 @@
 													href={social.profileUrl}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="text-blue-400 hover:text-blue-300"
+													class="text-primary-400 hover:text-primary-300"
 												>
 													@{social.username} →
 												</a>
@@ -485,7 +485,7 @@
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 			<!-- Balance -->
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<div class="text-white/60 text-sm mb-1">Account Balance</div>
 				<div class="text-3xl font-bold text-white">
@@ -496,7 +496,7 @@
 
 			<!-- Reputation -->
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<div class="text-white/60 text-sm mb-1">Reputation Score</div>
 				<div class="text-3xl font-bold text-white">
@@ -511,7 +511,7 @@
 
 			<!-- Total Contracts -->
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<div class="text-white/60 text-sm mb-1">Total Contracts</div>
 				<div class="text-3xl font-bold text-white">
@@ -525,7 +525,7 @@
 
 			<!-- Total Offerings -->
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<div class="text-white/60 text-sm mb-1">Offerings</div>
 				<div class="text-3xl font-bold text-white">
@@ -542,7 +542,7 @@
 		<!-- Cancellation Metrics -->
 		{#if (requesterCancellations && requesterCancellations.total > 0) || (providerCancellations && providerCancellations.total > 0)}
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Cancellation Patterns
@@ -687,7 +687,7 @@
 		<!-- Transaction Statistics -->
 		{#if txStats}
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Transaction Statistics
@@ -724,7 +724,7 @@
 		<!-- Recent Transactions -->
 		{#if transfers.length > 0}
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Recent Transactions
@@ -732,7 +732,7 @@
 				<div class="space-y-3 max-h-96 overflow-y-auto">
 					{#each transfers.slice(0, 20) as transfer}
 						<div
-							class="bg-white/5 rounded-lg p-4 border border-white/10"
+							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
 						>
 							<div class="flex justify-between items-start mb-2">
 								<div class="flex-1">
@@ -742,7 +742,7 @@
 										>
 										<a
 											href="/dashboard/reputation/{transfer.from_account}"
-											class="font-mono text-sm text-blue-400 hover:text-blue-300"
+											class="font-mono text-sm text-primary-400 hover:text-primary-300"
 										>
 											{truncatePubkey(transfer.from_account)}
 										</a>
@@ -753,7 +753,7 @@
 										>
 										<a
 											href="/dashboard/reputation/{transfer.to_account}"
-											class="font-mono text-sm text-blue-400 hover:text-blue-300"
+											class="font-mono text-sm text-primary-400 hover:text-primary-300"
 										>
 											{truncatePubkey(transfer.to_account)}
 										</a>
@@ -785,7 +785,7 @@
 		<!-- Offerings Provided -->
 		{#if activity && activity.offerings_provided.length > 0}
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Offerings Provided ({activity.offerings_provided.length})
@@ -795,7 +795,7 @@
 				>
 					{#each activity.offerings_provided as offering}
 						<div
-							class="bg-white/5 rounded-xl p-4 border border-white/10"
+							class="bg-glass/5 rounded-xl p-4 border border-glass/10"
 						>
 							<h3 class="text-lg font-semibold text-white mb-2">
 								{offering.offer_name}
@@ -824,7 +824,7 @@
 		<!-- Rentals as Requester -->
 		{#if activity && activity.rentals_as_requester.length > 0}
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Rentals as Requester ({activity.rentals_as_requester
@@ -833,7 +833,7 @@
 				<div class="space-y-3">
 					{#each activity.rentals_as_requester as contract}
 						<div
-							class="bg-white/5 rounded-lg p-4 border border-white/10"
+							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
 						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
@@ -844,7 +844,7 @@
 										Provider:
 										<a
 											href="/dashboard/reputation/{contract.provider_pubkey}"
-											class="text-blue-400 hover:text-blue-300"
+											class="text-primary-400 hover:text-primary-300"
 										>
 											{truncatePubkey(
 												contract.provider_pubkey,
@@ -859,7 +859,7 @@
 									</p>
 								</div>
 								<span
-									class="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400"
+									class="px-3 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400"
 								>
 									{contract.status}
 								</span>
@@ -893,7 +893,7 @@
 		<!-- Rentals as Provider -->
 		{#if activity && activity.rentals_as_provider.length > 0}
 			<div
-				class="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
 			>
 				<h2 class="text-2xl font-bold text-white mb-4">
 					Rentals as Provider ({activity.rentals_as_provider.length})
@@ -901,7 +901,7 @@
 				<div class="space-y-3">
 					{#each activity.rentals_as_provider as contract}
 						<div
-							class="bg-white/5 rounded-lg p-4 border border-white/10"
+							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
 						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
@@ -912,7 +912,7 @@
 										Requester:
 										<a
 											href="/dashboard/reputation/{contract.requester_pubkey}"
-											class="text-blue-400 hover:text-blue-300"
+											class="text-primary-400 hover:text-primary-300"
 										>
 											{truncatePubkey(
 												contract.requester_pubkey,
