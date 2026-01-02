@@ -43,7 +43,8 @@ impl GatewaySetup {
             }
             None => {
                 println!("Looking up Cloudflare Zone ID for {}...", self.domain);
-                let id = lookup_cloudflare_zone_id(&self.cloudflare_api_token, &self.domain).await?;
+                let id =
+                    lookup_cloudflare_zone_id(&self.cloudflare_api_token, &self.domain).await?;
                 println!("  [ok] Zone ID: {}", id);
                 id
             }
@@ -314,9 +315,7 @@ WantedBy=multi-user.target
 
     async fn start_traefik(&self, ssh: &Client) -> Result<()> {
         // Enable and start
-        let result = ssh
-            .execute("systemctl enable --now traefik")
-            .await?;
+        let result = ssh.execute("systemctl enable --now traefik").await?;
         if result.exit_status != 0 {
             bail!("Failed to start Traefik: {}", result.stdout);
         }
@@ -423,10 +422,7 @@ pub async fn lookup_cloudflare_zone_id(api_token: &str, domain: &str) -> Result<
     }
 
     let client = reqwest::Client::new();
-    let url = format!(
-        "https://api.cloudflare.com/client/v4/zones?name={}",
-        domain
-    );
+    let url = format!("https://api.cloudflare.com/client/v4/zones?name={}", domain);
 
     let response = client
         .get(&url)
@@ -442,8 +438,8 @@ pub async fn lookup_cloudflare_zone_id(api_token: &str, domain: &str) -> Result<
         bail!("Cloudflare API error ({}): {}", status, body);
     }
 
-    let resp: ZoneResponse = serde_json::from_str(&body)
-        .context("Failed to parse Cloudflare response")?;
+    let resp: ZoneResponse =
+        serde_json::from_str(&body).context("Failed to parse Cloudflare response")?;
 
     if !resp.success {
         let errors: Vec<_> = resp.errors.iter().map(|e| &e.message).collect();

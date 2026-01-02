@@ -65,7 +65,10 @@ impl Database {
     }
 
     /// Get latest bandwidth stats for a contract
-    pub async fn get_contract_bandwidth(&self, contract_id: &str) -> Result<Option<BandwidthStats>> {
+    pub async fn get_contract_bandwidth(
+        &self,
+        contract_id: &str,
+    ) -> Result<Option<BandwidthStats>> {
         let record = sqlx::query!(
             r#"SELECT
                 id as "id!: i64",
@@ -214,7 +217,11 @@ mod tests {
             .unwrap();
 
         // Should get the latest
-        let stats = db.get_contract_bandwidth("contract-1").await.unwrap().unwrap();
+        let stats = db
+            .get_contract_bandwidth("contract-1")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(stats.bytes_in, 5000);
         assert_eq!(stats.bytes_out, 10000);
     }

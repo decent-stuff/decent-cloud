@@ -185,7 +185,10 @@ impl Database {
         let limit_idx = idx;
         idx += 1;
         let offset_idx = idx;
-        query.push_str(&format!(" ORDER BY o.monthly_price ASC LIMIT ${} OFFSET ${}", limit_idx, offset_idx));
+        query.push_str(&format!(
+            " ORDER BY o.monthly_price ASC LIMIT ${} OFFSET ${}",
+            limit_idx, offset_idx
+        ));
 
         let mut query_builder = sqlx::query_as::<_, Offering>(&query)
             .bind(example_provider_pubkey)

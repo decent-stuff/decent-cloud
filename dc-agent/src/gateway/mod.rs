@@ -50,7 +50,10 @@ impl GatewayManager {
 
         // Initialize iptables NAT chain for port forwarding
         if let Err(e) = IptablesNat::init_chain() {
-            tracing::warn!("Failed to initialize iptables NAT chain: {} - TCP/UDP forwarding may not work", e);
+            tracing::warn!(
+                "Failed to initialize iptables NAT chain: {} - TCP/UDP forwarding may not work",
+                e
+            );
         }
 
         Ok(Self {

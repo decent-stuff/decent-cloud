@@ -50,15 +50,13 @@ pub async fn handle_ledger_remote_command(
     identity: Option<String>,
     mut ledger_local: LedgerMap,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let local_ledger_path = ledger_local
-        .get_file_path()
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Failed to get local ledger path. The ledger may not be initialized. \
+    let local_ledger_path = ledger_local.get_file_path().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Failed to get local ledger path. The ledger may not be initialized. \
                  Try using --local-ledger-dir flag to specify the ledger directory, \
                  or run 'ledger remote data-fetch' to initialize the local ledger."
-            )
-        })?;
+        )
+    })?;
 
     match subcmd {
         LedgerRemoteCommands::DataFetch => {
@@ -117,8 +115,9 @@ pub async fn handle_ledger_remote_command(
         LedgerRemoteCommands::GetRegistrationFee => {
             let canister =
                 LedgerCanister::new_without_identity(network_url, ledger_canister_id).await?;
-            let noargs = Encode!(&())
-                .map_err(|e| anyhow::anyhow!("Failed to encode registration fee query arguments: {}", e))?;
+            let noargs = Encode!(&()).map_err(|e| {
+                anyhow::anyhow!("Failed to encode registration fee query arguments: {}", e)
+            })?;
             let response = canister.call_query("get_registration_fee", &noargs).await?;
             #[allow(clippy::double_parens)]
             let fee_e9s = Decode!(response.as_slice(), u64).map_err(|e| e.to_string())?;

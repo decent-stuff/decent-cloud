@@ -78,7 +78,11 @@ impl CloudflareDns {
         public_ip: &str,
     ) -> Result<()> {
         // Validate inputs
-        if slug.len() != 6 || !slug.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+        if slug.len() != 6
+            || !slug
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        {
             bail!("Invalid slug format: must be 6 lowercase alphanumeric characters");
         }
 

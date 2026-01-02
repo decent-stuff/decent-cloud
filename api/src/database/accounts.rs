@@ -1127,11 +1127,12 @@ impl Database {
         account_id: &[u8],
         email: Option<&str>,
     ) -> Result<()> {
-        let result = sqlx::query("UPDATE accounts SET email = $1, email_verified = FALSE WHERE id = $2")
-            .bind(email)
-            .bind(account_id)
-            .execute(&self.pool)
-            .await?;
+        let result =
+            sqlx::query("UPDATE accounts SET email = $1, email_verified = FALSE WHERE id = $2")
+                .bind(email)
+                .bind(account_id)
+                .execute(&self.pool)
+                .await?;
 
         if result.rows_affected() == 0 {
             bail!("Account not found");

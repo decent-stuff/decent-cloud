@@ -159,7 +159,9 @@ impl Database {
                 .unwrap_or_else(|| "active".to_string()),
             stripe_subscription_id: account_row.subscription_stripe_id,
             current_period_end: account_row.subscription_current_period_end,
-            cancel_at_period_end: account_row.subscription_cancel_at_period_end.unwrap_or(false),
+            cancel_at_period_end: account_row
+                .subscription_cancel_at_period_end
+                .unwrap_or(false),
             features,
         })
     }

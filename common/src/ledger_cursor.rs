@@ -227,7 +227,8 @@ mod tests {
     #[test]
     fn test_parse_ledger_cursor() {
         let input = "data_begin_position=0&position=123&data_end_position=579&response_bytes=456&direction=Forward&more=true";
-        let cursor: LedgerCursor = input.parse()
+        let cursor: LedgerCursor = input
+            .parse()
             .expect("Failed to parse valid cursor string in test");
 
         assert_eq!(

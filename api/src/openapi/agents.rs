@@ -574,11 +574,7 @@ impl AgentsApi {
     /// Creates or deletes DNS A records for gateway subdomains.
     /// This proxies DNS management through the API so agents don't need Cloudflare credentials.
     /// Requires agent authentication with DnsManage permission.
-    #[oai(
-        path = "/agents/dns",
-        method = "post",
-        tag = "ApiTags::Agents"
-    )]
+    #[oai(path = "/agents/dns", method = "post", tag = "ApiTags::Agents")]
     async fn manage_gateway_dns(
         &self,
         cloudflare: Data<&Option<Arc<CloudflareDns>>>,
@@ -616,7 +612,9 @@ impl AgentsApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Invalid slug: must be 6 lowercase alphanumeric characters".to_string()),
+                error: Some(
+                    "Invalid slug: must be 6 lowercase alphanumeric characters".to_string(),
+                ),
             });
         }
 
@@ -660,10 +658,7 @@ impl AgentsApi {
                     }),
                 }
             }
-            "delete" => match cf
-                .delete_gateway_record(&req.slug, &req.datacenter)
-                .await
-            {
+            "delete" => match cf.delete_gateway_record(&req.slug, &req.datacenter).await {
                 Ok(()) => Json(ApiResponse {
                     success: true,
                     data: Some(GatewayDnsResponse { subdomain }),

@@ -136,17 +136,26 @@ mod tests {
                 "mainnet-eu" | "mainnet-01" | "mainnet-02" | "ic" => Some("https://icp-api.io"),
                 _ => None,
             };
-            assert!(network_url.is_some(), "Network {} should have a URL", network);
+            assert!(
+                network_url.is_some(),
+                "Network {} should have a URL",
+                network
+            );
 
             // Verify ledger_canister_id match handles this network
-            let principal_result: Result<IcPrincipal, ic_agent::export::PrincipalError> = match network {
-                "local" => IcPrincipal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai"),
-                "mainnet-eu" => IcPrincipal::from_text("tlvs5-oqaaa-aaaas-aaabq-cai"),
-                "mainnet-01" | "ic" => IcPrincipal::from_text("ggi4a-wyaaa-aaaai-actqq-cai"),
-                "mainnet-02" => IcPrincipal::from_text("gplx4-aqaaa-aaaai-actra-cai"),
-                _ => panic!("Should not reach here with valid network"),
-            };
-            assert!(principal_result.is_ok(), "Network {} should have a valid principal", network);
+            let principal_result: Result<IcPrincipal, ic_agent::export::PrincipalError> =
+                match network {
+                    "local" => IcPrincipal::from_text("bkyz2-fmaaa-aaaaa-qaaaq-cai"),
+                    "mainnet-eu" => IcPrincipal::from_text("tlvs5-oqaaa-aaaas-aaabq-cai"),
+                    "mainnet-01" | "ic" => IcPrincipal::from_text("ggi4a-wyaaa-aaaai-actqq-cai"),
+                    "mainnet-02" => IcPrincipal::from_text("gplx4-aqaaa-aaaai-actra-cai"),
+                    _ => panic!("Should not reach here with valid network"),
+                };
+            assert!(
+                principal_result.is_ok(),
+                "Network {} should have a valid principal",
+                network
+            );
         }
     }
 }

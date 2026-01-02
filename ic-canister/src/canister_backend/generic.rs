@@ -110,9 +110,8 @@ fn ledger_periodic_task() {
 
 pub fn encode_to_cbor_bytes(obj: &impl Serialize) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::new();
-    ciborium::into_writer(obj, &mut buf).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!("CRITICAL: Failed to encode to CBOR: {}", e))
-    });
+    ciborium::into_writer(obj, &mut buf)
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("CRITICAL: Failed to encode to CBOR: {}", e)));
     buf
 }
 
@@ -139,7 +138,10 @@ pub fn _init(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
         if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
-            ic_cdk::trap(&format!("CRITICAL: _init failed to load caches from ledger: {}", e));
+            ic_cdk::trap(&format!(
+                "CRITICAL: _init failed to load caches from ledger: {}",
+                e
+            ));
         }
     });
     println!(
@@ -167,7 +169,10 @@ pub fn _post_upgrade(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
         if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
-            ic_cdk::trap(&format!("CRITICAL: _post_upgrade failed to load caches from ledger: {}", e));
+            ic_cdk::trap(&format!(
+                "CRITICAL: _post_upgrade failed to load caches from ledger: {}",
+                e
+            ));
         }
         reward_e9s_per_block_recalculate();
     });

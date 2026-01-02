@@ -224,9 +224,10 @@ impl Database {
     /// Count total providers
     #[allow(dead_code)]
     pub async fn count_providers(&self) -> Result<i64> {
-        let count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM provider_profiles"#)
-            .fetch_one(&self.pool)
-            .await?;
+        let count: i64 =
+            sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM provider_profiles"#)
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(count)
     }

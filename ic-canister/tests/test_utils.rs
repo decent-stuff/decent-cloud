@@ -48,7 +48,9 @@ pub fn workspace_dir() -> PathBuf {
         .arg("--workspace")
         .arg("--message-format=plain")
         .output()
-        .expect("Failed to execute 'cargo locate-project'. Make sure Cargo is installed and in PATH.");
+        .expect(
+            "Failed to execute 'cargo locate-project'. Make sure Cargo is installed and in PATH.",
+        );
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

@@ -187,13 +187,7 @@ impl IptablesNat {
         lines_to_delete.sort_by(|a, b| b.cmp(a));
         for line_num in lines_to_delete {
             let result = Command::new("iptables")
-                .args([
-                    "-t",
-                    "nat",
-                    "-D",
-                    CHAIN_NAME,
-                    &line_num.to_string(),
-                ])
+                .args(["-t", "nat", "-D", CHAIN_NAME, &line_num.to_string()])
                 .output();
 
             if let Err(e) = result {

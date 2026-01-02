@@ -799,9 +799,12 @@ mod tests {
         // Create a corrupted template that will cause Typst to fail
         let temp_dir = TempDir::new().unwrap();
         let template_path = temp_dir.path().join("bad.typ");
-        tokio::fs::write(&template_path, b"#corrupt typst content that will fail to compile")
-            .await
-            .unwrap();
+        tokio::fs::write(
+            &template_path,
+            b"#corrupt typst content that will fail to compile",
+        )
+        .await
+        .unwrap();
 
         let output_path = temp_dir.path().join("invoice.pdf");
         let json_path = temp_dir.path().join("data.json");
@@ -897,15 +900,14 @@ mod tests {
         let typst_installed = std::env::var("PATH")
             .ok()
             .and_then(|path| {
-                std::env::split_paths(&path)
-                    .find_map(|p| {
-                        let typst_path = p.join("typst");
-                        if typst_path.exists() {
-                            Some(true)
-                        } else {
-                            None
-                        }
-                    })
+                std::env::split_paths(&path).find_map(|p| {
+                    let typst_path = p.join("typst");
+                    if typst_path.exists() {
+                        Some(true)
+                    } else {
+                        None
+                    }
+                })
             })
             .unwrap_or(false);
 

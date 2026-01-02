@@ -62,15 +62,13 @@ pub async fn handle_provider_command(
                 let dcc_ident = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
 
                 // Check the local ledger timestamp
-                let local_ledger_path = ledger_local
-                    .get_file_path()
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "Failed to get local ledger path. The ledger may not be initialized. \
+                let local_ledger_path = ledger_local.get_file_path().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Failed to get local ledger path. The ledger may not be initialized. \
                              Try using --local-ledger-dir flag to specify the ledger directory, \
                              or run 'ledger remote data-fetch' to initialize the local ledger."
-                        )
-                    })?;
+                    )
+                })?;
                 let local_ledger_file_mtime = local_ledger_path.metadata()?.modified()?;
 
                 // If the local ledger is older than 1 minute, refresh it automatically before proceeding
@@ -83,8 +81,9 @@ pub async fn handle_provider_command(
                             .await?;
                     ledger_data_fetch(&canister, &mut ledger_local).await?;
 
-                    dcc_common::refresh_caches_from_ledger(&ledger_local)
-                        .map_err(|e| anyhow::anyhow!("Failed to load balances from ledger: {}", e))?;
+                    dcc_common::refresh_caches_from_ledger(&ledger_local).map_err(|e| {
+                        anyhow::anyhow!("Failed to load balances from ledger: {}", e)
+                    })?;
                 }
                 // The local ledger needs to be refreshed to get the latest nonce
                 // This provides the incentive to clone and frequently re-fetch the ledger

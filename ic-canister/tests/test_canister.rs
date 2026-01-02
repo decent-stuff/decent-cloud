@@ -452,7 +452,8 @@ fn test_ledger_entries_pagination() {
     // Register multiple providers to create enough entries
     for i in 0..5 {
         let seed = format!("prov{}", i);
-        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV); // Return value intentionally ignored - only checking pagination
+        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        // Return value intentionally ignored - only checking pagination
     }
     ctx.commit();
 
@@ -482,7 +483,8 @@ fn test_ledger_entries_pagination_with_filter() {
     // Register 10 providers
     for i in 0..10 {
         let seed = format!("prov{}", i);
-        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV); // Return value intentionally ignored - only checking pagination
+        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        // Return value intentionally ignored - only checking pagination
     }
     ctx.commit();
 

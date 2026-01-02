@@ -14,11 +14,7 @@ pub async fn setup_test_db() -> Database {
 
     // Create a unique database name for this test
     let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let db_name = format!(
-        "test_db_{}_{}",
-        std::process::id(),
-        test_id
-    );
+    let db_name = format!("test_db_{}_{}", std::process::id(), test_id);
 
     // Connect to the postgres database to create our test database
     let admin_url = format!("{}/postgres", base_url);

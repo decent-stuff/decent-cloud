@@ -762,9 +762,7 @@ async fn run_gateway_setup_if_requested(
     })?;
 
     let host = ssh_host.ok_or_else(|| {
-        anyhow::anyhow!(
-            "--proxmox-host is required for gateway setup (used as SSH target)"
-        )
+        anyhow::anyhow!("--proxmox-host is required for gateway setup (used as SSH target)")
     })?;
 
     println!();
@@ -781,9 +779,7 @@ async fn run_gateway_setup_if_requested(
 
     // In non-interactive mode, we can't prompt for password
     let ssh_password = if non_interactive {
-        anyhow::bail!(
-            "Gateway setup requires SSH password. Cannot run in non-interactive mode."
-        );
+        anyhow::bail!("Gateway setup requires SSH password. Cannot run in non-interactive mode.");
     } else {
         rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?
     };
@@ -1026,7 +1022,10 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                     .open(&config_path)
                     .context("Failed to open config file for appending")?;
                 file.write_all(gateway_config.as_bytes())?;
-                println!("\nGateway configuration appended to: {}", config_path.display());
+                println!(
+                    "\nGateway configuration appended to: {}",
+                    config_path.display()
+                );
             } else {
                 println!("\nAdd this to your dc-agent.toml:");
                 println!("{}", gateway_config);
@@ -1131,27 +1130,25 @@ async fn run_agent(config: Config) -> Result<()> {
 
     // Initialize gateway manager if configured
     let gateway_manager = match &config.gateway {
-        Some(gw_config) => {
-            match GatewayManager::new(gw_config.clone(), api_client.clone()) {
-                Ok(gm) => {
-                    info!(
-                        datacenter = %gw_config.datacenter,
-                        domain = %gw_config.domain,
-                        public_ip = %gw_config.public_ip,
-                        port_range = %format!("{}-{}", gw_config.port_range_start, gw_config.port_range_end),
-                        "Gateway manager initialized"
-                    );
-                    Some(std::sync::Arc::new(tokio::sync::Mutex::new(gm)))
-                }
-                Err(e) => {
-                    warn!(
-                        error = %e,
-                        "Gateway configured but failed to initialize - gateway features disabled"
-                    );
-                    None
-                }
+        Some(gw_config) => match GatewayManager::new(gw_config.clone(), api_client.clone()) {
+            Ok(gm) => {
+                info!(
+                    datacenter = %gw_config.datacenter,
+                    domain = %gw_config.domain,
+                    public_ip = %gw_config.public_ip,
+                    port_range = %format!("{}-{}", gw_config.port_range_start, gw_config.port_range_end),
+                    "Gateway manager initialized"
+                );
+                Some(std::sync::Arc::new(tokio::sync::Mutex::new(gm)))
             }
-        }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "Gateway configured but failed to initialize - gateway features disabled"
+                );
+                None
+            }
+        },
         None => {
             info!("Gateway not configured - VMs will not get public subdomains");
             None
@@ -1234,15 +1231,14 @@ async fn send_heartbeat(
             let reports: Vec<_> = stats
                 .into_iter()
                 .filter_map(|(slug, bw)| {
-                    allocations
-                        .allocations
-                        .get(&slug)
-                        .map(|alloc| dc_agent::api_client::VmBandwidthReport {
+                    allocations.allocations.get(&slug).map(|alloc| {
+                        dc_agent::api_client::VmBandwidthReport {
                             gateway_slug: slug,
                             contract_id: alloc.contract_id.clone(),
                             bytes_in: bw.bytes_in,
                             bytes_out: bw.bytes_out,
-                        })
+                        }
+                    })
                 })
                 .collect();
 
@@ -2007,9 +2003,8 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                         println!("  [ok] Traefik service is running");
 
                         // Check if Traefik is listening on expected ports
-                        if let Ok(ss_output) = std::process::Command::new("ss")
-                            .args(["-tlnp"])
-                            .output()
+                        if let Ok(ss_output) =
+                            std::process::Command::new("ss").args(["-tlnp"]).output()
                         {
                             let ss = String::from_utf8_lossy(&ss_output.stdout);
                             if ss.contains(":443") && ss.contains("traefik") {
@@ -2021,7 +2016,10 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                             }
                         }
                     } else {
-                        println!("  [WARN] Traefik service not running (status: {})", status.trim());
+                        println!(
+                            "  [WARN] Traefik service not running (status: {})",
+                            status.trim()
+                        );
                         println!("       Run: systemctl start traefik");
                     }
                 }
@@ -2036,12 +2034,12 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                     Ok(gw_manager) => {
                         println!("  [ok] Gateway manager initialized");
 
-                    // Show current port allocations count
-                    let allocations = gw_manager.port_allocations();
-                    let count = allocations.allocations.len();
-                    if count > 0 {
-                        println!("  [info] {} active VM(s) with gateway routing", count);
-                    }
+                        // Show current port allocations count
+                        let allocations = gw_manager.port_allocations();
+                        let count = allocations.allocations.len();
+                        if count > 0 {
+                            println!("  [info] {} active VM(s) with gateway routing", count);
+                        }
 
                         // Show bandwidth stats if available
                         let stats = gw_manager.get_bandwidth_stats();
@@ -2058,7 +2056,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                         }
                     }
                     Err(e) => println!("  [FAILED] Gateway initialization: {}", e),
-                }
+                },
                 None => {
                     println!("  [WARN] Cannot verify gateway manager (API client not available)");
                 }

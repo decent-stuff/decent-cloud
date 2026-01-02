@@ -4,7 +4,8 @@ use ts_rs::TS;
 
 fn create_test_identity() -> (DccIdentity, Vec<u8>) {
     let seed = [42u8; 32];
-    let identity = DccIdentity::new_from_seed(&seed).expect("Failed to create test identity from seed");
+    let identity =
+        DccIdentity::new_from_seed(&seed).expect("Failed to create test identity from seed");
     let pubkey = identity.to_bytes_verifying();
     (identity, pubkey)
 }
@@ -19,7 +20,8 @@ fn test_cross_platform_signature_vector() {
         25, 26, 27, 28, 29, 30, 31,
     ];
     // Create identity directly from seed bytes (not via HMAC derivation)
-    let identity = DccIdentity::new_signing_from_bytes(&seed).expect("Failed to create identity from seed bytes");
+    let identity = DccIdentity::new_signing_from_bytes(&seed)
+        .expect("Failed to create identity from seed bytes");
     let pubkey = identity.to_bytes_verifying();
 
     // Fixed message
@@ -36,7 +38,9 @@ fn test_cross_platform_signature_vector() {
     println!("Signature (hex): {}", hex::encode(signature.to_bytes()));
 
     // Verify signature works
-    identity.verify(message, &signature).expect("Failed to verify signature");
+    identity
+        .verify(message, &signature)
+        .expect("Failed to verify signature");
 
     // Expected values - update TypeScript test if these change
     let expected_pubkey = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8";
@@ -83,7 +87,11 @@ fn test_verify_valid_signature() {
     );
 
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), pubkey, "Verified public key should match original public key");
+    assert_eq!(
+        result.unwrap(),
+        pubkey,
+        "Verified public key should match original public key"
+    );
 }
 
 #[test]
@@ -123,10 +131,10 @@ fn test_verify_invalid_signature() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        AuthError::InvalidSignature(_)
-    ), "Error should be InvalidSignature for tampered message");
+    assert!(
+        matches!(result.unwrap_err(), AuthError::InvalidSignature(_)),
+        "Error should be InvalidSignature for tampered message"
+    );
 }
 
 #[test]
@@ -161,7 +169,10 @@ fn test_verify_expired_timestamp() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), AuthError::TimestampExpired), "Error should be TimestampExpired");
+    assert!(
+        matches!(result.unwrap_err(), AuthError::TimestampExpired),
+        "Error should be TimestampExpired"
+    );
 }
 
 #[test]
@@ -178,7 +189,10 @@ fn test_verify_invalid_pubkey_length() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), AuthError::InvalidFormat(_)), "Error should be InvalidFormat for invalid public key length");
+    assert!(
+        matches!(result.unwrap_err(), AuthError::InvalidFormat(_)),
+        "Error should be InvalidFormat for invalid public key length"
+    );
 }
 
 #[test]
@@ -196,7 +210,10 @@ fn test_verify_invalid_signature_length() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), AuthError::InvalidFormat(_)), "Error should be InvalidFormat for invalid signature length");
+    assert!(
+        matches!(result.unwrap_err(), AuthError::InvalidFormat(_)),
+        "Error should be InvalidFormat for invalid signature length"
+    );
 }
 
 #[test]
@@ -215,7 +232,10 @@ fn test_verify_invalid_nonce_format() {
     );
 
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), AuthError::InvalidFormat(_)), "Error should be InvalidFormat for invalid nonce format");
+    assert!(
+        matches!(result.unwrap_err(), AuthError::InvalidFormat(_)),
+        "Error should be InvalidFormat for invalid nonce format"
+    );
 }
 
 #[test]
@@ -255,7 +275,8 @@ fn test_get_admin_pubkeys_single() {
 fn test_get_admin_pubkeys_multiple() {
     let (_, pubkey1) = create_test_identity();
     let seed2 = [99u8; 32];
-    let identity2 = DccIdentity::new_from_seed(&seed2).expect("Failed to create second test identity from seed");
+    let identity2 = DccIdentity::new_from_seed(&seed2)
+        .expect("Failed to create second test identity from seed");
     let pubkey2 = identity2.to_bytes_verifying();
 
     let pubkey_hex1 = hex::encode(&pubkey1);

@@ -233,7 +233,8 @@ async fn get_next_receipt_number(db: &Database) -> Result<i64> {
     .fetch_one(&db.pool)
     .await?;
 
-    row.receipt_number.ok_or_else(|| anyhow::anyhow!("receipt_number unexpectedly NULL"))
+    row.receipt_number
+        .ok_or_else(|| anyhow::anyhow!("receipt_number unexpectedly NULL"))
 }
 
 /// Update contract with receipt number and timestamp

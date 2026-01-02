@@ -24,8 +24,9 @@ pub fn println_identity(dcc_id: &DccIdentity, show_balance: bool) {
 pub fn dcc_to_ic_auth(dcc_identity: &DccIdentity) -> anyhow::Result<BasicIdentity> {
     let pem_key = dcc_identity
         .signing_key_as_ic_agent_pem_string()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get signing key as PEM string from DCC identity"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("Failed to get signing key as PEM string from DCC identity")
+        })?;
     let cursor = std::io::Cursor::new(pem_key.as_bytes());
-    BasicIdentity::from_pem(cursor)
-        .map_err(|e| anyhow::anyhow!("Failed to parse PEM key: {}", e))
+    BasicIdentity::from_pem(cursor).map_err(|e| anyhow::anyhow!("Failed to parse PEM key: {}", e))
 }

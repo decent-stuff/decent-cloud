@@ -244,19 +244,23 @@ impl Database {
 
     /// Get email queue statistics
     pub async fn get_email_stats(&self) -> Result<EmailStats> {
-        let pending: i64 =
-            sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'pending'"#)
-                .fetch_one(&self.pool)
-                .await?;
+        let pending: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'pending'"#
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
-        let sent: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'sent'"#)
-            .fetch_one(&self.pool)
-            .await?;
+        let sent: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'sent'"#
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
-        let failed: i64 =
-            sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'failed'"#)
-                .fetch_one(&self.pool)
-                .await?;
+        let failed: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'failed'"#
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
         let total: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue"#)
             .fetch_one(&self.pool)

@@ -74,7 +74,7 @@ pub fn _http_request(request: HttpRequest) -> HttpResponse {
                 body: ByteBuf::from(body),
                 ..Default::default()
             }
-        },
+        }
         _ => HttpResponse {
             status_code: 404u16,
             body: ByteBuf::from("not_found"),

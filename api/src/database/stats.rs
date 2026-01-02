@@ -72,13 +72,15 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
-        let total_contracts: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests"#)
-            .fetch_one(&self.pool)
-            .await?;
+        let total_contracts: i64 =
+            sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests"#)
+                .fetch_one(&self.pool)
+                .await?;
 
-        let total_transfers: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM token_transfers"#)
-            .fetch_one(&self.pool)
-            .await?;
+        let total_transfers: i64 =
+            sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM token_transfers"#)
+                .fetch_one(&self.pool)
+                .await?;
 
         let total_volume: Option<i64> =
             sqlx::query_scalar!(r#"SELECT SUM(amount_e9s)::BIGINT as "sum" FROM token_transfers"#)

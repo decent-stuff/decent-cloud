@@ -34,9 +34,7 @@ impl BandwidthMonitor {
         let chain_name = format!("{}{}", Self::CHAIN_PREFIX, slug);
 
         // Create chain if it doesn't exist
-        let _ = Command::new("iptables")
-            .args(["-N", &chain_name])
-            .output();
+        let _ = Command::new("iptables").args(["-N", &chain_name]).output();
 
         // Flush any existing rules
         Command::new("iptables")
@@ -47,21 +45,13 @@ impl BandwidthMonitor {
         // Add rules to count traffic to/from this VM
         // Incoming traffic (to VM)
         Command::new("iptables")
-            .args([
-                "-A", &chain_name,
-                "-d", internal_ip,
-                "-j", "RETURN",
-            ])
+            .args(["-A", &chain_name, "-d", internal_ip, "-j", "RETURN"])
             .output()
             .context("Failed to add incoming traffic rule")?;
 
         // Outgoing traffic (from VM)
         Command::new("iptables")
-            .args([
-                "-A", &chain_name,
-                "-s", internal_ip,
-                "-j", "RETURN",
-            ])
+            .args(["-A", &chain_name, "-s", internal_ip, "-j", "RETURN"])
             .output()
             .context("Failed to add outgoing traffic rule")?;
 
@@ -92,13 +82,9 @@ impl BandwidthMonitor {
             .output();
 
         // Flush and delete chain
-        let _ = Command::new("iptables")
-            .args(["-F", &chain_name])
-            .output();
+        let _ = Command::new("iptables").args(["-F", &chain_name]).output();
 
-        let _ = Command::new("iptables")
-            .args(["-X", &chain_name])
-            .output();
+        let _ = Command::new("iptables").args(["-X", &chain_name]).output();
 
         tracing::debug!("Cleaned up iptables accounting for {}", slug);
         Ok(())

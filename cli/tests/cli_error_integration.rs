@@ -75,7 +75,10 @@ fn test_ledger_path_with_custom_dir() {
     let custom_dir = "/custom/ledger/location";
     let ledger_path = PathBuf::from(custom_dir).join("main.bin");
 
-    assert_eq!(ledger_path, PathBuf::from("/custom/ledger/location/main.bin"));
+    assert_eq!(
+        ledger_path,
+        PathBuf::from("/custom/ledger/location/main.bin")
+    );
 }
 
 #[test]
@@ -122,12 +125,11 @@ fn test_all_errors_provide_next_steps() {
     // Each error type should have at least one actionable keyword
     let home_error = "Could not determine home directory. Please set HOME environment variable or use --local-ledger-dir to specify ledger location.";
     let ledger_error = "Failed to load local ledger\n\nPossible fixes:";
-    let cache_error = "Failed to refresh caches from ledger\n\nThis may indicate a corrupted ledger. Try:";
+    let cache_error =
+        "Failed to refresh caches from ledger\n\nThis may indicate a corrupted ledger. Try:";
 
     assert!(
-        actionable_keywords
-            .iter()
-            .any(|kw| home_error.contains(kw)),
+        actionable_keywords.iter().any(|kw| home_error.contains(kw)),
         "HomeDirNotFound error should provide next steps"
     );
     assert!(

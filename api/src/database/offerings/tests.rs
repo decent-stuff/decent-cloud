@@ -126,7 +126,10 @@ fn export_typescript_types() {
 #[tokio::test]
 async fn test_get_provider_offerings_empty() {
     let db = setup_test_db().await;
-    let offerings = db.get_provider_offerings(&[1u8; 32]).await.expect("Failed to get provider offerings");
+    let offerings = db
+        .get_provider_offerings(&[1u8; 32])
+        .await
+        .expect("Failed to get provider offerings");
     assert_eq!(offerings.len(), 0);
 }
 
@@ -138,7 +141,10 @@ async fn test_get_provider_offerings() {
     insert_test_offering(&db, 1, &pubkey, "US", 100.0).await;
     insert_test_offering(&db, 2, &pubkey, "DE", 200.0).await;
 
-    let offerings = db.get_provider_offerings(&pubkey).await.expect("Failed to get provider offerings");
+    let offerings = db
+        .get_provider_offerings(&pubkey)
+        .await
+        .expect("Failed to get provider offerings");
     assert_eq!(offerings.len(), 2);
 }
 
@@ -148,9 +154,15 @@ async fn test_get_offering_by_id() {
     insert_test_offering(&db, 42, &[1u8; 32], "US", 100.0).await;
 
     let db_id = test_id_to_db_id(42);
-    let offering = db.get_offering(db_id).await.expect("Failed to get offering by ID");
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering by ID");
     assert!(offering.is_some());
-    assert_eq!(offering.expect("Expected offering to exist").id, Some(db_id));
+    assert_eq!(
+        offering.expect("Expected offering to exist").id,
+        Some(db_id)
+    );
 }
 
 #[tokio::test]
@@ -166,7 +178,10 @@ async fn test_count_offerings_no_filters() {
     insert_test_offering(&db, 1, &[1u8; 32], "US", 100.0).await;
     insert_test_offering(&db, 2, &[2u8; 32], "DE", 200.0).await;
 
-    let count = db.count_offerings(None).await.expect("Failed to count offerings");
+    let count = db
+        .count_offerings(None)
+        .await
+        .expect("Failed to count offerings");
     // Count includes example offerings from migration 008
     assert!(count >= 2);
 }
@@ -507,11 +522,17 @@ async fn test_create_offering_success() {
         resolved_pool_name: None,
     };
 
-    let offering_id = db.create_offering(&pubkey, params).await.expect("Failed to create offering");
+    let offering_id = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
     assert!(offering_id > 0);
 
     // Verify the offering was created
-    let offering = db.get_offering(offering_id).await.expect("Failed to get created offering");
+    let offering = db
+        .get_offering(offering_id)
+        .await
+        .expect("Failed to get created offering");
     assert!(offering.is_some());
     let offering = offering.expect("Expected offering to exist after creation");
     assert_eq!(offering.offer_name, "Test Server");
@@ -787,7 +808,11 @@ async fn test_update_offering_success() {
     assert!(result.is_ok());
 
     // Verify update
-    let offering = db.get_offering(db_id).await.expect("Failed to get updated offering").expect("Expected offering to exist after update");
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get updated offering")
+        .expect("Expected offering to exist after update");
     assert_eq!(offering.offer_name, "Updated Server");
     assert_eq!(offering.monthly_price, 199.99);
     assert_eq!(offering.currency, "DER");
@@ -889,7 +914,10 @@ async fn test_delete_offering_success() {
     assert!(result.is_ok());
 
     // Verify deletion
-    let offering = db.get_offering(db_id).await.expect("Failed to get offering after deletion");
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering after deletion");
     assert!(offering.is_none());
 }
 
@@ -938,7 +966,11 @@ async fn test_duplicate_offering_success() {
     assert!(new_id > db_id);
 
     // Verify duplication
-    let duplicated = db.get_offering(new_id).await.expect("Failed to get offering").expect("Expected offering to exist");
+    let duplicated = db
+        .get_offering(new_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(duplicated.offer_name, "Test Offer (Copy)");
     assert_eq!(duplicated.monthly_price, 100.0);
     assert_eq!(duplicated.datacenter_country, "US");
@@ -992,7 +1024,11 @@ async fn test_bulk_update_stock_status_success() {
 
     // Verify all updated
     for id in offering_ids {
-        let offering = db.get_offering(id).await.expect("Failed to get offering").expect("Expected offering to exist");
+        let offering = db
+            .get_offering(id)
+            .await
+            .expect("Failed to get offering")
+            .expect("Expected offering to exist");
         assert_eq!(offering.stock_status, "out_of_stock");
     }
 }
@@ -1042,7 +1078,9 @@ off-1,Test Server,Great server,https://example.com,USD,100.0,0.0,public,dedicate
 off-2,Test Server 2,Another server,,DER,200.0,50.0,public,vps,kvm,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,\"BTC,ETH\",\"SSD,NVMe\",\"Ubuntu,Debian\"";
 
     let (success_count, errors) = db
-        .import_offerings_csv(&pubkey, csv_data, false).await.expect("Failed to import offerings CSV");
+        .import_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .expect("Failed to import offerings CSV");
 
     assert_eq!(success_count, 2);
     assert_eq!(errors.len(), 0);
@@ -1052,8 +1090,14 @@ off-2,Test Server 2,Another server,,DER,200.0,50.0,public,vps,kvm,monthly,in_sto
         r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "off-1"
     )
-    .fetch_one(&db.pool).await.expect("Failed to fetch from database");
-    let offering = db.get_offering(off1).await.expect("Failed to get offering").expect("Expected offering to exist");
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to fetch from database");
+    let offering = db
+        .get_offering(off1)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(offering.offer_name, "Test Server");
     assert_eq!(offering.monthly_price, 100.0);
     assert_eq!(offering.datacenter_country, "US");
@@ -1102,7 +1146,9 @@ off-3,,desc,,USD,100.0,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,
 off-4,Bad Price,desc,,USD,invalid,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,";
 
     let (success_count, errors) = db
-        .import_offerings_csv(&pubkey, csv_data, false).await.expect("Failed to import offerings CSV");
+        .import_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .expect("Failed to import offerings CSV");
 
     assert_eq!(success_count, 1);
     assert_eq!(errors.len(), 3);
@@ -1127,14 +1173,20 @@ off-1,Updated Offer,Updated desc,,USD,200.0,10.0,public,dedicated,,monthly,out_o
 off-2,New Offer,New desc,,DER,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,,,";
 
     let (success_count, errors) = db
-        .import_offerings_csv(&pubkey, csv_data, true).await.expect("Failed to import offerings CSV");
+        .import_offerings_csv(&pubkey, csv_data, true)
+        .await
+        .expect("Failed to import offerings CSV");
 
     assert_eq!(success_count, 2);
     assert_eq!(errors.len(), 0);
 
     // Verify update
     let db_id = test_id_to_db_id(1);
-    let offering = db.get_offering(db_id).await.expect("Failed to get offering").expect("Expected offering to exist");
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(offering.offer_name, "Updated Offer");
     assert_eq!(offering.monthly_price, 200.0);
     assert_eq!(offering.stock_status, "out_of_stock");
@@ -1144,7 +1196,9 @@ off-2,New Offer,New desc,,DER,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,
         r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "off-2"
     )
-    .fetch_one(&db.pool).await.expect("Failed to fetch from database");
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to fetch from database");
     assert!(off2 > db_id);
 }
 
@@ -1162,7 +1216,9 @@ async fn test_csv_import_unauthorized() {
 off-1,Hacked,Unauthorized update,,USD,1.0,0.0,public,dedicated,,monthly,in_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,";
 
     let (success_count, errors) = db
-        .import_offerings_csv(&pubkey2, csv_data, true).await.expect("Failed to import offerings CSV");
+        .import_offerings_csv(&pubkey2, csv_data, true)
+        .await
+        .expect("Failed to import offerings CSV");
 
     // Should create new offering for pubkey2, not update pubkey1's offering
     assert_eq!(success_count, 1);
@@ -1170,7 +1226,11 @@ off-1,Hacked,Unauthorized update,,USD,1.0,0.0,public,dedicated,,monthly,in_stock
 
     // Verify original offering unchanged
     let db_id = test_id_to_db_id(1);
-    let original = db.get_offering(db_id).await.expect("Failed to get offering").expect("Expected offering to exist");
+    let original = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(original.offer_name, "Test Offer");
     assert_eq!(original.monthly_price, 100.0);
 }
@@ -1185,7 +1245,9 @@ async fn test_csv_import_column_order_independence() {
 Reordered Server,reorder-1,USD,10.0,99.0,public,compute,monthly,in_stock,US,NYC,false";
 
     let (success_count, errors) = db
-        .import_offerings_csv(&pubkey, csv_data, false).await.expect("Failed to import offerings CSV");
+        .import_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .expect("Failed to import offerings CSV");
 
     assert_eq!(success_count, 1, "errors: {:?}", errors);
     assert_eq!(errors.len(), 0);
@@ -1195,8 +1257,14 @@ Reordered Server,reorder-1,USD,10.0,99.0,public,compute,monthly,in_stock,US,NYC,
         r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "reorder-1"
     )
-    .fetch_one(&db.pool).await.expect("Failed to fetch from database");
-    let offering = db.get_offering(off).await.expect("Failed to get offering").expect("Expected offering to exist");
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to fetch from database");
+    let offering = db
+        .get_offering(off)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(offering.offer_name, "Reordered Server");
     assert_eq!(offering.monthly_price, 99.0);
     assert_eq!(offering.setup_fee, 10.0);
@@ -1213,7 +1281,9 @@ async fn test_csv_import_gpu_fields() {
 gpu-1,GPU Server,USD,500.0,0.0,public,gpu,monthly,in_stock,US,NYC,false,NVIDIA A100,4,80";
 
     let (success_count, errors) = db
-        .import_offerings_csv(&pubkey, csv_data, false).await.expect("Failed to import offerings CSV");
+        .import_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .expect("Failed to import offerings CSV");
 
     assert_eq!(success_count, 1, "errors: {:?}", errors);
     assert_eq!(errors.len(), 0);
@@ -1222,8 +1292,14 @@ gpu-1,GPU Server,USD,500.0,0.0,public,gpu,monthly,in_stock,US,NYC,false,NVIDIA A
         r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "gpu-1"
     )
-    .fetch_one(&db.pool).await.expect("Failed to fetch from database");
-    let offering = db.get_offering(off).await.expect("Failed to get offering").expect("Expected offering to exist");
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to fetch from database");
+    let offering = db
+        .get_offering(off)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(offering.product_type, "gpu");
     assert_eq!(offering.gpu_name, Some("NVIDIA A100".to_string()));
     assert_eq!(offering.gpu_count, Some(4));
@@ -1238,7 +1314,10 @@ async fn test_search_offerings_dsl_empty_query() {
     insert_test_offering(&db, 2, &[2u8; 32], "DE", 200.0).await;
 
     // Empty query returns all public offerings (including examples)
-    let results = db.search_offerings_dsl("", 100, 0).await.expect("Failed to search offerings DSL");
+    let results = db
+        .search_offerings_dsl("", 100, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert!(results.len() >= 2);
     assert!(results.iter().any(|o| o.offering_id == "off-1"));
     assert!(results.iter().any(|o| o.offering_id == "off-2"));
@@ -1275,7 +1354,9 @@ async fn test_search_offerings_dsl_basic_type_filter() {
 
     // Search for compute type only (1 test + 2 example compute offerings)
     let results = db
-        .search_offerings_dsl("type:compute", 10, 0).await.expect("Failed to search offerings DSL");
+        .search_offerings_dsl("type:compute", 10, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(results.len(), 3);
     // Verify all are compute type
     assert!(results.iter().all(|r| r.product_type == "compute"));
@@ -1291,13 +1372,17 @@ async fn test_search_offerings_dsl_price_range() {
 
     // Search for price range [0 TO 100]
     let results = db
-        .search_offerings_dsl("price:[0 TO 100]", 10, 0).await.expect("Failed to search offerings DSL");
+        .search_offerings_dsl("price:[0 TO 100]", 10, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(results.len(), 1);
     assert!(results.iter().all(|r| r.monthly_price <= 100.0));
 
     // Search for price range [100 TO 200]
     let results = db
-        .search_offerings_dsl("price:[100 TO 200]", 10, 0).await.expect("Failed to search offerings DSL");
+        .search_offerings_dsl("price:[100 TO 200]", 10, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(results.len(), 1);
     assert!(results
         .iter()
@@ -1348,7 +1433,9 @@ async fn test_search_offerings_dsl_combined_filters() {
 
     // Combined query: type:compute AND country:US
     let results = db
-        .search_offerings_dsl("type:compute AND country:US", 10, 0).await.expect("Failed to search offerings DSL");
+        .search_offerings_dsl("type:compute AND country:US", 10, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].product_type, "compute");
     assert_eq!(results[0].datacenter_country, "US");
@@ -1398,12 +1485,18 @@ async fn test_search_offerings_dsl_comparison_operators() {
     .expect("Failed to execute SQL query");
 
     // Test >= operator (2 test offerings with cores >= 8)
-    let results = db.search_offerings_dsl("cores:>=8", 10, 0).await.expect("Failed to search offerings DSL");
+    let results = db
+        .search_offerings_dsl("cores:>=8", 10, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(results.len(), 2);
     assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) >= 8));
 
     // Test < operator (1 test offering with 4 cores)
-    let results = db.search_offerings_dsl("cores:<8", 10, 0).await.expect("Failed to search offerings DSL");
+    let results = db
+        .search_offerings_dsl("cores:<8", 10, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(results.len(), 1);
     assert!(results.iter().all(|r| r.processor_cores.unwrap_or(0) < 8));
 }
@@ -1429,7 +1522,9 @@ async fn test_search_offerings_dsl_excludes_private() {
 
     // DSL search should only return public offerings (including examples)
     let results = db
-        .search_offerings_dsl("type:compute", 100, 0).await.expect("Failed to search offerings DSL");
+        .search_offerings_dsl("type:compute", 100, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert!(!results.is_empty());
     assert!(results
         .iter()
@@ -1458,13 +1553,19 @@ async fn test_search_offerings_dsl_pagination() {
     }
 
     // First page (sorted by price ASC)
-    let page1 = db.search_offerings_dsl("", 2, 0).await.expect("Failed to search offerings DSL");
+    let page1 = db
+        .search_offerings_dsl("", 2, 0)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(page1.len(), 2);
     assert_eq!(page1[0].monthly_price, 100.0);
     assert_eq!(page1[1].monthly_price, 101.0);
 
     // Second page
-    let page2 = db.search_offerings_dsl("", 2, 2).await.expect("Failed to search offerings DSL");
+    let page2 = db
+        .search_offerings_dsl("", 2, 2)
+        .await
+        .expect("Failed to search offerings DSL");
     assert_eq!(page2.len(), 2);
     assert_eq!(page2[0].monthly_price, 102.0);
     assert_eq!(page2[1].monthly_price, 103.0);
@@ -1479,7 +1580,9 @@ async fn test_import_seeded_offerings_csv() {
 seeded-1,Seeded Server,From scraper,https://example.com/product,USD,100.0,0.0,public,dedicated,,monthly,in_stock,US,New York,false";
 
     let (success_count, errors) = db
-        .import_seeded_offerings_csv(&pubkey, csv_data, false).await.expect("Failed to import seeded offerings CSV");
+        .import_seeded_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .expect("Failed to import seeded offerings CSV");
 
     assert_eq!(success_count, 1, "errors: {:?}", errors);
     assert_eq!(errors.len(), 0);
@@ -1489,8 +1592,14 @@ seeded-1,Seeded Server,From scraper,https://example.com/product,USD,100.0,0.0,pu
         r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "seeded-1"
     )
-    .fetch_one(&db.pool).await.expect("Failed to fetch from database");
-    let offering = db.get_offering(off).await.expect("Failed to get offering").expect("Expected offering to exist");
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to fetch from database");
+    let offering = db
+        .get_offering(off)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(offering.offering_source, Some("seeded".to_string()));
 
     // Verify external_checkout_url was copied from product_page_url
@@ -1514,7 +1623,9 @@ async fn test_import_seeded_offerings_csv_with_external_checkout_url() {
 seeded-2,Seeded Server 2,From scraper,https://example.com/info,https://example.com/checkout,USD,100.0,0.0,public,dedicated,,monthly,in_stock,US,New York,false";
 
     let (success_count, errors) = db
-        .import_seeded_offerings_csv(&pubkey, csv_data, false).await.expect("Failed to import seeded offerings CSV");
+        .import_seeded_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .expect("Failed to import seeded offerings CSV");
 
     assert_eq!(success_count, 1, "errors: {:?}", errors);
     assert_eq!(errors.len(), 0);
@@ -1523,8 +1634,14 @@ seeded-2,Seeded Server 2,From scraper,https://example.com/info,https://example.c
         r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "seeded-2"
     )
-    .fetch_one(&db.pool).await.expect("Failed to fetch from database");
-    let offering = db.get_offering(off).await.expect("Failed to get offering").expect("Expected offering to exist");
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to fetch from database");
+    let offering = db
+        .get_offering(off)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(offering.offering_source, Some("seeded".to_string()));
 
     // Verify external_checkout_url kept explicit value
@@ -1548,7 +1665,9 @@ async fn test_import_seeded_offerings_csv_upsert() {
 seeded-3,Original,USD,100.0,0.0,public,compute,monthly,in_stock,US,NYC,false,https://example.com/old";
 
     let (success_count, _) = db
-        .import_seeded_offerings_csv(&pubkey, csv_data, false).await.expect("Failed to import seeded offerings CSV");
+        .import_seeded_offerings_csv(&pubkey, csv_data, false)
+        .await
+        .expect("Failed to import seeded offerings CSV");
     assert_eq!(success_count, 1);
 
     // Upsert with updated data
@@ -1556,7 +1675,9 @@ seeded-3,Original,USD,100.0,0.0,public,compute,monthly,in_stock,US,NYC,false,htt
 seeded-3,Updated,USD,200.0,10.0,public,compute,monthly,in_stock,US,LA,false,https://example.com/new";
 
     let (success_count, errors) = db
-        .import_seeded_offerings_csv(&pubkey, csv_data_updated, true).await.expect("Failed to import seeded offerings CSV");
+        .import_seeded_offerings_csv(&pubkey, csv_data_updated, true)
+        .await
+        .expect("Failed to import seeded offerings CSV");
 
     assert_eq!(success_count, 1);
     assert_eq!(errors.len(), 0);
@@ -1566,8 +1687,14 @@ seeded-3,Updated,USD,200.0,10.0,public,compute,monthly,in_stock,US,LA,false,http
         r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "seeded-3"
     )
-    .fetch_one(&db.pool).await.expect("Failed to fetch from database");
-    let offering = db.get_offering(off).await.expect("Failed to get offering").expect("Expected offering to exist");
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to fetch from database");
+    let offering = db
+        .get_offering(off)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert_eq!(offering.offer_name, "Updated");
     assert_eq!(offering.monthly_price, 200.0);
     assert_eq!(offering.offering_source, Some("seeded".to_string()));
@@ -1656,10 +1783,15 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         resolved_pool_name: None,
     };
 
-    db.create_offering(&pubkey, params).await.expect("Failed to create offering");
+    db.create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
 
     // Get provider offerings - should have resolved pool
-    let offerings = db.get_provider_offerings(&pubkey).await.expect("Failed to get provider offerings");
+    let offerings = db
+        .get_provider_offerings(&pubkey)
+        .await
+        .expect("Failed to get provider offerings");
     assert_eq!(offerings.len(), 1);
     assert_eq!(offerings[0].resolved_pool_id, Some("pool-eu-1".to_string()));
     assert_eq!(
@@ -1675,8 +1807,12 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
     register_provider(&db, &pubkey).await;
 
     // Create two pools
-    db.create_agent_pool("pool-eu-1", &pubkey, "DE Pool 1", "europe", "proxmox").await.expect("Failed to create agent pool");
-    db.create_agent_pool("pool-eu-2", &pubkey, "DE Pool 2", "europe", "script").await.expect("Failed to create agent pool");
+    db.create_agent_pool("pool-eu-1", &pubkey, "DE Pool 1", "europe", "proxmox")
+        .await
+        .expect("Failed to create agent pool");
+    db.create_agent_pool("pool-eu-2", &pubkey, "DE Pool 2", "europe", "script")
+        .await
+        .expect("Failed to create agent pool");
 
     // Create offering with explicit pool assignment (should use pool-eu-2 even though location matches pool-eu-1)
     let params = Offering {
@@ -1746,10 +1882,15 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         resolved_pool_name: None,
     };
 
-    db.create_offering(&pubkey, params).await.expect("Failed to create offering");
+    db.create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
 
     // Get provider offerings - should resolve to explicit pool
-    let offerings = db.get_provider_offerings(&pubkey).await.expect("Failed to get provider offerings");
+    let offerings = db
+        .get_provider_offerings(&pubkey)
+        .await
+        .expect("Failed to get provider offerings");
     assert_eq!(offerings.len(), 1);
     assert_eq!(offerings[0].resolved_pool_id, Some("pool-eu-2".to_string()));
     assert_eq!(
@@ -1765,7 +1906,9 @@ async fn test_get_provider_offerings_no_matching_pool() {
     register_provider(&db, &pubkey).await;
 
     // Create pool for north america
-    db.create_agent_pool("pool-na-1", &pubkey, "NA Pool", "na", "proxmox").await.expect("Failed to create agent pool");
+    db.create_agent_pool("pool-na-1", &pubkey, "NA Pool", "na", "proxmox")
+        .await
+        .expect("Failed to create agent pool");
 
     // Create offering in Europe (no matching pool)
     let params = Offering {
@@ -1835,10 +1978,15 @@ async fn test_get_provider_offerings_no_matching_pool() {
         resolved_pool_name: None,
     };
 
-    db.create_offering(&pubkey, params).await.expect("Failed to create offering");
+    db.create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
 
     // Get provider offerings - should have no resolved pool
-    let offerings = db.get_provider_offerings(&pubkey).await.expect("Failed to get provider offerings");
+    let offerings = db
+        .get_provider_offerings(&pubkey)
+        .await
+        .expect("Failed to get provider offerings");
     assert_eq!(offerings.len(), 1);
     assert_eq!(offerings[0].resolved_pool_id, None);
     assert_eq!(offerings[0].resolved_pool_name, None);
@@ -1931,7 +2079,9 @@ async fn test_search_offerings_filters_by_pool_existence() {
         resolved_pool_id: None,
         resolved_pool_name: None,
     };
-    db.create_offering(&provider_with_pool, params1).await.expect("Failed to create offering");
+    db.create_offering(&provider_with_pool, params1)
+        .await
+        .expect("Failed to create offering");
 
     // Offering 2: Provider with pool, explicit pool_id (should be included)
     let params2 = Offering {
@@ -2000,7 +2150,9 @@ async fn test_search_offerings_filters_by_pool_existence() {
         resolved_pool_id: None,
         resolved_pool_name: None,
     };
-    db.create_offering(&provider_with_pool, params2).await.expect("Failed to create offering");
+    db.create_offering(&provider_with_pool, params2)
+        .await
+        .expect("Failed to create offering");
 
     // Offering 3: Provider without pool, in US (should be EXCLUDED)
     let params3 = Offering {
@@ -2069,7 +2221,9 @@ async fn test_search_offerings_filters_by_pool_existence() {
         resolved_pool_id: None,
         resolved_pool_name: None,
     };
-    db.create_offering(&provider_without_pool, params3).await.expect("Failed to create offering");
+    db.create_offering(&provider_without_pool, params3)
+        .await
+        .expect("Failed to create offering");
 
     // Search all offerings
     let results = db
@@ -2174,8 +2328,15 @@ async fn test_create_subscription_offering() {
         resolved_pool_name: None,
     };
 
-    let db_id = db.create_offering(&pubkey, params).await.expect("Failed to create offering");
-    let offering = db.get_offering(db_id).await.expect("Failed to get offering").expect("Expected offering to exist");
+    let db_id = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
 
     assert!(offering.is_subscription);
     assert_eq!(offering.subscription_interval_days, Some(30));
@@ -2255,8 +2416,15 @@ async fn test_create_yearly_subscription_offering() {
         resolved_pool_name: None,
     };
 
-    let db_id = db.create_offering(&pubkey, params).await.expect("Failed to create offering");
-    let offering = db.get_offering(db_id).await.expect("Failed to get offering").expect("Expected offering to exist");
+    let db_id = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
 
     assert!(offering.is_subscription);
     assert_eq!(offering.subscription_interval_days, Some(365));
@@ -2336,10 +2504,17 @@ async fn test_get_subscription_offering_fields() {
         resolved_pool_name: None,
     };
 
-    let db_id = db.create_offering(&pubkey, params).await.expect("Failed to create offering");
+    let db_id = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
 
     // Get the offering by ID and verify subscription fields
-    let retrieved = db.get_offering(db_id).await.expect("Failed to get offering").expect("Expected offering to exist");
+    let retrieved = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
     assert!(retrieved.is_subscription);
     assert_eq!(retrieved.subscription_interval_days, Some(30));
 
@@ -2441,8 +2616,15 @@ async fn test_one_time_offering_default_subscription_fields() {
         resolved_pool_name: None,
     };
 
-    let db_id = db.create_offering(&pubkey, params).await.expect("Failed to create offering");
-    let offering = db.get_offering(db_id).await.expect("Failed to get offering").expect("Expected offering to exist");
+    let db_id = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
 
     // One-time offerings should have is_subscription = false and no interval
     assert!(!offering.is_subscription);

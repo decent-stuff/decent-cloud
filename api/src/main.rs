@@ -169,7 +169,9 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     if cloudflare_dns.is_some() {
         tracing::info!("Cloudflare DNS client initialized for gateway management");
     } else {
-        tracing::info!("Cloudflare DNS not configured (CF_API_TOKEN, CF_ZONE_ID) - gateway DNS will NOT work");
+        tracing::info!(
+            "Cloudflare DNS not configured (CF_API_TOKEN, CF_ZONE_ID) - gateway DNS will NOT work"
+        );
     }
 
     Ok(AppContext {

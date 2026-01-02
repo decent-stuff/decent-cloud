@@ -162,7 +162,9 @@ async fn test_check_nonce_exists() {
     // Insert audit record with nonce
     let public_key = [11u8; 32];
     let signature = [0u8; 64];
-    let timestamp = chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp");
+    let timestamp = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("Failed to get timestamp");
 
     db.insert_signature_audit(
         None,
@@ -191,11 +193,17 @@ async fn test_signature_audit_cleanup() {
     let recent_nonce = uuid::Uuid::new_v4();
 
     // Calculate timestamps
-    let old_created_at =
-        chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp") - (200 * 24 * 60 * 60 * 1_000_000_000);
-    let recent_created_at =
-        chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp") - (10 * 24 * 60 * 60 * 1_000_000_000);
-    let client_timestamp = chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp");
+    let old_created_at = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("Failed to get timestamp")
+        - (200 * 24 * 60 * 60 * 1_000_000_000);
+    let recent_created_at = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("Failed to get timestamp")
+        - (10 * 24 * 60 * 60 * 1_000_000_000);
+    let client_timestamp = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("Failed to get timestamp");
 
     // Insert old audit record directly with SQL to control created_at
     sqlx::query(
@@ -471,7 +479,8 @@ async fn test_create_oauth_linked_account() {
     let account_with_keys = db.get_account_with_keys("newuser").await.unwrap().unwrap();
     assert_eq!(account_with_keys.public_keys.len(), 1);
     assert_eq!(
-        hex::decode(&account_with_keys.public_keys[0].public_key).expect("Failed to decode public key hex"),
+        hex::decode(&account_with_keys.public_keys[0].public_key)
+            .expect("Failed to decode public key hex"),
         pubkey.to_vec()
     );
 
@@ -735,11 +744,12 @@ async fn test_verify_email_token_success() {
     db.verify_email_token(&token).await.unwrap();
 
     // Check that email_verified is now true
-    let result: Option<(bool,)> = sqlx::query_as("SELECT email_verified FROM accounts WHERE id = $1")
-        .bind(&account.id)
-        .fetch_optional(&db.pool)
-        .await
-        .expect("Failed to create email verification token");
+    let result: Option<(bool,)> =
+        sqlx::query_as("SELECT email_verified FROM accounts WHERE id = $1")
+            .bind(&account.id)
+            .fetch_optional(&db.pool)
+            .await
+            .expect("Failed to create email verification token");
 
     assert!(result.is_some());
     assert_eq!(result.unwrap().0, true);
@@ -868,10 +878,13 @@ async fn test_is_admin_migration() {
     assert_eq!(fetched.is_admin, false);
 
     // Manually set is_admin to TRUE to test non-default value
-    sqlx::query!("UPDATE accounts SET is_admin = TRUE WHERE id = $1", account.id)
-        .execute(&db.pool)
-        .await
-        .expect("Failed to get account by email");
+    sqlx::query!(
+        "UPDATE accounts SET is_admin = TRUE WHERE id = $1",
+        account.id
+    )
+    .execute(&db.pool)
+    .await
+    .expect("Failed to get account by email");
 
     // Verify is_admin is now true
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
@@ -909,10 +922,13 @@ async fn test_set_admin_status_revoke() {
         .await
         .expect("Failed to create account");
 
-    sqlx::query!("UPDATE accounts SET is_admin = TRUE WHERE id = $1", account.id)
-        .execute(&db.pool)
-        .await
-        .expect("Failed to create account");
+    sqlx::query!(
+        "UPDATE accounts SET is_admin = TRUE WHERE id = $1",
+        account.id
+    )
+    .execute(&db.pool)
+    .await
+    .expect("Failed to create account");
 
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
     assert_eq!(fetched.is_admin, true);
@@ -1852,7 +1868,9 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
         "{}",
         &signature,
         &pubkey,
-        chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp"),
+        chrono::Utc::now()
+            .timestamp_nanos_opt()
+            .expect("Failed to get timestamp"),
         &nonce,
         false,
     )

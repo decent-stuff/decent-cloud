@@ -212,8 +212,12 @@ fn build_filter_sql(
         (Operator::Eq, 1) if use_like => build_like_clause(column, filter.negated, placeholder_idx),
         (Operator::Eq, 1) => build_comparison_clause(column, "=", filter.negated, placeholder_idx),
         (Operator::Eq, n) if n > 1 => build_or_group(column, n, filter.negated, placeholder_idx),
-        (Operator::Gte, 1) => build_comparison_clause(column, ">=", filter.negated, placeholder_idx),
-        (Operator::Lte, 1) => build_comparison_clause(column, "<=", filter.negated, placeholder_idx),
+        (Operator::Gte, 1) => {
+            build_comparison_clause(column, ">=", filter.negated, placeholder_idx)
+        }
+        (Operator::Lte, 1) => {
+            build_comparison_clause(column, "<=", filter.negated, placeholder_idx)
+        }
         (Operator::Gt, 1) => build_comparison_clause(column, ">", filter.negated, placeholder_idx),
         (Operator::Lt, 1) => build_comparison_clause(column, "<", filter.negated, placeholder_idx),
         (Operator::Range, 2) => build_range_clause(column, filter.negated, placeholder_idx),
