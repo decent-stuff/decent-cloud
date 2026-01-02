@@ -1,9 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    networks:
+      - decent-cloud-network
+
   agent:
     build:
       context: ..
       dockerfile: agent/Dockerfile
     image: decent-cloud-claude:latest
+    depends_on:
+      - postgres
     # Run with docker group to access the socket
     group_add:
       - ${DOCKER_GID:-999}
@@ -15,6 +26,8 @@ services:
       - RUST_BACKTRACE=1
       - HOME=/home/ubuntu
       - VIRTUAL_ENV=/home/ubuntu/.venv
+      # PostgreSQL connection for testing
+      - DATABASE_URL_PG=postgres://test:test@postgres:5432/test
     volumes:
       # Mount the entire repository directory to /code
       - ..:/code
