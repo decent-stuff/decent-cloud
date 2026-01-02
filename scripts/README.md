@@ -1,6 +1,6 @@
 # Scripts
 
-This directory contains Python scripts that facilitate development.
+This directory contains development utility scripts (Python and Bash).
 
 ## Available Scripts
 
@@ -31,6 +31,26 @@ This script will:
 - Download the appropriate pocket-ic binary from GitHub releases
 - Install it to `~/.local/bin/pocket-ic`
 - Make it executable
+
+### `docker-compose-health.sh`
+Waits for a Docker Compose service to become healthy.
+
+Usage:
+```bash
+./scripts/docker-compose-health.sh <service-name> [timeout_seconds]
+```
+
+Example:
+```bash
+./scripts/docker-compose-health.sh postgres 30  # Wait 30s for postgres
+```
+
+This script will:
+- Validate service is running
+- Poll for service health with configurable timeout (default 60s)
+- PostgreSQL-specific: uses `pg_isready -U test -d test`
+- Generic fallback: checks container health status
+- Return 0 on healthy, 1 on timeout/failure with helpful error messages
 
 ## Usage with Cargo Make
 

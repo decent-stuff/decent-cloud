@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 API_URL="${API_URL:-http://localhost:59001/api/v1}"
-DATABASE_URL="${DATABASE_URL:-sqlite:./api/test.db?mode=rwc}"
+DATABASE_URL="${DATABASE_URL:-postgres://test:test@localhost:5432/test}"
 EMAIL="$1"
 
 if [ -z "$EMAIL" ]; then
@@ -53,7 +53,7 @@ echo ""
 
 # Step 2: Get token from database (simulating email link click)
 echo -e "${YELLOW}Step 2: Retrieving recovery token from database...${NC}"
-TOKEN_HEX=$(sqlite3 "$DATABASE_URL" "SELECT hex(token) FROM recovery_tokens WHERE created_at = (SELECT MAX(created_at) FROM recovery_tokens)" 2>/dev/null || echo "")
+TOKEN_HEX=$(psql "$DATABASE_URL" -t -c "SELECT encode(token, 'hex') FROM recovery_tokens WHERE created_at = (SELECT MAX(created_at) FROM recovery_tokens);" 2>/dev/null | tr -d ' ' || echo "")
 
 if [ -z "$TOKEN_HEX" ]; then
     echo -e "${RED}Error: No recovery token found in database${NC}"
