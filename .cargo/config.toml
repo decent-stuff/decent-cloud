@@ -14,3 +14,4 @@ opt-level = 3
 debug = 0
 incremental = false
 codegen-units = 256
+SQLX_OFFLINE=true
