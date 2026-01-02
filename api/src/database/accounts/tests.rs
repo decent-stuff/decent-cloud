@@ -2,8 +2,8 @@ use super::*;
 use sqlx::SqlitePool;
 
 async fn create_test_db() -> Database {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
+    let pool = SqlitePool::connect(":memory:").await.expect("Failed to create in-memory database for testing");
+    sqlx::migrate!().run(&pool).await.expect("Failed to run migrations for test database");
     Database { pool }
 }
 
@@ -16,7 +16,7 @@ async fn test_create_account() {
     let account = db
         .create_account(username, &public_key, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     assert_eq!(account.username, username);
     assert_eq!(account.id.len(), 16);
@@ -30,7 +30,7 @@ async fn test_get_account_by_username() {
 
     db.create_account(username, &public_key, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     let fetched = db.get_account_by_username(username).await.unwrap();
     assert!(fetched.is_some());
@@ -45,7 +45,7 @@ async fn test_get_account_with_keys() {
 
     db.create_account(username, &public_key, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     let account_with_keys = db.get_account_with_keys(username).await.unwrap();
     assert!(account_with_keys.is_some());
@@ -66,7 +66,7 @@ async fn test_add_account_key() {
     let account = db
         .create_account(username, &public_key1, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     let new_key = db.add_account_key(&account.id, &public_key2).await.unwrap();
     assert_eq!(new_key.public_key, public_key2);
@@ -84,7 +84,7 @@ async fn test_max_keys_limit() {
     let account = db
         .create_account(username, &public_key1, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Add 9 more keys (total 10)
     for i in 0..9 {
@@ -109,7 +109,7 @@ async fn test_disable_account_key() {
     let account = db
         .create_account(username, &public_key1, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     let key2 = db.add_account_key(&account.id, &public_key2).await.unwrap();
 
     let keys = db.get_account_keys(&account.id).await.unwrap();
@@ -147,7 +147,7 @@ async fn test_cannot_disable_last_key() {
     let account = db
         .create_account(username, &public_key, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     let keys = db.get_account_keys(&account.id).await.unwrap();
     let key_id = keys[0].id.clone();
 
@@ -168,7 +168,7 @@ async fn test_check_nonce_exists() {
     // Insert audit record with nonce
     let public_key = [11u8; 32];
     let signature = [0u8; 64];
-    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp");
 
     db.insert_signature_audit(
         None,
@@ -181,7 +181,7 @@ async fn test_check_nonce_exists() {
         false,
     )
     .await
-    .unwrap();
+    .expect("Failed to insert signature audit");
 
     // Now nonce should exist
     let exists = db.check_nonce_exists(&nonce, 10).await.unwrap();
@@ -198,10 +198,10 @@ async fn test_signature_audit_cleanup() {
 
     // Calculate timestamps
     let old_created_at =
-        chrono::Utc::now().timestamp_nanos_opt().unwrap() - (200 * 24 * 60 * 60 * 1_000_000_000);
+        chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp") - (200 * 24 * 60 * 60 * 1_000_000_000);
     let recent_created_at =
-        chrono::Utc::now().timestamp_nanos_opt().unwrap() - (10 * 24 * 60 * 60 * 1_000_000_000);
-    let client_timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+        chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp") - (10 * 24 * 60 * 60 * 1_000_000_000);
+    let client_timestamp = chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp");
 
     // Insert old audit record directly with SQL to control created_at
     sqlx::query(
@@ -220,7 +220,7 @@ async fn test_signature_audit_cleanup() {
     .bind(old_created_at)
     .execute(&db.pool)
     .await
-    .unwrap();
+    .expect("Failed to execute SQL query");
 
     // Insert recent audit record directly with SQL to control created_at
     sqlx::query(
@@ -239,7 +239,7 @@ async fn test_signature_audit_cleanup() {
     .bind(recent_created_at)
     .execute(&db.pool)
     .await
-    .unwrap();
+    .expect("Failed to execute SQL query");
 
     // Clean up records older than 180 days
     let deleted_count = db.cleanup_signature_audit(180).await.unwrap();
@@ -249,14 +249,14 @@ async fn test_signature_audit_cleanup() {
     let old_exists = db
         .check_nonce_exists(&old_nonce, 365 * 24 * 60)
         .await
-        .unwrap();
+        .expect("Failed to check nonce existence");
     assert!(!old_exists, "Old nonce should not exist after cleanup");
 
     // Verify recent nonce still exists
     let recent_exists = db
         .check_nonce_exists(&recent_nonce, 365 * 24 * 60)
         .await
-        .unwrap();
+        .expect("Failed to check nonce existence");
     assert!(recent_exists, "Recent nonce should still exist");
 }
 
@@ -268,7 +268,7 @@ async fn test_create_oauth_account() {
     let account = db
         .create_account("testuser", &[0u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Create OAuth link
     let oauth_acc = db
@@ -279,7 +279,7 @@ async fn test_create_oauth_account() {
             Some("test@example.com"),
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     assert_eq!(oauth_acc.provider, "google_oauth");
     assert_eq!(oauth_acc.external_id, "google_user_123");
@@ -294,7 +294,7 @@ async fn test_create_oauth_account_duplicate_external_id() {
     let account = db
         .create_account("testuser", &[0u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Create first OAuth link
     db.create_oauth_account(
@@ -304,7 +304,7 @@ async fn test_create_oauth_account_duplicate_external_id() {
         Some("test@example.com"),
     )
     .await
-    .unwrap();
+    .expect("Failed to create OAuth linked account");
 
     // Try to create duplicate with same provider + external_id
     let result = db
@@ -329,7 +329,7 @@ async fn test_get_oauth_account() {
     let account = db
         .create_account("testuser", &[0u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to get OAuth account");
 
     // Create OAuth link
     let created = db
@@ -340,7 +340,7 @@ async fn test_get_oauth_account() {
             Some("test@example.com"),
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Fetch by OAuth ID
     let fetched = db.get_oauth_account(&created.id).await.unwrap();
@@ -372,7 +372,7 @@ async fn test_get_oauth_account_by_provider_and_external_id() {
     let account = db
         .create_account("testuser", &[0u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to get OAuth account by provider and external ID");
 
     // Create OAuth link
     let created = db
@@ -383,13 +383,13 @@ async fn test_get_oauth_account_by_provider_and_external_id() {
             Some("test@example.com"),
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Fetch by provider and external_id
     let fetched = db
         .get_oauth_account_by_provider_and_external_id("google_oauth", "google_user_456")
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     assert!(fetched.is_some());
     let fetched = fetched.unwrap();
@@ -405,7 +405,7 @@ async fn test_get_oauth_account_by_provider_and_external_id_not_found() {
     let result = db
         .get_oauth_account_by_provider_and_external_id("google_oauth", "nonexistent")
         .await
-        .unwrap();
+        .expect("Failed to get OAuth account by provider and external ID");
 
     assert!(
         result.is_none(),
@@ -428,7 +428,7 @@ async fn test_get_account_by_email() {
             "google_789",
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Fetch by email
     let fetched = db.get_account_by_email("user@example.com").await.unwrap();
@@ -447,7 +447,7 @@ async fn test_get_account_by_email_not_found() {
     let result = db
         .get_account_by_email("nonexistent@example.com")
         .await
-        .unwrap();
+        .expect("Failed to get account by email");
 
     assert!(result.is_none(), "Should return None for nonexistent email");
 }
@@ -466,7 +466,7 @@ async fn test_create_oauth_linked_account() {
             "google_new_123",
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Verify account
     assert_eq!(account.username, "newuser");
@@ -477,7 +477,7 @@ async fn test_create_oauth_linked_account() {
     let account_with_keys = db.get_account_with_keys("newuser").await.unwrap().unwrap();
     assert_eq!(account_with_keys.public_keys.len(), 1);
     assert_eq!(
-        hex::decode(&account_with_keys.public_keys[0].public_key).unwrap(),
+        hex::decode(&account_with_keys.public_keys[0].public_key).expect("Failed to decode public key hex"),
         pubkey.to_vec()
     );
 
@@ -495,7 +495,7 @@ async fn test_create_oauth_linked_account_duplicate_username() {
     // Create first account
     db.create_account("duplicate", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Try to create OAuth account with same username
     let result = db
@@ -562,7 +562,7 @@ async fn test_usernames_preserve_case_but_unique_case_insensitive() {
     let account = db
         .create_account("AliceWonderland", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify username is stored with original case
     assert_eq!(account.username, "AliceWonderland");
@@ -601,7 +601,7 @@ async fn test_username_search_is_case_insensitive() {
     let _account = db
         .create_account("AliceWonderland", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Search with different cases should all find the same account
     let found_lower = db.get_account_by_username("alicewonderland").await.unwrap();
@@ -635,7 +635,7 @@ async fn test_create_oauth_linked_account_queues_welcome_email() {
             "google_email_123",
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Verify welcome email was queued
     let pending_emails = db.get_pending_emails(10).await.unwrap();
@@ -659,13 +659,13 @@ async fn test_create_email_verification_token() {
     let account = db
         .create_account("testuser", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Create verification token
     let token = db
         .create_email_verification_token(&account.id, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Token should be 16 bytes (UUID)
     assert_eq!(token.len(), 16);
@@ -677,7 +677,7 @@ async fn test_create_email_verification_token() {
     .bind(&token)
     .fetch_optional(&db.pool)
     .await
-    .unwrap();
+    .expect("Failed to create email verification token");
 
     assert!(result.is_some());
     let (stored_token, stored_account_id, stored_email) = result.unwrap();
@@ -694,13 +694,13 @@ async fn test_create_email_verification_token_expires() {
     let account = db
         .create_account("testuser", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Create verification token
     let token = db
         .create_email_verification_token(&account.id, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify expiry is set (24 hours from now)
     let result: Option<(i64, i64)> = sqlx::query_as(
@@ -709,7 +709,7 @@ async fn test_create_email_verification_token_expires() {
     .bind(&token)
     .fetch_optional(&db.pool)
     .await
-    .unwrap();
+    .expect("Failed to create email verification token");
 
     assert!(result.is_some());
     let (created_at, expires_at) = result.unwrap();
@@ -725,7 +725,7 @@ async fn test_verify_email_token_success() {
     let account = db
         .create_account("testuser", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify email is not verified initially
     let account_check = db.get_account(&account.id).await.unwrap().unwrap();
@@ -735,7 +735,7 @@ async fn test_verify_email_token_success() {
     let token = db
         .create_email_verification_token(&account.id, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify token
     db.verify_email_token(&token).await.unwrap();
@@ -745,7 +745,7 @@ async fn test_verify_email_token_success() {
         .bind(&account.id)
         .fetch_optional(&db.pool)
         .await
-        .unwrap();
+        .expect("Failed to create email verification token");
 
     assert!(result.is_some());
     assert_eq!(result.unwrap().0, 1);
@@ -756,7 +756,7 @@ async fn test_verify_email_token_success() {
             .bind(&token)
             .fetch_optional(&db.pool)
             .await
-            .unwrap();
+            .expect("Failed to fetch from database");
 
     assert!(token_result.is_some());
     assert!(token_result.unwrap().0.is_some());
@@ -785,13 +785,13 @@ async fn test_verify_email_token_already_used() {
     let account = db
         .create_account("testuser", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Create verification token
     let token = db
         .create_email_verification_token(&account.id, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify token once
     db.verify_email_token(&token).await.unwrap();
@@ -814,13 +814,13 @@ async fn test_verify_email_token_expired() {
     let account = db
         .create_account("testuser", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Create verification token
     let token = db
         .create_email_verification_token(&account.id, "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Manually expire the token by updating expires_at to past
     let past = chrono::Utc::now().timestamp() - 3600;
@@ -831,7 +831,7 @@ async fn test_verify_email_token_expired() {
     )
     .execute(&db.pool)
     .await
-    .unwrap();
+    .expect("Failed to create email verification token");
 
     // Try to verify expired token
     let result = db.verify_email_token(&token).await;
@@ -848,7 +848,7 @@ async fn test_is_admin_migration() {
     let account = db
         .create_account("testuser", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify is_admin is 0 by default
     assert_eq!(account.is_admin, 0);
@@ -861,7 +861,7 @@ async fn test_is_admin_migration() {
     let fetched = db
         .get_account_by_username("testuser")
         .await
-        .unwrap()
+        .expect("Failed to create account")
         .unwrap();
     assert_eq!(fetched.is_admin, 0);
 
@@ -869,7 +869,7 @@ async fn test_is_admin_migration() {
     let fetched = db
         .get_account_by_email("test@example.com")
         .await
-        .unwrap()
+        .expect("Failed to fetch account by username")
         .unwrap();
     assert_eq!(fetched.is_admin, 0);
 
@@ -877,7 +877,7 @@ async fn test_is_admin_migration() {
     sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = ?", account.id)
         .execute(&db.pool)
         .await
-        .unwrap();
+        .expect("Failed to get account by email");
 
     // Verify is_admin is now 1
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
@@ -892,7 +892,7 @@ async fn test_set_admin_status_grant() {
     let account = db
         .create_account("testadmin", &[1u8; 32], "admin@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify not admin initially
     assert_eq!(account.is_admin, 0);
@@ -913,12 +913,12 @@ async fn test_set_admin_status_revoke() {
     let account = db
         .create_account("revokeadmin", &[2u8; 32], "revoke@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = ?", account.id)
         .execute(&db.pool)
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
     assert_eq!(fetched.is_admin, 1);
@@ -939,7 +939,7 @@ async fn test_set_admin_status_case_insensitive() {
     let account = db
         .create_account("MixedCase", &[3u8; 32], "mixed@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Grant admin using different case
     db.set_admin_status("mixedcase", true).await.unwrap();
@@ -970,10 +970,10 @@ async fn test_list_admins_empty() {
     // Create some non-admin accounts
     db.create_account("user1", &[1u8; 32], "user1@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     db.create_account("user2", &[2u8; 32], "user2@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // List admins should be empty
     let admins = db.list_admins().await.unwrap();
@@ -987,13 +987,13 @@ async fn test_list_admins() {
     // Create accounts
     db.create_account("admin1", &[1u8; 32], "admin1@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     db.create_account("admin2", &[2u8; 32], "admin2@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     db.create_account("user3", &[3u8; 32], "user3@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Grant admin to two accounts
     db.set_admin_status("admin1", true).await.unwrap();
@@ -1021,7 +1021,7 @@ async fn test_get_account_with_keys_includes_is_admin() {
     let _account = db
         .create_account("testuser", &[1u8; 32], "test@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Get account with keys and verify is_admin is false
     let account_with_keys = db.get_account_with_keys("testuser").await.unwrap().unwrap();
@@ -1050,13 +1050,13 @@ async fn test_get_account_with_keys_by_public_key_includes_is_admin() {
     let _account = db
         .create_account("pkuser", &pubkey, "pkuser@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Get account with keys by public key and verify is_admin is false
     let account_with_keys = db
         .get_account_with_keys_by_public_key(&pubkey)
         .await
-        .unwrap()
+        .expect("Failed to create account")
         .unwrap();
     assert!(
         !account_with_keys.is_admin,
@@ -1070,7 +1070,7 @@ async fn test_get_account_with_keys_by_public_key_includes_is_admin() {
     let account_with_keys = db
         .get_account_with_keys_by_public_key(&pubkey)
         .await
-        .unwrap()
+        .expect("Failed to get account with keys by public key")
         .unwrap();
     assert!(
         account_with_keys.is_admin,
@@ -1095,7 +1095,7 @@ async fn test_oauth_session_key_can_lookup_account() {
             "google_123",
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Verify initial key can lookup account
     let account_id = db.get_account_id_by_public_key(&initial_key).await.unwrap();
@@ -1127,19 +1127,19 @@ async fn test_disabled_key_cannot_lookup_account() {
     let account = db
         .create_account("twokeys", &key1, "twokeys@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     let key2_record = db.add_account_key(&account.id, &key2).await.unwrap();
 
     // Both keys should work initially
     assert!(db
         .get_account_id_by_public_key(&key1)
         .await
-        .unwrap()
+        .expect("Failed to create account")
         .is_some());
     assert!(db
         .get_account_id_by_public_key(&key2)
         .await
-        .unwrap()
+        .expect("Failed to create account")
         .is_some());
 
     // Disable key2
@@ -1152,20 +1152,20 @@ async fn test_disabled_key_cannot_lookup_account() {
         .clone();
     db.disable_account_key(&key2_record.id, &key1_id)
         .await
-        .unwrap();
+        .expect("Failed to get account keys");
 
     // key1 should still work, key2 should not (is_active = 0)
     assert!(
         db.get_account_id_by_public_key(&key1)
             .await
-            .unwrap()
+            .expect("Failed to get account keys")
             .is_some(),
         "Active key should still find account"
     );
     assert!(
         db.get_account_id_by_public_key(&key2)
             .await
-            .unwrap()
+            .expect("Failed to disable account key")
             .is_none(),
         "Disabled key should NOT find account"
     );
@@ -1179,13 +1179,13 @@ async fn test_get_account_with_keys_includes_email_and_verification_status() {
     let _account = db
         .create_account("emailuser", &[30u8; 32], "emailuser@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Get account with keys and verify email fields
     let account_with_keys = db
         .get_account_with_keys("emailuser")
         .await
-        .unwrap()
+        .expect("Failed to create account")
         .unwrap();
     assert_eq!(
         account_with_keys.email,
@@ -1199,18 +1199,18 @@ async fn test_get_account_with_keys_includes_email_and_verification_status() {
     // Verify email
     let token = db
         .create_email_verification_token(
-            &hex::decode(&account_with_keys.id).unwrap(),
+            &hex::decode(&account_with_keys.id).expect("Failed to decode account ID"),
             "emailuser@example.com",
         )
         .await
-        .unwrap();
+        .expect("Failed to create email verification token");
     db.verify_email_token(&token).await.unwrap();
 
     // Get account with keys again and verify email_verified is now true
     let account_with_keys = db
         .get_account_with_keys("emailuser")
         .await
-        .unwrap()
+        .expect("Failed to fetch account with keys")
         .unwrap();
     assert_eq!(
         account_with_keys.email,
@@ -1231,13 +1231,13 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
     let _account = db
         .create_account("pkemailuser", &pubkey, "pkemailuser@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Get account with keys by public key and verify email fields
     let account_with_keys = db
         .get_account_with_keys_by_public_key(&pubkey)
         .await
-        .unwrap()
+        .expect("Failed to create account")
         .unwrap();
     assert_eq!(
         account_with_keys.email,
@@ -1251,18 +1251,18 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
     // Verify email
     let token = db
         .create_email_verification_token(
-            &hex::decode(&account_with_keys.id).unwrap(),
+            &hex::decode(&account_with_keys.id).expect("Failed to decode account ID"),
             "pkemailuser@example.com",
         )
         .await
-        .unwrap();
+        .expect("Failed to create email verification token");
     db.verify_email_token(&token).await.unwrap();
 
     // Get account with keys again and verify email_verified is now true
     let account_with_keys = db
         .get_account_with_keys_by_public_key(&pubkey)
         .await
-        .unwrap()
+        .expect("Failed to get account with keys by public key")
         .unwrap();
     assert_eq!(
         account_with_keys.email,
@@ -1288,13 +1288,13 @@ async fn test_oauth_account_with_keys_has_verified_email() {
             "google_456",
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Get account with keys and verify email is verified for OAuth accounts
     let account_with_keys = db
         .get_account_with_keys("oauth_email_user")
         .await
-        .unwrap()
+        .expect("Failed to create OAuth linked account")
         .unwrap();
     assert_eq!(
         account_with_keys.email,
@@ -1320,7 +1320,7 @@ async fn test_oauth_account_creation_sets_email_verified() {
             "google_123",
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Verify email_verified is set to 1 (true)
     assert_eq!(
@@ -1353,7 +1353,7 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
         Some("existing@example.com"),
     )
     .await
-    .unwrap();
+    .expect("Failed to create OAuth linked account");
 
     // Set email as verified (simulating what oauth_simple.rs does)
     db.set_email_verified(&account.id, true).await.unwrap();
@@ -1362,7 +1362,7 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
     let updated_account = db
         .get_account_by_username("existing_user")
         .await
-        .unwrap()
+        .expect("Failed to create OAuth linked account")
         .unwrap();
 
     assert_eq!(
@@ -1380,36 +1380,36 @@ async fn test_get_latest_verification_token_time() {
     let account = db
         .create_account(username, &public_key, "token@example.com")
         .await
-        .unwrap();
+        .expect("Failed to get latest verification token time");
 
     // No token created yet - should return None
     let time = db
         .get_latest_verification_token_time(&account.id)
         .await
-        .unwrap();
+        .expect("Failed to create account");
     assert!(time.is_none());
 
     // Create first token
     db.create_email_verification_token(&account.id, "token@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     let time1 = db
         .get_latest_verification_token_time(&account.id)
         .await
-        .unwrap();
+        .expect("Failed to create email verification token");
     assert!(time1.is_some());
 
     // Wait enough time to ensure different timestamps (SQLite precision is seconds)
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     db.create_email_verification_token(&account.id, "token@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create email verification token");
 
     let time2 = db
         .get_latest_verification_token_time(&account.id)
         .await
-        .unwrap();
+        .expect("Failed to create email verification token");
     assert!(time2.is_some());
 
     // Second token time should be greater than or equal to first
@@ -1425,17 +1425,17 @@ async fn test_resend_verification_rate_limit() {
     let account = db
         .create_account(username, &public_key, "rate@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Create first token
     db.create_email_verification_token(&account.id, "rate@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     let time = db
         .get_latest_verification_token_time(&account.id)
         .await
-        .unwrap()
+        .expect("Failed to create account")
         .unwrap();
     let now = chrono::Utc::now().timestamp();
 
@@ -1452,19 +1452,19 @@ async fn test_get_account_by_chatwoot_user_id() {
     let account = db
         .create_account("chatwoot_user", &[50u8; 32], "chatwoot@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Set Chatwoot user ID
     let chatwoot_user_id = 12345i64;
     db.set_chatwoot_user_id(&account.id, chatwoot_user_id)
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Fetch by Chatwoot user ID
     let fetched = db
         .get_account_by_chatwoot_user_id(chatwoot_user_id)
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     assert!(fetched.is_some());
     let fetched = fetched.unwrap();
@@ -1502,7 +1502,7 @@ async fn test_ensure_account_for_pubkey_creates_new_account() {
     let account = db
         .get_account_with_keys_by_public_key(&pubkey)
         .await
-        .unwrap();
+        .expect("Failed to get account with keys by public key");
     assert!(account.is_some());
     let account = account.unwrap();
     assert!(account.username.starts_with("user_abcdef12"));
@@ -1548,12 +1548,12 @@ async fn test_ensure_account_for_pubkey_handles_username_collision() {
     let acc1 = db
         .get_account_with_keys_by_public_key(&pubkey1)
         .await
-        .unwrap()
+        .expect("Failed to get account with keys by public key")
         .unwrap();
     let acc2 = db
         .get_account_with_keys_by_public_key(&pubkey2)
         .await
-        .unwrap()
+        .expect("Failed to get account with keys by public key")
         .unwrap();
     assert_eq!(acc1.username, "user_deadbeef");
     assert!(
@@ -1570,7 +1570,7 @@ async fn test_admin_set_account_email() {
     let account = db
         .create_account("emailtest", &[60u8; 32], "original@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify original email
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
@@ -1579,7 +1579,7 @@ async fn test_admin_set_account_email() {
     // Update email
     db.admin_set_account_email(&account.id, Some("new@example.com"))
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Verify new email and that email_verified was reset
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
@@ -1595,7 +1595,7 @@ async fn test_admin_set_account_email_clear() {
     let account = db
         .create_account("clearemail", &[61u8; 32], "clear@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Clear email
     db.admin_set_account_email(&account.id, None).await.unwrap();
@@ -1629,7 +1629,7 @@ async fn test_admin_delete_account() {
     let account = db
         .create_account("todelete", &[70u8; 32], "delete@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Add another key
     db.add_account_key(&account.id, &[71u8; 32]).await.unwrap();
@@ -1675,7 +1675,7 @@ async fn test_admin_delete_account_with_oauth() {
             "google_del_123",
         )
         .await
-        .unwrap();
+        .expect("Failed to create OAuth linked account");
 
     // Delete account
     let summary = db.admin_delete_account(&account.id).await.unwrap();
@@ -1691,7 +1691,7 @@ async fn test_admin_delete_account_with_oauth() {
     let oauth_fetched = db
         .get_oauth_account_by_provider_and_external_id("google_oauth", "google_del_123")
         .await
-        .unwrap();
+        .expect("Failed to get OAuth account by provider and external ID");
     assert!(oauth_fetched.is_none());
 }
 
@@ -1706,13 +1706,13 @@ async fn test_count_accounts() {
     // Create some accounts
     db.create_account("user1", &[1u8; 32], "user1@example.com")
         .await
-        .unwrap();
+        .expect("Failed to count accounts");
     db.create_account("user2", &[2u8; 32], "user2@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     db.create_account("user3", &[3u8; 32], "user3@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     let count = db.count_accounts().await.unwrap();
     assert_eq!(count, 3);
@@ -1725,13 +1725,13 @@ async fn test_list_all_accounts() {
     // Create accounts
     db.create_account("alice", &[1u8; 32], "alice@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     db.create_account("bob", &[2u8; 32], "bob@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     db.create_account("charlie", &[3u8; 32], "charlie@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // List all accounts
     let accounts = db.list_all_accounts(10, 0).await.unwrap();
@@ -1757,7 +1757,7 @@ async fn test_list_all_accounts_pagination() {
             &format!("user{}@example.com", i),
         )
         .await
-        .unwrap();
+        .expect("Failed to create account");
     }
 
     // First page (limit 2, offset 0)
@@ -1789,10 +1789,10 @@ async fn test_list_all_accounts_includes_admin_status() {
     // Create accounts
     db.create_account("admin_user", &[1u8; 32], "admin@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
     db.create_account("regular_user", &[2u8; 32], "regular@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Make one an admin
     db.set_admin_status("admin_user", true).await.unwrap();
@@ -1825,7 +1825,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     let account = db
         .create_account("provider_user", &pubkey, "provider@example.com")
         .await
-        .unwrap();
+        .expect("Failed to create account");
 
     // Create provider profile with account_id set
     sqlx::query(
@@ -1836,7 +1836,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     .bind(&account.id)
     .execute(&db.pool)
     .await
-    .unwrap();
+    .expect("Failed to create account");
 
     // Create provider offering with account_id set
     sqlx::query(
@@ -1847,7 +1847,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     .bind(&account.id)
     .execute(&db.pool)
     .await
-    .unwrap();
+    .expect("Failed to execute SQL query");
 
     // Create signature audit record with account_id set
     let signature = [0u8; 64];
@@ -1858,12 +1858,12 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
         "{}",
         &signature,
         &pubkey,
-        chrono::Utc::now().timestamp_nanos_opt().unwrap(),
+        chrono::Utc::now().timestamp_nanos_opt().expect("Failed to get timestamp"),
         &nonce,
         false,
     )
     .await
-    .unwrap();
+    .expect("Failed to insert signature audit");
 
     // Verify data was created
     let profile_count: (i64,) =
@@ -1871,7 +1871,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
             .bind(&account.id)
             .fetch_one(&db.pool)
             .await
-            .unwrap();
+            .expect("Failed to fetch from database");
     assert_eq!(profile_count.0, 1, "Profile should exist before deletion");
 
     let offering_count: (i64,) =
@@ -1879,7 +1879,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
             .bind(&account.id)
             .fetch_one(&db.pool)
             .await
-            .unwrap();
+            .expect("Failed to fetch from database");
     assert_eq!(offering_count.0, 1, "Offering should exist before deletion");
 
     // Delete account - this should NOT fail with FK constraint error
@@ -1900,7 +1900,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
             .bind(&pubkey[..])
             .fetch_one(&db.pool)
             .await
-            .unwrap();
+            .expect("Failed to get account");
     assert_eq!(profile_count.0, 0, "Profile should be deleted");
 
     let offering_count: (i64,) =
@@ -1908,7 +1908,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
             .bind(&pubkey[..])
             .fetch_one(&db.pool)
             .await
-            .unwrap();
+            .expect("Failed to fetch from database");
     assert_eq!(offering_count.0, 0, "Offering should be deleted");
 
     let audit_count: (i64,) =
@@ -1916,6 +1916,6 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
             .bind(&account.id)
             .fetch_one(&db.pool)
             .await
-            .unwrap();
+            .expect("Failed to fetch from database");
     assert_eq!(audit_count.0, 0, "Signature audit should be deleted");
 }

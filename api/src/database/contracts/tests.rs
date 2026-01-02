@@ -741,6 +741,78 @@ async fn test_add_provisioning_details_persists_connection_info() {
 }
 
 #[tokio::test]
+async fn test_add_provisioning_details_extracts_gateway_fields() {
+    let db = setup_test_db().await;
+    let contract_id = vec![77u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-gw",
+        0,
+        "accepted",
+    )
+    .await;
+
+    let instance_json = r#"{
+        "external_id": "vm-123",
+        "ip_address": "10.0.1.5",
+        "ssh_port": 22,
+        "gateway_slug": "k7m2p4",
+        "gateway_subdomain": "k7m2p4.dc-lk.decent-cloud.org",
+        "gateway_ssh_port": 20000,
+        "gateway_port_range_start": 20000,
+        "gateway_port_range_end": 20009
+    }"#;
+
+    db.add_provisioning_details(&contract_id, instance_json)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.gateway_slug.as_deref(), Some("k7m2p4"));
+    assert_eq!(contract.gateway_ssh_port, Some(20000));
+    assert_eq!(contract.gateway_port_range_start, Some(20000));
+    assert_eq!(contract.gateway_port_range_end, Some(20009));
+}
+
+#[tokio::test]
+async fn test_add_provisioning_details_handles_missing_gateway_fields() {
+    let db = setup_test_db().await;
+    let contract_id = vec![78u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-nogw",
+        0,
+        "accepted",
+    )
+    .await;
+
+    // Instance without gateway fields (legacy or gateway disabled)
+    let instance_json = r#"{"external_id": "vm-456", "ip_address": "10.0.1.6", "ssh_port": 22}"#;
+
+    db.add_provisioning_details(&contract_id, instance_json)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.gateway_slug, None);
+    assert_eq!(contract.gateway_ssh_port, None);
+    assert_eq!(contract.gateway_port_range_start, None);
+    assert_eq!(contract.gateway_port_range_end, None);
+}
+
+#[tokio::test]
 async fn test_cancel_contract_success_requested() {
     let db = setup_test_db().await;
     let contract_id = vec![10u8; 32];

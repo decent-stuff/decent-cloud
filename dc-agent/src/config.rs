@@ -38,13 +38,11 @@ pub struct GatewayConfig {
     /// Directory for Traefik dynamic configuration files
     #[serde(default = "default_traefik_dynamic_dir")]
     pub traefik_dynamic_dir: String,
-    /// Cloudflare API token for DNS management (Zone.DNS edit permission)
-    pub cloudflare_api_token: String,
-    /// Cloudflare Zone ID for the domain
-    pub cloudflare_zone_id: String,
     /// Path to port allocations state file
     #[serde(default = "default_port_allocations_path")]
     pub port_allocations_path: String,
+    // Note: DNS is managed via the central API (/api/v1/agents/dns)
+    // The agent authenticates with its agent key and the API handles Cloudflare.
 }
 
 fn default_port_range_start() -> u16 {
@@ -979,8 +977,6 @@ type = "manual"
 datacenter = "dc-lk"
 domain = "decent-cloud.org"
 public_ip = "203.0.113.1"
-cloudflare_api_token = "test_token"
-cloudflare_zone_id = "test_zone_id"
 "#;
 
         fs::write(&config_path, config_content).unwrap();
@@ -995,8 +991,6 @@ cloudflare_zone_id = "test_zone_id"
         assert_eq!(gateway.port_range_end, 59999);
         assert_eq!(gateway.ports_per_vm, 10);
         assert_eq!(gateway.traefik_dynamic_dir, "/etc/traefik/dynamic");
-        assert_eq!(gateway.cloudflare_api_token, "test_token");
-        assert_eq!(gateway.cloudflare_zone_id, "test_zone_id");
         assert_eq!(
             gateway.port_allocations_path,
             "/var/lib/dc-agent/port-allocations.json"
@@ -1027,8 +1021,6 @@ port_range_start = 30000
 port_range_end = 40000
 ports_per_vm = 5
 traefik_dynamic_dir = "/custom/traefik"
-cloudflare_api_token = "custom_token"
-cloudflare_zone_id = "custom_zone"
 port_allocations_path = "/custom/allocations.json"
 "#;
 

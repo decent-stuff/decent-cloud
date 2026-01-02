@@ -803,12 +803,44 @@ impl Database {
     ) -> Result<()> {
         let provisioned_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
+        // Extract gateway fields from instance JSON
+        #[derive(serde::Deserialize)]
+        struct InstanceGatewayFields {
+            gateway_slug: Option<String>,
+            gateway_ssh_port: Option<u16>,
+            gateway_port_range_start: Option<u16>,
+            gateway_port_range_end: Option<u16>,
+        }
+
+        let gateway = serde_json::from_str::<InstanceGatewayFields>(instance_details)
+            .unwrap_or(InstanceGatewayFields {
+                gateway_slug: None,
+                gateway_ssh_port: None,
+                gateway_port_range_start: None,
+                gateway_port_range_end: None,
+            });
+
+        let gateway_ssh_port = gateway.gateway_ssh_port.map(|p| p as i64);
+        let gateway_port_range_start = gateway.gateway_port_range_start.map(|p| p as i64);
+        let gateway_port_range_end = gateway.gateway_port_range_end.map(|p| p as i64);
+
         let mut tx = self.pool.begin().await?;
 
         sqlx::query!(
-            "UPDATE contract_sign_requests SET provisioning_instance_details = ?, provisioning_completed_at_ns = ? WHERE contract_id = ?",
+            r#"UPDATE contract_sign_requests
+               SET provisioning_instance_details = ?,
+                   provisioning_completed_at_ns = ?,
+                   gateway_slug = ?,
+                   gateway_ssh_port = ?,
+                   gateway_port_range_start = ?,
+                   gateway_port_range_end = ?
+               WHERE contract_id = ?"#,
             instance_details,
             provisioned_at_ns,
+            gateway.gateway_slug,
+            gateway_ssh_port,
+            gateway_port_range_start,
+            gateway_port_range_end,
             contract_id
         )
         .execute(&mut *tx)

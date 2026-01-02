@@ -13,9 +13,16 @@ fn workspace_dir() -> PathBuf {
         .arg("--workspace")
         .arg("--message-format=plain")
         .output()
-        .unwrap()
-        .stdout;
-    let cargo_path = Path::new(std::str::from_utf8(&output).unwrap().trim());
+        .expect("Failed to execute 'cargo locate-project'. Make sure Cargo is installed and in PATH.");
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        panic!(
+            "Failed to locate workspace directory.\nstdout: {}\nstderr: {}",
+            stdout, stderr
+        );
+    }
+    let cargo_path = Path::new(std::str::from_utf8(&output.stdout).unwrap().trim());
     cargo_path.parent().unwrap().to_path_buf()
 }
 
@@ -59,20 +66,31 @@ fn install_dfx_if_needed() {
         println!("cargo:warning=dfx not found, installing...");
 
         // Install dfx using the provided command
-        let status = Command::new("sh")
+        let output = Command::new("sh")
             .args([
                 "-ci",
                 "$(curl -fsSL https://internetcomputer.org/install.sh)",
             ])
             .env("DFXVM_INIT_YES", "yes")
-            .status();
+            .output();
 
-        match status {
-            Ok(exit_status) if exit_status.success() => {
+        match output {
+            Ok(output) if output.status.success() => {
                 println!("cargo:warning=dfx installed successfully");
             }
-            _ => {
-                panic!("Failed to install dfx. Please install it manually by running: DFXVM_INIT_YES=yes sh -ci \"$(curl -fsSL https://internetcomputer.org/install.sh)\"\n\nAlternatively, you can install it using the package manager for your system. For example, on Ubuntu/Debian:\n\nsudo apt update\nsudo apt install curl\nDFXVM_INIT_YES=yes sh -ci \"$(curl -fsSL https://internetcomputer.org/install.sh)\"\n\nMake sure you have curl installed before running the installation command.");
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                panic!(
+                    "Failed to install dfx.\nstdout: {}\nstderr: {}\n\nPlease install it manually by running: DFXVM_INIT_YES=yes sh -ci \"$(curl -fsSL https://internetcomputer.org/install.sh)\"\n\nAlternatively, you can install it using the package manager for your system. For example, on Ubuntu/Debian:\n\nsudo apt update\nsudo apt install curl\nDFXVM_INIT_YES=yes sh -ci \"$(curl -fsSL https://internetcomputer.org/install.sh)\"\n\nMake sure you have curl installed before running the installation command.",
+                    stdout, stderr
+                );
+            }
+            Err(e) => {
+                panic!(
+                    "Failed to execute dfx installation command: {}.\n\nPlease install it manually by running: DFXVM_INIT_YES=yes sh -ci \"$(curl -fsSL https://internetcomputer.org/install.sh)\"",
+                    e
+                );
             }
         }
     }
@@ -196,15 +214,22 @@ pub fn main() {
         std::env::remove_var(var);
     }
 
-    if !Command::new("dfx")
+    let output = Command::new("dfx")
         .args(["build"])
-        .current_dir(canister_dir_path)
-        .status()
-        .expect("Failed to build canister")
-        .success()
-    {
-        panic!("failed to build canister")
-    };
+        .current_dir(&canister_dir_path)
+        .output()
+        .expect("Failed to execute 'dfx build'. Make sure dfx is installed and in PATH.");
+
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        panic!(
+            "Failed to build canister at {}\nstdout: {}\nstderr: {}",
+            canister_dir_path.display(),
+            stdout,
+            stderr
+        );
+    }
 
     let result = which::which("pocket-ic").unwrap_or_else(|_| {
         eprintln!("Failed to find pocket-ic server binary.");

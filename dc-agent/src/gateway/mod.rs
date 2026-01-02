@@ -1,35 +1,44 @@
-//! Gateway module for DC-level reverse proxy (Traefik) management.
+//! Gateway module for DC-level reverse proxy management.
 //!
 //! This module handles:
 //! - Port allocation tracking
-//! - Traefik dynamic configuration file generation
-//! - Cloudflare DNS record management
+//! - Traefik for HTTP/HTTPS routing (SNI-based with TLS)
+//! - iptables DNAT for TCP/UDP port forwarding (SSH, databases, game servers)
+//! - DNS record management (via central API)
 //! - Gateway slug generation
+//! - Bandwidth monitoring via iptables
 
+mod bandwidth;
 mod cloudflare;
+mod iptables;
 mod port_allocator;
 mod traefik;
 
+pub use bandwidth::{BandwidthMonitor, BandwidthStats};
 pub use cloudflare::CloudflareClient;
+pub use iptables::IptablesNat;
 pub use port_allocator::{PortAllocation, PortAllocator};
 pub use traefik::TraefikConfigManager;
 
+use crate::api_client::ApiClient;
 use crate::config::GatewayConfig;
 use crate::provisioner::Instance;
 use anyhow::{Context, Result};
 use rand::Rng;
+use std::sync::Arc;
 
-/// Gateway manager that coordinates port allocation, Traefik config, and DNS.
+/// Gateway manager that coordinates port allocation, Traefik config, iptables, and DNS.
 pub struct GatewayManager {
     config: GatewayConfig,
     port_allocator: PortAllocator,
     traefik_manager: TraefikConfigManager,
-    cloudflare: CloudflareClient,
+    api_client: Arc<ApiClient>,
 }
 
 impl GatewayManager {
     /// Create a new gateway manager from config.
-    pub fn new(config: GatewayConfig) -> Result<Self> {
+    /// Requires an API client for DNS management via the central API.
+    pub fn new(config: GatewayConfig, api_client: Arc<ApiClient>) -> Result<Self> {
         let port_allocator = PortAllocator::new(
             &config.port_allocations_path,
             config.port_range_start,
@@ -39,14 +48,16 @@ impl GatewayManager {
 
         let traefik_manager = TraefikConfigManager::new(&config.traefik_dynamic_dir);
 
-        let cloudflare =
-            CloudflareClient::new(&config.cloudflare_api_token, &config.cloudflare_zone_id);
+        // Initialize iptables NAT chain for port forwarding
+        if let Err(e) = IptablesNat::init_chain() {
+            tracing::warn!("Failed to initialize iptables NAT chain: {} - TCP/UDP forwarding may not work", e);
+        }
 
         Ok(Self {
             config,
             port_allocator,
             traefik_manager,
-            cloudflare,
+            api_client,
         })
     }
 
@@ -90,19 +101,26 @@ impl GatewayManager {
             .as_ref()
             .context("Instance must have an IP address for gateway setup")?;
 
-        // Write Traefik config
+        // Write Traefik config (HTTP/HTTPS only)
         self.traefik_manager
             .write_vm_config(&slug, &subdomain, internal_ip, &allocation, contract_id)
             .context("Failed to write Traefik config")?;
 
-        // Create DNS record
-        self.cloudflare
-            .create_a_record(
-                &format!("{}.{}", slug, self.config.datacenter),
-                &self.config.public_ip,
-            )
+        // Setup iptables DNAT for TCP/UDP port forwarding
+        IptablesNat::setup_forwarding(&slug, internal_ip, &allocation)
+            .context("Failed to setup iptables port forwarding")?;
+
+        // Create DNS record via central API
+        self.api_client
+            .create_dns_record(&slug, &self.config.datacenter, &self.config.public_ip)
             .await
             .context("Failed to create DNS record")?;
+
+        // Setup bandwidth monitoring
+        if let Err(e) = BandwidthMonitor::setup_accounting(&slug, internal_ip) {
+            tracing::warn!("Failed to setup bandwidth monitoring for {}: {}", slug, e);
+            // Non-fatal: continue even if bandwidth monitoring fails
+        }
 
         // Update instance with gateway info
         instance.gateway_slug = Some(slug);
@@ -130,13 +148,23 @@ impl GatewayManager {
             .delete_vm_config(slug)
             .context("Failed to delete Traefik config")?;
 
-        // Delete DNS record
+        // Cleanup iptables DNAT rules
+        if let Err(e) = IptablesNat::cleanup_forwarding(slug) {
+            tracing::warn!("Failed to cleanup iptables for {}: {}", slug, e);
+        }
+
+        // Delete DNS record via central API
         if let Err(e) = self
-            .cloudflare
-            .delete_a_record(&format!("{}.{}", slug, self.config.datacenter))
+            .api_client
+            .delete_dns_record(slug, &self.config.datacenter)
             .await
         {
             tracing::warn!("Failed to delete DNS record for {}: {}", slug, e);
+        }
+
+        // Cleanup bandwidth monitoring
+        if let Err(e) = BandwidthMonitor::cleanup_accounting(slug) {
+            tracing::warn!("Failed to cleanup bandwidth monitoring for {}: {}", slug, e);
         }
 
         // Free port allocation
@@ -147,6 +175,16 @@ impl GatewayManager {
         tracing::info!("Gateway cleanup complete for slug: {}", slug);
 
         Ok(())
+    }
+
+    /// Get bandwidth statistics for all VMs.
+    pub fn get_bandwidth_stats(&self) -> std::collections::HashMap<String, BandwidthStats> {
+        BandwidthMonitor::get_all_stats().unwrap_or_default()
+    }
+
+    /// Get bandwidth statistics for a specific VM by slug.
+    pub fn get_vm_bandwidth(&self, slug: &str) -> Option<BandwidthStats> {
+        BandwidthMonitor::get_stats(slug).ok()
     }
 
     /// Get current port allocations for diagnostics.

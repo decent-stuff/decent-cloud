@@ -1,9 +1,10 @@
 //! Agent-related API endpoints.
 //!
-//! Handles agent delegations and heartbeats for provider provisioning agents.
+//! Handles agent delegations, heartbeats, and DNS management for provider provisioning agents.
 
 use super::common::{check_authorization, decode_pubkey, ApiResponse};
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
+use crate::cloudflare_dns::CloudflareDns;
 use crate::database::agent_delegations::CreateAgentDelegationParams;
 use crate::database::{AgentDelegation, AgentPermission, AgentStatus, Database};
 use poem::web::Data;
@@ -88,6 +89,33 @@ pub struct HeartbeatResponse {
     /// The agent's pool name, if it belongs to one
     #[oai(skip_serializing_if_is_none)]
     pub pool_name: Option<String>,
+}
+
+/// Request to manage gateway DNS records
+#[derive(Debug, Deserialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayDnsRequest {
+    /// Action to perform: "create" or "delete"
+    pub action: String,
+    /// Gateway slug (6 alphanumeric chars)
+    pub slug: String,
+    /// Datacenter identifier (e.g., "dc-lk")
+    pub datacenter: String,
+    /// Public IP address (required for create, ignored for delete)
+    #[oai(skip_serializing_if_is_none)]
+    pub public_ip: Option<String>,
+}
+
+/// Response for gateway DNS operations
+#[derive(Debug, Serialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayDnsResponse {
+    /// Full subdomain that was created/deleted
+    pub subdomain: String,
 }
 
 /// API Tags for agent operations
@@ -493,6 +521,120 @@ impl AgentsApi {
                 success: false,
                 data: None,
                 error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Manage gateway DNS records
+    ///
+    /// Creates or deletes DNS A records for gateway subdomains.
+    /// This proxies DNS management through the API so agents don't need Cloudflare credentials.
+    /// Requires agent authentication with DnsManage permission.
+    #[oai(
+        path = "/agents/dns",
+        method = "post",
+        tag = "ApiTags::Agents"
+    )]
+    async fn manage_gateway_dns(
+        &self,
+        cloudflare: Data<&Option<Arc<CloudflareDns>>>,
+        auth: AgentAuthenticatedUser,
+        req: Json<GatewayDnsRequest>,
+    ) -> Json<ApiResponse<GatewayDnsResponse>> {
+        // Check permission
+        if let Err(e) = auth.require_permission(AgentPermission::DnsManage) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        // Verify Cloudflare is configured
+        let cf = match cloudflare.as_ref() {
+            Some(cf) => cf,
+            None => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("DNS management not configured on server".to_string()),
+                });
+            }
+        };
+
+        // Validate slug format (6 lowercase alphanumeric)
+        if req.slug.len() != 6
+            || !req
+                .slug
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Invalid slug: must be 6 lowercase alphanumeric characters".to_string()),
+            });
+        }
+
+        // Validate datacenter
+        if req.datacenter.is_empty() || req.datacenter.len() > 20 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Invalid datacenter: must be 1-20 characters".to_string()),
+            });
+        }
+
+        let subdomain = format!("{}.{}.{}", req.slug, req.datacenter, cf.domain());
+
+        match req.action.as_str() {
+            "create" => {
+                let public_ip = match &req.public_ip {
+                    Some(ip) => ip,
+                    None => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("public_ip required for create action".to_string()),
+                        });
+                    }
+                };
+
+                match cf
+                    .create_gateway_record(&req.slug, &req.datacenter, public_ip)
+                    .await
+                {
+                    Ok(()) => Json(ApiResponse {
+                        success: true,
+                        data: Some(GatewayDnsResponse { subdomain }),
+                        error: None,
+                    }),
+                    Err(e) => Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Failed to create DNS record: {}", e)),
+                    }),
+                }
+            }
+            "delete" => match cf
+                .delete_gateway_record(&req.slug, &req.datacenter)
+                .await
+            {
+                Ok(()) => Json(ApiResponse {
+                    success: true,
+                    data: Some(GatewayDnsResponse { subdomain }),
+                    error: None,
+                }),
+                Err(e) => Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to delete DNS record: {}", e)),
+                }),
+            },
+            _ => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Invalid action: must be 'create' or 'delete'".to_string()),
             }),
         }
     }

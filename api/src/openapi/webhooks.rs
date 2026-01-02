@@ -344,7 +344,14 @@ pub async fn stripe_webhook(
                         }
 
                         // Cancel any pending receipt - we'll send immediately with Stripe invoice
-                        let _ = db.remove_pending_stripe_receipt(&contract_id_bytes).await;
+                        if let Err(e) = db.remove_pending_stripe_receipt(&contract_id_bytes).await {
+                            tracing::warn!(
+                                "Failed to remove pending receipt for contract {}: {}",
+                                contract_id_hex,
+                                e
+                            );
+                            // Don't fail webhook - invoice was created successfully
+                        }
 
                         // Send receipt with Stripe invoice PDF attached
                         // This is idempotent - skips if receipt already sent
@@ -505,7 +512,7 @@ pub async fn stripe_webhook(
             }
 
             // Record event for audit trail
-            let _ = db
+            if let Err(e) = db
                 .insert_subscription_event(
                     &account_id,
                     crate::database::SubscriptionEventInput {
@@ -515,7 +522,15 @@ pub async fn stripe_webhook(
                         ..Default::default()
                     },
                 )
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    "Failed to record subscription event for account {}: {}",
+                    hex::encode(&account_id),
+                    e
+                );
+                // Don't fail webhook - subscription was updated successfully
+            }
 
             tracing::info!(
                 "Updated subscription for customer {}: plan={}, status={}",
@@ -586,7 +601,7 @@ pub async fn stripe_webhook(
             }
 
             // Record event for audit trail
-            let _ = db
+            if let Err(e) = db
                 .insert_subscription_event(
                     &account_id,
                     crate::database::SubscriptionEventInput {
@@ -596,7 +611,15 @@ pub async fn stripe_webhook(
                         ..Default::default()
                     },
                 )
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    "Failed to record subscription deletion event for account {}: {}",
+                    hex::encode(&account_id),
+                    e
+                );
+                // Don't fail webhook - subscription was deleted successfully
+            }
 
             tracing::info!(
                 "Subscription deleted for customer {}, reset to free tier",

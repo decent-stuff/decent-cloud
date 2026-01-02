@@ -582,6 +582,50 @@ impl ApiClient {
             self.request(Method::Delete, &path, None).await?;
         Self::unwrap_response(response, "Failed to release lock").map(|_| ())
     }
+
+    /// Create a gateway DNS record via the central API.
+    /// The API handles Cloudflare credentials securely.
+    pub async fn create_dns_record(
+        &self,
+        slug: &str,
+        datacenter: &str,
+        public_ip: &str,
+    ) -> Result<String> {
+        let path = "/api/v1/agents/dns";
+        let request = serde_json::json!({
+            "action": "create",
+            "slug": slug,
+            "datacenter": datacenter,
+            "publicIp": public_ip
+        });
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<DnsResponse> =
+            self.request(Method::Post, path, Some(&body)).await?;
+        let data = Self::unwrap_response(response, "Failed to create DNS record")?;
+        Ok(data.subdomain)
+    }
+
+    /// Delete a gateway DNS record via the central API.
+    pub async fn delete_dns_record(&self, slug: &str, datacenter: &str) -> Result<String> {
+        let path = "/api/v1/agents/dns";
+        let request = serde_json::json!({
+            "action": "delete",
+            "slug": slug,
+            "datacenter": datacenter
+        });
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<DnsResponse> =
+            self.request(Method::Post, path, Some(&body)).await?;
+        let data = Self::unwrap_response(response, "Failed to delete DNS record")?;
+        Ok(data.subdomain)
+    }
+}
+
+/// Response from DNS management
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DnsResponse {
+    pub subdomain: String,
 }
 
 /// Response from lock acquisition

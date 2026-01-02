@@ -301,7 +301,7 @@ fn test_reputation() {
     let ts_ns = ctx.get_timestamp_ns();
 
     let (_prov_past, _reg_result) =
-        test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // ignored, added only to get 1 block
+        test_provider_register(&ctx, b"prov_past", 2 * DC_TOKEN_DECIMALS_DIV); // Return values intentionally ignored - this just adds a block
     ctx.ffwd_to_next_block(ts_ns);
 
     let (prov1, reg1) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
@@ -360,8 +360,8 @@ fn test_ledger_entries_with_committed_data() {
     let ctx = TestContext::new();
 
     // Register providers and commit
-    let (_prov1, _) = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV);
-    let (_prov2, _) = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV);
+    let _ = test_provider_register(&ctx, b"prov1", 2 * DC_TOKEN_DECIMALS_DIV); // Return values intentionally ignored - only checking pagination
+    let _ = test_provider_register(&ctx, b"prov2", 2 * DC_TOKEN_DECIMALS_DIV); // Return values intentionally ignored - only checking pagination
 
     // Commit the block
     ctx.commit();
@@ -452,7 +452,7 @@ fn test_ledger_entries_pagination() {
     // Register multiple providers to create enough entries
     for i in 0..5 {
         let seed = format!("prov{}", i);
-        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV); // Return value intentionally ignored - only checking pagination
     }
     ctx.commit();
 
@@ -482,7 +482,7 @@ fn test_ledger_entries_pagination_with_filter() {
     // Register 10 providers
     for i in 0..10 {
         let seed = format!("prov{}", i);
-        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV);
+        let _ = test_provider_register(&ctx, seed.as_bytes(), 2 * DC_TOKEN_DECIMALS_DIV); // Return value intentionally ignored - only checking pagination
     }
     ctx.commit();
 

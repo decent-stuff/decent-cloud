@@ -112,7 +112,7 @@ impl OfferingsApi {
         let mut csv_writer = csv::Writer::from_writer(vec![]);
 
         // Write header
-        let _ = csv_writer.write_record([
+        if let Err(e) = csv_writer.write_record([
             "offering_id",
             "offer_name",
             "description",
@@ -154,7 +154,9 @@ impl OfferingsApi {
             "features",
             "operating_systems",
             "agent_pool_id",
-        ]);
+        ]) {
+            return poem_openapi::payload::PlainText(format!("CSV header write error: {}", e));
+        }
 
         // Get example offerings for the specified product type from database
         let offerings = match db.get_example_offerings_by_type(&product_type.0).await {
@@ -168,7 +170,7 @@ impl OfferingsApi {
         };
 
         for offering in offerings {
-            let _ = csv_writer.write_record([
+            if let Err(e) = csv_writer.write_record([
                 &offering.offering_id,
                 &offering.offer_name,
                 &offering.description.unwrap_or_default(),
@@ -240,7 +242,9 @@ impl OfferingsApi {
                 &offering.features.unwrap_or_default(),
                 &offering.operating_systems.unwrap_or_default(),
                 &offering.agent_pool_id.unwrap_or_default(),
-            ]);
+            ]) {
+                return poem_openapi::payload::PlainText(format!("CSV record write error: {}", e));
+            }
         }
 
         match csv_writer.into_inner() {

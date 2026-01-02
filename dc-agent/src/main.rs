@@ -9,7 +9,7 @@ use dc_agent::{
         ProvisionRequest, Provisioner,
     },
     registration::{default_agent_dir, generate_agent_keypair},
-    setup::{proxmox::OsTemplate, ProxmoxSetup},
+    setup::{proxmox::OsTemplate, GatewaySetup, ProxmoxSetup},
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -157,6 +157,57 @@ enum SetupProvisioner {
         /// Output config file path
         #[arg(long, default_value = "dc-agent.toml")]
         output: PathBuf,
+    },
+    /// Set up gateway (Traefik reverse proxy) on the host.
+    /// Installs Traefik, configures wildcard TLS via Let's Encrypt/Cloudflare.
+    Gateway {
+        /// Host IP or hostname (SSH target)
+        #[arg(long)]
+        host: String,
+
+        /// SSH port (default: 22)
+        #[arg(long, default_value = "22")]
+        ssh_port: u16,
+
+        /// SSH username (default: root)
+        #[arg(long, default_value = "root")]
+        ssh_user: String,
+
+        /// Datacenter identifier (e.g., dc-lk)
+        #[arg(long)]
+        datacenter: String,
+
+        /// Base domain (e.g., decent-cloud.org)
+        #[arg(long)]
+        domain: String,
+
+        /// Host's public IPv4 address
+        #[arg(long)]
+        public_ip: String,
+
+        /// Cloudflare API token with DNS edit permissions
+        #[arg(long)]
+        cloudflare_token: String,
+
+        /// Cloudflare Zone ID (auto-detected from domain if not provided)
+        #[arg(long)]
+        cloudflare_zone_id: Option<String>,
+
+        /// Start of port range for VM allocation (default: 20000)
+        #[arg(long, default_value = "20000")]
+        port_range_start: u16,
+
+        /// End of port range for VM allocation (default: 59999)
+        #[arg(long, default_value = "59999")]
+        port_range_end: u16,
+
+        /// Number of ports per VM (default: 10)
+        #[arg(long, default_value = "10")]
+        ports_per_vm: u16,
+
+        /// Append gateway config to existing dc-agent.toml
+        #[arg(long)]
+        append_config: Option<PathBuf>,
     },
 }
 
@@ -719,6 +770,77 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
 
             Ok(())
         }
+        SetupProvisioner::Gateway {
+            host,
+            ssh_port,
+            ssh_user,
+            datacenter,
+            domain,
+            public_ip,
+            cloudflare_token,
+            cloudflare_zone_id,
+            port_range_start,
+            port_range_end,
+            ports_per_vm,
+            append_config,
+        } => {
+            println!("Decent Cloud Agent - Gateway Setup");
+            println!("===================================\n");
+
+            println!("Gateway Setup");
+            println!("  Host: {}", host);
+            println!("  SSH User: {}", ssh_user);
+            println!("  Datacenter: {}", datacenter);
+            println!("  Domain: {}", domain);
+            println!("  Public IP: {}", public_ip);
+            println!(
+                "  Port range: {}-{} ({} per VM)",
+                port_range_start, port_range_end, ports_per_vm
+            );
+            println!();
+
+            // Prompt for SSH password
+            let ssh_password =
+                rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?;
+
+            println!();
+
+            let setup = GatewaySetup {
+                host: host.clone(),
+                ssh_port,
+                ssh_user,
+                ssh_password,
+                datacenter: datacenter.clone(),
+                domain: domain.clone(),
+                public_ip: public_ip.clone(),
+                cloudflare_api_token: cloudflare_token.clone(),
+                cloudflare_zone_id,
+                port_range_start,
+                port_range_end,
+                ports_per_vm,
+            };
+
+            let result = setup.run().await?;
+
+            // Generate gateway config section
+            let gateway_config = setup.generate_gateway_config(&result.cloudflare_zone_id);
+
+            // Optionally append to existing config
+            if let Some(config_path) = append_config {
+                use std::io::Write;
+                let mut file = std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&config_path)
+                    .context("Failed to open config file for appending")?;
+                file.write_all(gateway_config.as_bytes())?;
+                println!("\nGateway configuration appended to: {}", config_path.display());
+            } else {
+                println!("\nAdd this to your dc-agent.toml:");
+                println!("{}", gateway_config);
+            }
+
+            Ok(())
+        }
     }
 }
 
@@ -811,13 +933,13 @@ async fn run_test_provision(
 async fn run_agent(config: Config) -> Result<()> {
     info!("Starting dc-agent");
 
-    let api_client = ApiClient::new(&config.api)?;
+    let api_client = std::sync::Arc::new(ApiClient::new(&config.api)?);
     let (provisioners, default_provisioner_type) = create_provisioner_map(&config)?;
 
     // Initialize gateway manager if configured
     let gateway_manager = match &config.gateway {
         Some(gw_config) => {
-            match GatewayManager::new(gw_config.clone()) {
+            match GatewayManager::new(gw_config.clone(), api_client.clone()) {
                 Ok(gm) => {
                     info!(
                         datacenter = %gw_config.datacenter,
@@ -1486,6 +1608,23 @@ fn create_provisioner_map(config: &Config) -> Result<(ProvisionerMap, String)> {
     Ok((map, default_type))
 }
 
+/// Format bytes into human-readable string (KB, MB, GB)
+fn format_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1}GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1}MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1}KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{}B", bytes)
+    }
+}
+
 async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> Result<()> {
     println!("dc-agent doctor");
     println!("================");
@@ -1511,6 +1650,9 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
     };
     println!("  Auth mode: {}", auth_mode);
     println!();
+
+    // Try to create API client early (needed for gateway manager)
+    let api_client = ApiClient::new(&config.api).ok().map(std::sync::Arc::new);
 
     // Check provisioner configuration and verify setup
     let provisioner = create_provisioner_from_config(&config.provisioner)?;
@@ -1610,7 +1752,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
             );
             println!("  Traefik config dir: {}", gw.traefik_dynamic_dir);
             println!("  Port allocations: {}", gw.port_allocations_path);
-            println!("  Cloudflare Zone ID: {}", gw.cloudflare_zone_id);
+            println!("  DNS management: via central API");
 
             // Verify paths exist
             if std::path::Path::new(&gw.traefik_dynamic_dir).exists() {
@@ -1620,23 +1762,88 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                     "  [WARN] Traefik config directory does not exist: {}",
                     gw.traefik_dynamic_dir
                 );
+                println!("       Run: dc-agent setup gateway --host <HOST> ...");
             }
 
-            // Verify GatewayManager can be initialized
-            match GatewayManager::new(gw.clone()) {
-                Ok(_) => println!("  [ok] Gateway manager initialized"),
-                Err(e) => println!("  [FAILED] Gateway initialization: {}", e),
+            // Check if Traefik is running
+            match std::process::Command::new("systemctl")
+                .args(["is-active", "traefik"])
+                .output()
+            {
+                Ok(output) => {
+                    let status = String::from_utf8_lossy(&output.stdout);
+                    if status.trim() == "active" {
+                        println!("  [ok] Traefik service is running");
+
+                        // Check if Traefik is listening on expected ports
+                        if let Ok(ss_output) = std::process::Command::new("ss")
+                            .args(["-tlnp"])
+                            .output()
+                        {
+                            let ss = String::from_utf8_lossy(&ss_output.stdout);
+                            if ss.contains(":443") && ss.contains("traefik") {
+                                println!("  [ok] Traefik listening on port 443");
+                            } else if ss.contains(":443") {
+                                println!("  [ok] Port 443 in use (Traefik or other)");
+                            } else {
+                                println!("  [WARN] Traefik not listening on port 443");
+                            }
+                        }
+                    } else {
+                        println!("  [WARN] Traefik service not running (status: {})", status.trim());
+                        println!("       Run: systemctl start traefik");
+                    }
+                }
+                Err(_) => {
+                    println!("  [info] Cannot check Traefik status (systemctl not available)");
+                }
+            }
+
+            // Verify GatewayManager can be initialized (requires API client)
+            match api_client.clone() {
+                Some(client) => match GatewayManager::new(gw.clone(), client) {
+                    Ok(gw_manager) => {
+                        println!("  [ok] Gateway manager initialized");
+
+                    // Show current port allocations count
+                    let allocations = gw_manager.port_allocations();
+                    let count = allocations.allocations.len();
+                    if count > 0 {
+                        println!("  [info] {} active VM(s) with gateway routing", count);
+                    }
+
+                        // Show bandwidth stats if available
+                        let stats = gw_manager.get_bandwidth_stats();
+                        if !stats.is_empty() {
+                            println!("  Bandwidth stats:");
+                            for (slug, bw) in &stats {
+                                println!(
+                                    "    {}: in={} out={}",
+                                    slug,
+                                    format_bytes(bw.bytes_in),
+                                    format_bytes(bw.bytes_out)
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => println!("  [FAILED] Gateway initialization: {}", e),
+                }
+                None => {
+                    println!("  [WARN] Cannot verify gateway manager (API client not available)");
+                }
             }
         }
         None => {
             println!("Gateway: Not configured");
             println!("  VMs will not get public subdomains");
+            println!("  To enable: dc-agent setup gateway --host <HOST> ...");
         }
     }
     println!();
 
     let provisioner_type = config.provisioner.type_name();
 
+    // Create API client for verification (separate from the one used for gateway check)
     let api_client = ApiClient::new(&config.api)?;
     println!("[ok] API client initialized");
 

@@ -1,6 +1,7 @@
 mod auth;
 mod chatwoot;
 mod cleanup_service;
+mod cloudflare_dns;
 mod database;
 mod email_processor;
 mod email_service;
@@ -93,6 +94,7 @@ struct AppContext {
     sync_interval_secs: u64,
     metadata_cache: Arc<MetadataCache>,
     email_service: Option<Arc<EmailService>>,
+    cloudflare_dns: Option<Arc<cloudflare_dns::CloudflareDns>>,
 }
 
 async fn setup_app_context() -> Result<AppContext, std::io::Error> {
@@ -162,12 +164,21 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
         ))
     });
 
+    // Cloudflare DNS setup (optional - for gateway DNS management)
+    let cloudflare_dns = cloudflare_dns::CloudflareDns::from_env();
+    if cloudflare_dns.is_some() {
+        tracing::info!("Cloudflare DNS client initialized for gateway management");
+    } else {
+        tracing::info!("Cloudflare DNS not configured (CF_API_TOKEN, CF_ZONE_ID) - gateway DNS will NOT work");
+    }
+
     Ok(AppContext {
         database,
         ledger_client,
         sync_interval_secs,
         metadata_cache,
         email_service,
+        cloudflare_dns,
     })
 }
 
@@ -574,6 +585,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .data(ctx.database.clone())
         .data(ctx.metadata_cache.clone())
         .data(ctx.email_service.clone())
+        .data(ctx.cloudflare_dns.clone())
         .with(CookieJarManager::new())
         .with(request_logging::RequestLogging)
         .with(cors);

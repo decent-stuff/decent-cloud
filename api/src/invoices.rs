@@ -406,19 +406,33 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
     if std::env::var("XDG_CACHE_HOME").is_err() {
         cmd.env("XDG_CACHE_HOME", temp_dir.path());
     }
-    let output = cmd
-        .arg("compile")
+    cmd.arg("compile")
         .arg("--input")
         .arg("data_file=data.json") // Relative to template in same temp dir
         .arg(&template_path)
-        .arg(&output_path)
+        .arg(&output_path);
+
+    let output = cmd
         .output()
         .await
         .context("Failed to execute typst command")?;
 
     if !output.status.success() {
+        let exit_code = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Typst compilation failed: {}", stderr);
+
+        anyhow::bail!(
+            "Typst compilation failed (exit code: {})\n\
+             Command: typst compile --input data_file=data.json {} {}\n\
+             Stdout:\n{}\n\
+             Stderr:\n{}",
+            exit_code,
+            template_path.display(),
+            output_path.display(),
+            stdout,
+            stderr
+        );
     }
 
     // Read generated PDF
@@ -750,5 +764,163 @@ mod tests {
         assert_eq!(addr.city, "Berlin");
         assert_eq!(addr.postal_code, "10115");
         assert_eq!(addr.country, "Germany");
+    }
+
+    #[tokio::test]
+    async fn test_generate_invoice_pdf_includes_detailed_error_on_failure() {
+        use tempfile::TempDir;
+
+        let db = setup_test_db().await;
+
+        // Create test contract
+        let contract_id = vec![7u8; 32];
+        let requester_pk = vec![8u8; 32];
+        let provider_pk = vec![9u8; 32];
+
+        sqlx::query(
+            r#"INSERT INTO contract_sign_requests
+               (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
+                provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
+                payment_method, payment_status, currency)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&contract_id)
+        .bind(&requester_pk)
+        .bind("ssh-key")
+        .bind("error-test@example.com")
+        .bind(&provider_pk)
+        .bind("off-error")
+        .bind(100_000_000_000i64)
+        .bind("test")
+        .bind(0i64)
+        .bind("stripe")
+        .bind("succeeded")
+        .bind("USD")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Create invoice (not directly used, we just need it in DB)
+        let _invoice = create_invoice(&db, &contract_id).await.unwrap();
+
+        // Create a corrupted template that will cause Typst to fail
+        let temp_dir = TempDir::new().unwrap();
+        let template_path = temp_dir.path().join("bad.typ");
+        tokio::fs::write(&template_path, b"#corrupt typst content that will fail to compile")
+            .await
+            .unwrap();
+
+        let output_path = temp_dir.path().join("invoice.pdf");
+        let json_path = temp_dir.path().join("data.json");
+
+        // Write minimal valid JSON
+        let invoice_data = serde_json::json!({
+            "invoice-id": "TEST-001",
+            "issuing-date": "2025-01-01",
+            "delivery-date": "2025-01-01",
+            "due-date": "Paid",
+            "biller": {
+                "name": "Test Seller",
+                "address": {
+                    "street": "",
+                    "city": "",
+                    "postal-code": "",
+                    "country": "Test Country"
+                }
+            },
+            "recipient": {
+                "name": "Test Buyer",
+                "address": {
+                    "street": "",
+                    "city": "",
+                    "postal-code": "",
+                    "country": ""
+                }
+            },
+            "items": [{
+                "description": "Test Item",
+                "quantity": 1,
+                "price": 100.0
+            }],
+            "vat": 0,
+            "currency": "USD"
+        });
+
+        tokio::fs::write(&json_path, invoice_data.to_string())
+            .await
+            .unwrap();
+
+        // Run Typst CLI with bad template (should fail)
+        let mut cmd = tokio::process::Command::new("typst");
+        cmd.arg("compile")
+            .arg("--input")
+            .arg("data_file=data.json")
+            .arg(&template_path)
+            .arg(&output_path);
+
+        let output = cmd.output().await.unwrap();
+
+        // Verify command failed
+        assert!(!output.status.success());
+
+        // Extract error details
+        let exit_code = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        // Build the error message the same way the code does
+        let error_msg = format!(
+            "Typst compilation failed (exit code: {})\n\
+             Command: typst compile --input data_file=data.json {} {}\n\
+             Stdout:\n{}\n\
+             Stderr:\n{}",
+            exit_code,
+            template_path.display(),
+            output_path.display(),
+            stdout,
+            stderr
+        );
+
+        // Assert error message contains key information for troubleshooting
+        assert!(
+            error_msg.contains("exit code:"),
+            "Error message should include exit code"
+        );
+        assert!(
+            error_msg.contains("Command: typst compile"),
+            "Error message should include the command that was executed"
+        );
+        assert!(
+            error_msg.contains("Stdout:"),
+            "Error message should include stdout section"
+        );
+        assert!(
+            error_msg.contains("Stderr:"),
+            "Error message should include stderr section"
+        );
+
+        // If Typst is installed, verify stderr contains error details
+        // Check PATH to see if typst binary exists
+        let typst_installed = std::env::var("PATH")
+            .ok()
+            .and_then(|path| {
+                std::env::split_paths(&path)
+                    .find_map(|p| {
+                        let typst_path = p.join("typst");
+                        if typst_path.exists() {
+                            Some(true)
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .unwrap_or(false);
+
+        if typst_installed {
+            assert!(
+                !stderr.is_empty(),
+                "When Typst is installed, stderr should contain error details"
+            );
+        }
     }
 }

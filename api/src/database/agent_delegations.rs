@@ -20,6 +20,8 @@ pub enum AgentPermission {
     Heartbeat,
     /// Can fetch pending contracts
     FetchContracts,
+    /// Can manage gateway DNS records
+    DnsManage,
 }
 
 impl AgentPermission {
@@ -29,6 +31,7 @@ impl AgentPermission {
             AgentPermission::HealthCheck => "health_check",
             AgentPermission::Heartbeat => "heartbeat",
             AgentPermission::FetchContracts => "fetch_contracts",
+            AgentPermission::DnsManage => "dns_manage",
         }
     }
 
@@ -40,6 +43,7 @@ impl AgentPermission {
             AgentPermission::HealthCheck,
             AgentPermission::Heartbeat,
             AgentPermission::FetchContracts,
+            AgentPermission::DnsManage,
         ]
     }
 }
@@ -64,6 +68,7 @@ impl std::str::FromStr for AgentPermission {
             "health_check" => Ok(AgentPermission::HealthCheck),
             "heartbeat" => Ok(AgentPermission::Heartbeat),
             "fetch_contracts" => Ok(AgentPermission::FetchContracts),
+            "dns_manage" => Ok(AgentPermission::DnsManage),
             _ => Err(()),
         }
     }

@@ -48,19 +48,39 @@ pub fn workspace_dir() -> PathBuf {
         .arg("--workspace")
         .arg("--message-format=plain")
         .output()
-        .unwrap()
-        .stdout;
-    let cargo_path = Path::new(std::str::from_utf8(&output).unwrap().trim());
+        .expect("Failed to execute 'cargo locate-project'. Make sure Cargo is installed and in PATH.");
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        panic!(
+            "Failed to locate workspace directory.\nstdout: {}\nstderr: {}",
+            stdout, stderr
+        );
+    }
+    let cargo_path = Path::new(std::str::from_utf8(&output.stdout).unwrap().trim());
     cargo_path.parent().unwrap().to_path_buf()
 }
 
 pub static CANISTER_WASM: Lazy<Vec<u8>> = Lazy::new(|| {
     let mut path = workspace_dir();
-    Command::new("dfx")
+    let canister_dir = path.join("ic-canister");
+    let output = Command::new("dfx")
         .arg("build")
-        .current_dir(path.join("ic-canister"))
+        .current_dir(&canister_dir)
         .output()
-        .unwrap();
+        .expect("Failed to execute 'dfx build'. Make sure dfx is installed and in PATH.");
+
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        panic!(
+            "Failed to build canister at {}\nstdout: {}\nstderr: {}",
+            canister_dir.display(),
+            stdout,
+            stderr
+        );
+    }
+
     path.push("target/wasm32-unknown-unknown/release/decent_cloud_canister.wasm");
     fs_err::read(path).unwrap()
 });
