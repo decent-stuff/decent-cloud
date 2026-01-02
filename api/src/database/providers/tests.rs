@@ -24,7 +24,7 @@ async fn test_create_external_provider() {
 
     // Verify record exists
     let result = sqlx::query!(
-        "SELECT name, domain, website_url, data_source FROM external_providers WHERE pubkey = ?",
+        "SELECT name, domain, website_url, data_source FROM external_providers WHERE pubkey = $1",
         pubkey
     )
     .fetch_one(&db.pool)
@@ -66,7 +66,7 @@ async fn test_update_external_provider() {
 
     // Verify update
     let result = sqlx::query!(
-        "SELECT name, domain, website_url, data_source FROM external_providers WHERE pubkey = ?",
+        "SELECT name, domain, website_url, data_source FROM external_providers WHERE pubkey = $1",
         pubkey
     )
     .fetch_one(&db.pool)
@@ -152,7 +152,7 @@ async fn test_update_provider_onboarding_updates_existing_profile() {
     // Create initial profile directly in DB
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(&pubkey)
     .bind("Existing Provider")

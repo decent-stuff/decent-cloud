@@ -46,12 +46,12 @@ impl Database {
                 .unwrap();
         let example_provider_hash_for_profiles = example_provider_hash.clone();
         let example_provider_hash_for_checkins = example_provider_hash.clone();
-        let total_providers = sqlx::query_scalar!(
-            r#"SELECT COUNT(DISTINCT pubkey) FROM (
-                SELECT pubkey FROM provider_profiles WHERE pubkey != ?
+        let total_providers: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM (
+                SELECT pubkey FROM provider_profiles WHERE pubkey != $1
                 UNION
-                SELECT pubkey FROM provider_check_ins WHERE pubkey != ?
-            )"#,
+                SELECT pubkey FROM provider_check_ins WHERE pubkey != $2
+            ) AS combined"#,
             example_provider_hash_for_profiles,
             example_provider_hash_for_checkins
         )
@@ -62,8 +62,8 @@ impl Database {
         let cutoff_ns =
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 365 * 24 * 3600 * 1_000_000_000;
         let example_provider_hash_active = example_provider_hash.clone();
-        let active_providers = sqlx::query_scalar!(
-            "SELECT COUNT(DISTINCT pubkey) FROM provider_check_ins WHERE block_timestamp_ns > ? AND (pubkey) != ?",
+        let active_providers: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM provider_check_ins WHERE block_timestamp_ns > $1 AND (pubkey) != $2"#,
             cutoff_ns,
             example_provider_hash_active
         )
@@ -71,23 +71,23 @@ impl Database {
         .await?;
 
         let example_provider_hash_offerings = example_provider_hash.clone();
-        let total_offerings = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != ?",
+        let total_offerings: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!" FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != $1"#,
             example_provider_hash_offerings
         )
         .fetch_one(&self.pool)
         .await?;
 
-        let total_contracts = sqlx::query_scalar!("SELECT COUNT(*) FROM contract_sign_requests")
+        let total_contracts: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests"#)
             .fetch_one(&self.pool)
             .await?;
 
-        let total_transfers = sqlx::query_scalar!("SELECT COUNT(*) FROM token_transfers")
+        let total_transfers: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM token_transfers"#)
             .fetch_one(&self.pool)
             .await?;
 
         let total_volume: Option<i64> =
-            sqlx::query_scalar!("SELECT SUM(amount_e9s) FROM token_transfers")
+            sqlx::query_scalar!(r#"SELECT SUM(amount_e9s)::BIGINT as "sum" FROM token_transfers"#)
                 .fetch_one(&self.pool)
                 .await?;
 
@@ -107,7 +107,7 @@ impl Database {
             ReputationInfo,
             r#"SELECT pubkey, COALESCE(SUM(change_amount), 0) as "total_reputation!: i64", COUNT(*) as "change_count!: i64"
              FROM reputation_changes
-             WHERE pubkey = ?
+             WHERE pubkey = $1
              GROUP BY pubkey"#,
             pubkey
         )
@@ -126,7 +126,7 @@ impl Database {
              FROM reputation_changes
              GROUP BY pubkey
              ORDER BY COALESCE(SUM(change_amount), 0) DESC
-             LIMIT ?"#,
+             LIMIT $1"#,
             limit
         )
         .fetch_all(&self.pool)
@@ -138,28 +138,28 @@ impl Database {
     /// Get contract stats for a provider
     pub async fn get_provider_stats(&self, pubkey: &[u8]) -> Result<ProviderStats> {
         let total_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1"#,
             pubkey
         )
         .fetch_one(&self.pool)
         .await?;
 
         let pending_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'pending'",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'pending'"#,
             pubkey
         )
         .fetch_one(&self.pool)
         .await?;
 
         let total_revenue: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ?",
+            r#"SELECT COALESCE(SUM(payment_amount_e9s), 0)::BIGINT as "sum!" FROM contract_sign_requests WHERE provider_pubkey = $1"#,
             pubkey
         )
         .fetch_one(&self.pool)
         .await?;
 
         let offerings_count: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM provider_offerings WHERE pubkey = ?",
+            r#"SELECT COUNT(*) as "count!" FROM provider_offerings WHERE pubkey = $1"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -183,7 +183,7 @@ impl Database {
 
         // Total contracts for this provider
         let total_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -191,7 +191,7 @@ impl Database {
 
         // Completed contracts
         let completed_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'completed'",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'completed'"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -199,7 +199,7 @@ impl Database {
 
         // Cancelled contracts
         let cancelled_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'cancelled'",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'cancelled'"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -207,7 +207,7 @@ impl Database {
 
         // Rejected contracts
         let rejected_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'rejected'",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'rejected'"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -215,7 +215,7 @@ impl Database {
 
         // Active contracts value
         let active_contract_value_e9s: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('active', 'provisioned')",
+            r#"SELECT COALESCE(SUM(payment_amount_e9s), 0)::BIGINT as "sum!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('active', 'provisioned')"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -223,7 +223,7 @@ impl Database {
 
         // Stuck contracts (>72h without progress in early stages)
         let stuck_contracts_value_e9s: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(SUM(payment_amount_e9s), 0) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending', 'accepted') AND created_at_ns < ?",
+            r#"SELECT COALESCE(SUM(payment_amount_e9s), 0)::BIGINT as "sum!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('requested', 'pending', 'accepted') AND created_at_ns < $2"#,
             pubkey,
             cutoff_72h_ns
         )
@@ -232,12 +232,12 @@ impl Database {
 
         // Repeat customers (users who rented more than once from this provider)
         let repeat_customer_count: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) FROM (
+            r#"SELECT COUNT(*) as "count!" FROM (
                 SELECT requester_pubkey FROM contract_sign_requests
-                WHERE provider_pubkey = ?
+                WHERE provider_pubkey = $1
                 GROUP BY requester_pubkey
                 HAVING COUNT(*) > 1
-            )"#,
+            ) AS repeats"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -250,15 +250,15 @@ impl Database {
         // 4. Account login (via account_public_keys link)
         let last_active_ns: i64 = sqlx::query_scalar::<_, i64>(
             r#"SELECT COALESCE(MAX(activity_ns), 0) FROM (
-                SELECT MAX(block_timestamp_ns) as activity_ns FROM provider_check_ins WHERE pubkey = ?
+                SELECT MAX(block_timestamp_ns) as activity_ns FROM provider_check_ins WHERE pubkey = $1
                 UNION ALL
-                SELECT MAX(COALESCE(status_updated_at_ns, created_at_ns)) FROM contract_sign_requests WHERE provider_pubkey = ?
+                SELECT MAX(COALESCE(status_updated_at_ns, created_at_ns)) FROM contract_sign_requests WHERE provider_pubkey = $2
                 UNION ALL
-                SELECT MAX(updated_at_ns) FROM provider_profiles WHERE pubkey = ?
+                SELECT MAX(updated_at_ns) FROM provider_profiles WHERE pubkey = $3
                 UNION ALL
                 SELECT MAX(a.last_login_at) FROM accounts a
                 INNER JOIN account_public_keys apk ON a.id = apk.account_id
-                WHERE apk.public_key = ?
+                WHERE apk.public_key = $4
             )"#,
         )
         .bind(pubkey)
@@ -270,7 +270,7 @@ impl Database {
 
         // Negative reputation in last 90 days
         let negative_reputation_90d: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(SUM(CASE WHEN change_amount < 0 THEN change_amount ELSE 0 END), 0) FROM reputation_changes WHERE pubkey = ? AND block_timestamp_ns > ?",
+            r#"SELECT COALESCE(SUM(CASE WHEN change_amount < 0 THEN change_amount ELSE 0 END), 0)::BIGINT as "sum!" FROM reputation_changes WHERE pubkey = $1 AND block_timestamp_ns > $2"#,
             pubkey,
             cutoff_90d_ns
         )
@@ -282,7 +282,7 @@ impl Database {
             r#"SELECT AVG(CAST(h.changed_at_ns - c.created_at_ns AS REAL)) as "avg: f64"
                FROM contract_sign_requests c
                INNER JOIN contract_status_history h ON c.contract_id = h.contract_id
-               WHERE c.provider_pubkey = ?
+               WHERE c.provider_pubkey = $1
                AND h.old_status = 'requested'
                AND h.changed_at_ns IS NOT NULL"#,
             pubkey
@@ -295,7 +295,7 @@ impl Database {
         let avg_delivery_time_ns: Option<f64> = sqlx::query_scalar!(
             r#"SELECT AVG(CAST(provisioning_completed_at_ns - created_at_ns AS REAL)) as "avg: f64"
                FROM contract_sign_requests
-               WHERE provider_pubkey = ?
+               WHERE provider_pubkey = $1
                AND provisioning_completed_at_ns IS NOT NULL"#,
             pubkey
         )
@@ -304,9 +304,9 @@ impl Database {
 
         // Early cancellations (cancelled within first 10% of duration)
         let early_cancellations: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) FROM contract_sign_requests c
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests c
                INNER JOIN contract_status_history h ON c.contract_id = h.contract_id
-               WHERE c.provider_pubkey = ?
+               WHERE c.provider_pubkey = $1
                AND c.status = 'cancelled'
                AND h.new_status = 'cancelled'
                AND c.duration_hours IS NOT NULL
@@ -319,7 +319,7 @@ impl Database {
 
         // Provisioning failures (accepted but never provisioned, older than 72h)
         let provisioning_failures: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'accepted' AND provisioning_completed_at_ns IS NULL AND created_at_ns < ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'accepted' AND provisioning_completed_at_ns IS NULL AND created_at_ns < $2"#,
             pubkey,
             cutoff_72h_ns
         )
@@ -328,7 +328,7 @@ impl Database {
 
         // Accepted contracts count for failure rate
         let accepted_contracts: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('accepted', 'provisioning', 'provisioned', 'active', 'completed')",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('accepted', 'provisioning', 'provisioned', 'active', 'completed')"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -373,7 +373,7 @@ impl Database {
 
         // Check if provider has contact info
         let contact_count: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM provider_profiles_contacts WHERE provider_pubkey = ?",
+            r#"SELECT COUNT(*) as "count!" FROM provider_profiles_contacts WHERE provider_pubkey = $1"#,
             pubkey
         )
         .fetch_one(&self.pool)
@@ -409,7 +409,7 @@ impl Database {
                     ELSE NULL
                 END as "ratio: f64"
             FROM contract_sign_requests
-            WHERE provider_pubkey = ?
+            WHERE provider_pubkey = $1
             AND status IN ('completed', 'cancelled')
             AND duration_hours IS NOT NULL
             AND duration_hours > 0"#,
@@ -423,7 +423,7 @@ impl Database {
 
         // Count total requests in last 90 days
         let total_requests_90d: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND created_at_ns > ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND created_at_ns > $2"#,
             pubkey,
             cutoff_90d_ns
         )
@@ -432,7 +432,7 @@ impl Database {
 
         // Count requests still in "requested" status and older than 7 days
         let no_response_count: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'requested' AND created_at_ns < ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'requested' AND created_at_ns < $2"#,
             pubkey,
             cutoff_7d_ns
         )
@@ -451,7 +451,7 @@ impl Database {
 
         // Recent period: last 30 days
         let recent_cancelled: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'cancelled' AND status_updated_at_ns > ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'cancelled' AND status_updated_at_ns > $2"#,
             pubkey,
             cutoff_30d_ns
         )
@@ -459,7 +459,7 @@ impl Database {
         .await?;
 
         let recent_total: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('completed', 'cancelled') AND status_updated_at_ns > ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('completed', 'cancelled') AND status_updated_at_ns > $2"#,
             pubkey,
             cutoff_30d_ns
         )
@@ -468,7 +468,7 @@ impl Database {
 
         // Baseline period: 31-90 days ago
         let baseline_cancelled: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status = 'cancelled' AND status_updated_at_ns > ? AND status_updated_at_ns <= ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status = 'cancelled' AND status_updated_at_ns > $2 AND status_updated_at_ns <= $3"#,
             pubkey,
             cutoff_90d_ns,
             cutoff_31d_ns
@@ -477,7 +477,7 @@ impl Database {
         .await?;
 
         let baseline_total: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('completed', 'cancelled') AND status_updated_at_ns > ? AND status_updated_at_ns <= ?",
+            r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('completed', 'cancelled') AND status_updated_at_ns > $2 AND status_updated_at_ns <= $3"#,
             pubkey,
             cutoff_90d_ns,
             cutoff_31d_ns
@@ -519,11 +519,10 @@ impl Database {
             );
 
         // Update cached trust score in provider_profiles
-        let has_flags_int: i64 = if has_critical_flags { 1 } else { 0 };
         sqlx::query!(
-            "UPDATE provider_profiles SET trust_score = ?, has_critical_flags = ? WHERE pubkey = ?",
+            "UPDATE provider_profiles SET trust_score = $1, has_critical_flags = $2 WHERE pubkey = $3",
             trust_score,
-            has_flags_int,
+            has_critical_flags,
             pubkey
         )
         .execute(&self.pool)
@@ -703,7 +702,7 @@ impl Database {
             r#"SELECT DISTINCT
                 a.username,
                 a.display_name,
-                hex(apk.public_key) as pubkey,
+                encode(apk.public_key, 'hex') as pubkey,
                 COALESCE(rep.total_reputation, 0) as reputation_score,
                 COALESCE(contracts.contract_count, 0) as contract_count,
                 COALESCE(offerings.offering_count, 0) as offering_count
@@ -730,13 +729,13 @@ impl Database {
             ) offerings ON apk.public_key = offerings.pubkey
             WHERE apk.is_active = 1
               AND (
-                lower(a.username) LIKE ?
-                OR lower(a.display_name) LIKE ?
-                OR hex(apk.public_key) LIKE ?
+                lower(a.username) LIKE $1
+                OR lower(a.display_name) LIKE $2
+                OR encode(apk.public_key, 'hex') LIKE $3
               )
             GROUP BY a.username, a.display_name, apk.public_key
             ORDER BY reputation_score DESC, contract_count DESC, offering_count DESC
-            LIMIT ?"#,
+            LIMIT $4"#,
         )
         .bind(&search_pattern)
         .bind(&search_pattern)

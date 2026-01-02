@@ -121,7 +121,7 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO email_queue
                (id, to_addr, from_addr, subject, body, is_html, email_type, status, attempts, max_attempts, created_at, related_account_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 999, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 0, 999, $8, $9)"#,
             id,
             to_addr,
             from_addr,
@@ -148,9 +148,9 @@ impl Database {
                       status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
                       related_account_id, user_notified_retry, user_notified_gave_up
                FROM email_queue
-               WHERE status = 'pending' AND created_at >= ?
+               WHERE status = 'pending' AND created_at >= $1
                ORDER BY created_at ASC
-               LIMIT ?"#,
+               LIMIT $2"#,
             cutoff,
             limit
         )
@@ -170,7 +170,7 @@ impl Database {
                FROM email_queue
                WHERE status = 'failed'
                ORDER BY created_at DESC
-               LIMIT ?"#,
+               LIMIT $1"#,
             limit
         )
         .fetch_all(&self.pool)
@@ -189,7 +189,7 @@ impl Database {
                FROM email_queue
                WHERE status = 'sent'
                ORDER BY sent_at DESC
-               LIMIT ?"#,
+               LIMIT $1"#,
             limit
         )
         .fetch_all(&self.pool)
@@ -203,7 +203,7 @@ impl Database {
         // Reset status, attempts, and also update created_at to restart the 7-day window
         let now = chrono::Utc::now().timestamp();
         sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = ?, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = ? AND status = 'failed'",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = $2 AND status = 'failed'",
             now,
             id
         )
@@ -219,7 +219,7 @@ impl Database {
     pub async fn reset_email_for_retry(&self, id: &[u8]) -> Result<bool> {
         let now = chrono::Utc::now().timestamp();
         let result = sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = ?, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = ?",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = 0, user_notified_gave_up = 0 WHERE id = $2",
             now,
             id
         )
@@ -234,7 +234,7 @@ impl Database {
     pub async fn retry_all_failed_emails(&self) -> Result<u64> {
         let now = chrono::Utc::now().timestamp();
         let result = sqlx::query!(
-            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = ?, user_notified_retry = 0, user_notified_gave_up = 0 WHERE status = 'failed'",
+            "UPDATE email_queue SET status = 'pending', attempts = 0, last_error = NULL, created_at = $1, user_notified_retry = 0, user_notified_gave_up = 0 WHERE status = 'failed'",
             now
         )
         .execute(&self.pool)
@@ -245,21 +245,21 @@ impl Database {
 
     /// Get email queue statistics
     pub async fn get_email_stats(&self) -> Result<EmailStats> {
-        let pending =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue WHERE status = 'pending'")
+        let pending: i64 =
+            sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'pending'"#)
                 .fetch_one(&self.pool)
                 .await?;
 
-        let sent = sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue WHERE status = 'sent'")
+        let sent: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'sent'"#)
             .fetch_one(&self.pool)
             .await?;
 
-        let failed =
-            sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue WHERE status = 'failed'")
+        let failed: i64 =
+            sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue WHERE status = 'failed'"#)
                 .fetch_one(&self.pool)
                 .await?;
 
-        let total = sqlx::query_scalar!("SELECT COUNT(*) FROM email_queue")
+        let total: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM email_queue"#)
             .fetch_one(&self.pool)
             .await?;
 
@@ -275,7 +275,7 @@ impl Database {
         let sent_at = chrono::Utc::now().timestamp();
 
         sqlx::query!(
-            "UPDATE email_queue SET status = 'sent', sent_at = ? WHERE id = ?",
+            "UPDATE email_queue SET status = 'sent', sent_at = $1 WHERE id = $2",
             sent_at,
             id
         )
@@ -291,7 +291,7 @@ impl Database {
         let now = chrono::Utc::now().timestamp();
 
         sqlx::query!(
-            "UPDATE email_queue SET attempts = attempts + 1, last_error = ?, last_attempted_at = ? WHERE id = ?",
+            "UPDATE email_queue SET attempts = attempts + 1, last_error = $1, last_attempted_at = $2 WHERE id = $3",
             error,
             now,
             id
@@ -305,7 +305,7 @@ impl Database {
     /// Mark an email as permanently failed (7-day window expired)
     pub async fn mark_email_permanently_failed(&self, id: &[u8]) -> Result<()> {
         sqlx::query!(
-            "UPDATE email_queue SET status = 'failed' WHERE id = ? AND status = 'pending'",
+            "UPDATE email_queue SET status = 'failed' WHERE id = $1 AND status = 'pending'",
             id
         )
         .execute(&self.pool)
@@ -324,9 +324,9 @@ impl Database {
                       status, attempts, max_attempts, last_error, created_at, last_attempted_at, sent_at,
                       related_account_id, user_notified_retry, user_notified_gave_up
                FROM email_queue
-               WHERE status = 'pending' AND created_at < ?
+               WHERE status = 'pending' AND created_at < $1
                ORDER BY created_at ASC
-               LIMIT ?"#,
+               LIMIT $2"#,
             cutoff,
             limit
         )
@@ -349,7 +349,7 @@ impl Database {
                FROM email_queue
                WHERE status = 'pending' AND attempts > 0 AND related_account_id IS NOT NULL AND user_notified_retry = 0
                ORDER BY last_attempted_at ASC
-               LIMIT ?"#,
+               LIMIT $1"#,
             limit
         )
         .fetch_all(&self.pool)
@@ -371,7 +371,7 @@ impl Database {
                FROM email_queue
                WHERE status = 'failed' AND related_account_id IS NOT NULL AND user_notified_gave_up = 0
                ORDER BY last_attempted_at ASC
-               LIMIT ?"#,
+               LIMIT $1"#,
             limit
         )
         .fetch_all(&self.pool)
@@ -383,7 +383,7 @@ impl Database {
     /// Mark that we've notified the user about email retry
     pub async fn mark_retry_notified(&self, id: &[u8]) -> Result<()> {
         sqlx::query!(
-            "UPDATE email_queue SET user_notified_retry = 1 WHERE id = ?",
+            "UPDATE email_queue SET user_notified_retry = 1 WHERE id = $1",
             id
         )
         .execute(&self.pool)
@@ -395,7 +395,7 @@ impl Database {
     /// Mark that we've notified the user about permanent failure
     pub async fn mark_gave_up_notified(&self, id: &[u8]) -> Result<()> {
         sqlx::query!(
-            "UPDATE email_queue SET user_notified_gave_up = 1 WHERE id = ?",
+            "UPDATE email_queue SET user_notified_gave_up = 1 WHERE id = $1",
             id
         )
         .execute(&self.pool)

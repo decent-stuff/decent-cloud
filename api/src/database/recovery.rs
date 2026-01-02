@@ -12,7 +12,7 @@ impl Database {
             r#"SELECT COALESCE(a.id, oa.account_id) as "id!"
                FROM accounts a
                LEFT JOIN oauth_accounts oa ON a.id = oa.account_id
-               WHERE a.email = ? OR oa.email = ?
+               WHERE a.email = $1 OR oa.email = $2
                LIMIT 1"#,
             email,
             email
@@ -31,7 +31,7 @@ impl Database {
 
         // Store token
         sqlx::query!(
-            "INSERT INTO recovery_tokens (token, account_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO recovery_tokens (token, account_id, created_at, expires_at) VALUES ($1, $2, $3, $4)",
             token,
             account.id,
             now,
@@ -53,7 +53,7 @@ impl Database {
         let result = sqlx::query!(
             r#"SELECT account_id, expires_at, used_at
                FROM recovery_tokens
-               WHERE token = ?"#,
+               WHERE token = $1"#,
             token
         )
         .fetch_optional(&self.pool)
@@ -85,7 +85,7 @@ impl Database {
         let result = sqlx::query!(
             r#"SELECT account_id, expires_at, used_at
                FROM recovery_tokens
-               WHERE token = ?"#,
+               WHERE token = $1"#,
             token
         )
         .fetch_optional(&mut *tx)
@@ -105,7 +105,7 @@ impl Database {
 
         // Mark token as used
         sqlx::query!(
-            "UPDATE recovery_tokens SET used_at = ? WHERE token = ?",
+            "UPDATE recovery_tokens SET used_at = $1 WHERE token = $2",
             now,
             token
         )
@@ -117,7 +117,7 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO account_public_keys
                (id, account_id, public_key, is_active, added_at)
-               VALUES (?, ?, ?, 1, ?)"#,
+               VALUES ($1, $2, $3, 1, $4)"#,
             key_id,
             row.account_id,
             new_public_key,
@@ -137,7 +137,7 @@ impl Database {
     pub async fn cleanup_expired_recovery_tokens(&self) -> Result<u64> {
         let now = chrono::Utc::now().timestamp();
 
-        let result = sqlx::query!("DELETE FROM recovery_tokens WHERE expires_at < ?", now)
+        let result = sqlx::query!("DELETE FROM recovery_tokens WHERE expires_at < $1", now)
             .execute(&self.pool)
             .await?;
 

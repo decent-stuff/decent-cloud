@@ -165,7 +165,7 @@ async fn get_next_invoice_number(db: &Database) -> Result<String> {
     }
 
     let result: Option<InvoiceNumberRow> = sqlx::query_as(
-        "UPDATE invoice_sequence SET next_number = next_number + 1 WHERE id = 1 AND year = ? RETURNING next_number - 1 as number",
+        "UPDATE invoice_sequence SET next_number = next_number + 1 WHERE id = 1 AND year = $1 RETURNING next_number - 1 as number",
     )
     .bind(current_year)
     .fetch_optional(&db.pool)
@@ -175,7 +175,7 @@ async fn get_next_invoice_number(db: &Database) -> Result<String> {
         Some(row) => row.number,
         None => {
             // Year changed, reset sequence
-            sqlx::query("UPDATE invoice_sequence SET year = ?, next_number = 2 WHERE id = 1")
+            sqlx::query("UPDATE invoice_sequence SET year = $1, next_number = 2 WHERE id = 1")
                 .bind(current_year)
                 .execute(&db.pool)
                 .await?;
@@ -229,13 +229,14 @@ pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice
     let vat_amount_e9s = contract.tax_amount_e9s.unwrap_or(0);
     let total_e9s = subtotal_e9s + vat_amount_e9s;
 
-    // Insert invoice record
-    let result = sqlx::query(
+    // Insert invoice record and return the created row
+    let invoice: Invoice = sqlx::query_as(
         r#"INSERT INTO invoices
            (contract_id, invoice_number, invoice_date_ns, seller_name, seller_address, seller_vat_id,
             buyer_name, buyer_address, buyer_vat_id, subtotal_e9s, vat_rate_percent, vat_amount_e9s,
             total_e9s, currency, created_at_ns)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+           RETURNING *"#,
     )
     .bind(contract_id)
     .bind(&invoice_number)
@@ -252,16 +253,8 @@ pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice
     .bind(total_e9s)
     .bind(&contract.currency)
     .bind(now_ns)
-    .execute(&db.pool)
+    .fetch_one(&db.pool)
     .await?;
-
-    let invoice_id = result.last_insert_rowid();
-
-    // Fetch the created invoice
-    let invoice: Invoice = sqlx::query_as("SELECT * FROM invoices WHERE id = ?")
-        .bind(invoice_id)
-        .fetch_one(&db.pool)
-        .await?;
 
     tracing::info!(
         "Created invoice {} for contract {}",
@@ -274,7 +267,7 @@ pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice
 
 /// Get invoice by contract ID
 async fn get_invoice_by_contract(db: &Database, contract_id: &[u8]) -> Result<Option<Invoice>> {
-    let invoice: Option<Invoice> = sqlx::query_as("SELECT * FROM invoices WHERE contract_id = ?")
+    let invoice: Option<Invoice> = sqlx::query_as("SELECT * FROM invoices WHERE contract_id = $1")
         .bind(contract_id)
         .fetch_optional(&db.pool)
         .await?;
@@ -565,7 +558,7 @@ async fn get_typst_invoice_pdf(db: &Database, contract_id: &[u8]) -> Result<Vec<
 
     // Update metadata in DB (just the timestamp, PDF is on disk)
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    sqlx::query("UPDATE invoices SET pdf_generated_at_ns = ? WHERE id = ?")
+    sqlx::query("UPDATE invoices SET pdf_generated_at_ns = $1 WHERE id = $2")
         .bind(now_ns)
         .bind(invoice.id)
         .execute(&db.pool)
@@ -636,7 +629,7 @@ mod tests {
                (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
                 provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
                 payment_method, payment_status, currency)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
         )
         .bind(&contract_id)
         .bind(&requester_pk)
@@ -682,7 +675,7 @@ mod tests {
                (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
                 provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
                 payment_method, payment_status, currency)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
         )
         .bind(&contract_id)
         .bind(&requester_pk)
@@ -782,7 +775,7 @@ mod tests {
                (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
                 provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
                 payment_method, payment_status, currency)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
         )
         .bind(&contract_id)
         .bind(&requester_pk)

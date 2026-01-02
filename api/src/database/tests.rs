@@ -66,7 +66,7 @@ async fn count_table_rows(db: &Database, table: &str) -> i64 {
 
     // For provider tables, exclude the example provider
     let query = if table.starts_with("provider_") {
-        format!("SELECT COUNT(*) as count FROM {} WHERE pubkey != ?", table)
+        format!("SELECT COUNT(*) as count FROM {} WHERE pubkey != $1", table)
     } else {
         format!("SELECT COUNT(*) as count FROM {}", table)
     };
@@ -99,17 +99,17 @@ async fn assert_table_count(db: &Database, table: &str, expected: i64) {
 async fn delete_example_data(db: &Database) {
     let example_pubkey = Database::example_provider_pubkey();
     // Delete in correct order to respect foreign key constraints
-    sqlx::query("DELETE FROM provider_agent_delegations WHERE provider_pubkey = ?")
+    sqlx::query("DELETE FROM provider_agent_delegations WHERE provider_pubkey = $1")
         .bind(&example_pubkey[..])
         .execute(&db.pool)
         .await
         .unwrap();
-    sqlx::query("DELETE FROM agent_pools WHERE provider_pubkey = ?")
+    sqlx::query("DELETE FROM agent_pools WHERE provider_pubkey = $1")
         .bind(&example_pubkey[..])
         .execute(&db.pool)
         .await
         .unwrap();
-    sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ?")
+    sqlx::query("DELETE FROM provider_offerings WHERE pubkey = $1")
         .bind(&example_pubkey[..])
         .execute(&db.pool)
         .await
@@ -388,7 +388,7 @@ async fn test_offerings_with_pools_included_in_search() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, 0)",
+            "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, 0)",
             pubkey_ref,
             pubkey_ref
         )
@@ -399,7 +399,7 @@ async fn test_offerings_with_pools_included_in_search() {
 
     // Create a pool for US region
     sqlx::query(
-        "INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES (?, ?, 'Test Pool', 'na', 'manual', 0)"
+        "INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES ($1, $2, 'Test Pool', 'na', 'manual', 0)"
     )
     .bind("test-pool-na")
     .bind(&pubkey)
@@ -410,7 +410,7 @@ async fn test_offerings_with_pools_included_in_search() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', 0, 0)",
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'test-public-001', 'Test Public Offering', 'USD', 99.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', FALSE, 0)",
             pubkey_ref
         )
         .execute(&db.pool)
@@ -642,7 +642,7 @@ async fn test_get_active_validators_with_profile() {
         let validator_key_ref = &validator_key[..];
         sqlx::query!(
             "INSERT INTO provider_profiles (pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             validator_key_ref,
             "Test Validator",
             Some("A test validator"),

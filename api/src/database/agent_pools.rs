@@ -145,7 +145,7 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns)
-               VALUES (?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6)"#,
             pool_id,
             provider_pubkey,
             name,
@@ -169,7 +169,7 @@ impl Database {
     /// Get a pool by ID.
     pub async fn get_agent_pool(&self, pool_id: &str) -> Result<Option<AgentPool>> {
         let row = sqlx::query_as::<_, PoolRow>(
-            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns FROM agent_pools WHERE pool_id = ?",
+            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns FROM agent_pools WHERE pool_id = $1",
         )
         .bind(pool_id)
         .fetch_optional(&self.pool)
@@ -198,12 +198,12 @@ impl Database {
             r#"SELECT
                 p.pool_id, p.provider_pubkey, p.name, p.location, p.provisioner_type, p.created_at_ns,
                 COUNT(DISTINCT d.agent_pubkey) as agent_count,
-                COUNT(DISTINCT CASE WHEN s.online = 1 AND s.last_heartbeat_ns > ? THEN d.agent_pubkey END) as online_count,
+                COUNT(DISTINCT CASE WHEN s.online = 1 AND s.last_heartbeat_ns > $1 THEN d.agent_pubkey END) as online_count,
                 COALESCE(SUM(s.active_contracts), 0) as active_contracts
             FROM agent_pools p
             LEFT JOIN provider_agent_delegations d ON d.pool_id = p.pool_id AND d.revoked_at_ns IS NULL
             LEFT JOIN provider_agent_status s ON s.provider_pubkey = p.provider_pubkey
-            WHERE p.provider_pubkey = ?
+            WHERE p.provider_pubkey = $2
             GROUP BY p.pool_id
             ORDER BY p.created_at_ns DESC"#,
         )
@@ -219,7 +219,7 @@ impl Database {
             datacenter_country: String,
         }
         let offerings = sqlx::query_as::<_, OfferingRow>(
-            "SELECT agent_pool_id, datacenter_country FROM provider_offerings WHERE pubkey = ?",
+            "SELECT agent_pool_id, datacenter_country FROM provider_offerings WHERE pubkey = $1",
         )
         .bind(provider_pubkey)
         .fetch_all(&self.pool)
@@ -285,23 +285,33 @@ impl Database {
 
         // Build dynamic update - only update provided fields
         let mut updates = Vec::new();
+        let mut placeholder_idx = 0usize;
         if name.is_some() {
-            updates.push("name = ?");
+            placeholder_idx += 1;
+            updates.push(format!("name = ${}", placeholder_idx));
         }
         if location.is_some() {
-            updates.push("location = ?");
+            placeholder_idx += 1;
+            updates.push(format!("location = ${}", placeholder_idx));
         }
         if provisioner_type.is_some() {
-            updates.push("provisioner_type = ?");
+            placeholder_idx += 1;
+            updates.push(format!("provisioner_type = ${}", placeholder_idx));
         }
 
         if updates.is_empty() {
             return Ok(false);
         }
 
+        placeholder_idx += 1;
+        let pool_id_idx = placeholder_idx;
+        placeholder_idx += 1;
+        let provider_pubkey_idx = placeholder_idx;
         let query = format!(
-            "UPDATE agent_pools SET {} WHERE pool_id = ? AND provider_pubkey = ?",
-            updates.join(", ")
+            "UPDATE agent_pools SET {} WHERE pool_id = ${} AND provider_pubkey = ${}",
+            updates.join(", "),
+            pool_id_idx,
+            provider_pubkey_idx
         );
 
         let mut q = sqlx::query(&query);
@@ -324,7 +334,7 @@ impl Database {
     pub async fn delete_agent_pool(&self, pool_id: &str, provider_pubkey: &[u8]) -> Result<bool> {
         // Check if pool has agents
         let agent_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM provider_agent_delegations WHERE pool_id = ? AND revoked_at_ns IS NULL",
+            "SELECT COUNT(*) FROM provider_agent_delegations WHERE pool_id = $1 AND revoked_at_ns IS NULL",
         )
         .bind(pool_id)
         .fetch_one(&self.pool)
@@ -338,7 +348,7 @@ impl Database {
         }
 
         let result = sqlx::query!(
-            "DELETE FROM agent_pools WHERE pool_id = ? AND provider_pubkey = ?",
+            "DELETE FROM agent_pools WHERE pool_id = $1 AND provider_pubkey = $2",
             pool_id,
             provider_pubkey
         )
@@ -372,7 +382,7 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO agent_setup_tokens (token, pool_id, label, created_at_ns, expires_at_ns)
-               VALUES (?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5)"#,
             token,
             pool_id,
             label,
@@ -405,8 +415,8 @@ impl Database {
         // Atomically mark token as used and get pool info
         let row = sqlx::query_as::<_, SetupTokenRow>(
             r#"UPDATE agent_setup_tokens
-               SET used_at_ns = ?, used_by_agent = ?
-               WHERE token = ? AND used_at_ns IS NULL AND expires_at_ns > ?
+               SET used_at_ns = $1, used_by_agent = $2
+               WHERE token = $3 AND used_at_ns IS NULL AND expires_at_ns > $4
                RETURNING token, pool_id, label, created_at_ns, expires_at_ns, used_at_ns, used_by_agent"#,
         )
         .bind(now_ns)
@@ -427,7 +437,7 @@ impl Database {
             None => {
                 // Check why it failed
                 let existing = sqlx::query_as::<_, SetupTokenRow>(
-                    "SELECT token, pool_id, label, created_at_ns, expires_at_ns, used_at_ns, used_by_agent FROM agent_setup_tokens WHERE token = ?",
+                    "SELECT token, pool_id, label, created_at_ns, expires_at_ns, used_at_ns, used_by_agent FROM agent_setup_tokens WHERE token = $1",
                 )
                 .bind(token)
                 .fetch_optional(&self.pool)
@@ -450,7 +460,7 @@ impl Database {
         let rows = sqlx::query_as::<_, SetupTokenRow>(
             r#"SELECT token, pool_id, label, created_at_ns, expires_at_ns, used_at_ns, used_by_agent
                FROM agent_setup_tokens
-               WHERE pool_id = ? AND used_at_ns IS NULL AND expires_at_ns > ?
+               WHERE pool_id = $1 AND used_at_ns IS NULL AND expires_at_ns > $2
                ORDER BY created_at_ns DESC"#,
         )
         .bind(pool_id)
@@ -474,7 +484,7 @@ impl Database {
 
     /// Delete a setup token.
     pub async fn delete_setup_token(&self, token: &str) -> Result<bool> {
-        let result = sqlx::query!("DELETE FROM agent_setup_tokens WHERE token = ?", token)
+        let result = sqlx::query!("DELETE FROM agent_setup_tokens WHERE token = $1", token)
             .execute(&self.pool)
             .await?;
 
@@ -486,7 +496,7 @@ impl Database {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         let result = sqlx::query!(
-            "DELETE FROM agent_setup_tokens WHERE expires_at_ns < ? AND used_at_ns IS NULL",
+            "DELETE FROM agent_setup_tokens WHERE expires_at_ns < $1 AND used_at_ns IS NULL",
             now_ns
         )
         .execute(&self.pool)
@@ -505,7 +515,7 @@ impl Database {
         location: &str,
     ) -> Result<Option<AgentPool>> {
         let row = sqlx::query_as::<_, PoolRow>(
-            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns FROM agent_pools WHERE provider_pubkey = ? AND location = ? ORDER BY created_at_ns ASC LIMIT 1",
+            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns FROM agent_pools WHERE provider_pubkey = $1 AND location = $2 ORDER BY created_at_ns ASC LIMIT 1",
         )
         .bind(provider_pubkey)
         .bind(location)
@@ -525,7 +535,7 @@ impl Database {
     /// Get agent's pool ID from their delegation.
     pub async fn get_agent_pool_id(&self, agent_pubkey: &[u8]) -> Result<Option<String>> {
         let pool_id: Option<String> = sqlx::query_scalar(
-            "SELECT pool_id FROM provider_agent_delegations WHERE agent_pubkey = ? AND revoked_at_ns IS NULL",
+            "SELECT pool_id FROM provider_agent_delegations WHERE agent_pubkey = $1 AND revoked_at_ns IS NULL",
         )
         .bind(agent_pubkey)
         .fetch_optional(&self.pool)
@@ -539,7 +549,7 @@ impl Database {
     pub async fn list_agents_in_pool(&self, pool_id: &str) -> Result<Vec<AgentDelegation>> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let rows = sqlx::query_as::<_, DelegationRow>(
-            "SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, created_at_ns, revoked_at_ns, label, pool_id, signature FROM provider_agent_delegations WHERE pool_id = ? AND revoked_at_ns IS NULL ORDER BY created_at_ns DESC"
+            "SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, created_at_ns, revoked_at_ns, label, pool_id, signature FROM provider_agent_delegations WHERE pool_id = $1 AND revoked_at_ns IS NULL ORDER BY created_at_ns DESC"
         )
         .bind(pool_id)
         .fetch_all(&self.pool)
@@ -576,7 +586,7 @@ mod tests {
     /// Helper to register a provider (required due to foreign key constraint)
     async fn register_provider(db: &crate::database::types::Database, pubkey: &[u8]) {
         sqlx::query(
-            "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, X'00', 0)",
+            "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, '\\x00', 0)",
         )
         .bind(pubkey)
         .execute(&db.pool)
@@ -618,7 +628,7 @@ mod tests {
             r#"INSERT INTO provider_offerings
                (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
                 product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
-               VALUES (?, 'off-1', 'Explicit EU', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'DE', 'Berlin', 0, ?)"#,
+               VALUES ($1, 'off-1', 'Explicit EU', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'DE', 'Berlin', 0, $2)"#,
         )
         .bind(&provider_pubkey)
         .bind(&pool_eu.pool_id)
@@ -631,7 +641,7 @@ mod tests {
             r#"INSERT INTO provider_offerings
                (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
                 product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
-               VALUES (?, 'off-2', 'Auto EU', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'FR', 'Paris', 0, NULL)"#,
+               VALUES ($1, 'off-2', 'Auto EU', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'FR', 'Paris', 0, NULL)"#,
         )
         .bind(&provider_pubkey)
         .execute(&db.pool)
@@ -643,7 +653,7 @@ mod tests {
             r#"INSERT INTO provider_offerings
                (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
                 product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
-               VALUES (?, 'off-3', 'Auto NA', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, NULL)"#,
+               VALUES ($1, 'off-3', 'Auto NA', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, NULL)"#,
         )
         .bind(&provider_pubkey)
         .execute(&db.pool)
@@ -655,7 +665,7 @@ mod tests {
             r#"INSERT INTO provider_offerings
                (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
                 product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
-               VALUES (?, 'off-4', 'Explicit NA', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'CA', 'Toronto', 0, ?)"#,
+               VALUES ($1, 'off-4', 'Explicit NA', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'CA', 'Toronto', 0, $2)"#,
         )
         .bind(&provider_pubkey)
         .bind(&pool_na.pool_id)
@@ -668,7 +678,7 @@ mod tests {
             r#"INSERT INTO provider_offerings
                (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
                 product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
-               VALUES (?, 'off-5', 'No Match', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'XX', 'Unknown', 0, NULL)"#,
+               VALUES ($1, 'off-5', 'No Match', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'XX', 'Unknown', 0, NULL)"#,
         )
         .bind(&provider_pubkey)
         .execute(&db.pool)
@@ -746,7 +756,7 @@ mod tests {
             r#"INSERT INTO provider_offerings
                (pubkey, offering_id, offer_name, currency, monthly_price, visibility,
                 product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns, agent_pool_id)
-               VALUES (?, 'off-1', 'Explicit Override', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'DE', 'Berlin', 0, ?)"#,
+               VALUES ($1, 'off-1', 'Explicit Override', 'USD', 100.0, 'public', 'vps', 'monthly', 'in_stock', 'DE', 'Berlin', 0, $2)"#,
         )
         .bind(&provider_pubkey)
         .bind(&pool_na.pool_id)

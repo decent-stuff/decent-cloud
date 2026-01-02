@@ -143,7 +143,17 @@ impl FieldConfig {
 }
 
 /// Builds SQL WHERE clause and bind values from parsed DSL filters
+/// Uses PostgreSQL-style numbered placeholders ($1, $2, etc.)
 pub fn build_sql(filters: &[Filter]) -> Result<(String, Vec<SqlValue>), String> {
+    build_sql_with_offset(filters, 0)
+}
+
+/// Builds SQL WHERE clause with a starting placeholder offset
+/// Useful when combining with other query parts that already have placeholders
+pub fn build_sql_with_offset(
+    filters: &[Filter],
+    start_offset: usize,
+) -> Result<(String, Vec<SqlValue>), String> {
     if filters.is_empty() {
         return Ok((String::new(), Vec::new()));
     }
@@ -151,13 +161,14 @@ pub fn build_sql(filters: &[Filter]) -> Result<(String, Vec<SqlValue>), String> 
     let allowlist = field_allowlist();
     let mut sql_parts = Vec::new();
     let mut bind_values = Vec::new();
+    let mut placeholder_idx = start_offset;
 
     for filter in filters {
         let config = allowlist
             .get(filter.field.as_str())
             .ok_or_else(|| format!("Unknown field: {}", filter.field))?;
 
-        let (sql, values) = build_filter_sql(filter, config)?;
+        let (sql, values) = build_filter_sql(filter, config, &mut placeholder_idx)?;
         sql_parts.push(sql);
         bind_values.extend(values);
     }
@@ -189,6 +200,7 @@ const LIKE_FIELDS: &[&str] = &[
 fn build_filter_sql(
     filter: &Filter,
     config: &FieldConfig,
+    placeholder_idx: &mut usize,
 ) -> Result<(String, Vec<SqlValue>), String> {
     let column = config.db_column;
     let use_like = (matches!(config.field_type, FieldType::Text)
@@ -197,14 +209,14 @@ fn build_filter_sql(
         && LIKE_FIELDS.contains(&filter.field.as_str());
 
     let sql = match (&filter.operator, filter.values.len()) {
-        (Operator::Eq, 1) if use_like => build_like_clause(column, filter.negated),
-        (Operator::Eq, 1) => build_comparison_clause(column, "=", filter.negated),
-        (Operator::Eq, n) if n > 1 => build_or_group(column, n, filter.negated),
-        (Operator::Gte, 1) => build_comparison_clause(column, ">=", filter.negated),
-        (Operator::Lte, 1) => build_comparison_clause(column, "<=", filter.negated),
-        (Operator::Gt, 1) => build_comparison_clause(column, ">", filter.negated),
-        (Operator::Lt, 1) => build_comparison_clause(column, "<", filter.negated),
-        (Operator::Range, 2) => build_range_clause(column, filter.negated),
+        (Operator::Eq, 1) if use_like => build_like_clause(column, filter.negated, placeholder_idx),
+        (Operator::Eq, 1) => build_comparison_clause(column, "=", filter.negated, placeholder_idx),
+        (Operator::Eq, n) if n > 1 => build_or_group(column, n, filter.negated, placeholder_idx),
+        (Operator::Gte, 1) => build_comparison_clause(column, ">=", filter.negated, placeholder_idx),
+        (Operator::Lte, 1) => build_comparison_clause(column, "<=", filter.negated, placeholder_idx),
+        (Operator::Gt, 1) => build_comparison_clause(column, ">", filter.negated, placeholder_idx),
+        (Operator::Lt, 1) => build_comparison_clause(column, "<", filter.negated, placeholder_idx),
+        (Operator::Range, 2) => build_range_clause(column, filter.negated, placeholder_idx),
         _ => {
             return Err(format!(
                 "Invalid operator/value combination for field: {}",
@@ -217,7 +229,8 @@ fn build_filter_sql(
     Ok((sql, values))
 }
 
-fn build_comparison_clause(column: &str, op: &str, negated: bool) -> String {
+fn build_comparison_clause(column: &str, op: &str, negated: bool, idx: &mut usize) -> String {
+    *idx += 1;
     if negated {
         let inverse_op = match op {
             "=" => "!=",
@@ -227,22 +240,28 @@ fn build_comparison_clause(column: &str, op: &str, negated: bool) -> String {
             "<" => ">=",
             _ => op,
         };
-        format!("{} {} ?", column, inverse_op)
+        format!("{} {} ${}", column, inverse_op, *idx)
     } else {
-        format!("{} {} ?", column, op)
+        format!("{} {} ${}", column, op, *idx)
     }
 }
 
-fn build_like_clause(column: &str, negated: bool) -> String {
+fn build_like_clause(column: &str, negated: bool, idx: &mut usize) -> String {
+    *idx += 1;
     if negated {
-        format!("{} NOT LIKE ?", column)
+        format!("{} NOT LIKE ${}", column, *idx)
     } else {
-        format!("{} LIKE ?", column)
+        format!("{} LIKE ${}", column, *idx)
     }
 }
 
-fn build_or_group(column: &str, count: usize, negated: bool) -> String {
-    let placeholders: Vec<String> = (0..count).map(|_| format!("{} = ?", column)).collect();
+fn build_or_group(column: &str, count: usize, negated: bool, idx: &mut usize) -> String {
+    let placeholders: Vec<String> = (0..count)
+        .map(|_| {
+            *idx += 1;
+            format!("{} = ${}", column, *idx)
+        })
+        .collect();
     let inner = placeholders.join(" OR ");
 
     if negated {
@@ -252,8 +271,12 @@ fn build_or_group(column: &str, count: usize, negated: bool) -> String {
     }
 }
 
-fn build_range_clause(column: &str, negated: bool) -> String {
-    let clause = format!("({} >= ? AND {} <= ?)", column, column);
+fn build_range_clause(column: &str, negated: bool, idx: &mut usize) -> String {
+    *idx += 1;
+    let p1 = *idx;
+    *idx += 1;
+    let p2 = *idx;
+    let clause = format!("({} >= ${} AND {} <= ${})", column, p1, column, p2);
     if negated {
         format!("NOT {}", clause)
     } else {

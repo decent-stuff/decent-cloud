@@ -177,7 +177,7 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO provider_agent_delegations
                (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, pool_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT(agent_pubkey) DO UPDATE SET
                    provider_pubkey = excluded.provider_pubkey,
                    permissions = excluded.permissions,
@@ -214,9 +214,9 @@ impl Database {
             DelegationRow,
             r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns, pool_id
                FROM provider_agent_delegations
-               WHERE agent_pubkey = ?
+               WHERE agent_pubkey = $1
                  AND revoked_at_ns IS NULL
-                 AND (expires_at_ns IS NULL OR expires_at_ns > ?)"#,
+                 AND (expires_at_ns IS NULL OR expires_at_ns > $2)"#,
             agent_pubkey,
             now_ns
         )
@@ -250,7 +250,7 @@ impl Database {
             DelegationRow,
             r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns, pool_id
                FROM provider_agent_delegations
-               WHERE provider_pubkey = ?
+               WHERE provider_pubkey = $1
                ORDER BY created_at_ns DESC"#,
             provider_pubkey
         )
@@ -289,8 +289,8 @@ impl Database {
 
         let result = sqlx::query!(
             r#"UPDATE provider_agent_delegations
-               SET revoked_at_ns = ?
-               WHERE provider_pubkey = ? AND agent_pubkey = ? AND revoked_at_ns IS NULL"#,
+               SET revoked_at_ns = $1
+               WHERE provider_pubkey = $2 AND agent_pubkey = $3 AND revoked_at_ns IS NULL"#,
             now_ns,
             provider_pubkey,
             agent_pubkey
@@ -310,8 +310,8 @@ impl Database {
     ) -> Result<bool> {
         let result = sqlx::query!(
             r#"UPDATE provider_agent_delegations
-               SET label = ?
-               WHERE provider_pubkey = ? AND agent_pubkey = ?"#,
+               SET label = $1
+               WHERE provider_pubkey = $2 AND agent_pubkey = $3"#,
             label,
             provider_pubkey,
             agent_pubkey
@@ -337,7 +337,7 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO provider_agent_status
                (provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, updated_at_ns)
-               VALUES (?, 1, ?, ?, ?, ?, ?, ?)
+               VALUES ($1, 1, $2, $3, $4, $5, $6, $7)
                ON CONFLICT(provider_pubkey) DO UPDATE SET
                    online = 1,
                    last_heartbeat_ns = excluded.last_heartbeat_ns,
@@ -365,7 +365,7 @@ impl Database {
         let row = sqlx::query_as::<_, AgentStatusRow>(
             r#"SELECT provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts
                FROM provider_agent_status
-               WHERE provider_pubkey = ?"#,
+               WHERE provider_pubkey = $1"#,
         )
         .bind(provider_pubkey)
         .fetch_optional(&self.pool)
@@ -409,8 +409,8 @@ impl Database {
 
         let result = sqlx::query!(
             r#"UPDATE provider_agent_status
-               SET online = 0, updated_at_ns = ?
-               WHERE online = 1 AND (last_heartbeat_ns IS NULL OR last_heartbeat_ns < ?)"#,
+               SET online = 0, updated_at_ns = $1
+               WHERE online = 1 AND (last_heartbeat_ns IS NULL OR last_heartbeat_ns < $2)"#,
             now_ns,
             cutoff_ns
         )

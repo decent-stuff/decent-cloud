@@ -1,83 +1,74 @@
 /// Shared test helpers for database tests
 use super::Database;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+static TEST_DB_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 /// Set up a test database with all migrations applied
+/// Requires TEST_DATABASE_URL environment variable pointing to a PostgreSQL server
+/// Each test gets a unique database that is dropped after the test
 pub async fn setup_test_db() -> Database {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    let base_url = std::env::var("TEST_DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432".to_string());
 
-    // Run all migrations in order
-    // NOTE: When adding new migrations, add them here
+    // Create a unique database name for this test
+    let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let db_name = format!(
+        "test_db_{}_{}",
+        std::process::id(),
+        test_id
+    );
+
+    // Connect to the postgres database to create our test database
+    let admin_url = format!("{}/postgres", base_url);
+    let admin_pool = PgPool::connect(&admin_url)
+        .await
+        .expect("Failed to connect to PostgreSQL admin database");
+
+    // Drop the test database if it exists, then create it fresh
+    sqlx::query(&format!("DROP DATABASE IF EXISTS {}", db_name))
+        .execute(&admin_pool)
+        .await
+        .expect("Failed to drop existing test database");
+
+    sqlx::query(&format!("CREATE DATABASE {}", db_name))
+        .execute(&admin_pool)
+        .await
+        .expect("Failed to create test database");
+
+    admin_pool.close().await;
+
+    // Connect to the new test database and run migrations
+    let test_url = format!("{}/{}", base_url, db_name);
+    let pool = PgPool::connect(&test_url)
+        .await
+        .expect("Failed to connect to test database");
+
+    // Run migrations from consolidated PostgreSQL files
     let migrations = [
-        include_str!("../../migrations/001_original_schema.sql"),
-        include_str!("../../migrations/002_account_profiles.sql"),
-        include_str!("../../migrations/003_device_names.sql"),
-        include_str!("../../migrations/004_account_profiles_fix.sql"),
-        include_str!("../../migrations/005_oauth_support.sql"),
-        include_str!("../../migrations/006_gpu_fields.sql"),
-        include_str!("../../migrations/007_username_case_sensitive.sql"),
-        include_str!("../../migrations/008_example_offerings.sql"),
-        include_str!("../../migrations/009_email_queue.sql"),
-        include_str!("../../migrations/010_payment_methods.sql"),
-        include_str!("../../migrations/011_payment_status.sql"),
-        include_str!("../../migrations/012_refund_tracking.sql"),
-        include_str!("../../migrations/013_contract_currency.sql"),
-        include_str!("../../migrations/014_fix_contract_currency_data.sql"),
-        include_str!("../../migrations/015_update_example_offering_currencies.sql"),
-        include_str!("../../migrations/016_contract_currency.sql"),
-        include_str!("../../migrations/017_drop_currency_default.sql"),
-        include_str!("../../migrations/018_provider_trust_cache.sql"),
-        include_str!("../../migrations/019_last_login_tracking.sql"),
-        include_str!("../../migrations/020_email_verification.sql"),
-        include_str!("../../migrations/021_admin_accounts.sql"),
-        include_str!("../../migrations/022_messaging.sql"),
-        include_str!("../../migrations/023_email_queue_time_based_retry.sql"),
-        include_str!("../../migrations/024_chatwoot_tracking.sql"),
-        include_str!("../../migrations/025_icpay_rename.sql"),
-        include_str!("../../migrations/026_sla_tracking.sql"),
-        include_str!("../../migrations/027_chatwoot_user_id.sql"),
-        include_str!("../../migrations/028_provider_notification_config.sql"),
-        include_str!("../../migrations/029_telegram_message_tracking.sql"),
-        include_str!("../../migrations/030_icpay_escrow.sql"),
-        include_str!("../../migrations/031_notification_usage.sql"),
-        include_str!("../../migrations/032_user_notification_config.sql"),
-        include_str!("../../migrations/033_remove_messaging.sql"),
-        include_str!("../../migrations/034_provider_onboarding.sql"),
-        include_str!("../../migrations/035_external_providers.sql"),
-        include_str!("../../migrations/036_reseller_infrastructure.sql"),
-        include_str!("../../migrations/037_chatwoot_provider_resources.sql"),
-        include_str!("../../migrations/038_receipt_tracking.sql"),
-        include_str!("../../migrations/039_invoices.sql"),
-        include_str!("../../migrations/040_tax_tracking.sql"),
-        include_str!("../../migrations/041_buyer_address.sql"),
-        include_str!("../../migrations/042_billing_settings.sql"),
-        include_str!("../../migrations/043_drop_chatwoot_portal_slug_from_user_notification.sql"),
-        include_str!("../../migrations/044_stripe_invoice_id.sql"),
-        include_str!("../../migrations/045_pending_stripe_receipts.sql"),
-        include_str!("../../migrations/046_remove_invoice_pdf_blob.sql"),
-        include_str!("../../migrations/047_agent_delegations.sql"),
-        include_str!("../../migrations/048_auto_accept_rentals.sql"),
-        include_str!("../../migrations/049_auto_accept_default_on.sql"),
-        include_str!("../../migrations/050_account_based_identification.sql"),
-        include_str!("../../migrations/051_termination_tracking.sql"),
-        include_str!("../../migrations/052_per_offering_provisioner.sql"),
-        include_str!("../../migrations/053_agent_pools.sql"),
-        include_str!("../../migrations/054_example_provider_pools.sql"),
-        include_str!("../../migrations/055_fix_example_offering_countries.sql"),
-        include_str!("../../migrations/056_subscription_plans.sql"),
-        include_str!("../../migrations/057_account_subscriptions.sql"),
-        include_str!("../../migrations/058_subscription_events.sql"),
-        include_str!("../../migrations/059_usage_billing_offerings.sql"),
-        include_str!("../../migrations/060_contract_usage.sql"),
-        include_str!("../../migrations/061_offering_subscriptions.sql"),
-        include_str!("../../migrations/062_contract_subscriptions.sql"),
-        include_str!("../../migrations/063_gateway_configuration.sql"),
-        include_str!("../../migrations/064_bandwidth_history.sql"),
+        include_str!("../../migrations_pg/001_schema.sql"),
+        include_str!("../../migrations_pg/002_seed_data.sql"),
     ];
 
     for migration in &migrations {
-        sqlx::query(migration).execute(&pool).await.unwrap();
+        // Split by semicolon and execute each statement (PostgreSQL requires this)
+        for statement in migration.split(';') {
+            let stmt = statement.trim();
+            if !stmt.is_empty() && !stmt.starts_with("--") {
+                if let Err(e) = sqlx::query(stmt).execute(&pool).await {
+                    panic!("Migration statement failed: {}\nStatement: {}", e, stmt);
+                }
+            }
+        }
     }
 
     Database { pool }
+}
+
+/// Clean up a test database (call this in test cleanup)
+pub async fn cleanup_test_db(db: Database) {
+    // The pool will be dropped, but we could also explicitly drop the database
+    // For now, just close the connection
+    db.pool.close().await;
 }

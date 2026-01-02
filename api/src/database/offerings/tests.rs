@@ -4,7 +4,7 @@ use crate::database::test_helpers::setup_test_db;
 /// Helper to register a provider (required due to foreign key constraint on agent_pools)
 async fn register_provider(db: &Database, pubkey: &[u8]) {
     sqlx::query(
-        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, X'00', 0)",
+        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, '\\x00', 0)",
     )
     .bind(pubkey)
     .execute(&db.pool)
@@ -21,7 +21,7 @@ async fn insert_test_offering(db: &Database, id: i64, pubkey: &[u8], country: &s
     let db_id = id + 100;
     let offering_id = format!("off-{}", id);
     sqlx::query!(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', ?, 'City', 0, NULL, NULL, NULL, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES ($1, $2, $3, 'Test Offer', 'USD', $4, 0, 'public', 'compute', 'monthly', 'in_stock', $5, 'City', FALSE, NULL, NULL, NULL, 0)",
         db_id,
         pubkey,
         offering_id,
@@ -34,12 +34,12 @@ async fn insert_test_offering(db: &Database, id: i64, pubkey: &[u8], country: &s
 }
 
 /// Ensures provider is registered and has a pool for the country's region with an online agent.
-/// Uses INSERT OR IGNORE to avoid conflicts if called multiple times for same provider.
+/// Uses ON CONFLICT DO NOTHING to avoid conflicts if called multiple times for same provider.
 async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) {
     use crate::regions::country_to_region;
 
     // Register provider if not exists
-    sqlx::query("INSERT OR IGNORE INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, X'00', 0)")
+    sqlx::query("INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, '\\x00', 0) ON CONFLICT (pubkey) DO NOTHING")
         .bind(pubkey)
         .execute(&db.pool)
         .await
@@ -52,7 +52,7 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
     // Create pool for region if not exists
     let pool_id = format!("pool-{}-{}", region, hex::encode(&pubkey[..4]));
     let pool_name = format!("Test Pool {}", region);
-    sqlx::query("INSERT OR IGNORE INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES (?, ?, ?, ?, 'manual', 0)")
+    sqlx::query("INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES ($1, $2, $3, $4, 'manual', 0) ON CONFLICT (pool_id) DO NOTHING")
         .bind(&pool_id)
         .bind(pubkey)
         .bind(&pool_name)
@@ -71,7 +71,7 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
     agent_pubkey[16..16 + region_len].copy_from_slice(&region_bytes[..region_len]);
 
     // Register agent delegation
-    sqlx::query("INSERT OR IGNORE INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, pool_id) VALUES (?, ?, '[]', NULL, 'Test Agent', X'00', 0, ?)")
+    sqlx::query("INSERT INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, pool_id) VALUES ($1, $2, '[]', NULL, 'Test Agent', '\\x00', 0, $3) ON CONFLICT (agent_pubkey) DO NOTHING")
         .bind(pubkey)
         .bind(&agent_pubkey[..])
         .bind(&pool_id)
@@ -81,7 +81,7 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
 
     // Mark provider as online (recent heartbeat)
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    sqlx::query("INSERT OR REPLACE INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES (?, 1, ?, ?)")
+    sqlx::query("INSERT INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, 1, $2, $3) ON CONFLICT (provider_pubkey) DO UPDATE SET online = 1, last_heartbeat_ns = EXCLUDED.last_heartbeat_ns, updated_at_ns = EXCLUDED.updated_at_ns")
         .bind(pubkey)
         .bind(now_ns)
         .bind(now_ns)
@@ -100,17 +100,17 @@ fn test_id_to_db_id(test_id: i64) -> i64 {
 async fn delete_example_data(db: &Database) {
     let example_pubkey = Database::example_provider_pubkey();
     // Delete in correct order to respect foreign key constraints
-    sqlx::query("DELETE FROM provider_agent_delegations WHERE provider_pubkey = ?")
+    sqlx::query("DELETE FROM provider_agent_delegations WHERE provider_pubkey = $1")
         .bind(&example_pubkey[..])
         .execute(&db.pool)
         .await
         .expect("Failed to delete example provider agent delegations");
-    sqlx::query("DELETE FROM agent_pools WHERE provider_pubkey = ?")
+    sqlx::query("DELETE FROM agent_pools WHERE provider_pubkey = $1")
         .bind(&example_pubkey[..])
         .execute(&db.pool)
         .await
         .expect("Failed to delete example provider agent pools");
-    sqlx::query("DELETE FROM provider_offerings WHERE pubkey = ?")
+    sqlx::query("DELETE FROM provider_offerings WHERE pubkey = $1")
         .bind(&example_pubkey[..])
         .execute(&db.pool)
         .await
@@ -210,7 +210,7 @@ async fn test_search_offerings_excludes_private() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Private Offer', 'USD', ?, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, NULL, NULL, NULL, 0)",
+            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES ($1, $2, $3, 'Private Offer', 'USD', $4, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, NULL, NULL, NULL, 0)",
             db_id_private,
             pubkey_ref,
             offering_id_private,
@@ -385,7 +385,7 @@ async fn test_search_offerings_pagination() {
         let db_id = 200 + i;
         let offering_id = format!("pagination-{}", i);
         sqlx::query(
-            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns) VALUES (?, ?, ?, 'Pagination Test', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0)"
+            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns) VALUES ($1, $2, $3, 'Pagination Test', 'USD', $4, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0)"
         )
         .bind(db_id)
         .bind(&pubkey)
@@ -919,7 +919,7 @@ async fn test_duplicate_offering_success() {
         let pubkey_ref = &pubkey;
         let offering_id_ref = &offering_id;
         sqlx::query!(
-            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES (?, ?, ?, 'Test Offer', 'USD', ?, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 'BTC', NULL, NULL, 0)",
+            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES ($1, $2, $3, 'Test Offer', 'USD', $4, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 'BTC', NULL, NULL, 0)",
             db_id,
             pubkey_ref,
             offering_id_ref,
@@ -1049,7 +1049,7 @@ off-2,Test Server 2,Another server,,DER,200.0,50.0,public,vps,kvm,monthly,in_sto
 
     // Verify first offering
     let off1 = sqlx::query_scalar!(
-        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "off-1"
     )
     .fetch_one(&db.pool).await.expect("Failed to fetch from database");
@@ -1141,7 +1141,7 @@ off-2,New Offer,New desc,,DER,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,
 
     // Verify new offering was created
     let off2 = sqlx::query_scalar!(
-        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "off-2"
     )
     .fetch_one(&db.pool).await.expect("Failed to fetch from database");
@@ -1192,7 +1192,7 @@ Reordered Server,reorder-1,USD,10.0,99.0,public,compute,monthly,in_stock,US,NYC,
 
     // Verify fields parsed correctly despite different order
     let off = sqlx::query_scalar!(
-        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "reorder-1"
     )
     .fetch_one(&db.pool).await.expect("Failed to fetch from database");
@@ -1219,7 +1219,7 @@ gpu-1,GPU Server,USD,500.0,0.0,public,gpu,monthly,in_stock,US,NYC,false,NVIDIA A
     assert_eq!(errors.len(), 0);
 
     let off = sqlx::query_scalar!(
-        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "gpu-1"
     )
     .fetch_one(&db.pool).await.expect("Failed to fetch from database");
@@ -1252,7 +1252,7 @@ async fn test_search_offerings_dsl_basic_type_filter() {
     let pubkey1 = vec![1u8; 32];
     ensure_provider_with_pool(&db, &pubkey1, "US").await;
     sqlx::query!(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'VPS Server', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'VPS Server', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
         101,
         pubkey1,
         "vps-1"
@@ -1264,7 +1264,7 @@ async fn test_search_offerings_dsl_basic_type_filter() {
     let pubkey2 = vec![2u8; 32];
     ensure_provider_with_pool(&db, &pubkey2, "US").await;
     sqlx::query!(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'Compute Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'Compute Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
         102,
         pubkey2,
         "compute-1"
@@ -1313,7 +1313,7 @@ async fn test_search_offerings_dsl_combined_filters() {
     let pubkey1 = vec![1u8; 32];
     ensure_provider_with_pool(&db, &pubkey1, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'US Compute', 'USD', 80.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US Compute', 'USD', 80.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
     )
     .bind(101i64)
     .bind(&pubkey1)
@@ -1325,7 +1325,7 @@ async fn test_search_offerings_dsl_combined_filters() {
     let pubkey2 = vec![2u8; 32];
     ensure_provider_with_pool(&db, &pubkey2, "DE").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'DE Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'DE Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', 0, 0)",
     )
     .bind(102i64)
     .bind(&pubkey2)
@@ -1337,7 +1337,7 @@ async fn test_search_offerings_dsl_combined_filters() {
     let pubkey3 = vec![3u8; 32];
     ensure_provider_with_pool(&db, &pubkey3, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'US VPS', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US VPS', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
     )
     .bind(103i64)
     .bind(&pubkey3)
@@ -1364,7 +1364,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
     let pubkey1 = vec![1u8; 32];
     ensure_provider_with_pool(&db, &pubkey1, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '4 Core Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 4, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '4 Core Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 4, 0)",
     )
     .bind(101i64)
     .bind(&pubkey1)
@@ -1376,7 +1376,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
     let pubkey2 = vec![2u8; 32];
     ensure_provider_with_pool(&db, &pubkey2, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '8 Core Server', 'USD', 150.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 8, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '8 Core Server', 'USD', 150.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 8, 0)",
     )
     .bind(102i64)
     .bind(&pubkey2)
@@ -1388,7 +1388,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
     let pubkey3 = vec![3u8; 32];
     ensure_provider_with_pool(&db, &pubkey3, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES (?, ?, ?, '16 Core Server', 'USD', 200.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 16, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '16 Core Server', 'USD', 200.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 16, 0)",
     )
     .bind(103i64)
     .bind(&pubkey3)
@@ -1418,7 +1418,7 @@ async fn test_search_offerings_dsl_excludes_private() {
     // Insert private offering (should be excluded)
     let pubkey = vec![2u8; 32];
     sqlx::query!(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, ?, ?, 'Private', 'USD', 50.0, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'Private', 'USD', 50.0, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
         200,
         pubkey,
         "private-1"
@@ -1486,7 +1486,7 @@ seeded-1,Seeded Server,From scraper,https://example.com/product,USD,100.0,0.0,pu
 
     // Verify offering has offering_source='seeded'
     let off = sqlx::query_scalar!(
-        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "seeded-1"
     )
     .fetch_one(&db.pool).await.expect("Failed to fetch from database");
@@ -1520,7 +1520,7 @@ seeded-2,Seeded Server 2,From scraper,https://example.com/info,https://example.c
     assert_eq!(errors.len(), 0);
 
     let off = sqlx::query_scalar!(
-        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "seeded-2"
     )
     .fetch_one(&db.pool).await.expect("Failed to fetch from database");
@@ -1563,7 +1563,7 @@ seeded-3,Updated,USD,200.0,10.0,public,compute,monthly,in_stock,US,LA,false,http
 
     // Verify update
     let off = sqlx::query_scalar!(
-        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = ?"#,
+        r#"SELECT id as "id!: i64" FROM provider_offerings WHERE offering_id = $1"#,
         "seeded-3"
     )
     .fetch_one(&db.pool).await.expect("Failed to fetch from database");

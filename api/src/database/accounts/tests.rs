@@ -1,15 +1,9 @@
 use super::*;
-use sqlx::SqlitePool;
-
-async fn create_test_db() -> Database {
-    let pool = SqlitePool::connect(":memory:").await.expect("Failed to create in-memory database for testing");
-    sqlx::migrate!().run(&pool).await.expect("Failed to run migrations for test database");
-    Database { pool }
-}
+use crate::database::test_helpers::setup_test_db;
 
 #[tokio::test]
 async fn test_create_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "alice";
     let public_key = [1u8; 32];
 
@@ -24,7 +18,7 @@ async fn test_create_account() {
 
 #[tokio::test]
 async fn test_get_account_by_username() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "bob";
     let public_key = [2u8; 32];
 
@@ -39,7 +33,7 @@ async fn test_get_account_by_username() {
 
 #[tokio::test]
 async fn test_get_account_with_keys() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "charlie";
     let public_key = [3u8; 32];
 
@@ -58,7 +52,7 @@ async fn test_get_account_with_keys() {
 
 #[tokio::test]
 async fn test_add_account_key() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "dave";
     let public_key1 = [4u8; 32];
     let public_key2 = [5u8; 32];
@@ -77,7 +71,7 @@ async fn test_add_account_key() {
 
 #[tokio::test]
 async fn test_max_keys_limit() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "eve";
     let public_key1 = [6u8; 32];
 
@@ -101,7 +95,7 @@ async fn test_max_keys_limit() {
 
 #[tokio::test]
 async fn test_disable_account_key() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "frank";
     let public_key1 = [8u8; 32];
     let public_key2 = [9u8; 32];
@@ -140,7 +134,7 @@ async fn test_disable_account_key() {
 
 #[tokio::test]
 async fn test_cannot_disable_last_key() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "grace";
     let public_key = [10u8; 32];
 
@@ -158,7 +152,7 @@ async fn test_cannot_disable_last_key() {
 
 #[tokio::test]
 async fn test_check_nonce_exists() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let nonce = uuid::Uuid::new_v4();
 
     // Initially nonce should not exist
@@ -190,7 +184,7 @@ async fn test_check_nonce_exists() {
 
 #[tokio::test]
 async fn test_signature_audit_cleanup() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let public_key = [22u8; 32];
     let signature = [0u8; 64];
     let old_nonce = uuid::Uuid::new_v4();
@@ -207,7 +201,7 @@ async fn test_signature_audit_cleanup() {
     sqlx::query(
         "INSERT INTO signature_audit
          (account_id, action, payload, signature, public_key, timestamp, nonce, is_admin_action, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(None::<&[u8]>)
     .bind("old_action")
@@ -226,7 +220,7 @@ async fn test_signature_audit_cleanup() {
     sqlx::query(
         "INSERT INTO signature_audit
          (account_id, action, payload, signature, public_key, timestamp, nonce, is_admin_action, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(None::<&[u8]>)
     .bind("recent_action")
@@ -262,7 +256,7 @@ async fn test_signature_audit_cleanup() {
 
 #[tokio::test]
 async fn test_create_oauth_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create a regular account first
     let account = db
@@ -289,7 +283,7 @@ async fn test_create_oauth_account() {
 
 #[tokio::test]
 async fn test_create_oauth_account_duplicate_external_id() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let account = db
         .create_account("testuser", &[0u8; 32], "test@example.com")
@@ -324,7 +318,7 @@ async fn test_create_oauth_account_duplicate_external_id() {
 
 #[tokio::test]
 async fn test_get_oauth_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let account = db
         .create_account("testuser", &[0u8; 32], "test@example.com")
@@ -355,7 +349,7 @@ async fn test_get_oauth_account() {
 
 #[tokio::test]
 async fn test_get_oauth_account_not_found() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let result = db.get_oauth_account(&[1u8; 16]).await.unwrap();
 
@@ -367,7 +361,7 @@ async fn test_get_oauth_account_not_found() {
 
 #[tokio::test]
 async fn test_get_oauth_account_by_provider_and_external_id() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let account = db
         .create_account("testuser", &[0u8; 32], "test@example.com")
@@ -400,7 +394,7 @@ async fn test_get_oauth_account_by_provider_and_external_id() {
 
 #[tokio::test]
 async fn test_get_oauth_account_by_provider_and_external_id_not_found() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let result = db
         .get_oauth_account_by_provider_and_external_id("google_oauth", "nonexistent")
@@ -415,7 +409,7 @@ async fn test_get_oauth_account_by_provider_and_external_id_not_found() {
 
 #[tokio::test]
 async fn test_get_account_by_email() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account with email via OAuth
     let pubkey = [1u8; 32];
@@ -442,7 +436,7 @@ async fn test_get_account_by_email() {
 
 #[tokio::test]
 async fn test_get_account_by_email_not_found() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let result = db
         .get_account_by_email("nonexistent@example.com")
@@ -454,7 +448,7 @@ async fn test_get_account_by_email_not_found() {
 
 #[tokio::test]
 async fn test_create_oauth_linked_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let pubkey = [2u8; 32];
     let (account, oauth_acc) = db
@@ -490,7 +484,7 @@ async fn test_create_oauth_linked_account() {
 
 #[tokio::test]
 async fn test_create_oauth_linked_account_duplicate_username() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create first account
     db.create_account("duplicate", &[1u8; 32], "test@example.com")
@@ -513,7 +507,7 @@ async fn test_create_oauth_linked_account_duplicate_username() {
 
 #[tokio::test]
 async fn test_create_oauth_linked_account_transaction_rollback() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create an account with a specific external_id
     let pubkey = [3u8; 32];
@@ -556,7 +550,7 @@ async fn test_create_oauth_linked_account_transaction_rollback() {
 
 #[tokio::test]
 async fn test_usernames_preserve_case_but_unique_case_insensitive() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account with specific case
     let account = db
@@ -595,7 +589,7 @@ async fn test_usernames_preserve_case_but_unique_case_insensitive() {
 
 #[tokio::test]
 async fn test_username_search_is_case_insensitive() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account with mixed case
     let _account = db
@@ -623,7 +617,7 @@ async fn test_username_search_is_case_insensitive() {
 
 #[tokio::test]
 async fn test_create_oauth_linked_account_queues_welcome_email() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let pubkey = [5u8; 32];
     let (_account, _oauth_acc) = db
@@ -653,7 +647,7 @@ async fn test_create_oauth_linked_account_queues_welcome_email() {
 
 #[tokio::test]
 async fn test_create_email_verification_token() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -672,7 +666,7 @@ async fn test_create_email_verification_token() {
 
     // Verify token was stored in database
     let result: Option<(Vec<u8>, Vec<u8>, String)> = sqlx::query_as(
-        "SELECT token, account_id, email FROM email_verification_tokens WHERE token = ?",
+        "SELECT token, account_id, email FROM email_verification_tokens WHERE token = $1",
     )
     .bind(&token)
     .fetch_optional(&db.pool)
@@ -688,7 +682,7 @@ async fn test_create_email_verification_token() {
 
 #[tokio::test]
 async fn test_create_email_verification_token_expires() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -704,7 +698,7 @@ async fn test_create_email_verification_token_expires() {
 
     // Verify expiry is set (24 hours from now)
     let result: Option<(i64, i64)> = sqlx::query_as(
-        "SELECT created_at, expires_at FROM email_verification_tokens WHERE token = ?",
+        "SELECT created_at, expires_at FROM email_verification_tokens WHERE token = $1",
     )
     .bind(&token)
     .fetch_optional(&db.pool)
@@ -719,7 +713,7 @@ async fn test_create_email_verification_token_expires() {
 
 #[tokio::test]
 async fn test_verify_email_token_success() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -741,7 +735,7 @@ async fn test_verify_email_token_success() {
     db.verify_email_token(&token).await.unwrap();
 
     // Check that email_verified is now 1
-    let result: Option<(i64,)> = sqlx::query_as("SELECT email_verified FROM accounts WHERE id = ?")
+    let result: Option<(i64,)> = sqlx::query_as("SELECT email_verified FROM accounts WHERE id = $1")
         .bind(&account.id)
         .fetch_optional(&db.pool)
         .await
@@ -752,7 +746,7 @@ async fn test_verify_email_token_success() {
 
     // Check that token is marked as used
     let token_result: Option<(Option<i64>,)> =
-        sqlx::query_as("SELECT used_at FROM email_verification_tokens WHERE token = ?")
+        sqlx::query_as("SELECT used_at FROM email_verification_tokens WHERE token = $1")
             .bind(&token)
             .fetch_optional(&db.pool)
             .await
@@ -764,7 +758,7 @@ async fn test_verify_email_token_success() {
 
 #[tokio::test]
 async fn test_verify_email_token_invalid() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Try to verify with invalid token
     let invalid_token = vec![0u8; 16];
@@ -779,7 +773,7 @@ async fn test_verify_email_token_invalid() {
 
 #[tokio::test]
 async fn test_verify_email_token_already_used() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -808,7 +802,7 @@ async fn test_verify_email_token_already_used() {
 
 #[tokio::test]
 async fn test_verify_email_token_expired() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -825,7 +819,7 @@ async fn test_verify_email_token_expired() {
     // Manually expire the token by updating expires_at to past
     let past = chrono::Utc::now().timestamp() - 3600;
     sqlx::query!(
-        "UPDATE email_verification_tokens SET expires_at = ? WHERE token = ?",
+        "UPDATE email_verification_tokens SET expires_at = $1 WHERE token = $2",
         past,
         token
     )
@@ -842,7 +836,7 @@ async fn test_verify_email_token_expired() {
 
 #[tokio::test]
 async fn test_is_admin_migration() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -874,7 +868,7 @@ async fn test_is_admin_migration() {
     assert_eq!(fetched.is_admin, 0);
 
     // Manually set is_admin to 1 to test non-default value
-    sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = ?", account.id)
+    sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = $1", account.id)
         .execute(&db.pool)
         .await
         .expect("Failed to get account by email");
@@ -886,7 +880,7 @@ async fn test_is_admin_migration() {
 
 #[tokio::test]
 async fn test_set_admin_status_grant() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -907,7 +901,7 @@ async fn test_set_admin_status_grant() {
 
 #[tokio::test]
 async fn test_set_admin_status_revoke() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account and make them admin
     let account = db
@@ -915,7 +909,7 @@ async fn test_set_admin_status_revoke() {
         .await
         .expect("Failed to create account");
 
-    sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = ?", account.id)
+    sqlx::query!("UPDATE accounts SET is_admin = 1 WHERE id = $1", account.id)
         .execute(&db.pool)
         .await
         .expect("Failed to create account");
@@ -933,7 +927,7 @@ async fn test_set_admin_status_revoke() {
 
 #[tokio::test]
 async fn test_set_admin_status_case_insensitive() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account with mixed case
     let account = db
@@ -951,7 +945,7 @@ async fn test_set_admin_status_case_insensitive() {
 
 #[tokio::test]
 async fn test_set_admin_status_nonexistent_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Try to grant admin to nonexistent account
     let result = db.set_admin_status("nonexistent", true).await;
@@ -965,7 +959,7 @@ async fn test_set_admin_status_nonexistent_account() {
 
 #[tokio::test]
 async fn test_list_admins_empty() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create some non-admin accounts
     db.create_account("user1", &[1u8; 32], "user1@example.com")
@@ -982,7 +976,7 @@ async fn test_list_admins_empty() {
 
 #[tokio::test]
 async fn test_list_admins() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create accounts
     db.create_account("admin1", &[1u8; 32], "admin1@example.com")
@@ -1015,7 +1009,7 @@ async fn test_list_admins() {
 
 #[tokio::test]
 async fn test_get_account_with_keys_includes_is_admin() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account (not admin by default)
     let _account = db
@@ -1043,7 +1037,7 @@ async fn test_get_account_with_keys_includes_is_admin() {
 
 #[tokio::test]
 async fn test_get_account_with_keys_by_public_key_includes_is_admin() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let pubkey = [2u8; 32];
 
     // Create account (not admin by default)
@@ -1082,7 +1076,7 @@ async fn test_get_account_with_keys_by_public_key_includes_is_admin() {
 /// This verifies the fix for admin auth failing when OAuth users log in again.
 #[tokio::test]
 async fn test_oauth_session_key_can_lookup_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create OAuth account with initial key (simulates first OAuth registration)
     let initial_key = [10u8; 32];
@@ -1118,7 +1112,7 @@ async fn test_oauth_session_key_can_lookup_account() {
 /// Test that disabled keys cannot be used for account lookup
 #[tokio::test]
 async fn test_disabled_key_cannot_lookup_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account with two keys
     let key1 = [20u8; 32];
@@ -1173,7 +1167,7 @@ async fn test_disabled_key_cannot_lookup_account() {
 
 #[tokio::test]
 async fn test_get_account_with_keys_includes_email_and_verification_status() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account (email_verified=0 by default)
     let _account = db
@@ -1224,7 +1218,7 @@ async fn test_get_account_with_keys_includes_email_and_verification_status() {
 
 #[tokio::test]
 async fn test_get_account_with_keys_by_public_key_includes_email_and_verification_status() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let pubkey = [31u8; 32];
 
     // Create account (email_verified=0 by default)
@@ -1276,7 +1270,7 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
 
 #[tokio::test]
 async fn test_oauth_account_with_keys_has_verified_email() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let pubkey = [32u8; 32];
     let (_account, _oauth_acc) = db
@@ -1308,7 +1302,7 @@ async fn test_oauth_account_with_keys_has_verified_email() {
 
 #[tokio::test]
 async fn test_oauth_account_creation_sets_email_verified() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let pubkey = [10u8; 32];
     let (account, _oauth_acc) = db
@@ -1331,7 +1325,7 @@ async fn test_oauth_account_creation_sets_email_verified() {
 
 #[tokio::test]
 async fn test_oauth_linking_to_existing_account_sets_email_verified() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create an account with unverified email
     let account = db
@@ -1373,7 +1367,7 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
 
 #[tokio::test]
 async fn test_get_latest_verification_token_time() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "token_time_user";
     let public_key = [99u8; 32];
 
@@ -1418,7 +1412,7 @@ async fn test_get_latest_verification_token_time() {
 
 #[tokio::test]
 async fn test_resend_verification_rate_limit() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let username = "rate_limit_user";
     let public_key = [98u8; 32];
 
@@ -1446,7 +1440,7 @@ async fn test_resend_verification_rate_limit() {
 
 #[tokio::test]
 async fn test_get_account_by_chatwoot_user_id() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -1475,7 +1469,7 @@ async fn test_get_account_by_chatwoot_user_id() {
 
 #[tokio::test]
 async fn test_get_account_by_chatwoot_user_id_not_found() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     let result = db.get_account_by_chatwoot_user_id(99999).await.unwrap();
 
@@ -1487,7 +1481,7 @@ async fn test_get_account_by_chatwoot_user_id_not_found() {
 
 #[tokio::test]
 async fn test_ensure_account_for_pubkey_creates_new_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let pubkey = [
         0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, // first 8 chars = abcdef12
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
@@ -1510,7 +1504,7 @@ async fn test_ensure_account_for_pubkey_creates_new_account() {
 
 #[tokio::test]
 async fn test_ensure_account_for_pubkey_returns_existing() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let pubkey = [0x99u8; 32];
 
     // Create account first
@@ -1523,7 +1517,7 @@ async fn test_ensure_account_for_pubkey_returns_existing() {
 
 #[tokio::test]
 async fn test_ensure_account_for_pubkey_handles_username_collision() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Two pubkeys with the same first 8 hex chars (different later bytes)
     let pubkey1 = [
@@ -1564,7 +1558,7 @@ async fn test_ensure_account_for_pubkey_handles_username_collision() {
 
 #[tokio::test]
 async fn test_admin_set_account_email() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -1589,7 +1583,7 @@ async fn test_admin_set_account_email() {
 
 #[tokio::test]
 async fn test_admin_set_account_email_clear() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account
     let account = db
@@ -1607,7 +1601,7 @@ async fn test_admin_set_account_email_clear() {
 
 #[tokio::test]
 async fn test_admin_set_account_email_nonexistent() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Try to update nonexistent account
     let result = db
@@ -1623,7 +1617,7 @@ async fn test_admin_set_account_email_nonexistent() {
 
 #[tokio::test]
 async fn test_admin_delete_account() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create account with keys
     let account = db
@@ -1649,7 +1643,7 @@ async fn test_admin_delete_account() {
 
 #[tokio::test]
 async fn test_admin_delete_account_nonexistent() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Try to delete nonexistent account
     let result = db.admin_delete_account(&[0u8; 16]).await;
@@ -1663,7 +1657,7 @@ async fn test_admin_delete_account_nonexistent() {
 
 #[tokio::test]
 async fn test_admin_delete_account_with_oauth() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create OAuth account
     let (account, _oauth) = db
@@ -1697,7 +1691,7 @@ async fn test_admin_delete_account_with_oauth() {
 
 #[tokio::test]
 async fn test_count_accounts() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // No accounts initially
     let count = db.count_accounts().await.unwrap();
@@ -1720,7 +1714,7 @@ async fn test_count_accounts() {
 
 #[tokio::test]
 async fn test_list_all_accounts() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create accounts
     db.create_account("alice", &[1u8; 32], "alice@example.com")
@@ -1745,7 +1739,7 @@ async fn test_list_all_accounts() {
 
 #[tokio::test]
 async fn test_list_all_accounts_pagination() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create 5 accounts
     for i in 0..5 {
@@ -1784,7 +1778,7 @@ async fn test_list_all_accounts_pagination() {
 
 #[tokio::test]
 async fn test_list_all_accounts_includes_admin_status() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
 
     // Create accounts
     db.create_account("admin_user", &[1u8; 32], "admin@example.com")
@@ -1818,7 +1812,7 @@ async fn test_list_all_accounts_includes_admin_status() {
 /// that have account_id set (the new foreign key from migration 050).
 #[tokio::test]
 async fn test_admin_delete_account_with_offerings_and_profile() {
-    let db = create_test_db().await;
+    let db = setup_test_db().await;
     let pubkey = [80u8; 32];
 
     // Create account
@@ -1830,7 +1824,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     // Create provider profile with account_id set
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, account_id, name, description, api_version, profile_version, updated_at_ns)
-         VALUES (?, ?, 'Test Provider', 'Test description', '1.0', '1.0', 0)",
+         VALUES ($1, $2, 'Test Provider', 'Test description', '1.0', '1.0', 0)",
     )
     .bind(&pubkey[..])
     .bind(&account.id)
@@ -1841,7 +1835,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     // Create provider offering with account_id set
     sqlx::query(
         "INSERT INTO provider_offerings (pubkey, account_id, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns)
-         VALUES (?, ?, 'test-offer-1', 'Test Offer', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+         VALUES ($1, $2, 'test-offer-1', 'Test Offer', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', false, 0)",
     )
     .bind(&pubkey[..])
     .bind(&account.id)
@@ -1867,7 +1861,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
 
     // Verify data was created
     let profile_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM provider_profiles WHERE account_id = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM provider_profiles WHERE account_id = $1")
             .bind(&account.id)
             .fetch_one(&db.pool)
             .await
@@ -1875,7 +1869,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     assert_eq!(profile_count.0, 1, "Profile should exist before deletion");
 
     let offering_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE account_id = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE account_id = $1")
             .bind(&account.id)
             .fetch_one(&db.pool)
             .await
@@ -1896,7 +1890,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
 
     // Verify all related data is deleted
     let profile_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM provider_profiles WHERE pubkey = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM provider_profiles WHERE pubkey = $1")
             .bind(&pubkey[..])
             .fetch_one(&db.pool)
             .await
@@ -1904,7 +1898,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     assert_eq!(profile_count.0, 0, "Profile should be deleted");
 
     let offering_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE pubkey = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM provider_offerings WHERE pubkey = $1")
             .bind(&pubkey[..])
             .fetch_one(&db.pool)
             .await
@@ -1912,7 +1906,7 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
     assert_eq!(offering_count.0, 0, "Offering should be deleted");
 
     let audit_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM signature_audit WHERE account_id = ?")
+        sqlx::query_as("SELECT COUNT(*) FROM signature_audit WHERE account_id = $1")
             .bind(&account.id)
             .fetch_one(&db.pool)
             .await

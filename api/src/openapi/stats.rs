@@ -64,7 +64,7 @@ impl StatsApi {
         let cutoff_24h =
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 24 * 3600 * 1_000_000_000;
         let validator_count: (i64,) = match sqlx::query_as(
-            "SELECT COUNT(DISTINCT pubkey) FROM provider_check_ins WHERE block_timestamp_ns > ?",
+            "SELECT COUNT(DISTINCT pubkey) FROM provider_check_ins WHERE block_timestamp_ns > $1",
         )
         .bind(cutoff_24h)
         .fetch_one(&db.pool)

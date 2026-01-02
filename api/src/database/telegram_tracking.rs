@@ -17,7 +17,7 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO telegram_message_tracking
                (telegram_message_id, conversation_id, provider_chat_id, created_at)
-               VALUES (?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4)
                ON CONFLICT(telegram_message_id) DO UPDATE SET
                    conversation_id = excluded.conversation_id,
                    provider_chat_id = excluded.provider_chat_id,
@@ -40,7 +40,7 @@ impl Database {
     ) -> Result<Option<i64>> {
         let result = sqlx::query_scalar!(
             r#"SELECT conversation_id FROM telegram_message_tracking
-               WHERE telegram_message_id = ?"#,
+               WHERE telegram_message_id = $1"#,
             telegram_message_id
         )
         .fetch_optional(&self.pool)
@@ -54,7 +54,7 @@ impl Database {
     pub async fn cleanup_telegram_tracking(&self, days_old: i64) -> Result<u64> {
         let cutoff = chrono::Utc::now().timestamp() - (days_old * 24 * 60 * 60);
 
-        let result = sqlx::query(r#"DELETE FROM telegram_message_tracking WHERE created_at < ?"#)
+        let result = sqlx::query(r#"DELETE FROM telegram_message_tracking WHERE created_at < $1"#)
             .bind(cutoff)
             .execute(&self.pool)
             .await?;

@@ -5,7 +5,7 @@ impl Database {
     // Reward distributions
     pub(crate) async fn insert_reward_distributions(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
@@ -24,7 +24,7 @@ impl Database {
             let timestamp_i64 = distribution_timestamp as i64;
 
             sqlx::query!(
-                "INSERT INTO reward_distributions (block_timestamp_ns, total_amount_e9s, providers_count, amount_per_provider_e9s) VALUES (?, ?, ?, ?)",
+                "INSERT INTO reward_distributions (block_timestamp_ns, total_amount_e9s, providers_count, amount_per_provider_e9s) VALUES ($1, $2, $3, $4)",
                 timestamp_i64,
                 0, // TODO: Calculate from actual reward distribution data
                 0, // TODO: Count actual providers who received rewards

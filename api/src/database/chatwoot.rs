@@ -46,7 +46,7 @@ impl Database {
         sqlx::query!(
             r#"INSERT INTO chatwoot_message_events
                (contract_id, chatwoot_conversation_id, chatwoot_message_id, sender_type, created_at)
-               VALUES (?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5)"#,
             contract_id,
             conversation_id,
             message_id,
@@ -72,13 +72,13 @@ impl Database {
                 SELECT
                     MIN(response.created_at - customer_msg.created_at) as response_time
                 FROM chatwoot_message_events customer_msg
-                JOIN contract_sign_requests c ON hex(c.contract_id) = customer_msg.contract_id
+                JOIN contract_sign_requests c ON encode(c.contract_id, 'hex') = customer_msg.contract_id
                 JOIN chatwoot_message_events response ON
                     response.chatwoot_conversation_id = customer_msg.chatwoot_conversation_id
                     AND response.sender_type = 'provider'
                     AND response.created_at > customer_msg.created_at
                 WHERE customer_msg.sender_type = 'customer'
-                    AND c.provider_pubkey = ?
+                    AND c.provider_pubkey = $1
                 GROUP BY customer_msg.id
             )
             "#,
@@ -107,7 +107,7 @@ impl Database {
                 c.provider_pubkey as "provider_pubkey!",
                 cm.created_at as "created_at!"
             FROM chatwoot_message_events cm
-            JOIN contract_sign_requests c ON hex(c.contract_id) = cm.contract_id
+            JOIN contract_sign_requests c ON encode(c.contract_id, 'hex') = cm.contract_id
             LEFT JOIN provider_sla_config sla ON sla.provider_pubkey = c.provider_pubkey
             WHERE cm.sender_type = 'customer'
               AND cm.sla_breached = 0
@@ -118,7 +118,7 @@ impl Database {
                     AND response.sender_type = 'provider'
                     AND response.created_at > cm.created_at
               )
-              AND (? - cm.created_at) > COALESCE(sla.response_time_seconds, 14400)
+              AND ($1 - cm.created_at) > COALESCE(sla.response_time_seconds, 14400)
             "#,
             now
         )
@@ -140,7 +140,7 @@ impl Database {
     /// Mark a message event as SLA breached.
     pub async fn mark_sla_breached(&self, message_id: i64) -> Result<()> {
         sqlx::query!(
-            "UPDATE chatwoot_message_events SET sla_breached = 1 WHERE id = ?",
+            "UPDATE chatwoot_message_events SET sla_breached = 1 WHERE id = $1",
             message_id
         )
         .execute(&self.pool)
@@ -151,7 +151,7 @@ impl Database {
     /// Mark that SLA alert was sent for a message event.
     pub async fn mark_sla_alert_sent(&self, message_id: i64) -> Result<()> {
         sqlx::query!(
-            "UPDATE chatwoot_message_events SET sla_alert_sent = 1 WHERE id = ?",
+            "UPDATE chatwoot_message_events SET sla_alert_sent = 1 WHERE id = $1",
             message_id
         )
         .execute(&self.pool)
@@ -175,22 +175,22 @@ impl Database {
             r#"
             SELECT
                 COUNT(*) as "total!: i64",
-                COALESCE(SUM(CASE WHEN response_time <= ? THEN 1 ELSE 0 END), 0) as "within_1h!: i64",
-                COALESCE(SUM(CASE WHEN response_time <= ? THEN 1 ELSE 0 END), 0) as "within_4h!: i64",
-                COALESCE(SUM(CASE WHEN response_time <= ? THEN 1 ELSE 0 END), 0) as "within_12h!: i64",
-                COALESCE(SUM(CASE WHEN response_time <= ? THEN 1 ELSE 0 END), 0) as "within_24h!: i64",
-                COALESCE(SUM(CASE WHEN response_time <= ? THEN 1 ELSE 0 END), 0) as "within_72h!: i64"
+                COALESCE(SUM(CASE WHEN response_time <= $1 THEN 1 ELSE 0 END), 0) as "within_1h!: i64",
+                COALESCE(SUM(CASE WHEN response_time <= $2 THEN 1 ELSE 0 END), 0) as "within_4h!: i64",
+                COALESCE(SUM(CASE WHEN response_time <= $3 THEN 1 ELSE 0 END), 0) as "within_12h!: i64",
+                COALESCE(SUM(CASE WHEN response_time <= $4 THEN 1 ELSE 0 END), 0) as "within_24h!: i64",
+                COALESCE(SUM(CASE WHEN response_time <= $5 THEN 1 ELSE 0 END), 0) as "within_72h!: i64"
             FROM (
                 SELECT
                     MIN(response.created_at - customer_msg.created_at) as response_time
                 FROM chatwoot_message_events customer_msg
-                JOIN contract_sign_requests c ON hex(c.contract_id) = customer_msg.contract_id
+                JOIN contract_sign_requests c ON encode(c.contract_id, 'hex') = customer_msg.contract_id
                 JOIN chatwoot_message_events response ON
                     response.chatwoot_conversation_id = customer_msg.chatwoot_conversation_id
                     AND response.sender_type = 'provider'
                     AND response.created_at > customer_msg.created_at
                 WHERE customer_msg.sender_type = 'customer'
-                    AND c.provider_pubkey = ?
+                    AND c.provider_pubkey = $6
                 GROUP BY customer_msg.id
             )
             "#,
@@ -245,10 +245,10 @@ impl Database {
                 COUNT(*) as "total!: i64",
                 COALESCE(SUM(CASE WHEN cm.sla_breached = 1 THEN 1 ELSE 0 END), 0) as "breached!: i64"
             FROM chatwoot_message_events cm
-            JOIN contract_sign_requests c ON hex(c.contract_id) = cm.contract_id
+            JOIN contract_sign_requests c ON encode(c.contract_id, 'hex') = cm.contract_id
             WHERE cm.sender_type = 'customer'
-              AND c.provider_pubkey = ?
-              AND cm.created_at >= ?
+              AND c.provider_pubkey = $1
+              AND cm.created_at >= $2
             "#,
             provider_pubkey,
             thirty_days_ago

@@ -21,7 +21,7 @@ async fn test_get_platform_stats_with_data() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
             pubkey_ref
         )
         .execute(&db.pool)
@@ -31,7 +31,7 @@ async fn test_get_platform_stats_with_data() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
             pubkey_ref
         )
         .execute(&db.pool)
@@ -48,7 +48,7 @@ async fn test_get_platform_stats_with_data() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 0, 'pending', $4, $5, $6, 'usd')",
             contract_id_ref,
             requester_pubkey_ref,
             pubkey_ref,
@@ -73,7 +73,7 @@ async fn test_get_platform_stats_with_data() {
         let pubkey_ref = &pubkey;
         let nonce_signature_ref = &nonce_signature;
         sqlx::query!(
-            "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, 'test', ?, ?)",
+            "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'test', $2, $3)",
             pubkey_ref,
             nonce_signature_ref,
             now_ns
@@ -107,7 +107,7 @@ async fn test_get_reputation_with_changes() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, 10, 'test', 0)",
+            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 10, 'test', 0)",
             pubkey_ref
         )
         .execute(&db.pool)
@@ -117,7 +117,7 @@ async fn test_get_reputation_with_changes() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, -5, 'penalty', 1000)",
+            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, -5, 'penalty', 1000)",
             pubkey_ref
         )
         .execute(&db.pool)
@@ -139,7 +139,7 @@ async fn test_get_top_providers_by_reputation() {
     {
         let pk1_ref = &pk1;
         sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, 100, 'good', 0)",
+            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 100, 'good', 0)",
             pk1_ref
         )
         .execute(&db.pool)
@@ -149,7 +149,7 @@ async fn test_get_top_providers_by_reputation() {
     {
         let pk2_ref = &pk2;
         sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, 50, 'ok', 0)",
+            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 50, 'ok', 0)",
             pk2_ref
         )
         .execute(&db.pool)
@@ -181,7 +181,7 @@ async fn test_get_provider_stats_with_data() {
     {
         let pubkey_ref = &pubkey;
         sqlx::query!(
-            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
             pubkey_ref
         )
         .execute(&db.pool)
@@ -198,7 +198,7 @@ async fn test_get_provider_stats_with_data() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, 'pending', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 0, 'pending', $4, $5, $6, 'usd')",
             contract_id_ref,
             requester_ref,
             pubkey_ref,
@@ -220,7 +220,7 @@ async fn test_get_provider_stats_with_data() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 2000, 'memo', 1000, 'active', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 2000, 'memo', 1000, 'active', $4, $5, $6, 'usd')",
             contract_id_ref,
             requester_ref,
             pubkey_ref,
@@ -259,7 +259,7 @@ async fn test_get_latest_block_timestamp_ns_with_data() {
         let pubkey_ref = &pubkey;
         let nonce_ref = &nonce_signature1;
         sqlx::query!(
-            "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, 'test1', ?, ?)",
+            "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'test1', $2, $3)",
             pubkey_ref,
             nonce_ref,
             timestamp1
@@ -273,7 +273,7 @@ async fn test_get_latest_block_timestamp_ns_with_data() {
         let pubkey_ref = &pubkey;
         let nonce_ref = &nonce_signature2;
         sqlx::query!(
-            "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, 'test2', ?, ?)",
+            "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'test2', $2, $3)",
             pubkey_ref,
             nonce_ref,
             timestamp2
@@ -325,7 +325,7 @@ async fn test_search_accounts_by_display_name() {
 
     // Update display name
     sqlx::query!(
-        "UPDATE accounts SET display_name = ? WHERE id = ?",
+        "UPDATE accounts SET display_name = $1 WHERE id = $2",
         "Alice Wonderland",
         account.id
     )
@@ -381,7 +381,7 @@ async fn test_search_accounts_with_reputation_and_activity() {
 
     // Add reputation for alice
     sqlx::query!(
-        "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, 100, 'test', 0)",
+        "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 100, 'test', 0)",
         pubkey1
     )
     .execute(&db.pool)
@@ -394,7 +394,7 @@ async fn test_search_accounts_with_reputation_and_activity() {
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000, 'memo', 0, 'active', ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000, 'memo', 0, 'active', $4, $5, $6, 'usd')",
         contract_id,
         pubkey2,
         pubkey1,
@@ -408,7 +408,7 @@ async fn test_search_accounts_with_reputation_and_activity() {
 
     // Add offering for alice
     sqlx::query!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 0)",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-1', 'Test', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
         pubkey1
     )
     .execute(&db.pool)
@@ -676,7 +676,7 @@ async fn test_get_provider_trust_metrics_new_provider() {
 
     // Create provider profile first (required for contact info foreign key)
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -685,7 +685,7 @@ async fn test_get_provider_trust_metrics_new_provider() {
 
     // Add contact info to avoid "no contact info" penalty
     sqlx::query(
-        "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, 'email', 'test@example.com')",
+        "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES ($1, 'email', 'test@example.com')",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -711,7 +711,7 @@ async fn test_get_provider_trust_metrics_with_contracts() {
 
     // Create provider profile first (required for contact info foreign key)
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&provider_pubkey)
     .execute(&db.pool)
@@ -720,7 +720,7 @@ async fn test_get_provider_trust_metrics_with_contracts() {
 
     // Add contact info to avoid "no contact info" penalty
     sqlx::query(
-        "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES (?, 'email', 'provider@example.com')",
+        "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES ($1, 'email', 'provider@example.com')",
     )
     .bind(&provider_pubkey)
     .execute(&db.pool)
@@ -735,7 +735,7 @@ async fn test_get_provider_trust_metrics_with_contracts() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
             contract_id,
             requester,
             provider_pubkey,
@@ -752,7 +752,7 @@ async fn test_get_provider_trust_metrics_with_contracts() {
     let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
     let nonce = vec![0u8; 64];
     sqlx::query!(
-        "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, 'active', ?, ?)",
+        "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'active', $2, $3)",
         provider_pubkey,
         nonce,
         now_ns
@@ -782,7 +782,7 @@ async fn test_provider_tenure_new() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -797,7 +797,7 @@ async fn test_provider_tenure_new() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
             contract_id,
             requester,
             pubkey,
@@ -821,7 +821,7 @@ async fn test_provider_tenure_growing() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -836,7 +836,7 @@ async fn test_provider_tenure_growing() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
             contract_id,
             requester,
             pubkey,
@@ -860,7 +860,7 @@ async fn test_provider_tenure_growing_at_boundary() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -875,7 +875,7 @@ async fn test_provider_tenure_growing_at_boundary() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
             contract_id,
             requester,
             pubkey,
@@ -899,7 +899,7 @@ async fn test_provider_tenure_established() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -914,7 +914,7 @@ async fn test_provider_tenure_established() {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
             contract_id,
             requester,
             pubkey,
@@ -938,7 +938,7 @@ async fn test_provider_tenure_zero_contracts() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -957,7 +957,7 @@ async fn test_avg_contract_duration_ratio_none() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -976,7 +976,7 @@ async fn test_avg_contract_duration_ratio_completed_exact() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -994,7 +994,7 @@ async fn test_avg_contract_duration_ratio_completed_exact() {
     let stripe_customer_id: Option<&str> = None;
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, end_timestamp_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', 100, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, end_timestamp_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', 100, $4, $5, $6, $7, $8, 'usd')",
     )
     .bind(&contract_id)
     .bind(&requester)
@@ -1021,7 +1021,7 @@ async fn test_avg_contract_duration_ratio_completed_longer() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1039,7 +1039,7 @@ async fn test_avg_contract_duration_ratio_completed_longer() {
     let stripe_customer_id: Option<&str> = None;
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, end_timestamp_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', 100, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, end_timestamp_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', 100, $4, $5, $6, $7, $8, 'usd')",
     )
     .bind(&contract_id)
     .bind(&requester)
@@ -1066,7 +1066,7 @@ async fn test_avg_contract_duration_ratio_cancelled_early() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1084,7 +1084,7 @@ async fn test_avg_contract_duration_ratio_cancelled_early() {
     let stripe_customer_id: Option<&str> = None;
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', 100, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', 100, $4, $5, $6, $7, $8, 'usd')",
     )
     .bind(&contract_id)
     .bind(&requester)
@@ -1111,7 +1111,7 @@ async fn test_avg_contract_duration_ratio_mixed_contracts() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1128,7 +1128,7 @@ async fn test_avg_contract_duration_ratio_mixed_contracts() {
     let stripe_customer_id: Option<&str> = None;
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, end_timestamp_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', 100, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, end_timestamp_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', 100, $4, $5, $6, $7, $8, 'usd')",
     )
     .bind(&contract_id1)
     .bind(&requester)
@@ -1148,7 +1148,7 @@ async fn test_avg_contract_duration_ratio_mixed_contracts() {
     let status_updated_ns2 = start_ns2 + (50 * 3600 * 1_000_000_000i64);
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', 100, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, start_timestamp_ns, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', 100, $4, $5, $6, $7, $8, 'usd')",
     )
     .bind(&contract_id2)
     .bind(&requester)
@@ -1176,7 +1176,7 @@ async fn test_avg_contract_duration_ratio_ignores_active_contracts() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1191,7 +1191,7 @@ async fn test_avg_contract_duration_ratio_ignores_active_contracts() {
     let stripe_customer_id: Option<&str> = None;
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'active', 100, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, duration_hours, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'active', 100, $4, $5, $6, 'usd')",
     )
     .bind(&contract_id)
     .bind(&requester)
@@ -1214,7 +1214,7 @@ async fn test_no_response_rate_pct_none() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1233,7 +1233,7 @@ async fn test_no_response_rate_pct_zero() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1253,7 +1253,7 @@ async fn test_no_response_rate_pct_zero() {
         let stripe_customer_id: Option<&str> = None;
 
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', ?, 'accepted', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', $4, 'accepted', $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1279,7 +1279,7 @@ async fn test_no_response_rate_pct_all_ignored() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1300,7 +1300,7 @@ async fn test_no_response_rate_pct_all_ignored() {
         let stripe_customer_id: Option<&str> = None;
 
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', ?, 'requested', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', $4, 'requested', $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1326,7 +1326,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1347,7 +1347,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
         let stripe_customer_id: Option<&str> = None;
 
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', ?, 'requested', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', $4, 'requested', $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1371,7 +1371,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
         let stripe_customer_id: Option<&str> = None;
 
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', ?, 'accepted', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', $4, 'accepted', $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1398,7 +1398,7 @@ async fn test_no_response_rate_pct_recent_requested_not_counted() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1418,7 +1418,7 @@ async fn test_no_response_rate_pct_recent_requested_not_counted() {
         let stripe_customer_id: Option<&str> = None;
 
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', ?, 'requested', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', $4, 'requested', $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1444,7 +1444,7 @@ async fn test_no_response_rate_pct_only_counts_last_90_days() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1465,7 +1465,7 @@ async fn test_no_response_rate_pct_only_counts_last_90_days() {
         let stripe_customer_id: Option<&str> = None;
 
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', ?, 'requested', ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', $4, 'requested', $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1490,7 +1490,7 @@ async fn test_abandonment_velocity_none_no_baseline() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1509,7 +1509,7 @@ async fn test_abandonment_velocity_none_no_baseline() {
     let stripe_customer_id: Option<&str> = None;
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
     )
     .bind(&contract_id)
     .bind(&requester)
@@ -1533,7 +1533,7 @@ async fn test_abandonment_velocity_zero_no_recent() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1554,7 +1554,7 @@ async fn test_abandonment_velocity_zero_no_recent() {
         let stripe_customer_id: Option<&str> = None;
 
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1580,7 +1580,7 @@ async fn test_abandonment_velocity_stable() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1599,7 +1599,7 @@ async fn test_abandonment_velocity_stable() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1616,7 +1616,7 @@ async fn test_abandonment_velocity_stable() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1635,7 +1635,7 @@ async fn test_abandonment_velocity_stable() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day; // 1-8 days ago
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1652,7 +1652,7 @@ async fn test_abandonment_velocity_stable() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day; // 9-10 days ago
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1679,7 +1679,7 @@ async fn test_abandonment_velocity_improving() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1698,7 +1698,7 @@ async fn test_abandonment_velocity_improving() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1715,7 +1715,7 @@ async fn test_abandonment_velocity_improving() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1734,7 +1734,7 @@ async fn test_abandonment_velocity_improving() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1751,7 +1751,7 @@ async fn test_abandonment_velocity_improving() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1778,7 +1778,7 @@ async fn test_abandonment_velocity_spike() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1797,7 +1797,7 @@ async fn test_abandonment_velocity_spike() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1814,7 +1814,7 @@ async fn test_abandonment_velocity_spike() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1833,7 +1833,7 @@ async fn test_abandonment_velocity_spike() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1850,7 +1850,7 @@ async fn test_abandonment_velocity_spike() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1877,7 +1877,7 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
 
     // Create provider profile
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES (?, 'Test', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
     )
     .bind(&pubkey)
     .execute(&db.pool)
@@ -1896,7 +1896,7 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1915,7 +1915,7 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'completed', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -1932,7 +1932,7 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
         let contract_id = vec![i + 10u8; 32];
         let status_updated_ns = now_ns - (i as i64 - 19) * ns_per_day;
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES (?, ?, 'ssh', 'contact', ?, 'off-1', 1000000000, 'memo', 0, 'cancelled', ?, ?, ?, ?, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, status_updated_at_ns, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'cancelled', $4, $5, $6, $7, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)

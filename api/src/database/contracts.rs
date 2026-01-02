@@ -253,15 +253,15 @@ impl Database {
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool",
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE requester_pubkey = ? ORDER BY created_at_ns DESC"#,
+               FROM contract_sign_requests WHERE requester_pubkey = $1 ORDER BY created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -274,15 +274,15 @@ impl Database {
     pub async fn get_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool",
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE provider_pubkey = ? ORDER BY created_at_ns DESC"#,
+               FROM contract_sign_requests WHERE provider_pubkey = $1 ORDER BY created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -295,15 +295,15 @@ impl Database {
     pub async fn get_pending_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool",
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE provider_pubkey = ? AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
+               FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -323,10 +323,10 @@ impl Database {
         let contracts = sqlx::query_as!(
             ContractPendingTermination,
             r#"SELECT
-               lower(hex(contract_id)) as "contract_id!: String",
+               lower(encode(contract_id, 'hex')) as "contract_id!: String",
                provisioning_instance_details as "instance_details!: String"
                FROM contract_sign_requests
-               WHERE provider_pubkey = ?
+               WHERE provider_pubkey = $1
                AND status = 'cancelled'
                AND provisioning_instance_details IS NOT NULL
                AND terminated_at_ns IS NULL
@@ -344,7 +344,7 @@ impl Database {
         let terminated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         let result = sqlx::query!(
-            "UPDATE contract_sign_requests SET terminated_at_ns = ? WHERE contract_id = ? AND status = 'cancelled'",
+            "UPDATE contract_sign_requests SET terminated_at_ns = $1 WHERE contract_id = $2 AND status = 'cancelled'",
             terminated_at_ns,
             contract_id
         )
@@ -365,15 +365,15 @@ impl Database {
     pub async fn get_contract(&self, contract_id: &[u8]) -> Result<Option<Contract>> {
         let contract = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool",
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE contract_id = ?"#,
+               FROM contract_sign_requests WHERE contract_id = $1"#,
             contract_id
         )
         .fetch_optional(&self.pool)
@@ -387,7 +387,7 @@ impl Database {
     pub async fn get_contract_reply(&self, contract_id: &[u8]) -> Result<Option<ContractReply>> {
         let reply = sqlx::query_as!(
             ContractReply,
-            "SELECT contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns FROM contract_sign_replies WHERE contract_id = ?",
+            "SELECT contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns FROM contract_sign_replies WHERE contract_id = $1",
             contract_id
         )
         .fetch_optional(&self.pool)
@@ -401,7 +401,7 @@ impl Database {
     pub async fn get_contract_payments(&self, contract_id: &[u8]) -> Result<Vec<PaymentEntry>> {
         let payments = sqlx::query_as!(
             PaymentEntry,
-            "SELECT pricing_model, time_period_unit, quantity, amount_e9s FROM contract_payment_entries WHERE contract_id = ?",
+            "SELECT pricing_model, time_period_unit, quantity, amount_e9s FROM contract_payment_entries WHERE contract_id = $1",
             contract_id
         )
         .fetch_all(&self.pool)
@@ -414,15 +414,15 @@ impl Database {
     pub async fn list_contracts(&self, limit: i64, offset: i64) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool",
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT ? OFFSET ?"#,
+               FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT $1 OFFSET $2"#,
             limit,
             offset
         )
@@ -562,7 +562,7 @@ impl Database {
                 duration_hours, original_duration_hours, request_memo,
                 created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, buyer_address,
                 requester_account_id, provider_account_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)"#,
             contract_id,
             requester_pubkey,
             ssh_pubkey,
@@ -617,7 +617,7 @@ impl Database {
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let mut tx = self.pool.begin().await?;
         sqlx::query!(
-            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
             new_status,
             updated_at_ns,
             updated_by_pubkey,
@@ -626,7 +626,7 @@ impl Database {
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query!("INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+        sqlx::query!("INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
             contract_id,
             contract.status,
             new_status,
@@ -753,7 +753,7 @@ impl Database {
 
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
             sqlx::query!(
-                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ?, payment_status = ?, refund_amount_e9s = ?, stripe_refund_id = ?, icpay_refund_id = ?, refund_created_at_ns = ? WHERE contract_id = ?",
+                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
                 "rejected",
                 updated_at_ns,
                 rejected_by_pubkey,
@@ -768,7 +768,7 @@ impl Database {
             .await?;
         } else {
             sqlx::query!(
-                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
                 "rejected",
                 updated_at_ns,
                 rejected_by_pubkey,
@@ -780,7 +780,7 @@ impl Database {
 
         // Record in history
         sqlx::query!(
-            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
             contract_id,
             contract.status,
             "rejected",
@@ -828,13 +828,13 @@ impl Database {
 
         sqlx::query!(
             r#"UPDATE contract_sign_requests
-               SET provisioning_instance_details = ?,
-                   provisioning_completed_at_ns = ?,
-                   gateway_slug = ?,
-                   gateway_ssh_port = ?,
-                   gateway_port_range_start = ?,
-                   gateway_port_range_end = ?
-               WHERE contract_id = ?"#,
+               SET provisioning_instance_details = $1,
+                   provisioning_completed_at_ns = $2,
+                   gateway_slug = $3,
+                   gateway_ssh_port = $4,
+                   gateway_port_range_start = $5,
+                   gateway_port_range_end = $6
+               WHERE contract_id = $7"#,
             instance_details,
             provisioned_at_ns,
             gateway.gateway_slug,
@@ -850,7 +850,7 @@ impl Database {
         let empty_credentials: Option<&str> = None;
         sqlx::query!(
             r#"INSERT INTO contract_provisioning_details (contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns)
-               VALUES (?, ?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4, $5)
                ON CONFLICT(contract_id) DO UPDATE SET instance_ip = excluded.instance_ip, instance_credentials = excluded.instance_credentials, connection_instructions = excluded.connection_instructions, provisioned_at_ns = excluded.provisioned_at_ns"#,
             contract_id,
             empty_instance_ip,
@@ -921,7 +921,7 @@ impl Database {
         // Update contract end timestamp and duration
         let new_duration_hours = contract.duration_hours.unwrap_or(0) + extension_hours;
         sqlx::query!(
-            "UPDATE contract_sign_requests SET end_timestamp_ns = ?, duration_hours = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET end_timestamp_ns = $1, duration_hours = $2 WHERE contract_id = $3",
             new_end_timestamp_ns,
             new_duration_hours,
             contract_id
@@ -931,7 +931,7 @@ impl Database {
 
         // Record extension in history
         sqlx::query!(
-            "INSERT INTO contract_extensions (contract_id, extended_by_pubkey, extension_hours, extension_payment_e9s, previous_end_timestamp_ns, new_end_timestamp_ns, extension_memo, created_at_ns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO contract_extensions (contract_id, extended_by_pubkey, extension_hours, extension_payment_e9s, previous_end_timestamp_ns, new_end_timestamp_ns, extension_memo, created_at_ns) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             contract_id,
             extended_by_pubkey,
             extension_hours,
@@ -957,7 +957,7 @@ impl Database {
             r#"SELECT id as "id!", contract_id, extended_by_pubkey, extension_hours as "extension_hours!",
                extension_payment_e9s as "extension_payment_e9s!", previous_end_timestamp_ns as "previous_end_timestamp_ns!",
                new_end_timestamp_ns as "new_end_timestamp_ns!", extension_memo, created_at_ns as "created_at_ns!"
-               FROM contract_extensions WHERE contract_id = ? ORDER BY created_at_ns DESC"#,
+               FROM contract_extensions WHERE contract_id = $1 ORDER BY created_at_ns DESC"#,
             contract_id
         )
         .fetch_all(&self.pool)
@@ -977,7 +977,7 @@ impl Database {
         stripe_invoice_id: Option<&str>,
     ) -> Result<()> {
         sqlx::query(
-            "UPDATE contract_sign_requests SET stripe_payment_intent_id = ?, payment_status = ?, tax_amount_e9s = ?, customer_tax_id = ?, reverse_charge = ?, stripe_invoice_id = ? WHERE contract_id = ?"
+            "UPDATE contract_sign_requests SET stripe_payment_intent_id = $1, payment_status = $2, tax_amount_e9s = $3, customer_tax_id = $4, reverse_charge = $5, stripe_invoice_id = $6 WHERE contract_id = $7"
         )
         .bind(checkout_session_id)
         .bind("succeeded")
@@ -999,7 +999,7 @@ impl Database {
         stripe_invoice_id: &str,
     ) -> Result<()> {
         sqlx::query!(
-            "UPDATE contract_sign_requests SET stripe_invoice_id = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET stripe_invoice_id = $1 WHERE contract_id = $2",
             stripe_invoice_id,
             contract_id
         )
@@ -1015,14 +1015,14 @@ impl Database {
         offering_id: &str,
     ) -> Result<Option<crate::database::offerings::Offering>> {
         let offering = sqlx::query_as::<_, crate::database::offerings::Offering>(
-            r#"SELECT id, lower(hex(pubkey)) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
+            r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
                processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
-               FROM provider_offerings WHERE offering_id = ?"#
+               FROM provider_offerings WHERE offering_id = $1"#
         )
         .bind(offering_id)
         .fetch_optional(&self.pool)
@@ -1106,7 +1106,7 @@ impl Database {
         transaction_id: &str,
     ) -> Result<()> {
         sqlx::query!(
-            "UPDATE contract_sign_requests SET icpay_transaction_id = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET icpay_transaction_id = $1 WHERE contract_id = $2",
             transaction_id,
             contract_id
         )
@@ -1124,7 +1124,7 @@ impl Database {
         payment_id: &str,
     ) -> Result<()> {
         sqlx::query!(
-            "UPDATE contract_sign_requests SET icpay_payment_id = ?, payment_status = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET icpay_payment_id = $1, payment_status = $2 WHERE contract_id = $3",
             payment_id,
             "succeeded",
             contract_id
@@ -1142,7 +1142,7 @@ impl Database {
         new_status: &str,
     ) -> Result<()> {
         sqlx::query!(
-            "UPDATE contract_sign_requests SET payment_status = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET payment_status = $1 WHERE contract_id = $2",
             new_status,
             contract_id
         )
@@ -1336,7 +1336,7 @@ impl Database {
         // Update contract status to cancelled with refund info
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
             sqlx::query!(
-                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ?, payment_status = ?, refund_amount_e9s = ?, stripe_refund_id = ?, icpay_refund_id = ?, refund_created_at_ns = ? WHERE contract_id = ?",
+                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
                 "cancelled",
                 updated_at_ns,
                 cancelled_by_pubkey,
@@ -1351,7 +1351,7 @@ impl Database {
             .await?;
         } else {
             sqlx::query!(
-                "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
                 "cancelled",
                 updated_at_ns,
                 cancelled_by_pubkey,
@@ -1363,7 +1363,7 @@ impl Database {
 
         // Record status change in history
         sqlx::query!(
-            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
             contract_id,
             contract.status,
             "cancelled",
@@ -1382,13 +1382,13 @@ impl Database {
     pub async fn get_contracts_for_release(&self) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool",
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests
                WHERE payment_method = 'icpay'
@@ -1415,23 +1415,24 @@ impl Database {
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let status = "pending";
 
-        let result = sqlx::query!(
+        let id: i64 = sqlx::query_scalar(
             r#"INSERT INTO payment_releases (contract_id, release_type, period_start_ns, period_end_ns, amount_e9s, provider_pubkey, status, created_at_ns)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-            contract_id,
-            release_type,
-            period_start_ns,
-            period_end_ns,
-            amount_e9s,
-            provider_pubkey,
-            status,
-            created_at_ns
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+               RETURNING id"#,
         )
-        .execute(&self.pool)
+        .bind(contract_id)
+        .bind(release_type)
+        .bind(period_start_ns)
+        .bind(period_end_ns)
+        .bind(amount_e9s)
+        .bind(provider_pubkey)
+        .bind(status)
+        .bind(created_at_ns)
+        .fetch_one(&self.pool)
         .await?;
 
         Ok(PaymentRelease {
-            id: result.last_insert_rowid(),
+            id,
             contract_id: contract_id.to_vec(),
             release_type: release_type.to_string(),
             period_start_ns,
@@ -1453,7 +1454,7 @@ impl Database {
         total_released_e9s: i64,
     ) -> Result<()> {
         sqlx::query!(
-            "UPDATE contract_sign_requests SET last_release_at_ns = ?, total_released_e9s = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET last_release_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
             last_release_at_ns,
             total_released_e9s,
             contract_id
@@ -1474,7 +1475,7 @@ impl Database {
                period_end_ns, amount_e9s, provider_pubkey,
                status, created_at_ns, released_at_ns, payout_id
                FROM payment_releases
-               WHERE provider_pubkey = ? AND status = 'pending'
+               WHERE provider_pubkey = $1 AND status = 'pending'
                ORDER BY created_at_ns ASC"#,
         )
         .bind(provider_pubkey)
@@ -1490,14 +1491,13 @@ impl Database {
             return Ok(());
         }
 
-        // Build placeholders for IN clause
-        let placeholders = (0..release_ids.len())
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
+        // Build placeholders for IN clause (starting at $3 since $1 and $2 are used)
+        let placeholders: Vec<String> = (3..=release_ids.len() + 2)
+            .map(|i| format!("${}", i))
+            .collect();
         let query = format!(
-            "UPDATE payment_releases SET status = ?, payout_id = ? WHERE id IN ({})",
-            placeholders
+            "UPDATE payment_releases SET status = $1, payout_id = $2 WHERE id IN ({})",
+            placeholders.join(",")
         );
 
         let mut query_builder = sqlx::query(&query);
@@ -1537,7 +1537,7 @@ impl Database {
         let first_attempt_ns = now_ns + 60_000_000_000; // 1 minute
 
         sqlx::query!(
-            "INSERT OR IGNORE INTO pending_stripe_receipts (contract_id, created_at_ns, next_attempt_at_ns, attempts) VALUES (?, ?, ?, 0)",
+            "INSERT INTO pending_stripe_receipts (contract_id, created_at_ns, next_attempt_at_ns, attempts) VALUES ($1, $2, $3, 0) ON CONFLICT (contract_id) DO NOTHING",
             contract_id,
             now_ns,
             first_attempt_ns
@@ -1558,9 +1558,9 @@ impl Database {
         let rows = sqlx::query!(
             r#"SELECT contract_id, created_at_ns, next_attempt_at_ns, attempts
                FROM pending_stripe_receipts
-               WHERE next_attempt_at_ns <= ?
+               WHERE next_attempt_at_ns <= $1
                ORDER BY next_attempt_at_ns ASC
-               LIMIT ?"#,
+               LIMIT $2"#,
             now_ns,
             limit
         )
@@ -1571,7 +1571,7 @@ impl Database {
             .into_iter()
             .filter_map(|r| {
                 Some(PendingStripeReceipt {
-                    contract_id: r.contract_id?,
+                    contract_id: r.contract_id,
                     created_at_ns: r.created_at_ns,
                     next_attempt_at_ns: r.next_attempt_at_ns,
                     attempts: r.attempts,
@@ -1588,7 +1588,7 @@ impl Database {
         // Increment attempts and update next_attempt_at_ns
         // Only if attempts < 5
         let result = sqlx::query!(
-            "UPDATE pending_stripe_receipts SET attempts = attempts + 1, next_attempt_at_ns = ? WHERE contract_id = ? AND attempts < 5",
+            "UPDATE pending_stripe_receipts SET attempts = attempts + 1, next_attempt_at_ns = $1 WHERE contract_id = $2 AND attempts < 5",
             next_attempt_ns,
             contract_id
         )
@@ -1601,7 +1601,7 @@ impl Database {
     /// Remove pending receipt (either sent successfully or max attempts reached)
     pub async fn remove_pending_stripe_receipt(&self, contract_id: &[u8]) -> Result<()> {
         sqlx::query!(
-            "DELETE FROM pending_stripe_receipts WHERE contract_id = ?",
+            "DELETE FROM pending_stripe_receipts WHERE contract_id = $1",
             contract_id
         )
         .execute(&self.pool)
@@ -1666,7 +1666,7 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
         sqlx::query!(
-            "UPDATE contract_sign_requests SET status = ?, status_updated_at_ns = ?, status_updated_by = ? WHERE contract_id = ?",
+            "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
             new_status,
             updated_at_ns,
             provider_pubkey,
@@ -1676,7 +1676,7 @@ impl Database {
         .await?;
 
         sqlx::query!(
-            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
             contract_id,
             contract.status,
             new_status,
@@ -1720,15 +1720,15 @@ impl Database {
         // - Only lock contracts in accepted/provisioning status with succeeded payment
         let result = sqlx::query!(
             r#"UPDATE contract_sign_requests
-               SET provisioning_lock_agent = ?,
-                   provisioning_lock_at_ns = ?,
-                   provisioning_lock_expires_ns = ?
-               WHERE contract_id = ?
+               SET provisioning_lock_agent = $1,
+                   provisioning_lock_at_ns = $2,
+                   provisioning_lock_expires_ns = $3
+               WHERE contract_id = $4
                  AND status IN ('accepted', 'provisioning')
                  AND payment_status = 'succeeded'
                  AND (provisioning_lock_agent IS NULL
-                      OR provisioning_lock_agent = ?
-                      OR provisioning_lock_expires_ns < ?)"#,
+                      OR provisioning_lock_agent = $5
+                      OR provisioning_lock_expires_ns < $6)"#,
             agent_pubkey,
             now_ns,
             expires_ns,
@@ -1778,8 +1778,8 @@ impl Database {
                SET provisioning_lock_agent = NULL,
                    provisioning_lock_at_ns = NULL,
                    provisioning_lock_expires_ns = NULL
-               WHERE contract_id = ?
-                 AND provisioning_lock_agent = ?"#,
+               WHERE contract_id = $1
+                 AND provisioning_lock_agent = $2"#,
             contract_id,
             agent_pubkey
         )
@@ -1801,7 +1801,7 @@ impl Database {
                    provisioning_lock_at_ns = NULL,
                    provisioning_lock_expires_ns = NULL
                WHERE provisioning_lock_expires_ns IS NOT NULL
-                 AND provisioning_lock_expires_ns < ?
+                 AND provisioning_lock_expires_ns < $1
                  AND status IN ('accepted', 'provisioning')"#,
             now_ns
         )
@@ -1853,7 +1853,7 @@ impl Database {
         // - Location-matchable (agent_pool_id IS NULL with datacenter_country)
         let candidates = sqlx::query_as::<_, ContractWithCountry>(
             r#"SELECT
-               lower(hex(c.contract_id)) as contract_id,
+               lower(encode(c.contract_id, 'hex')) as contract_id,
                c.offering_id,
                c.requester_ssh_pubkey,
                c.instance_config,
@@ -1866,11 +1866,11 @@ impl Database {
                o.datacenter_country
                FROM contract_sign_requests c
                LEFT JOIN provider_offerings o ON c.offering_id = o.offering_id AND c.provider_pubkey = o.pubkey
-               WHERE c.provider_pubkey = ?
+               WHERE c.provider_pubkey = $1
                AND c.status IN ('accepted', 'provisioning')
                AND c.payment_status = 'succeeded'
-               AND (c.provisioning_lock_agent IS NULL OR c.provisioning_lock_expires_ns < ?)
-               AND (o.agent_pool_id = ? OR o.agent_pool_id IS NULL)
+               AND (c.provisioning_lock_agent IS NULL OR c.provisioning_lock_expires_ns < $2)
+               AND (o.agent_pool_id = $3 OR o.agent_pool_id IS NULL)
                ORDER BY c.created_at_ns ASC"#,
         )
         .bind(provider_pubkey)
@@ -1920,15 +1920,15 @@ impl Database {
     ) -> Result<Option<Contract>> {
         let contract = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(hex(contract_id)) as "contract_id!: String", lower(hex(requester_pubkey)) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(hex(provider_pubkey)) as "provider_pubkey!: String",
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
                offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
                provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, 0) as "cancel_at_period_end!: bool",
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE stripe_subscription_id = ?"#,
+               FROM contract_sign_requests WHERE stripe_subscription_id = $1"#,
             subscription_id
         )
         .fetch_optional(&self.pool)
@@ -1945,12 +1945,11 @@ impl Database {
         current_period_end_ns: i64,
         cancel_at_period_end: bool,
     ) -> Result<()> {
-        let cancel_flag = if cancel_at_period_end { 1i32 } else { 0i32 };
         sqlx::query!(
-            "UPDATE contract_sign_requests SET subscription_status = ?, current_period_end_ns = ?, cancel_at_period_end = ? WHERE stripe_subscription_id = ?",
+            "UPDATE contract_sign_requests SET subscription_status = $1, current_period_end_ns = $2, cancel_at_period_end = $3 WHERE stripe_subscription_id = $4",
             status,
             current_period_end_ns,
-            cancel_flag,
+            cancel_at_period_end,
             stripe_subscription_id
         )
         .execute(&self.pool)
@@ -1971,7 +1970,7 @@ impl Database {
     ) -> Result<i64> {
         let result = sqlx::query!(
             r#"INSERT INTO contract_usage (contract_id, billing_period_start, billing_period_end, units_included)
-               VALUES (?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4)
                RETURNING id as "id!: i64""#,
             contract_id,
             billing_period_start,
@@ -1996,7 +1995,7 @@ impl Database {
     ) -> Result<i64> {
         let result = sqlx::query!(
             r#"INSERT INTO contract_usage_events (contract_id, event_type, units_delta, heartbeat_at, source, metadata)
-               VALUES (?, ?, ?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4, $5, $6)
                RETURNING id as "id!: i64""#,
             contract_id,
             event_type,
@@ -2018,7 +2017,7 @@ impl Database {
             ContractUsage,
             r#"SELECT
                 id as "id!: i64",
-                lower(hex(contract_id)) as "contract_id!: String",
+                lower(encode(contract_id, 'hex')) as "contract_id!: String",
                 billing_period_start as "billing_period_start!: i64",
                 billing_period_end as "billing_period_end!: i64",
                 units_used as "units_used!: f64",
@@ -2030,7 +2029,7 @@ impl Database {
                 created_at as "created_at!: i64",
                 updated_at as "updated_at!: i64"
             FROM contract_usage
-            WHERE contract_id = ? AND billing_period_start <= ? AND billing_period_end > ?
+            WHERE contract_id = $1 AND billing_period_start <= $2 AND billing_period_end > $3
             ORDER BY billing_period_start DESC
             LIMIT 1"#,
             contract_id,
@@ -2056,7 +2055,7 @@ impl Database {
             r#"SELECT billing_period_start as "billing_period_start!: i64",
                       billing_period_end as "billing_period_end!: i64",
                       units_included
-               FROM contract_usage WHERE id = ?"#,
+               FROM contract_usage WHERE id = $1"#,
             usage_id
         )
         .fetch_one(&self.pool)
@@ -2066,10 +2065,10 @@ impl Database {
         let heartbeats = sqlx::query!(
             r#"SELECT heartbeat_at as "heartbeat_at!: i64"
                FROM contract_usage_events
-               WHERE contract_id = ?
+               WHERE contract_id = $1
                  AND event_type = 'heartbeat'
-                 AND heartbeat_at >= ?
-                 AND heartbeat_at < ?
+                 AND heartbeat_at >= $2
+                 AND heartbeat_at < $3
                ORDER BY heartbeat_at ASC"#,
             contract_id,
             usage.billing_period_start,
@@ -2110,7 +2109,7 @@ impl Database {
         // Update the usage record
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         sqlx::query!(
-            "UPDATE contract_usage SET units_used = ?, overage_units = ?, updated_at = ? WHERE id = ?",
+            "UPDATE contract_usage SET units_used = $1, overage_units = $2, updated_at = $3 WHERE id = $4",
             total_units,
             overage,
             now_ns,
@@ -2130,7 +2129,7 @@ impl Database {
     ) -> Result<()> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         sqlx::query!(
-            "UPDATE contract_usage SET reported_to_stripe = 1, stripe_usage_record_id = ?, updated_at = ? WHERE id = ?",
+            "UPDATE contract_usage SET reported_to_stripe = TRUE, stripe_usage_record_id = $1, updated_at = $2 WHERE id = $3",
             stripe_usage_record_id,
             now_ns,
             usage_id
@@ -2148,7 +2147,7 @@ impl Database {
             ContractUsage,
             r#"SELECT
                 id as "id!: i64",
-                lower(hex(contract_id)) as "contract_id!: String",
+                lower(encode(contract_id, 'hex')) as "contract_id!: String",
                 billing_period_start as "billing_period_start!: i64",
                 billing_period_end as "billing_period_end!: i64",
                 units_used as "units_used!: f64",
@@ -2160,7 +2159,7 @@ impl Database {
                 created_at as "created_at!: i64",
                 updated_at as "updated_at!: i64"
             FROM contract_usage
-            WHERE reported_to_stripe = 0 AND billing_period_end <= ?
+            WHERE reported_to_stripe = FALSE AND billing_period_end <= $1
             ORDER BY billing_period_end ASC"#,
             now
         )

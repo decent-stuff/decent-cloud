@@ -282,7 +282,7 @@ fn test_field_with_dot() {
 fn test_sql_simple_equality() {
     let filters = parse_dsl("type:gpu").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "product_type = ?");
+    assert_eq!(sql, "product_type = $1");
     assert_eq!(values, vec![SqlValue::String("gpu".to_string())]);
 }
 
@@ -290,7 +290,7 @@ fn test_sql_simple_equality() {
 fn test_sql_gte_operator() {
     let filters = parse_dsl("price:>=100").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "monthly_price >= ?");
+    assert_eq!(sql, "monthly_price >= $1");
     assert_eq!(values, vec![SqlValue::Float(100.0)]);
 }
 
@@ -298,7 +298,7 @@ fn test_sql_gte_operator() {
 fn test_sql_lte_operator() {
     let filters = parse_dsl("price:<=500").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "monthly_price <= ?");
+    assert_eq!(sql, "monthly_price <= $1");
     assert_eq!(values, vec![SqlValue::Float(500.0)]);
 }
 
@@ -306,7 +306,7 @@ fn test_sql_lte_operator() {
 fn test_sql_gt_operator() {
     let filters = parse_dsl("cores:>8").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "processor_cores > ?");
+    assert_eq!(sql, "processor_cores > $1");
     assert_eq!(values, vec![SqlValue::Integer(8)]);
 }
 
@@ -314,7 +314,7 @@ fn test_sql_gt_operator() {
 fn test_sql_lt_operator() {
     let filters = parse_dsl("cores:<16").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "processor_cores < ?");
+    assert_eq!(sql, "processor_cores < $1");
     assert_eq!(values, vec![SqlValue::Integer(16)]);
 }
 
@@ -322,7 +322,7 @@ fn test_sql_lt_operator() {
 fn test_sql_range() {
     let filters = parse_dsl("price:[50 TO 200]").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "(monthly_price >= ? AND monthly_price <= ?)");
+    assert_eq!(sql, "(monthly_price >= $1 AND monthly_price <= $2)");
     assert_eq!(values, vec![SqlValue::Float(50.0), SqlValue::Float(200.0)]);
 }
 
@@ -330,7 +330,7 @@ fn test_sql_range() {
 fn test_sql_or_group() {
     let filters = parse_dsl("type:(gpu OR compute)").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "(product_type = ? OR product_type = ?)");
+    assert_eq!(sql, "(product_type = $1 OR product_type = $2)");
     assert_eq!(
         values,
         vec![
@@ -346,7 +346,7 @@ fn test_sql_or_group_three_values() {
     let (sql, values) = build_sql(&filters).unwrap();
     assert_eq!(
         sql,
-        "(datacenter_country = ? OR datacenter_country = ? OR datacenter_country = ?)"
+        "(datacenter_country = $1 OR datacenter_country = $2 OR datacenter_country = $3)"
     );
     assert_eq!(
         values,
@@ -362,7 +362,7 @@ fn test_sql_or_group_three_values() {
 fn test_sql_negation_simple() {
     let filters = parse_dsl("!stock:out_of_stock").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "stock_status != ?");
+    assert_eq!(sql, "stock_status != $1");
     assert_eq!(values, vec![SqlValue::String("out_of_stock".to_string())]);
 }
 
@@ -370,7 +370,7 @@ fn test_sql_negation_simple() {
 fn test_sql_negation_gte() {
     let filters = parse_dsl("!price:>=100").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "monthly_price < ?");
+    assert_eq!(sql, "monthly_price < $1");
     assert_eq!(values, vec![SqlValue::Float(100.0)]);
 }
 
@@ -378,7 +378,7 @@ fn test_sql_negation_gte() {
 fn test_sql_negation_or_group() {
     let filters = parse_dsl("!type:(gpu OR compute)").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "NOT (product_type = ? OR product_type = ?)");
+    assert_eq!(sql, "NOT (product_type = $1 OR product_type = $2)");
     assert_eq!(
         values,
         vec![
@@ -392,7 +392,7 @@ fn test_sql_negation_or_group() {
 fn test_sql_negation_range() {
     let filters = parse_dsl("!price:[50 TO 200]").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "NOT (monthly_price >= ? AND monthly_price <= ?)");
+    assert_eq!(sql, "NOT (monthly_price >= $1 AND monthly_price <= $2)");
     assert_eq!(values, vec![SqlValue::Float(50.0), SqlValue::Float(200.0)]);
 }
 
@@ -400,7 +400,7 @@ fn test_sql_negation_range() {
 fn test_sql_text_like_name() {
     let filters = parse_dsl("name:server").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "offer_name LIKE ?");
+    assert_eq!(sql, "offer_name LIKE $1");
     assert_eq!(values, vec![SqlValue::String("%server%".to_string())]);
 }
 
@@ -408,7 +408,7 @@ fn test_sql_text_like_name() {
 fn test_sql_text_like_gpu() {
     let filters = parse_dsl("gpu:RTX").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "gpu_name LIKE ?");
+    assert_eq!(sql, "gpu_name LIKE $1");
     assert_eq!(values, vec![SqlValue::String("%RTX%".to_string())]);
 }
 
@@ -416,7 +416,7 @@ fn test_sql_text_like_gpu() {
 fn test_sql_text_like_memory() {
     let filters = parse_dsl("memory:32GB").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "memory_amount LIKE ?");
+    assert_eq!(sql, "memory_amount LIKE $1");
     assert_eq!(values, vec![SqlValue::String("%32GB%".to_string())]);
 }
 
@@ -424,7 +424,7 @@ fn test_sql_text_like_memory() {
 fn test_sql_text_like_features() {
     let filters = parse_dsl("features:raid").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "features LIKE ?");
+    assert_eq!(sql, "features LIKE $1");
     assert_eq!(values, vec![SqlValue::String("%raid%".to_string())]);
 }
 
@@ -432,7 +432,7 @@ fn test_sql_text_like_features() {
 fn test_sql_text_like_negated() {
     let filters = parse_dsl("!name:test").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "offer_name NOT LIKE ?");
+    assert_eq!(sql, "offer_name NOT LIKE $1");
     assert_eq!(values, vec![SqlValue::String("%test%".to_string())]);
 }
 
@@ -440,7 +440,7 @@ fn test_sql_text_like_negated() {
 fn test_sql_boolean_true() {
     let filters = parse_dsl("unmetered:true").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "unmetered_bandwidth = ?");
+    assert_eq!(sql, "unmetered_bandwidth = $1");
     assert_eq!(values, vec![SqlValue::Bool(true)]);
 }
 
@@ -448,7 +448,7 @@ fn test_sql_boolean_true() {
 fn test_sql_boolean_false() {
     let filters = parse_dsl("unmetered:false").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "unmetered_bandwidth = ?");
+    assert_eq!(sql, "unmetered_bandwidth = $1");
     assert_eq!(values, vec![SqlValue::Bool(false)]);
 }
 
@@ -456,7 +456,7 @@ fn test_sql_boolean_false() {
 fn test_sql_float_price() {
     let filters = parse_dsl("price:99.99").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "monthly_price = ?");
+    assert_eq!(sql, "monthly_price = $1");
     assert_eq!(values, vec![SqlValue::Float(99.99)]);
 }
 
@@ -464,7 +464,7 @@ fn test_sql_float_price() {
 fn test_sql_integer_to_float_conversion() {
     let filters = parse_dsl("price:100").unwrap();
     let (sql, values) = build_sql(&filters).unwrap();
-    assert_eq!(sql, "monthly_price = ?");
+    assert_eq!(sql, "monthly_price = $1");
     assert_eq!(values, vec![SqlValue::Float(100.0)]);
 }
 
@@ -474,7 +474,7 @@ fn test_sql_multiple_filters_and() {
     let (sql, values) = build_sql(&filters).unwrap();
     assert_eq!(
         sql,
-        "product_type = ? AND monthly_price >= ? AND datacenter_country = ?"
+        "product_type = $1 AND monthly_price >= $2 AND datacenter_country = $3"
     );
     assert_eq!(
         values,
@@ -494,7 +494,7 @@ fn test_sql_complex_query() {
 
     assert_eq!(
         sql,
-        "(product_type = ? OR product_type = ?) AND (monthly_price >= ? AND monthly_price <= ?) AND processor_cores >= ? AND stock_status != ?"
+        "(product_type = $1 OR product_type = $2) AND (monthly_price >= $3 AND monthly_price <= $4) AND processor_cores >= $5 AND stock_status != $6"
     );
 
     assert_eq!(
@@ -514,53 +514,53 @@ fn test_sql_complex_query() {
 fn test_sql_all_allowlisted_fields() {
     let queries = vec![
         // Basic offering info
-        ("name:test", "offer_name LIKE ?"),
-        ("desc:cloud", "description LIKE ?"),
-        ("type:gpu", "product_type = ?"),
-        ("stock:available", "stock_status = ?"),
-        ("source:seeded", "offering_source = ?"),
+        ("name:test", "offer_name LIKE $1"),
+        ("desc:cloud", "description LIKE $1"),
+        ("type:gpu", "product_type = $1"),
+        ("stock:available", "stock_status = $1"),
+        ("source:seeded", "offering_source = $1"),
         // Pricing
-        ("price:100", "monthly_price = ?"),
-        ("setup_fee:50", "setup_fee = ?"),
-        ("currency:EUR", "currency = ?"),
+        ("price:100", "monthly_price = $1"),
+        ("setup_fee:50", "setup_fee = $1"),
+        ("currency:EUR", "currency = $1"),
         // Processor
-        ("cores:8", "processor_cores = ?"),
-        ("cpu_count:2", "processor_amount = ?"),
-        ("cpu_brand:AMD", "processor_brand LIKE ?"),
-        ("cpu_speed:3.5GHz", "processor_speed LIKE ?"),
-        ("cpu:Xeon", "processor_name LIKE ?"),
+        ("cores:8", "processor_cores = $1"),
+        ("cpu_count:2", "processor_amount = $1"),
+        ("cpu_brand:AMD", "processor_brand LIKE $1"),
+        ("cpu_speed:3.5GHz", "processor_speed LIKE $1"),
+        ("cpu:Xeon", "processor_name LIKE $1"),
         // Memory
-        ("memory:32GB", "memory_amount LIKE ?"),
-        ("mem_type:DDR5", "memory_type LIKE ?"),
-        ("ecc:ECC", "memory_error_correction LIKE ?"),
+        ("memory:32GB", "memory_amount LIKE $1"),
+        ("mem_type:DDR5", "memory_type LIKE $1"),
+        ("ecc:ECC", "memory_error_correction LIKE $1"),
         // Storage
-        ("ssd:500GB", "total_ssd_capacity LIKE ?"),
-        ("ssd_count:2", "ssd_amount = ?"),
-        ("hdd:2TB", "total_hdd_capacity LIKE ?"),
-        ("hdd_count:4", "hdd_amount = ?"),
+        ("ssd:500GB", "total_ssd_capacity LIKE $1"),
+        ("ssd_count:2", "ssd_amount = $1"),
+        ("hdd:2TB", "total_hdd_capacity LIKE $1"),
+        ("hdd_count:4", "hdd_amount = $1"),
         // Location
-        ("country:US", "datacenter_country = ?"),
-        ("city:NYC", "datacenter_city = ?"),
+        ("country:US", "datacenter_country = $1"),
+        ("city:NYC", "datacenter_city = $1"),
         // GPU
-        ("gpu:RTX", "gpu_name LIKE ?"),
-        ("gpu_count:2", "gpu_count = ?"),
-        ("gpu_memory:16", "gpu_memory_gb = ?"),
+        ("gpu:RTX", "gpu_name LIKE $1"),
+        ("gpu_count:2", "gpu_count = $1"),
+        ("gpu_memory:16", "gpu_memory_gb = $1"),
         // Network
-        ("unmetered:true", "unmetered_bandwidth = ?"),
-        ("uplink:10Gbps", "uplink_speed LIKE ?"),
-        ("traffic:1000", "traffic = ?"),
+        ("unmetered:true", "unmetered_bandwidth = $1"),
+        ("uplink:10Gbps", "uplink_speed LIKE $1"),
+        ("traffic:1000", "traffic = $1"),
         // Contract terms
-        ("min_hours:720", "min_contract_hours = ?"),
-        ("max_hours:8760", "max_contract_hours = ?"),
-        ("billing:monthly", "billing_interval = ?"),
+        ("min_hours:720", "min_contract_hours = $1"),
+        ("max_hours:8760", "max_contract_hours = $1"),
+        ("billing:monthly", "billing_interval = $1"),
         // Platform/features
-        ("virt:kvm", "virtualization_type = ?"),
-        ("panel:cPanel", "control_panel LIKE ?"),
-        ("features:ssd", "features LIKE ?"),
-        ("os:Ubuntu", "operating_systems LIKE ?"),
-        ("payment:crypto", "payment_methods LIKE ?"),
+        ("virt:kvm", "virtualization_type = $1"),
+        ("panel:cPanel", "control_panel LIKE $1"),
+        ("features:ssd", "features LIKE $1"),
+        ("os:Ubuntu", "operating_systems LIKE $1"),
+        ("payment:crypto", "payment_methods LIKE $1"),
         // Trust
-        ("trust:95", "trust_score = ?"),
+        ("trust:95", "trust_score = $1"),
     ];
 
     for (query, expected_sql) in queries {

@@ -10,7 +10,7 @@ async fn insert_transfer(
     timestamp: i64,
 ) {
     sqlx::query!(
-        "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns) VALUES (?, ?, ?, ?, '', ?)",
+        "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns) VALUES ($1, $2, $3, $4, '', $5)",
         from,
         to,
         amount,

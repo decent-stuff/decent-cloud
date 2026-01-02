@@ -15,7 +15,7 @@ async fn insert_contract_request(
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, 'ssh-key', 'contact', ?, ?, 1000, 'memo', ?, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, $4, 1000, 'memo', $5, $6, $7, $8, $9, $10, 'usd')",
         contract_id,
         requester_pubkey,
         provider_pubkey,
@@ -55,7 +55,7 @@ async fn insert_stripe_contract_with_timestamps(db: &Database, params: StripeCon
     let created_at_ns: i64 = 0;
 
     sqlx::query!(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'usd')",
         params.contract_id,
         params.requester_pubkey,
         ssh_pubkey,
@@ -235,7 +235,7 @@ async fn test_get_contract_reply() {
         let contract_id_slice = contract_id.as_slice();
         let provider_slice = provider.as_slice();
         sqlx::query!(
-            "INSERT INTO contract_sign_replies (contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns) VALUES (?, ?, 'accepted', 'ok', 'details', 0)",
+            "INSERT INTO contract_sign_replies (contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns) VALUES ($1, $2, 'accepted', 'ok', 'details', 0)",
             contract_id_slice,
             provider_slice
         )
@@ -272,7 +272,7 @@ async fn test_get_contract_payments() {
     {
         let contract_id_slice = contract_id.as_slice();
         sqlx::query!(
-            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'fixed', 'month', 1, 1000)",
+            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES ($1, 'fixed', 'month', 1, 1000)",
             contract_id_slice
         )
         .execute(&db.pool)
@@ -282,7 +282,7 @@ async fn test_get_contract_payments() {
     {
         let contract_id_slice = contract_id.as_slice();
         sqlx::query!(
-            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES (?, 'usage', 'hour', 10, 500)",
+            "INSERT INTO contract_payment_entries (contract_id, pricing_model, time_period_unit, quantity, amount_e9s) VALUES ($1, 'usage', 'hour', 10, 500)",
             contract_id_slice
         )
         .execute(&db.pool)
@@ -304,7 +304,7 @@ async fn test_create_rental_request_with_icpay_payment_method() {
     // Create offering
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-payment-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -335,7 +335,7 @@ async fn test_create_rental_request_with_stripe_payment_method() {
     // Create offering
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-2', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-payment-2', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -366,7 +366,7 @@ async fn test_create_rental_request_invalid_payment_method() {
     // Create offering
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-3', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-payment-3', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -430,7 +430,7 @@ async fn test_create_rental_request_success() {
     // Create offering first (no explicit id, let it auto-increment)
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-rental-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -482,7 +482,7 @@ async fn test_create_rental_request_with_defaults() {
     // Create offering (no explicit id)
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-2', 'Test Server', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-rental-2', 'Test Server', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -548,7 +548,7 @@ async fn test_create_rental_request_calculates_price() {
     // Create offering with specific price (no explicit id)
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-rental-3', 'Expensive Server', 'USD', 499.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-rental-3', 'Expensive Server', 'USD', 499.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -581,7 +581,7 @@ async fn test_create_rental_request_eur_stripe() {
     // Create offering with EUR currency
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-eur-1', 'EU Server', 'EUR', 89.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-eur-1', 'EU Server', 'EUR', 89.99, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -631,7 +631,7 @@ async fn test_update_contract_status_records_history() {
 
     let contract_id_param = contract_id.clone();
     let status: String = sqlx::query_scalar!(
-        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = $1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -641,7 +641,7 @@ async fn test_update_contract_status_records_history() {
 
     let contract_id_param = contract_id.clone();
     let history = sqlx::query!(
-        r#"SELECT old_status as "old_status!", new_status as "new_status!", change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1"#,
+        r#"SELECT old_status as "old_status!", new_status as "new_status!", change_memo FROM contract_status_history WHERE contract_id = $1 ORDER BY changed_at_ns DESC LIMIT 1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -678,7 +678,7 @@ async fn test_update_contract_status_rejects_non_provider() {
 
     let contract_id_param = contract_id.clone();
     let history_count: i64 = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) as "count!: i64" FROM contract_status_history WHERE contract_id = ?"#,
+        r#"SELECT COUNT(*) as "count!: i64" FROM contract_status_history WHERE contract_id = $1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -711,7 +711,7 @@ async fn test_add_provisioning_details_persists_connection_info() {
 
     let contract_id_param = contract_id.clone();
     let provisioning = sqlx::query!(
-        "SELECT provisioning_instance_details FROM contract_sign_requests WHERE contract_id = ?",
+        "SELECT provisioning_instance_details FROM contract_sign_requests WHERE contract_id = $1",
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -724,7 +724,7 @@ async fn test_add_provisioning_details_persists_connection_info() {
 
     let contract_id_param = contract_id.clone();
     let detail_row = sqlx::query!(
-        r#"SELECT contract_id as "contract_id!", instance_ip, instance_credentials, connection_instructions, provisioned_at_ns as "provisioned_at_ns!" FROM contract_provisioning_details WHERE contract_id = ?"#,
+        r#"SELECT contract_id as "contract_id!", instance_ip, instance_credentials, connection_instructions, provisioned_at_ns as "provisioned_at_ns!" FROM contract_provisioning_details WHERE contract_id = $1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -842,7 +842,7 @@ async fn test_cancel_contract_success_requested() {
 
     let contract_id_param = contract_id.clone();
     let status: String = sqlx::query_scalar!(
-        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = $1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -852,7 +852,7 @@ async fn test_cancel_contract_success_requested() {
 
     let contract_id_param = contract_id.clone();
     let history = sqlx::query!(
-        r#"SELECT old_status as "old_status!", new_status as "new_status!", change_memo FROM contract_status_history WHERE contract_id = ? ORDER BY changed_at_ns DESC LIMIT 1"#,
+        r#"SELECT old_status as "old_status!", new_status as "new_status!", change_memo FROM contract_status_history WHERE contract_id = $1 ORDER BY changed_at_ns DESC LIMIT 1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -907,7 +907,7 @@ async fn test_cancel_contract_success_all_cancellable_statuses() {
 
         let contract_id_param = contract_id.clone();
         let new_status: String = sqlx::query_scalar!(
-            r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+            r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = $1"#,
             contract_id_param
         )
         .fetch_one(&db.pool)
@@ -947,7 +947,7 @@ async fn test_cancel_contract_rejects_unauthorized_user() {
 
     let contract_id_param = contract_id.clone();
     let status: String = sqlx::query_scalar!(
-        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = ?"#,
+        r#"SELECT status as "status!: String" FROM contract_sign_requests WHERE contract_id = $1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -1051,7 +1051,7 @@ async fn test_payment_status_icpay_payment_succeeds_immediately() {
     // Create offering
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-status-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-payment-status-1', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -1085,7 +1085,7 @@ async fn test_payment_status_stripe_payment_starts_pending() {
     // Create offering
     let provider_pk_clone = provider_pk.clone();
     let offering_id = sqlx::query_scalar!(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES (?, 'off-payment-status-2', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0) RETURNING id",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-payment-status-2', 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) RETURNING id as \"id!\"",
         provider_pk_clone
     )
     .fetch_one(&db.pool)
@@ -1393,7 +1393,7 @@ async fn test_cancel_contract_icpay_refund_calculation() {
     let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64); // 30 day contract
 
     sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ?, icpay_payment_id = ?, start_timestamp_ns = ?, end_timestamp_ns = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, icpay_payment_id = $3, start_timestamp_ns = $4, end_timestamp_ns = $5 WHERE contract_id = $6",
         "icpay",
         "succeeded",
         "pay_test_123",
@@ -1441,7 +1441,7 @@ async fn test_cancel_contract_icpay_no_payment_id() {
     .await;
 
     sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2 WHERE contract_id = $3",
         "icpay",
         "succeeded",
         contract_id
@@ -1487,7 +1487,7 @@ async fn test_cancel_contract_icpay_with_released_amount() {
 
     // Set ICPay payment with some amount already released to provider
     sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ?, icpay_payment_id = ?, start_timestamp_ns = ?, end_timestamp_ns = ?, total_released_e9s = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, icpay_payment_id = $3, start_timestamp_ns = $4, end_timestamp_ns = $5, total_released_e9s = $6 WHERE contract_id = $7",
         "icpay",
         "succeeded",
         "pay_test_456",
@@ -1531,7 +1531,7 @@ async fn test_try_auto_accept_contract_enabled() {
 
     // Create provider profile with auto_accept_rentals enabled
     sqlx::query!(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES (?, 'Test Provider', 'v1', '1.0', 0, 1)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, 1)",
         provider_pk
     )
     .execute(&db.pool)
@@ -1568,7 +1568,7 @@ async fn test_try_auto_accept_contract_disabled() {
 
     // Create provider profile with auto_accept_rentals explicitly disabled
     sqlx::query!(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES (?, 'Test Provider', 'v1', '1.0', 0, 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, 0)",
         provider_pk
     )
     .execute(&db.pool)
@@ -1605,7 +1605,7 @@ async fn test_try_auto_accept_contract_idempotent() {
 
     // Create provider profile with auto_accept_rentals enabled
     sqlx::query!(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES (?, 'Test Provider', 'v1', '1.0', 0, 1)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, 1)",
         provider_pk
     )
     .execute(&db.pool)
@@ -1664,7 +1664,7 @@ async fn test_cancel_active_contract_with_prorated_refund() {
     let instance_details =
         r#"{"external_id":"vm-12345","ip_address":"192.168.1.100","ssh_port":22}"#;
     sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = ?, payment_status = ?, icpay_payment_id = ?, provisioning_instance_details = ?, provisioning_completed_at_ns = ?, start_timestamp_ns = ?, end_timestamp_ns = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, icpay_payment_id = $3, provisioning_instance_details = $4, provisioning_completed_at_ns = $5, start_timestamp_ns = $6, end_timestamp_ns = $7 WHERE contract_id = $8",
         "icpay",
         "succeeded",
         "pay_test_active",
@@ -1723,7 +1723,7 @@ async fn test_get_pending_termination_contracts() {
 
     let instance_details_1 = r#"{"external_id":"vm-001","ip_address":"10.0.0.1","ssh_port":22}"#;
     sqlx::query!(
-        "UPDATE contract_sign_requests SET provisioning_instance_details = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET provisioning_instance_details = $1 WHERE contract_id = $2",
         instance_details_1,
         contract_id_1
     )
@@ -1759,7 +1759,7 @@ async fn test_get_pending_termination_contracts() {
 
     let instance_details_3 = r#"{"external_id":"vm-003","ip_address":"10.0.0.3","ssh_port":22}"#;
     sqlx::query!(
-        "UPDATE contract_sign_requests SET provisioning_instance_details = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET provisioning_instance_details = $1 WHERE contract_id = $2",
         instance_details_3,
         contract_id_3
     )
@@ -1800,7 +1800,7 @@ async fn test_mark_contract_terminated() {
     let instance_details =
         r#"{"external_id":"vm-to-terminate","ip_address":"10.0.0.5","ssh_port":22}"#;
     sqlx::query!(
-        "UPDATE contract_sign_requests SET provisioning_instance_details = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET provisioning_instance_details = $1 WHERE contract_id = $2",
         instance_details,
         contract_id
     )
@@ -1828,7 +1828,7 @@ async fn test_mark_contract_terminated() {
     // Verify terminated_at_ns is set
     let contract_id_param = contract_id.clone();
     let terminated_at: Option<i64> = sqlx::query_scalar!(
-        r#"SELECT terminated_at_ns FROM contract_sign_requests WHERE contract_id = ?"#,
+        r#"SELECT terminated_at_ns FROM contract_sign_requests WHERE contract_id = $1"#,
         contract_id_param
     )
     .fetch_one(&db.pool)
@@ -1894,7 +1894,7 @@ async fn test_get_contract_returns_end_timestamp_for_active() {
     .await;
 
     // Update status to provisioned (active)
-    sqlx::query("UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = ?")
+    sqlx::query("UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = $1")
         .bind(&contract_id)
         .execute(&db.pool)
         .await
@@ -1936,7 +1936,7 @@ async fn test_get_contract_returns_end_timestamp_for_expired() {
     .await;
 
     // Update status to provisioned (was running)
-    sqlx::query("UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = ?")
+    sqlx::query("UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = $1")
         .bind(&contract_id)
         .execute(&db.pool)
         .await
@@ -2064,7 +2064,7 @@ async fn test_provisioning_lock_race_condition() {
     // 5. Verify lock state in DB
     let winner = if result1 { &agent1_pk } else { &agent2_pk };
     let c: (Option<Vec<u8>>,) = sqlx::query_as(
-        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = $1",
     )
     .bind(&contract_id)
     .fetch_one(&db.pool)
@@ -2102,7 +2102,7 @@ async fn test_provisioning_lock_race_condition() {
 
     // 9. Verify lock is released in DB
     let c: (Option<Vec<u8>>,) = sqlx::query_as(
-        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = $1",
     )
     .bind(&contract_id)
     .fetch_one(&db.pool)
@@ -2154,7 +2154,7 @@ async fn test_provisioning_lock_expiration() {
     // Simulate time passing - manually set expires_ns to past
     let past_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 1_000_000_000;
     sqlx::query(
-        "UPDATE contract_sign_requests SET provisioning_lock_expires_ns = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET provisioning_lock_expires_ns = $1 WHERE contract_id = $2",
     )
     .bind(past_ns)
     .bind(&contract_id)
@@ -2175,7 +2175,7 @@ async fn test_provisioning_lock_expiration() {
 
     // Verify agent 2 now holds the lock
     let c: (Option<Vec<u8>>,) = sqlx::query_as(
-        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = $1",
     )
     .bind(&contract_id)
     .fetch_one(&db.pool)
@@ -2228,7 +2228,7 @@ async fn test_cleanup_expired_provisioning_locks() {
     // Set contract_id_1's lock to expired (in the past)
     let past_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 1_000_000_000;
     sqlx::query(
-        "UPDATE contract_sign_requests SET provisioning_lock_expires_ns = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET provisioning_lock_expires_ns = $1 WHERE contract_id = $2",
     )
     .bind(past_ns)
     .bind(&contract_id_1)
@@ -2242,7 +2242,7 @@ async fn test_cleanup_expired_provisioning_locks() {
 
     // Verify contract_id_1's lock is cleared
     let c1: (Option<Vec<u8>>,) = sqlx::query_as(
-        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = $1",
     )
     .bind(&contract_id_1)
     .fetch_one(&db.pool)
@@ -2252,7 +2252,7 @@ async fn test_cleanup_expired_provisioning_locks() {
 
     // Verify contract_id_2's lock is still held
     let c2: (Option<Vec<u8>>,) = sqlx::query_as(
-        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = ?",
+        "SELECT provisioning_lock_agent FROM contract_sign_requests WHERE contract_id = $1",
     )
     .bind(&contract_id_2)
     .fetch_one(&db.pool)
@@ -2484,11 +2484,11 @@ async fn test_get_contract_by_subscription_id_found() {
     // Set subscription ID
     let subscription_id = "sub_test_123456";
     sqlx::query!(
-        "UPDATE contract_sign_requests SET stripe_subscription_id = ?, subscription_status = ?, current_period_end_ns = ?, cancel_at_period_end = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET stripe_subscription_id = $1, subscription_status = $2, current_period_end_ns = $3, cancel_at_period_end = $4 WHERE contract_id = $5",
         subscription_id,
         "active",
         1234567890i64,
-        0,
+        false,
         contract_id
     )
     .execute(&db.pool)
@@ -2543,7 +2543,7 @@ async fn test_update_contract_subscription() {
 
     let subscription_id = "sub_update_test";
     sqlx::query!(
-        "UPDATE contract_sign_requests SET stripe_subscription_id = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET stripe_subscription_id = $1 WHERE contract_id = $2",
         subscription_id,
         contract_id
     )
@@ -2591,7 +2591,7 @@ async fn test_update_contract_subscription_cancel_at_period_end() {
 
     let subscription_id = "sub_cancel_test";
     sqlx::query!(
-        "UPDATE contract_sign_requests SET stripe_subscription_id = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET stripe_subscription_id = $1 WHERE contract_id = $2",
         subscription_id,
         contract_id
     )

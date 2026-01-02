@@ -50,7 +50,7 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO bandwidth_history (contract_id, gateway_slug, provider_pubkey, bytes_in, bytes_out, recorded_at_ns)
-               VALUES (?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6)"#,
             contract_id,
             gateway_slug,
             provider_pubkey,
@@ -76,7 +76,7 @@ impl Database {
                 bytes_out as "bytes_out!: i64",
                 recorded_at_ns as "recorded_at_ns!: i64"
                FROM bandwidth_history
-               WHERE contract_id = ?
+               WHERE contract_id = $1
                ORDER BY recorded_at_ns DESC
                LIMIT 1"#,
             contract_id
@@ -112,10 +112,10 @@ impl Database {
                INNER JOIN (
                    SELECT contract_id, MAX(recorded_at_ns) as max_ts
                    FROM bandwidth_history
-                   WHERE provider_pubkey = ?
+                   WHERE provider_pubkey = $1
                    GROUP BY contract_id
                ) latest ON bh.contract_id = latest.contract_id AND bh.recorded_at_ns = latest.max_ts
-               WHERE bh.provider_pubkey = ?"#,
+               WHERE bh.provider_pubkey = $2"#,
             provider_pubkey,
             provider_pubkey
         )
@@ -150,9 +150,9 @@ impl Database {
                 bytes_out as "bytes_out!: i64",
                 recorded_at_ns as "recorded_at_ns!: i64"
                FROM bandwidth_history
-               WHERE contract_id = ?
+               WHERE contract_id = $1
                ORDER BY recorded_at_ns DESC
-               LIMIT ?"#,
+               LIMIT $2"#,
             contract_id,
             limit
         )

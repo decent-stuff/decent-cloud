@@ -158,7 +158,7 @@ async fn test_cleanup_expired_recovery_tokens() {
 
     // Manually expire the token by updating expires_at to past
     let past = chrono::Utc::now().timestamp() - 3600;
-    sqlx::query!("UPDATE recovery_tokens SET expires_at = ?", past)
+    sqlx::query!("UPDATE recovery_tokens SET expires_at = $1", past)
         .execute(&db.pool)
         .await
         .unwrap();

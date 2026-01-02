@@ -151,7 +151,7 @@ impl Database {
             ProviderProfile,
             r#"SELECT DISTINCT p.pubkey, p.name, p.description, p.website_url, p.logo_url, p.why_choose_us, p.api_version, p.profile_version, p.updated_at_ns, p.support_email, p.support_hours, p.support_channels, p.regions, p.payment_methods, p.refund_policy, p.sla_guarantee, p.unique_selling_points, p.common_issues, p.onboarding_completed_at FROM provider_profiles p
              INNER JOIN provider_check_ins c ON p.pubkey = c.pubkey
-             WHERE c.block_timestamp_ns > ?
+             WHERE c.block_timestamp_ns > $1
              ORDER BY p.name"#,
             cutoff_ns
         )
@@ -165,7 +165,7 @@ impl Database {
     pub async fn get_provider_profile(&self, pubkey: &[u8]) -> Result<Option<ProviderProfile>> {
         let profile = sqlx::query_as!(
             ProviderProfile,
-            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles WHERE pubkey = ?",
+            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles WHERE pubkey = $1",
             pubkey
         )
         .fetch_optional(&self.pool)
@@ -178,7 +178,7 @@ impl Database {
     pub async fn get_provider_contacts(&self, pubkey: &[u8]) -> Result<Vec<ProviderContact>> {
         let contacts = sqlx::query_as!(
             ProviderContact,
-            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = ?",
+            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = $1",
             pubkey
         )
         .fetch_all(&self.pool)
@@ -197,7 +197,7 @@ impl Database {
         let check_ins = sqlx::query_as!(
             ProviderCheckIn,
             r#"SELECT pubkey, memo, block_timestamp_ns FROM provider_check_ins
-             WHERE pubkey = ? ORDER BY block_timestamp_ns DESC LIMIT ?"#,
+             WHERE pubkey = $1 ORDER BY block_timestamp_ns DESC LIMIT $2"#,
             pubkey,
             limit
         )
@@ -211,7 +211,7 @@ impl Database {
     pub async fn list_providers(&self, limit: i64, offset: i64) -> Result<Vec<ProviderProfile>> {
         let profiles = sqlx::query_as!(
             ProviderProfile,
-            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT ? OFFSET ?",
+            "SELECT pubkey, name, description, website_url, logo_url, why_choose_us, api_version, profile_version, updated_at_ns, support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles ORDER BY updated_at_ns DESC LIMIT $1 OFFSET $2",
             limit,
             offset
         )
@@ -224,7 +224,7 @@ impl Database {
     /// Count total providers
     #[allow(dead_code)]
     pub async fn count_providers(&self) -> Result<i64> {
-        let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM provider_profiles")
+        let count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM provider_profiles"#)
             .fetch_one(&self.pool)
             .await?;
 
@@ -238,7 +238,7 @@ impl Database {
     ) -> Result<Option<ProviderOnboarding>> {
         let onboarding = sqlx::query_as!(
             ProviderOnboarding,
-            "SELECT support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles WHERE pubkey = ?",
+            "SELECT support_email, support_hours, support_channels, regions, payment_methods, refund_policy, sla_guarantee, unique_selling_points, common_issues, onboarding_completed_at FROM provider_profiles WHERE pubkey = $1",
             pubkey
         )
         .fetch_optional(&self.pool)
@@ -268,7 +268,7 @@ impl Database {
                    payment_methods, refund_policy, sla_guarantee,
                    unique_selling_points, common_issues, onboarding_completed_at,
                    account_id
-               ) VALUES (?, ?, 'v1', '1.0', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ) VALUES ($1, $2, 'v1', '1.0', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                ON CONFLICT(pubkey) DO UPDATE SET
                    support_email = excluded.support_email,
                    support_hours = excluded.support_hours,
@@ -281,7 +281,7 @@ impl Database {
                    common_issues = excluded.common_issues,
                    onboarding_completed_at = excluded.onboarding_completed_at,
                    updated_at_ns = excluded.updated_at_ns,
-                   account_id = COALESCE(account_id, excluded.account_id)"#,
+                   account_id = COALESCE(provider_profiles.account_id, excluded.account_id)"#,
             pubkey,
             provider_name,
             now_ns,
@@ -315,22 +315,22 @@ impl Database {
         let validators = sqlx::query_as!(
             Validator,
             r#"SELECT
-                lower(hex(r.pubkey)) as "pubkey!: String",
-                NULLIF(p.name, '') as "name?: String",
-                NULLIF(p.description, '') as "description?: String",
-                NULLIF(p.website_url, '') as "website_url?: String",
-                NULLIF(p.logo_url, '') as "logo_url?: String",
+                lower(encode(r.pubkey, 'hex')) as "pubkey!: String",
+                NULLIF(p.name, '') as "name: String",
+                NULLIF(p.description, '') as "description: String",
+                NULLIF(p.website_url, '') as "website_url: String",
+                NULLIF(p.logo_url, '') as "logo_url: String",
                 COUNT(DISTINCT c.block_timestamp_ns) as "total_check_ins!: i64",
-                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END), 0) as "check_ins_24h!: i64",
-                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END), 0) as "check_ins_7d!: i64",
-                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > ? THEN 1 ELSE 0 END), 0) as "check_ins_30d!: i64",
+                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > $1 THEN 1 ELSE 0 END), 0) as "check_ins_24h!: i64",
+                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > $2 THEN 1 ELSE 0 END), 0) as "check_ins_7d!: i64",
+                COALESCE(SUM(CASE WHEN c.block_timestamp_ns > $3 THEN 1 ELSE 0 END), 0) as "check_ins_30d!: i64",
                 MAX(c.block_timestamp_ns) as "last_check_in_ns!: i64",
                 r.created_at_ns as "registered_at_ns!: i64"
              FROM provider_registrations r
              INNER JOIN provider_check_ins c ON r.pubkey = c.pubkey
              LEFT JOIN provider_profiles p ON r.pubkey = p.pubkey
-             WHERE c.block_timestamp_ns > ?
-             GROUP BY r.pubkey
+             WHERE c.block_timestamp_ns > $4
+             GROUP BY r.pubkey, r.created_at_ns, p.name, p.description, p.website_url, p.logo_url
              ORDER BY MAX(c.block_timestamp_ns) DESC"#,
             cutoff_24h,
             cutoff_7d,
@@ -357,7 +357,7 @@ impl Database {
                 CAST(COUNT(po.id) AS INTEGER) as "offerings_count!: i64"
             FROM external_providers ep
             LEFT JOIN provider_offerings po ON ep.pubkey = po.pubkey AND po.offering_source = 'seeded'
-            GROUP BY ep.pubkey
+            GROUP BY ep.pubkey, ep.name, ep.domain, ep.website_url, ep.logo_url, ep.data_source, ep.created_at_ns
             ORDER BY ep.name"#
         )
         .fetch_all(&self.pool)
@@ -394,7 +394,7 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO external_providers (pubkey, name, domain, website_url, data_source, created_at_ns)
-               VALUES (?, ?, ?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4, $5, $6)
                ON CONFLICT(pubkey) DO UPDATE SET
                    name = excluded.name,
                    domain = excluded.domain,
@@ -416,14 +416,14 @@ impl Database {
     // Provider registrations
     pub(crate) async fn insert_provider_registrations(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
             // Store raw Ed25519 public key (32 bytes) and signature
             let timestamp_i64 = entry.block_timestamp_ns as i64;
             sqlx::query!(
-                "INSERT OR REPLACE INTO provider_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, ?)",
+                "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, $3) ON CONFLICT (pubkey) DO UPDATE SET signature = EXCLUDED.signature, created_at_ns = EXCLUDED.created_at_ns",
                 entry.key,
                 entry.value,
                 timestamp_i64
@@ -437,7 +437,7 @@ impl Database {
     // Provider check-ins
     pub(crate) async fn insert_provider_check_ins(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
@@ -463,7 +463,7 @@ impl Database {
             let memo = check_in.memo().to_string();
             let nonce_signature = check_in.nonce_signature();
             sqlx::query!(
-                "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES (?, ?, ?, ?)",
+                "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, $2, $3, $4)",
                 entry.key,
                 memo,
                 nonce_signature,
@@ -487,8 +487,8 @@ impl Database {
         let team_id = team_id as i64;
         sqlx::query!(
             r#"UPDATE provider_profiles
-               SET chatwoot_inbox_id = ?, chatwoot_team_id = ?, chatwoot_portal_slug = ?
-               WHERE pubkey = ?"#,
+               SET chatwoot_inbox_id = $1, chatwoot_team_id = $2, chatwoot_portal_slug = $3
+               WHERE pubkey = $4"#,
             inbox_id,
             team_id,
             portal_slug,
@@ -508,7 +508,7 @@ impl Database {
     ) -> Result<Option<(u32, u32, String)>> {
         let row = sqlx::query!(
             r#"SELECT chatwoot_inbox_id, chatwoot_team_id, chatwoot_portal_slug
-               FROM provider_profiles WHERE pubkey = ?"#,
+               FROM provider_profiles WHERE pubkey = $1"#,
             pubkey
         )
         .fetch_optional(&self.pool)
@@ -530,7 +530,7 @@ impl Database {
     /// Returns false if provider profile doesn't exist or auto_accept_rentals is not set.
     pub async fn get_provider_auto_accept_rentals(&self, pubkey: &[u8]) -> Result<bool> {
         let row = sqlx::query_scalar!(
-            "SELECT auto_accept_rentals FROM provider_profiles WHERE pubkey = ?",
+            "SELECT auto_accept_rentals FROM provider_profiles WHERE pubkey = $1",
             pubkey
         )
         .fetch_optional(&self.pool)
@@ -549,7 +549,7 @@ impl Database {
     ) -> Result<()> {
         let value = if enabled { 1 } else { 0 };
         let result = sqlx::query!(
-            "UPDATE provider_profiles SET auto_accept_rentals = ? WHERE pubkey = ?",
+            "UPDATE provider_profiles SET auto_accept_rentals = $1 WHERE pubkey = $2",
             value,
             pubkey
         )

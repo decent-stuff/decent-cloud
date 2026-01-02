@@ -1,17 +1,10 @@
 use super::*;
-use crate::database::Database;
-use sqlx::SqlitePool;
+use crate::database::test_helpers::setup_test_db;
 use std::time::Duration;
-
-async fn create_test_db() -> Database {
-    let pool = SqlitePool::connect(":memory:").await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    Database { pool }
-}
 
 #[tokio::test]
 async fn test_cleanup_service_creation() {
-    let db = Arc::new(create_test_db().await);
+    let db = Arc::new(setup_test_db().await);
     let service = CleanupService::new(db, 24, 180);
 
     assert_eq!(service.interval, Duration::from_secs(24 * 60 * 60));
@@ -20,7 +13,7 @@ async fn test_cleanup_service_creation() {
 
 #[tokio::test]
 async fn test_cleanup_once() {
-    let db = Arc::new(create_test_db().await);
+    let db = Arc::new(setup_test_db().await);
     let service = CleanupService::new(db.clone(), 24, 180);
 
     // Insert old audit record (200 days old)
@@ -33,7 +26,7 @@ async fn test_cleanup_once() {
     sqlx::query(
         "INSERT INTO signature_audit
          (account_id, action, payload, signature, public_key, timestamp, nonce, is_admin_action, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(None::<&[u8]>)
     .bind("test_action")
@@ -61,7 +54,7 @@ async fn test_cleanup_once() {
 
 #[tokio::test]
 async fn test_cleanup_service_runs_periodically() {
-    let db = Arc::new(create_test_db().await);
+    let db = Arc::new(setup_test_db().await);
 
     // Use very short interval for testing (100ms)
     let service = CleanupService {
@@ -86,7 +79,7 @@ async fn test_cleanup_service_runs_periodically() {
 
 #[tokio::test]
 async fn test_cleanup_once_no_old_records() {
-    let db = Arc::new(create_test_db().await);
+    let db = Arc::new(setup_test_db().await);
     let service = CleanupService::new(db, 24, 180);
 
     // Run cleanup with no old records

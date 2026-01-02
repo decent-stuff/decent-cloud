@@ -233,7 +233,7 @@ async fn get_next_receipt_number(db: &Database) -> Result<i64> {
     .fetch_one(&db.pool)
     .await?;
 
-    Ok(row.receipt_number)
+    row.receipt_number.ok_or_else(|| anyhow::anyhow!("receipt_number unexpectedly NULL"))
 }
 
 /// Update contract with receipt number and timestamp
@@ -244,7 +244,7 @@ async fn update_contract_receipt_info(
     sent_at_ns: i64,
 ) -> Result<()> {
     sqlx::query!(
-        "UPDATE contract_sign_requests SET receipt_number = ?, receipt_sent_at_ns = ? WHERE contract_id = ?",
+        "UPDATE contract_sign_requests SET receipt_number = $1, receipt_sent_at_ns = $2 WHERE contract_id = $3",
         receipt_number,
         sent_at_ns,
         contract_id
@@ -530,7 +530,7 @@ mod tests {
                (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
                 provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
                 payment_method, payment_status, currency)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
             contract_id,
             requester_pk,
             "ssh-key",
@@ -563,7 +563,7 @@ mod tests {
         }
 
         let row: ReceiptInfo = sqlx::query_as(
-            "SELECT receipt_number, receipt_sent_at_ns FROM contract_sign_requests WHERE contract_id = ?"
+            "SELECT receipt_number, receipt_sent_at_ns FROM contract_sign_requests WHERE contract_id = $1"
         )
         .bind(&contract_id)
         .fetch_one(&db.pool)
@@ -584,7 +584,7 @@ mod tests {
                (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
                 provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
                 payment_method, payment_status, currency)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
             contract_id,
             requester_pk,
             "ssh-key",
@@ -621,7 +621,7 @@ mod tests {
 
         // Verify email was queued
         let email: QueuedEmail =
-            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = ?")
+            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = $1")
                 .bind("user@test.example")
                 .fetch_one(&db.pool)
                 .await
@@ -659,7 +659,7 @@ mod tests {
 
         // Verify email content
         let email: QueuedEmail =
-            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = ?")
+            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = $1")
                 .bind("user@test.example")
                 .fetch_one(&db.pool)
                 .await
@@ -680,7 +680,7 @@ mod tests {
         send_contract_rejected_notification(&db, &contract_id, None).await;
 
         let email: QueuedEmail =
-            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = ?")
+            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = $1")
                 .bind("user@test.example")
                 .fetch_one(&db.pool)
                 .await

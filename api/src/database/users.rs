@@ -71,7 +71,7 @@ impl Database {
     // User registrations (blockchain-based, keyed by pubkey)
     pub(crate) async fn insert_user_registrations(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
@@ -79,7 +79,7 @@ impl Database {
             let signature = entry.value.clone();
             let created_at_ns = entry.block_timestamp_ns as i64;
             sqlx::query!(
-                "INSERT OR REPLACE INTO user_registrations (pubkey, signature, created_at_ns) VALUES (?, ?, ?)",
+                "INSERT INTO user_registrations (pubkey, signature, created_at_ns) VALUES ($1, $2, $3) ON CONFLICT (pubkey) DO UPDATE SET signature = EXCLUDED.signature, created_at_ns = EXCLUDED.created_at_ns",
                 pubkey,
                 signature,
                 created_at_ns
@@ -111,7 +111,7 @@ impl Database {
             AccountContact,
             r#"SELECT id as "id!", contact_type, contact_value, verified as "verified!"
                FROM account_contacts
-               WHERE account_id = ?"#,
+               WHERE account_id = $1"#,
             account_id
         )
         .fetch_all(&self.pool)
@@ -132,7 +132,7 @@ impl Database {
 
         sqlx::query!(
             "INSERT INTO account_contacts (account_id, contact_type, contact_value, verified, created_at)
-             VALUES (?, ?, ?, ?, ?)",
+             VALUES ($1, $2, $3, $4, $5)",
             account_id,
             contact_type,
             contact_value,
@@ -148,7 +148,7 @@ impl Database {
     /// Delete account contact by ID
     pub async fn delete_account_contact(&self, account_id: &[u8], contact_id: i64) -> Result<()> {
         sqlx::query!(
-            "DELETE FROM account_contacts WHERE account_id = ? AND id = ?",
+            "DELETE FROM account_contacts WHERE account_id = $1 AND id = $2",
             account_id,
             contact_id
         )
@@ -164,7 +164,7 @@ impl Database {
             AccountSocial,
             r#"SELECT id as "id!", platform, username, profile_url
                FROM account_socials
-               WHERE account_id = ?"#,
+               WHERE account_id = $1"#,
             account_id
         )
         .fetch_all(&self.pool)
@@ -185,7 +185,7 @@ impl Database {
 
         sqlx::query!(
             "INSERT INTO account_socials (account_id, platform, username, profile_url, created_at)
-             VALUES (?, ?, ?, ?, ?)",
+             VALUES ($1, $2, $3, $4, $5)",
             account_id,
             platform,
             username,
@@ -201,7 +201,7 @@ impl Database {
     /// Delete account social by ID
     pub async fn delete_account_social(&self, account_id: &[u8], social_id: i64) -> Result<()> {
         sqlx::query!(
-            "DELETE FROM account_socials WHERE account_id = ? AND id = ?",
+            "DELETE FROM account_socials WHERE account_id = $1 AND id = $2",
             account_id,
             social_id
         )
@@ -220,7 +220,7 @@ impl Database {
             AccountExternalKey,
             r#"SELECT id as "id!", key_type, key_data, key_fingerprint, label
                FROM account_external_keys
-               WHERE account_id = ?"#,
+               WHERE account_id = $1"#,
             account_id
         )
         .fetch_all(&self.pool)
@@ -242,7 +242,7 @@ impl Database {
 
         sqlx::query!(
             "INSERT INTO account_external_keys (account_id, key_type, key_data, key_fingerprint, label, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
+             VALUES ($1, $2, $3, $4, $5, $6)",
             account_id,
             key_type,
             key_data,
@@ -259,7 +259,7 @@ impl Database {
     /// Delete account external key by ID
     pub async fn delete_account_external_key(&self, account_id: &[u8], key_id: i64) -> Result<()> {
         sqlx::query!(
-            "DELETE FROM account_external_keys WHERE account_id = ? AND id = ?",
+            "DELETE FROM account_external_keys WHERE account_id = $1 AND id = $2",
             account_id,
             key_id
         )

@@ -27,7 +27,7 @@ impl Database {
                       notify_sms as "notify_sms!: bool",
                       telegram_chat_id, notify_phone, notify_email_address
                FROM user_notification_config
-               WHERE user_pubkey = ?"#,
+               WHERE user_pubkey = $1"#,
             pubkey
         )
         .fetch_optional(&self.pool)
@@ -48,7 +48,7 @@ impl Database {
             r#"INSERT INTO user_notification_config
                (user_pubkey, notify_telegram, notify_email, notify_sms,
                 telegram_chat_id, notify_phone, notify_email_address, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                ON CONFLICT(user_pubkey) DO UPDATE SET
                    notify_telegram = excluded.notify_telegram,
                    notify_email = excluded.notify_email,
@@ -79,8 +79,8 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO notification_usage (provider_id, channel, date, count)
-               VALUES (?, ?, ?, 1)
-               ON CONFLICT(provider_id, channel, date) DO UPDATE SET count = count + 1"#,
+               VALUES ($1, $2, $3, 1)
+               ON CONFLICT(provider_id, channel, date) DO UPDATE SET count = notification_usage.count + 1"#,
             user_id,
             channel,
             today
@@ -90,7 +90,7 @@ impl Database {
 
         let row = sqlx::query!(
             r#"SELECT count as "count!" FROM notification_usage
-               WHERE provider_id = ? AND channel = ? AND date = ?"#,
+               WHERE provider_id = $1 AND channel = $2 AND date = $3"#,
             user_id,
             channel,
             today
@@ -107,7 +107,7 @@ impl Database {
 
         let row = sqlx::query!(
             r#"SELECT count as "count!" FROM notification_usage
-               WHERE provider_id = ? AND channel = ? AND date = ?"#,
+               WHERE provider_id = $1 AND channel = $2 AND date = $3"#,
             user_id,
             channel,
             today

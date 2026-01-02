@@ -217,7 +217,7 @@ async fn test_structured_provider_registration() {
     database.insert_entries(entries).await.unwrap();
 
     // Verify to entry was inserted into the structured table
-    let row = sqlx::query("SELECT * FROM provider_registrations WHERE pubkey = ?")
+    let row = sqlx::query("SELECT * FROM provider_registrations WHERE pubkey = $1")
         .bind(&[1, 2, 3, 4][..])
         .fetch_one(database.pool())
         .await
@@ -250,7 +250,7 @@ async fn test_structured_provider_check_in() {
     database.insert_entries(entries).await.unwrap();
 
     // Verify to entry was inserted into the structured table
-    let row = sqlx::query("SELECT * FROM provider_check_ins WHERE pubkey = ?")
+    let row = sqlx::query("SELECT * FROM provider_check_ins WHERE pubkey = $1")
         .bind(&[1, 2, 3, 4][..])
         .fetch_one(database.pool())
         .await
@@ -355,7 +355,7 @@ async fn test_structured_mixed_entries() {
             .unwrap();
 
     let provider_count: i64 =
-        sqlx::query("SELECT COUNT(*) as count FROM provider_registrations WHERE pubkey != ?")
+        sqlx::query("SELECT COUNT(*) as count FROM provider_registrations WHERE pubkey != $1")
             .bind(&example_provider_pubkey)
             .fetch_one(database.pool())
             .await
@@ -369,7 +369,7 @@ async fn test_structured_mixed_entries() {
         .get("count");
 
     let check_in_count: i64 =
-        sqlx::query("SELECT COUNT(*) as count FROM provider_check_ins WHERE pubkey != ?")
+        sqlx::query("SELECT COUNT(*) as count FROM provider_check_ins WHERE pubkey != $1")
             .bind(&example_provider_pubkey)
             .fetch_one(database.pool())
             .await

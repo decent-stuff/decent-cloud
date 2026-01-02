@@ -1,4 +1,4 @@
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 #[derive(Debug, Clone)]
 pub struct LedgerEntryData {
@@ -12,5 +12,5 @@ pub struct LedgerEntryData {
 
 #[derive(Clone)]
 pub struct Database {
-    pub(crate) pool: SqlitePool,
+    pub(crate) pool: PgPool,
 }

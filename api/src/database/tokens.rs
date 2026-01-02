@@ -37,8 +37,8 @@ impl Database {
             TokenTransfer,
             r#"SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
              FROM token_transfers
-             WHERE from_account = ? OR to_account = ?
-             ORDER BY created_at_ns DESC LIMIT ?"#,
+             WHERE from_account = $1 OR to_account = $2
+             ORDER BY created_at_ns DESC LIMIT $3"#,
             account,
             account,
             limit
@@ -55,7 +55,7 @@ impl Database {
             TokenTransfer,
             r#"SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
              FROM token_transfers
-             ORDER BY created_at_ns DESC LIMIT ?"#,
+             ORDER BY created_at_ns DESC LIMIT $1"#,
             limit
         )
         .fetch_all(&self.pool)
@@ -67,14 +67,14 @@ impl Database {
     /// Get account balance (sum of all transfers)
     pub async fn get_account_balance(&self, account: &str) -> Result<i64> {
         let received: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(SUM(amount_e9s), 0) FROM token_transfers WHERE to_account = ?",
+            r#"SELECT COALESCE(SUM(amount_e9s), 0)::BIGINT as "total!" FROM token_transfers WHERE to_account = $1"#,
             account
         )
         .fetch_one(&self.pool)
         .await?;
 
         let sent: i64 = sqlx::query_scalar!(
-            "SELECT COALESCE(SUM(amount_e9s + fee_e9s), 0) FROM token_transfers WHERE from_account = ?", 
+            r#"SELECT COALESCE(SUM(amount_e9s + fee_e9s), 0)::BIGINT as "total!" FROM token_transfers WHERE from_account = $1"#,
             account
         )
         .fetch_one(&self.pool)
@@ -90,7 +90,7 @@ impl Database {
             TokenApproval,
             r#"SELECT owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns
              FROM token_approvals
-             WHERE owner_account = ? OR spender_account = ?
+             WHERE owner_account = $1 OR spender_account = $2
              ORDER BY created_at_ns DESC"#,
             account,
             account
@@ -103,7 +103,7 @@ impl Database {
     // Token transfers
     pub(crate) async fn insert_token_transfers(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
@@ -119,7 +119,7 @@ impl Database {
             let block_offset_i64 = entry.block_offset as i64;
 
             sqlx::query!(
-                "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns, block_hash, block_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns, block_hash, block_offset) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                 from_account,
                 to_account,
                 amount_i64,
@@ -138,7 +138,7 @@ impl Database {
     // Token approvals
     pub(crate) async fn insert_token_approvals(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
@@ -158,7 +158,7 @@ impl Database {
             let timestamp_i64 = entry.block_timestamp_ns as i64;
 
             sqlx::query!(
-                "INSERT INTO token_approvals (owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO token_approvals (owner_account, spender_account, amount_e9s, expires_at_ns, created_at_ns) VALUES ($1, $2, $3, $4, $5)",
                 approver,
                 spender,
                 amount_e9s,

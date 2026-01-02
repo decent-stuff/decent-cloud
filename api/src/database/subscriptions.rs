@@ -94,7 +94,7 @@ impl Database {
                       monthly_price_cents as "monthly_price_cents!",
                       trial_days as "trial_days!", features
                FROM subscription_plans
-               WHERE id = ?"#,
+               WHERE id = $1"#,
             plan_id
         )
         .fetch_optional(&self.pool)
@@ -114,7 +114,7 @@ impl Database {
                       monthly_price_cents as "monthly_price_cents!",
                       trial_days as "trial_days!", features
                FROM subscription_plans
-               WHERE stripe_price_id = ?"#,
+               WHERE stripe_price_id = $1"#,
             stripe_price_id
         )
         .fetch_optional(&self.pool)
@@ -130,7 +130,7 @@ impl Database {
             r#"SELECT subscription_plan_id, subscription_status,
                       subscription_stripe_id, subscription_current_period_end,
                       subscription_cancel_at_period_end
-               FROM accounts WHERE id = ?"#,
+               FROM accounts WHERE id = $1"#,
             account_id
         )
         .fetch_optional(&self.pool)
@@ -159,7 +159,7 @@ impl Database {
                 .unwrap_or_else(|| "active".to_string()),
             stripe_subscription_id: account_row.subscription_stripe_id,
             current_period_end: account_row.subscription_current_period_end,
-            cancel_at_period_end: account_row.subscription_cancel_at_period_end.unwrap_or(0) != 0,
+            cancel_at_period_end: account_row.subscription_cancel_at_period_end.unwrap_or(false),
             features,
         })
     }
@@ -174,22 +174,20 @@ impl Database {
         current_period_end: Option<i64>,
         cancel_at_period_end: bool,
     ) -> Result<()> {
-        let cancel_flag = if cancel_at_period_end { 1i64 } else { 0i64 };
-
         sqlx::query!(
             r#"UPDATE accounts SET
-               subscription_plan_id = ?,
-               subscription_status = ?,
-               subscription_stripe_id = ?,
-               subscription_current_period_end = ?,
-               subscription_cancel_at_period_end = ?,
-               updated_at = strftime('%s', 'now') * 1000000000
-               WHERE id = ?"#,
+               subscription_plan_id = $1,
+               subscription_status = $2,
+               subscription_stripe_id = $3,
+               subscription_current_period_end = $4,
+               subscription_cancel_at_period_end = $5,
+               updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT
+               WHERE id = $6"#,
             plan_id,
             status,
             stripe_subscription_id,
             current_period_end,
-            cancel_flag,
+            cancel_at_period_end,
             account_id
         )
         .execute(&self.pool)
@@ -201,9 +199,9 @@ impl Database {
     /// Link Stripe customer ID to account
     pub async fn set_stripe_customer_id(&self, account_id: &[u8], customer_id: &str) -> Result<()> {
         sqlx::query!(
-            r#"UPDATE accounts SET stripe_customer_id = ?,
-               updated_at = strftime('%s', 'now') * 1000000000
-               WHERE id = ?"#,
+            r#"UPDATE accounts SET stripe_customer_id = $1,
+               updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT
+               WHERE id = $2"#,
             customer_id,
             account_id
         )
@@ -216,7 +214,7 @@ impl Database {
     /// Get Stripe customer ID for account
     pub async fn get_stripe_customer_id(&self, account_id: &[u8]) -> Result<Option<String>> {
         let row = sqlx::query!(
-            r#"SELECT stripe_customer_id FROM accounts WHERE id = ?"#,
+            r#"SELECT stripe_customer_id FROM accounts WHERE id = $1"#,
             account_id
         )
         .fetch_optional(&self.pool)
@@ -231,7 +229,7 @@ impl Database {
         customer_id: &str,
     ) -> Result<Option<Vec<u8>>> {
         let row = sqlx::query!(
-            r#"SELECT id as "id!" FROM accounts WHERE stripe_customer_id = ?"#,
+            r#"SELECT id as "id!" FROM accounts WHERE stripe_customer_id = $1"#,
             customer_id
         )
         .fetch_optional(&self.pool)
@@ -250,7 +248,7 @@ impl Database {
             r#"INSERT INTO subscription_events
                (account_id, event_type, stripe_event_id, old_plan_id, new_plan_id,
                 stripe_subscription_id, stripe_invoice_id, amount_cents, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
             account_id,
             input.event_type,
             input.stripe_event_id,
@@ -273,7 +271,7 @@ impl Database {
         let row = sqlx::query!(
             r#"SELECT COUNT(*) as "count!: i64" FROM contract_sign_requests
                WHERE requester_pubkey IN (
-                   SELECT public_key FROM account_public_keys WHERE account_id = ? AND is_active = 1
+                   SELECT public_key FROM account_public_keys WHERE account_id = $1 AND is_active = 1
                )
                AND status IN ('active', 'provisioned', 'provisioning', 'accepted', 'pending')"#,
             account_id
@@ -304,9 +302,9 @@ impl Database {
         stripe_price_id: &str,
     ) -> Result<()> {
         sqlx::query!(
-            r#"UPDATE subscription_plans SET stripe_price_id = ?,
-               updated_at = strftime('%s', 'now') * 1000000000
-               WHERE id = ?"#,
+            r#"UPDATE subscription_plans SET stripe_price_id = $1,
+               updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000000000)::BIGINT
+               WHERE id = $2"#,
             stripe_price_id,
             plan_id
         )
@@ -329,7 +327,7 @@ mod tests {
         status: &str,
     ) {
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES (?, ?, 'ssh-key', 'contact', ?, 'off-1', 1000, 'memo', 0, ?, 'icpay', 'succeeded', 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 0, $4, 'icpay', 'succeeded', 'usd')",
             contract_id,
             requester_pubkey,
             provider_pubkey,

@@ -152,7 +152,7 @@ impl Database {
 
         // Insert account
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        sqlx::query("INSERT INTO accounts (id, username, email) VALUES (?, ?, ?)")
+        sqlx::query("INSERT INTO accounts (id, username, email) VALUES ($1, $2, $3)")
             .bind(&account_id)
             .bind(username)
             .bind(email)
@@ -162,7 +162,7 @@ impl Database {
         // Insert initial public key
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES ($1, $2, $3)",
         )
         .bind(&key_id)
         .bind(&account_id)
@@ -193,7 +193,7 @@ impl Database {
 
         // Store token
         sqlx::query(
-            "INSERT INTO email_verification_tokens (token, account_id, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO email_verification_tokens (token, account_id, email, created_at, expires_at) VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(&token)
         .bind(account_id)
@@ -213,7 +213,7 @@ impl Database {
         account_id: &[u8],
     ) -> Result<Option<i64>> {
         let result: Option<(i64,)> = sqlx::query_as(
-            "SELECT created_at FROM email_verification_tokens WHERE account_id = ? ORDER BY created_at DESC LIMIT 1"
+            "SELECT created_at FROM email_verification_tokens WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1"
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -233,7 +233,7 @@ impl Database {
         let result = sqlx::query!(
             r#"SELECT account_id, expires_at, used_at
                FROM email_verification_tokens
-               WHERE token = ?"#,
+               WHERE token = $1"#,
             token
         )
         .fetch_optional(&mut *tx)
@@ -260,7 +260,7 @@ impl Database {
 
         // Mark token as used
         sqlx::query!(
-            "UPDATE email_verification_tokens SET used_at = ? WHERE token = ?",
+            "UPDATE email_verification_tokens SET used_at = $1 WHERE token = $2",
             now,
             token
         )
@@ -269,7 +269,7 @@ impl Database {
 
         // Update email_verified flag on account
         sqlx::query!(
-            "UPDATE accounts SET email_verified = 1 WHERE id = ?",
+            "UPDATE accounts SET email_verified = 1 WHERE id = $1",
             row.account_id
         )
         .execute(&mut *tx)
@@ -284,7 +284,7 @@ impl Database {
     pub async fn get_account(&self, account_id: &[u8]) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
-             FROM accounts WHERE id = ?",
+             FROM accounts WHERE id = $1",
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -297,7 +297,7 @@ impl Database {
     pub async fn get_account_by_username(&self, username: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
-             FROM accounts WHERE LOWER(username) = LOWER(?)",
+             FROM accounts WHERE LOWER(username) = LOWER($1)",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -359,7 +359,7 @@ impl Database {
         let keys = sqlx::query_as::<_, AccountPublicKey>(
             "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
-             WHERE account_id = ?
+             WHERE account_id = $1
              ORDER BY added_at ASC"
         )
         .bind(account_id)
@@ -377,7 +377,7 @@ impl Database {
         let keys = sqlx::query_as::<_, AccountPublicKey>(
             "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
-             WHERE account_id = ? AND is_active = 1
+             WHERE account_id = $1 AND is_active = 1
              ORDER BY added_at ASC"
         )
         .bind(account_id)
@@ -390,7 +390,7 @@ impl Database {
     /// Get account ID by public key
     pub async fn get_account_id_by_public_key(&self, public_key: &[u8]) -> Result<Option<Vec<u8>>> {
         let result: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT account_id FROM account_public_keys WHERE public_key = ? AND is_active = 1",
+            "SELECT account_id FROM account_public_keys WHERE public_key = $1 AND is_active = 1",
         )
         .bind(public_key)
         .fetch_optional(&self.pool)
@@ -418,7 +418,7 @@ impl Database {
         // Insert new key
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES ($1, $2, $3)",
         )
         .bind(&key_id)
         .bind(account_id)
@@ -430,7 +430,7 @@ impl Database {
         let key = sqlx::query_as::<_, AccountPublicKey>(
             "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
-             WHERE id = ?"
+             WHERE id = $1"
         )
         .bind(&key_id)
         .fetch_one(&self.pool)
@@ -449,7 +449,7 @@ impl Database {
 
         // Get the key to check account_id
         let key: Option<(Vec<u8>,)> =
-            sqlx::query_as("SELECT account_id FROM account_public_keys WHERE id = ?")
+            sqlx::query_as("SELECT account_id FROM account_public_keys WHERE id = $1")
                 .bind(key_id)
                 .fetch_optional(&self.pool)
                 .await?;
@@ -465,8 +465,8 @@ impl Database {
         // Disable the key
         sqlx::query(
             "UPDATE account_public_keys
-             SET is_active = 0, disabled_at = ?, disabled_by_key_id = ?
-             WHERE id = ?",
+             SET is_active = 0, disabled_at = $1, disabled_by_key_id = $2
+             WHERE id = $3",
         )
         .bind(now)
         .bind(disabled_by_key_id)
@@ -489,7 +489,7 @@ impl Database {
 
         let result: Option<(i64,)> = sqlx::query_as(
             "SELECT 1 FROM signature_audit
-             WHERE nonce = ? AND created_at > ?
+             WHERE nonce = $1 AND created_at > $2
              LIMIT 1",
         )
         .bind(nonce_bytes)
@@ -519,7 +519,7 @@ impl Database {
         sqlx::query(
             "INSERT INTO signature_audit
              (account_id, action, payload, signature, public_key, timestamp, nonce, is_admin_action)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(account_id)
         .bind(action)
@@ -541,7 +541,7 @@ impl Database {
         let cutoff_time = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
             - (retention_days * 24 * 60 * 60 * 1_000_000_000);
 
-        let result = sqlx::query("DELETE FROM signature_audit WHERE created_at < ?")
+        let result = sqlx::query("DELETE FROM signature_audit WHERE created_at < $1")
             .bind(cutoff_time)
             .execute(&self.pool)
             .await?;
@@ -605,7 +605,7 @@ impl Database {
         key_id: &[u8],
         device_name: Option<&str>,
     ) -> Result<AccountPublicKey> {
-        sqlx::query("UPDATE account_public_keys SET device_name = ? WHERE id = ?")
+        sqlx::query("UPDATE account_public_keys SET device_name = $1 WHERE id = $2")
             .bind(device_name)
             .bind(key_id)
             .execute(&self.pool)
@@ -614,7 +614,7 @@ impl Database {
         let key = sqlx::query_as::<_, AccountPublicKey>(
             "SELECT id, account_id, public_key, is_active, added_at, disabled_at, disabled_by_key_id, device_name
              FROM account_public_keys
-             WHERE id = ?",
+             WHERE id = $1",
         )
         .bind(key_id)
         .fetch_optional(&self.pool)
@@ -636,8 +636,8 @@ impl Database {
 
         sqlx::query(
             "UPDATE accounts
-             SET display_name = ?, bio = ?, avatar_url = ?, profile_updated_at = ?
-             WHERE id = ?",
+             SET display_name = $1, bio = $2, avatar_url = $3, profile_updated_at = $4
+             WHERE id = $5",
         )
         .bind(display_name)
         .bind(bio)
@@ -657,8 +657,8 @@ impl Database {
     pub async fn update_account_email(&self, account_id: &[u8], email: &str) -> Result<Account> {
         sqlx::query(
             "UPDATE accounts
-             SET email = ?, email_verified = 0
-             WHERE id = ?",
+             SET email = $1, email_verified = 0
+             WHERE id = $2",
         )
         .bind(email)
         .bind(account_id)
@@ -681,7 +681,7 @@ impl Database {
         let oauth_id = uuid::Uuid::new_v4().as_bytes().to_vec();
 
         sqlx::query(
-            "INSERT INTO oauth_accounts (id, account_id, provider, external_id, email) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO oauth_accounts (id, account_id, provider, external_id, email) VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(&oauth_id)
         .bind(account_id)
@@ -700,7 +700,7 @@ impl Database {
     pub async fn get_oauth_account(&self, oauth_id: &[u8]) -> Result<Option<OAuthAccount>> {
         let oauth_account = sqlx::query_as::<_, OAuthAccount>(
             "SELECT id, account_id, provider, external_id, email, created_at
-             FROM oauth_accounts WHERE id = ?",
+             FROM oauth_accounts WHERE id = $1",
         )
         .bind(oauth_id)
         .fetch_optional(&self.pool)
@@ -717,7 +717,7 @@ impl Database {
     ) -> Result<Option<OAuthAccount>> {
         let oauth_account = sqlx::query_as::<_, OAuthAccount>(
             "SELECT id, account_id, provider, external_id, email, created_at
-             FROM oauth_accounts WHERE provider = ? AND external_id = ?",
+             FROM oauth_accounts WHERE provider = $1 AND external_id = $2",
         )
         .bind(provider)
         .bind(external_id)
@@ -736,7 +736,7 @@ impl Database {
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
-             FROM accounts WHERE email = ?",
+             FROM accounts WHERE email = $1",
         )
         .bind(email)
         .fetch_optional(&self.pool)
@@ -753,7 +753,7 @@ impl Database {
     ) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
-             FROM accounts WHERE chatwoot_user_id = ?",
+             FROM accounts WHERE chatwoot_user_id = $1",
         )
         .bind(chatwoot_user_id)
         .fetch_optional(&self.pool)
@@ -767,8 +767,8 @@ impl Database {
     pub async fn update_last_login_by_public_key(&self, public_key: &[u8]) -> Result<bool> {
         let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let result = sqlx::query(
-            "UPDATE accounts SET last_login_at = ?
-             WHERE id IN (SELECT account_id FROM account_public_keys WHERE public_key = ? AND is_active = 1)",
+            "UPDATE accounts SET last_login_at = $1
+             WHERE id IN (SELECT account_id FROM account_public_keys WHERE public_key = $2 AND is_active = 1)",
         )
         .bind(now)
         .bind(public_key)
@@ -797,7 +797,7 @@ impl Database {
         // Insert account with email and verified status (OAuth providers have already verified the email)
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO accounts (id, username, email, auth_provider, email_verified) VALUES (?, ?, ?, ?, 1)",
+            "INSERT INTO accounts (id, username, email, auth_provider, email_verified) VALUES ($1, $2, $3, $4, 1)",
         )
         .bind(&account_id)
         .bind(username)
@@ -809,7 +809,7 @@ impl Database {
         // Insert initial public key
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES ($1, $2, $3)",
         )
         .bind(&key_id)
         .bind(&account_id)
@@ -820,7 +820,7 @@ impl Database {
         // Create OAuth account link
         let oauth_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO oauth_accounts (id, account_id, provider, external_id, email) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO oauth_accounts (id, account_id, provider, external_id, email) VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(&oauth_id)
         .bind(&account_id)
@@ -870,7 +870,7 @@ impl Database {
     pub async fn set_admin_status(&self, username: &str, is_admin: bool) -> Result<()> {
         let is_admin_value = if is_admin { 1 } else { 0 };
         let result =
-            sqlx::query("UPDATE accounts SET is_admin = ? WHERE LOWER(username) = LOWER(?)")
+            sqlx::query("UPDATE accounts SET is_admin = $1 WHERE LOWER(username) = LOWER($2)")
                 .bind(is_admin_value)
                 .bind(username)
                 .execute(&self.pool)
@@ -888,7 +888,7 @@ impl Database {
     pub async fn list_all_accounts(&self, limit: i64, offset: i64) -> Result<Vec<Account>> {
         let accounts = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
-             FROM accounts ORDER BY username ASC LIMIT ? OFFSET ?"
+             FROM accounts ORDER BY username ASC LIMIT $1 OFFSET $2"
         )
         .bind(limit)
         .bind(offset)
@@ -922,7 +922,7 @@ impl Database {
     /// Admin: Set email verification status for an account
     pub async fn set_email_verified(&self, account_id: &[u8], verified: bool) -> Result<()> {
         let verified_value = if verified { 1 } else { 0 };
-        let result = sqlx::query("UPDATE accounts SET email_verified = ? WHERE id = ?")
+        let result = sqlx::query("UPDATE accounts SET email_verified = $1 WHERE id = $2")
             .bind(verified_value)
             .bind(account_id)
             .execute(&self.pool)
@@ -941,7 +941,7 @@ impl Database {
         account_id: &[u8],
         chatwoot_user_id: i64,
     ) -> Result<()> {
-        let result = sqlx::query("UPDATE accounts SET chatwoot_user_id = ? WHERE id = ?")
+        let result = sqlx::query("UPDATE accounts SET chatwoot_user_id = $1 WHERE id = $2")
             .bind(chatwoot_user_id)
             .bind(account_id)
             .execute(&self.pool)
@@ -963,7 +963,7 @@ impl Database {
             r#"SELECT a.chatwoot_user_id as "chatwoot_user_id: i64"
                FROM accounts a
                JOIN account_public_keys pk ON pk.account_id = a.id
-               WHERE pk.public_key = ? AND pk.is_active = 1"#,
+               WHERE pk.public_key = $1 AND pk.is_active = 1"#,
             public_key
         )
         .fetch_optional(&self.pool)
@@ -976,7 +976,7 @@ impl Database {
     pub async fn get_billing_settings(&self, account_id: &[u8]) -> Result<BillingSettings> {
         let row = sqlx::query(
             "SELECT billing_address, billing_vat_id, billing_country_code
-             FROM accounts WHERE id = ?",
+             FROM accounts WHERE id = $1",
         )
         .bind(account_id)
         .fetch_one(&self.pool)
@@ -997,8 +997,8 @@ impl Database {
     ) -> Result<()> {
         let result = sqlx::query(
             "UPDATE accounts
-             SET billing_address = ?, billing_vat_id = ?, billing_country_code = ?
-             WHERE id = ?",
+             SET billing_address = $1, billing_vat_id = $2, billing_country_code = $3
+             WHERE id = $4",
         )
         .bind(&settings.billing_address)
         .bind(&settings.billing_vat_id)
@@ -1077,7 +1077,7 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        sqlx::query("INSERT INTO accounts (id, username, email) VALUES (?, ?, ?)")
+        sqlx::query("INSERT INTO accounts (id, username, email) VALUES ($1, $2, $3)")
             .bind(&account_id)
             .bind(username)
             .bind(email)
@@ -1086,7 +1086,7 @@ impl Database {
 
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(
-            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES (?, ?, ?)",
+            "INSERT INTO account_public_keys (id, account_id, public_key) VALUES ($1, $2, $3)",
         )
         .bind(&key_id)
         .bind(&account_id)
@@ -1130,7 +1130,7 @@ impl Database {
         account_id: &[u8],
         email: Option<&str>,
     ) -> Result<()> {
-        let result = sqlx::query("UPDATE accounts SET email = ?, email_verified = 0 WHERE id = ?")
+        let result = sqlx::query("UPDATE accounts SET email = $1, email_verified = 0 WHERE id = $2")
             .bind(email)
             .bind(account_id)
             .execute(&self.pool)
@@ -1151,13 +1151,13 @@ impl Database {
 
         // Get all public keys for this account to find offerings
         let pubkeys: Vec<Vec<u8>> =
-            sqlx::query_scalar("SELECT public_key FROM account_public_keys WHERE account_id = ?")
+            sqlx::query_scalar("SELECT public_key FROM account_public_keys WHERE account_id = $1")
                 .bind(account_id)
                 .fetch_all(&mut *tx)
                 .await?;
 
         // Delete offerings (by account_id - covers both pubkey and account_id FK)
-        let result = sqlx::query("DELETE FROM provider_offerings WHERE account_id = ?")
+        let result = sqlx::query("DELETE FROM provider_offerings WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await?;
@@ -1165,7 +1165,7 @@ impl Database {
         // Also delete any offerings by pubkey (for backwards compatibility / incomplete backfill)
         for pubkey in &pubkeys {
             let result = sqlx::query(
-                "DELETE FROM provider_offerings WHERE pubkey = ? AND account_id IS NULL",
+                "DELETE FROM provider_offerings WHERE pubkey = $1 AND account_id IS NULL",
             )
             .bind(pubkey)
             .execute(&mut *tx)
@@ -1175,7 +1175,7 @@ impl Database {
 
         // Count contracts where user is requester (contracts reference pubkeys)
         let requester_contracts: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE requester_account_id = ?",
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE requester_account_id = $1",
         )
         .bind(account_id)
         .fetch_one(&mut *tx)
@@ -1184,7 +1184,7 @@ impl Database {
 
         // Count contracts where user is provider
         let provider_contracts: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_account_id = ?",
+            "SELECT COUNT(*) FROM contract_sign_requests WHERE provider_account_id = $1",
         )
         .bind(account_id)
         .fetch_one(&mut *tx)
@@ -1194,21 +1194,21 @@ impl Database {
         // Note: We don't delete contracts - they are historical records
         // Instead, we nullify the account references
         sqlx::query(
-            "UPDATE contract_sign_requests SET requester_account_id = NULL WHERE requester_account_id = ?",
+            "UPDATE contract_sign_requests SET requester_account_id = NULL WHERE requester_account_id = $1",
         )
         .bind(account_id)
         .execute(&mut *tx)
         .await?;
 
         sqlx::query(
-            "UPDATE contract_sign_requests SET provider_account_id = NULL WHERE provider_account_id = ?",
+            "UPDATE contract_sign_requests SET provider_account_id = NULL WHERE provider_account_id = $1",
         )
         .bind(account_id)
         .execute(&mut *tx)
         .await?;
 
         // Delete provider profiles (by account_id - covers both pubkey and account_id FK)
-        let result = sqlx::query("DELETE FROM provider_profiles WHERE account_id = ?")
+        let result = sqlx::query("DELETE FROM provider_profiles WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await?;
@@ -1218,7 +1218,7 @@ impl Database {
         // Also delete any profiles by pubkey (for backwards compatibility / incomplete backfill)
         for pubkey in &pubkeys {
             let result = sqlx::query(
-                "DELETE FROM provider_profiles WHERE pubkey = ? AND account_id IS NULL",
+                "DELETE FROM provider_profiles WHERE pubkey = $1 AND account_id IS NULL",
             )
             .bind(pubkey)
             .execute(&mut *tx)
@@ -1230,64 +1230,64 @@ impl Database {
 
         // Delete public keys (count them first)
         let keys_count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM account_public_keys WHERE account_id = ?")
+            sqlx::query_as("SELECT COUNT(*) FROM account_public_keys WHERE account_id = $1")
                 .bind(account_id)
                 .fetch_one(&mut *tx)
                 .await?;
         summary.public_keys_deleted = keys_count.0;
 
-        sqlx::query("DELETE FROM account_public_keys WHERE account_id = ?")
+        sqlx::query("DELETE FROM account_public_keys WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await?;
 
         // Delete email verification tokens (CASCADE should handle, but be explicit)
-        sqlx::query("DELETE FROM email_verification_tokens WHERE account_id = ?")
+        sqlx::query("DELETE FROM email_verification_tokens WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await?;
 
         // Delete oauth accounts
-        sqlx::query("DELETE FROM oauth_accounts WHERE account_id = ?")
+        sqlx::query("DELETE FROM oauth_accounts WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await?;
 
         // Delete account contacts, socials, external keys (if tables exist)
         // These have ON DELETE CASCADE but we're explicit
-        sqlx::query("DELETE FROM account_contacts WHERE account_id = ?")
+        sqlx::query("DELETE FROM account_contacts WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await
             .ok(); // Ignore if table doesn't exist
 
-        sqlx::query("DELETE FROM account_socials WHERE account_id = ?")
+        sqlx::query("DELETE FROM account_socials WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await
             .ok();
 
-        sqlx::query("DELETE FROM account_external_keys WHERE account_id = ?")
+        sqlx::query("DELETE FROM account_external_keys WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await
             .ok();
 
         // Delete recovery tokens
-        sqlx::query("DELETE FROM recovery_tokens WHERE account_id = ?")
+        sqlx::query("DELETE FROM recovery_tokens WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await
             .ok();
 
         // Delete signature audit records (FK without cascade)
-        sqlx::query("DELETE FROM signature_audit WHERE account_id = ?")
+        sqlx::query("DELETE FROM signature_audit WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await?;
 
         // Finally delete the account itself
-        let result = sqlx::query("DELETE FROM accounts WHERE id = ?")
+        let result = sqlx::query("DELETE FROM accounts WHERE id = $1")
             .bind(account_id)
             .execute(&mut *tx)
             .await?;

@@ -54,7 +54,7 @@ impl Database {
 
         let id = sqlx::query_scalar!(
             r#"INSERT INTO reseller_relationships (reseller_pubkey, external_provider_pubkey, commission_percent, status, created_at_ns)
-               VALUES (?, ?, ?, 'active', ?)
+               VALUES ($1, $2, $3, 'active', $4)
                RETURNING id"#,
             reseller_pubkey,
             external_provider_pubkey,
@@ -87,7 +87,7 @@ impl Database {
         if let Some(pct) = commission_percent {
             if let Some(st) = status {
                 sqlx::query!(
-                    "UPDATE reseller_relationships SET commission_percent = ?, status = ?, updated_at_ns = ? WHERE id = ?",
+                    "UPDATE reseller_relationships SET commission_percent = $1, status = $2, updated_at_ns = $3 WHERE id = $4",
                     pct,
                     st,
                     updated_at_ns,
@@ -97,7 +97,7 @@ impl Database {
                 .await?;
             } else {
                 sqlx::query!(
-                    "UPDATE reseller_relationships SET commission_percent = ?, updated_at_ns = ? WHERE id = ?",
+                    "UPDATE reseller_relationships SET commission_percent = $1, updated_at_ns = $2 WHERE id = $3",
                     pct,
                     updated_at_ns,
                     id
@@ -107,7 +107,7 @@ impl Database {
             }
         } else if let Some(st) = status {
             sqlx::query!(
-                "UPDATE reseller_relationships SET status = ?, updated_at_ns = ? WHERE id = ?",
+                "UPDATE reseller_relationships SET status = $1, updated_at_ns = $2 WHERE id = $3",
                 st,
                 updated_at_ns,
                 id
@@ -125,7 +125,7 @@ impl Database {
     pub async fn get_reseller_relationship(&self, id: i64) -> Result<Option<ResellerRelationship>> {
         let relationship = sqlx::query_as!(
             ResellerRelationship,
-            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE id = ?"#,
+            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE id = $1"#,
             id
         )
         .fetch_optional(&self.pool)
@@ -143,7 +143,7 @@ impl Database {
     ) -> Result<Option<ResellerRelationship>> {
         let relationship = sqlx::query_as!(
             ResellerRelationship,
-            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?"#,
+            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = $1 AND external_provider_pubkey = $2"#,
             reseller_pubkey,
             external_provider_pubkey
         )
@@ -172,7 +172,7 @@ impl Database {
 
         // Get current values
         let current = sqlx::query!(
-            "SELECT commission_percent, status FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+            "SELECT commission_percent, status FROM reseller_relationships WHERE reseller_pubkey = $1 AND external_provider_pubkey = $2",
             reseller_pubkey,
             external_provider_pubkey
         )
@@ -183,8 +183,8 @@ impl Database {
         let new_commission = commission_percent.unwrap_or(current.commission_percent);
         let new_status = status.unwrap_or(&current.status);
 
-        let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
-            "UPDATE reseller_relationships SET commission_percent = ?, status = ?, updated_at_ns = ? WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+        let result = sqlx::query!(
+            "UPDATE reseller_relationships SET commission_percent = $1, status = $2, updated_at_ns = $3 WHERE reseller_pubkey = $4 AND external_provider_pubkey = $5",
             new_commission,
             new_status,
             updated_at_ns,
@@ -207,8 +207,8 @@ impl Database {
         reseller_pubkey: &[u8],
         external_provider_pubkey: &[u8],
     ) -> Result<()> {
-        let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
-            "DELETE FROM reseller_relationships WHERE reseller_pubkey = ? AND external_provider_pubkey = ?",
+        let result = sqlx::query!(
+            "DELETE FROM reseller_relationships WHERE reseller_pubkey = $1 AND external_provider_pubkey = $2",
             reseller_pubkey,
             external_provider_pubkey
         )
@@ -229,7 +229,7 @@ impl Database {
     ) -> Result<Vec<ResellerRelationship>> {
         let relationships = sqlx::query_as!(
             ResellerRelationship,
-            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = ? ORDER BY created_at_ns DESC"#,
+            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = $1 ORDER BY created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -240,10 +240,9 @@ impl Database {
 
     /// Delete a reseller relationship
     pub async fn delete_reseller_relationship(&self, id: i64) -> Result<()> {
-        let result: sqlx::sqlite::SqliteQueryResult =
-            sqlx::query!("DELETE FROM reseller_relationships WHERE id = ?", id)
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query!("DELETE FROM reseller_relationships WHERE id = $1", id)
+            .execute(&self.pool)
+            .await?;
 
         if result.rows_affected() == 0 {
             anyhow::bail!("Reseller relationship not found");
@@ -268,7 +267,7 @@ impl Database {
 
         let id = sqlx::query_scalar!(
             r#"INSERT INTO reseller_orders (contract_id, reseller_pubkey, external_provider_pubkey, offering_id, base_price_e9s, commission_e9s, total_paid_e9s, status, created_at_ns)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
                RETURNING id"#,
             contract_id,
             reseller_pubkey,
@@ -289,7 +288,7 @@ impl Database {
     pub async fn get_reseller_order(&self, contract_id: &[u8]) -> Result<Option<ResellerOrder>> {
         let order = sqlx::query_as!(
             ResellerOrder,
-            r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status as "status!", created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE contract_id = ?"#,
+            r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status as "status!", created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE contract_id = $1"#,
             contract_id
         )
         .fetch_optional(&self.pool)
@@ -307,7 +306,7 @@ impl Database {
         let orders = if let Some(status) = status_filter {
             sqlx::query_as!(
                 ResellerOrder,
-                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = ? AND status = ? ORDER BY created_at_ns DESC"#,
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = $1 AND status = $2 ORDER BY created_at_ns DESC"#,
                 pubkey,
                 status
             )
@@ -316,7 +315,7 @@ impl Database {
         } else {
             sqlx::query_as!(
                 ResellerOrder,
-                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = ? ORDER BY created_at_ns DESC"#,
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = $1 ORDER BY created_at_ns DESC"#,
                 pubkey
             )
             .fetch_all(&self.pool)
@@ -336,7 +335,7 @@ impl Database {
         let orders = if let Some(status) = status_filter {
             sqlx::query_as!(
                 ResellerOrder,
-                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = ? AND status = ? ORDER BY created_at_ns DESC"#,
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = $1 AND status = $2 ORDER BY created_at_ns DESC"#,
                 pubkey,
                 status
             )
@@ -345,7 +344,7 @@ impl Database {
         } else {
             sqlx::query_as!(
                 ResellerOrder,
-                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = ? ORDER BY created_at_ns DESC"#,
+                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = $1 ORDER BY created_at_ns DESC"#,
                 pubkey
             )
             .fetch_all(&self.pool)
@@ -364,8 +363,8 @@ impl Database {
     ) -> Result<()> {
         let fulfilled_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
-        let result: sqlx::sqlite::SqliteQueryResult = sqlx::query!(
-            "UPDATE reseller_orders SET external_order_id = ?, external_order_details = ?, status = 'fulfilled', fulfilled_at_ns = ? WHERE contract_id = ?",
+        let result = sqlx::query!(
+            "UPDATE reseller_orders SET external_order_id = $1, external_order_details = $2, status = 'fulfilled', fulfilled_at_ns = $3 WHERE contract_id = $4",
             external_order_id,
             external_order_details,
             fulfilled_at_ns,

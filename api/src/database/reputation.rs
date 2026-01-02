@@ -7,7 +7,7 @@ impl Database {
     // Reputation changes
     pub(crate) async fn insert_reputation_changes(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
@@ -18,7 +18,7 @@ impl Database {
             let delta_amount = change.changes()[0].1; // Get delta amount from first change
 
             sqlx::query!(
-                "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES (?, ?, ?, ?)",
+                "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, $2, $3, $4)",
                 entry.key,
                 delta_amount,
                 "", // Reason is not stored in structure, use empty string
@@ -34,7 +34,7 @@ impl Database {
     // Reputation aging
     pub(crate) async fn insert_reputation_aging(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         entries: &[LedgerEntryData],
     ) -> Result<()> {
         for entry in entries {
@@ -45,7 +45,7 @@ impl Database {
             let aging_factor = age.reductions_ppm() as i64;
 
             sqlx::query!(
-                "INSERT INTO reputation_aging (block_timestamp_ns, aging_factor_ppm) VALUES (?, ?)",
+                "INSERT INTO reputation_aging (block_timestamp_ns, aging_factor_ppm) VALUES ($1, $2)",
                 timestamp_i64,
                 aging_factor
             )
