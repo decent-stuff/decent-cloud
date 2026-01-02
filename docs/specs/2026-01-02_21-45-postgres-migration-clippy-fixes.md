@@ -6,7 +6,13 @@
 
 ## Summary
 
-Systematically fix all `cargo clippy --tests` warnings and errors that have arisen during the SQLite to PostgreSQL migration. The database migration has introduced fundamental breaking changes across the codebase that need to be resolved methodically.
+Systematically fix all `cargo make` warnings and errors that have arisen during the SQLite to PostgreSQL migration. This includes:
+
+1. **Code fixes**: Database-specific syntax differences, type system mismatches, query incompatibilities
+2. **Test infrastructure**: Automated PostgreSQL test instance setup via cargo make (replacing SQLite-based sqlx-prepare)
+3. **Build system updates**: Update Makefile.toml to automatically manage test PostgreSQL lifecycle
+
+The database migration has introduced fundamental breaking changes across the codebase that need to be resolved methodically, along with the build tooling that depends on the database.
 
 ## Problem Statement
 
@@ -18,7 +24,7 @@ We are migrating from SQLite to PostgreSQL, and many things are fundamentally br
 4. **Clippy warnings**: The migration has introduced new clippy warnings and errors
 5. **Test failures**: Tests that passed with SQLite now fail with PostgreSQL
 
-The codebase currently has numerous `cargo clippy --tests` failures that must be systematically resolved.
+The codebase currently has numerous `cargo clippy --tests` failures that must be systematically resolved. Additionally, the build system (`cargo make`) still uses SQLite-based `sqlx-prepare` and needs to be updated to use PostgreSQL for all testing and preparation tasks.
 
 ## Root Causes
 
@@ -39,6 +45,115 @@ The codebase currently has numerous `cargo clippy --tests` failures that must be
 5. **Dead code**: Migration-specific dead code accumulated
 
 ## Approach
+
+### Phase 0: Test Infrastructure (PostgreSQL Automation)
+
+**CRITICAL PREREQUISITE**: Before fixing code issues, update the build system to automatically provide PostgreSQL for testing.
+
+Reference implementation exists in `agent/docker-compose.yml` which sets up:
+- PostgreSQL 16-alpine container
+- Test database (user: test, password: test, db: test)
+- Network connectivity for tests
+
+**Tasks:**
+
+1. **Create root-level docker-compose.yml for test PostgreSQL:**
+   ```yaml
+   services:
+     postgres-test:
+       image: postgres:16-alpine
+       environment:
+         POSTGRES_USER: test
+         POSTGRES_PASSWORD: test
+         POSTGRES_DB: test
+       ports:
+         - "5432:5432"
+       healthcheck:
+         test: ["CMD-SHELL", "pg_isready -U test"]
+         interval: 2s
+         timeout: 5s
+         retries: 10
+   ```
+
+2. **Update Makefile.toml tasks:**
+
+   Replace `sqlx-prepare` task:
+   ```toml
+   [tasks.postgres-start]
+   script = '''
+   #!/usr/bin/env bash
+   set -eEuo pipefail
+
+   # Start PostgreSQL if not running
+   if ! docker ps | grep -q decent-cloud-postgres-test; then
+       docker compose -f docker-compose.test.yml up -d postgres-test
+       # Wait for PostgreSQL to be ready
+       timeout 60 bash -c 'until docker compose -f docker-compose.test.yml exec -T postgres-test pg_isready -U test; do sleep 1; done'
+   fi
+   '''
+
+   [tasks.postgres-stop]
+   script = '''
+   #!/usr/bin/env bash
+   set -eEuo pipefail
+
+   docker compose -f docker-compose.test.yml down
+   '''
+
+   [tasks.sqlx-prepare]
+   dependencies = ["postgres-start"]
+   script = '''
+   #!/usr/bin/env bash
+   set -eEuo pipefail
+
+   unset SQLX_OFFLINE
+   export DATABASE_URL="postgres://test:test@localhost:5432/test"
+   docker compose -f docker-compose.test.yml exec -T postgres-test psql -U test -d test -f - < api/migrations_pg/base.sql
+   cargo sqlx prepare --workspace -- --tests
+   '''
+   ```
+
+   Update task dependencies:
+   ```toml
+   [tasks.clippy]
+   dependencies = ["sqlx-prepare", "dfx-start"]
+
+   [tasks.build]
+   dependencies = ["sqlx-prepare", "dfx-start"]
+
+   [tasks.test]
+   dependencies = ["sqlx-prepare", "dfx-start", "build", "canister"]
+
+   [tasks.all]
+   dependencies = [
+       "postgres-start",  # Add before other tasks
+       "format",
+       "dfx-start",
+       "canister",
+       "clippy",
+       "clippy-canister",
+       "build",
+       "test",
+       "website-check",
+       "website-build",
+       "dfx-stop",
+       "postgres-stop",  # Cleanup at end
+   ]
+   ```
+
+3. **Verify automatic setup:**
+   - `cargo make postgres-start` should start PostgreSQL container
+   - `cargo make sqlx-prepare` should use PostgreSQL (not SQLite)
+   - `cargo make clippy` should work with PostgreSQL offline mode
+   - `cargo make` (all tasks) should manage PostgreSQL lifecycle automatically
+
+**Success criteria for Phase 0:**
+- ✅ `docker-compose.test.yml` creates PostgreSQL test instance
+- ✅ `cargo make` starts PostgreSQL automatically before tests
+- ✅ `cargo make` stops PostgreSQL after all tasks complete
+- ✅ `sqlx-prepare` uses PostgreSQL migrations from `api/migrations_pg/`
+- ✅ Tests run against PostgreSQL (not SQLite)
+- ✅ No manual PostgreSQL setup required for developers
 
 ### Phase 1: Current State Assessment
 
@@ -153,6 +268,13 @@ Based on the workspace structure, these crates likely need fixes:
 
 ## Success Criteria
 
+### Infrastructure
+- ✅ Test PostgreSQL container starts automatically via `cargo make`
+- ✅ `sqlx-prepare` uses PostgreSQL (not SQLite)
+- ✅ `cargo make` manages PostgreSQL lifecycle (start/stop)
+- ✅ No manual database setup required
+
+### Code Quality
 - Zero `cargo clippy --tests` warnings across all crates
 - Zero `cargo clippy --tests` errors across all crates
 - All tests pass with PostgreSQL
@@ -162,6 +284,15 @@ Based on the workspace structure, these crates likely need fixes:
 - Type-safe queries with proper annotations
 
 ## Execution Log
+
+### Phase 0: Test Infrastructure
+- **Status:** Pending
+- **Tasks:**
+  - Create `docker-compose.test.yml` with PostgreSQL 16-alpine
+  - Update Makefile.toml with postgres-start, postgres-stop tasks
+  - Replace sqlx-prepare to use PostgreSQL
+  - Update task dependencies in Makefile.toml
+  - Verify `cargo make` automatically manages PostgreSQL
 
 ### Assessment Phase
 - **Status:** Pending
