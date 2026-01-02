@@ -399,7 +399,7 @@
 							{#if offering.resolved_pool_name}
 								<span class="text-primary-400 font-medium">→ {offering.resolved_pool_name}</span>
 							{:else}
-								<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><Icon name="alert" size={12} /> No pool</span>
+								<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><Icon name="alert" size={12} class="text-amber-400" /> No pool</span>
 							{/if}
 						</div>
 						{#if offering.description}
@@ -413,8 +413,8 @@
 		<!-- Empty State (if no offerings) -->
 		{#if offerings.length === 0}
 			<div class="text-center py-16">
-				<div class="flex justify-center mb-4 text-neutral-600">
-					<Icon name="package" size={56} />
+				<div class="flex justify-center mb-4">
+					<Icon name="package" size={56} class="text-neutral-600" />
 				</div>
 				<h3 class="text-2xl font-bold text-white mb-2">No Offerings Yet</h3>
 				<p class="text-neutral-500 mb-6">Create your first cloud service offering to get started</p>

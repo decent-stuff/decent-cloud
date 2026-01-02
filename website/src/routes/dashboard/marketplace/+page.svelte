@@ -437,11 +437,11 @@
 						class="flex items-center gap-2 md:cursor-default"
 					>
 						<span class="text-white font-medium text-sm">Filters</span>
-						<span class="md:hidden text-neutral-500">
+						<span class="md:hidden">
 							{#if showFilters}
-								<Icon name="chevron-up" size={14} />
+								<Icon name="chevron-up" size={14} class="text-neutral-500" />
 							{:else}
-								<Icon name="chevron-down" size={14} />
+								<Icon name="chevron-down" size={14} class="text-neutral-500" />
 							{/if}
 						</span>
 					</button>
@@ -476,7 +476,7 @@
 									/>
 									<span
 										class="flex items-center gap-1.5 text-sm text-neutral-400 group-hover:text-white"
-										><Icon name={opt.icon} size={14} /> {opt.label}</span
+										><Icon name={opt.icon} size={14} class="text-neutral-400 group-hover:text-white" /> {opt.label}</span
 									>
 								</label>
 							{/each}
@@ -713,8 +713,8 @@
 		<div class="flex-1 min-w-0 space-y-4">
 			<!-- Search Bar with Icon -->
 			<div class="relative">
-				<div class="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none">
-					<Icon name="search" size={18} />
+				<div class="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+					<Icon name="search" size={18} class="text-neutral-500" />
 				</div>
 				<input
 					type="text"
@@ -736,9 +736,9 @@
 				>
 					<span>Price</span>
 					{#if sortDir === "asc"}
-						<Icon name="chevron-up" size={14} />
+						<Icon name="chevron-up" size={14} class="text-neutral-500" />
 					{:else}
-						<Icon name="chevron-down" size={14} />
+						<Icon name="chevron-down" size={14} class="text-neutral-500" />
 					{/if}
 				</button>
 			</div>
@@ -751,8 +751,8 @@
 				</div>
 			{:else if filteredOfferings.length === 0}
 				<div class="text-center py-12">
-					<div class="flex justify-center mb-3 text-neutral-600">
-						<Icon name="search" size={48} />
+					<div class="flex justify-center mb-3">
+						<Icon name="search" size={48} class="text-neutral-600" />
 					</div>
 					<p class="text-neutral-500">No offerings found</p>
 				</div>
@@ -775,9 +775,9 @@
 									<span class="inline-flex items-center gap-1">
 										Price
 										{#if sortDir === "asc"}
-											<Icon name="chevron-up" size={14} />
+											<Icon name="chevron-up" size={14} class="text-neutral-500" />
 										{:else}
-											<Icon name="chevron-down" size={14} />
+											<Icon name="chevron-down" size={14} class="text-neutral-500" />
 										{/if}
 									</span>
 								</th>
@@ -836,7 +836,7 @@
 												<span
 													class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
 													title="Recurring subscription"
-													><Icon name="repeat" size={10} /> {getSubscriptionBadge(offering)}</span
+													><Icon name="repeat" size={10} class="text-purple-400" /> {getSubscriptionBadge(offering)}</span
 												>
 											{/if}
 										</div>
@@ -888,7 +888,7 @@
 												onclick={(e) =>
 													e.stopPropagation()}
 												class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
-												>Visit Provider <Icon name="external" size={12} /></a
+												>Visit Provider <Icon name="external" size={12} class="text-white" /></a
 											>
 										{:else}
 											<button
@@ -1144,12 +1144,12 @@
 											<span
 												class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
 												title="Recurring subscription"
-												><Icon name="repeat" size={10} /> {getSubscriptionBadge(offering)}</span
+												><Icon name="repeat" size={10} class="text-purple-400" /> {getSubscriptionBadge(offering)}</span
 											>
 										{/if}
 									</div>
 									<div class="flex items-center gap-1 text-xs text-neutral-500">
-										<Icon name={getTypeIcon(offering.product_type)} size={12} />
+										<Icon name={getTypeIcon(offering.product_type)} size={12} class="text-neutral-500" />
 										{offering.product_type}
 									</div>
 									<a
@@ -1201,7 +1201,7 @@
 										rel="noopener noreferrer"
 										onclick={(e) => e.stopPropagation()}
 										class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
-										>Visit Provider <Icon name="external" size={12} /></a
+										>Visit Provider <Icon name="external" size={12} class="text-white" /></a
 									>
 								{:else}
 									<button
