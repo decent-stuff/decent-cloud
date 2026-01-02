@@ -1,57 +1,61 @@
 @import "tailwindcss";
 
 /*
- * DESIGN SYSTEM: Industrial Precision
+ * DESIGN SYSTEM: Industrial Luxe
  *
- * Philosophy: Sharp, authoritative, data-driven.
- * Every element earns its place. No decoration without purpose.
+ * Philosophy: Precision engineering meets understated luxury.
+ * Sharp edges, warm copper-gold accents, strategic transparency.
+ * Every pixel is intentional. Elegance through restraint.
  */
 
 @theme {
-	/* === Base Colors === */
+	/* === Base Colors (Deep Blacks with Warm Undertone) === */
 	--color-base: #0a0a0a;
-	--color-surface: #111111;
-	--color-surface-elevated: #1a1a1a;
-	--color-surface-hover: #222222;
+	--color-surface: #0f0f0f;
+	--color-surface-elevated: #161616;
+	--color-surface-hover: #1c1c1c;
+	--color-surface-active: #242424;
 
-	/* === Primary (Refined Amber) === */
-	--color-primary-50: #fefdfb;
-	--color-primary-100: #fcf6e8;
-	--color-primary-200: #f8e9c4;
-	--color-primary-300: #f2d78e;
-	--color-primary-400: #e8c05a;
-	--color-primary-500: #d4a853;
-	--color-primary-600: #b8923f;
-	--color-primary-700: #967633;
-	--color-primary-800: #7a5f2a;
-	--color-primary-900: #654d23;
+	/* === Primary (Copper-Gold - Warm, Luxurious) === */
+	--color-primary-50: #fdfaf5;
+	--color-primary-100: #faf2e4;
+	--color-primary-200: #f3e0c0;
+	--color-primary-300: #e8c78a;
+	--color-primary-400: #daa550;
+	--color-primary-500: #c9923e;
+	--color-primary-600: #a87832;
+	--color-primary-700: #8a6129;
+	--color-primary-800: #714e22;
+	--color-primary-900: #5c3f1c;
 
-	/* === Neutral (Sharp Grays) === */
-	--color-neutral-50: #fafafa;
-	--color-neutral-100: #f0f0f0;
-	--color-neutral-200: #e0e0e0;
-	--color-neutral-300: #b0b0b0;
-	--color-neutral-400: #808080;
-	--color-neutral-500: #606060;
-	--color-neutral-600: #404040;
-	--color-neutral-700: #303030;
-	--color-neutral-800: #202020;
-	--color-neutral-900: #141414;
+	/* === Neutral (Cool Grays with Subtle Warmth) === */
+	--color-neutral-50: #fafaf9;
+	--color-neutral-100: #f0efee;
+	--color-neutral-200: #dddcda;
+	--color-neutral-300: #a8a7a5;
+	--color-neutral-400: #737270;
+	--color-neutral-500: #525150;
+	--color-neutral-600: #3a3938;
+	--color-neutral-700: #2a2928;
+	--color-neutral-800: #1e1d1c;
+	--color-neutral-900: #141413;
 
-	/* === Status Colors (Muted, Professional) === */
-	--color-success: #4a9d6e;
-	--color-warning: #c49a3a;
-	--color-danger: #b54a4a;
-	--color-info: #4a7eb5;
+	/* === Status Colors (Refined, Less Saturated) === */
+	--color-success: #3d8b5a;
+	--color-warning: #b8892f;
+	--color-danger: #a34343;
+	--color-info: #4070a0;
 
-	/* === Glass === */
+	/* === Glass (For Elevated Surfaces) === */
 	--color-glass: #ffffff;
+	--color-glass-border: #ffffff;
 
-	/* === Border Radius (Sharp) === */
+	/* === Border Radius (Sharp - Industrial Precision) === */
 	--radius-none: 0;
+	--radius-xs: 1px;
 	--radius-sm: 2px;
-	--radius-md: 4px;
-	--radius-lg: 6px;
+	--radius-md: 3px;
+	--radius-lg: 4px;
 }
 
 /* === Typography === */
@@ -94,10 +98,22 @@
 
 /* === Component Classes === */
 @layer components {
-	/* Card - Sharp edges, subtle glass */
+	/* === Cards === */
+
+	/* Solid Card - Primary surface treatment */
 	.card {
-		@apply bg-surface-elevated/80 backdrop-blur-sm border border-neutral-800;
-		border-radius: var(--radius-sm);
+		@apply bg-surface border border-neutral-800;
+	}
+
+	/* Glass Card - For elevated/floating elements */
+	.card-glass {
+		@apply bg-glass/[0.03] backdrop-blur-md border border-glass-border/[0.06];
+	}
+
+	/* Highlighted Card - With accent glow */
+	.card-accent {
+		@apply bg-surface border border-primary-500/20;
+		box-shadow: 0 0 0 1px rgba(201, 146, 62, 0.05), 0 4px 24px -4px rgba(201, 146, 62, 0.08);
 	}
 
 	.card-hover {
@@ -108,88 +124,120 @@
 		@apply bg-surface-hover border-neutral-700;
 	}
 
-	/* Button Primary */
+	/* === Buttons === */
+
+	/* Primary Button - Solid copper-gold */
 	.btn-primary {
-		@apply px-6 py-2.5 bg-primary-500 text-base font-semibold;
+		@apply px-6 py-2.5 bg-primary-500 text-neutral-900 font-semibold;
 		@apply hover:bg-primary-400 active:bg-primary-600;
-		@apply transition-colors duration-150;
-		border-radius: var(--radius-sm);
+		@apply transition-all duration-150;
 	}
 
-	/* Button Secondary */
+	/* Secondary Button - Ghost with border */
 	.btn-secondary {
-		@apply px-6 py-2.5 bg-transparent border border-neutral-600 text-neutral-200;
-		@apply hover:border-neutral-400 hover:text-white;
-		@apply transition-colors duration-150;
-		border-radius: var(--radius-sm);
+		@apply px-6 py-2.5 bg-transparent border border-neutral-700 text-neutral-200;
+		@apply hover:border-neutral-500 hover:text-white hover:bg-surface-hover;
+		@apply transition-all duration-150;
 	}
 
-	/* Input */
+	/* Tertiary Button - Minimal */
+	.btn-tertiary {
+		@apply px-4 py-2 text-neutral-400 font-medium;
+		@apply hover:text-white hover:bg-surface-hover;
+		@apply transition-all duration-150;
+	}
+
+	/* === Inputs === */
 	.input {
-		@apply px-4 py-2.5 bg-surface border border-neutral-700 text-white;
-		@apply focus:border-primary-500 focus:outline-none;
-		@apply placeholder:text-neutral-500;
-		@apply transition-colors duration-150;
-		border-radius: var(--radius-sm);
+		@apply px-4 py-2.5 bg-base border border-neutral-800 text-white;
+		@apply focus:border-primary-500/50 focus:bg-surface focus:outline-none;
+		@apply placeholder:text-neutral-600;
+		@apply transition-all duration-150;
 	}
 
-	/* Badge */
+	/* === Badges === */
 	.badge {
-		@apply inline-flex items-center px-2 py-0.5 text-xs font-medium;
-		@apply border border-current;
-		border-radius: var(--radius-sm);
+		@apply inline-flex items-center px-2.5 py-1 text-xs font-medium tracking-wide uppercase;
+		@apply border;
 	}
 
 	.badge-primary {
-		@apply text-primary-400 bg-primary-500/10;
+		@apply text-primary-400 bg-primary-500/10 border-primary-500/20;
 	}
 
 	.badge-success {
-		@apply text-success bg-success/10;
+		@apply text-success bg-success/10 border-success/20;
 	}
 
 	.badge-warning {
-		@apply text-warning bg-warning/10;
+		@apply text-warning bg-warning/10 border-warning/20;
 	}
 
 	.badge-danger {
-		@apply text-danger bg-danger/10;
+		@apply text-danger bg-danger/10 border-danger/20;
 	}
 
-	/* Section Header */
-	.section-header {
-		@apply text-xs font-semibold uppercase tracking-wider text-neutral-500;
-		letter-spacing: 0.1em;
+	.badge-neutral {
+		@apply text-neutral-400 bg-neutral-800/50 border-neutral-700;
 	}
 
-	/* Data Display */
+	/* === Section Elements === */
+	.section-label {
+		@apply text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-500;
+	}
+
+	.section-title {
+		@apply text-3xl md:text-4xl font-bold text-white tracking-tight;
+	}
+
+	.section-subtitle {
+		@apply text-neutral-400 text-lg max-w-2xl;
+	}
+
+	/* === Data Display === */
 	.data-label {
-		@apply text-xs uppercase tracking-wider text-neutral-500;
+		@apply text-[10px] uppercase tracking-[0.15em] text-neutral-500 font-medium;
 	}
 
 	.data-value {
-		@apply text-2xl font-semibold text-white tabular-nums;
+		@apply text-2xl font-semibold text-white tabular-nums tracking-tight;
 	}
 
-	/* Divider */
+	.data-value-sm {
+		@apply text-lg font-semibold text-white tabular-nums;
+	}
+
+	/* === Dividers === */
 	.divider {
-		@apply border-t border-neutral-800;
+		@apply border-t border-neutral-800/80;
 	}
 
-	/* Icon Container */
+	.divider-accent {
+		@apply border-t border-primary-500/20;
+	}
+
+	/* === Icon Containers === */
 	.icon-box {
 		@apply flex items-center justify-center w-10 h-10;
-		@apply bg-surface-elevated border border-neutral-700;
-		border-radius: var(--radius-sm);
+		@apply bg-surface-elevated border border-neutral-800;
 	}
 
 	.icon-box svg {
 		@apply w-5 h-5 text-primary-400;
 	}
 
-	/* Status Indicator */
+	.icon-box-accent {
+		@apply flex items-center justify-center w-10 h-10;
+		@apply bg-primary-500/10 border border-primary-500/20;
+	}
+
+	.icon-box-accent svg {
+		@apply w-5 h-5 text-primary-400;
+	}
+
+	/* === Status Indicators === */
 	.status-dot {
-		@apply w-2 h-2 rounded-full;
+		@apply w-2 h-2;
 	}
 
 	.status-dot-success {
@@ -203,26 +251,114 @@
 	.status-dot-danger {
 		@apply bg-danger;
 	}
+
+	/* Status with glow */
+	.status-glow {
+		@apply relative;
+	}
+
+	.status-glow::after {
+		content: '';
+		@apply absolute inset-0 blur-sm opacity-50;
+		background: inherit;
+	}
+
+	/* === Metric Cards === */
+	.metric-card {
+		@apply bg-surface border border-neutral-800 p-5;
+	}
+
+	.metric-card-glass {
+		@apply bg-glass/[0.03] backdrop-blur-md border border-glass-border/[0.06] p-5;
+	}
+
+	.metric-label {
+		@apply text-[10px] uppercase tracking-[0.15em] text-neutral-500 font-medium mb-2;
+	}
+
+	.metric-value {
+		@apply text-3xl font-bold text-white tabular-nums tracking-tight;
+	}
+
+	.metric-subtext {
+		@apply text-xs text-neutral-500 mt-1;
+	}
+
+	/* === Navigation Items === */
+	.nav-item {
+		@apply flex items-center gap-3 px-3 py-2 text-neutral-400;
+		@apply hover:bg-surface-hover hover:text-white;
+		@apply transition-all duration-150;
+	}
+
+	.nav-item-active {
+		@apply bg-primary-500/5 text-primary-400 border-l-2 border-primary-500 -ml-[2px];
+	}
+
+	/* === Feature Cards === */
+	.feature-card {
+		@apply bg-surface border border-neutral-800 p-6;
+		@apply hover:border-neutral-700 hover:bg-surface-hover;
+		@apply transition-all duration-200;
+	}
+
+	.feature-card-icon {
+		@apply w-12 h-12 bg-surface-elevated border border-neutral-800 flex items-center justify-center mb-5;
+		@apply group-hover:border-primary-500/30 group-hover:bg-primary-500/5;
+		@apply transition-all duration-200;
+	}
 }
 
 /* === Utility Classes === */
 @layer utilities {
-	/* Gradient Text */
+	/* === Text Effects === */
+
+	/* Gradient Text - Primary accent */
 	.text-gradient {
 		@apply text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-primary-300;
 	}
 
-	/* Accent Border */
+	/* Gradient Text - Subtle shine */
+	.text-gradient-subtle {
+		@apply text-transparent bg-clip-text bg-gradient-to-br from-white via-neutral-200 to-neutral-400;
+	}
+
+	/* === Borders === */
+
+	/* Accent Border - Left edge highlight */
 	.border-accent {
 		border-left: 2px solid var(--color-primary-500);
 	}
 
-	/* Grid Pattern Background */
+	/* Accent Border - Top edge */
+	.border-accent-top {
+		border-top: 1px solid var(--color-primary-500);
+	}
+
+	/* Subtle inner glow border */
+	.border-glow {
+		box-shadow: inset 0 0 0 1px rgba(201, 146, 62, 0.1);
+	}
+
+	/* === Background Patterns === */
+
+	/* Grid Pattern - Technical aesthetic */
 	.bg-grid {
 		background-image:
-			linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
-			linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
-		background-size: 32px 32px;
+			linear-gradient(to right, rgba(255,255,255,0.015) 1px, transparent 1px),
+			linear-gradient(to bottom, rgba(255,255,255,0.015) 1px, transparent 1px);
+		background-size: 40px 40px;
+	}
+
+	/* Dot Pattern - Alternative to grid */
+	.bg-dots {
+		background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+		background-size: 24px 24px;
+	}
+
+	/* Radial Gradient - For hero sections */
+	.bg-radial {
+		background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201, 146, 62, 0.08), transparent);
 	}
 
 	/* Subtle Noise Texture */
@@ -234,30 +370,89 @@
 		content: '';
 		position: absolute;
 		inset: 0;
-		opacity: 0.015;
-		background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+		opacity: 0.012;
+		background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
 		pointer-events: none;
 	}
 
-	/* Glow effect for emphasis */
+	/* === Glow Effects === */
+
+	/* Primary glow - For important elements */
 	.glow-primary {
-		box-shadow: 0 0 20px rgba(212, 168, 83, 0.15);
+		box-shadow: 0 0 30px -5px rgba(201, 146, 62, 0.15);
 	}
+
+	/* Subtle glow - For hover states */
+	.glow-subtle {
+		box-shadow: 0 0 20px -8px rgba(201, 146, 62, 0.1);
+	}
+
+	/* Ring glow - Focus alternative */
+	.glow-ring {
+		box-shadow: 0 0 0 1px rgba(201, 146, 62, 0.2), 0 0 20px -5px rgba(201, 146, 62, 0.15);
+	}
+
+	/* === Typography === */
 
 	/* Tabular numbers for data */
 	.tabular-nums {
 		font-variant-numeric: tabular-nums;
 	}
+
+	/* Tight tracking for headings */
+	.tracking-display {
+		letter-spacing: -0.03em;
+	}
+
+	/* Wide tracking for labels */
+	.tracking-label {
+		letter-spacing: 0.15em;
+	}
+
+	/* === Interactions === */
+
+	/* Lift on hover */
+	.hover-lift {
+		@apply transition-transform duration-200;
+	}
+
+	.hover-lift:hover {
+		transform: translateY(-2px);
+	}
+
+	/* Scale on hover */
+	.hover-scale {
+		@apply transition-transform duration-200;
+	}
+
+	.hover-scale:hover {
+		transform: scale(1.02);
+	}
+
+	/* === Shadows === */
+
+	/* Layered shadow for depth */
+	.shadow-layered {
+		box-shadow:
+			0 1px 2px rgba(0, 0, 0, 0.3),
+			0 4px 8px rgba(0, 0, 0, 0.2),
+			0 8px 16px rgba(0, 0, 0, 0.1);
+	}
+
+	/* Inset shadow for recessed elements */
+	.shadow-inset {
+		box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+	}
 }
 
 /* === Scrollbar === */
 ::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+	width: 5px;
+	height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-	background: var(--color-surface);
+	background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -268,26 +463,51 @@
 	background: var(--color-neutral-600);
 }
 
+/* Show scrollbar only on hover for supported browsers */
+@supports (scrollbar-gutter: stable) {
+	* {
+		scrollbar-gutter: stable;
+	}
+}
+
 /* === Select Dropdown === */
 select {
 	appearance: none;
-	background-color: var(--color-surface);
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23808080' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+	background-color: var(--color-base);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23737270' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
 	background-repeat: no-repeat;
 	background-position: right 12px center;
-	padding-right: 36px;
-	border-radius: var(--radius-sm);
+	padding-right: 32px;
+	border: 1px solid var(--color-neutral-800);
+	transition: border-color 0.15s, background-color 0.15s;
+}
+
+select:hover {
+	background-color: var(--color-surface);
+	border-color: var(--color-neutral-700);
+}
+
+select:focus {
+	background-color: var(--color-surface);
+	border-color: var(--color-primary-500);
+	outline: none;
 }
 
 select option {
 	background-color: var(--color-surface);
 	color: white;
+	padding: 8px;
 }
 
 /* === Focus Styles === */
 :focus-visible {
-	outline: 2px solid var(--color-primary-500);
-	outline-offset: 2px;
+	outline: 1px solid var(--color-primary-500);
+	outline-offset: 1px;
+}
+
+/* Remove outline for mouse users, keep for keyboard */
+:focus:not(:focus-visible) {
+	outline: none;
 }
 
 /* === Transitions === */

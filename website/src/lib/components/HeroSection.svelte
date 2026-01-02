@@ -44,136 +44,131 @@
 	});
 </script>
 
-<section class="min-h-screen flex items-center justify-center px-6 bg-grid relative">
-	<div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+<section class="min-h-screen flex items-center justify-center px-6 bg-grid bg-radial relative pt-14">
+	<div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
 		<!-- Content -->
 		<div class="space-y-8">
 			<!-- Badge -->
-			<div class="inline-flex items-center gap-2 px-3 py-1 bg-surface-elevated border border-neutral-700 text-neutral-300 text-sm">
-				<span class="w-1.5 h-1.5 bg-primary-400 animate-pulse-subtle"></span>
-				<span>Decentralized Cloud Marketplace</span>
+			<div class="inline-flex items-center gap-2.5 px-3 py-1.5 bg-surface border border-neutral-800 text-neutral-400 text-xs tracking-wide">
+				<span class="w-1.5 h-1.5 bg-primary-500 animate-pulse-subtle"></span>
+				<span class="uppercase tracking-label">Decentralized Cloud</span>
 			</div>
 
 			<!-- Headline -->
-			<h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight">
+			<h1 class="text-4xl sm:text-5xl lg:text-[3.5rem] font-bold leading-[1.08] tracking-display">
 				<span class="text-white">Rent Cloud Resources</span>
 				<br />
 				<span class="text-gradient">With Confidence</span>
 			</h1>
 
 			<!-- Description -->
-			<p class="text-lg text-neutral-400 max-w-xl leading-relaxed">
+			<p class="text-lg text-neutral-400 max-w-lg leading-relaxed">
 				Every provider has a trust score based on real performance data.
 				See response times, completion rates, and red flags
-				<span class="text-white font-medium">before</span> you pay.
+				<span class="text-white">before</span> you pay.
 			</p>
 
 			<!-- Typing animation -->
-			<div class="h-8 flex items-center border-l-2 border-primary-500 pl-4">
-				<span class="font-mono text-primary-400 text-sm tracking-wide">
-					{currentText}<span class="animate-pulse-subtle">_</span>
+			<div class="h-8 flex items-center border-l-2 border-primary-500/60 pl-4">
+				<span class="font-mono text-primary-400 text-sm">
+					{currentText}<span class="text-primary-500 animate-pulse-subtle">_</span>
 				</span>
 			</div>
 
 			<!-- CTA -->
-			<div class="flex flex-wrap gap-4 pt-4">
+			<div class="flex flex-wrap gap-3 pt-2">
 				<a
 					href="/dashboard/marketplace"
-					class="inline-flex items-center gap-3 px-6 py-3 bg-primary-500 text-base font-semibold hover:bg-primary-400 transition-colors"
+					class="inline-flex items-center gap-2.5 px-5 py-2.5 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 				>
 					<span>Open Marketplace</span>
-					<Icon name="arrow-right" size={18} />
+					<Icon name="arrow-right" size={16} />
 				</a>
 				<a
 					href="#features"
-					class="inline-flex items-center gap-3 px-6 py-3 border border-neutral-600 text-neutral-200 font-medium hover:border-neutral-400 hover:text-white transition-colors"
+					class="inline-flex items-center gap-2.5 px-5 py-2.5 border border-neutral-700 text-neutral-300 text-sm font-medium hover:border-neutral-500 hover:text-white hover:bg-surface-hover transition-all"
 				>
 					<span>Learn More</span>
 				</a>
 			</div>
 
 			<!-- Stats row -->
-			<div class="flex gap-8 pt-6 border-t border-neutral-800">
+			<div class="flex gap-10 pt-8 border-t border-neutral-800/60">
 				<div>
-					<div class="text-2xl font-semibold text-white font-mono tabular-nums">100%</div>
-					<div class="text-xs uppercase tracking-wider text-neutral-500">Transparent</div>
+					<div class="text-xl font-semibold text-white font-mono tabular-nums">100%</div>
+					<div class="text-[10px] uppercase tracking-label text-neutral-500 mt-0.5">Transparent</div>
 				</div>
 				<div>
-					<div class="text-2xl font-semibold text-white font-mono tabular-nums">0</div>
-					<div class="text-xs uppercase tracking-wider text-neutral-500">Hidden Fees</div>
+					<div class="text-xl font-semibold text-white font-mono tabular-nums">0</div>
+					<div class="text-[10px] uppercase tracking-label text-neutral-500 mt-0.5">Hidden Fees</div>
 				</div>
 				<div>
-					<div class="text-2xl font-semibold text-white font-mono tabular-nums">Real</div>
-					<div class="text-xs uppercase tracking-wider text-neutral-500">Data Only</div>
+					<div class="text-xl font-semibold text-white font-mono tabular-nums">Real</div>
+					<div class="text-[10px] uppercase tracking-label text-neutral-500 mt-0.5">Data Only</div>
 				</div>
 			</div>
 		</div>
 
 		<!-- Visual -->
 		<div class="hidden lg:block relative">
-			<div class="relative">
-				<!-- Grid decoration -->
-				<div class="absolute inset-0 bg-gradient-to-br from-primary-500/5 to-transparent"></div>
-
-				<!-- Main visual: Trust score card mockup -->
-				<div class="relative bg-surface border border-neutral-800 p-6 space-y-6">
-					<!-- Header -->
-					<div class="flex items-center justify-between pb-4 border-b border-neutral-800">
-						<div class="flex items-center gap-3">
-							<div class="w-10 h-10 bg-surface-elevated border border-neutral-700 flex items-center justify-center">
-								<Icon name="server" size={20} class="text-primary-400" />
-							</div>
-							<div>
-								<div class="font-semibold text-white">provider_alpha</div>
-								<div class="text-xs text-neutral-500">Verified Provider</div>
-							</div>
+			<!-- Main visual: Trust score card mockup -->
+			<div class="relative bg-surface border border-neutral-800 p-6 space-y-5 shadow-layered">
+				<!-- Header -->
+				<div class="flex items-center justify-between pb-4 border-b border-neutral-800/80">
+					<div class="flex items-center gap-3">
+						<div class="icon-box">
+							<Icon name="server" size={18} />
 						</div>
-						<div class="text-right">
-							<div class="text-2xl font-bold text-primary-400 font-mono">87</div>
-							<div class="text-xs text-neutral-500">Trust Score</div>
+						<div>
+							<div class="font-semibold text-white text-sm">provider_alpha</div>
+							<div class="text-[10px] text-neutral-500 uppercase tracking-label">Verified Provider</div>
 						</div>
 					</div>
-
-					<!-- Metrics grid -->
-					<div class="grid grid-cols-2 gap-4">
-						<div class="bg-surface-elevated p-4 border border-neutral-800">
-							<div class="flex items-center gap-2 mb-2">
-								<Icon name="clock" size={14} class="text-neutral-500" />
-								<span class="text-xs text-neutral-500 uppercase tracking-wider">Response</span>
-							</div>
-							<div class="text-lg font-semibold text-white font-mono">2.3h</div>
-						</div>
-						<div class="bg-surface-elevated p-4 border border-neutral-800">
-							<div class="flex items-center gap-2 mb-2">
-								<Icon name="check" size={14} class="text-neutral-500" />
-								<span class="text-xs text-neutral-500 uppercase tracking-wider">Completion</span>
-							</div>
-							<div class="text-lg font-semibold text-white font-mono">98.2%</div>
-						</div>
-						<div class="bg-surface-elevated p-4 border border-neutral-800">
-							<div class="flex items-center gap-2 mb-2">
-								<Icon name="users" size={14} class="text-neutral-500" />
-								<span class="text-xs text-neutral-500 uppercase tracking-wider">Repeat</span>
-							</div>
-							<div class="text-lg font-semibold text-white font-mono">73%</div>
-						</div>
-						<div class="bg-surface-elevated p-4 border border-neutral-800">
-							<div class="flex items-center gap-2 mb-2">
-								<Icon name="file" size={14} class="text-neutral-500" />
-								<span class="text-xs text-neutral-500 uppercase tracking-wider">Contracts</span>
-							</div>
-							<div class="text-lg font-semibold text-white font-mono">1,247</div>
-						</div>
+					<div class="text-right">
+						<div class="text-3xl font-bold text-primary-400 font-mono tracking-tight">87</div>
+						<div class="text-[10px] text-neutral-500 uppercase tracking-label">Trust Score</div>
 					</div>
+				</div>
 
-					<!-- Status -->
-					<div class="flex items-center justify-between pt-4 border-t border-neutral-800">
-						<div class="flex items-center gap-2">
-							<span class="w-2 h-2 bg-success rounded-full"></span>
-							<span class="text-sm text-neutral-400">No red flags detected</span>
+				<!-- Metrics grid -->
+				<div class="grid grid-cols-2 gap-3">
+					<div class="bg-surface-elevated p-4 border border-neutral-800">
+						<div class="flex items-center gap-2 mb-2">
+							<Icon name="clock" size={12} class="text-neutral-600" />
+							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Response</span>
 						</div>
-						<span class="text-xs text-neutral-600">Updated 2m ago</span>
+						<div class="text-lg font-semibold text-white font-mono">2.3h</div>
 					</div>
+					<div class="bg-surface-elevated p-4 border border-neutral-800">
+						<div class="flex items-center gap-2 mb-2">
+							<Icon name="check" size={12} class="text-neutral-600" />
+							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Completion</span>
+						</div>
+						<div class="text-lg font-semibold text-white font-mono">98.2%</div>
+					</div>
+					<div class="bg-surface-elevated p-4 border border-neutral-800">
+						<div class="flex items-center gap-2 mb-2">
+							<Icon name="users" size={12} class="text-neutral-600" />
+							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Repeat</span>
+						</div>
+						<div class="text-lg font-semibold text-white font-mono">73%</div>
+					</div>
+					<div class="bg-surface-elevated p-4 border border-neutral-800">
+						<div class="flex items-center gap-2 mb-2">
+							<Icon name="file" size={12} class="text-neutral-600" />
+							<span class="text-[10px] text-neutral-500 uppercase tracking-label">Contracts</span>
+						</div>
+						<div class="text-lg font-semibold text-white font-mono">1,247</div>
+					</div>
+				</div>
+
+				<!-- Status -->
+				<div class="flex items-center justify-between pt-4 border-t border-neutral-800/80">
+					<div class="flex items-center gap-2">
+						<span class="status-dot status-dot-success"></span>
+						<span class="text-xs text-neutral-400">No red flags detected</span>
+					</div>
+					<span class="text-[10px] text-neutral-600 uppercase tracking-label">Updated 2m ago</span>
 				</div>
 			</div>
 		</div>
@@ -181,9 +176,9 @@
 
 	<!-- Scroll indicator -->
 	<div class="absolute bottom-8 left-1/2 -translate-x-1/2">
-		<a href="#features" class="flex flex-col items-center gap-2 text-neutral-600 hover:text-neutral-400 transition-colors">
-			<span class="text-xs uppercase tracking-widest">Scroll</span>
-			<Icon name="arrow-down" size={16} />
+		<a href="#features" class="flex flex-col items-center gap-1.5 text-neutral-600 hover:text-neutral-400 transition-colors group">
+			<span class="text-[10px] uppercase tracking-[0.2em]">Scroll</span>
+			<Icon name="arrow-down" size={14} class="group-hover:translate-y-0.5 transition-transform" />
 		</a>
 	</div>
 </section>

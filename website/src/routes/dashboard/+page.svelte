@@ -8,6 +8,7 @@
 	import { computePubkey } from "$lib/utils/contract-format";
 	import { getProviderTrustMetrics, getProviderResponseMetrics, type ProviderTrustMetrics, type ProviderResponseMetrics } from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
+	import Icon from "$lib/components/Icons.svelte";
 
 	let dashboardData = $state<DashboardData>({
 		totalProviders: 0,
@@ -76,34 +77,25 @@
 <div class="space-y-8">
 	<!-- User Info Section -->
 	{#if currentIdentity}
-		<div
-			class="bg-gradient-to-r from-primary-500/20 to-primary-600/20 backdrop-blur-lg rounded-xl p-6 border border-primary-500/30"
-		>
+		<div class="card-accent p-5">
 			<div class="flex items-center gap-4">
-				<div class="text-4xl">
-					🔑
+				<div class="icon-box-accent">
+					<Icon name="key" size={18} />
 				</div>
-				<div class="flex-1">
-					<h2 class="text-2xl font-bold text-white mb-1">
+				<div class="flex-1 min-w-0">
+					<h2 class="text-lg font-semibold text-white">
 						{#if currentIdentity.displayName}
-							Welcome back, {currentIdentity.displayName}!
+							Welcome back, {currentIdentity.displayName}
 						{:else}
-							Welcome back!
+							Welcome back
 						{/if}
 					</h2>
-					<p class="text-white/70 text-sm">
+					<p class="text-neutral-500 text-xs mt-1">
 						Logged in via Seed Phrase
 					</p>
-					<p class="text-white/50 text-xs font-mono mt-1">
-						Principal: {currentIdentity.principal.toString()}
+					<p class="text-neutral-600 text-[10px] font-mono mt-2 truncate" title={currentIdentity.principal.toString()}>
+						{currentIdentity.principal.toString()}
 					</p>
-					{#if currentIdentity.publicKeyBytes}
-						<p class="text-white/50 text-xs font-mono">
-							Public key (hex): {computePubkey(
-								currentIdentity.publicKeyBytes,
-							)}
-						</p>
-					{/if}
 				</div>
 			</div>
 		</div>
@@ -111,167 +103,146 @@
 		<!-- User's Trust Metrics -->
 		{#if trustMetricsLoading}
 			<div class="flex justify-center items-center p-8">
-				<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-400"></div>
+				<div class="w-5 h-5 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
 			</div>
 		{:else if trustMetrics}
-			<div class="flex items-center justify-between mb-2">
-				<h2 class="text-2xl font-bold text-white">Your Trust Score</h2>
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-lg font-semibold text-white">Your Trust Score</h2>
 				<a
 					href="/dashboard/reputation/{computePubkey(currentIdentity.publicKeyBytes!)}"
-					class="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+					class="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
 				>
-					View full profile &rarr;
+					<span>View full profile</span>
+					<Icon name="arrow-right" size={12} />
 				</a>
 			</div>
 			<TrustDashboard metrics={trustMetrics} {responseMetrics} />
 		{/if}
 	{/if}
 
+	<!-- Page Header -->
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Dashboard Overview</h1>
-		<p class="text-white/60">Marketplace statistics and quick actions</p>
+		<h1 class="text-2xl font-bold text-white tracking-tight">Dashboard</h1>
+		<p class="text-neutral-500 text-sm mt-1">Marketplace statistics and quick actions</p>
 	</div>
 
 	{#if error}
-		<div
-			class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400"
-		>
-			<p class="font-semibold">Error loading dashboard data</p>
-			<p class="text-sm mt-1">{error}</p>
+		<div class="bg-danger/10 border border-danger/20 p-4">
+			<p class="font-medium text-danger text-sm">Error loading dashboard data</p>
+			<p class="text-xs text-neutral-400 mt-1">{error}</p>
 		</div>
 	{/if}
 
 	<!-- Stats Grid -->
-	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-		<!-- Total Providers -->
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-		>
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">Total Providers</h3>
-				<span class="text-2xl">🖥️</span>
+	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+		<div class="metric-card">
+			<div class="flex items-center gap-2 mb-3">
+				<Icon name="server" size={14} class="text-neutral-600" />
+				<span class="metric-label mb-0">Providers</span>
 			</div>
-			<p class="text-3xl font-bold text-white">
-				{dashboardData.totalProviders.toLocaleString()}
-			</p>
-			<p class="text-white/50 text-sm mt-1">Registered providers</p>
+			<p class="metric-value">{dashboardData.totalProviders.toLocaleString()}</p>
+			<p class="metric-subtext">Registered</p>
 		</div>
 
-		<!-- Active Providers -->
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-		>
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">Active Providers</h3>
-				<span class="text-2xl">✅</span>
+		<div class="metric-card">
+			<div class="flex items-center gap-2 mb-3">
+				<Icon name="check" size={14} class="text-success" />
+				<span class="metric-label mb-0">Active</span>
 			</div>
-			<p class="text-3xl font-bold text-white">
-				{dashboardData.activeProviders.toLocaleString()}
-			</p>
-			<p class="text-white/50 text-sm mt-1">Currently active</p>
+			<p class="metric-value">{dashboardData.activeProviders.toLocaleString()}</p>
+			<p class="metric-subtext">Online now</p>
 		</div>
 
-		<!-- Total Offerings -->
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-		>
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">Available Offerings</h3>
-				<span class="text-2xl">📦</span>
+		<div class="metric-card">
+			<div class="flex items-center gap-2 mb-3">
+				<Icon name="package" size={14} class="text-neutral-600" />
+				<span class="metric-label mb-0">Offerings</span>
 			</div>
-			<p class="text-3xl font-bold text-white">
-				{dashboardData.totalOfferings.toLocaleString()}
-			</p>
-			<p class="text-white/50 text-sm mt-1">Services listed</p>
+			<p class="metric-value">{dashboardData.totalOfferings.toLocaleString()}</p>
+			<p class="metric-subtext">Available</p>
 		</div>
 
-		<!-- Total Contracts -->
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-		>
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">
-					Total Contracts
-				</h3>
-				<span class="text-2xl">📝</span>
+		<div class="metric-card">
+			<div class="flex items-center gap-2 mb-3">
+				<Icon name="file" size={14} class="text-neutral-600" />
+				<span class="metric-label mb-0">Contracts</span>
 			</div>
-			<p class="text-3xl font-bold text-white">
-				{dashboardData.totalContracts.toLocaleString()}
-			</p>
-			<p class="text-white/50 text-sm mt-1">Marketplace agreements</p>
+			<p class="metric-value">{dashboardData.totalContracts.toLocaleString()}</p>
+			<p class="metric-subtext">Total</p>
 		</div>
 
-		<!-- Active Validators -->
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-		>
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-white/70 text-sm font-medium">Active Validators</h3>
-				<span class="text-2xl">🛡️</span>
+		<div class="metric-card">
+			<div class="flex items-center gap-2 mb-3">
+				<Icon name="shield" size={14} class="text-neutral-600" />
+				<span class="metric-label mb-0">Validators</span>
 			</div>
-			<p class="text-3xl font-bold text-white">
-				{dashboardData.activeValidators.toLocaleString()}
-			</p>
-			<p class="text-white/50 text-sm mt-1">Network security</p>
+			<p class="metric-value">{dashboardData.activeValidators.toLocaleString()}</p>
+			<p class="metric-subtext">Active</p>
 		</div>
 	</div>
 
 	<!-- Quick Actions -->
-	<div
-		class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-	>
-		<h2 class="text-2xl font-bold text-white mb-4">Quick Actions</h2>
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+	<div class="card p-5">
+		<h2 class="text-base font-semibold text-white mb-4">Quick Actions</h2>
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 			<a
 				href="/dashboard/marketplace"
-				class="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/20 rounded-lg border border-primary-500/30 hover:border-primary-400 transition-all group"
+				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
-				<span class="text-3xl mb-2 block">🛒</span>
-				<h3
-					class="text-white font-semibold mb-1 group-hover:text-primary-400"
-				>
-					Browse Marketplace
-				</h3>
-				<p class="text-white/60 text-sm">Find cloud services</p>
+				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+					<Icon name="cart" size={16} />
+				</div>
+				<div>
+					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
+						Marketplace
+					</h3>
+					<p class="text-xs text-neutral-500">Browse services</p>
+				</div>
 			</a>
 
 			<a
 				href="/dashboard/offerings"
-				class="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/20 rounded-lg border border-primary-500/30 hover:border-primary-400 transition-all group"
+				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
-				<span class="text-3xl mb-2 block">📦</span>
-				<h3
-					class="text-white font-semibold mb-1 group-hover:text-primary-400"
-				>
-					Manage Offerings
-				</h3>
-				<p class="text-white/60 text-sm">Your cloud services</p>
+				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+					<Icon name="package" size={16} />
+				</div>
+				<div>
+					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
+						My Offerings
+					</h3>
+					<p class="text-xs text-neutral-500">Manage services</p>
+				</div>
 			</a>
 
 			<a
 				href="/dashboard/rentals"
-				class="p-4 bg-gradient-to-r from-amber-500/20 to-orange-600/20 rounded-lg border border-amber-500/30 hover:border-amber-400 transition-all group"
+				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
-				<span class="text-3xl mb-2 block">📋</span>
-				<h3
-					class="text-white font-semibold mb-1 group-hover:text-amber-400"
-				>
-					My Rentals
-				</h3>
-				<p class="text-white/60 text-sm">Rented services</p>
+				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+					<Icon name="file" size={16} />
+				</div>
+				<div>
+					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
+						My Rentals
+					</h3>
+					<p class="text-xs text-neutral-500">Active contracts</p>
+				</div>
 			</a>
 
 			<a
 				href="/dashboard/validators"
-				class="p-4 bg-gradient-to-r from-green-500/20 to-teal-600/20 rounded-lg border border-green-500/30 hover:border-green-400 transition-all group"
+				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 			>
-				<span class="text-3xl mb-2 block">✓</span>
-				<h3
-					class="text-white font-semibold mb-1 group-hover:text-green-400"
-				>
-					View Validators
-				</h3>
-				<p class="text-white/60 text-sm">Network participants</p>
+				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+					<Icon name="shield" size={16} />
+				</div>
+				<div>
+					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
+						Validators
+					</h3>
+					<p class="text-xs text-neutral-500">Network nodes</p>
+				</div>
 			</a>
 		</div>
 	</div>

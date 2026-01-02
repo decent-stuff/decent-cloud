@@ -125,29 +125,29 @@
 {#if isOpen}
 	<button
 		type="button"
-		class="fixed inset-0 bg-base/80 z-40 md:hidden"
+		class="fixed inset-0 bg-base/90 backdrop-blur-sm z-40 md:hidden"
 		onclick={closeSidebar}
 		aria-label="Close sidebar"
 	></button>
 {/if}
 
 <aside
-	class="fixed left-0 top-0 h-screen w-64 bg-surface border-r border-neutral-800 flex flex-col z-50 transition-transform duration-200 {isOpen
+	class="fixed left-0 top-0 h-screen w-60 bg-surface border-r border-neutral-800/80 flex flex-col z-50 transition-transform duration-200 {isOpen
 		? 'translate-x-0'
 		: '-translate-x-full md:translate-x-0'}"
 >
 	<!-- Logo -->
-	<div class="h-16 px-6 flex items-center border-b border-neutral-800">
-		<a href="/" class="text-xl font-bold text-white hover:text-primary-400 transition-colors">
+	<div class="h-14 px-5 flex items-center border-b border-neutral-800/80">
+		<a href="/" class="text-base font-bold text-white hover:text-primary-400 transition-colors tracking-tight">
 			Decent Cloud
 		</a>
 	</div>
 
 	<!-- Navigation -->
-	<nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+	<nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
 		<!-- Browse section -->
-		<div class="pb-2 px-3">
-			<div class="text-xs uppercase tracking-widest text-neutral-600">Browse</div>
+		<div class="pb-2 px-3 pt-1">
+			<div class="section-label">Browse</div>
 		</div>
 		{#each browseItems as item}
 			{@const isActive =
@@ -156,37 +156,33 @@
 			<a
 				href={item.href}
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-3 py-2 transition-colors {isActive
-					? 'bg-primary-500/10 text-primary-400 border-l-2 border-primary-500 -ml-px'
-					: 'text-neutral-400 hover:bg-surface-elevated hover:text-white'}"
+				class="nav-item {isActive ? 'nav-item-active' : ''}"
 			>
-				<Icon name={item.icon} size={18} />
-				<span class="text-sm font-medium">{item.label}</span>
+				<Icon name={item.icon} size={16} />
+				<span class="text-sm">{item.label}</span>
 			</a>
 		{/each}
 
 		{#if isAuthenticated}
 			<!-- My Activity section -->
-			<div class="pt-6 pb-2 px-3">
-				<div class="text-xs uppercase tracking-widest text-neutral-600">My Activity</div>
+			<div class="pt-5 pb-2 px-3">
+				<div class="section-label">My Activity</div>
 			</div>
 			{#each activityItems as item}
 				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
 				<a
 					href={item.href}
 					onclick={closeSidebar}
-					class="flex items-center gap-3 px-3 py-2 transition-colors {isActive
-						? 'bg-primary-500/10 text-primary-400 border-l-2 border-primary-500 -ml-px'
-						: 'text-neutral-400 hover:bg-surface-elevated hover:text-white'}"
+					class="nav-item {isActive ? 'nav-item-active' : ''}"
 				>
-					<Icon name={item.icon} size={18} />
-					<span class="text-sm font-medium">{item.label}</span>
+					<Icon name={item.icon} size={16} />
+					<span class="text-sm">{item.label}</span>
 				</a>
 			{/each}
 
 			<!-- Provider section -->
-			<div class="pt-6 pb-2 px-3">
-				<div class="text-xs uppercase tracking-widest text-neutral-600">Provider</div>
+			<div class="pt-5 pb-2 px-3">
+				<div class="section-label">Provider</div>
 			</div>
 
 			<!-- Provider Setup -->
@@ -196,14 +192,12 @@
 			<a
 				href={providerSetupItem.href}
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-3 py-2 transition-colors {setupActive
-					? 'bg-primary-500/10 text-primary-400 border-l-2 border-primary-500 -ml-px'
-					: 'text-neutral-400 hover:bg-surface-elevated hover:text-white'}"
+				class="nav-item {setupActive ? 'nav-item-active' : ''}"
 			>
-				<Icon name={providerSetupItem.icon} size={18} />
-				<span class="text-sm font-medium">{providerSetupItem.label}</span>
+				<Icon name={providerSetupItem.icon} size={16} />
+				<span class="text-sm">{providerSetupItem.label}</span>
 				{#if hasOfferings && !onboardingCompleted}
-					<span class="ml-auto w-2 h-2 bg-warning" title="Setup incomplete"></span>
+					<span class="ml-auto status-dot status-dot-warning" title="Setup incomplete"></span>
 				{/if}
 			</a>
 
@@ -216,12 +210,10 @@
 				<a
 					href="/dashboard/offerings"
 					onclick={closeSidebar}
-					class="flex items-center gap-3 px-3 py-2 transition-colors {offeringsActive
-						? 'bg-primary-500/10 text-primary-400 border-l-2 border-primary-500 -ml-px'
-						: 'text-neutral-400 hover:bg-surface-elevated hover:text-white'}"
+					class="nav-item {offeringsActive ? 'nav-item-active' : ''}"
 				>
-					<Icon name="package" size={18} />
-					<span class="text-sm font-medium">My Offerings</span>
+					<Icon name="package" size={16} />
+					<span class="text-sm">My Offerings</span>
 				</a>
 
 				{#each providerOnboardedItems as item}
@@ -229,12 +221,10 @@
 					<a
 						href={item.href}
 						onclick={closeSidebar}
-						class="flex items-center gap-3 px-3 py-2 transition-colors {isActive
-							? 'bg-primary-500/10 text-primary-400 border-l-2 border-primary-500 -ml-px'
-							: 'text-neutral-400 hover:bg-surface-elevated hover:text-white'}"
+						class="nav-item {isActive ? 'nav-item-active' : ''}"
 					>
-						<Icon name={item.icon} size={18} />
-						<span class="text-sm font-medium">{item.label}</span>
+						<Icon name={item.icon} size={16} />
+						<span class="text-sm">{item.label}</span>
 					</a>
 				{/each}
 
@@ -244,12 +234,12 @@
 						target="_blank"
 						rel="noopener noreferrer"
 						onclick={closeSidebar}
-						class="flex items-center gap-3 px-3 py-2 text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
+						class="nav-item"
 						title="Open Chatwoot support dashboard"
 					>
-						<Icon name="headphones" size={18} />
-						<span class="text-sm font-medium">Support Dashboard</span>
-						<Icon name="external" size={12} class="ml-auto opacity-50" />
+						<Icon name="headphones" size={16} />
+						<span class="text-sm">Support Dashboard</span>
+						<Icon name="external" size={10} class="ml-auto text-neutral-600" />
 					</a>
 				{/if}
 			{/if}
@@ -257,64 +247,56 @@
 
 		{#if isAdmin}
 			<!-- Admin section -->
-			<div class="pt-6 pb-2 px-3">
-				<div class="text-xs uppercase tracking-widest text-neutral-600">Admin</div>
+			<div class="pt-5 pb-2 px-3">
+				<div class="section-label">Admin</div>
 			</div>
 			<a
 				href="/dashboard/admin"
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-3 py-2 transition-colors {currentPath.startsWith(
-					'/dashboard/admin'
-				)
-					? 'bg-primary-500/10 text-primary-400 border-l-2 border-primary-500 -ml-px'
-					: 'text-neutral-400 hover:bg-surface-elevated hover:text-white'}"
+				class="nav-item {currentPath.startsWith('/dashboard/admin') ? 'nav-item-active' : ''}"
 			>
-				<Icon name="wrench" size={18} />
-				<span class="text-sm font-medium">Admin</span>
+				<Icon name="wrench" size={16} />
+				<span class="text-sm">Admin</span>
 			</a>
 		{/if}
 	</nav>
 
 	<!-- User Section -->
-	<div class="p-4 border-t border-neutral-800 space-y-2">
+	<div class="p-3 border-t border-neutral-800/80 space-y-1">
 		{#if isAuthenticated}
 			{#if currentIdentity?.account}
 				<a
 					href="/dashboard/account"
 					onclick={closeSidebar}
-					class="block px-3 py-2 text-center text-neutral-300 hover:text-white border-b border-neutral-800 mb-2 transition-colors"
+					class="block px-3 py-2 text-center text-neutral-400 hover:text-white border-b border-neutral-800/60 mb-2 transition-colors"
 					title="View account settings"
 				>
-					<span class="font-medium text-sm">@{currentIdentity.account.username}</span>
+					<span class="text-xs font-medium">@{currentIdentity.account.username}</span>
 				</a>
 			{/if}
 			<a
 				href="/dashboard/account"
 				onclick={closeSidebar}
-				class="flex items-center gap-3 px-3 py-2 transition-colors {currentPath.startsWith(
-					'/dashboard/account'
-				)
-					? 'bg-primary-500/10 text-primary-400'
-					: 'text-neutral-400 hover:bg-surface-elevated hover:text-white'}"
+				class="nav-item {currentPath.startsWith('/dashboard/account') ? 'nav-item-active' : ''}"
 			>
-				<Icon name="user" size={18} />
-				<span class="text-sm font-medium">Account</span>
+				<Icon name="user" size={16} />
+				<span class="text-sm">Account</span>
 			</a>
 			<button
 				type="button"
 				onclick={handleLogout}
-				class="w-full flex items-center gap-3 px-3 py-2 text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
+				class="nav-item w-full"
 			>
-				<Icon name="logout" size={18} />
-				<span class="text-sm font-medium">Logout</span>
+				<Icon name="logout" size={16} />
+				<span class="text-sm">Logout</span>
 			</button>
 		{:else}
 			<button
 				type="button"
 				onclick={handleLogin}
-				class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500 text-base font-semibold hover:bg-primary-400 transition-colors"
+				class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 			>
-				<Icon name="login" size={18} />
+				<Icon name="login" size={16} />
 				<span>Sign In</span>
 			</button>
 		{/if}

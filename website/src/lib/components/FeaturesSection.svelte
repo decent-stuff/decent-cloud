@@ -30,38 +30,38 @@
 	];
 </script>
 
-<section id="features" class="py-24 px-6">
+<section id="features" class="py-28 px-6">
 	<div class="max-w-6xl mx-auto">
 		<!-- Section header -->
 		<div class="text-center mb-16">
-			<div class="inline-block px-3 py-1 mb-4 text-xs uppercase tracking-widest text-primary-400 border border-primary-500/30 bg-primary-500/5">
-				Features
+			<div class="inline-flex items-center gap-2 px-3 py-1.5 mb-5 bg-surface border border-neutral-800">
+				<span class="text-[10px] uppercase tracking-label text-primary-400">Features</span>
 			</div>
-			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">
+			<h2 class="section-title mb-4">
 				Why Decent Cloud?
 			</h2>
-			<p class="text-neutral-400 max-w-2xl mx-auto">
+			<p class="section-subtitle mx-auto text-center">
 				A marketplace where trust is earned, not claimed. Every metric you see is calculated from real transactions.
 			</p>
 		</div>
 
 		<!-- Features grid -->
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 			{#each features as feature, i}
 				<div
-					class="group bg-surface border border-neutral-800 p-6 hover:border-neutral-700 transition-colors"
-					style="animation: slide-up 0.5s ease-out {i * 0.1}s both"
+					class="group feature-card"
+					style="animation: slide-up 0.5s ease-out {i * 0.08}s both"
 				>
 					<!-- Icon -->
-					<div class="w-12 h-12 bg-surface-elevated border border-neutral-700 flex items-center justify-center mb-5 group-hover:border-primary-500/50 transition-colors">
-						<Icon name={feature.icon} size={22} class="text-primary-400" />
+					<div class="feature-card-icon">
+						<Icon name={feature.icon} size={20} class="text-primary-400" />
 					</div>
 
 					<!-- Content -->
-					<h3 class="text-lg font-semibold text-white mb-2">
+					<h3 class="text-base font-semibold text-white mb-2">
 						{feature.title}
 					</h3>
-					<p class="text-sm text-neutral-400 leading-relaxed">
+					<p class="text-sm text-neutral-500 leading-relaxed">
 						{feature.description}
 					</p>
 				</div>

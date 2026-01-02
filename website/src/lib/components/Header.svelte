@@ -34,51 +34,53 @@
 	}
 </script>
 
-<header class="fixed top-0 left-0 right-0 z-50 bg-base/90 backdrop-blur-md border-b border-neutral-800">
-	<div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+<header class="fixed top-0 left-0 right-0 z-50 bg-base/95 backdrop-blur-lg border-b border-neutral-800/80">
+	<div class="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
 		<!-- Logo -->
-		<a href="/" class="text-xl font-bold text-white hover:text-primary-400 transition-colors tracking-tight">
-			Decent Cloud
+		<a href="/" class="group flex items-center gap-2">
+			<span class="text-lg font-bold text-white tracking-tight group-hover:text-primary-400 transition-colors">
+				Decent Cloud
+			</span>
 		</a>
 
 		<!-- Actions -->
-		<div class="flex items-center gap-4">
+		<div class="flex items-center gap-3">
 			{#if isAuthenticated}
 				{#if currentIdentity?.account}
 					<a
 						href="/dashboard/account"
-						class="text-neutral-400 hover:text-white transition-colors text-sm font-medium"
+						class="px-3 py-1.5 text-neutral-400 hover:text-white text-sm font-medium transition-colors"
 						title="Account Settings"
 					>
 						@{currentIdentity.account.username}
 					</a>
 				{:else if currentIdentity?.displayName}
-					<span class="text-neutral-400 text-sm">
+					<span class="px-3 py-1.5 text-neutral-500 text-sm">
 						{currentIdentity.displayName}
 					</span>
 				{:else if currentIdentity?.principal}
-					<span class="text-neutral-500 text-sm font-mono" title={currentIdentity.principal.toString()}>
+					<span class="px-3 py-1.5 text-neutral-600 text-xs font-mono" title={currentIdentity.principal.toString()}>
 						{truncate(currentIdentity.principal.toString())}
 					</span>
 				{/if}
 				<a
 					href="/dashboard/marketplace"
-					class="inline-flex items-center gap-2 px-5 py-2 bg-primary-500 text-base font-semibold hover:bg-primary-400 transition-colors"
+					class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 				>
 					<span>Dashboard</span>
-					<Icon name="arrow-right" size={16} />
+					<Icon name="arrow-right" size={14} />
 				</a>
 			{:else}
 				<a
 					href="/dashboard/marketplace"
-					class="text-neutral-400 hover:text-white transition-colors text-sm font-medium"
+					class="px-3 py-1.5 text-neutral-400 hover:text-white text-sm font-medium transition-colors"
 				>
-					Dashboard
+					Explore
 				</a>
 				<button
 					type="button"
 					onclick={handleConnect}
-					class="inline-flex items-center gap-2 px-5 py-2 bg-primary-500 text-base font-semibold hover:bg-primary-400 transition-colors"
+					class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 				>
 					<span>Sign In</span>
 				</button>

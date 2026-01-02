@@ -48,44 +48,44 @@
 	];
 </script>
 
-<section class="py-24 px-6 bg-surface/50">
+<section class="py-28 px-6 bg-surface-elevated/30">
 	<div class="max-w-6xl mx-auto">
 		<!-- Section header -->
 		<div class="text-center mb-16">
-			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">
+			<h2 class="section-title mb-4">
 				Your Concerns. <span class="text-gradient">Our Solutions.</span>
 			</h2>
-			<p class="text-neutral-400 max-w-2xl mx-auto">
+			<p class="section-subtitle mx-auto text-center">
 				We know what worries you about renting from unknown providers.
 				That's why we built a system that makes bad behavior impossible to hide.
 			</p>
 		</div>
 
 		<!-- Guarantees grid -->
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 			{#each guarantees as item, i}
 				<div
-					class="bg-surface border border-neutral-800 p-6 hover:border-neutral-700 transition-colors"
-					style="animation: slide-up 0.5s ease-out {i * 0.08}s both"
+					class="feature-card group"
+					style="animation: slide-up 0.5s ease-out {i * 0.06}s both"
 				>
-					<div class="flex gap-4">
+					<div class="flex gap-3">
 						<!-- Icon -->
-						<div class="shrink-0 w-10 h-10 bg-surface-elevated border border-neutral-700 flex items-center justify-center">
-							<Icon name={item.icon} size={18} class="text-primary-400" />
+						<div class="feature-card-icon shrink-0 w-10 h-10 mb-0">
+							<Icon name={item.icon} size={16} class="text-primary-400" />
 						</div>
 
 						<!-- Content -->
 						<div class="space-y-2">
 							<!-- Fear (the problem) -->
-							<p class="text-sm text-neutral-500 italic">
+							<p class="text-xs text-neutral-600">
 								"{item.fear}"
 							</p>
 							<!-- Solution -->
-							<h3 class="text-lg font-semibold text-white">
+							<h3 class="text-base font-semibold text-white">
 								{item.solution}
 							</h3>
 							<!-- Description -->
-							<p class="text-sm text-neutral-400 leading-relaxed">
+							<p class="text-sm text-neutral-500 leading-relaxed">
 								{item.description}
 							</p>
 						</div>
@@ -95,10 +95,10 @@
 		</div>
 
 		<!-- Bottom badge -->
-		<div class="mt-12 text-center">
-			<div class="inline-flex items-center gap-3 px-5 py-3 bg-surface border border-neutral-800">
-				<Icon name="check" size={18} class="text-primary-400" />
-				<span class="text-neutral-300 text-sm">
+		<div class="mt-14 text-center">
+			<div class="inline-flex items-center gap-2.5 px-4 py-2.5 bg-surface border border-neutral-800">
+				<Icon name="check" size={14} class="text-primary-500" />
+				<span class="text-neutral-400 text-xs">
 					All provider metrics are calculated from real data, not self-reported
 				</span>
 			</div>

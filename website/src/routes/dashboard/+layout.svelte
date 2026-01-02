@@ -45,16 +45,16 @@
 	<DashboardSidebar bind:isOpen={isSidebarOpen} {isAuthenticated} />
 
 	<!-- Mobile header -->
-	<header class="fixed top-0 left-0 right-0 h-16 bg-surface border-b border-neutral-800 flex items-center px-4 md:hidden z-30">
+	<header class="fixed top-0 left-0 right-0 h-14 bg-surface border-b border-neutral-800/80 flex items-center px-4 md:hidden z-30">
 		<button
 			type="button"
 			onclick={toggleSidebar}
-			class="text-neutral-400 p-2 hover:bg-surface-elevated hover:text-white transition-colors"
+			class="text-neutral-400 p-2 hover:bg-surface-hover hover:text-white transition-colors"
 			aria-label="Toggle menu"
 		>
-			<Icon name="menu" size={22} />
+			<Icon name="menu" size={20} />
 		</button>
-		<span class="ml-3 text-white font-bold">Decent Cloud</span>
+		<span class="ml-3 text-white font-semibold text-sm">Decent Cloud</span>
 	</header>
 
 	<!-- Auth prompt banner for anonymous users -->
@@ -65,8 +65,8 @@
 	{/if}
 
 	<!-- Main content area -->
-	<main class="md:ml-64 p-4 md:p-8 pt-20 md:pt-8 {showEmailVerificationBanner ? 'pt-44 md:pt-24' : ''} {!isAuthenticated ? 'md:pt-24' : ''}">
-		<div class="max-w-7xl mx-auto">
+	<main class="md:ml-60 p-4 md:p-6 pt-18 md:pt-6 {showEmailVerificationBanner ? 'pt-44 md:pt-20' : ''} {!isAuthenticated ? 'md:pt-20' : ''}">
+		<div class="max-w-6xl mx-auto">
 			{@render children()}
 		</div>
 	</main>

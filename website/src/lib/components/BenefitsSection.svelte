@@ -52,52 +52,52 @@
 	];
 </script>
 
-<section class="py-24 px-6">
+<section class="py-28 px-6">
 	<div class="max-w-6xl mx-auto">
 		<!-- Section header -->
 		<div class="text-center mb-16">
-			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">
+			<h2 class="section-title">
 				Benefits for Everyone
 			</h2>
 		</div>
 
 		<!-- Benefits grid -->
-		<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 			{#each benefits as benefit, i}
 				<div
-					class="bg-surface border border-neutral-800 p-8"
-					style="animation: slide-up 0.5s ease-out {i * 0.1}s both"
+					class="card p-6"
+					style="animation: slide-up 0.5s ease-out {i * 0.08}s both"
 				>
 					<!-- Header -->
-					<div class="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-800">
-						<div class="w-12 h-12 bg-surface-elevated border border-neutral-700 flex items-center justify-center">
-							<Icon name={benefit.icon} size={22} class="text-primary-400" />
+					<div class="flex items-center gap-3 mb-5 pb-5 border-b border-neutral-800/80">
+						<div class="icon-box">
+							<Icon name={benefit.icon} size={18} />
 						</div>
 						<div>
-							<h3 class="text-xl font-semibold text-white">
+							<h3 class="text-base font-semibold text-white">
 								{benefit.title}
 							</h3>
-							<p class="text-sm text-neutral-500 italic">
+							<p class="text-xs text-neutral-500 mt-0.5">
 								{benefit.tagline}
 							</p>
 						</div>
 					</div>
 
 					<!-- Items -->
-					<ul class="space-y-3">
+					<ul class="space-y-2.5">
 						{#each benefit.items as item}
-							<li class="flex items-start gap-3">
-								<Icon name="check" size={16} class="text-primary-400 shrink-0 mt-0.5" />
-								<span class="text-sm text-neutral-300">{item}</span>
+							<li class="flex items-start gap-2.5">
+								<Icon name="check" size={14} class="text-primary-500 shrink-0 mt-0.5" />
+								<span class="text-sm text-neutral-400">{item}</span>
 							</li>
 						{/each}
 					</ul>
 
 					<!-- Note if present -->
 					{#if benefit.note}
-						<div class="mt-6 pt-4 border-t border-neutral-800">
-							<div class="flex items-start gap-3">
-								<Icon name="alert" size={14} class="text-warning shrink-0 mt-0.5" />
+						<div class="mt-5 pt-4 border-t border-neutral-800/80">
+							<div class="flex items-start gap-2.5">
+								<Icon name="alert" size={12} class="text-warning shrink-0 mt-0.5" />
 								<p class="text-xs text-neutral-500">{benefit.note}</p>
 							</div>
 						</div>
