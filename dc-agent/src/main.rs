@@ -58,7 +58,7 @@ enum Commands {
     /// Set up a new provisioner
     Setup {
         #[command(subcommand)]
-        provisioner: SetupProvisioner,
+        provisioner: Box<SetupProvisioner>,
     },
     /// Test provisioning by creating and optionally destroying a test VM
     TestProvision {
@@ -124,6 +124,39 @@ enum SetupProvisioner {
         /// Skip interactive prompts (use with --proxmox-host for non-interactive setup)
         #[arg(long, default_value = "false")]
         non_interactive: bool,
+
+        // === Optional: Gateway setup (Traefik reverse proxy) ===
+        /// Datacenter identifier for gateway (e.g., dc-lk). Enables gateway setup.
+        #[arg(long)]
+        gateway_datacenter: Option<String>,
+
+        /// Host's public IPv4 address (required if --gateway-datacenter is set)
+        #[arg(long)]
+        gateway_public_ip: Option<String>,
+
+        /// Cloudflare API token with DNS edit permissions (required if --gateway-datacenter is set)
+        #[arg(long)]
+        cloudflare_token: Option<String>,
+
+        /// Cloudflare Zone ID (auto-detected from domain if not provided)
+        #[arg(long)]
+        cloudflare_zone_id: Option<String>,
+
+        /// Base domain for gateway (default: decent-cloud.org)
+        #[arg(long, default_value = "decent-cloud.org")]
+        gateway_domain: String,
+
+        /// Start of port range for VM allocation (default: 20000)
+        #[arg(long, default_value = "20000")]
+        gateway_port_start: u16,
+
+        /// End of port range for VM allocation (default: 59999)
+        #[arg(long, default_value = "59999")]
+        gateway_port_end: u16,
+
+        /// Number of ports per VM (default: 10)
+        #[arg(long, default_value = "10")]
+        gateway_ports_per_vm: u16,
     },
     /// Set up Proxmox VE provisioner (creates templates and API token).
     /// Note: Agent registration now requires a setup token from a pool.
@@ -239,7 +272,7 @@ async fn main() -> Result<()> {
                 _ => unreachable!(),
             }
         }
-        Commands::Setup { provisioner } => run_setup(provisioner).await,
+        Commands::Setup { provisioner } => run_setup(*provisioner).await,
     }
 }
 
@@ -257,6 +290,16 @@ async fn run_setup_token(
     proxmox_storage: &str,
     proxmox_templates: &str,
     non_interactive: bool,
+    // Gateway parameters
+    gateway_datacenter: Option<String>,
+    gateway_public_ip: Option<String>,
+    cloudflare_token: Option<String>,
+    cloudflare_zone_id: Option<String>,
+    gateway_domain: &str,
+    gateway_port_start: u16,
+    gateway_port_end: u16,
+    gateway_ports_per_vm: u16,
+    gateway_ssh_host: Option<String>,
 ) -> Result<()> {
     use dc_agent::geolocation::{country_to_region, detect_country, region_display_name};
     use std::io::Write;
@@ -331,6 +374,7 @@ async fn run_setup_token(
     println!("Permissions: {}", response.permissions.join(", "));
 
     // Step 5: If pool uses Proxmox, optionally run automated setup
+    let proxmox_host_for_gateway = proxmox_host.clone();
     let proxmox_config = if response.provisioner_type == "proxmox" {
         run_proxmox_setup_if_requested(
             proxmox_host,
@@ -438,17 +482,48 @@ type = "{provisioner_type}"
 
     println!();
     println!("Configuration written to: {}", output.display());
+
+    // Step 7: Run gateway setup if parameters provided
+    let gateway_configured = run_gateway_setup_if_requested(
+        gateway_datacenter,
+        gateway_public_ip,
+        cloudflare_token,
+        cloudflare_zone_id,
+        gateway_domain,
+        gateway_port_start,
+        gateway_port_end,
+        gateway_ports_per_vm,
+        gateway_ssh_host.or(proxmox_host_for_gateway),
+        proxmox_ssh_port,
+        proxmox_ssh_user,
+        non_interactive,
+        output,
+    )
+    .await?;
+
     println!();
 
     // Provide type-specific next steps
     match response.provisioner_type.as_str() {
         "proxmox" => {
-            if proxmox_config.is_some() {
+            if proxmox_config.is_some() && gateway_configured {
+                println!("✓ Proxmox and Gateway configured successfully!");
+                println!();
+                println!("Configuration is ready to use. Next steps:");
+                println!("  1. Verify: dc-agent --config {} doctor", output.display());
+                println!("  2. Start: dc-agent --config {} run", output.display());
+            } else if proxmox_config.is_some() {
                 println!("✓ Proxmox configured successfully!");
                 println!();
                 println!("Configuration is ready to use. Next steps:");
                 println!("  1. Verify: dc-agent --config {} doctor", output.display());
                 println!("  2. Start: dc-agent --config {} run", output.display());
+                if !gateway_configured {
+                    println!();
+                    println!("Note: Gateway not configured. VMs will need public IPs.");
+                    println!("  To enable gateway, run setup again with:");
+                    println!("    --gateway-datacenter <DC> --gateway-public-ip <IP> --cloudflare-token <TOKEN>");
+                }
             } else {
                 println!(
                     "IMPORTANT: You must configure Proxmox settings before running the agent!"
@@ -648,6 +723,106 @@ async fn run_proxmox_setup_if_requested(
     Ok(Some(config))
 }
 
+/// Optionally run gateway setup based on CLI args.
+/// Returns true if gateway was configured, false otherwise.
+#[allow(clippy::too_many_arguments)]
+async fn run_gateway_setup_if_requested(
+    datacenter: Option<String>,
+    public_ip: Option<String>,
+    cloudflare_token: Option<String>,
+    cloudflare_zone_id: Option<String>,
+    domain: &str,
+    port_start: u16,
+    port_end: u16,
+    ports_per_vm: u16,
+    ssh_host: Option<String>,
+    ssh_port: u16,
+    ssh_user: &str,
+    non_interactive: bool,
+    config_path: &std::path::Path,
+) -> Result<bool> {
+    use std::io::Write;
+
+    // Check if gateway setup was requested
+    let datacenter = match datacenter {
+        Some(dc) => dc,
+        None => {
+            // Gateway not requested
+            return Ok(false);
+        }
+    };
+
+    // Validate required parameters
+    let public_ip = public_ip.ok_or_else(|| {
+        anyhow::anyhow!("--gateway-public-ip is required when --gateway-datacenter is set")
+    })?;
+
+    let cf_token = cloudflare_token.ok_or_else(|| {
+        anyhow::anyhow!("--cloudflare-token is required when --gateway-datacenter is set")
+    })?;
+
+    let host = ssh_host.ok_or_else(|| {
+        anyhow::anyhow!(
+            "--proxmox-host is required for gateway setup (used as SSH target)"
+        )
+    })?;
+
+    println!();
+    println!("Setting up Gateway (Traefik reverse proxy)...");
+    println!("  Host: {}", host);
+    println!("  Datacenter: {}", datacenter);
+    println!("  Domain: {}", domain);
+    println!("  Public IP: {}", public_ip);
+    println!(
+        "  Port range: {}-{} ({} per VM)",
+        port_start, port_end, ports_per_vm
+    );
+    println!();
+
+    // In non-interactive mode, we can't prompt for password
+    let ssh_password = if non_interactive {
+        anyhow::bail!(
+            "Gateway setup requires SSH password. Cannot run in non-interactive mode."
+        );
+    } else {
+        rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?
+    };
+
+    println!();
+
+    let setup = GatewaySetup {
+        host: host.clone(),
+        ssh_port,
+        ssh_user: ssh_user.to_string(),
+        ssh_password,
+        datacenter: datacenter.clone(),
+        domain: domain.to_string(),
+        public_ip: public_ip.clone(),
+        cloudflare_api_token: cf_token,
+        cloudflare_zone_id,
+        port_range_start: port_start,
+        port_range_end: port_end,
+        ports_per_vm,
+    };
+
+    let result = setup.run().await?;
+
+    // Generate and append gateway config
+    let gateway_config = setup.generate_gateway_config(&result.cloudflare_zone_id);
+
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(config_path)
+        .context("Failed to open config file for appending gateway config")?;
+    file.write_all(gateway_config.as_bytes())?;
+
+    println!();
+    println!("✓ Gateway configured successfully!");
+    println!("  Gateway config appended to: {}", config_path.display());
+
+    Ok(true)
+}
+
 async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
     match provisioner {
         SetupProvisioner::Token {
@@ -662,19 +837,37 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             proxmox_storage,
             proxmox_templates,
             non_interactive,
+            gateway_datacenter,
+            gateway_public_ip,
+            cloudflare_token,
+            cloudflare_zone_id,
+            gateway_domain,
+            gateway_port_start,
+            gateway_port_end,
+            gateway_ports_per_vm,
         } => {
             run_setup_token(
                 &token,
                 &api_url,
                 &output,
                 force,
-                proxmox_host,
+                proxmox_host.clone(),
                 proxmox_ssh_port,
                 &proxmox_ssh_user,
                 &proxmox_user,
                 &proxmox_storage,
                 &proxmox_templates,
                 non_interactive,
+                // Gateway parameters
+                gateway_datacenter,
+                gateway_public_ip,
+                cloudflare_token,
+                cloudflare_zone_id,
+                &gateway_domain,
+                gateway_port_start,
+                gateway_port_end,
+                gateway_ports_per_vm,
+                proxmox_host, // Reuse as SSH host for gateway
             )
             .await
         }
@@ -1003,6 +1196,7 @@ async fn run_agent(config: Config) -> Result<()> {
         &mut heartbeat_interval_secs,
         &mut heartbeat_ticker,
         &mut heartbeat_failures,
+        gateway_manager.clone(),
     )
     .await;
 
@@ -1012,7 +1206,7 @@ async fn run_agent(config: Config) -> Result<()> {
                 active_contracts = poll_and_provision(&api_client, &provisioners, &default_provisioner_type, config.polling.orphan_grace_period_seconds, &mut orphan_tracker, &mut poll_failures, gateway_manager.clone()).await;
             }
             _ = heartbeat_ticker.tick() => {
-                send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures).await;
+                send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures, gateway_manager.clone()).await;
             }
         }
     }
@@ -1025,13 +1219,50 @@ async fn send_heartbeat(
     heartbeat_interval_secs: &mut u64,
     heartbeat_ticker: &mut tokio::time::Interval,
     consecutive_failures: &mut u32,
+    gateway_manager: OptionalGatewayManager,
 ) {
+    // Collect bandwidth stats from gateway manager if available
+    let bandwidth_stats = if let Some(ref gw) = gateway_manager {
+        let gw_lock = gw.lock().await;
+        let stats = gw_lock.get_bandwidth_stats();
+        let allocations = gw_lock.port_allocations();
+
+        if stats.is_empty() {
+            None
+        } else {
+            // Map slug -> contract_id from allocations
+            let reports: Vec<_> = stats
+                .into_iter()
+                .filter_map(|(slug, bw)| {
+                    allocations
+                        .allocations
+                        .get(&slug)
+                        .map(|alloc| dc_agent::api_client::VmBandwidthReport {
+                            gateway_slug: slug,
+                            contract_id: alloc.contract_id.clone(),
+                            bytes_in: bw.bytes_in,
+                            bytes_out: bw.bytes_out,
+                        })
+                })
+                .collect();
+
+            if reports.is_empty() {
+                None
+            } else {
+                Some(reports)
+            }
+        }
+    } else {
+        None
+    };
+
     match api_client
         .send_heartbeat(
             Some(env!("CARGO_PKG_VERSION")),
             Some(provisioner_type),
             None,
             active_contracts,
+            bandwidth_stats,
         )
         .await
     {
@@ -1857,6 +2088,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 Some(provisioner_type),
                 None,
                 0,
+                None, // No bandwidth stats in doctor mode
             )
             .await
         {

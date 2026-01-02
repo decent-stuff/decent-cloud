@@ -158,6 +158,20 @@ struct HealthCheckRequest {
     health_status: HealthStatus,
 }
 
+/// Bandwidth stats for a single VM
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VmBandwidthReport {
+    /// Gateway slug (6-char identifier)
+    pub gateway_slug: String,
+    /// Contract ID this VM belongs to
+    pub contract_id: String,
+    /// Bytes received by the VM since last reset
+    pub bytes_in: u64,
+    /// Bytes sent by the VM since last reset
+    pub bytes_out: u64,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HeartbeatRequest {
@@ -165,6 +179,9 @@ struct HeartbeatRequest {
     provisioner_type: Option<String>,
     capabilities: Option<Vec<String>>,
     active_contracts: i64,
+    /// Per-VM bandwidth stats (optional, only if gateway is configured)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bandwidth_stats: Option<Vec<VmBandwidthReport>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -488,6 +505,7 @@ impl ApiClient {
         provisioner_type: Option<&str>,
         capabilities: Option<&[String]>,
         active_contracts: i64,
+        bandwidth_stats: Option<Vec<VmBandwidthReport>>,
     ) -> Result<HeartbeatResponse> {
         let path = format!("/api/v1/providers/{}/heartbeat", self.provider_pubkey);
         let request = HeartbeatRequest {
@@ -495,6 +513,7 @@ impl ApiClient {
             provisioner_type: provisioner_type.map(String::from),
             capabilities: capabilities.map(|c| c.to_vec()),
             active_contracts,
+            bandwidth_stats,
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<HeartbeatResponse> =

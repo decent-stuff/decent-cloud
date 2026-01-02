@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                bh.id as \"id!: i64\",\n                bh.contract_id as \"contract_id!: String\",\n                bh.gateway_slug as \"gateway_slug!: String\",\n                bh.provider_pubkey as \"provider_pubkey!: String\",\n                bh.bytes_in as \"bytes_in!: i64\",\n                bh.bytes_out as \"bytes_out!: i64\",\n                bh.recorded_at_ns as \"recorded_at_ns!: i64\"\n               FROM bandwidth_history bh\n               INNER JOIN (\n                   SELECT contract_id, MAX(recorded_at_ns) as max_ts\n                   FROM bandwidth_history\n                   WHERE provider_pubkey = ?\n                   GROUP BY contract_id\n               ) latest ON bh.contract_id = latest.contract_id AND bh.recorded_at_ns = latest.max_ts\n               WHERE bh.provider_pubkey = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "contract_id!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "gateway_slug!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "provider_pubkey!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "bytes_in!: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "bytes_out!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "recorded_at_ns!: i64",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6e10df1a20529b599659eb8e6673e2a0bf8c8bae80399d4a04ba0a385127c610"
+}

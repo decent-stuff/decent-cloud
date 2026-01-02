@@ -574,6 +574,11 @@ export interface Contract {
 	subscription_status?: string;
 	current_period_end_ns?: number;
 	cancel_at_period_end?: boolean;
+	// Gateway fields
+	gateway_slug?: string;
+	gateway_ssh_port?: number;
+	gateway_port_range_start?: number;
+	gateway_port_range_end?: number;
 }
 
 export interface RentalRequestParams {
@@ -1881,4 +1886,78 @@ export async function cancelSubscription(
 	}
 
 	return payload.data;
+}
+
+// ==================== Bandwidth Stats API ====================
+
+import type { BandwidthStatsResponse } from '$lib/types/generated/BandwidthStatsResponse';
+import type { BandwidthHistoryResponse } from '$lib/types/generated/BandwidthHistoryResponse';
+
+export type { BandwidthStatsResponse, BandwidthHistoryResponse };
+
+/**
+ * Get bandwidth stats for all provider's contracts
+ * Requires provider authentication
+ */
+export async function getProviderBandwidthStats(
+	providerPubkey: string | Uint8Array,
+	headers: SignedRequestHeaders
+): Promise<BandwidthStatsResponse[]> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/bandwidth`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch bandwidth stats: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<BandwidthStatsResponse[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch bandwidth stats');
+	}
+
+	return payload.data ?? [];
+}
+
+/**
+ * Get bandwidth history for a specific contract
+ * Requires provider authentication
+ */
+export async function getContractBandwidthHistory(
+	providerPubkey: string | Uint8Array,
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<BandwidthHistoryResponse[]> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/contracts/${contractId}/bandwidth`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch bandwidth history: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<BandwidthHistoryResponse[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch bandwidth history');
+	}
+
+	return payload.data ?? [];
 }

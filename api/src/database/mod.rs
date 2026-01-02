@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod agent_delegations;
 pub mod agent_pools;
+pub mod bandwidth;
 pub mod chatwoot;
 pub mod contracts;
 pub mod core;

@@ -9,9 +9,11 @@
 		getProviderContracts,
 		respondToRentalRequest,
 		updateProvisioningStatus,
+		getProviderBandwidthStats,
 		type Contract,
 		type ProviderRentalResponseParams,
 		type ProvisioningStatusUpdateParams,
+		type BandwidthStatsResponse,
 		hexEncode,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
@@ -21,6 +23,7 @@
 
 	let pendingRequests = $state<Contract[]>([]),
 		managedContracts = $state<Contract[]>([]);
+	let bandwidthStats = $state<BandwidthStatsResponse[]>([]);
 	let loading = $state(true),
 		error = $state<string | null>(null),
 		actionMessage = $state<string | null>(null),
@@ -33,6 +36,15 @@
 	let unsubscribeAuth: (() => void) | null = null;
 	let autoAcceptEnabled = $state(false),
 		autoAcceptUpdating = $state(false);
+
+	// Format bytes to human readable
+	function formatBytes(bytes: number): string {
+		if (bytes === 0) return "0 B";
+		const k = 1024;
+		const sizes = ["B", "KB", "MB", "GB", "TB"];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+	}
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -106,6 +118,13 @@
 					contract.status.toLowerCase(),
 				),
 			);
+			// Load bandwidth stats
+			const bandwidthSigned = await signRequest(
+				normalizedIdentity.identity,
+				"GET",
+				`/api/v1/providers/${providerHex}/bandwidth`,
+			);
+			bandwidthStats = await getProviderBandwidthStats(providerHex, bandwidthSigned.headers);
 			// Load auto-accept setting
 			autoAcceptEnabled = await getAutoAcceptSetting(normalizedIdentity.identity);
 		} catch (e) {
@@ -385,6 +404,69 @@
 				</div>
 			{/if}
 		</section>
+
+		<!-- Bandwidth Stats Section -->
+		{#if bandwidthStats.length > 0}
+			<section class="space-y-4">
+				<div class="flex items-center justify-between mt-10">
+					<h2 class="text-2xl font-semibold text-white">
+						Bandwidth Usage
+					</h2>
+					<span class="text-white/60 text-sm"
+						>{bandwidthStats.length} contracts with gateway traffic</span
+					>
+				</div>
+
+				<div class="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-white/10 text-left">
+								<th class="px-4 py-3 text-white/60 font-medium">Contract</th>
+								<th class="px-4 py-3 text-white/60 font-medium">Gateway</th>
+								<th class="px-4 py-3 text-white/60 font-medium text-right">Inbound</th>
+								<th class="px-4 py-3 text-white/60 font-medium text-right">Outbound</th>
+								<th class="px-4 py-3 text-white/60 font-medium text-right">Total</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each bandwidthStats as stat}
+								<tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+									<td class="px-4 py-3 font-mono text-white/80">
+										{stat.contractId.substring(0, 12)}...
+									</td>
+									<td class="px-4 py-3 text-white/70">
+										{stat.gatewaySlug}
+									</td>
+									<td class="px-4 py-3 text-right text-emerald-400">
+										↓ {formatBytes(stat.bytesIn)}
+									</td>
+									<td class="px-4 py-3 text-right text-blue-400">
+										↑ {formatBytes(stat.bytesOut)}
+									</td>
+									<td class="px-4 py-3 text-right text-white font-medium">
+										{formatBytes(stat.bytesIn + stat.bytesOut)}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr class="bg-white/5">
+								<td colspan="2" class="px-4 py-3 text-white/60 font-medium">Total</td>
+								<td class="px-4 py-3 text-right text-emerald-400 font-medium">
+									↓ {formatBytes(bandwidthStats.reduce((sum, s) => sum + s.bytesIn, 0))}
+								</td>
+								<td class="px-4 py-3 text-right text-blue-400 font-medium">
+									↑ {formatBytes(bandwidthStats.reduce((sum, s) => sum + s.bytesOut, 0))}
+								</td>
+								<td class="px-4 py-3 text-right text-white font-bold">
+									{formatBytes(bandwidthStats.reduce((sum, s) => sum + s.bytesIn + s.bytesOut, 0))}
+								</td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			</section>
+		{/if}
 	{/if}
 	{/if}
 </div>

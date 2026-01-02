@@ -45,6 +45,24 @@ pub struct AgentSetupResponse {
     pub permissions: Vec<String>,
 }
 
+/// Bandwidth stats for a single VM
+#[derive(Debug, Clone, Deserialize, Serialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct VmBandwidthReport {
+    /// Gateway slug (6-char identifier)
+    pub gateway_slug: String,
+    /// Contract ID this VM belongs to
+    pub contract_id: String,
+    /// Bytes received by the VM since last reset
+    #[ts(type = "number")]
+    pub bytes_in: u64,
+    /// Bytes sent by the VM since last reset
+    #[ts(type = "number")]
+    pub bytes_out: u64,
+}
+
 /// Request for agent heartbeat
 #[derive(Debug, Deserialize, Object, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -60,6 +78,8 @@ pub struct HeartbeatRequest {
     /// Number of active contracts being managed
     #[ts(type = "number")]
     pub active_contracts: i64,
+    /// Per-VM bandwidth stats (optional, only if gateway is configured)
+    pub bandwidth_stats: Option<Vec<VmBandwidthReport>>,
 }
 
 /// Request to update agent delegation label
@@ -497,7 +517,7 @@ impl AgentsApi {
         };
 
         // Update heartbeat
-        match db
+        if let Err(e) = db
             .update_agent_heartbeat(
                 &provider_pubkey,
                 req.version.as_deref(),
@@ -507,22 +527,46 @@ impl AgentsApi {
             )
             .await
         {
-            Ok(()) => Json(ApiResponse {
-                success: true,
-                data: Some(HeartbeatResponse {
-                    acknowledged: true,
-                    next_heartbeat_seconds: 60,
-                    pool_id: auth.pool_id,
-                    pool_name,
-                }),
-                error: None,
-            }),
-            Err(e) => Json(ApiResponse {
+            return Json(ApiResponse {
                 success: false,
                 data: None,
                 error: Some(e.to_string()),
-            }),
+            });
         }
+
+        // Record bandwidth stats if provided
+        if let Some(ref stats) = req.bandwidth_stats {
+            for stat in stats {
+                if let Err(e) = db
+                    .record_bandwidth(
+                        &stat.contract_id,
+                        &stat.gateway_slug,
+                        &pubkey.0,
+                        stat.bytes_in,
+                        stat.bytes_out,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        contract_id = %stat.contract_id,
+                        error = %e,
+                        "Failed to record bandwidth stats"
+                    );
+                    // Don't fail heartbeat for bandwidth recording errors
+                }
+            }
+        }
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(HeartbeatResponse {
+                acknowledged: true,
+                next_heartbeat_seconds: 60,
+                pool_id: auth.pool_id,
+                pool_name,
+            }),
+            error: None,
+        })
     }
 
     /// Manage gateway DNS records

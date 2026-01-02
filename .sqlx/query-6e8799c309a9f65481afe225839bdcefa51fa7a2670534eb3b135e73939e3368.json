@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO bandwidth_history (contract_id, gateway_slug, provider_pubkey, bytes_in, bytes_out, recorded_at_ns)\n               VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "6e8799c309a9f65481afe225839bdcefa51fa7a2670534eb3b135e73939e3368"
+}

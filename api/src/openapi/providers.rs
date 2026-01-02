@@ -2724,4 +2724,158 @@ impl ProvidersApi {
             }),
         }
     }
+
+    /// Get bandwidth stats for all provider's contracts
+    ///
+    /// Returns the latest bandwidth usage for all contracts with gateway routing.
+    /// Requires provider authentication.
+    #[oai(
+        path = "/providers/:pubkey/bandwidth",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_bandwidth(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<BandwidthStatsResponse>>> {
+        // Decode and verify auth
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.get_provider_bandwidth_stats(&pubkey.0).await {
+            Ok(stats) => {
+                let response: Vec<BandwidthStatsResponse> = stats
+                    .into_iter()
+                    .map(|s| BandwidthStatsResponse {
+                        contract_id: s.contract_id,
+                        gateway_slug: s.gateway_slug,
+                        bytes_in: s.bytes_in,
+                        bytes_out: s.bytes_out,
+                        last_updated_ns: s.last_updated_ns,
+                    })
+                    .collect();
+
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(response),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get bandwidth history for a specific contract
+    ///
+    /// Returns bandwidth history records for graphing/analysis.
+    /// Requires provider authentication.
+    #[oai(
+        path = "/providers/:pubkey/contracts/:contract_id/bandwidth",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_contract_bandwidth(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        contract_id: Path<String>,
+    ) -> Json<ApiResponse<Vec<BandwidthHistoryResponse>>> {
+        // Decode and verify auth
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Get history (last 100 records)
+        match db.get_bandwidth_history(&contract_id.0, 100).await {
+            Ok(records) => {
+                let response: Vec<BandwidthHistoryResponse> = records
+                    .into_iter()
+                    .map(|r| BandwidthHistoryResponse {
+                        bytes_in: r.bytes_in as u64,
+                        bytes_out: r.bytes_out as u64,
+                        recorded_at_ns: r.recorded_at_ns,
+                    })
+                    .collect();
+
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(response),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+}
+
+/// Bandwidth stats for a contract
+#[derive(Debug, serde::Serialize, poem_openapi::Object, ts_rs::TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct BandwidthStatsResponse {
+    pub contract_id: String,
+    pub gateway_slug: String,
+    #[ts(type = "number")]
+    pub bytes_in: u64,
+    #[ts(type = "number")]
+    pub bytes_out: u64,
+    #[ts(type = "number")]
+    pub last_updated_ns: i64,
+}
+
+/// A single bandwidth history record
+#[derive(Debug, serde::Serialize, poem_openapi::Object, ts_rs::TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct BandwidthHistoryResponse {
+    #[ts(type = "number")]
+    pub bytes_in: u64,
+    #[ts(type = "number")]
+    pub bytes_out: u64,
+    #[ts(type = "number")]
+    pub recorded_at_ns: i64,
 }
