@@ -4,12 +4,34 @@ SQLX_OFFLINE = "true"
 
 [config]
 default_to_workspace = false
-init_task = "dfx-start"
-end_task = "dfx-stop"
-on_error_task = "dfx-stop"
+init_task = "postgres-start"
+end_task = "cleanup"
+on_error_task = "cleanup"
 unstable_features = ["CTRL_C_HANDLING"]
 
+[tasks.postgres-start]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+echo "Starting postgres..."
+if ! output=$(docker compose up -d postgres 2>&1); then
+    if echo "$output" | grep -q "port is already allocated"; then
+        echo "✗ Port 5432 is already in use"
+        echo "Check running containers: docker ps"
+        echo "Stop other postgres containers or change the port mapping"
+        exit 1
+    fi
+    echo "✗ Failed to start postgres"
+    echo "$output"
+    exit 1
+fi
+
+scripts/docker-compose-health.sh postgres 30
+'''
+
 [tasks.dfx-start]
+dependencies = ["postgres-start"]
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
@@ -44,7 +66,7 @@ args = ["clippy", "--tests"]
 [tasks.clippy-canister]
 dependencies = ["dfx-start"]
 command = "cargo"
-args = ["clippy", "--tests", "--target=wasm32-unknown-unknown"]
+args = ["clippy", "--target=wasm32-unknown-unknown"]
 cwd = "./ic-canister/"
 
 [tasks.build]
@@ -94,6 +116,15 @@ script = '''
 set -eExuo pipefail
 
 ( cd ./ic-canister && for i in {1..10}; do dfx stop && break; sleep 1; pkill -9 -f versions || true; done; )
+'''
+
+[tasks.postgres-stop]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+echo "Stopping postgres..."
+docker compose down
 '''
 
 [tasks.sqlx-prepare]
@@ -151,3 +182,6 @@ dependencies = [
     "website-build",
     "dfx-stop",
 ]
+
+[tasks.cleanup]
+dependencies = ["dfx-stop", "postgres-stop"]
