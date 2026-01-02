@@ -229,7 +229,7 @@
 			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400 mx-auto"></div>
 		</div>
 	{:else if error}
-		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-300">
+		<div class="bg-red-500/20 border border-red-500/30  p-6 text-red-300">
 			<h2 class="font-bold mb-2">Error loading pool</h2>
 			<p>{error}</p>
 		</div>
@@ -248,7 +248,7 @@
 				<div>
 					<button
 						onclick={() => showTokenDialog = true}
-						class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
+						class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600  font-semibold text-white hover:brightness-110 transition-all"
 					>
 						+ Add Agent
 					</button>
@@ -258,27 +258,27 @@
 
 		<!-- Stats Cards -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			<div class="bg-glass/5 border border-glass/10 rounded-xl p-5">
-				<div class="text-sm text-white/60 mb-1">Agents</div>
+			<div class="bg-surface-elevated border border-neutral-800  p-5">
+				<div class="text-sm text-neutral-500 mb-1">Agents</div>
 				<div class="text-2xl font-semibold text-white">{pool.agentCount}</div>
 			</div>
-			<div class="bg-glass/5 border border-glass/10 rounded-xl p-5">
-				<div class="text-sm text-white/60 mb-1">Online</div>
+			<div class="bg-surface-elevated border border-neutral-800  p-5">
+				<div class="text-sm text-neutral-500 mb-1">Online</div>
 				<div class="text-2xl font-semibold text-green-400">{pool.onlineCount} / {pool.agentCount}</div>
 			</div>
-			<div class="bg-glass/5 border border-glass/10 rounded-xl p-5">
-				<div class="text-sm text-white/60 mb-1">Active Contracts</div>
+			<div class="bg-surface-elevated border border-neutral-800  p-5">
+				<div class="text-sm text-neutral-500 mb-1">Active Contracts</div>
 				<div class="text-2xl font-semibold text-white">{pool.activeContracts}</div>
 			</div>
 		</div>
 
 		<!-- Agent Delegations Table -->
-		<div class="bg-glass/5 border border-glass/10 rounded-xl overflow-hidden">
-			<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-glass/10">
+		<div class="bg-surface-elevated border border-neutral-800  overflow-hidden">
+			<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-neutral-800">
 				Agent Delegations
 			</h3>
 			<table class="w-full text-sm text-left">
-				<thead class="bg-glass/5 text-xs text-white/60 uppercase">
+				<thead class="bg-surface-elevated text-xs text-neutral-500 uppercase">
 					<tr>
 						<th scope="col" class="px-6 py-3">Label</th>
 						<th scope="col" class="px-6 py-3">Agent Pubkey</th>
@@ -291,17 +291,17 @@
 				<tbody>
 					{#if delegations.length === 0}
 						<tr>
-							<td colspan="6" class="text-center py-8 text-white/50">
+							<td colspan="6" class="text-center py-8 text-neutral-500">
 								No agents delegated to this pool yet.
 							</td>
 						</tr>
 					{/if}
 					{#each delegations as delegation (delegation.agentPubkey)}
-						<tr class="border-b border-glass/10 last:border-b-0 hover:bg-glass/5 transition-colors">
+						<tr class="border-b border-neutral-800 last:border-b-0 hover:bg-surface-elevated transition-colors">
 							<th scope="row" class="px-6 py-4 font-medium text-white whitespace-nowrap">
 								{delegation.label || "No label"}
 							</th>
-							<td class="px-6 py-4 font-mono text-xs text-white/70" title={delegation.agentPubkey}>
+							<td class="px-6 py-4 font-mono text-xs text-neutral-400" title={delegation.agentPubkey}>
 								{formatPubkey(delegation.agentPubkey)}
 							</td>
 							<td class="px-6 py-4">
@@ -313,7 +313,7 @@
 									{/each}
 								</div>
 							</td>
-							<td class="px-6 py-4 text-white/80">
+							<td class="px-6 py-4 text-neutral-300">
 								{formatTimestamp(delegation.createdAtNs)}
 							</td>
 							<td class="px-6 py-4">

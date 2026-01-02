@@ -335,59 +335,59 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Admin Dashboard</h1>
-		<p class="text-white/60">
+		<h1 class="text-2xl font-bold text-white tracking-tight">Admin Dashboard</h1>
+		<p class="text-neutral-500">
 			Manage email queue and system administration
 		</p>
 	</div>
 
 	{#if !isAdmin}
-		<div class="bg-red-500/20 backdrop-blur-lg rounded-xl p-8 border border-red-500/30 text-center">
+		<div class="bg-red-500/20 backdrop-blur-lg  p-8 border border-red-500/30 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🚫</span>
 				<h2 class="text-2xl font-bold text-white">Access Denied</h2>
-				<p class="text-white/70">
+				<p class="text-neutral-400">
 					You do not have admin privileges to access this page.
 				</p>
 			</div>
 		</div>
 	{:else}
 		{#if error}
-			<div class="bg-red-500/20 backdrop-blur-lg rounded-xl p-4 border border-red-500/30">
+			<div class="bg-red-500/20 backdrop-blur-lg  p-4 border border-red-500/30">
 				<p class="text-red-200">Error: {error}</p>
 			</div>
 		{/if}
 
 		{#if loading && !stats}
-			<div class="text-white/60 text-center py-8">Loading...</div>
+			<div class="text-neutral-500 text-center py-8">Loading...</div>
 		{:else}
 			<!-- Email Queue Stats -->
 			{#if stats}
-				<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+				<div class="card p-6 border border-neutral-800">
 					<h2 class="text-2xl font-bold text-white mb-4">
 						Email Queue Statistics
 					</h2>
 					<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-						<div class="bg-glass/5 rounded-lg p-4">
-							<p class="text-white/70 text-sm">Total</p>
+						<div class="bg-surface-elevated  p-4">
+							<p class="text-neutral-400 text-sm">Total</p>
 							<p class="text-white font-bold text-2xl">
 								{stats.total}
 							</p>
 						</div>
-						<div class="bg-glass/5 rounded-lg p-4">
-							<p class="text-white/70 text-sm">Pending</p>
+						<div class="bg-surface-elevated  p-4">
+							<p class="text-neutral-400 text-sm">Pending</p>
 							<p class="text-yellow-400 font-bold text-2xl">
 								{stats.pending}
 							</p>
 						</div>
-						<div class="bg-glass/5 rounded-lg p-4">
-							<p class="text-white/70 text-sm">Sent</p>
+						<div class="bg-surface-elevated  p-4">
+							<p class="text-neutral-400 text-sm">Sent</p>
 							<p class="text-green-400 font-bold text-2xl">
 								{stats.sent}
 							</p>
 						</div>
-						<div class="bg-glass/5 rounded-lg p-4">
-							<p class="text-white/70 text-sm">Failed</p>
+						<div class="bg-surface-elevated  p-4">
+							<p class="text-neutral-400 text-sm">Failed</p>
 							<p class="text-red-400 font-bold text-2xl">
 								{stats.failed}
 							</p>
@@ -397,9 +397,9 @@
 			{/if}
 
 			<!-- Test Email -->
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<h2 class="text-2xl font-bold text-white mb-4">Send Test Email</h2>
-				<p class="text-white/60 mb-4">
+				<p class="text-neutral-500 mb-4">
 					Test your email configuration by sending a test email.
 				</p>
 				<form onsubmit={(e) => { e.preventDefault(); handleSendTestEmail(); }} class="flex gap-4">
@@ -407,36 +407,36 @@
 						type="email"
 						bind:value={testEmailAddress}
 						placeholder="recipient@example.com"
-						class="flex-1 px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+						class="flex-1 px-4 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 						required
 					/>
 					<button
 						type="submit"
 						disabled={sendingTestEmail || !testEmailAddress.trim()}
-						class="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+						class="px-6 py-2 bg-primary-600 text-white  hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 					>
 						{sendingTestEmail ? "Sending..." : "Send Test"}
 					</button>
 				</form>
 				{#if testEmailResult}
-					<div class="mt-4 p-3 rounded-lg {testEmailResult.success ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}">
+					<div class="mt-4 p-3  {testEmailResult.success ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}">
 						{testEmailResult.message}
 					</div>
 				{/if}
 			</div>
 
 			<!-- Accounts List -->
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<h2 class="text-2xl font-bold text-white mb-4">All Accounts</h2>
 
 				{#if accountsError}
-					<div class="p-3 rounded-lg bg-red-500/20 text-red-200 mb-4">
+					<div class="p-3  bg-red-500/20 text-red-200 mb-4">
 						{accountsError}
 					</div>
 				{/if}
 
 				{#if deletionResult}
-					<div class="p-4 rounded-lg bg-green-500/20 text-green-200 mb-4">
+					<div class="p-4  bg-green-500/20 text-green-200 mb-4">
 						<p class="font-medium mb-2">Account deleted successfully</p>
 						<ul class="text-sm space-y-1">
 							<li>Offerings deleted: {deletionResult.offeringsDeleted}</li>
@@ -449,15 +449,15 @@
 				{/if}
 
 				{#if loadingAccounts && !accountsList}
-					<div class="text-white/60 text-center py-8">Loading accounts...</div>
+					<div class="text-neutral-500 text-center py-8">Loading accounts...</div>
 				{:else if accountsList}
-					<div class="mb-4 text-white/60 text-sm">
+					<div class="mb-4 text-neutral-500 text-sm">
 						Showing {accountsList.accounts.length} of {accountsList.total} accounts
 					</div>
 
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-white/90">
-							<thead class="text-white/70 border-b border-glass/15">
+							<thead class="text-neutral-400 border-b border-neutral-800">
 								<tr>
 									<th class="pb-3 px-2">Username</th>
 									<th class="pb-3 px-2">Email</th>
@@ -470,27 +470,27 @@
 							<tbody>
 								{#each accountsList.accounts as account}
 									<tr
-										class="border-b border-glass/10 hover:bg-glass/5 cursor-pointer transition-colors"
+										class="border-b border-neutral-800 hover:bg-surface-elevated cursor-pointer transition-colors"
 										onclick={() => toggleAccountDetails(account.username)}
 									>
 										<td class="py-3 px-2 font-medium">
 											<span class="inline-flex items-center gap-1">
 												{#if expandedAccountUsername === account.username}
-													<span class="text-white/50">▼</span>
+													<span class="text-neutral-500">▼</span>
 												{:else}
-													<span class="text-white/50">▶</span>
+													<span class="text-neutral-500">▶</span>
 												{/if}
 												@{account.username}
 											</span>
 										</td>
 										<td class="py-3 px-2 text-sm">{account.email || "-"}</td>
 										<td class="py-3 px-2">
-											<span class="{account.emailVerified ? 'text-green-400' : 'text-white/40'}">
+											<span class="{account.emailVerified ? 'text-green-400' : 'text-neutral-600'}">
 												{account.emailVerified ? "Yes" : "No"}
 											</span>
 										</td>
 										<td class="py-3 px-2">
-											<span class="{account.isAdmin ? 'text-yellow-400 font-medium' : 'text-white/60'}">
+											<span class="{account.isAdmin ? 'text-yellow-400 font-medium' : 'text-neutral-500'}">
 												{account.isAdmin ? "Admin" : "User"}
 											</span>
 										</td>
@@ -517,33 +517,33 @@
 
 									<!-- Expanded account details row -->
 									{#if expandedAccountUsername === account.username}
-										<tr class="bg-glass/5">
+										<tr class="bg-surface-elevated">
 											<td colspan="6" class="p-4">
 												{#if loadingAccountDetails}
-													<div class="text-white/60 text-center py-4">Loading details...</div>
+													<div class="text-neutral-500 text-center py-4">Loading details...</div>
 												{:else if accountError}
-													<div class="p-3 rounded-lg bg-red-500/20 text-red-200">
+													<div class="p-3  bg-red-500/20 text-red-200">
 														{accountError}
 													</div>
 												{:else if expandedAccountInfo}
 													<div class="space-y-4">
 														<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 															<div>
-																<p class="text-white/50 text-sm">Account ID</p>
+																<p class="text-neutral-500 text-sm">Account ID</p>
 																<p class="text-white font-mono text-sm">{expandedAccountInfo.id.slice(0, 8)}...{expandedAccountInfo.id.slice(-8)}</p>
 															</div>
 															<div>
-																<p class="text-white/50 text-sm">Last Login</p>
+																<p class="text-neutral-500 text-sm">Last Login</p>
 																<p class="text-white">
 																	{expandedAccountInfo.lastLoginAt ? formatTimestamp(expandedAccountInfo.lastLoginAt) : "Never"}
 																</p>
 															</div>
 															<div>
-																<p class="text-white/50 text-sm">Active Keys</p>
+																<p class="text-neutral-500 text-sm">Active Keys</p>
 																<p class="text-white">{expandedAccountInfo.activeKeys} / {expandedAccountInfo.totalKeys}</p>
 															</div>
 															<div>
-																<p class="text-white/50 text-sm">Admin Status</p>
+																<p class="text-neutral-500 text-sm">Admin Status</p>
 																<p class="{expandedAccountInfo.isAdmin ? 'text-yellow-400' : 'text-white'}">
 																	{expandedAccountInfo.isAdmin ? "Yes" : "No"}
 																</p>
@@ -551,17 +551,17 @@
 														</div>
 
 														<!-- Email Management -->
-														<div class="border-t border-glass/10 pt-4">
+														<div class="border-t border-neutral-800 pt-4">
 															<div class="flex items-center gap-4">
 																<div class="flex-1">
-																	<p class="text-white/50 text-sm mb-1">Email</p>
+																	<p class="text-neutral-500 text-sm mb-1">Email</p>
 																	{#if editingEmail}
 																		<div class="flex items-center gap-2">
 																			<input
 																				type="email"
 																				bind:value={newEmail}
 																				placeholder="email@example.com (leave empty to clear)"
-																				class="flex-1 px-3 py-1 bg-glass/5 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+																				class="flex-1 px-3 py-1 bg-surface-elevated border border-neutral-800 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 																			/>
 																			<button
 																				type="button"
@@ -575,7 +575,7 @@
 																				type="button"
 																				onclick={cancelEditingEmail}
 																				disabled={updatingEmail}
-																				class="px-3 py-1 text-sm bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 transition-colors"
+																				class="px-3 py-1 text-sm bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 transition-colors"
 																			>
 																				Cancel
 																			</button>
@@ -586,7 +586,7 @@
 																			<button
 																				type="button"
 																				onclick={startEditingEmail}
-																				class="px-2 py-1 text-xs bg-glass/10 text-white rounded hover:bg-glass/15 transition-colors"
+																				class="px-2 py-1 text-xs bg-surface-elevated text-white rounded hover:bg-surface-elevated transition-colors"
 																			>
 																				Edit
 																			</button>
@@ -594,7 +594,7 @@
 																	{/if}
 																</div>
 																<div>
-																	<p class="text-white/50 text-sm mb-1">Verified</p>
+																	<p class="text-neutral-500 text-sm mb-1">Verified</p>
 																	<div class="flex items-center gap-2">
 																		<span class="{expandedAccountInfo.emailVerified ? 'text-green-400' : 'text-red-400'}">
 																			{expandedAccountInfo.emailVerified ? "Yes" : "No"}
@@ -603,7 +603,7 @@
 																			type="button"
 																			onclick={handleToggleEmailVerified}
 																			disabled={updatingEmailVerified}
-																			class="px-2 py-1 text-xs bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 transition-colors"
+																			class="px-2 py-1 text-xs bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 transition-colors"
 																		>
 																			{updatingEmailVerified ? "..." : expandedAccountInfo.emailVerified ? "Unverify" : "Verify"}
 																		</button>
@@ -614,16 +614,16 @@
 
 														<!-- Delete Account Section -->
 														{#if !expandedAccountInfo.isAdmin}
-															<div class="border-t border-glass/10 pt-4">
+															<div class="border-t border-neutral-800 pt-4">
 																{#if showDeleteConfirm}
-																	<div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
+																	<div class="bg-red-500/10 border border-red-500/30  p-4 space-y-3">
 																		<p class="text-red-200 font-medium">Delete Account @{expandedAccountInfo.username}?</p>
-																		<p class="text-white/60 text-sm">
+																		<p class="text-neutral-500 text-sm">
 																			This will permanently delete the account and all associated resources:
 																			offerings, provider profile, public keys, and email tokens.
 																			Contracts will be preserved but account references will be nullified.
 																		</p>
-																		<p class="text-white/60 text-sm">
+																		<p class="text-neutral-500 text-sm">
 																			Type <span class="font-mono text-white">{expandedAccountInfo.username}</span> to confirm:
 																		</p>
 																		<div class="flex items-center gap-2">
@@ -631,7 +631,7 @@
 																				type="text"
 																				bind:value={deleteConfirmUsername}
 																				placeholder="username"
-																				class="flex-1 px-3 py-1 bg-glass/5 border border-red-500/30 rounded text-white placeholder-white/40 focus:outline-none focus:border-red-500"
+																				class="flex-1 px-3 py-1 bg-surface-elevated border border-red-500/30 rounded text-white placeholder-white/40 focus:outline-none focus:border-red-500"
 																			/>
 																			<button
 																				type="button"
@@ -645,7 +645,7 @@
 																				type="button"
 																				onclick={cancelDeleteAccount}
 																				disabled={deletingAccount}
-																				class="px-4 py-1 bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 transition-colors"
+																				class="px-4 py-1 bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 transition-colors"
 																			>
 																				Cancel
 																			</button>
@@ -655,7 +655,7 @@
 																	<button
 																		type="button"
 																		onclick={showDeleteAccountConfirm}
-																		class="px-4 py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition-colors"
+																		class="px-4 py-2 bg-red-600/20 text-red-400 border border-red-500/30  hover:bg-red-600/30 transition-colors"
 																	>
 																		Delete Account
 																	</button>
@@ -680,18 +680,18 @@
 								type="button"
 								onclick={() => goToAccountsPage(accountsPage - 1)}
 								disabled={accountsPage === 0 || loadingAccounts}
-								class="px-3 py-1 bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								class="px-3 py-1 bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								Previous
 							</button>
-							<span class="text-white/60 text-sm">
+							<span class="text-neutral-500 text-sm">
 								Page {accountsPage + 1} of {totalPages}
 							</span>
 							<button
 								type="button"
 								onclick={() => goToAccountsPage(accountsPage + 1)}
 								disabled={accountsPage >= totalPages - 1 || loadingAccounts}
-								class="px-3 py-1 bg-glass/10 text-white rounded hover:bg-glass/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								class="px-3 py-1 bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								Next
 							</button>
@@ -701,17 +701,17 @@
 			</div>
 
 			<!-- Sent Emails -->
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<h2 class="text-2xl font-bold text-white mb-4">Sent Emails</h2>
 
 				{#if sentEmails.length === 0}
-					<p class="text-white/60 text-center py-8">
+					<p class="text-neutral-500 text-center py-8">
 						No sent emails
 					</p>
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-white/90">
-							<thead class="text-white/70 border-b border-glass/15">
+							<thead class="text-neutral-400 border-b border-neutral-800">
 								<tr>
 									<th class="pb-3 px-2">To</th>
 									<th class="pb-3 px-2">Subject</th>
@@ -721,7 +721,7 @@
 							</thead>
 							<tbody>
 								{#each sentEmails as email}
-									<tr class="border-b border-glass/10 hover:bg-glass/5">
+									<tr class="border-b border-neutral-800 hover:bg-surface-elevated">
 										<td class="py-3 px-2 font-mono text-sm">
 											{email.toAddr}
 										</td>
@@ -741,7 +741,7 @@
 			</div>
 
 			<!-- Failed Emails -->
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-4">
 					<h2 class="text-2xl font-bold text-white">Failed Emails</h2>
 					{#if failedEmails.length > 0}
@@ -749,7 +749,7 @@
 							type="button"
 							onclick={handleRetryAll}
 							disabled={retryingAll}
-							class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							class="px-4 py-2 bg-primary-600 text-white  hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
 							{retryingAll ? "Retrying..." : "Retry All"}
 						</button>
@@ -757,13 +757,13 @@
 				</div>
 
 				{#if failedEmails.length === 0}
-					<p class="text-white/60 text-center py-8">
+					<p class="text-neutral-500 text-center py-8">
 						No failed emails
 					</p>
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full text-left text-white/90">
-							<thead class="text-white/70 border-b border-glass/15">
+							<thead class="text-neutral-400 border-b border-neutral-800">
 								<tr>
 									<th class="pb-3 px-2">To</th>
 									<th class="pb-3 px-2">Subject</th>
@@ -776,7 +776,7 @@
 							<tbody>
 								{#each failedEmails as email}
 									{@const emailId = computeEmailId(email)}
-									<tr class="border-b border-glass/10 hover:bg-glass/5">
+									<tr class="border-b border-neutral-800 hover:bg-surface-elevated">
 										<td class="py-3 px-2 font-mono text-sm">
 											{email.toAddr}
 										</td>

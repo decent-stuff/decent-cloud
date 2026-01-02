@@ -27,7 +27,7 @@
 				? 'text-red-400'
 				: charCount > 50
 					? 'text-yellow-400'
-					: 'text-white/40'
+					: 'text-neutral-600'
 	);
 
 	// Validate when value changes (handles pre-filled values from OAuth)
@@ -132,12 +132,12 @@
 				? 'text-red-400 border-red-500/30'
 				: validationState === 'validating'
 					? 'text-primary-400 border-primary-500/30'
-					: 'border-glass/15'
+					: 'border-neutral-800'
 	);
 </script>
 
 <div class="space-y-2">
-	<label for="username" class="block text-sm font-medium text-white/70">
+	<label for="username" class="block text-sm font-medium text-neutral-400">
 		Choose your username
 	</label>
 
@@ -151,7 +151,7 @@
 			autocomplete="off"
 			autocapitalize="off"
 			spellcheck="false"
-			class="w-full px-4 py-3 bg-glass/5 border {stateColor} rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
+			class="w-full px-4 py-3 bg-surface-elevated border {stateColor}  text-white placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
 		/>
 
 		{#if stateIcon}
@@ -169,7 +169,7 @@
 
 	<!-- Character counter -->
 	<div class="flex justify-between items-center text-xs">
-		<div class="text-white/40">
+		<div class="text-neutral-600">
 			3-64 characters, letters, numbers, ._@- (case sensitive)
 		</div>
 		<div class="{charCountColor}">
@@ -188,13 +188,13 @@
 	<!-- Suggestions -->
 	{#if suggestions.length > 0}
 		<div class="space-y-2">
-			<div class="text-sm text-white/60">Try these instead:</div>
+			<div class="text-sm text-neutral-500">Try these instead:</div>
 			<div class="flex flex-wrap gap-2">
 				{#each suggestions as suggestion}
 					<button
 						type="button"
 						onclick={() => selectSuggestion(suggestion)}
-						class="px-3 py-1 bg-glass/10 hover:bg-glass/15 border border-glass/15 rounded-lg text-sm text-white transition-colors"
+						class="px-3 py-1 bg-surface-elevated hover:bg-surface-elevated border border-neutral-800  text-sm text-white transition-colors"
 					>
 						{suggestion}
 					</button>

@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { verifyEmail } from '$lib/services/account-api';
+	import Icon from '$lib/components/Icons.svelte';
 
 	type State = 'verifying' | 'success' | 'error';
 
@@ -41,28 +42,28 @@
 	<title>Verify Email - Decent Cloud</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-base via-surface to-surface flex items-center justify-center p-4">
+<div class="min-h-screen bg-base bg-grid bg-radial flex items-center justify-center p-4">
 	<div class="w-full max-w-lg">
 		<!-- Header -->
 		<div class="text-center mb-8">
 			<a href="/" class="inline-block">
-				<h1 class="text-4xl font-bold text-white mb-2">Decent Cloud</h1>
+				<h1 class="text-2xl font-bold text-white tracking-tight mb-2">Decent Cloud</h1>
 			</a>
-			<p class="text-white/70">Email Verification</p>
+			<p class="text-neutral-500 text-sm">Email Verification</p>
 		</div>
 
 		<!-- Verification Card -->
-		<div class="bg-surface/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-glass/15 shadow-2xl">
+		<div class="card p-6 md:p-8">
 			<!-- Verifying -->
 			{#if currentState === 'verifying'}
 				<div class="space-y-4 text-center py-8">
-					<div class="text-6xl animate-pulse">✉️</div>
-					<h3 class="text-2xl font-bold text-white">Verifying Email</h3>
-					<p class="text-white/60">Please wait...</p>
+					<div class="icon-box mx-auto">
+						<Icon name="mail" size={20} />
+					</div>
+					<h3 class="text-xl font-semibold text-white">Verifying Email</h3>
+					<p class="text-neutral-500 text-sm">Please wait...</p>
 					<div class="flex justify-center">
-						<div
-							class="w-8 h-8 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin"
-						></div>
+						<div class="w-6 h-6 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
 					</div>
 				</div>
 			{/if}
@@ -70,29 +71,27 @@
 			<!-- Success -->
 			{#if currentState === 'success'}
 				<div class="space-y-4 text-center py-8">
-					<div class="text-6xl">✅</div>
-					<h3 class="text-2xl font-bold text-green-400">Email Verified!</h3>
+					<div class="icon-box-accent mx-auto">
+						<Icon name="check" size={20} />
+					</div>
+					<h3 class="text-xl font-semibold text-success">Email Verified!</h3>
 					<div class="space-y-2">
-						<p class="text-white text-lg">
+						<p class="text-white text-base">
 							Thank you for verifying your email!
 						</p>
-						<p class="text-white/70">
+						<p class="text-neutral-500 text-sm">
 							Your account reputation has been improved. You now have full access to all platform features.
 						</p>
 					</div>
 
 					<div class="pt-4 flex flex-col gap-3">
-						<button
-							type="button"
-							onclick={handleGoToDashboard}
-							class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
-						>
+						<button type="button" onclick={handleGoToDashboard} class="btn-primary">
 							Go to Dashboard
 						</button>
 						<button
 							type="button"
 							onclick={handleGoToLogin}
-							class="text-white/60 hover:text-white transition-colors text-sm"
+							class="text-neutral-500 hover:text-white transition-colors text-sm"
 						>
 							Go to Login
 						</button>
@@ -103,21 +102,19 @@
 			<!-- Error -->
 			{#if currentState === 'error'}
 				<div class="space-y-4 text-center py-8">
-					<div class="text-6xl">❌</div>
-					<h3 class="text-2xl font-bold text-white">Verification Failed</h3>
-					<div class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+					<div class="icon-box mx-auto">
+						<Icon name="x" size={20} />
+					</div>
+					<h3 class="text-xl font-semibold text-white">Verification Failed</h3>
+					<div class="bg-danger/10 border border-danger/20 p-4 text-danger text-sm">
 						{error || 'Email verification failed'}
 					</div>
-					<p class="text-white/60 text-sm">
+					<p class="text-neutral-500 text-sm">
 						The verification link may have expired or been used already.
 					</p>
 
 					<div class="pt-4">
-						<button
-							type="button"
-							onclick={handleGoToLogin}
-							class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
-						>
+						<button type="button" onclick={handleGoToLogin} class="btn-primary">
 							Go to Login
 						</button>
 					</div>
@@ -127,7 +124,7 @@
 
 		<!-- Back link -->
 		<div class="text-center mt-6">
-			<a href="/" class="text-white/60 hover:text-white transition-colors text-sm">
+			<a href="/" class="text-neutral-500 hover:text-white transition-colors text-sm">
 				← Back to home
 			</a>
 		</div>

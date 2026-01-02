@@ -131,13 +131,13 @@
 	}
 </script>
 
-<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+<div class="card p-6 border border-neutral-800">
 	<h2 class="text-2xl font-semibold text-white mb-6">Account Overview</h2>
 
 	<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 		<!-- Username -->
 		<div>
-			<div class="text-sm text-white/60 mb-1">Username</div>
+			<div class="text-sm text-neutral-500 mb-1">Username</div>
 			<div class="flex items-center gap-2">
 				<span class="text-xl font-semibold text-white"
 					>@{account.username}</span
@@ -146,7 +146,7 @@
 					type="button"
 					onclick={() =>
 						copyToClipboard(account.username, "username")}
-					class="text-white/60 hover:text-white transition-colors"
+					class="text-neutral-500 hover:text-white transition-colors"
 					title="Copy username"
 				>
 					{#if copiedField === "username"}
@@ -160,15 +160,15 @@
 
 		<!-- Account ID -->
 		<div>
-			<div class="text-sm text-white/60 mb-1">Account ID</div>
+			<div class="text-sm text-neutral-500 mb-1">Account ID</div>
 			<div class="flex items-center gap-2">
-				<span class="text-sm font-mono text-white/80"
+				<span class="text-sm font-mono text-neutral-300"
 					>{truncatePubkey(account.id)}</span
 				>
 				<button
 					type="button"
 					onclick={() => copyToClipboard(account.id, "accountId")}
-					class="text-white/60 hover:text-white transition-colors"
+					class="text-neutral-500 hover:text-white transition-colors"
 					title="Copy account ID"
 				>
 					{#if copiedField === "accountId"}
@@ -182,13 +182,13 @@
 
 		<!-- Created Date -->
 		<div>
-			<div class="text-sm text-white/60 mb-1">Created</div>
+			<div class="text-sm text-neutral-500 mb-1">Created</div>
 			<div class="text-white">{formatDate(account.createdAt)}</div>
 		</div>
 
 		<!-- Active Keys -->
 		<div>
-			<div class="text-sm text-white/60 mb-1">Active Keys</div>
+			<div class="text-sm text-neutral-500 mb-1">Active Keys</div>
 			<div class="text-white font-semibold">
 				{activeKeysCount}
 				{activeKeysCount === 1 ? "key" : "keys"}
@@ -198,13 +198,13 @@
 
 	<!-- Device Keys Section -->
 	{#if account.publicKeys.length > 0}
-		<div class="mt-6 pt-6 border-t border-glass/10">
+		<div class="mt-6 pt-6 border-t border-neutral-800">
 			<div class="flex items-center justify-between mb-4">
 				<h3 class="text-lg font-semibold text-white">Devices</h3>
 				<button
 					type="button"
 					onclick={() => (showAddDeviceModal = true)}
-					class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-sm rounded-lg transition-colors"
+					class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-sm  transition-colors"
 				>
 					+ Add Device
 				</button>
@@ -212,7 +212,7 @@
 			<div class="space-y-3">
 				{#each account.publicKeys as key}
 					<div
-						class="flex items-center justify-between p-3 bg-glass/5 rounded-lg"
+						class="flex items-center justify-between p-3 bg-surface-elevated "
 					>
 						<div class="flex items-center gap-3">
 							<span class="text-xl"
@@ -225,7 +225,7 @@
 											type="text"
 											bind:value={editingName}
 											placeholder="Device name"
-											class="px-2 py-1 bg-glass/10 border border-glass/15 rounded text-white text-sm w-40"
+											class="px-2 py-1 bg-surface-elevated border border-neutral-800 rounded text-white text-sm w-40"
 											disabled={saving}
 										/>
 										<button
@@ -241,7 +241,7 @@
 											type="button"
 											onclick={cancelEdit}
 											disabled={saving}
-											class="px-2 py-1 bg-glass/10 hover:bg-glass/15 text-white text-xs rounded disabled:opacity-50"
+											class="px-2 py-1 bg-surface-elevated hover:bg-surface-elevated text-white text-xs rounded disabled:opacity-50"
 										>
 											Cancel
 										</button>
@@ -261,7 +261,7 @@
 										{getDeviceName(key)}
 									</button>
 								{/if}
-								<div class="text-xs text-white/50 font-mono">
+								<div class="text-xs text-neutral-500 font-mono">
 									{truncatePubkey(key.publicKey)}
 								</div>
 							</div>
@@ -293,7 +293,7 @@
 					</div>
 				{/each}
 				{#if removeError}
-					<div class="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+					<div class="p-3 bg-red-500/20 border border-red-500/30  text-red-400 text-sm">
 						{removeError}
 					</div>
 				{/if}

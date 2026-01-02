@@ -296,21 +296,21 @@
 	>
 		<!-- Dialog -->
 		<div
-			class="bg-gradient-to-br from-base to-gray-800 rounded-2xl max-w-2xl w-full border border-glass/15 shadow-2xl max-h-[90vh] overflow-y-auto"
+			class="bg-gradient-to-br from-base to-gray-800  max-w-2xl w-full border border-neutral-800 shadow-2xl max-h-[90vh] overflow-y-auto"
 		>
 			<!-- Header -->
 			<div
-				class="flex items-center justify-between p-6 border-b border-glass/10"
+				class="flex items-center justify-between p-6 border-b border-neutral-800"
 			>
 				<div>
 					<h2 class="text-2xl font-bold text-white">Rent Resource</h2>
-					<p class="text-white/60 text-sm mt-1">
+					<p class="text-neutral-500 text-sm mt-1">
 						{offering.offer_name}
 					</p>
 				</div>
 				<button
 					onclick={onClose}
-					class="text-white/60 hover:text-white transition-colors"
+					class="text-neutral-500 hover:text-white transition-colors"
 					aria-label="Close dialog"
 				>
 					<svg
@@ -334,7 +334,7 @@
 				<!-- Trust Warning -->
 				{#if offering.has_critical_flags || (offering.trust_score !== undefined && offering.trust_score < 50)}
 					<div
-						class="bg-red-500/20 border border-red-500/30 rounded-lg p-4"
+						class="bg-red-500/20 border border-red-500/30  p-4"
 					>
 						<div class="flex items-start gap-3">
 							<span class="text-2xl">&#x26A0;</span>
@@ -373,20 +373,20 @@
 				{/if}
 
 				<!-- Resource Summary -->
-				<div class="bg-glass/5 rounded-lg p-4 border border-glass/10">
-					<h3 class="text-sm font-semibold text-white/70 mb-3">
+				<div class="bg-surface-elevated  p-4 border border-neutral-800">
+					<h3 class="text-sm font-semibold text-neutral-400 mb-3">
 						Resource Details
 					</h3>
 					<div class="space-y-2 text-sm">
 						<div class="flex justify-between">
-							<span class="text-white/60">Type</span>
+							<span class="text-neutral-500">Type</span>
 							<span class="text-white font-medium"
 								>{offering.product_type}</span
 							>
 						</div>
 						{#if offering.processor_cores}
 							<div class="flex justify-between">
-								<span class="text-white/60">CPU</span>
+								<span class="text-neutral-500">CPU</span>
 								<span class="text-white font-medium"
 									>{offering.processor_cores} cores</span
 								>
@@ -394,7 +394,7 @@
 						{/if}
 						{#if offering.memory_amount}
 							<div class="flex justify-between">
-								<span class="text-white/60">RAM</span>
+								<span class="text-neutral-500">RAM</span>
 								<span class="text-white font-medium"
 									>{offering.memory_amount}</span
 								>
@@ -402,7 +402,7 @@
 						{/if}
 						{#if offering.total_ssd_capacity}
 							<div class="flex justify-between">
-								<span class="text-white/60">Storage</span>
+								<span class="text-neutral-500">Storage</span>
 								<span class="text-white font-medium"
 									>{offering.total_ssd_capacity} SSD</span
 								>
@@ -410,7 +410,7 @@
 						{/if}
 						{#if offering.datacenter_country}
 							<div class="flex justify-between">
-								<span class="text-white/60">Location</span>
+								<span class="text-neutral-500">Location</span>
 								<span class="text-white font-medium"
 									>{offering.datacenter_city}, {offering.datacenter_country}</span
 								>
@@ -431,7 +431,7 @@
 						<select
 							id="duration"
 							bind:value={durationHours}
-							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400 transition-colors"
+							class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors"
 						>
 							<option value={24}>1 Day (24 hours)</option>
 							<option value={168}>1 Week (7 days)</option>
@@ -440,7 +440,7 @@
 							<option value={4320}>6 Months (180 days)</option>
 							<option value={8760}>1 Year (365 days)</option>
 						</select>
-						<p class="text-xs text-white/50 mt-1">
+						<p class="text-xs text-neutral-500 mt-1">
 							Ends: {new Date(Date.now() + durationHours * 60 * 60 * 1000).toLocaleString()}
 						</p>
 					</div>
@@ -455,10 +455,10 @@
 						<button
 							type="button"
 							onclick={() => (paymentMethod = "icpay")}
-							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod ===
+							class="px-4 py-3  font-semibold transition-all border-2 {paymentMethod ===
 							'icpay'
 								? 'bg-primary-500/20 border-primary-500 text-white'
-								: 'bg-glass/10 border-glass/15 text-white/60 hover:border-white/40'}"
+								: 'bg-surface-elevated border-neutral-800 text-neutral-500 hover:border-white/40'}"
 						>
 							Crypto (ICPay)
 						</button>
@@ -467,12 +467,12 @@
 							onclick={() =>
 								isStripeAvailable && (paymentMethod = "stripe")}
 							disabled={!isStripeAvailable}
-							class="px-4 py-3 rounded-lg font-semibold transition-all border-2 {paymentMethod ===
+							class="px-4 py-3  font-semibold transition-all border-2 {paymentMethod ===
 							'stripe'
 								? 'bg-primary-500/20 border-primary-500 text-white'
 								: isStripeAvailable
-									? 'bg-glass/10 border-glass/15 text-white/60 hover:border-white/40'
-									: 'bg-glass/5 border-glass/10 text-white/30 cursor-not-allowed'}"
+									? 'bg-surface-elevated border-neutral-800 text-neutral-500 hover:border-white/40'
+									: 'bg-surface-elevated border-neutral-800 text-neutral-700 cursor-not-allowed'}"
 							title={!isStripeAvailable
 								? `Stripe does not support ${offering?.currency} currency`
 								: ""}
@@ -491,12 +491,12 @@
 				<!-- ICPay Payment Section -->
 				{#if paymentMethod === "icpay"}
 					<div
-						class="bg-glass/5 rounded-lg p-4 border border-glass/10"
+						class="bg-surface-elevated  p-4 border border-neutral-800"
 					>
-						<h3 class="text-sm font-semibold text-white/70 mb-2">
+						<h3 class="text-sm font-semibold text-neutral-400 mb-2">
 							Crypto Payment via ICPay
 						</h3>
-						<p class="text-sm text-white/60 mb-3">
+						<p class="text-sm text-neutral-500 mb-3">
 							Connect your wallet (Internet Identity, Plug, etc.)
 							to complete the payment with ICP or other supported
 							tokens.
@@ -505,7 +505,7 @@
 							<button
 								type="button"
 								onclick={connectWallet}
-								class="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-semibold transition-colors"
+								class="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white  font-semibold transition-colors"
 							>
 								Connect Wallet
 							</button>
@@ -524,12 +524,12 @@
 				<!-- Stripe Payment Info -->
 				{#if paymentMethod === "stripe"}
 					<div
-						class="bg-glass/5 rounded-lg p-4 border border-glass/10"
+						class="bg-surface-elevated  p-4 border border-neutral-800"
 					>
-						<h3 class="text-sm font-semibold text-white/70 mb-2">
+						<h3 class="text-sm font-semibold text-neutral-400 mb-2">
 							Credit Card Payment via Stripe
 						</h3>
-						<p class="text-sm text-white/60">
+						<p class="text-sm text-neutral-500">
 							You will be redirected to Stripe's secure checkout
 							page to complete your payment. Tax will be
 							calculated automatically based on your location.<br
@@ -572,7 +572,7 @@
 									sshKey = value;
 								}
 							}}
-							class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400 transition-colors mb-2"
+							class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors mb-2"
 						>
 							{#each savedSshKeys as key}
 								<option value={key.keyData} selected={sshKey === key.keyData}>
@@ -588,7 +588,7 @@
 						placeholder="ssh-ed25519 AAAA..."
 						rows="3"
 						required
-						class="w-full px-4 py-3 bg-glass/10 border rounded-lg text-white placeholder-white/50 focus:outline-none transition-colors font-mono text-sm {sshKeyValidation ? 'border-red-500/50' : sshKey.trim() ? 'border-green-500/50' : 'border-glass/15'} {!sshKeyValidation && sshKey.trim() ? 'focus:border-green-400' : 'focus:border-primary-400'}"
+						class="w-full px-4 py-3 bg-surface-elevated border  text-white placeholder-white/50 focus:outline-none transition-colors font-mono text-sm {sshKeyValidation ? 'border-red-500/50' : sshKey.trim() ? 'border-green-500/50' : 'border-neutral-800'} {!sshKeyValidation && sshKey.trim() ? 'focus:border-green-400' : 'focus:border-primary-400'}"
 					></textarea>
 					{#if sshKeyValidation && sshKey.trim()}
 						<p class="text-xs text-red-400 mt-1">
@@ -599,7 +599,7 @@
 							Valid SSH key format
 						</p>
 					{:else}
-						<p class="text-xs text-white/50 mt-1">
+						<p class="text-xs text-neutral-500 mt-1">
 							Required for server access after provisioning
 						</p>
 					{/if}
@@ -611,7 +611,7 @@
 						for="contact"
 						class="block text-sm font-medium text-white mb-2"
 					>
-						Contact Method <span class="text-white/50"
+						Contact Method <span class="text-neutral-500"
 							>(optional)</span
 						>
 					</label>
@@ -620,9 +620,9 @@
 						type="text"
 						bind:value={contactMethod}
 						placeholder="email:you@example.com or matrix:@user:server"
-						class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
 					/>
-					<p class="text-xs text-white/50 mt-1">
+					<p class="text-xs text-neutral-500 mt-1">
 						How the provider should reach you (e.g.,
 						email:you@example.com)
 					</p>
@@ -634,7 +634,7 @@
 						for="buyer-address"
 						class="block text-sm font-medium text-white mb-2"
 					>
-						Billing Address <span class="text-white/50"
+						Billing Address <span class="text-neutral-500"
 							>(optional, for invoices)</span
 						>
 					</label>
@@ -643,9 +643,9 @@
 						bind:value={buyerAddress}
 						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
 						rows="3"
-						class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
 					></textarea>
-					<p class="text-xs text-white/50 mt-1">
+					<p class="text-xs text-neutral-500 mt-1">
 						Required for B2B invoices with VAT
 					</p>
 				</div>
@@ -656,31 +656,31 @@
 						for="memo"
 						class="block text-sm font-medium text-white mb-2"
 					>
-						Notes <span class="text-white/50">(optional)</span>
+						Notes <span class="text-neutral-500">(optional)</span>
 					</label>
 					<textarea
 						id="memo"
 						bind:value={memo}
 						placeholder="Any special requirements or notes for the provider..."
 						rows="3"
-						class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
 					></textarea>
 				</div>
 
 				<!-- Price Summary -->
 				<div
-					class="bg-primary-500/10 rounded-lg p-4 border border-primary-500/30"
+					class="bg-primary-500/10  p-4 border border-primary-500/30"
 				>
 					<div class="flex justify-between items-center mb-3">
 						<div>
 							{#if isSubscriptionOffering}
-								<span class="text-white/70 text-sm">{subscriptionIntervalLabel()} Subscription</span>
-								<p class="text-xs text-white/50 mt-1">
+								<span class="text-neutral-400 text-sm">{subscriptionIntervalLabel()} Subscription</span>
+								<p class="text-xs text-neutral-500 mt-1">
 									Billed {subscriptionIntervalLabel().toLowerCase()}
 								</p>
 							{:else}
-								<span class="text-white/70 text-sm">One-Time Payment</span>
-								<p class="text-xs text-white/50 mt-1">
+								<span class="text-neutral-400 text-sm">One-Time Payment</span>
+								<p class="text-xs text-neutral-500 mt-1">
 									{durationHours} hours @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
 								</p>
 							{/if}
@@ -695,11 +695,11 @@
 								<span class="text-lg">{offering.currency}</span>
 							</span>
 							{#if isSubscriptionOffering}
-								<p class="text-xs text-white/50">/{subscriptionIntervalLabel().toLowerCase().replace('ly', '')}</p>
+								<p class="text-xs text-neutral-500">/{subscriptionIntervalLabel().toLowerCase().replace('ly', '')}</p>
 							{/if}
 						</div>
 					</div>
-					<div class="text-xs text-white/50 border-t border-glass/10 pt-2 space-y-1">
+					<div class="text-xs text-neutral-500 border-t border-neutral-800 pt-2 space-y-1">
 						{#if isSubscriptionOffering}
 							<p>Recurring subscription. Cancel anytime from your rentals dashboard.</p>
 						{:else}
@@ -711,7 +711,7 @@
 				<!-- Error Message -->
 				{#if error}
 					<div
-						class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400"
+						class="bg-red-500/20 border border-red-500/30  p-4 text-red-400"
 					>
 						<p class="font-semibold">Error</p>
 						<p class="text-sm mt-1">{error}</p>
@@ -720,18 +720,18 @@
 			</div>
 
 			<!-- Footer -->
-			<div class="flex gap-3 p-6 border-t border-glass/10 bg-glass/5">
+			<div class="flex gap-3 p-6 border-t border-neutral-800 bg-surface-elevated">
 				<button
 					onclick={onClose}
 					disabled={loading}
-					class="flex-1 px-4 py-3 bg-glass/10 text-white rounded-lg font-semibold hover:bg-glass/15 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+					class="flex-1 px-4 py-3 bg-surface-elevated text-white  font-semibold hover:bg-surface-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={handleSubmit}
 					disabled={loading}
-					class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+					class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 				>
 					{#if processingPayment}
 						<span class="flex items-center justify-center gap-2">

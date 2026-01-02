@@ -44,6 +44,6 @@
 			<span class="text-red-400">&#x26A0;</span>
 		{/if}
 		<span class={getScoreColor(score)}>{score}</span>
-		<span class="text-white/60">{getLabel(score)}</span>
+		<span class="text-neutral-500">{getLabel(score)}</span>
 	</div>
 {/if}

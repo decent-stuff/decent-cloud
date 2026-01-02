@@ -17,7 +17,7 @@
 	$: memoFieldId = `pending-response-${contract.contract_id}`;
 </script>
 
-<div class="bg-glass/10 border border-white/15 rounded-xl p-6 space-y-4">
+<div class="bg-surface-elevated border border-white/15  p-6 space-y-4">
 	<div class="flex flex-wrap items-start justify-between gap-4">
 		<div>
 			<div class="flex items-center gap-3 mb-1">
@@ -33,7 +33,7 @@
 			</div>
 			<a
 				href="/dashboard/reputation/{contract.requester_pubkey}"
-				class="text-white/60 text-sm hover:text-primary-400 transition-colors inline-flex items-center gap-1"
+				class="text-neutral-500 text-sm hover:text-primary-400 transition-colors inline-flex items-center gap-1"
 			>
 				<span class="text-xs">👤</span>
 				Requester: {truncateContractHash(contract.requester_pubkey)}
@@ -48,21 +48,21 @@
 	</div>
 
 	<div class="grid md:grid-cols-2 gap-4">
-		<div class="bg-glass/5 rounded-lg p-3 border border-glass/10">
-			<div class="text-white/60 text-xs mb-1">SSH Key</div>
+		<div class="bg-surface-elevated  p-3 border border-neutral-800">
+			<div class="text-neutral-500 text-xs mb-1">SSH Key</div>
 			<div class="font-mono text-sm text-white truncate">
 				{truncateContractHash(contract.requester_ssh_pubkey)}
 			</div>
 		</div>
-		<div class="bg-glass/5 rounded-lg p-3 border border-glass/10">
-			<div class="text-white/60 text-xs mb-1">Contact</div>
+		<div class="bg-surface-elevated  p-3 border border-neutral-800">
+			<div class="text-neutral-500 text-xs mb-1">Contact</div>
 			<div class="text-white text-sm">{contract.requester_contact}</div>
 		</div>
 	</div>
 
 	{#if contract.request_memo}
-		<div class="bg-glass/5 rounded-lg p-3 border border-glass/10">
-			<div class="text-white/60 text-xs mb-1">Request Memo</div>
+		<div class="bg-surface-elevated  p-3 border border-neutral-800">
+			<div class="text-neutral-500 text-xs mb-1">Request Memo</div>
 			<p class="text-white text-sm whitespace-pre-wrap">
 				{contract.request_memo}
 			</p>
@@ -70,11 +70,11 @@
 	{/if}
 
 	<div class="space-y-3">
-		<label class="text-white/80 text-sm font-medium" for={memoFieldId}>
+		<label class="text-neutral-300 text-sm font-medium" for={memoFieldId}>
 			Optional response memo
 		</label>
 		<textarea
-			class="w-full bg-glass/10 border border-glass/15 rounded-lg text-white p-3"
+			class="w-full bg-surface-elevated border border-neutral-800  text-white p-3"
 			id={memoFieldId}
 			rows="2"
 			placeholder="Add provisioning notes or reasons"
@@ -84,14 +84,14 @@
 
 		<div class="flex flex-wrap gap-3">
 			<button
-				class="px-4 py-2 rounded-lg bg-emerald-500/80 text-white font-semibold disabled:opacity-60"
+				class="px-4 py-2  bg-emerald-500/80 text-white font-semibold disabled:opacity-60"
 				onclick={() => onRespond(true)}
 				disabled={busy}
 			>
 				Accept
 			</button>
 			<button
-				class="px-4 py-2 rounded-lg bg-red-500/80 text-white font-semibold disabled:opacity-60"
+				class="px-4 py-2  bg-red-500/80 text-white font-semibold disabled:opacity-60"
 				onclick={() => onRespond(false)}
 				disabled={busy}
 			>

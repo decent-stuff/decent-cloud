@@ -97,7 +97,7 @@
 
 <div class="space-y-6">
 	<div
-		class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
+		class="card p-6 border border-neutral-800"
 	>
 		<h2 class="text-2xl font-bold text-white mb-4">Basic Information</h2>
 
@@ -105,7 +105,7 @@
 			<div>
 				<label
 					for="display-name"
-					class="block text-sm font-medium text-white/70 mb-2"
+					class="block text-sm font-medium text-neutral-400 mb-2"
 				>
 					Display Name
 				</label>
@@ -113,7 +113,7 @@
 					id="display-name"
 					type="text"
 					bind:value={profile.displayName}
-					class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 					placeholder="Your display name"
 				/>
 			</div>
@@ -121,13 +121,13 @@
 			<div>
 				<label
 					for="bio"
-					class="block text-sm font-medium text-white/70 mb-2"
+					class="block text-sm font-medium text-neutral-400 mb-2"
 					>Bio</label
 				>
 				<textarea
 					id="bio"
 					bind:value={profile.bio}
-					class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 					rows={4}
 					placeholder="Tell us about yourself"
 				></textarea>
@@ -136,7 +136,7 @@
 			<div>
 				<label
 					for="avatar-url"
-					class="block text-sm font-medium text-white/70 mb-2"
+					class="block text-sm font-medium text-neutral-400 mb-2"
 				>
 					Avatar URL
 				</label>
@@ -144,7 +144,7 @@
 					id="avatar-url"
 					type="url"
 					bind:value={profile.avatarUrl}
-					class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+					class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 					placeholder="https://example.com/avatar.png"
 				/>
 			</div>
@@ -169,7 +169,7 @@
 		<button
 			onclick={handleSave}
 			disabled={loading}
-			class="mt-6 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+			class="mt-6 px-6 py-2 bg-primary-600 text-white  hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 		>
 			{loading ? "Saving..." : "Save Profile"}
 		</button>

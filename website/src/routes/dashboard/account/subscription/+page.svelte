@@ -141,7 +141,7 @@
 			case "canceled":
 				return { text: "Canceled", class: "bg-red-500/20 text-red-300 border-red-500/50" };
 			default:
-				return { text: status, class: "bg-glass/15 text-white/70 border-white/30" };
+				return { text: status, class: "bg-surface-elevated text-neutral-400 border-white/30" };
 		}
 	}
 
@@ -158,41 +158,41 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Subscription</h1>
-		<p class="text-white/60">Manage your subscription plan and billing</p>
+		<h1 class="text-2xl font-bold text-white tracking-tight">Subscription</h1>
+		<p class="text-neutral-500">Manage your subscription plan and billing</p>
 	</div>
 
 	{#if error}
-		<div class="p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200">
+		<div class="p-4 bg-red-500/20 border border-red-500/50  text-red-200">
 			{error}
 		</div>
 	{/if}
 
 	{#if !isAuthenticated}
-		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
+		<div class="card p-8 border border-neutral-800 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">⭐</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-white/70">
+				<p class="text-neutral-400">
 					Create an account or login to manage your subscription.
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
 			</div>
 		</div>
 	{:else if loading}
-		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
-			<p class="text-white/60">Loading subscription...</p>
+		<div class="card p-8 border border-neutral-800 text-center">
+			<p class="text-neutral-500">Loading subscription...</p>
 		</div>
 	{:else}
 		<!-- Current Subscription -->
 		{#if subscription}
 			{@const badge = getStatusBadge(subscription.status)}
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-4">
 					<h2 class="text-xl font-semibold text-white">Current Plan</h2>
 					<span class="px-3 py-1 rounded-full text-sm border {badge.class}">
@@ -209,16 +209,16 @@
 							</p>
 						{/if}
 						{#if subscription.current_period_end}
-							<p class="text-white/60 text-sm mt-1">
+							<p class="text-neutral-500 text-sm mt-1">
 								{subscription.cancel_at_period_end ? "Access until" : "Renews"}: {new Date(subscription.current_period_end * 1000).toLocaleDateString()}
 							</p>
 						{/if}
 					</div>
 					<div>
-						<p class="text-white/70 text-sm mb-2">Your Features</p>
+						<p class="text-neutral-400 text-sm mb-2">Your Features</p>
 						<ul class="space-y-1">
 							{#each subscription.features as feature}
-								<li class="text-white/80 text-sm flex items-center gap-2">
+								<li class="text-neutral-300 text-sm flex items-center gap-2">
 									<span class="text-green-400">✓</span>
 									{featureLabels[feature] || feature}
 								</li>
@@ -228,15 +228,15 @@
 				</div>
 
 				{#if subscription.stripe_subscription_id}
-					<div class="mt-6 pt-4 border-t border-glass/10">
+					<div class="mt-6 pt-4 border-t border-neutral-800">
 						<button
 							onclick={handleManageSubscription}
 							disabled={openingPortal}
-							class="px-6 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white hover:bg-glass/15 disabled:opacity-50 transition-colors"
+							class="px-6 py-2 bg-surface-elevated border border-neutral-800  text-white hover:bg-surface-elevated disabled:opacity-50 transition-colors"
 						>
 							{openingPortal ? "Opening..." : "Manage Subscription"}
 						</button>
-						<p class="text-white/40 text-xs mt-2">
+						<p class="text-neutral-600 text-xs mt-2">
 							Update payment method, view invoices, or cancel subscription
 						</p>
 					</div>
@@ -245,26 +245,26 @@
 		{/if}
 
 		<!-- Available Plans -->
-		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+		<div class="card p-6 border border-neutral-800">
 			<h2 class="text-xl font-semibold text-white mb-6">
 				{subscription?.plan_id === "free" ? "Upgrade Your Plan" : "Available Plans"}
 			</h2>
 
 			{#if loadingPlans}
-				<p class="text-white/60">Loading plans...</p>
+				<p class="text-neutral-500">Loading plans...</p>
 			{:else}
 				<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 					{#each plans as plan}
 						{@const isCurrentPlan = subscription?.plan_id === plan.id}
 						{@const features = parseFeatures(plan.features)}
 						<div
-							class="p-6 rounded-xl border transition-all {isCurrentPlan
+							class="p-6  border transition-all {isCurrentPlan
 								? 'bg-primary-500/10 border-primary-500/50'
-								: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
+								: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
 						>
 							<h3 class="text-xl font-bold text-white">{plan.name}</h3>
 							{#if plan.description}
-								<p class="text-white/60 text-sm mt-1">{plan.description}</p>
+								<p class="text-neutral-500 text-sm mt-1">{plan.description}</p>
 							{/if}
 
 							<div class="mt-4">
@@ -272,7 +272,7 @@
 									{plan.monthlyPriceCents === 0 ? "Free" : formatPrice(plan.monthlyPriceCents)}
 								</span>
 								{#if plan.monthlyPriceCents > 0}
-									<span class="text-white/60">/month</span>
+									<span class="text-neutral-500">/month</span>
 								{/if}
 							</div>
 
@@ -284,7 +284,7 @@
 
 							<ul class="mt-4 space-y-2">
 								{#each features as feature}
-									<li class="text-white/70 text-sm flex items-center gap-2">
+									<li class="text-neutral-400 text-sm flex items-center gap-2">
 										<span class="text-green-400">✓</span>
 										{featureLabels[feature] || feature}
 									</li>
@@ -293,7 +293,7 @@
 
 							<div class="mt-6">
 								{#if isCurrentPlan}
-									<span class="inline-block px-4 py-2 bg-primary-500/20 text-primary-300 rounded-lg text-sm">
+									<span class="inline-block px-4 py-2 bg-primary-500/20 text-primary-300  text-sm">
 										Current Plan
 									</span>
 								{:else if plan.id === "free"}
@@ -302,7 +302,7 @@
 										<button
 											onclick={handleManageSubscription}
 											disabled={openingPortal}
-											class="w-full px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white hover:bg-glass/15 disabled:opacity-50 transition-colors"
+											class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white hover:bg-surface-elevated disabled:opacity-50 transition-colors"
 										>
 											Manage Plan
 										</button>
@@ -311,12 +311,12 @@
 									<button
 										onclick={() => handleUpgrade(plan.id)}
 										disabled={upgrading !== null}
-										class="w-full px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-50 transition-all"
+										class="w-full px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 disabled:opacity-50 transition-all"
 									>
 										{upgrading === plan.id ? "Processing..." : subscription?.plan_id === "free" ? "Upgrade" : "Switch Plan"}
 									</button>
 								{:else}
-									<span class="inline-block px-4 py-2 bg-glass/5 text-white/40 rounded-lg text-sm">
+									<span class="inline-block px-4 py-2 bg-surface-elevated text-neutral-600  text-sm">
 										Contact Sales
 									</span>
 								{/if}
@@ -328,9 +328,9 @@
 		</div>
 
 		<!-- Help Section -->
-		<div class="bg-glass/5 backdrop-blur-lg rounded-xl p-6 border border-glass/10">
-			<h3 class="text-lg font-semibold text-white/80 mb-3">Need Help?</h3>
-			<ul class="text-white/60 text-sm space-y-2">
+		<div class="bg-surface-elevated backdrop-blur-lg  p-6 border border-neutral-800">
+			<h3 class="text-lg font-semibold text-neutral-300 mb-3">Need Help?</h3>
+			<ul class="text-neutral-500 text-sm space-y-2">
 				<li>Plans can be upgraded or downgraded at any time.</li>
 				<li>When upgrading, you'll be charged the prorated difference.</li>
 				<li>Cancellations take effect at the end of your billing period.</li>

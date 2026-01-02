@@ -55,7 +55,7 @@
 </script>
 
 <div class="space-y-3">
-	<label for="account-email-input" class="block text-sm font-medium text-white/70">Account Email</label>
+	<label for="account-email-input" class="block text-sm font-medium text-neutral-400">Account Email</label>
 	{#if isEditing}
 		<div class="space-y-2">
 			<input
@@ -63,7 +63,7 @@
 				type="email"
 				bind:value={newEmail}
 				placeholder="you@example.com"
-				class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+				class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 			/>
 			{#if newEmail && !emailValid}
 				<p class="text-xs text-red-400">Please enter a valid email address</p>
@@ -79,7 +79,7 @@
 				<button
 					onclick={handleCancel}
 					disabled={isSubmitting}
-					class="px-3 py-1.5 bg-glass/10 hover:bg-glass/15 rounded text-white text-sm transition-colors"
+					class="px-3 py-1.5 bg-surface-elevated hover:bg-surface-elevated rounded text-white text-sm transition-colors"
 				>
 					Cancel
 				</button>
@@ -90,7 +90,7 @@
 			<span class="text-white/90">{email || 'Not set'}</span>
 			<button
 				onclick={() => { isEditing = true; error = null; success = null; }}
-				class="px-2 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded text-white/70 hover:text-white transition-colors"
+				class="px-2 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded text-neutral-400 hover:text-white transition-colors"
 			>
 				{email ? 'Change' : 'Add Email'}
 			</button>
@@ -104,7 +104,7 @@
 		<p class="text-sm text-green-400">{success}</p>
 	{/if}
 
-	<p class="text-xs text-white/50">
+	<p class="text-xs text-neutral-500">
 		Used for account verification and recovery. A verification email will be sent when changed.
 	</p>
 </div>

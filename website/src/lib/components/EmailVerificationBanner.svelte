@@ -60,7 +60,7 @@
 				<button
 					onclick={handleResend}
 					disabled={isResending}
-					class="px-4 py-2 bg-amber-900 hover:bg-amber-800 disabled:bg-amber-700 disabled:opacity-50 rounded-lg text-white text-sm font-medium transition-colors whitespace-nowrap"
+					class="px-4 py-2 bg-amber-900 hover:bg-amber-800 disabled:bg-amber-700 disabled:opacity-50  text-white text-sm font-medium transition-colors whitespace-nowrap"
 				>
 					{isResending ? 'Sending...' : 'Resend Verification Email'}
 				</button>

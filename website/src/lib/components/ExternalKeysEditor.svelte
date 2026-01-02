@@ -130,16 +130,16 @@
 	}
 </script>
 
-<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+<div class="card p-6 border border-neutral-800">
 	<h2 class="text-2xl font-bold text-white mb-4">External Keys (SSH/GPG)</h2>
 
 	<!-- Keys list -->
 	<div class="space-y-2 mb-4">
 		{#if keys.length === 0}
-			<p class="text-white/50 text-sm">No external keys added yet.</p>
+			<p class="text-neutral-500 text-sm">No external keys added yet.</p>
 		{/if}
 		{#each keys as key}
-			<div class="p-3 bg-glass/5 rounded-lg border border-glass/10">
+			<div class="p-3 bg-surface-elevated  border border-neutral-800">
 				<div class="flex items-start justify-between mb-2">
 					<div>
 						<span class="font-medium text-sm text-white"
@@ -160,13 +160,13 @@
 						Delete
 					</button>
 				</div>
-				<div class="text-xs text-white/60 font-mono break-all">
+				<div class="text-xs text-neutral-500 font-mono break-all">
 					{key.keyData.substring(0, 80)}{key.keyData.length > 80
 						? "..."
 						: ""}
 				</div>
 				{#if key.keyFingerprint}
-					<div class="text-xs text-white/50 mt-1">
+					<div class="text-xs text-neutral-500 mt-1">
 						Fingerprint: {key.keyFingerprint}
 					</div>
 				{/if}
@@ -179,7 +179,7 @@
 		<div class="flex gap-2">
 			<select
 				bind:value={newKey.type}
-				class="px-3 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+				class="px-3 py-2 bg-surface-elevated border border-neutral-800  text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 			>
 				<option value="ssh-ed25519">SSH Ed25519</option>
 				<option value="ssh-rsa">SSH RSA</option>
@@ -188,13 +188,13 @@
 			<input
 				type="text"
 				bind:value={newKey.label}
-				class="flex-1 px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+				class="flex-1 px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 				placeholder="Label (optional)"
 			/>
 		</div>
 		<textarea
 			bind:value={newKey.data}
-			class="w-full px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+			class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
 			rows={3}
 			placeholder="Paste your public key here"
 		></textarea>
@@ -202,13 +202,13 @@
 			<input
 				type="text"
 				bind:value={newKey.fingerprint}
-				class="flex-1 px-3 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+				class="flex-1 px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 				placeholder="Fingerprint (optional)"
 			/>
 			<button
 				onclick={handleAdd}
 				disabled={!newKey.data.trim() || loading}
-				class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+				class="px-4 py-2 bg-primary-600 text-white  hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 			>
 				Add
 			</button>

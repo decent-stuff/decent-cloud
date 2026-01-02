@@ -132,16 +132,16 @@
 	}
 </script>
 
-<div class="bg-glass/5 backdrop-blur-lg rounded-xl border border-glass/15 overflow-hidden">
+<div class="bg-surface-elevated backdrop-blur-lg  border border-neutral-800 overflow-hidden">
 	<!-- Header Controls -->
-	<div class="flex items-center justify-between p-4 border-b border-glass/10">
-		<div class="text-white/70 text-sm font-medium">
+	<div class="flex items-center justify-between p-4 border-b border-neutral-800">
+		<div class="text-neutral-400 text-sm font-medium">
 			{rows.length - 1} data rows × {rows[0]?.length || 0} columns
 		</div>
 		<button
 			onclick={addRow}
 			{disabled}
-			class="px-4 py-2 bg-glass/10 rounded-lg text-sm text-white/90 hover:bg-glass/15 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+			class="px-4 py-2 bg-surface-elevated  text-sm text-white/90 hover:bg-surface-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
 			title="Add new data row"
 		>
 			<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -161,8 +161,8 @@
 		<table class="w-full border-collapse">
 			<!-- Headers (first row, non-editable) -->
 			<thead>
-				<tr class="bg-glass/10 border-b-2 border-glass/15">
-					<th class="px-2 py-2 text-white/40 text-xs sticky left-0 bg-glass/10">#</th>
+				<tr class="bg-surface-elevated border-b-2 border-neutral-800">
+					<th class="px-2 py-2 text-neutral-600 text-xs sticky left-0 bg-surface-elevated">#</th>
 					{#each rows[0] || [] as header, colIndex}
 						<th class="px-3 py-2 min-w-32 text-left">
 							<span class="text-primary-400 font-semibold text-sm truncate block" title={header}>
@@ -175,9 +175,9 @@
 			<tbody>
 				<!-- Data rows (skip first row as it's the header) -->
 				{#each rows.slice(1) as row, rowIndex}
-					<tr class="border-b border-white/5 hover:bg-glass/5 transition-colors group">
+					<tr class="border-b border-white/5 hover:bg-surface-elevated transition-colors group">
 						<!-- Row number + delete button -->
-						<td class="px-2 py-1 text-white/40 text-xs sticky left-0 bg-glass/5 border-r border-glass/10">
+						<td class="px-2 py-1 text-neutral-600 text-xs sticky left-0 bg-surface-elevated border-r border-neutral-800">
 							<div class="flex items-center gap-1">
 								<span class="w-6 text-center">{rowIndex + 1}</span>
 								{#if rows.length > 2 && !disabled}
@@ -210,14 +210,14 @@
 											updateCell(rowIndex + 1, colIndex, (e.target as HTMLInputElement).value)}
 										onblur={handleCellBlur}
 										onkeydown={(e) => handleKeyDown(e, rowIndex + 1, colIndex)}
-										class="w-full px-2 py-1.5 bg-glass/10 border border-primary-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+										class="w-full px-2 py-1.5 bg-surface-elevated border border-primary-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
 									/>
 								{:else}
 									<!-- svelte-ignore a11y_click_events_have_key_events -->
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<div
 										onclick={() => handleCellClick(rowIndex + 1, colIndex)}
-										class="px-2 py-1.5 text-white/90 text-sm rounded cursor-pointer hover:bg-glass/10 transition-colors truncate"
+										class="px-2 py-1.5 text-white/90 text-sm rounded cursor-pointer hover:bg-surface-elevated transition-colors truncate"
 										title={cell}
 									>
 										{cell || '\u00A0'}
@@ -232,8 +232,8 @@
 	</div>
 
 	<!-- Footer -->
-	<div class="p-3 border-t border-glass/10 bg-glass/5">
-		<p class="text-white/50 text-xs">
+	<div class="p-3 border-t border-neutral-800 bg-surface-elevated">
+		<p class="text-neutral-500 text-xs">
 			💡 Click a cell to edit • Tab to move right • Enter to move down • Headers are shown at top and are non-editable
 		</p>
 	</div>

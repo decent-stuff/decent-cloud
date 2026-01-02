@@ -18,12 +18,12 @@
 	}
 </script>
 
-<div class="bg-glass/5 border border-glass/10 rounded-xl overflow-hidden">
-	<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-glass/10">
+<div class="bg-surface-elevated border border-neutral-800  overflow-hidden">
+	<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-neutral-800">
 		Agents
 	</h3>
 	<table class="w-full text-sm text-left">
-		<thead class="bg-glass/5 text-xs text-white/60 uppercase">
+		<thead class="bg-surface-elevated text-xs text-neutral-500 uppercase">
 			<tr>
 				<th scope="col" class="px-6 py-3">Label</th>
 				<th scope="col" class="px-6 py-3">Status</th>
@@ -36,13 +36,13 @@
 		<tbody>
 			{#if agents.length === 0}
 				<tr>
-					<td colspan="6" class="text-center py-8 text-white/50">
+					<td colspan="6" class="text-center py-8 text-neutral-500">
 						No agents in this pool.
 					</td>
 				</tr>
 			{/if}
 			{#each agents as agent (agent.label)}
-				<tr class="border-b border-glass/10 last:border-b-0 hover:bg-glass/5 transition-colors">
+				<tr class="border-b border-neutral-800 last:border-b-0 hover:bg-surface-elevated transition-colors">
 					<th scope="row" class="px-6 py-4 font-medium text-white whitespace-nowrap">
 						{agent.label}
 					</th>
@@ -59,13 +59,13 @@
 							</span>
 						{/if}
 					</td>
-					<td class="px-6 py-4 text-white/80">{agent.version}</td>
-					<td class="px-6 py-4 text-white/80">{agent.activeContracts}</td>
-					<td class="px-6 py-4 text-white/80">{agent.lastSeen}</td>
+					<td class="px-6 py-4 text-neutral-300">{agent.version}</td>
+					<td class="px-6 py-4 text-neutral-300">{agent.activeContracts}</td>
+					<td class="px-6 py-4 text-neutral-300">{agent.lastSeen}</td>
 					<td class="px-6 py-4 text-right">
 						<button
 							onclick={() => handleRevoke(agent)}
-							class="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors"
+							class="px-3 py-1.5  text-sm font-medium bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors"
 							title="Revoke Agent Delegation"
 						>
 							Revoke

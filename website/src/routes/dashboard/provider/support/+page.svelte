@@ -440,38 +440,38 @@
 
 <div class="space-y-6">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Provider Setup</h1>
-		<p class="text-white/60">
+		<h1 class="text-2xl font-bold text-white tracking-tight">Provider Setup</h1>
+		<p class="text-neutral-500">
 			Manage your support account, notifications, and provider profile
 		</p>
 	</div>
 
 	<!-- Section Navigation -->
-	<nav class="flex flex-wrap gap-2 bg-glass/5 rounded-lg p-2">
+	<nav class="flex flex-wrap gap-2 bg-surface-elevated  p-2">
 		<a
 			href="#support"
-			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-glass/10 hover:text-white transition-colors"
+			class="px-4 py-2  text-sm font-medium text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
 			>Support Portal</a
 		>
 		<a
 			href="#notifications"
-			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-glass/10 hover:text-white transition-colors"
+			class="px-4 py-2  text-sm font-medium text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
 			>Notifications</a
 		>
 		<a
 			href="#helpcenter"
-			class="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:bg-glass/10 hover:text-white transition-colors"
+			class="px-4 py-2  text-sm font-medium text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
 			>Help Center Profile</a
 		>
 	</nav>
 
 	{#if error}<div
-			class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400"
+			class="bg-red-500/20 border border-red-500/30  p-4 text-red-400"
 		>
 			{error}
 		</div>{/if}
 	{#if success}<div
-			class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-400"
+			class="bg-green-500/20 border border-green-500/30  p-4 text-green-400"
 		>
 			{success}{#if articleUrl}
 				{" "}<a
@@ -482,7 +482,7 @@
 				>{/if}
 		</div>{/if}
 	{#if testResult}<div
-			class="p-4 rounded-lg {testResult.sent
+			class="p-4  {testResult.sent
 				? 'bg-green-500/20 text-green-200'
 				: 'bg-yellow-500/20 text-yellow-200'}"
 		>
@@ -492,16 +492,16 @@
 
 	{#if !isAuthenticated}
 		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
+			class="card p-8 border border-neutral-800 text-center"
 		>
 			<span class="text-6xl">⚙️</span>
 			<h2 class="text-2xl font-bold text-white mt-4">Login Required</h2>
-			<p class="text-white/70 mt-2">
+			<p class="text-neutral-400 mt-2">
 				Login to configure your provider profile.
 			</p>
 			<button
 				onclick={handleLogin}
-				class="mt-4 px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
+				class="mt-4 px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all"
 			>
 				Login / Create Account
 			</button>
@@ -516,10 +516,10 @@
 		<!-- Support Portal Section (moved to top - most frequently accessed) -->
 		<section
 			id="support"
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 space-y-6 scroll-mt-4"
+			class="card p-6 border border-neutral-800 space-y-6 scroll-mt-4"
 		>
 			<h2 class="text-2xl font-bold text-white">Support Portal</h2>
-			<p class="text-white/60 text-sm">
+			<p class="text-neutral-500 text-sm">
 				Access your support dashboard and knowledge base
 			</p>
 
@@ -529,7 +529,7 @@
 					href={supportDashboardUrl}
 					target="_blank"
 					rel="noopener noreferrer"
-					class="flex items-start gap-4 p-4 rounded-lg bg-gradient-to-br from-primary-500/20 to-primary-600/20 border border-primary-500/30 hover:border-primary-400/50 transition-colors group"
+					class="flex items-start gap-4 p-4  bg-gradient-to-br from-primary-500/20 to-primary-600/20 border border-primary-500/30 hover:border-primary-400/50 transition-colors group"
 				>
 					<span class="text-3xl">🎧</span>
 					<div>
@@ -540,7 +540,7 @@
 								>↗</span
 							>
 						</h3>
-						<p class="text-white/60 text-sm mt-1">
+						<p class="text-neutral-500 text-sm mt-1">
 							View and respond to customer tickets, manage
 							conversations
 						</p>
@@ -551,7 +551,7 @@
 						href={helpCenterEditUrl}
 						target="_blank"
 						rel="noopener noreferrer"
-						class="flex items-start gap-4 p-4 rounded-lg bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 hover:border-green-400/50 transition-colors group"
+						class="flex items-start gap-4 p-4  bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 hover:border-green-400/50 transition-colors group"
 					>
 						<span class="text-3xl">📝</span>
 						<div>
@@ -562,7 +562,7 @@
 									>↗</span
 								>
 							</h3>
-							<p class="text-white/60 text-sm mt-1">
+							<p class="text-neutral-500 text-sm mt-1">
 								Edit and publish support articles for your
 								customers
 							</p>
@@ -570,14 +570,14 @@
 					</a>
 				{:else}
 					<div
-						class="flex items-start gap-4 p-4 rounded-lg bg-glass/5 border border-glass/10"
+						class="flex items-start gap-4 p-4  bg-surface-elevated border border-neutral-800"
 					>
 						<span class="text-3xl opacity-50">📝</span>
 						<div>
-							<h3 class="text-white/50 font-semibold">
+							<h3 class="text-neutral-500 font-semibold">
 								Help Center
 							</h3>
-							<p class="text-white/40 text-sm mt-1">
+							<p class="text-neutral-600 text-sm mt-1">
 								Create your portal account first to access the
 								Help Center
 							</p>
@@ -587,11 +587,11 @@
 			</div>
 
 			<!-- Portal Account Status -->
-			<div class="bg-glass/5 rounded-lg p-4 space-y-4">
+			<div class="bg-surface-elevated  p-4 space-y-4">
 				<h3 class="text-white font-medium">Portal Account</h3>
 				{#if newPassword}
 					<div
-						class="bg-green-500/20 border border-green-500/50 rounded-lg p-4 space-y-3"
+						class="bg-green-500/20 border border-green-500/50  p-4 space-y-3"
 					>
 						<p class="text-green-300 font-semibold">
 							Password generated:
@@ -603,11 +603,11 @@
 							>
 							<button
 								onclick={copyPassword}
-								class="px-4 py-2 bg-glass/10 rounded hover:bg-glass/15 text-white transition-colors text-sm"
+								class="px-4 py-2 bg-surface-elevated rounded hover:bg-surface-elevated text-white transition-colors text-sm"
 								>Copy</button
 							>
 						</div>
-						<p class="text-white/60 text-xs">
+						<p class="text-neutral-500 text-xs">
 							Save this password now - it won't be shown again.
 						</p>
 					</div>
@@ -615,7 +615,7 @@
 				{#if portalStatus}
 					<div class="flex flex-wrap items-center gap-4 text-sm">
 						<div>
-							<span class="text-white/50">Status:</span>
+							<span class="text-neutral-500">Status:</span>
 							<span
 								class="text-white font-medium {portalStatus.hasAccount
 									? 'text-green-400'
@@ -626,7 +626,7 @@
 							>
 						</div>
 						{#if portalStatus.email}<div>
-								<span class="text-white/50">Email:</span>
+								<span class="text-neutral-500">Email:</span>
 								<span class="text-white"
 									>{portalStatus.email}</span
 								>
@@ -637,7 +637,7 @@
 							<button
 								onclick={handlePortalReset}
 								disabled={resetting}
-								class="px-4 py-2 bg-glass/10 hover:bg-glass/15 rounded-lg text-white text-sm transition-colors disabled:opacity-50"
+								class="px-4 py-2 bg-surface-elevated hover:bg-surface-elevated  text-white text-sm transition-colors disabled:opacity-50"
 								>{resetting
 									? "Resetting..."
 									: "Reset Password"}</button
@@ -646,7 +646,7 @@
 							<button
 								onclick={handlePortalCreate}
 								disabled={creating}
-								class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
+								class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600  text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
 								>{creating
 									? "Creating..."
 									: "Create Account"}</button
@@ -654,19 +654,19 @@
 						{/if}
 					</div>
 				{:else}
-					<p class="text-white/60 text-sm">
+					<p class="text-neutral-500 text-sm">
 						Unable to load portal status
 					</p>
 				{/if}
 			</div>
 
 			<!-- How to use the support portal -->
-			<details class="bg-glass/5 rounded-lg">
+			<details class="bg-surface-elevated ">
 				<summary
-					class="cursor-pointer p-4 text-white font-medium hover:bg-glass/5 rounded-lg transition-colors"
+					class="cursor-pointer p-4 text-white font-medium hover:bg-surface-elevated  transition-colors"
 					>How to use the Support Portal</summary
 				>
-				<div class="px-4 pb-4 space-y-3 text-white/70 text-sm">
+				<div class="px-4 pb-4 space-y-3 text-neutral-400 text-sm">
 					<div class="space-y-2">
 						<h4 class="text-white font-medium">Getting Started</h4>
 						<ol class="list-decimal list-inside space-y-1">
@@ -760,18 +760,18 @@
 		<!-- Notifications Section -->
 		<section
 			id="notifications"
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 space-y-6 scroll-mt-4"
+			class="card p-6 border border-neutral-800 space-y-6 scroll-mt-4"
 		>
 			<h2 class="text-2xl font-bold text-white">Notifications</h2>
-			<p class="text-white/60 text-sm">
+			<p class="text-neutral-500 text-sm">
 				Get alerted when customers need support
 			</p>
 
 			<div class="space-y-4">
 				<label
-					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyEmail
+					class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifyEmail
 						? 'bg-primary-500/20 border-primary-500/50'
-						: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
+						: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
 				>
 					<input
 						type="checkbox"
@@ -788,7 +788,7 @@
 								>Free</span
 							>
 						</div>
-						{#if accountEmail}<p class="text-white/60 text-sm mt-1">
+						{#if accountEmail}<p class="text-neutral-500 text-sm mt-1">
 								Notifications to <span class="text-white"
 									>{accountEmail}</span
 								>
@@ -801,7 +801,7 @@
 										handleTestChannel("email");
 									}}
 									disabled={testingChannel === "email"}
-									class="mt-2 px-3 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded border border-glass/15 text-white/80 disabled:opacity-50"
+									class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
 									>{testingChannel === "email"
 										? "Sending..."
 										: "Send Test"}</button
@@ -816,9 +816,9 @@
 				</label>
 
 				<label
-					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifyTelegram
+					class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifyTelegram
 						? 'bg-primary-500/20 border-primary-500/50'
-						: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
+						: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
 				>
 					<input
 						type="checkbox"
@@ -834,7 +834,7 @@
 								>Free (50/day)</span
 							>
 						</div>
-						<p class="text-white/60 text-sm mt-1">
+						<p class="text-neutral-500 text-sm mt-1">
 							Instant notifications via Telegram
 						</p>
 						{#if notifyTelegram}
@@ -846,9 +846,9 @@
 									type="text"
 									bind:value={telegramChatId}
 									placeholder="Chat ID"
-									class="w-full px-3 py-2 bg-black/30 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+									class="w-full px-3 py-2 bg-black/30 border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 								/>
-								<p class="text-xs text-white/50">
+								<p class="text-xs text-neutral-500">
 									Message <a
 										href="https://t.me/{botUsername}"
 										target="_blank"
@@ -864,7 +864,7 @@
 											handleTestChannel("telegram");
 										}}
 										disabled={testingChannel === "telegram"}
-										class="mt-2 px-3 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded border border-glass/15 text-white/80 disabled:opacity-50"
+										class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
 										>{testingChannel === "telegram"
 											? "Sending..."
 											: "Send Test"}</button
@@ -875,9 +875,9 @@
 				</label>
 
 				<label
-					class="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all {notifySms
+					class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifySms
 						? 'bg-primary-500/20 border-primary-500/50'
-						: 'bg-glass/5 border-glass/15 hover:border-white/40'}"
+						: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
 				>
 					<input
 						type="checkbox"
@@ -893,7 +893,7 @@
 								>5 free/day</span
 							>
 						</div>
-						<p class="text-white/60 text-sm mt-1">
+						<p class="text-neutral-500 text-sm mt-1">
 							SMS alerts to your phone
 						</p>
 						{#if notifySms}
@@ -902,7 +902,7 @@
 									type="tel"
 									bind:value={notifyPhone}
 									placeholder="+1 555-123-4567"
-									class="w-full px-3 py-2 bg-black/30 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+									class="w-full px-3 py-2 bg-black/30 border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 								/>
 								{#if notifyPhone}<button
 										type="button"
@@ -912,7 +912,7 @@
 											handleTestChannel("sms");
 										}}
 										disabled={testingChannel === "sms"}
-										class="mt-2 px-3 py-1 text-xs bg-glass/10 hover:bg-glass/15 rounded border border-glass/15 text-white/80 disabled:opacity-50"
+										class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
 										>{testingChannel === "sms"
 											? "Sending..."
 											: "Send Test"}</button
@@ -925,25 +925,25 @@
 
 			{#if usage}
 				<div
-					class="grid grid-cols-3 gap-4 text-center bg-glass/5 rounded-lg p-4"
+					class="grid grid-cols-3 gap-4 text-center bg-surface-elevated  p-4"
 				>
 					<div>
 						<div class="text-xl font-bold text-white">
 							{usage.emailCount}
 						</div>
-						<div class="text-white/60 text-xs">Email</div>
+						<div class="text-neutral-500 text-xs">Email</div>
 					</div>
 					<div>
 						<div class="text-xl font-bold text-white">
 							{usage.telegramCount}/{usage.telegramLimit}
 						</div>
-						<div class="text-white/60 text-xs">Telegram</div>
+						<div class="text-neutral-500 text-xs">Telegram</div>
 					</div>
 					<div>
 						<div class="text-xl font-bold text-white">
 							{usage.smsCount}/{usage.smsLimit}
 						</div>
-						<div class="text-white/60 text-xs">SMS</div>
+						<div class="text-neutral-500 text-xs">SMS</div>
 					</div>
 				</div>
 			{/if}
@@ -951,7 +951,7 @@
 			<button
 				onclick={saveNotifications}
 				disabled={savingNotif}
-				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
 				>{savingNotif ? "Saving..." : "Save Notifications"}</button
 			>
 		</section>
@@ -960,13 +960,13 @@
 		<section id="helpcenter" class="scroll-mt-4">
 			<form onsubmit={saveOnboarding} class="space-y-6">
 				<div
-					class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 space-y-6"
+					class="card p-6 border border-neutral-800 space-y-6"
 				>
 					<div>
 						<h2 class="text-2xl font-bold text-white">
 							Help Center Profile
 						</h2>
-						<p class="text-white/60 text-sm mt-1">
+						<p class="text-neutral-500 text-sm mt-1">
 							Configure your provider profile - this
 							auto-generates a help article for customers
 						</p>
@@ -974,18 +974,18 @@
 
 					<div class="grid md:grid-cols-2 gap-6">
 						<div>
-							<span class="block text-white/80 mb-2"
+							<span class="block text-neutral-300 mb-2"
 								>Support Email <span class="text-red-400"
 									>*</span
 								></span
 							>
 							{#if accountEmail}
 								<div
-									class="w-full px-4 py-3 bg-glass/5 border border-glass/10 rounded-lg text-white/80"
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-neutral-300"
 								>
 									{accountEmail}
 								</div>
-								<p class="text-white/50 text-xs mt-1">
+								<p class="text-neutral-500 text-xs mt-1">
 									Using your account email. <a
 										href="/dashboard/account/profile"
 										class="text-primary-400 hover:underline"
@@ -994,7 +994,7 @@
 								</p>
 							{:else}
 								<div
-									class="w-full px-4 py-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-300"
+									class="w-full px-4 py-3 bg-yellow-500/10 border border-yellow-500/30  text-yellow-300"
 								>
 									No email set
 								</div>
@@ -1009,7 +1009,7 @@
 						<div>
 							<label
 								for="support-hours"
-								class="block text-white/80 mb-2"
+								class="block text-neutral-300 mb-2"
 								>Support Hours <span class="text-red-400"
 									>*</span
 								></label
@@ -1018,7 +1018,7 @@
 								id="support-hours"
 								bind:value={supportHours}
 								required
-								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
 							>
 								<option value="">Select...</option>
 								{#each supportHoursOptions as opt}<option
@@ -1032,13 +1032,13 @@
 									type="text"
 									bind:value={customSupportHours}
 									placeholder="e.g., Mon-Fri 9-17 PST"
-									class="w-full mt-2 px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									class="w-full mt-2 px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								/>{/if}
 						</div>
 					</div>
 
 					<div>
-						<div class="text-white/80 mb-2">
+						<div class="text-neutral-300 mb-2">
 							Support Channels <span class="text-red-400">*</span>
 						</div>
 						<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -1053,14 +1053,14 @@
 												ch,
 											))}
 										class="w-4 h-4 rounded"
-									/><span class="text-white/80">{ch}</span
+									/><span class="text-neutral-300">{ch}</span
 									></label
 								>{/each}
 						</div>
 					</div>
 
 					<div>
-						<div class="text-white/80 mb-2">
+						<div class="text-neutral-300 mb-2">
 							Regions <span class="text-red-400">*</span>
 						</div>
 						<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -1072,14 +1072,14 @@
 										onchange={() =>
 											(regions = toggleArray(regions, r))}
 										class="w-4 h-4 rounded"
-									/><span class="text-white/80">{r}</span
+									/><span class="text-neutral-300">{r}</span
 									></label
 								>{/each}
 						</div>
 					</div>
 
 					<div>
-						<div class="text-white/80 mb-2">
+						<div class="text-neutral-300 mb-2">
 							Payment Methods <span class="text-red-400">*</span>
 						</div>
 						<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1094,7 +1094,7 @@
 												m,
 											))}
 										class="w-4 h-4 rounded"
-									/><span class="text-white/80">{m}</span
+									/><span class="text-neutral-300">{m}</span
 									></label
 								>{/each}
 						</div>
@@ -1104,13 +1104,13 @@
 						<div>
 							<label
 								for="refund-policy"
-								class="block text-white/80 mb-2"
+								class="block text-neutral-300 mb-2"
 								>Refund Policy</label
 							>
 							<select
 								id="refund-policy"
 								bind:value={refundPolicy}
-								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
 							>
 								<option value="">Select...</option>
 								{#each refundPolicyOptions as opt}<option
@@ -1124,19 +1124,19 @@
 									type="text"
 									bind:value={customRefundPolicy}
 									placeholder="Describe policy"
-									class="w-full mt-2 px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									class="w-full mt-2 px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								/>{/if}
 						</div>
 						<div>
 							<label
 								for="sla-guarantee"
-								class="block text-white/80 mb-2"
+								class="block text-neutral-300 mb-2"
 								>SLA Guarantee</label
 							>
 							<select
 								id="sla-guarantee"
 								bind:value={slaGuarantee}
-								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
 							>
 								<option value="">Select...</option>
 								{#each slaGuaranteeOptions as opt}<option
@@ -1147,8 +1147,8 @@
 					</div>
 
 					<div>
-						<div class="text-white/80 mb-2">
-							Unique Selling Points <span class="text-white/50"
+						<div class="text-neutral-300 mb-2">
+							Unique Selling Points <span class="text-neutral-500"
 								>(max 200 chars)</span
 							>
 						</div>
@@ -1158,28 +1158,28 @@
 								bind:value={usp1}
 								maxlength="200"
 								placeholder="Key differentiator #1"
-								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 							/>
 							<input
 								type="text"
 								bind:value={usp2}
 								maxlength="200"
 								placeholder="Key differentiator #2"
-								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 							/>
 							<input
 								type="text"
 								bind:value={usp3}
 								maxlength="200"
 								placeholder="Key differentiator #3"
-								class="w-full px-4 py-3 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 							/>
 						</div>
 					</div>
 
 					<div>
 						<div class="flex justify-between items-center mb-2">
-							<span class="text-white/80"
+							<span class="text-neutral-300"
 								>Common Issues / FAQ</span
 							>
 							{#if commonIssues.length < 10}<button
@@ -1191,10 +1191,10 @@
 						</div>
 						{#each commonIssues as issue, i}
 							<div
-								class="border border-glass/15 rounded-lg p-3 mb-2 space-y-2"
+								class="border border-neutral-800  p-3 mb-2 space-y-2"
 							>
 								<div class="flex justify-between">
-									<span class="text-white/50 text-sm"
+									<span class="text-neutral-500 text-sm"
 										>#{i + 1}</span
 									><button
 										type="button"
@@ -1207,13 +1207,13 @@
 									type="text"
 									bind:value={issue.question}
 									placeholder="Question"
-									class="w-full px-3 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								/>
 								<textarea
 									bind:value={issue.answer}
 									rows="2"
 									placeholder="Answer"
-									class="w-full px-3 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								></textarea>
 							</div>
 						{/each}
@@ -1222,7 +1222,7 @@
 					<button
 						type="submit"
 						disabled={savingOnboarding}
-						class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+						class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
 						>{savingOnboarding
 							? "Saving & Publishing..."
 							: "Save & Publish"}</button

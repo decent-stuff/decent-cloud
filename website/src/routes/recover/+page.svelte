@@ -5,6 +5,7 @@
 	import { requestRecovery, completeRecovery } from '$lib/services/account-api';
 	import { identityFromSeed, bytesToHex } from '$lib/utils/identity';
 	import SeedPhraseStep from '$lib/components/SeedPhraseStep.svelte';
+	import Icon from '$lib/components/Icons.svelte';
 
 	type State = 'request' | 'request-sent' | 'generate-seed' | 'processing' | 'success';
 
@@ -16,7 +17,6 @@
 	let successMessage = $state('');
 
 	onMount(() => {
-		// Check if URL has token parameter
 		const urlToken = $page.url.searchParams.get('token');
 		if (urlToken) {
 			token = urlToken;
@@ -85,50 +85,45 @@
 	<title>Account Recovery - Decent Cloud</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-base via-surface to-surface flex items-center justify-center p-4">
+<div class="min-h-screen bg-base bg-grid bg-radial flex items-center justify-center p-4">
 	<div class="w-full max-w-lg">
 		<!-- Header -->
 		<div class="text-center mb-8">
 			<a href="/" class="inline-block">
-				<h1 class="text-4xl font-bold text-white mb-2">Decent Cloud</h1>
+				<h1 class="text-2xl font-bold text-white tracking-tight mb-2">Decent Cloud</h1>
 			</a>
-			<p class="text-white/70">Account Recovery</p>
+			<p class="text-neutral-500 text-sm">Account Recovery</p>
 		</div>
 
 		<!-- Recovery Flow Card -->
-		<div class="bg-surface/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-glass/15 shadow-2xl">
+		<div class="card p-6 md:p-8">
 			<!-- Request Recovery Form -->
 			{#if currentState === 'request'}
 				<form onsubmit={handleRequestSubmit} class="space-y-4">
-					<h3 class="text-2xl font-bold text-white">Request Account Recovery</h3>
-					<p class="text-white/60">
+					<h3 class="text-xl font-semibold text-white">Request Account Recovery</h3>
+					<p class="text-neutral-500 text-sm">
 						Enter the email address associated with your account. We'll send you a recovery link.
 					</p>
 
 					<div class="space-y-2">
-						<label for="email" class="block text-sm font-medium text-white/70">
-							Email Address
-						</label>
+						<label for="email" class="data-label block">Email Address</label>
 						<input
 							id="email"
 							type="email"
 							bind:value={email}
 							placeholder="your@email.com"
-							class="w-full px-4 py-3 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
+							class="input w-full"
 							required
 						/>
 					</div>
 
 					{#if error}
-						<div class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+						<div class="bg-danger/10 border border-danger/20 p-4 text-danger text-sm">
 							{error}
 						</div>
 					{/if}
 
-					<button
-						type="submit"
-						class="w-full px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
-					>
+					<button type="submit" class="btn-primary w-full">
 						Send Recovery Link
 					</button>
 				</form>
@@ -137,9 +132,11 @@
 			<!-- Request Sent Success -->
 			{#if currentState === 'request-sent'}
 				<div class="space-y-4 text-center py-8">
-					<div class="text-6xl">✉️</div>
-					<h3 class="text-2xl font-bold text-white">Check Your Email</h3>
-					<p class="text-white/60">
+					<div class="icon-box-accent mx-auto">
+						<Icon name="mail" size={20} />
+					</div>
+					<h3 class="text-xl font-semibold text-white">Check Your Email</h3>
+					<p class="text-neutral-500 text-sm">
 						{successMessage || 'We sent a recovery link to your email address. Click the link to continue.'}
 					</p>
 
@@ -147,7 +144,7 @@
 						<button
 							type="button"
 							onclick={handleBackToRequest}
-							class="text-white/60 hover:text-white transition-colors text-sm"
+							class="text-neutral-500 hover:text-white transition-colors text-sm"
 						>
 							Send to a different email
 						</button>
@@ -158,13 +155,13 @@
 			<!-- Generate New Seed Phrase -->
 			{#if currentState === 'generate-seed'}
 				<div class="space-y-4">
-					<h3 class="text-2xl font-bold text-white">Complete Recovery</h3>
-					<p class="text-white/60 mb-4">
+					<h3 class="text-xl font-semibold text-white">Complete Recovery</h3>
+					<p class="text-neutral-500 text-sm mb-4">
 						Generate a new seed phrase to regain access to your account.
 					</p>
 
 					{#if error}
-						<div class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+						<div class="bg-danger/10 border border-danger/20 p-4 text-danger text-sm">
 							{error}
 						</div>
 					{/if}
@@ -180,13 +177,13 @@
 			<!-- Processing -->
 			{#if currentState === 'processing'}
 				<div class="space-y-4 text-center py-8">
-					<div class="text-6xl animate-pulse">🔐</div>
-					<h3 class="text-2xl font-bold text-white">Processing</h3>
-					<p class="text-white/60">Please wait...</p>
+					<div class="icon-box mx-auto">
+						<Icon name="key" size={20} />
+					</div>
+					<h3 class="text-xl font-semibold text-white">Processing</h3>
+					<p class="text-neutral-500 text-sm">Please wait...</p>
 					<div class="flex justify-center">
-						<div
-							class="w-8 h-8 border-4 border-primary-500/30 border-t-primary-500 rounded-full animate-spin"
-						></div>
+						<div class="w-6 h-6 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
 					</div>
 				</div>
 			{/if}
@@ -194,18 +191,16 @@
 			<!-- Success -->
 			{#if currentState === 'success'}
 				<div class="space-y-4 text-center py-8">
-					<div class="text-6xl">✅</div>
-					<h3 class="text-2xl font-bold text-white">Recovery Complete!</h3>
-					<p class="text-white/60">
+					<div class="icon-box-accent mx-auto">
+						<Icon name="check" size={20} />
+					</div>
+					<h3 class="text-xl font-semibold text-white">Recovery Complete!</h3>
+					<p class="text-neutral-500 text-sm">
 						Your account has been recovered. You can now login with your new seed phrase.
 					</p>
 
 					<div class="pt-4">
-						<button
-							type="button"
-							onclick={handleGoToLogin}
-							class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
-						>
+						<button type="button" onclick={handleGoToLogin} class="btn-primary">
 							Go to Login
 						</button>
 					</div>
@@ -216,7 +211,7 @@
 		<!-- Back link -->
 		{#if currentState === 'request' || currentState === 'request-sent'}
 			<div class="text-center mt-6">
-				<a href="/login" class="text-white/60 hover:text-white transition-colors text-sm">
+				<a href="/login" class="text-neutral-500 hover:text-white transition-colors text-sm">
 					← Back to login
 				</a>
 			</div>

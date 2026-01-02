@@ -13,7 +13,7 @@
 	const normalizedStatus = contract.status.toLowerCase();
 </script>
 
-<div class="bg-glass/10 border border-white/15 rounded-xl p-6 space-y-4">
+<div class="bg-surface-elevated border border-white/15  p-6 space-y-4">
 	<div class="flex items-start justify-between gap-4">
 		<div>
 			<div class="flex items-center gap-3 mb-1">
@@ -27,18 +27,18 @@
 					{badge.text}
 				</span>
 			</div>
-			<p class="text-white/60 text-sm">
+			<p class="text-neutral-500 text-sm">
 				Contract: {truncateContractHash(contract.contract_id)}
 			</p>
 		</div>
-		<div class="text-right text-white/80 text-sm">
+		<div class="text-right text-neutral-300 text-sm">
 			Requester: {truncateContractHash(contract.requester_pubkey)}
 		</div>
 	</div>
 
 	{#if contract.provisioning_instance_details}
 		<div
-			class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-white whitespace-pre-wrap"
+			class="bg-emerald-500/10 border border-emerald-500/20  p-3 text-sm text-white whitespace-pre-wrap"
 		>
 			{contract.provisioning_instance_details}
 		</div>
@@ -48,7 +48,7 @@
 		<div class="space-y-3">
 			{#if normalizedStatus === "provisioning"}
 				<textarea
-					class="w-full bg-glass/10 border border-glass/15 rounded-lg text-white p-3"
+					class="w-full bg-surface-elevated border border-neutral-800  text-white p-3"
 					rows="3"
 					placeholder="Include IP, credentials, and instructions"
 					value={note}
@@ -58,7 +58,7 @@
 			<div class="flex flex-wrap gap-3">
 				{#if normalizedStatus === "accepted"}
 					<button
-						class="px-4 py-2 rounded-lg bg-primary-500/80 text-white font-semibold disabled:opacity-60"
+						class="px-4 py-2  bg-primary-500/80 text-white font-semibold disabled:opacity-60"
 						onclick={() => onUpdateStatus("provisioning")}
 						disabled={busy}
 					>
@@ -66,7 +66,7 @@
 					</button>
 				{:else if normalizedStatus === "provisioning"}
 					<button
-						class="px-4 py-2 rounded-lg bg-emerald-500/80 text-white font-semibold disabled:opacity-60"
+						class="px-4 py-2  bg-emerald-500/80 text-white font-semibold disabled:opacity-60"
 						onclick={() => onUpdateStatus("provisioned")}
 						disabled={busy}
 					>
@@ -74,7 +74,7 @@
 					</button>
 				{:else if normalizedStatus === "provisioned"}
 					<button
-						class="px-4 py-2 rounded-lg bg-indigo-500/80 text-white font-semibold disabled:opacity-60"
+						class="px-4 py-2  bg-indigo-500/80 text-white font-semibold disabled:opacity-60"
 						onclick={() => onUpdateStatus("active")}
 						disabled={busy}
 					>

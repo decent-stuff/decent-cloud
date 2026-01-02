@@ -10,29 +10,23 @@
 	let returnUrl = $state<string>('/dashboard/marketplace');
 
 	onMount(() => {
-		// Get returnUrl from query params
 		const urlReturnUrl = $page.url.searchParams.get('returnUrl');
 		if (urlReturnUrl) {
 			returnUrl = urlReturnUrl;
 		}
 
-		// Check if already authenticated on page load only
-		// Don't subscribe to changes, as we want the auth flow to show the success screen
 		const currentlyAuthenticated = get(authStore.isAuthenticated);
 		if (currentlyAuthenticated) {
-			// Already logged in when arriving at page, redirect immediately
 			goto(returnUrl);
 		}
 	});
 
 	function handleSuccess(account: AccountInfo) {
 		console.log('Auth success:', account);
-		// Navigate to returnUrl
 		goto(returnUrl);
 	}
 
 	function handleCancel() {
-		// Go back or to home
 		goto('/');
 	}
 </script>
@@ -41,25 +35,25 @@
 	<title>Login - Decent Cloud</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-base via-surface to-surface flex items-center justify-center p-4">
+<div class="min-h-screen bg-base bg-grid bg-radial flex items-center justify-center p-4">
 	<div class="w-full max-w-lg">
 		<!-- Header -->
 		<div class="text-center mb-8">
 			<a href="/" class="inline-block">
-				<h1 class="text-4xl font-bold text-white mb-2">Decent Cloud</h1>
+				<h1 class="text-2xl font-bold text-white tracking-tight mb-2">Decent Cloud</h1>
 			</a>
-			<p class="text-white/70">Login or create your account</p>
+			<p class="text-neutral-500 text-sm">Login or create your account</p>
 		</div>
 
 		<!-- Auth Flow Card -->
-		<div class="bg-surface/95 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-glass/15 shadow-2xl">
+		<div class="card p-6 md:p-8">
 			<AuthFlow onSuccess={handleSuccess} />
 		</div>
 
 		<!-- Footer links -->
 		<div class="text-center mt-6 space-y-2">
 			<div>
-				<a href="/recover" class="text-white/50 hover:text-white/80 transition-colors text-xs">
+				<a href="/recover" class="text-neutral-600 hover:text-neutral-400 transition-colors text-xs">
 					Lost access? Recover your account
 				</a>
 			</div>
@@ -67,7 +61,7 @@
 				<button
 					type="button"
 					onclick={handleCancel}
-					class="text-white/60 hover:text-white transition-colors text-sm"
+					class="text-neutral-500 hover:text-white transition-colors text-sm"
 				>
 					← Back to home
 				</button>

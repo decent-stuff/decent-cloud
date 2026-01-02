@@ -92,27 +92,27 @@
 {#if mode === 'choose'}
 	<div class="space-y-4">
 		<h3 class="text-2xl font-bold text-white">Seed Phrase</h3>
-		<p class="text-white/60">Generate a new seed phrase or import an existing one</p>
+		<p class="text-neutral-500">Generate a new seed phrase or import an existing one</p>
 
 		<div class="grid gap-4">
 			<button
 				type="button"
 				onclick={() => chooseMode('generate')}
-				class="p-6 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-xl text-left transition-all group"
+				class="p-6 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500  text-left transition-all group"
 			>
 				<div class="text-3xl mb-2">✨</div>
 				<h4 class="text-xl font-bold text-white mb-1">Generate New</h4>
-				<p class="text-white/80 text-sm">Create a new 12-word seed phrase</p>
+				<p class="text-neutral-300 text-sm">Create a new 12-word seed phrase</p>
 			</button>
 
 			<button
 				type="button"
 				onclick={() => chooseMode('import')}
-				class="p-6 bg-glass/5 hover:bg-glass/10 border border-glass/15 rounded-xl text-left transition-all group"
+				class="p-6 bg-surface-elevated hover:bg-surface-elevated border border-neutral-800  text-left transition-all group"
 			>
 				<div class="text-3xl mb-2">🔑</div>
 				<h4 class="text-xl font-bold text-white mb-1">Import Existing</h4>
-				<p class="text-white/60 text-sm">Use an existing seed phrase</p>
+				<p class="text-neutral-500 text-sm">Use an existing seed phrase</p>
 			</button>
 		</div>
 
@@ -120,7 +120,7 @@
 			<button
 				type="button"
 				onclick={onBack}
-				class="w-full px-4 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
+				class="w-full px-4 py-3 bg-surface-elevated hover:bg-surface-elevated  text-white transition-colors"
 			>
 				Back
 			</button>
@@ -132,16 +132,16 @@
 {#if mode === 'generate'}
 	<div class="space-y-4">
 		<h3 class="text-2xl font-bold text-white">Backup Your Seed Phrase</h3>
-		<p class="text-white/60">
+		<p class="text-neutral-500">
 			Save these 12 words in a secure location. You'll need them to recover your account.
 		</p>
 
 		<!-- Seed phrase display with 12 boxes -->
-		<div class="p-4 bg-black/40 border border-glass/15 rounded-lg">
+		<div class="p-4 bg-black/40 border border-neutral-800 ">
 			<div class="grid grid-cols-3 gap-2 text-sm">
 				{#each seedPhrase.split(' ') as word, i}
-					<div class="flex items-center gap-2 p-2 bg-glass/5 rounded">
-						<span class="text-white/40 text-xs w-4">{i + 1}.</span>
+					<div class="flex items-center gap-2 p-2 bg-surface-elevated rounded">
+						<span class="text-neutral-600 text-xs w-4">{i + 1}.</span>
 						<span class="text-white font-mono">{word}</span>
 					</div>
 				{/each}
@@ -152,14 +152,14 @@
 		<button
 			type="button"
 			onclick={copySeedPhrase}
-			class="w-full px-4 py-3 bg-glass/10 hover:bg-glass/15 border border-glass/15 rounded-lg text-white transition-colors flex items-center justify-center gap-2"
+			class="w-full px-4 py-3 bg-surface-elevated hover:bg-surface-elevated border border-neutral-800  text-white transition-colors flex items-center justify-center gap-2"
 		>
 			<span>📋</span>
 			<span>Copy to Clipboard</span>
 		</button>
 
 		<!-- Warning -->
-		<div class="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+		<div class="p-4 bg-yellow-500/10 border border-yellow-500/30 ">
 			<div class="flex gap-3">
 				<span class="text-yellow-400 text-xl">⚠️</span>
 				<div class="flex-1 space-y-2">
@@ -176,7 +176,7 @@
 		<!-- Device Name (optional) -->
 		{#if showDeviceName}
 			<div class="space-y-2">
-				<label for="device-name" class="block text-sm font-medium text-white/70">
+				<label for="device-name" class="block text-sm font-medium text-neutral-400">
 					Device Name (optional)
 				</label>
 				<input
@@ -184,7 +184,7 @@
 					type="text"
 					bind:value={deviceName}
 					placeholder="e.g., Laptop, Phone, Work Computer"
-					class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
+					class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
 				/>
 			</div>
 		{/if}
@@ -194,15 +194,15 @@
 			<input
 				type="checkbox"
 				bind:checked={seedBackedUp}
-				class="mt-1 w-5 h-5 rounded border-glass/15 bg-glass/5 text-primary-600 focus:ring-2 focus:ring-primary-500/50"
+				class="mt-1 w-5 h-5 rounded border-neutral-800 bg-surface-elevated text-primary-600 focus:ring-2 focus:ring-primary-500/50"
 			/>
-			<span class="text-sm text-white/80">
+			<span class="text-sm text-neutral-300">
 				I have saved my seed phrase in a secure location
 			</span>
 		</label>
 
 		{#if error}
-			<div class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+			<div class="p-4 bg-red-500/20 border border-red-500/30  text-red-400 text-sm">
 				{error}
 			</div>
 		{/if}
@@ -211,14 +211,14 @@
 			<button
 				type="button"
 				onclick={handleBackClick}
-				class="flex-1 px-4 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
+				class="flex-1 px-4 py-3 bg-surface-elevated hover:bg-surface-elevated  text-white transition-colors"
 			>
 				Back
 			</button>
 			<button
 				type="button"
 				onclick={confirmSeedBackup}
-				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500  text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 				disabled={!seedBackedUp}
 			>
 				Continue
@@ -231,10 +231,10 @@
 {#if mode === 'import'}
 	<div class="space-y-4">
 		<h3 class="text-2xl font-bold text-white">Enter Your Seed Phrase</h3>
-		<p class="text-white/60">Type or paste your 12-word recovery phrase</p>
+		<p class="text-neutral-500">Type or paste your 12-word recovery phrase</p>
 
 		<div class="space-y-2">
-			<label for="seedPhrase" class="block text-sm font-medium text-white/70">
+			<label for="seedPhrase" class="block text-sm font-medium text-neutral-400">
 				Seed Phrase
 			</label>
 			<div class="relative">
@@ -244,21 +244,21 @@
 					onpaste={handlePaste}
 					placeholder="word1 word2 word3 ..."
 					rows="4"
-					class="w-full px-4 py-3 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all font-mono text-sm {showSeedEntry
+					class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all font-mono text-sm {showSeedEntry
 						? ''
 						: 'blur-sm'}"
 				></textarea>
 				<button
 					type="button"
 					onclick={() => (showSeedEntry = !showSeedEntry)}
-					class="absolute top-3 right-3 px-3 py-1 bg-glass/10 hover:bg-glass/15 rounded text-xs text-white transition-colors"
+					class="absolute top-3 right-3 px-3 py-1 bg-surface-elevated hover:bg-surface-elevated rounded text-xs text-white transition-colors"
 				>
 					{showSeedEntry ? '🙈 Hide' : '👁️ Show'}
 				</button>
 			</div>
 
 			<!-- Word counter -->
-			<div class="text-xs text-white/40">
+			<div class="text-xs text-neutral-600">
 				{seedPhrase
 					.trim()
 					.split(/\s+/)
@@ -269,7 +269,7 @@
 		<!-- Device Name (optional) -->
 		{#if showDeviceName}
 			<div class="space-y-2">
-				<label for="device-name-import" class="block text-sm font-medium text-white/70">
+				<label for="device-name-import" class="block text-sm font-medium text-neutral-400">
 					Device Name (optional)
 				</label>
 				<input
@@ -277,13 +277,13 @@
 					type="text"
 					bind:value={deviceName}
 					placeholder="e.g., Laptop, Phone, Work Computer"
-					class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
+					class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-500/50 transition-all"
 				/>
 			</div>
 		{/if}
 
 		{#if error}
-			<div class="p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+			<div class="p-4 bg-red-500/20 border border-red-500/30  text-red-400 text-sm">
 				{error}
 			</div>
 		{/if}
@@ -292,14 +292,14 @@
 			<button
 				type="button"
 				onclick={handleBackClick}
-				class="flex-1 px-4 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
+				class="flex-1 px-4 py-3 bg-surface-elevated hover:bg-surface-elevated  text-white transition-colors"
 			>
 				Back
 			</button>
 			<button
 				type="button"
 				onclick={continueWithSeed}
-				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 rounded-lg text-white font-medium transition-all"
+				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500  text-white font-medium transition-all"
 			>
 				Continue
 			</button>

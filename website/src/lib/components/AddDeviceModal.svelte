@@ -81,7 +81,7 @@
 		tabindex="0"
 	>
 		<div
-			class="bg-surface rounded-2xl p-8 max-w-2xl w-full border border-glass/15 shadow-2xl"
+			class="bg-surface  p-8 max-w-2xl w-full border border-neutral-800 shadow-2xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
@@ -100,20 +100,20 @@
 				<div class="text-center py-8">
 					<div class="text-5xl animate-pulse mb-4">🔗</div>
 					<h2 class="text-2xl font-bold text-white mb-2">Linking Device</h2>
-					<p class="text-white/60">Adding new device to your account...</p>
+					<p class="text-neutral-500">Adding new device to your account...</p>
 				</div>
 
 			{:else if step === 'success'}
 				<div class="text-center py-8">
 					<div class="text-5xl mb-4">✅</div>
 					<h2 class="text-2xl font-bold text-white mb-2">Device Added!</h2>
-					<p class="text-white/60 mb-6">
+					<p class="text-neutral-500 mb-6">
 						You can now use the seed phrase to sign in on your new device.
 					</p>
 					<button
 						type="button"
 						onclick={handleClose}
-						class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white font-medium"
+						class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  text-white font-medium"
 					>
 						Done
 					</button>
@@ -128,14 +128,14 @@
 						<button
 							type="button"
 							onclick={handleClose}
-							class="px-6 py-3 bg-glass/10 hover:bg-glass/15 rounded-lg text-white transition-colors"
+							class="px-6 py-3 bg-surface-elevated hover:bg-surface-elevated  text-white transition-colors"
 						>
 							Cancel
 						</button>
 						<button
 							type="button"
 							onclick={() => (step = 'seed')}
-							class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg text-white font-medium"
+							class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  text-white font-medium"
 						>
 							Try Again
 						</button>

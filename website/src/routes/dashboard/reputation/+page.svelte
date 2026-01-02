@@ -7,6 +7,7 @@
 		searchReputation,
 		type AccountSearchResult
 	} from '$lib/services/api-reputation';
+	import Icon from '$lib/components/Icons.svelte';
 
 	let searchQuery = $state('');
 	let results = $state<AccountSearchResult[]>([]);
@@ -16,7 +17,6 @@
 	let myUsername = $state<string | null>(null);
 
 	onMount(() => {
-		// Get user's username for "My Reputation" link
 		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
 			if (identity?.account?.username) {
 				myUsername = identity.account.username;
@@ -46,7 +46,6 @@
 	}
 
 	function handleInput() {
-		// Debounce search
 		if (debounceTimeout) {
 			clearTimeout(debounceTimeout);
 		}
@@ -67,27 +66,28 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Reputation</h1>
-		<p class="text-white/60">
+		<h1 class="text-2xl font-bold text-white tracking-tight">Reputation</h1>
+		<p class="text-neutral-500 text-sm mt-1">
 			Search for users and providers by username, display name, or public key
 		</p>
 	</div>
 
 	<!-- My Reputation Link -->
 	{#if myUsername}
-		<div class="flex gap-4">
+		<div class="flex gap-3">
 			<button
 				onclick={() => navigateToProfile(myUsername!)}
-				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+				class="btn-primary inline-flex items-center gap-2"
 			>
-				View My Reputation
+				<span>View My Reputation</span>
+				<Icon name="arrow-right" size={14} />
 			</button>
 		</div>
 	{/if}
 
 	<!-- Search Box -->
-	<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
-		<label for="search" class="block text-sm font-medium text-white/80 mb-2">
+	<div class="card p-5">
+		<label for="search" class="data-label block mb-2">
 			Search Accounts
 		</label>
 		<input
@@ -96,64 +96,58 @@
 			bind:value={searchQuery}
 			oninput={handleInput}
 			placeholder="Enter username, display name, or public key..."
-			class="w-full px-4 py-3 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+			class="input w-full"
 		/>
 		{#if loading}
-			<div class="mt-4 flex items-center gap-2 text-white/60">
-				<div
-					class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-primary-400"
-				></div>
+			<div class="mt-4 flex items-center gap-2 text-neutral-400">
+				<div class="w-4 h-4 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
 				<span class="text-sm">Searching...</span>
 			</div>
 		{/if}
 		{#if error}
-			<div class="mt-4 text-red-400 text-sm">{error}</div>
+			<div class="mt-4 text-danger text-sm">{error}</div>
 		{/if}
 	</div>
 
 	<!-- Search Results -->
 	{#if results.length > 0}
 		<div class="space-y-4">
-			<h2 class="text-2xl font-bold text-white">
+			<h2 class="text-lg font-semibold text-white">
 				Search Results ({results.length})
 			</h2>
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 				{#each results as result}
 					<button
 						onclick={() => navigateToProfile(result.username)}
-						class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 hover:bg-white/15 hover:border-white/30 transition-all text-left"
+						class="card card-hover p-5 text-left"
 					>
 						<div class="flex items-start justify-between gap-4 mb-3">
-							<div class="flex-1">
-								<h3 class="text-lg font-bold text-white mb-1">
+							<div class="flex-1 min-w-0">
+								<h3 class="text-base font-semibold text-white mb-1 truncate">
 									{result.display_name || result.username}
 								</h3>
 								{#if result.display_name}
-									<p class="text-sm text-white/60">@{result.username}</p>
+									<p class="text-sm text-neutral-500">@{result.username}</p>
 								{/if}
-								<p class="text-xs text-white/50 font-mono mt-1">
+								<p class="text-xs text-neutral-600 font-mono mt-1">
 									{truncatePubkey(result.pubkey)}
 								</p>
 							</div>
-							<div class="text-right">
-								<div class="text-2xl font-bold text-white">
+							<div class="text-right shrink-0">
+								<div class="text-2xl font-bold text-primary-400 font-mono">
 									{formatNumber(result.reputation_score)}
 								</div>
-								<div class="text-xs text-white/50">Reputation</div>
+								<div class="text-[10px] text-neutral-500 uppercase tracking-label">Reputation</div>
 							</div>
 						</div>
-						<div class="flex gap-4 text-sm">
+						<div class="flex gap-4 text-sm border-t border-neutral-800/60 pt-3">
 							<div>
-								<span class="text-white/60">Contracts:</span>
-								<span class="text-white font-medium ml-1"
-									>{formatNumber(result.contract_count)}</span
-								>
+								<span class="text-neutral-500">Contracts:</span>
+								<span class="text-white font-medium ml-1">{formatNumber(result.contract_count)}</span>
 							</div>
 							<div>
-								<span class="text-white/60">Offerings:</span>
-								<span class="text-white font-medium ml-1"
-									>{formatNumber(result.offering_count)}</span
-								>
+								<span class="text-neutral-500">Offerings:</span>
+								<span class="text-white font-medium ml-1">{formatNumber(result.offering_count)}</span>
 							</div>
 						</div>
 					</button>
@@ -161,30 +155,28 @@
 			</div>
 		</div>
 	{:else if searchQuery && !loading && !error}
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
-		>
-			<div class="text-6xl mb-4">🔍</div>
-			<h2 class="text-2xl font-bold text-white mb-2">No Results Found</h2>
-			<p class="text-white/60">
-				No accounts match your search query: <span class="font-mono"
-					>"{searchQuery}"</span
-				>
+		<div class="card p-8 text-center">
+			<div class="icon-box mx-auto mb-4">
+				<Icon name="search" size={20} />
+			</div>
+			<h2 class="text-lg font-semibold text-white mb-2">No Results Found</h2>
+			<p class="text-neutral-500 text-sm">
+				No accounts match your search query: <span class="font-mono text-neutral-400">"{searchQuery}"</span>
 			</p>
-			<p class="text-sm text-white/50 mt-2">
+			<p class="text-xs text-neutral-600 mt-2">
 				Try searching by username, display name, or public key
 			</p>
 		</div>
 	{:else if !searchQuery && !loading}
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
-		>
-			<div class="text-6xl mb-4">⭐</div>
-			<h2 class="text-2xl font-bold text-white mb-2">Search Reputation</h2>
-			<p class="text-white/60">
+		<div class="card p-8 text-center">
+			<div class="icon-box-accent mx-auto mb-4">
+				<Icon name="star" size={20} />
+			</div>
+			<h2 class="text-lg font-semibold text-white mb-2">Search Reputation</h2>
+			<p class="text-neutral-500 text-sm">
 				Enter a username, display name, or public key to find accounts
 			</p>
-			<p class="text-sm text-white/50 mt-4">
+			<p class="text-xs text-neutral-600 mt-4">
 				All reputation data is public by design to encourage transparency and trust
 			</p>
 		</div>

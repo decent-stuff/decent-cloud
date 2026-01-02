@@ -97,8 +97,8 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">User Info</h1>
-		<p class="text-white/60">
+		<h1 class="text-2xl font-bold text-white tracking-tight">User Info</h1>
+		<p class="text-neutral-500">
 			{#if username}
 				Username: <span class="font-semibold">{username}</span>
 			{:else if pubkey}
@@ -113,7 +113,7 @@
 
 	{#if error}
 		<div
-			class="bg-red-500/20 border border-red-500/30 rounded-lg p-6 text-red-400"
+			class="bg-red-500/20 border border-red-500/30  p-6 text-red-400"
 		>
 			{#if isNotFound}
 				<div class="text-center">
@@ -138,7 +138,7 @@
 					<div class="mt-6">
 						<a
 							href="/dashboard/marketplace"
-							class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+							class="inline-flex items-center px-4 py-2 bg-primary-600 text-white  hover:bg-primary-700 transition-colors"
 						>
 							← Back to Marketplace
 						</a>
@@ -164,19 +164,19 @@
 				Offerings Provided ({activity.offerings_provided.length})
 			</h2>
 			{#if activity.offerings_provided.length === 0}
-				<p class="text-white/60">No offerings provided yet.</p>
+				<p class="text-neutral-500">No offerings provided yet.</p>
 			{:else}
 				<div
 					class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
 				>
 					{#each activity.offerings_provided as offering}
 						<div
-							class="bg-glass/10 backdrop-blur-lg rounded-xl p-4 border border-glass/15"
+							class="card p-4 border border-neutral-800"
 						>
 							<h3 class="text-lg font-semibold text-white mb-2">
 								{offering.offer_name}
 							</h3>
-							<p class="text-sm text-white/60 mb-2">
+							<p class="text-sm text-neutral-500 mb-2">
 								{offering.product_type}
 							</p>
 							<p class="text-white font-medium">
@@ -203,19 +203,19 @@
 				Rentals (as Requester) ({activity.rentals_as_requester.length})
 			</h2>
 			{#if activity.rentals_as_requester.length === 0}
-				<p class="text-white/60">No rental requests made yet.</p>
+				<p class="text-neutral-500">No rental requests made yet.</p>
 			{:else}
 				<div class="space-y-3">
 					{#each activity.rentals_as_requester as contract}
 						<div
-							class="bg-glass/10 backdrop-blur-lg rounded-lg p-4 border border-glass/15"
+							class="card-glass  p-4 border border-neutral-800"
 						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
 									<p class="text-white font-semibold">
 										Offering: {contract.offering_id}
 									</p>
-									<p class="text-sm text-white/60">
+									<p class="text-sm text-neutral-500">
 										Provider:
 										<a
 											href="/dashboard/reputation/{contract.provider_pubkey}"
@@ -233,13 +233,13 @@
 									{contract.status}
 								</span>
 							</div>
-							<p class="text-sm text-white/60">
+							<p class="text-sm text-neutral-500">
 								Created: {formatContractDate(
 									contract.created_at_ns,
 								)}
 							</p>
 							{#if contract.duration_hours}
-								<p class="text-sm text-white/60">
+								<p class="text-sm text-neutral-500">
 									Duration: {contract.duration_hours} hours
 								</p>
 							{/if}
@@ -255,19 +255,19 @@
 				Rentals (as Provider) ({activity.rentals_as_provider.length})
 			</h2>
 			{#if activity.rentals_as_provider.length === 0}
-				<p class="text-white/60">No rentals provided yet.</p>
+				<p class="text-neutral-500">No rentals provided yet.</p>
 			{:else}
 				<div class="space-y-3">
 					{#each activity.rentals_as_provider as contract}
 						<div
-							class="bg-glass/10 backdrop-blur-lg rounded-lg p-4 border border-glass/15"
+							class="card-glass  p-4 border border-neutral-800"
 						>
 							<div class="flex justify-between items-start mb-2">
 								<div>
 									<p class="text-white font-semibold">
 										Offering: {contract.offering_id}
 									</p>
-									<p class="text-sm text-white/60">
+									<p class="text-sm text-neutral-500">
 										Requester:
 										<a
 											href="/dashboard/reputation/{contract.requester_pubkey}"
@@ -285,13 +285,13 @@
 									{contract.status}
 								</span>
 							</div>
-							<p class="text-sm text-white/60">
+							<p class="text-sm text-neutral-500">
 								Created: {formatContractDate(
 									contract.created_at_ns,
 								)}
 							</p>
 							{#if contract.duration_hours}
-								<p class="text-sm text-white/60">
+								<p class="text-sm text-neutral-500">
 									Duration: {contract.duration_hours} hours
 								</p>
 							{/if}

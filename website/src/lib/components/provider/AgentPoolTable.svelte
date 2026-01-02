@@ -24,9 +24,9 @@
 	}
 </script>
 
-<div class="bg-glass/5 border border-glass/10 rounded-xl overflow-hidden">
+<div class="bg-surface-elevated border border-neutral-800  overflow-hidden">
 	<table class="w-full text-sm text-left">
-		<thead class="bg-glass/5 text-xs text-white/60 uppercase">
+		<thead class="bg-surface-elevated text-xs text-neutral-500 uppercase">
 			<tr>
 				<th scope="col" class="px-6 py-3">Pool</th>
 				<th scope="col" class="px-6 py-3">Pool ID</th>
@@ -42,7 +42,7 @@
 		<tbody>
 			{#if pools.length === 0}
 				<tr>
-					<td colspan="9" class="text-center py-8 text-white/50">
+					<td colspan="9" class="text-center py-8 text-neutral-500">
 						No agent pools configured yet.
 					</td>
 				</tr>
@@ -51,7 +51,7 @@
 				<tr
 					onclick={() => handleRowClick(pool)}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleRowClick(pool); }}
-					class="border-b border-glass/10 last:border-b-0 hover:bg-glass/5 transition-colors cursor-pointer"
+					class="border-b border-neutral-800 last:border-b-0 hover:bg-surface-elevated transition-colors cursor-pointer"
 					role="button"
 					tabindex="0"
 				>
@@ -60,7 +60,7 @@
 							{pool.name}
 						</span>
 					</th>
-					<td class="px-6 py-4 font-mono text-white/60 text-xs">
+					<td class="px-6 py-4 font-mono text-neutral-500 text-xs">
 						{pool.poolId}
 					</td>
 					<td class="px-6 py-4">
@@ -73,25 +73,25 @@
 							{pool.provisionerType}
 						</span>
 					</td>
-					<td class="px-6 py-4 text-white/80">{pool.agentCount}</td>
-					<td class="px-6 py-4 text-white/80">
+					<td class="px-6 py-4 text-neutral-300">{pool.agentCount}</td>
+					<td class="px-6 py-4 text-neutral-300">
 						<span class="{pool.onlineCount > 0 ? 'text-green-400' : 'text-red-400'}">
 							{pool.onlineCount} / {pool.agentCount}
 						</span>
 					</td>
-					<td class="px-6 py-4 text-white/80">{pool.activeContracts}</td>
-					<td class="px-6 py-4 text-white/80">{pool.offeringsCount}</td>
+					<td class="px-6 py-4 text-neutral-300">{pool.activeContracts}</td>
+					<td class="px-6 py-4 text-neutral-300">{pool.offeringsCount}</td>
 					<td class="px-6 py-4 text-right space-x-2 hidden sm:table-cell">
 						<button
 							onclick={(e) => handleAddAgent(e, pool)}
-							class="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
+							class="px-3 py-1.5  text-sm font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
 							title="Add Agent / Setup Tokens"
 						>
 							+
 						</button>
 						<button
 							onclick={(e) => handleEdit(e, pool)}
-							class="px-3 py-1.5 rounded-lg text-sm font-medium bg-glass/10 text-white/80 hover:bg-glass/15 transition-colors"
+							class="px-3 py-1.5  text-sm font-medium bg-surface-elevated text-neutral-300 hover:bg-surface-elevated transition-colors"
 							title="Edit Pool"
 						>
 							Edit

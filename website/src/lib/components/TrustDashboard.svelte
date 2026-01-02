@@ -94,7 +94,7 @@
 	}
 </script>
 
-<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/10">
+<div class="card p-6 border border-neutral-800">
 	<!-- Trust Score Header -->
 	<div class="flex items-center justify-between mb-6">
 		<h3 class="text-xl font-bold">Trust Score</h3>
@@ -102,7 +102,7 @@
 			class="flex items-center gap-3 px-4 py-2 rounded-full border {getScoreBgColor(trustScore)}"
 		>
 			<span class="text-3xl font-bold {getScoreColor(trustScore)}">{trustScore}</span>
-			<span class="text-sm text-white/70">/100</span>
+			<span class="text-sm text-neutral-400">/100</span>
 			<span class="text-sm font-medium {getScoreColor(trustScore)}">{getScoreLabel(trustScore)}</span
 			>
 		</div>
@@ -110,48 +110,48 @@
 
 	<!-- Core Metrics Grid -->
 	<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-		<div class="bg-glass/5 rounded-lg p-3">
-			<div class="text-xs text-white/50 mb-1">Time to Delivery</div>
+		<div class="bg-surface-elevated  p-3">
+			<div class="text-xs text-neutral-500 mb-1">Time to Delivery</div>
 			<div class="text-lg font-semibold">
 				{#if metrics.time_to_delivery_hours}
 					{metrics.time_to_delivery_hours < 1
 						? `${Math.round(metrics.time_to_delivery_hours * 60)}m`
 						: `${metrics.time_to_delivery_hours.toFixed(1)}h`}
 				{:else}
-					<span class="text-white/40">N/A</span>
+					<span class="text-neutral-600">N/A</span>
 				{/if}
 			</div>
 		</div>
 
-		<div class="bg-glass/5 rounded-lg p-3">
-			<div class="text-xs text-white/50 mb-1">Completion Rate</div>
+		<div class="bg-surface-elevated  p-3">
+			<div class="text-xs text-neutral-500 mb-1">Completion Rate</div>
 			<div class="text-lg font-semibold">{metrics.completion_rate_pct.toFixed(0)}%</div>
 		</div>
 
-		<div class="bg-glass/5 rounded-lg p-3">
-			<div class="text-xs text-white/50 mb-1">Repeat Customers</div>
+		<div class="bg-surface-elevated  p-3">
+			<div class="text-xs text-neutral-500 mb-1">Repeat Customers</div>
 			<div class="text-lg font-semibold">{metrics.repeat_customer_count}</div>
 		</div>
 
-		<div class="bg-glass/5 rounded-lg p-3">
-			<div class="text-xs text-white/50 mb-1">Total Contracts</div>
+		<div class="bg-surface-elevated  p-3">
+			<div class="text-xs text-neutral-500 mb-1">Total Contracts</div>
 			<div class="text-lg font-semibold">{metrics.total_contracts}</div>
 		</div>
 
-		<div class="bg-glass/5 rounded-lg p-3">
-			<div class="text-xs text-white/50 mb-1">Active Value</div>
+		<div class="bg-surface-elevated  p-3">
+			<div class="text-xs text-neutral-500 mb-1">Active Value</div>
 			<div class="text-lg font-semibold">{formatValue(metrics.active_contract_value_e9s)}</div>
 		</div>
 
-		<div class="bg-glass/5 rounded-lg p-3">
-			<div class="text-xs text-white/50 mb-1">Last Active</div>
+		<div class="bg-surface-elevated  p-3">
+			<div class="text-xs text-neutral-500 mb-1">Last Active</div>
 			<div class="text-lg font-semibold">{formatLastActive(metrics.last_active_ns)}</div>
 		</div>
 	</div>
 
 	<!-- Provider Tenure Badge -->
 	<div
-		class="flex items-center gap-2 px-3 py-2 border rounded-lg mb-4 {getTenureBadgeColor(
+		class="flex items-center gap-2 px-3 py-2 border  mb-4 {getTenureBadgeColor(
 			metrics.provider_tenure
 		)}"
 	>
@@ -167,7 +167,7 @@
 
 	<!-- Critical Flags Section -->
 	{#if metrics.has_critical_flags && metrics.critical_flag_reasons.length > 0}
-		<div class="border-t border-glass/10 pt-4">
+		<div class="border-t border-neutral-800 pt-4">
 			<h4 class="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
 				<span>&#x26A0;</span> Red Flags Detected
 			</h4>
@@ -186,8 +186,8 @@
 
 	<!-- Response Time Details -->
 	{#if metrics.avg_response_time_hours}
-		<div class="border-t border-glass/10 pt-4 mt-4">
-			<div class="text-xs text-white/50 mb-1">Average Response Time</div>
+		<div class="border-t border-neutral-800 pt-4 mt-4">
+			<div class="text-xs text-neutral-500 mb-1">Average Response Time</div>
 			<div class="text-sm">
 				{metrics.avg_response_time_hours < 1
 					? `${Math.round(metrics.avg_response_time_hours * 60)} minutes`
@@ -198,16 +198,16 @@
 
 	<!-- Contract Duration Ratio -->
 	{#if metrics.avg_contract_duration_ratio !== undefined}
-		<div class="border-t border-glass/10 pt-4 mt-4">
-			<div class="text-xs text-white/50 mb-1">Contract Duration Performance</div>
+		<div class="border-t border-neutral-800 pt-4 mt-4">
+			<div class="text-xs text-neutral-500 mb-1">Contract Duration Performance</div>
 			<div class="text-sm">{formatDurationRatio(metrics.avg_contract_duration_ratio)}</div>
 		</div>
 	{/if}
 
 	<!-- No Response Rate with Warning -->
 	{#if metrics.no_response_rate_pct !== undefined}
-		<div class="border-t border-glass/10 pt-4 mt-4">
-			<div class="text-xs text-white/50 mb-1">No Response Rate</div>
+		<div class="border-t border-neutral-800 pt-4 mt-4">
+			<div class="text-xs text-neutral-500 mb-1">No Response Rate</div>
 			<div class="flex items-center gap-2">
 				<div class="text-sm">{metrics.no_response_rate_pct.toFixed(1)}%</div>
 				{#if isNoResponseConcerning(metrics.no_response_rate_pct)}
@@ -222,9 +222,9 @@
 
 	<!-- Abandonment Velocity -->
 	{#if metrics.abandonment_velocity !== undefined}
-		<div class="border-t border-glass/10 pt-4 mt-4">
-			<div class="text-xs text-white/50 mb-1">Abandonment Velocity</div>
-			<div class="text-xs text-white/40 mb-2">
+		<div class="border-t border-neutral-800 pt-4 mt-4">
+			<div class="text-xs text-neutral-500 mb-1">Abandonment Velocity</div>
+			<div class="text-xs text-neutral-600 mb-2">
 				Ratio of recent (30d) to baseline (31-90d) cancellation rate
 			</div>
 			<div class="flex items-center gap-2">
@@ -254,17 +254,17 @@
 
 	<!-- Support Response Metrics -->
 	{#if responseMetrics}
-		<div class="border-t border-glass/10 pt-4 mt-4">
+		<div class="border-t border-neutral-800 pt-4 mt-4">
 			<h4 class="text-sm font-semibold mb-3">Support Response</h4>
 			<div class="grid grid-cols-2 gap-3">
-				<div class="bg-glass/5 rounded-lg p-3">
-					<div class="text-xs text-white/50 mb-1">Avg Response Time</div>
+				<div class="bg-surface-elevated  p-3">
+					<div class="text-xs text-neutral-500 mb-1">Avg Response Time</div>
 					<div class="text-lg font-semibold">
 						{formatResponseTime(responseMetrics.avgResponseHours)}
 					</div>
 				</div>
-				<div class="bg-glass/5 rounded-lg p-3">
-					<div class="text-xs text-white/50 mb-1">SLA Compliance</div>
+				<div class="bg-surface-elevated  p-3">
+					<div class="text-xs text-neutral-500 mb-1">SLA Compliance</div>
 					<div class="text-lg font-semibold {getSlaComplianceColor(responseMetrics.slaCompliancePercent)}">
 						{responseMetrics.slaCompliancePercent.toFixed(0)}%
 					</div>
@@ -279,7 +279,7 @@
 			<!-- Response Time Distribution -->
 			{#if responseMetrics.distribution.totalResponses > 0}
 				<div class="mt-4 pt-3 border-t border-white/5">
-					<div class="text-xs text-white/50 mb-2">Response Time Distribution ({responseMetrics.distribution.totalResponses} responses)</div>
+					<div class="text-xs text-neutral-500 mb-2">Response Time Distribution ({responseMetrics.distribution.totalResponses} responses)</div>
 					<div class="space-y-2">
 						{#each [
 							{ label: '≤1h', pct: responseMetrics.distribution.within1hPct },
@@ -289,14 +289,14 @@
 							{ label: '≤72h', pct: responseMetrics.distribution.within72hPct }
 						] as bucket}
 							<div class="flex items-center gap-2">
-								<div class="w-10 text-xs text-white/60">{bucket.label}</div>
-								<div class="flex-1 h-2 bg-glass/10 rounded-full overflow-hidden">
+								<div class="w-10 text-xs text-neutral-500">{bucket.label}</div>
+								<div class="flex-1 h-2 bg-surface-elevated rounded-full overflow-hidden">
 									<div
 										class="h-full rounded-full {bucket.pct >= 80 ? 'bg-green-500' : bucket.pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}"
 										style="width: {bucket.pct}%"
 									></div>
 								</div>
-								<div class="w-12 text-xs text-white/70 text-right">{bucket.pct.toFixed(0)}%</div>
+								<div class="w-12 text-xs text-neutral-400 text-right">{bucket.pct.toFixed(0)}%</div>
 							</div>
 						{/each}
 					</div>

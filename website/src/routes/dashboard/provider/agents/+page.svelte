@@ -199,15 +199,15 @@
 <div class="space-y-8">
 	<header class="flex items-center justify-between">
 		<div>
-			<h1 class="text-4xl font-bold text-white mb-2">Agents</h1>
-			<p class="text-white/60">
+			<h1 class="text-2xl font-bold text-white tracking-tight">Agents</h1>
+			<p class="text-neutral-500">
 				Group agents into pools by location and provisioner type for load distribution.
 			</p>
 		</div>
 		{#if isAuthenticated && !loading && !showCreateForm}
 			<button
 				onclick={() => { showCreateForm = true; }}
-				class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all"
+				class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all"
 			>
 				+ New Pool
 			</button>
@@ -215,16 +215,16 @@
 	</header>
 
 	{#if !isAuthenticated}
-		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
+		<div class="card p-8 border border-neutral-800 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🤖</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-white/70">
+				<p class="text-neutral-400">
 					Create an account or login to manage your agents and pools.
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
@@ -232,12 +232,12 @@
 		</div>
 	{:else}
 		{#if error}
-			<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-300">
+			<div class="bg-red-500/20 border border-red-500/30  p-4 text-red-300">
 				{error}
 			</div>
 		{/if}
 		{#if actionMessage}
-			<div class="bg-emerald-500/15 border border-emerald-500/30 rounded-lg p-4 text-emerald-300">
+			<div class="bg-emerald-500/15 border border-emerald-500/30  p-4 text-emerald-300">
 				{actionMessage}
 			</div>
 		{/if}
@@ -249,28 +249,28 @@
 		{:else}
 			<!-- Create/Edit Form -->
 			{#if showCreateForm}
-				<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+				<div class="card p-6 border border-neutral-800">
 					<h2 class="text-xl font-semibold text-white mb-4">
 						{editingPool ? "Edit Pool" : "Create Agent Pool"}
 					</h2>
 					<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-4">
 						<div>
-							<label for="poolName" class="block text-sm text-white/70 mb-1">Pool Name</label>
+							<label for="poolName" class="block text-sm text-neutral-400 mb-1">Pool Name</label>
 							<input
 								id="poolName"
 								type="text"
 								bind:value={formName}
 								placeholder="e.g., eu-proxmox"
-								class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
+								class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
 							/>
 						</div>
 						<div class="grid grid-cols-2 gap-4">
 							<div>
-								<label for="location" class="block text-sm text-white/70 mb-1">Location</label>
+								<label for="location" class="block text-sm text-neutral-400 mb-1">Location</label>
 								<select
 									id="location"
 									bind:value={formLocation}
-									class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
+									class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
 								>
 									{#each LOCATIONS as loc}
 										<option value={loc.code}>{loc.name}</option>
@@ -278,11 +278,11 @@
 								</select>
 							</div>
 							<div>
-								<label for="provisionerType" class="block text-sm text-white/70 mb-1">Provisioner Type</label>
+								<label for="provisionerType" class="block text-sm text-neutral-400 mb-1">Provisioner Type</label>
 								<select
 									id="provisionerType"
 									bind:value={formProvisionerType}
-									class="w-full px-4 py-2 bg-glass/5 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-400"
+									class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
 								>
 									{#each PROVISIONER_TYPES as ptype}
 										<option value={ptype}>{ptype}</option>
@@ -294,14 +294,14 @@
 							<button
 								type="button"
 								onclick={resetForm}
-								class="px-4 py-2 rounded-lg text-white/70 hover:text-white hover:bg-glass/10 transition-colors"
+								class="px-4 py-2  text-neutral-400 hover:text-white hover:bg-surface-elevated transition-colors"
 							>
 								Cancel
 							</button>
 							<button
 								type="submit"
 								disabled={formSubmitting}
-								class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+								class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
 							>
 								{#if formSubmitting}
 									Saving...

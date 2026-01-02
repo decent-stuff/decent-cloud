@@ -139,52 +139,52 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Billing Settings</h1>
-		<p class="text-white/60">Manage your billing address and VAT information for invoices</p>
+		<h1 class="text-2xl font-bold text-white tracking-tight">Billing Settings</h1>
+		<p class="text-neutral-500">Manage your billing address and VAT information for invoices</p>
 	</div>
 
 	{#if !isAuthenticated}
-		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
+		<div class="card p-8 border border-neutral-800 text-center">
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">💳</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-white/70">
+				<p class="text-neutral-400">
 					Create an account or login to manage your billing information.
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
 			</div>
 		</div>
 	{:else if loading}
-		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center">
-			<p class="text-white/60">Loading billing settings...</p>
+		<div class="card p-8 border border-neutral-800 text-center">
+			<p class="text-neutral-500">Loading billing settings...</p>
 		</div>
 	{:else}
-		<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+		<div class="card p-6 border border-neutral-800">
 			<h2 class="text-xl font-semibold text-white mb-6">Invoice Information</h2>
-			<p class="text-white/60 text-sm mb-6">
+			<p class="text-neutral-500 text-sm mb-6">
 				This information will be used on your invoices. For businesses, provide your company details and VAT ID to receive proper B2B invoices.
 			</p>
 
 			{#if error}
-				<div class="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
+				<div class="mb-4 p-3 bg-red-500/20 border border-red-500/50  text-red-200 text-sm">
 					{error}
 				</div>
 			{/if}
 
 			{#if success}
-				<div class="mb-4 p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-200 text-sm">
+				<div class="mb-4 p-3 bg-green-500/20 border border-green-500/50  text-green-200 text-sm">
 					{success}
 				</div>
 			{/if}
 
 			<div class="space-y-4">
 				<div>
-					<label for="billingAddress" class="block text-white/70 text-sm mb-1">
+					<label for="billingAddress" class="block text-neutral-400 text-sm mb-1">
 						Billing Address
 					</label>
 					<textarea
@@ -192,22 +192,22 @@
 						bind:value={billingAddress}
 						rows="3"
 						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
-						class="w-full px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+						class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 					></textarea>
-					<p class="text-white/40 text-xs mt-1">
+					<p class="text-neutral-600 text-xs mt-1">
 						Include company name (if applicable), street, city, postal code, and country
 					</p>
 				</div>
 
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					<div class="min-w-0">
-						<label for="billingCountryCode" class="block text-white/70 text-sm mb-1">
+						<label for="billingCountryCode" class="block text-neutral-400 text-sm mb-1">
 							Country (for VAT)
 						</label>
 						<select
 							id="billingCountryCode"
 							bind:value={billingCountryCode}
-							class="w-full px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white focus:outline-none focus:border-primary-500"
+							class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-500"
 						>
 							<option value="">Select country...</option>
 							{#each euCountries as country}
@@ -218,7 +218,7 @@
 					</div>
 
 					<div class="min-w-0">
-						<label for="billingVatId" class="block text-white/70 text-sm mb-1">
+						<label for="billingVatId" class="block text-neutral-400 text-sm mb-1">
 							VAT ID (optional)
 						</label>
 						<div class="flex gap-2">
@@ -227,24 +227,24 @@
 								type="text"
 								bind:value={billingVatId}
 								placeholder="123456789"
-								class="flex-1 px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+								class="flex-1 px-4 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
 							/>
 							<button
 								onclick={handleValidateVat}
 								disabled={validating || !billingCountryCode || !billingVatId}
-								class="px-4 py-2 bg-glass/10 border border-glass/15 rounded-lg text-white hover:bg-glass/15 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+								class="px-4 py-2 bg-surface-elevated border border-neutral-800  text-white hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 							>
 								{validating ? "..." : "Verify"}
 							</button>
 						</div>
-						<p class="text-white/40 text-xs mt-1">
+						<p class="text-neutral-600 text-xs mt-1">
 							EU businesses: Enter VAT number without country prefix
 						</p>
 					</div>
 				</div>
 
 				{#if vatValidationResult}
-					<div class="p-3 rounded-lg {vatValidationResult.valid ? 'bg-green-500/20 border border-green-500/50' : 'bg-yellow-500/20 border border-yellow-500/50'}">
+					<div class="p-3  {vatValidationResult.valid ? 'bg-green-500/20 border border-green-500/50' : 'bg-yellow-500/20 border border-yellow-500/50'}">
 						{#if vatValidationResult.valid}
 							<p class="text-green-200 text-sm font-medium">VAT ID is valid</p>
 							{#if vatValidationResult.name}
@@ -256,11 +256,11 @@
 					</div>
 				{/if}
 
-				<div class="pt-4 border-t border-glass/10">
+				<div class="pt-4 border-t border-neutral-800">
 					<button
 						onclick={handleSave}
 						disabled={saving}
-						class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+						class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 					>
 						{saving ? "Saving..." : "Save Billing Settings"}
 					</button>
@@ -268,9 +268,9 @@
 			</div>
 		</div>
 
-		<div class="bg-glass/5 backdrop-blur-lg rounded-xl p-6 border border-glass/10">
-			<h3 class="text-lg font-semibold text-white/80 mb-3">About VAT and Invoices</h3>
-			<ul class="text-white/60 text-sm space-y-2">
+		<div class="bg-surface-elevated backdrop-blur-lg  p-6 border border-neutral-800">
+			<h3 class="text-lg font-semibold text-neutral-300 mb-3">About VAT and Invoices</h3>
+			<ul class="text-neutral-500 text-sm space-y-2">
 				<li>Your billing information will appear on all invoices for your purchases.</li>
 				<li>EU businesses with valid VAT IDs may qualify for reverse charge (0% VAT).</li>
 				<li>VAT validation uses the official EU VIES database.</li>

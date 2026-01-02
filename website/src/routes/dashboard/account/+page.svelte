@@ -64,8 +64,8 @@
 
 <div class="space-y-8">
 	<div>
-		<h1 class="text-4xl font-bold text-white mb-2">Account Settings</h1>
-		<p class="text-white/60">
+		<h1 class="text-2xl font-bold text-white tracking-tight">Account Settings</h1>
+		<p class="text-neutral-500">
 			Manage your account, security, and public profile
 		</p>
 	</div>
@@ -73,18 +73,18 @@
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->
 		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
+			class="card p-8 border border-neutral-800 text-center"
 		>
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🔐</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-white/70">
+				<p class="text-neutral-400">
 					Create an account or login to access your account settings,
 					manage security, and edit your public profile.
 				</p>
 				<button
 					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Login / Create Account
 				</button>
@@ -93,18 +93,18 @@
 	{:else if currentIdentity?.account}
 		<!-- Account Overview Card -->
 		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
+			class="card p-6 border border-neutral-800"
 		>
 			<h2 class="text-2xl font-bold text-white mb-4">Account Overview</h2>
 			<div class="space-y-3">
 				<div>
-					<p class="text-white/70 text-sm">Username</p>
+					<p class="text-neutral-400 text-sm">Username</p>
 					<p class="text-white font-semibold text-lg">
 						@{currentIdentity.account.username}
 					</p>
 				</div>
 				<div>
-					<p class="text-white/70 text-sm">Public Profile</p>
+					<p class="text-neutral-400 text-sm">Public Profile</p>
 					<a
 						href="/dashboard/reputation/{currentIdentity.account.username}"
 						class="text-primary-400 hover:text-primary-300 text-sm transition-colors"
@@ -113,7 +113,7 @@
 					</a>
 				</div>
 				<div>
-					<p class="text-white/70 text-sm">Created</p>
+					<p class="text-neutral-400 text-sm">Created</p>
 					<p class="text-white">
 						{new Date(
 							currentIdentity.account.createdAt / 1_000_000,
@@ -125,7 +125,7 @@
 					</p>
 				</div>
 				<div>
-					<p class="text-white/70 text-sm">Active Keys</p>
+					<p class="text-neutral-400 text-sm">Active Keys</p>
 					<p class="text-white">
 						{currentIdentity.account.publicKeys.filter(
 							(k) => k.isActive,
@@ -142,14 +142,14 @@
 
 		<!-- Settings -->
 		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
+			class="card p-6 border border-neutral-800"
 		>
 			<h2 class="text-xl font-semibold text-white mb-4">Settings</h2>
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{#each settingsTabs as tab}
 					<a
 						href={tab.href}
-						class="flex items-center gap-4 p-6 bg-glass/5 rounded-lg border border-glass/15 hover:bg-glass/10 hover:border-primary-500/50 transition-all group"
+						class="flex items-center gap-4 p-6 bg-surface-elevated  border border-neutral-800 hover:bg-surface-elevated hover:border-primary-500/50 transition-all group"
 					>
 						<span class="text-4xl">{tab.icon}</span>
 						<div>
@@ -158,7 +158,7 @@
 							>
 								{tab.label}
 							</h3>
-							<p class="text-white/60 text-sm">
+							<p class="text-neutral-500 text-sm">
 								{tab.description}
 							</p>
 						</div>
@@ -167,6 +167,6 @@
 			</div>
 		</div>
 	{:else}
-		<p class="text-white/60">Loading...</p>
+		<p class="text-neutral-500">Loading...</p>
 	{/if}
 </div>

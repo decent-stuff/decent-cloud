@@ -410,22 +410,18 @@
 
 <div class="space-y-4">
 	<div>
-		<h1 class="text-3xl font-bold text-white">Marketplace</h1>
-		<p class="text-white/60 text-sm">Find and rent cloud resources</p>
+		<h1 class="text-2xl font-bold text-white tracking-tight">Marketplace</h1>
+		<p class="text-neutral-500 text-sm mt-1">Find and rent cloud resources</p>
 	</div>
 
 	{#if successMessage}
-		<div
-			class="bg-green-500/20 border border-green-500/30 rounded-lg p-3 text-green-400 text-sm"
-		>
+		<div class="bg-success/10 border border-success/20 p-3 text-success text-sm">
 			{successMessage}
 		</div>
 	{/if}
 
 	{#if error}
-		<div
-			class="bg-red-500/20 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm"
-		>
+		<div class="bg-danger/10 border border-danger/20 p-3 text-danger text-sm">
 			{error}
 		</div>
 	{/if}
@@ -433,24 +429,19 @@
 	<div class="flex flex-col md:flex-row gap-6">
 		<!-- Filters: collapsible on mobile, sidebar on desktop -->
 		<aside class="w-full md:w-56 shrink-0">
-			<div class="bg-glass/5 rounded-lg p-4">
+			<div class="card p-4">
 				<div class="flex items-center justify-between">
 					<button
 						onclick={() => (showFilters = !showFilters)}
 						class="flex items-center gap-2 md:cursor-default"
 					>
-						<span class="text-white font-medium text-sm"
-							>Filters</span
-						>
-						<span class="md:hidden text-white/60 text-sm"
-							>{showFilters ? "▲" : "▼"}</span
-						>
+						<span class="text-white font-medium text-sm">Filters</span>
+						<span class="md:hidden text-neutral-500 text-sm">{showFilters ? "▲" : "▼"}</span>
 					</button>
 					<button
 						onclick={clearFilters}
 						class="text-xs text-primary-400 hover:text-primary-300"
-						>Clear</button
-					>
+					>Clear</button>
 				</div>
 
 				<div
@@ -461,7 +452,7 @@
 					<!-- Type Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Type
 						</div>
@@ -474,10 +465,10 @@
 										type="checkbox"
 										checked={selectedTypes.has(opt.key)}
 										onchange={() => toggleType(opt.key)}
-										class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
+										class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 									/>
 									<span
-										class="text-sm text-white/80 group-hover:text-white"
+										class="text-sm text-neutral-400 group-hover:text-white"
 										>{opt.icon} {opt.label}</span
 									>
 								</label>
@@ -488,7 +479,7 @@
 					<!-- Price Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Price ($/mo)
 						</div>
@@ -498,14 +489,14 @@
 								placeholder="Min"
 								bind:value={minPrice}
 								onchange={handleFilterChange}
-								class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							/>
 							<input
 								type="number"
 								placeholder="Max"
 								bind:value={maxPrice}
 								onchange={handleFilterChange}
-								class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							/>
 						</div>
 					</div>
@@ -513,7 +504,7 @@
 					<!-- Region Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Region
 						</div>
@@ -523,7 +514,7 @@
 								selectedCountry = "";
 								selectedCity = "";
 							}}
-							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
+							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						>
 							<option value="">All regions</option>
 							{#each REGIONS as region}
@@ -535,7 +526,7 @@
 					<!-- Country Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Country
 						</div>
@@ -545,7 +536,7 @@
 								selectedCity = "";
 								handleFilterChange();
 							}}
-							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
+							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						>
 							<option value="">All countries</option>
 							{#each countries() as country}
@@ -557,13 +548,13 @@
 					<!-- City Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							City
 						</div>
 						<select
 							bind:value={selectedCity}
-							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
+							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						>
 							<option value="">All cities</option>
 							{#each cities() as city}
@@ -575,7 +566,7 @@
 					<!-- CPU Cores Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Min CPU Cores
 						</div>
@@ -584,14 +575,14 @@
 							placeholder="e.g., 4"
 							bind:value={minCores}
 							min="1"
-							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
+							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
 					<!-- Memory Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Min Memory (GB)
 						</div>
@@ -600,14 +591,14 @@
 							placeholder="e.g., 8"
 							bind:value={minMemoryGb}
 							min="1"
-							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
+							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
 					<!-- SSD Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Min SSD (GB)
 						</div>
@@ -616,7 +607,7 @@
 							placeholder="e.g., 100"
 							bind:value={minSsdGb}
 							min="1"
-							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
+							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
@@ -624,13 +615,13 @@
 					{#if virtTypes.length > 0}
 						<div>
 							<div
-								class="text-white/60 text-xs uppercase tracking-wide mb-2"
+								class="data-label mb-2"
 							>
 								Virtualization
 							</div>
 							<select
 								bind:value={selectedVirt}
-								class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white focus:outline-none focus:border-primary-400"
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							>
 								<option value="">All types</option>
 								{#each virtTypes as vt}
@@ -643,7 +634,7 @@
 					<!-- Min Trust Filter -->
 					<div>
 						<div
-							class="text-white/60 text-xs uppercase tracking-wide mb-2"
+							class="data-label mb-2"
 						>
 							Min Trust Score
 						</div>
@@ -653,7 +644,7 @@
 							bind:value={minTrust}
 							min="0"
 							max="100"
-							class="w-full px-2 py-1.5 text-sm bg-glass/10 border border-glass/15 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-400"
+							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
 
@@ -665,10 +656,10 @@
 							<input
 								type="checkbox"
 								bind:checked={unmeteredOnly}
-								class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
+								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 							/>
 							<span
-								class="text-sm text-white/80 group-hover:text-white"
+								class="text-sm text-neutral-400 group-hover:text-white"
 								>Unmetered bandwidth only</span
 							>
 						</label>
@@ -682,10 +673,10 @@
 							<input
 								type="checkbox"
 								bind:checked={showDemoOfferings}
-								class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
+								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 							/>
 							<span
-								class="text-sm text-white/80 group-hover:text-white"
+								class="text-sm text-neutral-400 group-hover:text-white"
 								>Show demo offerings</span
 							>
 						</label>
@@ -699,10 +690,10 @@
 							<input
 								type="checkbox"
 								bind:checked={showOfflineOfferings}
-								class="rounded border-white/30 bg-glass/10 text-primary-500 focus:ring-primary-500"
+								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 							/>
 							<span
-								class="text-sm text-white/80 group-hover:text-white"
+								class="text-sm text-neutral-400 group-hover:text-white"
 								>Show offline offerings</span
 							>
 						</label>
@@ -719,11 +710,11 @@
 				placeholder="Search (e.g., type:gpu price:<=100)..."
 				bind:value={searchQuery}
 				oninput={handleSearchInput}
-				class="w-full px-4 py-2.5 bg-glass/10 border border-glass/15 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+				class="w-full px-4 py-2.5 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 			/>
 
 			<!-- Results count -->
-			<div class="text-white/60 text-sm">
+			<div class="text-neutral-500 text-sm">
 				{filteredOfferings.length} offerings
 			</div>
 
@@ -736,7 +727,7 @@
 			{:else if filteredOfferings.length === 0}
 				<div class="text-center py-12">
 					<span class="text-5xl block mb-3">🔍</span>
-					<p class="text-white/60">No offerings found</p>
+					<p class="text-neutral-500">No offerings found</p>
 				</div>
 			{:else}
 				<!-- Desktop Table -->
@@ -744,7 +735,7 @@
 					<table class="w-full text-sm">
 						<thead>
 							<tr
-								class="text-left text-white/60 border-b border-glass/10"
+								class="text-left text-neutral-500 border-b border-neutral-800"
 							>
 								<th class="pb-3 font-medium">Offering</th>
 								<th class="pb-3 font-medium">Type</th>
@@ -764,7 +755,7 @@
 								{@const isExpanded =
 									expandedRow === offering.id}
 								<tr
-									class="border-b border-white/5 hover:bg-glass/5 cursor-pointer transition-colors"
+									class="border-b border-neutral-800/60 hover:bg-surface-elevated cursor-pointer transition-colors"
 									onclick={() => toggleRow(offering.id)}
 								>
 									<td class="py-3 pr-4">
@@ -819,7 +810,7 @@
 											href="/dashboard/reputation/{offering.owner_username ||
 												offering.pubkey}"
 											onclick={(e) => e.stopPropagation()}
-											class="text-xs text-white/50 hover:text-primary-400 {offering.owner_username
+											class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username
 												? ''
 												: 'font-mono'}"
 											>{offering.owner_username
@@ -837,10 +828,10 @@
 											{offering.product_type}</span
 										>
 									</td>
-									<td class="py-3 pr-4 text-white/80"
+									<td class="py-3 pr-4 text-neutral-300"
 										>{formatSpecs(offering)}</td
 									>
-									<td class="py-3 pr-4 text-white/80"
+									<td class="py-3 pr-4 text-neutral-300"
 										>{formatLocation(offering)}</td
 									>
 									<td class="py-3 pr-4 font-medium text-white"
@@ -882,18 +873,18 @@
 									</td>
 								</tr>
 								{#if isExpanded}
-									<tr class="bg-glass/5">
+									<tr class="bg-surface-elevated">
 										<td colspan="6" class="p-4">
 											<div
 												class="grid grid-cols-3 gap-4 text-sm"
 											>
 												<div>
 													<div
-														class="text-white/60 text-xs uppercase mb-1"
+														class="text-neutral-500 text-xs uppercase mb-1"
 													>
 														Description
 													</div>
-													<div class="text-white/80">
+													<div class="text-neutral-300">
 														{offering.description ||
 															"No description"}
 													</div>
@@ -902,11 +893,11 @@
 													{#if offering.processor_name || offering.processor_brand}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>CPU:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.processor_name ||
 																	offering.processor_brand}{offering.processor_speed
 																	? ` @ ${offering.processor_speed}`
@@ -917,11 +908,11 @@
 													{#if offering.memory_amount}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Memory:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.memory_amount}{offering.memory_type
 																	? ` ${offering.memory_type}`
 																	: ""}{offering.memory_error_correction
@@ -933,11 +924,11 @@
 													{#if offering.total_ssd_capacity || offering.total_hdd_capacity}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Storage:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{[
 																	offering.total_ssd_capacity
 																		? `${offering.total_ssd_capacity} SSD`
@@ -958,11 +949,11 @@
 													{#if offering.uplink_speed || offering.unmetered_bandwidth}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Network:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.uplink_speed ||
 																	""}{offering.unmetered_bandwidth
 																	? " (Unmetered)"
@@ -975,11 +966,11 @@
 													{#if offering.virtualization_type}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Platform:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.virtualization_type}</span
 															>
 														</div>
@@ -988,11 +979,11 @@
 												<div class="space-y-2">
 													<div>
 														<span
-															class="text-white/60"
+															class="text-neutral-500"
 															>Billing:</span
 														>
 														<span
-															class="text-white/80"
+															class="text-neutral-300"
 															>{formatBilling(
 																offering,
 															)}</span
@@ -1001,11 +992,11 @@
 													{#if offering.setup_fee > 0}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Setup Fee:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.setup_fee.toFixed(
 																	2,
 																)}
@@ -1016,11 +1007,11 @@
 													{#if offering.min_contract_hours || offering.max_contract_hours}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Contract:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{formatContractTerms(
 																	offering,
 																)}</span
@@ -1030,11 +1021,11 @@
 													{#if offering.operating_systems}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>OS:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.operating_systems}</span
 															>
 														</div>
@@ -1042,11 +1033,11 @@
 													{#if offering.features}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Features:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.features}</span
 															>
 														</div>
@@ -1054,11 +1045,11 @@
 													{#if offering.control_panel}
 														<div>
 															<span
-																class="text-white/60"
+																class="text-neutral-500"
 																>Control Panel:</span
 															>
 															<span
-																class="text-white/80"
+																class="text-neutral-300"
 																>{offering.control_panel}</span
 															>
 														</div>
@@ -1079,7 +1070,7 @@
 						<div
 							role="button"
 							tabindex="0"
-							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
+							class="bg-surface-elevated  p-4 border border-neutral-800"
 							onclick={() => toggleRow(offering.id)}
 							onkeydown={(e) =>
 								e.key === "Enter" && toggleRow(offering.id)}
@@ -1125,7 +1116,7 @@
 											>
 										{/if}
 									</div>
-									<div class="text-xs text-white/50">
+									<div class="text-xs text-neutral-500">
 										{getTypeIcon(offering.product_type)}
 										{offering.product_type}
 									</div>
@@ -1133,7 +1124,7 @@
 										href="/dashboard/reputation/{offering.owner_username ||
 											offering.pubkey}"
 										onclick={(e) => e.stopPropagation()}
-										class="text-xs text-white/50 hover:text-primary-400 {offering.owner_username
+										class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username
 											? ''
 											: 'font-mono'}"
 										>{offering.owner_username
@@ -1152,7 +1143,7 @@
 									/>
 								{/if}
 							</div>
-							<div class="text-sm text-white/70 mb-2">
+							<div class="text-sm text-neutral-400 mb-2">
 								{formatSpecs(offering)}
 							</div>
 							<div class="flex items-center justify-between">
@@ -1160,7 +1151,7 @@
 									<div class="text-white font-medium">
 										{formatPrice(offering)}
 									</div>
-									<div class="text-xs text-white/50">
+									<div class="text-xs text-neutral-500">
 										{formatLocation(offering)}
 									</div>
 								</div>
@@ -1192,19 +1183,19 @@
 							</div>
 							{#if expandedRow === offering.id}
 								<div
-									class="mt-3 pt-3 border-t border-glass/10 text-sm space-y-2"
+									class="mt-3 pt-3 border-t border-neutral-800 text-sm space-y-2"
 								>
-									<div class="text-white/70">
+									<div class="text-neutral-400">
 										{offering.description ||
 											"No description"}
 									</div>
 									<div class="grid grid-cols-2 gap-2 text-xs">
 										{#if offering.processor_name || offering.processor_brand}
 											<div>
-												<span class="text-white/50"
+												<span class="text-neutral-500"
 													>CPU:</span
 												>
-												<span class="text-white/70"
+												<span class="text-neutral-400"
 													>{offering.processor_name ||
 														offering.processor_brand}</span
 												>
@@ -1212,20 +1203,20 @@
 										{/if}
 										{#if offering.memory_amount}
 											<div>
-												<span class="text-white/50"
+												<span class="text-neutral-500"
 													>Memory:</span
 												>
-												<span class="text-white/70"
+												<span class="text-neutral-400"
 													>{offering.memory_amount}</span
 												>
 											</div>
 										{/if}
 										{#if offering.total_ssd_capacity || offering.total_hdd_capacity}
 											<div>
-												<span class="text-white/50"
+												<span class="text-neutral-500"
 													>Storage:</span
 												>
-												<span class="text-white/70"
+												<span class="text-neutral-400"
 													>{offering.total_ssd_capacity ||
 														offering.total_hdd_capacity}</span
 												>
@@ -1233,28 +1224,28 @@
 										{/if}
 										{#if offering.virtualization_type}
 											<div>
-												<span class="text-white/50"
+												<span class="text-neutral-500"
 													>Platform:</span
 												>
-												<span class="text-white/70"
+												<span class="text-neutral-400"
 													>{offering.virtualization_type}</span
 												>
 											</div>
 										{/if}
 										<div>
-											<span class="text-white/50"
+											<span class="text-neutral-500"
 												>Billing:</span
 											>
-											<span class="text-white/70"
+											<span class="text-neutral-400"
 												>{formatBilling(offering)}</span
 											>
 										</div>
 										{#if offering.setup_fee > 0}
 											<div>
-												<span class="text-white/50"
+												<span class="text-neutral-500"
 													>Setup:</span
 												>
-												<span class="text-white/70"
+												<span class="text-neutral-400"
 													>{offering.setup_fee.toFixed(
 														2,
 													)}
@@ -1264,10 +1255,10 @@
 										{/if}
 										{#if offering.min_contract_hours || offering.max_contract_hours}
 											<div>
-												<span class="text-white/50"
+												<span class="text-neutral-500"
 													>Contract:</span
 												>
-												<span class="text-white/70"
+												<span class="text-neutral-400"
 													>{formatContractTerms(
 														offering,
 													)}</span
@@ -1276,10 +1267,10 @@
 										{/if}
 										{#if offering.unmetered_bandwidth}
 											<div>
-												<span class="text-white/50"
+												<span class="text-neutral-500"
 													>Bandwidth:</span
 												>
-												<span class="text-white/70"
+												<span class="text-neutral-400"
 													>Unmetered</span
 												>
 											</div>

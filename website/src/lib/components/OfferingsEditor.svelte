@@ -336,19 +336,19 @@
 		tabindex="-1"
 	>
 		<div
-			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-glass/15 w-full max-w-6xl max-h-[90vh] overflow-y-auto"
+			class="bg-gradient-to-br from-slate-900 to-slate-800  shadow-2xl border border-neutral-800 w-full max-w-6xl max-h-[90vh] overflow-y-auto"
 		>
 			<!-- Header -->
-			<div class="flex items-center justify-between p-6 border-b border-glass/10">
+			<div class="flex items-center justify-between p-6 border-b border-neutral-800">
 				<div>
 					<h2 class="text-2xl font-bold text-white">Edit Offerings</h2>
-					<p class="text-white/60 text-sm mt-1">
+					<p class="text-neutral-500 text-sm mt-1">
 						Edit your offerings directly or upload a CSV file
 					</p>
 				</div>
 				<button
 					onclick={handleClose}
-					class="text-white/60 hover:text-white transition-colors"
+					class="text-neutral-500 hover:text-white transition-colors"
 					aria-label="Close dialog"
 				>
 					<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -368,7 +368,7 @@
 				<div class="flex flex-wrap gap-3 items-center justify-between">
 					<div class="flex gap-3">
 						<label
-							class="px-4 py-2 bg-glass/10 rounded-lg font-medium hover:bg-glass/15 transition-all cursor-pointer flex items-center gap-2"
+							class="px-4 py-2 bg-surface-elevated  font-medium hover:bg-surface-elevated transition-all cursor-pointer flex items-center gap-2"
 						>
 							<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path
@@ -390,7 +390,7 @@
 						</label>
 						<button
 							onclick={handleDownload}
-							class="px-4 py-2 bg-glass/10 rounded-lg font-medium hover:bg-glass/15 transition-all flex items-center gap-2"
+							class="px-4 py-2 bg-surface-elevated  font-medium hover:bg-surface-elevated transition-all flex items-center gap-2"
 							disabled={importing || !currentCsvContent}
 						>
 							<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -405,7 +405,7 @@
 						</button>
 					</div>
 					{#if selectedFile}
-						<div class="flex items-center gap-2 text-sm text-white/70">
+						<div class="flex items-center gap-2 text-sm text-neutral-400">
 							<span class="text-lg">📄</span>
 							<span>{selectedFile.name}</span>
 						</div>
@@ -415,14 +415,14 @@
 				<!-- Product Type Selector -->
 				<div class="space-y-4">
 					<div>
-						<div class="text-white/70 text-sm font-medium block mb-3">Product Type:</div>
+						<div class="text-neutral-400 text-sm font-medium block mb-3">Product Type:</div>
 						<div class="flex flex-wrap gap-2">
 							{#each productTypes as { key, label }}
 								<button
 									onclick={() => handleProductTypeClick(key)}
-									class="px-4 py-3 rounded-lg font-medium transition-all {selectedResourceType === key
+									class="px-4 py-3  font-medium transition-all {selectedResourceType === key
 										? 'bg-primary-600 text-white'
-										: 'bg-glass/10 text-white/70 hover:bg-glass/15'}"
+										: 'bg-surface-elevated text-neutral-400 hover:bg-surface-elevated'}"
 									disabled={importing || loadingExample}
 								>
 									{label}
@@ -436,9 +436,9 @@
 						<div class="flex items-center gap-3">
 							<button
 								onclick={loadExampleData}
-								class="px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 {isSpreadsheetEmpty()
+								class="px-4 py-2  font-medium transition-all flex items-center gap-2 {isSpreadsheetEmpty()
 									? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse hover:scale-105'
-									: 'bg-glass/10 text-white/70 hover:bg-glass/15'}"
+									: 'bg-surface-elevated text-neutral-400 hover:bg-surface-elevated'}"
 								disabled={importing || loadingExample}
 							>
 								{#if loadingExample}
@@ -493,7 +493,7 @@
 				{#if isDragging}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
-						class="absolute inset-0 bg-primary-500/20 border-4 border-dashed border-primary-500 rounded-2xl flex items-center justify-center z-10"
+						class="absolute inset-0 bg-primary-500/20 border-4 border-dashed border-primary-500  flex items-center justify-center z-10"
 						ondragenter={handleDragEnter}
 						ondragleave={handleDragLeave}
 						ondragover={handleDragOver}
@@ -508,7 +508,7 @@
 
 				<!-- Error Display -->
 				{#if error}
-					<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4">
+					<div class="bg-red-500/20 border border-red-500/30  p-4">
 						<p class="text-red-400 font-semibold">Error</p>
 						<p class="text-red-400/80 text-sm mt-1">{error}</p>
 					</div>
@@ -517,7 +517,7 @@
 				<!-- Result Display -->
 				{#if result}
 					<div
-						class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 space-y-3"
+						class="bg-green-500/20 border border-green-500/30  p-4 space-y-3"
 					>
 						<div class="flex items-center gap-2">
 							<span class="text-2xl">✅</span>
@@ -537,7 +537,7 @@
 									{#each result.errors as err}
 										<div class="bg-black/30 rounded p-2 text-sm">
 											<span class="text-yellow-400 font-medium">Row {err.row}:</span>
-											<span class="text-white/80 ml-2">{err.message}</span>
+											<span class="text-neutral-300 ml-2">{err.message}</span>
 										</div>
 									{/each}
 								</div>
@@ -547,9 +547,9 @@
 				{/if}
 
 				<!-- Instructions -->
-				<div class="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4 space-y-2">
+				<div class="bg-primary-500/10 border border-primary-500/30  p-4 space-y-2">
 					<p class="text-primary-400 font-semibold mb-2">📋 How to Edit Offerings</p>
-					<ul class="text-white/70 text-sm space-y-1 list-disc list-inside">
+					<ul class="text-neutral-400 text-sm space-y-1 list-disc list-inside">
 						<li>Edit offerings directly in the spreadsheet above</li>
 						<li>Click "Download CSV" to export your offerings for editing in Excel or Google Sheets</li>
 						<li>Click "Upload CSV" to import offerings from a file</li>
@@ -560,17 +560,17 @@
 			</div>
 
 			<!-- Footer Actions -->
-			<div class="flex items-center justify-end gap-3 p-6 border-t border-glass/10">
+			<div class="flex items-center justify-end gap-3 p-6 border-t border-neutral-800">
 				<button
 					onclick={handleClose}
-					class="px-6 py-3 bg-glass/10 rounded-lg font-medium hover:bg-glass/15 transition-all"
+					class="px-6 py-3 bg-surface-elevated  font-medium hover:bg-surface-elevated transition-all"
 					disabled={importing}
 				>
 					Cancel
 				</button>
 				<button
 					onclick={handleSave}
-					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 					disabled={!currentCsvContent || importing || !!result}
 				>
 					{#if importing}

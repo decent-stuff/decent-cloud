@@ -24,6 +24,7 @@
 		type ProviderResponseMetrics,
 	} from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
+	import Icon from "$lib/components/Icons.svelte";
 	import type { UserProfile } from "$lib/types/generated/UserProfile";
 	import type { UserContact } from "$lib/types/generated/UserContact";
 	import type { UserSocial } from "$lib/types/generated/UserSocial";
@@ -34,18 +35,14 @@
 		calculateActualDuration,
 		formatDuration,
 	} from "$lib/utils/contract-format";
-	import { truncatePubkey, isPubkeyHex, resolveIdentifierToPubkey } from "$lib/utils/identity";
+	import { truncatePubkey, isPubkeyHex } from "$lib/utils/identity";
 	import { authStore } from "$lib/stores/auth";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
-	// Identifier can be a pubkey (64 hex chars) OR a username
 	const identifier = $page.params.identifier ?? "";
 
-	// Resolved pubkey (set after resolution in onMount)
 	let pubkey = $state<string>("");
-	// Username (set if identifier was a username or fetched from account)
 	let username = $state<string | null>(null);
-
 	let activity = $state<UserActivity | null>(null);
 	let reputation = $state<ReputationInfo | null>(null);
 	let balance = $state<number>(0);
@@ -61,25 +58,21 @@
 	let isNotFound = $state(false);
 	let currentIdentity = $state<IdentityInfo | null>(null);
 
-	// Filter out email contacts (account email is now separate)
 	const filteredContacts = $derived(contacts.filter(c => c.contactType !== 'email'));
 
 	authStore.currentIdentity.subscribe((value) => {
 		currentIdentity = value;
 	});
 
-	// Check if viewing own profile and derive principal
 	const isOwnProfile = $derived(
 		currentIdentity?.publicKeyBytes &&
 			computePubkey(currentIdentity.publicKeyBytes) === pubkey,
 	);
 
-	// Derive IC Principal from the public key hex string in the URL
 	const derivedPrincipal = $derived(
 		(() => {
-			if (!pubkey || pubkey.length !== 64) return null; // Ed25519 keys are 32 bytes = 64 hex chars
+			if (!pubkey || pubkey.length !== 64) return null;
 			try {
-				// Convert hex string to bytes
 				const pubkeyBytes = new Uint8Array(
 					pubkey.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)),
 				);
@@ -90,22 +83,16 @@
 		})(),
 	);
 
-	// Format balance from e9s to tokens
 	function formatBalance(balanceE9s: number, currency: string): string {
 		return (balanceE9s / 1_000_000_000).toFixed(4);
 	}
 
-	// Format timestamp
 	function formatTimestamp(timestampNs: number): string {
 		const date = new Date(timestampNs / 1_000_000);
 		return date.toLocaleString();
 	}
 
-	// Calculate total spent and received
-	function calculateTransactionStats(
-		transfers: TokenTransfer[],
-		account: string,
-	) {
+	function calculateTransactionStats(transfers: TokenTransfer[], account: string) {
 		let totalSent = 0;
 		let totalReceived = 0;
 
@@ -121,7 +108,6 @@
 		return { totalSent, totalReceived };
 	}
 
-	// Calculate early cancellation metrics
 	function calculateCancellationMetrics(contracts: any[]) {
 		if (contracts.length === 0) return null;
 
@@ -177,18 +163,13 @@
 			error = null;
 			isNotFound = false;
 
-			// Step 1: Resolve identifier to pubkey
-			// If it's a pubkey (64 hex chars), use it directly
-			// If it's a username, look up the account to get the pubkey
 			const { getAccount, getAccountByPublicKey } = await import('$lib/services/account-api');
 
 			let accountExists = false;
 			let resolvedPubkey: string | null = null;
 
 			if (isPubkeyHex(identifier)) {
-				// It's a pubkey - use it directly
 				resolvedPubkey = identifier;
-				// Try to get username from account
 				const account = await getAccountByPublicKey(identifier).catch(() => null);
 				if (account) {
 					accountExists = true;
@@ -197,13 +178,11 @@
 						emailVerified: account.emailVerified,
 						email: account.email,
 					};
-					// Update URL to username-based for cleaner URLs (without re-navigation)
 					if (username && username !== identifier) {
 						history.replaceState(history.state, '', `/dashboard/reputation/${username}`);
 					}
 				}
 			} else {
-				// It's a username - look up the account
 				const account = await getAccount(identifier).catch(() => null);
 				if (account && account.publicKeys && account.publicKeys.length > 0) {
 					accountExists = true;
@@ -212,7 +191,6 @@
 						emailVerified: account.emailVerified,
 						email: account.email,
 					};
-					// Get the first active public key
 					const activeKey = account.publicKeys.find((k) => k.isActive);
 					resolvedPubkey = activeKey?.publicKey ?? account.publicKeys[0].publicKey;
 				}
@@ -227,7 +205,6 @@
 
 			pubkey = resolvedPubkey;
 
-			// Step 2: Fetch all data in parallel using the resolved pubkey
 			const [
 				activityData,
 				reputationData,
@@ -260,7 +237,6 @@
 			trustMetrics = trustMetricsData;
 			responseMetrics = responseMetricsData;
 
-			// Use account username as display name if no profile
 			if (!profile && username) {
 				profile = {
 					displayName: username,
@@ -270,7 +246,6 @@
 				};
 			}
 
-			// If we have no data at all AND account doesn't exist, mark as not found
 			const hasActivity =
 				activity &&
 				(activity.offerings_provided.length > 0 ||
@@ -325,115 +300,87 @@
 	);
 </script>
 
-<div class="space-y-8 max-w-7xl mx-auto p-6">
+<div class="space-y-6">
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
-			<div
-				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
-			></div>
+			<div class="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
 		</div>
 	{:else if error && isNotFound}
-		<div
-			class="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-6 text-yellow-300"
-		>
+		<div class="bg-warning/10 border border-warning/20 p-6">
 			<div class="text-center">
-				<div class="text-6xl mb-4">🔍</div>
-				<h2 class="text-2xl font-bold mb-2">No Account Data</h2>
-				<p class="mb-4">
-					The identifier <span class="font-mono text-sm"
-						>{identifier}</span
-					>
-					is not registered in the system.
+				<div class="icon-box mx-auto mb-4">
+					<Icon name="search" size={20} />
+				</div>
+				<h2 class="text-lg font-semibold text-white mb-2">No Account Data</h2>
+				<p class="text-neutral-400 text-sm mb-4">
+					The identifier <span class="font-mono text-neutral-300">{identifier}</span> is not registered in the system.
 				</p>
-				<p class="text-sm text-yellow-300/70">Please verify:</p>
-				<ul class="text-sm text-yellow-300/70 list-disc list-inside mt-2">
+				<p class="text-xs text-neutral-500">Please verify:</p>
+				<ul class="text-xs text-neutral-500 list-disc list-inside mt-2">
 					<li>The public key address is correct</li>
 					<li>The account has been registered with a username</li>
 				</ul>
 				<div class="mt-6">
-					<a
-						href="/dashboard/marketplace"
-						class="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-					>
-						← Back to Marketplace
+					<a href="/dashboard/marketplace" class="btn-secondary inline-flex items-center gap-2">
+						<Icon name="arrow-left" size={14} />
+						<span>Back to Marketplace</span>
 					</a>
 				</div>
 			</div>
 		</div>
 	{:else}
 		<!-- Page Header -->
-		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-		>
+		<div class="card p-5">
 			<div class="flex items-start justify-between gap-4 mb-4">
 				<div class="flex-1">
-					<h1 class="text-4xl font-bold text-white mb-2">
+					<h1 class="text-2xl font-bold text-white tracking-tight mb-2">
 						{profile?.displayName || "Account Reputation"}
 					</h1>
 					{#if profile?.bio}
-						<p class="text-white/70 text-sm mb-3">{profile.bio}</p>
+						<p class="text-neutral-400 text-sm mb-3">{profile.bio}</p>
 					{/if}
 				</div>
 				{#if profile?.avatarUrl}
 					<img
 						src={profile.avatarUrl}
 						alt="Avatar"
-						class="w-20 h-20 rounded-full border-2 border-glass/15"
+						class="w-16 h-16 border border-neutral-800"
 					/>
 				{/if}
 			</div>
 			<div class="space-y-3">
 				<div>
-					<p class="text-white/80 text-sm">Public Key:</p>
-					<p class="font-mono text-sm text-white/90 break-all">
-						{pubkey}
-					</p>
+					<p class="data-label mb-1">Public Key</p>
+					<p class="font-mono text-xs text-neutral-300 break-all">{pubkey}</p>
 				</div>
 				{#if derivedPrincipal}
 					<div>
-						<p class="text-white/80 text-sm">IC Principal:</p>
-						<p class="font-mono text-sm text-white/90 break-all">
-							{derivedPrincipal}
-						</p>
+						<p class="data-label mb-1">IC Principal</p>
+						<p class="font-mono text-xs text-neutral-300 break-all">{derivedPrincipal}</p>
 					</div>
 				{/if}
 			</div>
 
 			<!-- Contact Information & Socials -->
 			{#if filteredContacts.length > 0 || socials.length > 0 || accountInfo?.emailVerified}
-				<div class="mt-4 pt-4 border-t border-glass/10">
+				<div class="mt-4 pt-4 border-t border-neutral-800/80">
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<!-- Contacts -->
 						{#if filteredContacts.length > 0 || accountInfo?.emailVerified}
 							<div>
-								<h3
-									class="text-sm font-semibold text-white/80 mb-2"
-								>
-									Contact
-								</h3>
+								<h3 class="data-label mb-2">Contact</h3>
 								<div class="space-y-2">
 									{#if accountInfo?.emailVerified}
 										<div class="flex items-center gap-2 text-sm">
-											<span class="text-white/60">Email:</span>
-											<span class="text-green-400 text-xs bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30">
-												✓ Verified
-											</span>
+											<span class="text-neutral-500">Email:</span>
+											<span class="badge badge-success">Verified</span>
 										</div>
 									{/if}
 									{#each filteredContacts as contact}
-										<div
-											class="flex items-center gap-2 text-sm"
-										>
-											<span class="text-white/60 capitalize"
-												>{contact.contactType}:</span
-											>
-											<span class="text-white/90"
-												>{contact.contactValue}</span
-											>
+										<div class="flex items-center gap-2 text-sm">
+											<span class="text-neutral-500 capitalize">{contact.contactType}:</span>
+											<span class="text-neutral-200">{contact.contactValue}</span>
 											{#if contact.verified}
-												<span class="text-green-400 text-xs"
-													>✓</span
-												>
+												<Icon name="check" size={12} class="text-success" />
 											{/if}
 										</div>
 									{/each}
@@ -441,22 +388,13 @@
 							</div>
 						{/if}
 
-						<!-- Social Links -->
 						{#if socials.length > 0}
 							<div>
-								<h3
-									class="text-sm font-semibold text-white/80 mb-2"
-								>
-									Social
-								</h3>
+								<h3 class="data-label mb-2">Social</h3>
 								<div class="space-y-2">
 									{#each socials as social}
-										<div
-											class="flex items-center gap-2 text-sm"
-										>
-											<span class="text-white/60 capitalize"
-												>{social.platform}:</span
-											>
+										<div class="flex items-center gap-2 text-sm">
+											<span class="text-neutral-500 capitalize">{social.platform}:</span>
 											{#if social.profileUrl}
 												<a
 													href={social.profileUrl}
@@ -464,12 +402,11 @@
 													rel="noopener noreferrer"
 													class="text-primary-400 hover:text-primary-300"
 												>
-													@{social.username} →
+													@{social.username}
+													<Icon name="external" size={10} class="inline ml-1" />
 												</a>
 											{:else}
-												<span class="text-white/90"
-													>@{social.username}</span
-												>
+												<span class="text-neutral-200">@{social.username}</span>
 											{/if}
 										</div>
 									{/each}
@@ -482,55 +419,34 @@
 		</div>
 
 		<!-- Overview Stats -->
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-			<!-- Balance -->
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<div class="text-white/60 text-sm mb-1">Account Balance</div>
-				<div class="text-3xl font-bold text-white">
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+			<div class="metric-card">
+				<div class="metric-label">Balance</div>
+				<div class="metric-value">
 					{formatBalance(balance, 'dct')}
-					<span class="text-xl text-white/60">DC</span>
+					<span class="text-lg text-neutral-500">DC</span>
 				</div>
 			</div>
 
-			<!-- Reputation -->
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<div class="text-white/60 text-sm mb-1">Reputation Score</div>
-				<div class="text-3xl font-bold text-white">
-					{reputation?.total_reputation ?? 0}
-				</div>
+			<div class="metric-card">
+				<div class="metric-label">Reputation</div>
+				<div class="metric-value">{reputation?.total_reputation ?? 0}</div>
 				{#if reputation}
-					<div class="text-xs text-white/50 mt-1">
-						{reputation.change_count} reputation changes
-					</div>
+					<div class="metric-subtext">{reputation.change_count} changes</div>
 				{/if}
 			</div>
 
-			<!-- Total Contracts -->
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<div class="text-white/60 text-sm mb-1">Total Contracts</div>
-				<div class="text-3xl font-bold text-white">
-					{totalContracts}
-				</div>
-				<div class="text-xs text-white/50 mt-1">
-					{activity?.rentals_as_requester.length ?? 0} as requester, {activity
-						?.rentals_as_provider.length ?? 0} as provider
+			<div class="metric-card">
+				<div class="metric-label">Contracts</div>
+				<div class="metric-value">{totalContracts}</div>
+				<div class="metric-subtext">
+					{activity?.rentals_as_requester.length ?? 0} req / {activity?.rentals_as_provider.length ?? 0} prov
 				</div>
 			</div>
 
-			<!-- Total Offerings -->
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<div class="text-white/60 text-sm mb-1">Offerings</div>
-				<div class="text-3xl font-bold text-white">
-					{activity?.offerings_provided.length ?? 0}
-				</div>
+			<div class="metric-card">
+				<div class="metric-label">Offerings</div>
+				<div class="metric-value">{activity?.offerings_provided.length ?? 0}</div>
 			</div>
 		</div>
 
@@ -541,141 +457,63 @@
 
 		<!-- Cancellation Metrics -->
 		{#if (requesterCancellations && requesterCancellations.total > 0) || (providerCancellations && providerCancellations.total > 0)}
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<h2 class="text-2xl font-bold text-white mb-4">
-					Cancellation Patterns
-				</h2>
+			<div class="card p-5">
+				<h2 class="text-lg font-semibold text-white mb-4">Cancellation Patterns</h2>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 					{#if requesterCancellations && requesterCancellations.total > 0}
 						<div>
-							<h3 class="text-lg font-semibold text-white/80 mb-3">
-								As Requester
-							</h3>
+							<h3 class="text-sm font-medium text-neutral-400 mb-3">As Requester</h3>
 							<div class="space-y-2">
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Total cancelled:</span
-									>
-									<span
-										class="text-lg font-bold text-white"
-										>{requesterCancellations.total}</span
-									>
+									<span class="text-sm text-neutral-500">Total cancelled:</span>
+									<span class="text-base font-semibold text-white">{requesterCancellations.total}</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 1 hour:</span
-									>
-									<span
-										class="text-lg font-bold {requesterCancellations.pct1h >
-										50
-											? 'text-red-400'
-											: 'text-white'}"
-										>{requesterCancellations.within1h} ({requesterCancellations.pct1h.toFixed(
-											0,
-										)}%)</span
-									>
+									<span class="text-sm text-neutral-500">Within 1 hour:</span>
+									<span class="text-base font-semibold {requesterCancellations.pct1h > 50 ? 'text-danger' : 'text-white'}">
+										{requesterCancellations.within1h} ({requesterCancellations.pct1h.toFixed(0)}%)
+									</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 24 hours:</span
-									>
-									<span
-										class="text-lg font-bold {requesterCancellations.pct24h >
-										80
-											? 'text-yellow-400'
-											: 'text-white'}"
-										>{requesterCancellations.within24h} ({requesterCancellations.pct24h.toFixed(
-											0,
-										)}%)</span
-									>
+									<span class="text-sm text-neutral-500">Within 24 hours:</span>
+									<span class="text-base font-semibold {requesterCancellations.pct24h > 80 ? 'text-warning' : 'text-white'}">
+										{requesterCancellations.within24h} ({requesterCancellations.pct24h.toFixed(0)}%)
+									</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 7 days:</span
-									>
-									<span class="text-lg font-bold text-white"
-										>{requesterCancellations.within7d} ({requesterCancellations.pct7d.toFixed(
-											0,
-										)}%)</span
-									>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 180 days:</span
-									>
-									<span class="text-lg font-bold text-white"
-										>{requesterCancellations.within180d} ({requesterCancellations.pct180d.toFixed(
-											0,
-										)}%)</span
-									>
+									<span class="text-sm text-neutral-500">Within 7 days:</span>
+									<span class="text-base font-semibold text-white">
+										{requesterCancellations.within7d} ({requesterCancellations.pct7d.toFixed(0)}%)
+									</span>
 								</div>
 							</div>
 						</div>
 					{/if}
 					{#if providerCancellations && providerCancellations.total > 0}
 						<div>
-							<h3 class="text-lg font-semibold text-white/80 mb-3">
-								As Provider
-							</h3>
+							<h3 class="text-sm font-medium text-neutral-400 mb-3">As Provider</h3>
 							<div class="space-y-2">
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Total cancelled:</span
-									>
-									<span
-										class="text-lg font-bold text-white"
-										>{providerCancellations.total}</span
-									>
+									<span class="text-sm text-neutral-500">Total cancelled:</span>
+									<span class="text-base font-semibold text-white">{providerCancellations.total}</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 1 hour:</span
-									>
-									<span
-										class="text-lg font-bold {providerCancellations.pct1h >
-										50
-											? 'text-red-400'
-											: 'text-white'}"
-										>{providerCancellations.within1h} ({providerCancellations.pct1h.toFixed(
-											0,
-										)}%)</span
-									>
+									<span class="text-sm text-neutral-500">Within 1 hour:</span>
+									<span class="text-base font-semibold {providerCancellations.pct1h > 50 ? 'text-danger' : 'text-white'}">
+										{providerCancellations.within1h} ({providerCancellations.pct1h.toFixed(0)}%)
+									</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 24 hours:</span
-									>
-									<span
-										class="text-lg font-bold {providerCancellations.pct24h >
-										80
-											? 'text-yellow-400'
-											: 'text-white'}"
-										>{providerCancellations.within24h} ({providerCancellations.pct24h.toFixed(
-											0,
-										)}%)</span
-									>
+									<span class="text-sm text-neutral-500">Within 24 hours:</span>
+									<span class="text-base font-semibold {providerCancellations.pct24h > 80 ? 'text-warning' : 'text-white'}">
+										{providerCancellations.within24h} ({providerCancellations.pct24h.toFixed(0)}%)
+									</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 7 days:</span
-									>
-									<span class="text-lg font-bold text-white"
-										>{providerCancellations.within7d} ({providerCancellations.pct7d.toFixed(
-											0,
-										)}%)</span
-									>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-sm text-white/60"
-										>Within 180 days:</span
-									>
-									<span class="text-lg font-bold text-white"
-										>{providerCancellations.within180d} ({providerCancellations.pct180d.toFixed(
-											0,
-										)}%)</span
-									>
+									<span class="text-sm text-neutral-500">Within 7 days:</span>
+									<span class="text-base font-semibold text-white">
+										{providerCancellations.within7d} ({providerCancellations.pct7d.toFixed(0)}%)
+									</span>
 								</div>
 							</div>
 						</div>
@@ -686,36 +524,20 @@
 
 		<!-- Transaction Statistics -->
 		{#if txStats}
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<h2 class="text-2xl font-bold text-white mb-4">
-					Transaction Statistics
-				</h2>
+			<div class="card p-5">
+				<h2 class="text-lg font-semibold text-white mb-4">Transaction Statistics</h2>
 				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 					<div>
-						<div class="text-white/60 text-sm mb-1">
-							Total Spent
-						</div>
-						<div class="text-2xl font-bold text-red-400">
-							{formatBalance(txStats.totalSent, 'dct')} DC
-						</div>
+						<div class="data-label mb-1">Total Spent</div>
+						<div class="text-xl font-semibold text-danger">{formatBalance(txStats.totalSent, 'dct')} DC</div>
 					</div>
 					<div>
-						<div class="text-white/60 text-sm mb-1">
-							Total Received
-						</div>
-						<div class="text-2xl font-bold text-green-400">
-							{formatBalance(txStats.totalReceived, 'dct')} DC
-						</div>
+						<div class="data-label mb-1">Total Received</div>
+						<div class="text-xl font-semibold text-success">{formatBalance(txStats.totalReceived, 'dct')} DC</div>
 					</div>
 					<div>
-						<div class="text-white/60 text-sm mb-1">
-							Total Transactions
-						</div>
-						<div class="text-2xl font-bold text-white">
-							{transfers.length}
-						</div>
+						<div class="data-label mb-1">Total Transactions</div>
+						<div class="text-xl font-semibold text-white">{transfers.length}</div>
 					</div>
 				</div>
 			</div>
@@ -723,23 +545,15 @@
 
 		<!-- Recent Transactions -->
 		{#if transfers.length > 0}
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<h2 class="text-2xl font-bold text-white mb-4">
-					Recent Transactions
-				</h2>
+			<div class="card p-5">
+				<h2 class="text-lg font-semibold text-white mb-4">Recent Transactions</h2>
 				<div class="space-y-3 max-h-96 overflow-y-auto">
 					{#each transfers.slice(0, 20) as transfer}
-						<div
-							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
-						>
+						<div class="bg-surface-elevated p-4 border border-neutral-800">
 							<div class="flex justify-between items-start mb-2">
 								<div class="flex-1">
 									<div class="flex items-center gap-2 mb-1">
-										<span class="text-white/60 text-sm"
-											>From:</span
-										>
+										<span class="text-neutral-500 text-sm">From:</span>
 										<a
 											href="/dashboard/reputation/{transfer.from_account}"
 											class="font-mono text-sm text-primary-400 hover:text-primary-300"
@@ -748,9 +562,7 @@
 										</a>
 									</div>
 									<div class="flex items-center gap-2">
-										<span class="text-white/60 text-sm"
-											>To:</span
-										>
+										<span class="text-neutral-500 text-sm">To:</span>
 										<a
 											href="/dashboard/reputation/{transfer.to_account}"
 											class="font-mono text-sm text-primary-400 hover:text-primary-300"
@@ -760,21 +572,13 @@
 									</div>
 								</div>
 								<div class="text-right">
-									<div class="text-lg font-bold text-white">
-										{formatBalance(transfer.amount_e9s, 'dct')} DC
-									</div>
-									<div class="text-xs text-white/50">
-										Fee: {formatBalance(transfer.fee_e9s, 'dct')} DC
-									</div>
+									<div class="text-lg font-semibold text-white">{formatBalance(transfer.amount_e9s, 'dct')} DC</div>
+									<div class="text-xs text-neutral-600">Fee: {formatBalance(transfer.fee_e9s, 'dct')} DC</div>
 								</div>
 							</div>
-							<div class="text-xs text-white/50">
-								{formatTimestamp(transfer.created_at_ns)}
-							</div>
+							<div class="text-xs text-neutral-600">{formatTimestamp(transfer.created_at_ns)}</div>
 							{#if transfer.memo}
-								<div class="mt-2 text-sm text-white/70 italic">
-									{transfer.memo}
-								</div>
+								<div class="mt-2 text-sm text-neutral-400 italic">{transfer.memo}</div>
 							{/if}
 						</div>
 					{/each}
@@ -784,35 +588,17 @@
 
 		<!-- Offerings Provided -->
 		{#if activity && activity.offerings_provided.length > 0}
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<h2 class="text-2xl font-bold text-white mb-4">
+			<div class="card p-5">
+				<h2 class="text-lg font-semibold text-white mb-4">
 					Offerings Provided ({activity.offerings_provided.length})
 				</h2>
-				<div
-					class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-				>
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
 					{#each activity.offerings_provided as offering}
-						<div
-							class="bg-glass/5 rounded-xl p-4 border border-glass/10"
-						>
-							<h3 class="text-lg font-semibold text-white mb-2">
-								{offering.offer_name}
-							</h3>
-							<p class="text-sm text-white/60 mb-2">
-								{offering.product_type}
-							</p>
-							<p class="text-white font-medium">
-								{offering.monthly_price.toFixed(2)}
-								{offering.currency}/mo
-							</p>
-							<span
-								class="inline-block mt-2 px-2 py-1 rounded text-xs font-medium {offering.stock_status ===
-								'in_stock'
-									? 'bg-green-500/20 text-green-400'
-									: 'bg-red-500/20 text-red-400'}"
-							>
+						<div class="bg-surface-elevated p-4 border border-neutral-800">
+							<h3 class="text-base font-semibold text-white mb-2">{offering.offer_name}</h3>
+							<p class="text-sm text-neutral-500 mb-2">{offering.product_type}</p>
+							<p class="text-white font-medium">{offering.monthly_price.toFixed(2)} {offering.currency}/mo</p>
+							<span class="badge mt-2 {offering.stock_status === 'in_stock' ? 'badge-success' : 'badge-danger'}">
 								{offering.stock_status}
 							</span>
 						</div>
@@ -823,58 +609,36 @@
 
 		<!-- Rentals as Requester -->
 		{#if activity && activity.rentals_as_requester.length > 0}
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<h2 class="text-2xl font-bold text-white mb-4">
-					Rentals as Requester ({activity.rentals_as_requester
-						.length})
+			<div class="card p-5">
+				<h2 class="text-lg font-semibold text-white mb-4">
+					Rentals as Requester ({activity.rentals_as_requester.length})
 				</h2>
 				<div class="space-y-3">
 					{#each activity.rentals_as_requester as contract}
-						<div
-							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
-						>
+						<div class="bg-surface-elevated p-4 border border-neutral-800">
 							<div class="flex justify-between items-start mb-2">
 								<div>
-									<p class="text-white font-semibold">
-										Offering: {contract.offering_id}
-									</p>
-									<p class="text-sm text-white/60">
+									<p class="text-white font-semibold">Offering: {contract.offering_id}</p>
+									<p class="text-sm text-neutral-500">
 										Provider:
 										<a
 											href="/dashboard/reputation/{contract.provider_pubkey}"
 											class="text-primary-400 hover:text-primary-300"
 										>
-											{truncatePubkey(
-												contract.provider_pubkey,
-											)}
+											{truncatePubkey(contract.provider_pubkey)}
 										</a>
 									</p>
-									<p class="text-sm text-white/60">
-										Amount: {formatBalance(
-											contract.payment_amount_e9s,
-											contract.currency,
-										)} {contract.currency.toUpperCase()}
+									<p class="text-sm text-neutral-500">
+										Amount: {formatBalance(contract.payment_amount_e9s, contract.currency)} {contract.currency.toUpperCase()}
 									</p>
 								</div>
-								<span
-									class="px-3 py-1 rounded-full text-xs font-medium bg-primary-500/20 text-primary-400"
-								>
-									{contract.status}
-								</span>
+								<span class="badge badge-primary">{contract.status}</span>
 							</div>
-							<p class="text-sm text-white/60">
-								Created: {formatContractDate(
-									contract.created_at_ns,
-								)}
-							</p>
+							<p class="text-sm text-neutral-500">Created: {formatContractDate(contract.created_at_ns)}</p>
 							{#if contract.duration_hours}
-								<p class="text-sm text-white/60">
-									Planned: {contract.duration_hours}h
-								</p>
+								<p class="text-sm text-neutral-500">Planned: {contract.duration_hours}h</p>
 							{/if}
-							<p class="text-sm text-white/60">
+							<p class="text-sm text-neutral-500">
 								Actual runtime: {formatDuration(
 									calculateActualDuration(
 										contract.created_at_ns,
@@ -892,57 +656,36 @@
 
 		<!-- Rentals as Provider -->
 		{#if activity && activity.rentals_as_provider.length > 0}
-			<div
-				class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15"
-			>
-				<h2 class="text-2xl font-bold text-white mb-4">
+			<div class="card p-5">
+				<h2 class="text-lg font-semibold text-white mb-4">
 					Rentals as Provider ({activity.rentals_as_provider.length})
 				</h2>
 				<div class="space-y-3">
 					{#each activity.rentals_as_provider as contract}
-						<div
-							class="bg-glass/5 rounded-lg p-4 border border-glass/10"
-						>
+						<div class="bg-surface-elevated p-4 border border-neutral-800">
 							<div class="flex justify-between items-start mb-2">
 								<div>
-									<p class="text-white font-semibold">
-										Offering: {contract.offering_id}
-									</p>
-									<p class="text-sm text-white/60">
+									<p class="text-white font-semibold">Offering: {contract.offering_id}</p>
+									<p class="text-sm text-neutral-500">
 										Requester:
 										<a
 											href="/dashboard/reputation/{contract.requester_pubkey}"
 											class="text-primary-400 hover:text-primary-300"
 										>
-											{truncatePubkey(
-												contract.requester_pubkey,
-											)}
+											{truncatePubkey(contract.requester_pubkey)}
 										</a>
 									</p>
-									<p class="text-sm text-white/60">
-										Amount: {formatBalance(
-											contract.payment_amount_e9s,
-											contract.currency,
-										)} {contract.currency.toUpperCase()}
+									<p class="text-sm text-neutral-500">
+										Amount: {formatBalance(contract.payment_amount_e9s, contract.currency)} {contract.currency.toUpperCase()}
 									</p>
 								</div>
-								<span
-									class="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400"
-								>
-									{contract.status}
-								</span>
+								<span class="badge badge-neutral">{contract.status}</span>
 							</div>
-							<p class="text-sm text-white/60">
-								Created: {formatContractDate(
-									contract.created_at_ns,
-								)}
-							</p>
+							<p class="text-sm text-neutral-500">Created: {formatContractDate(contract.created_at_ns)}</p>
 							{#if contract.duration_hours}
-								<p class="text-sm text-white/60">
-									Planned: {contract.duration_hours}h
-								</p>
+								<p class="text-sm text-neutral-500">Planned: {contract.duration_hours}h</p>
 							{/if}
-							<p class="text-sm text-white/60">
+							<p class="text-sm text-neutral-500">
 								Actual runtime: {formatDuration(
 									calculateActualDuration(
 										contract.created_at_ns,

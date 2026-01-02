@@ -221,13 +221,13 @@
 <div class="space-y-8">
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-4xl font-bold text-white mb-2">My Offerings</h1>
-			<p class="text-white/60">Manage your cloud service offerings</p>
+			<h1 class="text-2xl font-bold text-white tracking-tight">My Offerings</h1>
+			<p class="text-neutral-500">Manage your cloud service offerings</p>
 		</div>
 		<div class="flex gap-3">
 			<button
 				onclick={() => (showTemplateDialog = true)}
-				class="px-6 py-3 bg-glass/10 backdrop-blur rounded-lg font-semibold hover:bg-glass/15 transition-all flex items-center gap-2"
+				class="px-6 py-3 bg-surface-elevated backdrop-blur  font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2"
 				title="Download CSV template with example offerings"
 			>
 				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -242,7 +242,7 @@
 			</button>
 			<button
 				onclick={openEditor}
-				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
+				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
 			>
 				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path
@@ -259,7 +259,7 @@
 
 	{#if importSuccess}
 		<div
-			class="bg-green-500/20 border border-green-500/30 rounded-lg p-4 flex items-center gap-2 animate-fade-in"
+			class="bg-green-500/20 border border-green-500/30  p-4 flex items-center gap-2 animate-fade-in"
 		>
 			<span class="text-2xl">✅</span>
 			<p class="text-green-400 font-semibold">{importSuccess}</p>
@@ -267,7 +267,7 @@
 	{/if}
 
 	{#if error}
-		<div class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">
+		<div class="bg-red-500/20 border border-red-500/30  p-4 text-red-400">
 			<p class="font-semibold">Error loading offerings</p>
 			<p class="text-sm mt-1">{error}</p>
 		</div>
@@ -275,7 +275,7 @@
 
 	{#if offerings.filter(o => !o.resolved_pool_id).length > 0}
 		{@const offeringsWithoutPool = offerings.filter(o => !o.resolved_pool_id)}
-		<div class="bg-amber-500/20 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
+		<div class="bg-amber-500/20 border border-amber-500/30  p-4 flex items-start gap-3">
 			<span class="text-2xl">⚠️</span>
 			<div>
 				<p class="text-amber-400 font-semibold">
@@ -295,9 +295,9 @@
 	{:else}
 		<!-- Stats Summary -->
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-2">
-					<h3 class="text-white/70 text-sm font-medium">Active Offerings</h3>
+					<h3 class="text-neutral-400 text-sm font-medium">Active Offerings</h3>
 					<span class="text-2xl">📦</span>
 				</div>
 				<p class="text-3xl font-bold text-white">
@@ -305,17 +305,17 @@
 				</p>
 			</div>
 
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-2">
-					<h3 class="text-white/70 text-sm font-medium">Total Offerings</h3>
+					<h3 class="text-neutral-400 text-sm font-medium">Total Offerings</h3>
 					<span class="text-2xl">📊</span>
 				</div>
 				<p class="text-3xl font-bold text-white">{offerings.length}</p>
 			</div>
 
-			<div class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15">
+			<div class="card p-6 border border-neutral-800">
 				<div class="flex items-center justify-between mb-2">
-					<h3 class="text-white/70 text-sm font-medium">Product Types</h3>
+					<h3 class="text-neutral-400 text-sm font-medium">Product Types</h3>
 					<span class="text-2xl">🏷️</span>
 				</div>
 				<p class="text-3xl font-bold text-white">
@@ -330,7 +330,7 @@
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="bg-glass/10 backdrop-blur-lg rounded-xl p-6 border border-glass/15 hover:border-white/40 transition-all group cursor-pointer"
+					class="card p-6 border border-neutral-800 hover:border-white/40 transition-all group cursor-pointer"
 					onclick={() => handleEditClick(offering)}
 				>
 					<!-- Header: Icon and Badges -->
@@ -378,21 +378,21 @@
 
 					<!-- Details -->
 					<div class="space-y-2 text-sm">
-						<div class="flex items-center justify-between text-white/70">
+						<div class="flex items-center justify-between text-neutral-400">
 							<span>Type</span>
 							<span class="text-white font-medium">{offering.product_type}</span>
 						</div>
-						<div class="flex items-center justify-between text-white/70">
+						<div class="flex items-center justify-between text-neutral-400">
 							<span>Price</span>
 							<span class="text-white font-medium">{formatPrice(offering)}</span>
 						</div>
 						{#if offering.datacenter_country}
-							<div class="flex items-center justify-between text-white/70">
+							<div class="flex items-center justify-between text-neutral-400">
 								<span>Location</span>
 								<span class="text-white font-medium">{offering.datacenter_city}, {offering.datacenter_country}</span>
 							</div>
 						{/if}
-						<div class="flex items-center justify-between text-white/70">
+						<div class="flex items-center justify-between text-neutral-400">
 							<span>Pool</span>
 							{#if offering.resolved_pool_name}
 								<span class="text-primary-400 font-medium">→ {offering.resolved_pool_name}</span>
@@ -401,7 +401,7 @@
 							{/if}
 						</div>
 						{#if offering.description}
-							<div class="text-white/60 text-xs mt-3 line-clamp-2">{offering.description}</div>
+							<div class="text-neutral-500 text-xs mt-3 line-clamp-2">{offering.description}</div>
 						{/if}
 					</div>
 				</div>
@@ -413,10 +413,10 @@
 			<div class="text-center py-16">
 				<span class="text-6xl mb-4 block">📦</span>
 				<h3 class="text-2xl font-bold text-white mb-2">No Offerings Yet</h3>
-				<p class="text-white/60 mb-6">Create your first cloud service offering to get started</p>
+				<p class="text-neutral-500 mb-6">Create your first cloud service offering to get started</p>
 				<button
 					onclick={openEditor}
-					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 hover:scale-105 transition-all"
+					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Create Your First Offering
 				</button>
@@ -450,33 +450,33 @@
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div
-			class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 max-w-2xl w-full mx-4 border border-glass/10 shadow-2xl max-h-[90vh] overflow-y-auto"
+			class="bg-gradient-to-br from-slate-900 to-slate-800  p-8 max-w-2xl w-full mx-4 border border-neutral-800 shadow-2xl max-h-[90vh] overflow-y-auto"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<h2 class="text-2xl font-bold text-white mb-4">Select Product Type</h2>
-			<p class="text-white/60 mb-6">Choose a product type to download an example template</p>
+			<p class="text-neutral-500 mb-6">Choose a product type to download an example template</p>
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 				{#each productTypes as productType}
 					<button
 						onclick={() => downloadTemplate(productType.key)}
-						class="p-4 bg-glass/10 backdrop-blur rounded-lg border border-glass/15 hover:border-white/40 hover:bg-glass/15 transition-all text-left group"
+						class="p-4 bg-surface-elevated backdrop-blur  border border-neutral-800 hover:border-white/40 hover:bg-surface-elevated transition-all text-left group"
 					>
 						<div class="text-2xl mb-2">{productType.label.split(' ')[0]}</div>
 						<div class="text-white font-medium group-hover:text-primary-400 transition-colors">
 							{productType.label.substring(productType.label.indexOf(' ') + 1)}
 						</div>
-						<div class="text-white/50 text-sm mt-1">Download template</div>
+						<div class="text-neutral-500 text-sm mt-1">Download template</div>
 					</button>
 				{/each}
 			</div>
 			{#if offerings.length === 0}
-				<div class="border-t border-glass/10 pt-6">
-					<p class="text-white/60 mb-4 text-sm">Or start editing with a template:</p>
+				<div class="border-t border-neutral-800 pt-6">
+					<p class="text-neutral-500 mb-4 text-sm">Or start editing with a template:</p>
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 						{#each productTypes as productType}
 							<button
 								onclick={() => openEditorWithTemplate(productType.key)}
-								class="p-3 bg-primary-500/20 backdrop-blur rounded-lg border border-primary-500/30 hover:border-primary-500/50 hover:bg-primary-500/30 transition-all text-left"
+								class="p-3 bg-primary-500/20 backdrop-blur  border border-primary-500/30 hover:border-primary-500/50 hover:bg-primary-500/30 transition-all text-left"
 							>
 								<div class="text-sm text-primary-400 font-medium">
 									Edit {productType.label.substring(productType.label.indexOf(' ') + 1)}
@@ -489,7 +489,7 @@
 			<div class="flex justify-end mt-6">
 				<button
 					onclick={() => (showTemplateDialog = false)}
-					class="px-6 py-2 bg-glass/10 rounded-lg hover:bg-glass/15 transition-colors"
+					class="px-6 py-2 bg-surface-elevated  hover:bg-surface-elevated transition-colors"
 				>
 					Cancel
 				</button>

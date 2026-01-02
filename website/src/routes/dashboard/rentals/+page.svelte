@@ -296,8 +296,8 @@
 <div class="space-y-8">
 	<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
 		<div>
-			<h1 class="text-4xl font-bold text-white mb-2">My Rentals</h1>
-			<p class="text-white/60">
+			<h1 class="text-2xl font-bold text-white tracking-tight mb-2">My Rentals</h1>
+			<p class="text-neutral-500">
 				View and manage your resource rental requests
 			</p>
 		</div>
@@ -305,20 +305,20 @@
 			<div class="flex items-center gap-3">
 				<button
 					onclick={toggleAutoRefresh}
-					class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-glass/5 text-white/50 border border-glass/10'}"
+					class="flex items-center gap-2 px-3 py-1.5  text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-surface-elevated text-neutral-500 border border-neutral-800'}"
 					title={autoRefreshEnabled ? 'Auto-refresh enabled (15s)' : 'Auto-refresh disabled'}
 				>
 					<span class="relative flex h-2 w-2">
 						{#if autoRefreshEnabled}
-							<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+							<span class="animate-ping absolute inline-flex h-full w-full  bg-emerald-400 opacity-75"></span>
 						{/if}
-						<span class="relative inline-flex rounded-full h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-400' : 'bg-white/30'}"></span>
+						<span class="relative inline-flex  h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-400' : 'bg-white/30'}"></span>
 					</span>
 					Auto-refresh
 				</button>
 				<button
 					onclick={refreshContracts}
-					class="px-3 py-1.5 rounded-lg text-sm bg-glass/5 text-white/70 border border-glass/10 hover:bg-glass/10 transition-colors"
+					class="px-3 py-1.5  text-sm bg-surface-elevated text-neutral-400 border border-neutral-800 hover:bg-surface-elevated transition-colors"
 					title="Refresh now"
 				>
 					↻ Refresh
@@ -330,12 +330,12 @@
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->
 		<div
-			class="bg-glass/10 backdrop-blur-lg rounded-xl p-8 border border-glass/15 text-center"
+			class="card p-8 border border-neutral-800 text-center"
 		>
 			<div class="max-w-md mx-auto space-y-6">
 				<span class="text-6xl">🔑</span>
 				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-white/70">
+				<p class="text-neutral-400">
 					Create an account or login to view and manage your rental
 					contracts. See the marketplace to browse available
 					resources.
@@ -343,13 +343,13 @@
 				<div class="flex flex-col gap-3">
 					<button
 						onclick={handleLogin}
-						class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
+						class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
 					>
 						Login / Create Account
 					</button>
 					<a
 						href="/dashboard/marketplace"
-						class="px-8 py-3 bg-glass/10 rounded-lg font-semibold text-white hover:bg-glass/15 transition-all"
+						class="px-8 py-3 bg-surface-elevated  font-semibold text-white hover:bg-surface-elevated transition-all"
 					>
 						Browse Marketplace
 					</a>
@@ -358,7 +358,7 @@
 		</div>
 	{:else if error}
 		<div
-			class="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400"
+			class="bg-red-500/20 border border-red-500/30  p-4 text-red-400"
 		>
 			<p class="font-semibold">Error loading rentals</p>
 			<p class="text-sm mt-1">{error}</p>
@@ -368,19 +368,19 @@
 	{#if loading}
 		<div class="flex justify-center items-center p-8">
 			<div
-				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
+				class="animate-spin  h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
 	{:else if contracts.length === 0}
 		<div class="text-center py-16">
 			<span class="text-6xl mb-4 block">📋</span>
 			<h3 class="text-2xl font-bold text-white mb-2">No Rentals Yet</h3>
-			<p class="text-white/60 mb-6">
+			<p class="text-neutral-500 mb-6">
 				You haven't created any rental requests yet
 			</p>
 			<a
 				href="/dashboard/marketplace"
-				class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg font-semibold hover:brightness-110 transition-all"
+				class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 transition-all"
 			>
 				Browse Marketplace
 			</a>
@@ -395,9 +395,9 @@
 				<a
 					href="/dashboard/rentals/{contract.contract_id}"
 					id="contract-{contract.contract_id}"
-					class="block bg-glass/10 backdrop-blur-lg rounded-xl p-6 border transition-all cursor-pointer {isHighlighted
+					class="block card p-6 border transition-all cursor-pointer {isHighlighted
 						? 'border-primary-400 ring-2 ring-primary-400/50'
-						: 'border-glass/15 hover:border-primary-400 hover:bg-white/[0.12]'}"
+						: 'border-neutral-800 hover:border-primary-400 hover:bg-white/[0.12]'}"
 				>
 					<div class="flex items-start justify-between mb-4">
 						<div class="flex-1">
@@ -406,7 +406,7 @@
 									{contract.offering_id}
 								</h3>
 								<span
-									class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border {statusBadge.class}"
+									class="inline-flex items-center gap-1 px-3 py-1  text-xs font-medium border {statusBadge.class}"
 								>
 									<span>{statusBadge.icon}</span>
 									{statusBadge.text}
@@ -447,7 +447,7 @@
 										class="flex items-center gap-1 text-xs text-primary-400"
 									>
 										<div
-											class="animate-spin rounded-full h-3 w-3 border-t border-b border-primary-400"
+											class="animate-spin  h-3 w-3 border-t border-b border-primary-400"
 										></div>
 										Downloading...
 									</div>
@@ -458,13 +458,13 @@
 										class="flex items-center gap-1 text-xs text-red-400"
 									>
 										<div
-											class="animate-spin rounded-full h-3 w-3 border-t border-b border-red-400"
+											class="animate-spin  h-3 w-3 border-t border-b border-red-400"
 										></div>
 										Cancelling...
 									</div>
 								{/if}
 							</div>
-							<p class="text-white/60 text-sm">
+							<p class="text-neutral-500 text-sm">
 								Contract ID: {truncateHash(
 									contract.contract_id,
 								)}
@@ -478,7 +478,7 @@
 								)}
 							</div>
 							{#if contract.duration_hours}
-								<div class="text-white/60 text-sm">
+								<div class="text-neutral-500 text-sm">
 									{contract.duration_hours} hours
 								</div>
 							{/if}
@@ -487,35 +487,35 @@
 
 					<!-- Progress indicator (only for active rental flows) -->
 					{#if stageIndex >= 0}
-						<div class="mb-4 p-4 bg-glass/5 rounded-lg border border-glass/10">
+						<div class="mb-4 p-4 bg-surface-elevated  border border-neutral-800">
 							<div class="flex items-center justify-between mb-3">
 								{#each LIFECYCLE_STAGES as stage, i}
 									<div class="flex flex-col items-center flex-1">
 										<div class="flex items-center w-full">
 											{#if i > 0}
-												<div class="flex-1 h-0.5 {i <= stageIndex ? 'bg-emerald-500' : 'bg-glass/15'}"></div>
+												<div class="flex-1 h-0.5 {i <= stageIndex ? 'bg-emerald-500' : 'bg-surface-elevated'}"></div>
 											{/if}
 											<div
-												class="w-8 h-8 rounded-full flex items-center justify-center text-sm border-2 transition-all {
+												class="w-8 h-8  flex items-center justify-center text-sm border-2 transition-all {
 													i < stageIndex
 														? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
 														: i === stageIndex
 															? 'bg-primary-500/20 border-primary-500 text-primary-400 ring-2 ring-primary-500/30'
-															: 'bg-glass/5 border-glass/15 text-white/40'
+															: 'bg-surface-elevated border-neutral-800 text-neutral-600'
 												}"
 											>
 												{stage.icon}
 											</div>
 											{#if i < LIFECYCLE_STAGES.length - 1}
-												<div class="flex-1 h-0.5 {i < stageIndex ? 'bg-emerald-500' : 'bg-glass/15'}"></div>
+												<div class="flex-1 h-0.5 {i < stageIndex ? 'bg-emerald-500' : 'bg-surface-elevated'}"></div>
 											{/if}
 										</div>
-										<span class="text-xs mt-1 {i <= stageIndex ? 'text-white/80' : 'text-white/40'}">{stage.label}</span>
+										<span class="text-xs mt-1 {i <= stageIndex ? 'text-neutral-300' : 'text-neutral-600'}">{stage.label}</span>
 									</div>
 								{/each}
 							</div>
 							{#if nextStep}
-								<div class="flex items-start gap-2 text-sm {nextStep.isWaiting ? 'text-primary-400' : 'text-white/70'}">
+								<div class="flex items-start gap-2 text-sm {nextStep.isWaiting ? 'text-primary-400' : 'text-neutral-400'}">
 									{#if nextStep.isWaiting}
 										<div class="animate-pulse mt-0.5">⏳</div>
 									{:else}
@@ -524,7 +524,7 @@
 									<div>
 										<span>{nextStep.text}</span>
 										{#if nextStep.isWaiting}
-											<p class="text-white/50 text-xs mt-1">
+											<p class="text-neutral-500 text-xs mt-1">
 												You'll receive an email when your resource is ready. Make sure your <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto('/dashboard/account/profile'); }} class="text-primary-400 hover:underline">profile</button> has a valid email address.
 											</p>
 										{/if}
@@ -536,9 +536,9 @@
 
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 						<div
-							class="bg-glass/5 rounded-lg p-3 border border-glass/10"
+							class="bg-surface-elevated  p-3 border border-neutral-800"
 						>
-							<div class="text-white/60 text-xs mb-1">
+							<div class="text-neutral-500 text-xs mb-1">
 								Created
 							</div>
 							<div class="text-white text-sm">
@@ -547,9 +547,9 @@
 						</div>
 						{#if contract.region_name}
 							<div
-								class="bg-glass/5 rounded-lg p-3 border border-glass/10"
+								class="bg-surface-elevated  p-3 border border-neutral-800"
 							>
-								<div class="text-white/60 text-xs mb-1">
+								<div class="text-neutral-500 text-xs mb-1">
 									Region
 								</div>
 								<div class="text-white text-sm">
@@ -559,9 +559,9 @@
 						{/if}
 						{#if contract.requester_ssh_pubkey}
 							<div
-								class="bg-glass/5 rounded-lg p-3 border border-glass/10"
+								class="bg-surface-elevated  p-3 border border-neutral-800"
 							>
-								<div class="text-white/60 text-xs mb-1">
+								<div class="text-neutral-500 text-xs mb-1">
 									SSH Key
 								</div>
 								<div
@@ -574,9 +574,9 @@
 							</div>
 						{/if}
 						<div
-							class="bg-glass/5 rounded-lg p-3 border border-glass/10"
+							class="bg-surface-elevated  p-3 border border-neutral-800"
 						>
-							<div class="text-white/60 text-xs mb-1">
+							<div class="text-neutral-500 text-xs mb-1">
 								Provider
 							</div>
 							<button
@@ -594,9 +594,9 @@
 
 					{#if contract.request_memo}
 						<div
-							class="bg-glass/5 rounded-lg p-3 border border-glass/10 mb-4"
+							class="bg-surface-elevated  p-3 border border-neutral-800 mb-4"
 						>
-							<div class="text-white/60 text-xs mb-1">Memo</div>
+							<div class="text-neutral-500 text-xs mb-1">Memo</div>
 							<div class="text-white text-sm">
 								{contract.request_memo}
 							</div>
@@ -605,7 +605,7 @@
 
 					{#if contract.provisioning_instance_details}
 						<div
-							class="bg-green-500/10 border border-green-500/30 rounded-lg p-4"
+							class="bg-green-500/10 border border-green-500/30  p-4"
 						>
 							<div class="text-green-400 font-semibold mb-2">
 								Instance Details
