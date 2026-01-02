@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) as \"count!\" FROM (\n                SELECT requester_pubkey FROM contract_sign_requests\n                WHERE provider_pubkey = $1\n                GROUP BY requester_pubkey\n                HAVING COUNT(*) > 1\n            ) AS repeats",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "84a943539e9c780d9ac642c5093f0acbf90ddd401d7c6916a5b19d925f25a44e"
+}

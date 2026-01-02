@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "contact_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "contact_value",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ebff7d31932c9eaf1bd44f924773fca2780f41d1c9c9846e1823018e967a58af"
+}

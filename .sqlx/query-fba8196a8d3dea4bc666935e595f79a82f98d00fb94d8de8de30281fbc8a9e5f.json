@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT SUM(amount_e9s)::BIGINT as \"sum\" FROM token_transfers",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sum",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fba8196a8d3dea4bc666935e595f79a82f98d00fb94d8de8de30281fbc8a9e5f"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT AVG(CAST(provisioning_completed_at_ns - created_at_ns AS REAL)) as \"avg: f64\"\n               FROM contract_sign_requests\n               WHERE provider_pubkey = $1\n               AND provisioning_completed_at_ns IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "avg: f64",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a694812240283d76dc8299934d0ae1952d688cdca01b6913cc99b535f5be97d5"
+}

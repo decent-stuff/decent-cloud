@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT heartbeat_at as \"heartbeat_at!: i64\"\n               FROM contract_usage_events\n               WHERE contract_id = $1\n                 AND event_type = 'heartbeat'\n                 AND heartbeat_at >= $2\n                 AND heartbeat_at < $3\n               ORDER BY heartbeat_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "heartbeat_at!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "e34c38e8b1c110d3c852ec5cd0b3b532ffd466c6ba8b7340ceeb6193feb16b5d"
+}

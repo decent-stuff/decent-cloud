@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_usage SET units_used = $1, overage_units = $2, updated_at = $3 WHERE id = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Float8",
+        "Float8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98a47ecc00d1fb7eb6d77d28f8c63ad2504ae94a46cc1f0a9293aeb227ea7ea9"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id as \"id!\", contact_type, contact_value, verified as \"verified!\"\n               FROM account_contacts\n               WHERE account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contact_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "contact_value",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "verified!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "d8fa885419fd1613a944fee7ad8607d468e325b542dcd37720b08de3adc58f02"
+}

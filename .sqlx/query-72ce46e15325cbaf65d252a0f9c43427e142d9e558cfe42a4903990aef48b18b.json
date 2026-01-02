@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET stripe_subscription_id = $1, subscription_status = $2, current_period_end_ns = $3, cancel_at_period_end = $4 WHERE contract_id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Bool",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "72ce46e15325cbaf65d252a0f9c43427e142d9e558cfe42a4903990aef48b18b"
+}

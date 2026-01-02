@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(SUM(payment_amount_e9s), 0)::BIGINT as \"sum!\" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('requested', 'pending', 'accepted') AND created_at_ns < $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sum!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5b4a6c444a48445ff0121e8ea3c84a14a20d622ec714582dcda86c42624bcdf0"
+}

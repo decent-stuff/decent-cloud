@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) as \"count!\" FROM contract_sign_requests c\n               INNER JOIN contract_status_history h ON c.contract_id = h.contract_id\n               WHERE c.provider_pubkey = $1\n               AND c.status = 'cancelled'\n               AND h.new_status = 'cancelled'\n               AND c.duration_hours IS NOT NULL\n               AND c.duration_hours > 0\n               AND (h.changed_at_ns - c.start_timestamp_ns) < (c.duration_hours * 3600000000000 / 10)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5c1d178f3e3734218d27b064489d1f2538e696495cc8450aa36978c5e38f89f1"
+}

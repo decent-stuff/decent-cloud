@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO email_queue\n               (id, to_addr, from_addr, subject, body, is_html, email_type, status, attempts, max_attempts, created_at, related_account_id)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 0, 999, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3dec228e26a5bf8a76a2e2c247107e61ad8140f346acacc856e4abbe99461c39"
+}

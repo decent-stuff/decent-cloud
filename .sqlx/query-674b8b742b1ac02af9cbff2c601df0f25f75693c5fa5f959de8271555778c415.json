@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                bh.id as \"id!: i64\",\n                bh.contract_id as \"contract_id!: String\",\n                bh.gateway_slug as \"gateway_slug!: String\",\n                bh.provider_pubkey as \"provider_pubkey!: String\",\n                bh.bytes_in as \"bytes_in!: i64\",\n                bh.bytes_out as \"bytes_out!: i64\",\n                bh.recorded_at_ns as \"recorded_at_ns!: i64\"\n               FROM bandwidth_history bh\n               INNER JOIN (\n                   SELECT contract_id, MAX(recorded_at_ns) as max_ts\n                   FROM bandwidth_history\n                   WHERE provider_pubkey = $1\n                   GROUP BY contract_id\n               ) latest ON bh.contract_id = latest.contract_id AND bh.recorded_at_ns = latest.max_ts\n               WHERE bh.provider_pubkey = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "gateway_slug!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "provider_pubkey!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "bytes_in!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "bytes_out!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "recorded_at_ns!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "674b8b742b1ac02af9cbff2c601df0f25f75693c5fa5f959de8271555778c415"
+}

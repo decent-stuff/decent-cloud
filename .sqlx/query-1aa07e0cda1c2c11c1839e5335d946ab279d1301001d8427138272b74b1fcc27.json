@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subscription_plan_id, subscription_status,\n                      subscription_stripe_id, subscription_current_period_end,\n                      subscription_cancel_at_period_end\n               FROM accounts WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subscription_plan_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "subscription_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "subscription_stripe_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "subscription_current_period_end",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "subscription_cancel_at_period_end",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "1aa07e0cda1c2c11c1839e5335d946ab279d1301001d8427138272b74b1fcc27"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET terminated_at_ns = $1 WHERE contract_id = $2 AND status = 'cancelled'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b9d9f7e94ab42d6ce65c879b5356f09a6ccbdd239cac396d72925395b151226c"
+}

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id as \"id!\", reseller_pubkey, external_provider_pubkey, commission_percent as \"commission_percent!\", status as \"status!\", created_at_ns as \"created_at_ns!\", updated_at_ns FROM reseller_relationships WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "reseller_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "external_provider_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "commission_percent!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at_ns!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at_ns",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "38f88f1ee4bbfad9ea7d68228e83e659b66979d6dd70d5964c702e56bbdeadde"
+}

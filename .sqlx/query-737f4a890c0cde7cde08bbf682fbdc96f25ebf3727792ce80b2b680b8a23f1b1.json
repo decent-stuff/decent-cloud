@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET stripe_invoice_id = $1 WHERE contract_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "737f4a890c0cde7cde08bbf682fbdc96f25ebf3727792ce80b2b680b8a23f1b1"
+}

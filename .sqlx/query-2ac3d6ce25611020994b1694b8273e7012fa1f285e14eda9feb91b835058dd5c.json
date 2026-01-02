@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count as \"count!\" FROM notification_usage\n               WHERE provider_id = $1 AND channel = $2 AND date = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2ac3d6ce25611020994b1694b8273e7012fa1f285e14eda9feb91b835058dd5c"
+}

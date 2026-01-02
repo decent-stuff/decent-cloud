@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                id as \"id!: i64\",\n                contract_id as \"contract_id!: String\",\n                gateway_slug as \"gateway_slug!: String\",\n                provider_pubkey as \"provider_pubkey!: String\",\n                bytes_in as \"bytes_in!: i64\",\n                bytes_out as \"bytes_out!: i64\",\n                recorded_at_ns as \"recorded_at_ns!: i64\"\n               FROM bandwidth_history\n               WHERE contract_id = $1\n               ORDER BY recorded_at_ns DESC\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "gateway_slug!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "provider_pubkey!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "bytes_in!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "bytes_out!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "recorded_at_ns!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0f5483a2cf8a4b18f85396d045221466abbc9238f688d218aff47935b56dd757"
+}

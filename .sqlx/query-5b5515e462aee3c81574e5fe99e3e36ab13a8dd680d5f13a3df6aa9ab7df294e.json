@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO bandwidth_history (contract_id, gateway_slug, provider_pubkey, bytes_in, bytes_out, recorded_at_ns)\n               VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5b5515e462aee3c81574e5fe99e3e36ab13a8dd680d5f13a3df6aa9ab7df294e"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM agent_setup_tokens WHERE expires_at_ns < $1 AND used_at_ns IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "870e6f0a3a8d7551a710144c2453f9e476ba6d5a50592981d054245f0df5b9c5"
+}

@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_profiles (\n                   pubkey, name, api_version, profile_version, updated_at_ns,\n                   support_email, support_hours, support_channels, regions,\n                   payment_methods, refund_policy, sla_guarantee,\n                   unique_selling_points, common_issues, onboarding_completed_at,\n                   account_id\n               ) VALUES ($1, $2, 'v1', '1.0', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)\n               ON CONFLICT(pubkey) DO UPDATE SET\n                   support_email = excluded.support_email,\n                   support_hours = excluded.support_hours,\n                   support_channels = excluded.support_channels,\n                   regions = excluded.regions,\n                   payment_methods = excluded.payment_methods,\n                   refund_policy = excluded.refund_policy,\n                   sla_guarantee = excluded.sla_guarantee,\n                   unique_selling_points = excluded.unique_selling_points,\n                   common_issues = excluded.common_issues,\n                   onboarding_completed_at = excluded.onboarding_completed_at,\n                   updated_at_ns = excluded.updated_at_ns,\n                   account_id = COALESCE(provider_profiles.account_id, excluded.account_id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "726a2ba2f4b3809c242dbb953f975c8f5d8dc6f120fe3fd40d848f6b9af74a57"
+}

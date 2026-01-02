@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns FROM contract_sign_replies WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "contract_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "reply_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "reply_memo",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "instance_details",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at_ns",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "1c13731806def16d5cecca996b4194dd2efaa5c519681c8c68a1e13a6bad1aff"
+}

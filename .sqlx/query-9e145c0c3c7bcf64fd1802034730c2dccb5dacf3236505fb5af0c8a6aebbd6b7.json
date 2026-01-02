@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) as \"count!\" FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('accepted', 'provisioning', 'provisioned', 'active', 'completed')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9e145c0c3c7bcf64fd1802034730c2dccb5dacf3236505fb5af0c8a6aebbd6b7"
+}
