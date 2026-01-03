@@ -152,13 +152,7 @@ impl Drop for EphemeralPostgres {
         // Stop PostgreSQL
         let pg_data = self.data_dir.join("data");
         let _ = Command::new("pg_ctl")
-            .args([
-                "-D",
-                pg_data.to_str().unwrap(),
-                "stop",
-                "-m",
-                "immediate",
-            ])
+            .args(["-D", pg_data.to_str().unwrap(), "stop", "-m", "immediate"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();
@@ -230,9 +224,8 @@ fn get_postgres_url() -> String {
     }
 
     // Start or get ephemeral PostgreSQL
-    let pg = EPHEMERAL_PG.get_or_init(|| {
-        EphemeralPostgres::start().expect("Failed to start ephemeral PostgreSQL")
-    });
+    let pg = EPHEMERAL_PG
+        .get_or_init(|| EphemeralPostgres::start().expect("Failed to start ephemeral PostgreSQL"));
 
     pg.url.clone()
 }
