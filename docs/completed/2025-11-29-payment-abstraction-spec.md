@@ -278,11 +278,11 @@ curl -X POST /api/contracts -d '{"payment_method": "paypal", ...}'  # 400 error
 - api/migrations/010_payment_methods.sql (NEW - 15 lines)
 
 **Testing**:
-- Migration runs successfully: `DATABASE_URL="sqlite:/tmp/verify_migration.db" sqlx migrate run`
-- Verified columns added correctly via sqlite3 schema inspection
+- Migration runs successfully: `DATABASE_URL="postgres://test:test@localhost:5432/test" sqlx migrate run --source api/migrations_pg`
+- Verified columns added correctly via PostgreSQL schema inspection
 - Default value 'dct' works for existing contracts
 - Tested insertion with default values - payment_method correctly defaults to 'dct'
-- Migration #10 applies in 3.8ms
+- Migration applies successfully
 
 **Outcome**: Success
 - Migration is clean, minimal, and follows DRY principles

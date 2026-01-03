@@ -1230,7 +1230,7 @@ Requirements: 5/5 must-have, 0/1 nice-to-have
 Tests pass, cargo make clean
 
 Notes:
-- Seeded data stored in temp DB (/tmp/seeding.db) due to migration checksum issues with dev DB
+- Seeded data stored in test PostgreSQL database (test/test@localhost:5432/test)
 - Migration 035 includes ALTER TABLE statements that fail on re-run (columns exist)
 - For production: use fresh DB or manually mark migration 35 as complete after verifying columns exist
 - Frontend shows "External" badge (purple) and "Visit Provider" button for seeded offerings

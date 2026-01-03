@@ -531,6 +531,15 @@ cargo doc --no-deps --open
 
 ## CI/CD
 
+### CI Environment Requirements
+
+The CI/CD pipeline requires PostgreSQL 14+ for running tests and migrations:
+
+- **PostgreSQL Service**: GitHub Actions workflow automatically starts PostgreSQL 16
+- **Database Configuration**: Tests use `postgres://test:test@localhost:5432/test` connection string
+- **Migration Verification**: CI runs all migrations from `api/migrations_pg/` directory
+- **sqlx Offline Mode**: Pre-generated `.sqlx/*.json` files for PostgreSQL queries
+
 ### Local CI Image
 
 Build the CI image locally:
@@ -558,9 +567,10 @@ password: <generated token>
 
 ### GitHub Actions
 
-- CI workflow runs on all PRs
+- CI workflow runs on all PRs with PostgreSQL 16 service
 - Release workflow triggers on tags
 - Container image workflow can be manually triggered
+- All tests require PostgreSQL to be running (started automatically)
 
 ## Contributing
 

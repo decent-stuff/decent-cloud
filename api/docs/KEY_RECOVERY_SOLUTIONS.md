@@ -408,11 +408,11 @@ async fn store_encrypted_seed(
 
 | Operation | Cost |
 |-----------|------|
-| Store encrypted seed (SQLite) | Free |
+| Store encrypted seed (PostgreSQL) | ~$0.00001/request |
 | Bandwidth (retrieval) | ~$0.000001/request |
 | OPRF computation | Negligible (CPU) |
 
-**Per user per year**: ~$0.001
+**Per user per year**: ~$0.002
 
 ## Conclusion
 
