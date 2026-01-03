@@ -20,7 +20,7 @@ use super::Database;
 use sqlx::PgPool;
 use std::io::Write;
 use std::net::TcpListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
@@ -96,7 +96,7 @@ fn find_postgres_bin_dir() -> Option<PathBuf> {
 
 impl EphemeralPostgres {
     /// Get full path to a PostgreSQL binary command
-    fn pg_cmd(pg_bin_dir: &PathBuf, cmd: &str) -> PathBuf {
+    fn pg_cmd(pg_bin_dir: &Path, cmd: &str) -> PathBuf {
         if pg_bin_dir.as_os_str().is_empty() {
             // Command is in PATH
             PathBuf::from(cmd)
@@ -264,7 +264,7 @@ fn rand_u32() -> u32 {
 }
 
 /// Wait for PostgreSQL to accept connections using pg_isready (synchronous)
-fn wait_for_postgres(pg_bin_dir: &PathBuf, base_url: &str, max_attempts: u32) -> Result<(), String> {
+fn wait_for_postgres(pg_bin_dir: &Path, base_url: &str, max_attempts: u32) -> Result<(), String> {
     // Parse host and port from postgres URL: postgres://user@host:port
     let url_without_scheme = base_url
         .strip_prefix("postgres://")
@@ -274,7 +274,7 @@ fn wait_for_postgres(pg_bin_dir: &PathBuf, base_url: &str, max_attempts: u32) ->
     // Extract host:port (after @ if present)
     let host_port = url_without_scheme
         .split('@')
-        .last()
+        .next_back()
         .ok_or_else(|| "Missing host in URL".to_string())?;
 
     let (host, port) = host_port
