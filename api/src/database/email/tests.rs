@@ -580,7 +580,7 @@ async fn test_queue_email_with_account() {
             "Subject",
             "Body",
             false,
-            EmailType::MessageNotification,
+            EmailType::General,
             Some(&account_id),
         )
         .await
@@ -590,7 +590,7 @@ async fn test_queue_email_with_account() {
     assert_eq!(emails.len(), 1);
     assert_eq!(emails[0].id, id);
     assert_eq!(emails[0].related_account_id, Some(account_id));
-    assert_eq!(emails[0].email_type, "message_notification");
+    assert_eq!(emails[0].email_type, "general");
 }
 
 #[tokio::test]
@@ -606,7 +606,7 @@ async fn test_get_emails_needing_retry_notification() {
             "Subject",
             "Body",
             false,
-            EmailType::MessageNotification,
+            EmailType::General,
             Some(&account_id),
         )
         .await
@@ -637,7 +637,7 @@ async fn test_mark_retry_notified() {
             "Subject",
             "Body",
             false,
-            EmailType::MessageNotification,
+            EmailType::General,
             Some(&account_id),
         )
         .await
@@ -669,7 +669,7 @@ async fn test_get_emails_needing_gave_up_notification() {
             "Subject",
             "Body",
             false,
-            EmailType::MessageNotification,
+            EmailType::General,
             Some(&account_id),
         )
         .await
@@ -706,7 +706,7 @@ async fn test_mark_gave_up_notified() {
             "Subject",
             "Body",
             false,
-            EmailType::MessageNotification,
+            EmailType::General,
             Some(&account_id),
         )
         .await

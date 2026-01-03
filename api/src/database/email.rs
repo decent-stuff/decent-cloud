@@ -29,8 +29,6 @@ pub enum EmailType {
     Welcome,
     /// General notifications
     General,
-    /// Message notifications - deprecated, kept for backward compatibility with existing DB records
-    MessageNotification,
 }
 
 impl EmailType {
@@ -39,7 +37,6 @@ impl EmailType {
             EmailType::Recovery => "recovery",
             EmailType::Welcome => "welcome",
             EmailType::General => "general",
-            EmailType::MessageNotification => "message_notification",
         }
     }
 }

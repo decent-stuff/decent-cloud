@@ -132,24 +132,6 @@ pub struct Contract {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct ContractReply {
-    pub contract_id: Vec<u8>,
-    pub provider_pubkey: Vec<u8>,
-    pub reply_status: String,
-    pub reply_memo: Option<String>,
-    pub instance_details: Option<String>,
-    pub created_at_ns: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct PaymentEntry {
-    pub pricing_model: String,
-    pub time_period_unit: String,
-    pub quantity: i64,
-    pub amount_e9s: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct PaymentRelease {
     pub id: i64,
     pub contract_id: Vec<u8>,
@@ -377,32 +359,6 @@ impl Database {
         .await?;
 
         Ok(contract)
-    }
-
-    /// Get contract reply
-    pub async fn get_contract_reply(&self, contract_id: &[u8]) -> Result<Option<ContractReply>> {
-        let reply = sqlx::query_as!(
-            ContractReply,
-            "SELECT contract_id, provider_pubkey, reply_status, reply_memo, instance_details, created_at_ns FROM contract_sign_replies WHERE contract_id = $1",
-            contract_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(reply)
-    }
-
-    /// Get contract payment entries
-    pub async fn get_contract_payments(&self, contract_id: &[u8]) -> Result<Vec<PaymentEntry>> {
-        let payments = sqlx::query_as!(
-            PaymentEntry,
-            "SELECT pricing_model, time_period_unit, quantity, amount_e9s FROM contract_payment_entries WHERE contract_id = $1",
-            contract_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(payments)
     }
 
     /// Get all contracts with pagination
@@ -1566,8 +1522,6 @@ impl Database {
             .into_iter()
             .map(|r| PendingStripeReceipt {
                 contract_id: r.contract_id,
-                created_at_ns: r.created_at_ns,
-                next_attempt_at_ns: r.next_attempt_at_ns,
                 attempts: r.attempts,
             })
             .collect())
@@ -1904,77 +1858,7 @@ impl Database {
         Ok(contracts)
     }
 
-    // === Subscription Management ===
-
-    /// Get contract by Stripe subscription ID
-    pub async fn get_contract_by_subscription_id(
-        &self,
-        subscription_id: &str,
-    ) -> Result<Option<Contract>> {
-        let contract = sqlx::query_as!(
-            Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE stripe_subscription_id = $1"#,
-            subscription_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(contract)
-    }
-
-    /// Update subscription status from Stripe webhooks
-    pub async fn update_contract_subscription(
-        &self,
-        stripe_subscription_id: &str,
-        status: &str,
-        current_period_end_ns: i64,
-        cancel_at_period_end: bool,
-    ) -> Result<()> {
-        sqlx::query!(
-            "UPDATE contract_sign_requests SET subscription_status = $1, current_period_end_ns = $2, cancel_at_period_end = $3 WHERE stripe_subscription_id = $4",
-            status,
-            current_period_end_ns,
-            cancel_at_period_end,
-            stripe_subscription_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
     // === Contract Usage Tracking ===
-
-    /// Create a new billing period for a contract
-    pub async fn create_contract_usage(
-        &self,
-        contract_id: &[u8],
-        billing_period_start: i64,
-        billing_period_end: i64,
-        units_included: Option<f64>,
-    ) -> Result<i64> {
-        let result = sqlx::query!(
-            r#"INSERT INTO contract_usage (contract_id, billing_period_start, billing_period_end, units_included)
-               VALUES ($1, $2, $3, $4)
-               RETURNING id as "id!: i64""#,
-            contract_id,
-            billing_period_start,
-            billing_period_end,
-            units_included
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(result.id)
-    }
 
     /// Record a usage event for a contract
     pub async fn record_usage_event(
@@ -2199,8 +2083,6 @@ pub struct ContractUsage {
 #[derive(Debug)]
 pub struct PendingStripeReceipt {
     pub contract_id: Vec<u8>,
-    pub created_at_ns: i64,
-    pub next_attempt_at_ns: i64,
     pub attempts: i64,
 }
 

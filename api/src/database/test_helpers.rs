@@ -129,17 +129,8 @@ full_page_writes = off
         let url = format!("postgres://{}@127.0.0.1:{}", whoami(), port);
         wait_for_postgres(&url, 50)?;
 
-        // Create the 'postgres' database for admin connections
-        let create_status = Command::new("createdb")
-            .args(["-h", "127.0.0.1", "-p", &port.to_string(), "postgres"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map_err(|e| format!("createdb failed: {}", e))?;
-
-        if !create_status.success() {
-            return Err("Failed to create postgres database".to_string());
-        }
+        // Note: The 'postgres' database is automatically created by initdb,
+        // so no need to create it explicitly.
 
         Ok(Self {
             url,
@@ -175,11 +166,17 @@ fn find_free_port() -> Result<u16, String> {
     Ok(port)
 }
 
-/// Get current username
+/// Get current username using the `whoami` command for reliability
 fn whoami() -> String {
-    std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "postgres".to_string())
+    Command::new("whoami")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("USER").ok())
+        .or_else(|| std::env::var("USERNAME").ok())
+        .unwrap_or_else(|| "postgres".to_string())
 }
 
 /// Generate a random u32 for unique naming
@@ -189,22 +186,34 @@ fn rand_u32() -> u32 {
     RandomState::new().build_hasher().finish() as u32
 }
 
-/// Wait for PostgreSQL to accept connections
+/// Wait for PostgreSQL to accept connections using pg_isready (synchronous)
 fn wait_for_postgres(base_url: &str, max_attempts: u32) -> Result<(), String> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| format!("Failed to create runtime: {}", e))?;
+    // Parse host and port from postgres URL: postgres://user@host:port
+    let url_without_scheme = base_url
+        .strip_prefix("postgres://")
+        .or_else(|| base_url.strip_prefix("postgresql://"))
+        .ok_or_else(|| format!("Invalid PostgreSQL URL: {}", base_url))?;
 
-    let url = format!("{}/postgres", base_url);
+    // Extract host:port (after @ if present)
+    let host_port = url_without_scheme
+        .split('@')
+        .last()
+        .ok_or_else(|| "Missing host in URL".to_string())?;
+
+    let (host, port) = host_port
+        .split_once(':')
+        .ok_or_else(|| "Missing port in URL".to_string())?;
 
     for attempt in 0..max_attempts {
-        match rt.block_on(async { PgPool::connect(&url).await }) {
-            Ok(pool) => {
-                rt.block_on(pool.close());
-                return Ok(());
-            }
-            Err(_) => {
+        let status = Command::new("pg_isready")
+            .args(["-h", host, "-p", port])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+
+        match status {
+            Ok(exit_status) if exit_status.success() => return Ok(()),
+            _ => {
                 if attempt < max_attempts - 1 {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }

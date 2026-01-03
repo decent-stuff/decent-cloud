@@ -505,33 +505,6 @@ impl Database {
         Ok(result.rows_affected())
     }
 
-    // ==================== Pool Matching ====================
-
-    /// Find pool matching a location for a provider.
-    /// Returns the first matching pool for the given provider and location.
-    pub async fn find_pool_by_location(
-        &self,
-        provider_pubkey: &[u8],
-        location: &str,
-    ) -> Result<Option<AgentPool>> {
-        let row = sqlx::query_as::<_, PoolRow>(
-            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns FROM agent_pools WHERE provider_pubkey = $1 AND location = $2 ORDER BY created_at_ns ASC LIMIT 1",
-        )
-        .bind(provider_pubkey)
-        .bind(location)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(row.map(|r| AgentPool {
-            pool_id: r.pool_id,
-            provider_pubkey: hex::encode(&r.provider_pubkey),
-            name: r.name,
-            location: r.location,
-            provisioner_type: r.provisioner_type,
-            created_at_ns: r.created_at_ns,
-        }))
-    }
-
     /// Get agent's pool ID from their delegation.
     pub async fn get_agent_pool_id(&self, agent_pubkey: &[u8]) -> Result<Option<String>> {
         let pool_id: Option<String> = sqlx::query_scalar(

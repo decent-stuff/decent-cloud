@@ -1400,7 +1400,7 @@ async fn test_search_offerings_dsl_combined_filters() {
     let pubkey1 = vec![1u8; 32];
     ensure_provider_with_pool(&db, &pubkey1, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US Compute', 'USD', 80.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US Compute', 'USD', 80.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
     )
     .bind(101i64)
     .bind(&pubkey1)
@@ -1412,7 +1412,7 @@ async fn test_search_offerings_dsl_combined_filters() {
     let pubkey2 = vec![2u8; 32];
     ensure_provider_with_pool(&db, &pubkey2, "DE").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'DE Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'DE Compute', 'USD', 120.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, 0)",
     )
     .bind(102i64)
     .bind(&pubkey2)
@@ -1424,7 +1424,7 @@ async fn test_search_offerings_dsl_combined_filters() {
     let pubkey3 = vec![3u8; 32];
     ensure_provider_with_pool(&db, &pubkey3, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US VPS', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', 0, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US VPS', 'USD', 50.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
     )
     .bind(103i64)
     .bind(&pubkey3)
@@ -1453,7 +1453,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
     let pubkey1 = vec![1u8; 32];
     ensure_provider_with_pool(&db, &pubkey1, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '4 Core Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 4, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '4 Core Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 4, 0)",
     )
     .bind(101i64)
     .bind(&pubkey1)
@@ -1465,7 +1465,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
     let pubkey2 = vec![2u8; 32];
     ensure_provider_with_pool(&db, &pubkey2, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '8 Core Server', 'USD', 150.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 8, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '8 Core Server', 'USD', 150.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 8, 0)",
     )
     .bind(102i64)
     .bind(&pubkey2)
@@ -1477,7 +1477,7 @@ async fn test_search_offerings_dsl_comparison_operators() {
     let pubkey3 = vec![3u8; 32];
     ensure_provider_with_pool(&db, &pubkey3, "US").await;
     sqlx::query(
-        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '16 Core Server', 'USD', 200.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', 0, 16, 0)",
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, processor_cores, created_at_ns) VALUES ($1, $2, $3, '16 Core Server', 'USD', 200.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 16, 0)",
     )
     .bind(103i64)
     .bind(&pubkey3)

@@ -744,22 +744,6 @@ impl Database {
         Ok(account)
     }
 
-    /// Get account by Chatwoot user ID
-    pub async fn get_account_by_chatwoot_user_id(
-        &self,
-        chatwoot_user_id: i64,
-    ) -> Result<Option<Account>> {
-        let account = sqlx::query_as::<_, Account>(
-            "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code
-             FROM accounts WHERE chatwoot_user_id = $1",
-        )
-        .bind(chatwoot_user_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(account)
-    }
-
     /// Update last login timestamp for account by public key
     /// Returns true if an account was updated, false if no account found for this pubkey
     pub async fn update_last_login_by_public_key(&self, public_key: &[u8]) -> Result<bool> {

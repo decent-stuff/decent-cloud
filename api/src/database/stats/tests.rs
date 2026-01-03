@@ -131,39 +131,6 @@ async fn test_get_reputation_with_changes() {
 }
 
 #[tokio::test]
-async fn test_get_top_providers_by_reputation() {
-    let db = setup_test_db().await;
-    let pk1 = vec![1u8; 32];
-    let pk2 = vec![2u8; 32];
-
-    {
-        let pk1_ref: &[u8] = &pk1;
-        sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 100, 'good', 0)",
-            pk1_ref
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-    }
-    {
-        let pk2_ref: &[u8] = &pk2;
-        sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 50, 'ok', 0)",
-            pk2_ref
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-    }
-
-    let top = db.get_top_providers_by_reputation(1).await.unwrap();
-    assert_eq!(top.len(), 1);
-    assert_eq!(top[0].pubkey, pk1);
-    assert_eq!(top[0].total_reputation, 100);
-}
-
-#[tokio::test]
 async fn test_get_provider_stats_empty() {
     let db = setup_test_db().await;
     let stats = db.get_provider_stats(&[1u8; 32]).await.unwrap();

@@ -374,28 +374,6 @@ impl Database {
         Ok(result)
     }
 
-    /// Resolve which pool an offering maps to.
-    /// Returns the pool if found, None otherwise.
-    async fn resolve_pool_for_offering(
-        &self,
-        provider_pubkey: &[u8],
-        offering: &Offering,
-    ) -> Result<Option<super::agent_pools::AgentPool>> {
-        // If offering has explicit agent_pool_id, use that
-        if let Some(pool_id) = &offering.agent_pool_id {
-            if !pool_id.is_empty() {
-                return self.get_agent_pool(pool_id).await;
-            }
-        }
-
-        // Otherwise, try to match by location
-        if let Some(region) = country_to_region(&offering.datacenter_country) {
-            return self.find_pool_by_location(provider_pubkey, region).await;
-        }
-
-        Ok(None)
-    }
-
     /// Get single offering by id
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
@@ -1152,15 +1130,6 @@ impl Database {
 
         let result = update_builder.execute(&self.pool).await?;
         Ok(result.rows_affected())
-    }
-
-    // Helper function to convert Vec<String> to Option<String> (comma-separated)
-    fn vec_to_csv(vec: &[String]) -> Option<String> {
-        if vec.is_empty() {
-            None
-        } else {
-            Some(vec.join(","))
-        }
     }
 
     /// Import offerings from CSV data

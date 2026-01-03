@@ -113,23 +113,6 @@ impl Database {
         Ok(info)
     }
 
-    /// Get top providers by reputation
-    pub async fn get_top_providers_by_reputation(&self, limit: i64) -> Result<Vec<ReputationInfo>> {
-        let top = sqlx::query_as!(
-            ReputationInfo,
-            r#"SELECT pubkey, COALESCE(SUM(change_amount), 0)::BIGINT as "total_reputation!: i64", COUNT(*)::BIGINT as "change_count!: i64"
-             FROM reputation_changes
-             GROUP BY pubkey
-             ORDER BY SUM(change_amount) DESC NULLS LAST
-             LIMIT $1"#,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(top)
-    }
-
     /// Get contract stats for a provider
     pub async fn get_provider_stats(&self, pubkey: &[u8]) -> Result<ProviderStats> {
         let total_contracts: i64 = sqlx::query_scalar!(

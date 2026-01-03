@@ -48,18 +48,6 @@ impl Database {
 
         Ok(result)
     }
-
-    /// Clean up old tracking entries (older than specified days).
-    pub async fn cleanup_telegram_tracking(&self, days_old: i64) -> Result<u64> {
-        let cutoff = chrono::Utc::now().timestamp() - (days_old * 24 * 60 * 60);
-
-        let result = sqlx::query(r#"DELETE FROM telegram_message_tracking WHERE created_at < $1"#)
-            .bind(cutoff)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(result.rows_affected())
-    }
 }
 
 #[cfg(test)]
@@ -101,24 +89,5 @@ mod tests {
             db.lookup_telegram_conversation(111).await.unwrap(),
             Some(300)
         );
-    }
-
-    #[tokio::test]
-    async fn test_cleanup_telegram_tracking() {
-        let db = setup_test_db().await;
-
-        // Insert some entries
-        db.track_telegram_message(1, 100, "chat1").await.unwrap();
-        db.track_telegram_message(2, 200, "chat2").await.unwrap();
-
-        // Cleanup with 0 days should remove all (since they were just created)
-        // But actually, 0 days means "created before now", which is impossible for fresh entries
-        // Let's clean up entries older than 1 day (none should be deleted)
-        let deleted = db.cleanup_telegram_tracking(1).await.unwrap();
-        assert_eq!(deleted, 0);
-
-        // Both entries should still exist
-        assert!(db.lookup_telegram_conversation(1).await.unwrap().is_some());
-        assert!(db.lookup_telegram_conversation(2).await.unwrap().is_some());
     }
 }

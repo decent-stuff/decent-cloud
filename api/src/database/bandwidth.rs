@@ -64,38 +64,6 @@ impl Database {
         Ok(())
     }
 
-    /// Get latest bandwidth stats for a contract
-    pub async fn get_contract_bandwidth(
-        &self,
-        contract_id: &str,
-    ) -> Result<Option<BandwidthStats>> {
-        let record = sqlx::query!(
-            r#"SELECT
-                id as "id!: i64",
-                contract_id as "contract_id!: String",
-                gateway_slug as "gateway_slug!: String",
-                provider_pubkey as "provider_pubkey!: String",
-                bytes_in as "bytes_in!: i64",
-                bytes_out as "bytes_out!: i64",
-                recorded_at_ns as "recorded_at_ns!: i64"
-               FROM bandwidth_history
-               WHERE contract_id = $1
-               ORDER BY recorded_at_ns DESC
-               LIMIT 1"#,
-            contract_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(record.map(|r| BandwidthStats {
-            contract_id: r.contract_id,
-            gateway_slug: r.gateway_slug,
-            bytes_in: r.bytes_in as u64,
-            bytes_out: r.bytes_out as u64,
-            last_updated_ns: r.recorded_at_ns,
-        }))
-    }
-
     /// Get bandwidth stats for all contracts of a provider
     pub async fn get_provider_bandwidth_stats(
         &self,
@@ -180,51 +148,6 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use crate::database::test_helpers::setup_test_db;
-
-    #[tokio::test]
-    async fn test_record_and_get_bandwidth() {
-        let db = setup_test_db().await;
-
-        // Record some bandwidth
-        db.record_bandwidth("contract-1", "abc123", "provider-pub", 1000, 2000)
-            .await
-            .unwrap();
-
-        // Get it back
-        let stats = db.get_contract_bandwidth("contract-1").await.unwrap();
-        assert!(stats.is_some());
-        let stats = stats.unwrap();
-        assert_eq!(stats.contract_id, "contract-1");
-        assert_eq!(stats.gateway_slug, "abc123");
-        assert_eq!(stats.bytes_in, 1000);
-        assert_eq!(stats.bytes_out, 2000);
-    }
-
-    #[tokio::test]
-    async fn test_get_latest_bandwidth() {
-        let db = setup_test_db().await;
-
-        // Record multiple entries
-        db.record_bandwidth("contract-1", "abc123", "provider-pub", 1000, 2000)
-            .await
-            .unwrap();
-
-        // Small delay to ensure different timestamps
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-
-        db.record_bandwidth("contract-1", "abc123", "provider-pub", 5000, 10000)
-            .await
-            .unwrap();
-
-        // Should get the latest
-        let stats = db
-            .get_contract_bandwidth("contract-1")
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(stats.bytes_in, 5000);
-        assert_eq!(stats.bytes_out, 10000);
-    }
 
     #[tokio::test]
     async fn test_get_provider_bandwidth_stats() {

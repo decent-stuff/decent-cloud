@@ -44,35 +44,6 @@ impl Database {
         Ok(token)
     }
 
-    /// Verify a recovery token and return the account ID if valid
-    /// Returns error if token is invalid, expired, or already used
-    pub async fn verify_recovery_token(&self, token: &[u8]) -> Result<Vec<u8>> {
-        let now = chrono::Utc::now().timestamp();
-
-        let result = sqlx::query!(
-            r#"SELECT account_id, expires_at, used_at
-               FROM recovery_tokens
-               WHERE token = $1"#,
-            token
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        let Some(row) = result else {
-            bail!("Invalid recovery token");
-        };
-
-        if row.used_at.is_some() {
-            bail!("Recovery token has already been used");
-        }
-
-        if now > row.expires_at {
-            bail!("Recovery token has expired");
-        }
-
-        Ok(row.account_id)
-    }
-
     /// Consume a recovery token and add a new public key to the account
     /// This completes the recovery flow
     pub async fn complete_recovery(&self, token: &[u8], new_public_key: &[u8]) -> Result<()> {
@@ -129,17 +100,6 @@ impl Database {
         tx.commit().await?;
 
         Ok(())
-    }
-
-    /// Clean up expired recovery tokens (should be called periodically)
-    pub async fn cleanup_expired_recovery_tokens(&self) -> Result<u64> {
-        let now = chrono::Utc::now().timestamp();
-
-        let result = sqlx::query!("DELETE FROM recovery_tokens WHERE expires_at < $1", now)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(result.rows_affected())
     }
 }
 
