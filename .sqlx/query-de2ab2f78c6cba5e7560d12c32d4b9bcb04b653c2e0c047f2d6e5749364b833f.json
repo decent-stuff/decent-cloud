@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                CASE\n                    WHEN AVG(duration_hours) > 0 THEN\n                        AVG(CAST(\n                            CASE\n                                WHEN status = 'completed' AND end_timestamp_ns IS NOT NULL AND start_timestamp_ns IS NOT NULL THEN\n                                    (end_timestamp_ns - start_timestamp_ns) / 3600000000000.0\n                                WHEN status = 'cancelled' AND status_updated_at_ns IS NOT NULL AND start_timestamp_ns IS NOT NULL THEN\n                                    (status_updated_at_ns - start_timestamp_ns) / 3600000000000.0\n                                ELSE NULL\n                            END AS DOUBLE PRECISION\n                        )) / AVG(duration_hours)\n                    ELSE NULL\n                END as \"ratio: f64\"\n            FROM contract_sign_requests\n            WHERE provider_pubkey = $1\n            AND status IN ('completed', 'cancelled')\n            AND duration_hours IS NOT NULL\n            AND duration_hours > 0",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ratio: f64",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "de2ab2f78c6cba5e7560d12c32d4b9bcb04b653c2e0c047f2d6e5749364b833f"
+}

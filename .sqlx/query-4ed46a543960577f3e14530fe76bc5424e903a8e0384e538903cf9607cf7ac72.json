@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n                ep.pubkey,\n                ep.name,\n                ep.domain,\n                ep.website_url,\n                ep.logo_url,\n                ep.data_source,\n                ep.created_at_ns,\n                CAST(COUNT(po.id) AS INTEGER) as \"offerings_count!: i64\"\n            FROM external_providers ep\n            LEFT JOIN provider_offerings po ON ep.pubkey = po.pubkey AND po.offering_source = 'seeded'\n            GROUP BY ep.pubkey, ep.name, ep.domain, ep.website_url, ep.logo_url, ep.data_source, ep.created_at_ns\n            ORDER BY ep.name",
+  "query": "SELECT\n                ep.pubkey,\n                ep.name,\n                ep.domain,\n                ep.website_url,\n                ep.logo_url,\n                ep.data_source,\n                ep.created_at_ns,\n                CAST(COUNT(po.id) AS BIGINT) as \"offerings_count!: i64\"\n            FROM external_providers ep\n            LEFT JOIN provider_offerings po ON ep.pubkey = po.pubkey AND po.offering_source = 'seeded'\n            GROUP BY ep.pubkey, ep.name, ep.domain, ep.website_url, ep.logo_url, ep.data_source, ep.created_at_ns\n            ORDER BY ep.name",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,7 @@
       {
         "ordinal": 7,
         "name": "offerings_count!: i64",
-        "type_info": "Int4"
+        "type_info": "Int8"
       }
     ],
     "parameters": {
@@ -58,5 +58,5 @@
       null
     ]
   },
-  "hash": "9ea32b9c8211e0e00324b33fa637be313290099bef02a219ea7651ad59e071ce"
+  "hash": "4ed46a543960577f3e14530fe76bc5424e903a8e0384e538903cf9607cf7ac72"
 }

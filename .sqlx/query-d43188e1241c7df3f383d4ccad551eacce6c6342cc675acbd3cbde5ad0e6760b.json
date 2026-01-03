@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT AVG(CAST(h.changed_at_ns - c.created_at_ns AS DOUBLE PRECISION)) as \"avg: f64\"\n               FROM contract_sign_requests c\n               INNER JOIN contract_status_history h ON c.contract_id = h.contract_id\n               WHERE c.provider_pubkey = $1\n               AND h.old_status = 'requested'\n               AND h.changed_at_ns IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "avg: f64",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d43188e1241c7df3f383d4ccad551eacce6c6342cc675acbd3cbde5ad0e6760b"
+}
