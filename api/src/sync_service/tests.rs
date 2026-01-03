@@ -214,7 +214,7 @@ async fn test_structured_provider_registration() {
 
     // Verify to entry was inserted into the structured table
     let row = sqlx::query("SELECT * FROM provider_registrations WHERE pubkey = $1")
-        .bind(&[1, 2, 3, 4][..])
+        .bind(vec![1u8, 2, 3, 4])
         .fetch_one(database.pool())
         .await
         .unwrap();
@@ -247,7 +247,7 @@ async fn test_structured_provider_check_in() {
 
     // Verify to entry was inserted into the structured table
     let row = sqlx::query("SELECT * FROM provider_check_ins WHERE pubkey = $1")
-        .bind(&[1, 2, 3, 4][..])
+        .bind(vec![1u8, 2, 3, 4])
         .fetch_one(database.pool())
         .await
         .unwrap();
