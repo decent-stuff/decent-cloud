@@ -34,4 +34,7 @@ pub use types::{Database, LedgerEntryData};
 pub mod test_helpers;
 
 #[cfg(test)]
+mod migration_tests;
+
+#[cfg(test)]
 mod tests;
