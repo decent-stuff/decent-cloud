@@ -2605,7 +2605,7 @@ async fn test_update_contract_subscription_cancel_at_period_end() {
         .await
         .unwrap();
 
-    // Verify boolean is correctly stored as 1 in SQLite
+    // Verify boolean is correctly stored as TRUE in PostgreSQL
     let contract = db
         .get_contract_by_subscription_id(subscription_id)
         .await

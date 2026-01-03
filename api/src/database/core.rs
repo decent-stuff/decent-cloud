@@ -3,6 +3,13 @@ use anyhow::Result;
 use sqlx::PgPool;
 
 impl Database {
+    /// Create a new Database connection and run migrations
+    ///
+    /// The `sqlx::migrate!()` macro uses a relative path "./migrations_pg" which is
+    /// resolved relative to the crate root (CARGO_MANIFEST_DIR = api/ directory).
+    /// This works correctly in both api-server runtime and cargo build/test contexts.
+    ///
+    /// Migrations are tracked in the __sqlx_migrations table to ensure each runs only once.
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = PgPool::connect(database_url).await?;
         sqlx::migrate!("./migrations_pg").run(&pool).await?;

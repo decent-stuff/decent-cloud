@@ -226,7 +226,7 @@ Decent Cloud
 
 /// Get next receipt number atomically
 async fn get_next_receipt_number(db: &Database) -> Result<i64> {
-    // Use SQLite's UPDATE RETURNING to atomically get and increment
+    // Use PostgreSQL's UPDATE RETURNING to atomically get and increment
     let row = sqlx::query!(
         "UPDATE receipt_sequence SET next_number = next_number + 1 WHERE id = 1 RETURNING next_number - 1 as receipt_number"
     )

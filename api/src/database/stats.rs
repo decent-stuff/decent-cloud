@@ -287,7 +287,7 @@ impl Database {
         .await?;
 
         // Time to delivery (median time from created to provisioned)
-        // Using average as SQLite doesn't have native MEDIAN
+        // Using average as PostgreSQL's MEDIAN requires window function
         let avg_delivery_time_ns: Option<f64> = sqlx::query_scalar!(
             r#"SELECT AVG(CAST(provisioning_completed_at_ns - created_at_ns AS REAL)) as "avg: f64"
                FROM contract_sign_requests

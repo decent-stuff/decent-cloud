@@ -1,4 +1,3 @@
-use super::*;
 use crate::database::test_helpers::setup_test_db;
 
 #[tokio::test]
@@ -1410,7 +1409,7 @@ async fn test_get_latest_verification_token_time() {
         .expect("Failed to create email verification token");
     assert!(time1.is_some());
 
-    // Wait enough time to ensure different timestamps (SQLite precision is seconds)
+    // Wait enough time to ensure different timestamps (PostgreSQL precision is microseconds)
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     db.create_email_verification_token(&account.id, "token@example.com")
         .await

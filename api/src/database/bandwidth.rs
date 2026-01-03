@@ -44,7 +44,7 @@ impl Database {
             .unwrap()
             .as_nanos() as i64;
 
-        // SQLite stores as i64
+        // PostgreSQL stores as BIGINT (i64 in Rust)
         let bytes_in_i64 = bytes_in as i64;
         let bytes_out_i64 = bytes_out as i64;
 
