@@ -4,9 +4,9 @@ use sqlx::Row;
 /// Test database setup - manual table creation for test isolation
 ///
 /// NOTE: We manually create tables instead of using migrations because:
-/// 1. sqlx migrations don't work well with in-memory SQLite databases
-/// 2. File-based migrations cause test isolation issues and cleanup complexity
-/// 3. Manual creation gives us precise control over test schema
+/// 1. Migrations add complexity to test setup/teardown
+/// 2. Manual creation gives us precise control over test schema
+/// 3. Each test gets a fresh, isolated schema
 /// 4. The manual schema matches migration 001_original_schema.sql
 ///
 /// Test data factory for creating consistent test entries

@@ -100,8 +100,8 @@ struct AppContext {
 async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     // Database setup
     // Note: DATABASE_URL should be set via environment variable or .env file
-    let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://test:test@localhost:5432/test".to_string());
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://test:test@localhost:5432/test".to_string());
     let database = match Database::new(&database_url).await {
         Ok(db) => {
             tracing::info!("Database initialized at {}", database_url);
@@ -322,7 +322,9 @@ async fn doctor_command() -> Result<(), std::io::Error> {
             println!("  [ERROR] DATABASE_URL - NOT SET (required)");
             errors += 1;
             println!("\n  Set DATABASE_URL in your .env file or environment:");
-            println!("    - Local dev (with docker compose): postgres://test:test@localhost:5432/test");
+            println!(
+                "    - Local dev (with docker compose): postgres://test:test@localhost:5432/test"
+            );
             println!("    - Production: postgres://user:password@host:5432/database");
             println!("\n  To start PostgreSQL locally:");
             println!("    docker compose up -d postgres");
@@ -368,7 +370,9 @@ async fn doctor_command() -> Result<(), std::io::Error> {
             println!("\n  To apply migrations:");
             println!("    - The API server auto-runs migrations on startup");
             println!("    - Or run manually: sqlx migrate run --source-url migrations_pg");
-            println!("\n  Ensure the migrations_pg/001_schema.sql file exists in the api/ directory.");
+            println!(
+                "\n  Ensure the migrations_pg/001_schema.sql file exists in the api/ directory."
+            );
         }
         Err(e) => {
             println!("[ERROR] failed to check schema");

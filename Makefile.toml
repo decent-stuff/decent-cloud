@@ -59,7 +59,7 @@ args = ["build", "--all"]
 cwd = "./ic-canister/"
 
 [tasks.clippy]
-dependencies = ["sqlx-prepare", "dfx-start"]
+dependencies = ["postgres-start", "sqlx-prepare", "dfx-start"]
 command = "cargo"
 args = ["clippy", "--tests"]
 
@@ -70,7 +70,7 @@ args = ["clippy", "--target=wasm32-unknown-unknown"]
 cwd = "./ic-canister/"
 
 [tasks.build]
-dependencies = ["sqlx-prepare", "dfx-start"]
+dependencies = ["postgres-start", "sqlx-prepare", "dfx-start"]
 command = "cargo"
 args = ["build"]
 
@@ -106,7 +106,7 @@ python3 ./docs/whitepaper/build.py
 
 
 [tasks.test]
-dependencies = ["sqlx-prepare", "dfx-start", "build", "canister"]
+dependencies = ["postgres-start", "sqlx-prepare", "dfx-start", "build", "canister"]
 command = "cargo"
 args = ["nextest", "run"]
 
@@ -128,16 +128,96 @@ docker compose down
 '''
 
 [tasks.sqlx-prepare]
+dependencies = ["postgres-start"]
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+# Unset SQLX_OFFLINE to enable live database connection
 unset SQLX_OFFLINE
-TMPDB=$(mktemp --suffix=.db)
-trap "rm -f $TMPDB" EXIT
-DATABASE_URL="sqlite:$TMPDB?mode=rwc" sqlx database create
-DATABASE_URL="sqlite:$TMPDB" sqlx migrate run --source api/migrations
-DATABASE_URL="sqlite:$TMPDB" cargo sqlx prepare --workspace -- --tests
+
+# PostgreSQL connection details from docker-compose
+PG_USER="test"
+PG_PASSWORD="test"
+PG_HOST="localhost"
+PG_PORT="5432"
+PG_DB="test"
+CONTAINER_NAME="decent-cloud-postgres-1"
+
+# Helper function to run psql commands in the container
+psql_exec() {
+    docker exec "${CONTAINER_NAME}" psql -U "${PG_USER}" -d "${PG_DB}" "$@"
+}
+
+# Generate unique temporary database name
+TMP_DB_NAME="sqlx_prepare_$(date +%s)_$$"
+
+# Cleanup function
+cleanup() {
+    local exit_code=$?
+    echo "Cleaning up temporary database..."
+    if psql_exec -c "DROP DATABASE IF EXISTS ${TMP_DB_NAME};" 2>/dev/null; then
+        echo "✓ Dropped temporary database ${TMP_DB_NAME}"
+    else
+        echo "✗ Failed to drop temporary database ${TMP_DB_NAME}"
+    fi
+    exit ${exit_code}
+}
+trap cleanup EXIT INT TERM
+
+# Wait for PostgreSQL container to be ready
+echo "Checking PostgreSQL connection..."
+MAX_RETRIES=10
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if docker exec "${CONTAINER_NAME}" pg_isready -U "${PG_USER}" -d "${PG_DB}" >/dev/null 2>&1; then
+        # Verify we can actually connect
+        if psql_exec -c "SELECT 1;" >/dev/null 2>&1; then
+            echo "✓ PostgreSQL is ready"
+            break
+        fi
+    fi
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+        echo "Waiting for PostgreSQL... ($RETRY_COUNT/$MAX_RETRIES)"
+        sleep 1
+    fi
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    echo "✗ PostgreSQL is not ready after $MAX_RETRIES attempts"
+    echo "Check: docker ps | grep postgres"
+    exit 1
+fi
+
+# Create temporary database
+echo "Creating temporary database: ${TMP_DB_NAME}"
+if ! psql_exec -c "CREATE DATABASE ${TMP_DB_NAME};" >/dev/null 2>&1; then
+    echo "✗ Failed to create temporary database ${TMP_DB_NAME}"
+    echo "Check PostgreSQL permissions and connection"
+    exit 1
+fi
+echo "✓ Created temporary database ${TMP_DB_NAME}"
+
+# Update DATABASE_URL to use temporary database
+DATABASE_URL="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${TMP_DB_NAME}"
+export DATABASE_URL
+
+# Run migrations
+echo "Running migrations from api/migrations_pg..."
+if ! sqlx migrate run --source api/migrations_pg; then
+    echo "✗ Migration failed"
+    exit 1
+fi
+echo "✓ Migrations completed"
+
+# Prepare sqlx data
+echo "Preparing sqlx data..."
+if ! cargo sqlx prepare --workspace -- --tests; then
+    echo "✗ sqlx prepare failed"
+    exit 1
+fi
+echo "✓ sqlx prepare completed"
 '''
 
 [tasks.website-check]

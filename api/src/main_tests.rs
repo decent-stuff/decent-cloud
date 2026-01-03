@@ -31,14 +31,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_schema_applied_with_invalid_url() {
-        let result: Result<bool, sqlx::Error> = check_schema_applied("postgres://invalid:invalid@invalid:99999/invalid").await;
-        assert!(result.is_err(), "Should return error for invalid database URL");
+        let result: Result<bool, sqlx::Error> =
+            check_schema_applied("postgres://invalid:invalid@invalid:99999/invalid").await;
+        assert!(
+            result.is_err(),
+            "Should return error for invalid database URL"
+        );
     }
 
     #[tokio::test]
     async fn test_check_schema_applied_with_empty_url() {
         let result: Result<bool, sqlx::Error> = check_schema_applied("").await;
-        assert!(result.is_err(), "Should return error for empty database URL");
+        assert!(
+            result.is_err(),
+            "Should return error for empty database URL"
+        );
     }
 
     #[test]

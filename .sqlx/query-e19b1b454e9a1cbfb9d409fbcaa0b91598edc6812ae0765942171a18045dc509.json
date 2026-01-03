@@ -191,7 +191,7 @@
       {
         "ordinal": 37,
         "name": "reverse_charge",
-        "type_info": "Int8"
+        "type_info": "Bool"
       },
       {
         "ordinal": 38,

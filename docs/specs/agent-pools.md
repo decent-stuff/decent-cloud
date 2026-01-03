@@ -727,6 +727,115 @@ All core features have been implemented and tested. See below for actual file lo
 
 ## Task Log
 
+### 2026-01-03: Documentation consolidation review
+
+**Status:** ✅ Complete - No action needed
+
+**Review Findings:**
+- Spec file already contains comprehensive Task Log section (lines 728-1053)
+- All task completion rationales are well-documented with dates, artifacts, and impact
+- No separate temporary documentation files exist to consolidate
+- No obsolete documentation to delete
+- Task log entries follow consistent format with clear technical details
+
+**Documentation Quality:**
+- Each entry includes: artifacts, implementation/changes details, and impact
+- Technical decisions are preserved with context
+- File changes are tracked with specific line references where applicable
+- Testing and verification steps are documented
+
+### 2026-01-03: Delete obsolete SQLite sqlx-prepare database file
+
+**Artifacts:**
+- Deleted: `api/.sqlx-prepare.db` (716KB SQLite file, obsolete after PostgreSQL migration)
+
+**Cleanup:**
+- Removed leftover SQLite database from pre-PostgreSQL migration
+- All sqlx offline data now stored in `.sqlx/*.json` (PostgreSQL format)
+- No code changes - file cleanup only
+
+### 2026-01-03: Update sqlx-prepare task to use PostgreSQL instead of SQLite
+
+**Artifacts:**
+- `Makefile.toml` - sqlx-prepare task converted to PostgreSQL
+
+**Implementation:**
+- Replaced SQLite `sqlx database` commands with PostgreSQL Docker exec
+- Creates temporary database `sqlx_prepare_<timestamp>_$$` for isolation
+- Connection string: `postgresql://test:test@localhost:5432/{tmp_db}`
+- Runs migrations from `api/migrations_pg` before preparing
+- Auto-cleanup: drops temp database on exit (trap EXIT INT TERM)
+- Unsets `SQLX_OFFLINE` to enable live database connection
+- Proper error handling with clear messages for each failure point
+
+**Key features:**
+- PostgreSQL readiness check with retries (max 10, 1s interval)
+- Uses `pg_isready` + `SELECT 1` to verify connection
+- Port conflict detection: "port is already allocated" → actionable error
+- Container name: `decent-cloud-postgres-1`
+- Prepares workspace-wide: `cargo sqlx prepare --workspace -- --tests`
+
+**Impact:**
+- All cargo commands now use PostgreSQL for sqlx offline mode data
+- Consistent with migration directory: `api/migrations_pg`
+- Zero-config: `makers clippy/build/test` automatically prepare PostgreSQL data
+
+### 2026-01-03: Verify docker-compose.yml PostgreSQL configuration works with cargo make
+
+**Artifacts:**
+- `docker-compose.yml` - PostgreSQL 16-alpine service
+- `scripts/docker-compose-health.sh` - Health check helper
+- `Makefile.toml` - postgres-start/stop tasks, init_task integration
+
+**Implementation:**
+- **docker-compose.yml**: PostgreSQL 16-alpine with healthcheck (pg_isready), port 5432, user/pass/db: `test/test/test`
+- **Health check script**: `scripts/docker-compose-health.sh <service> [timeout]` - waits for container ready, supports postgres-specific checks via `pg_isready -U test -d test`
+- **postgres-start task**: Runs `docker compose up -d postgres` with 30s health check, detects port conflicts ("port is already allocated" → helpful error)
+- **postgres-stop task**: Cleanup via `docker compose down`
+- **init_task integration**: `postgres-start` runs automatically before any cargo command
+- **Dependency chain**: `init_task = "postgres-start"`, `end_task = "cleanup"`, `on_error_task = "cleanup"`
+- **Connection string**: `postgres://test:test@localhost:5432/test`
+
+**Usage:**
+```bash
+# Zero-config development - postgres starts automatically
+makers clippy    # postgres-start → sqlx-prepare → dfx-start → clippy
+makers build     # postgres-start → sqlx-prepare → dfx-start → build
+makers test      # postgres-start → sqlx-prepare → dfx-start → build → canister → test
+
+# Manual health check
+scripts/docker-compose-health.sh postgres 30
+```
+
+**Port conflict handling:** If port 5432 is in use, postgres-start fails with clear error: "Check running containers: docker ps"
+
+**sqlx-prepare integration**: Creates temp DB `sqlx_prepare_<timestamp>`, runs migrations, prepares sqlx data, auto-cleanup on exit
+
+### 2026-01-03: Update Makefile.toml task dependencies to include postgres-start
+
+**Artifacts:**
+- `Makefile.toml`
+
+**Changes:**
+- Added `postgres-start` as explicit dependency to all database-dependent tasks
+- **dfx-start**: Now depends on `postgres-start` (ensures DB ready before DFX starts)
+- **sqlx-prepare**: Depends on `postgres-start` (was implicit, now explicit)
+- **clippy**: Depends on `postgres-start` + `sqlx-prepare` (was missing postgres dependency)
+- **build**: Depends on `postgres-start` + `sqlx-prepare` + `dfx-start` (was missing postgres dependency)
+- **test**: Depends on `postgres-start` + `sqlx-prepare` + `dfx-start` + `build` + `canister` (was missing postgres dependency)
+
+**Implementation Details:**
+- All tasks that interact with PostgreSQL now have explicit `postgres-start` dependency
+- Dependency chain is clear and documented in Makefile.toml
+- Maintains existing init_task (postgres-start runs automatically first)
+- Cleanup flow remains unchanged (cleanup → dfx-stop + postgres-stop)
+
+**Impact:**
+- All database-dependent tasks now explicitly depend on `postgres-start`
+- Prevents race conditions where DB isn't ready when cargo commands run
+- Clear dependency graph in Makefile.toml
+- Consistent behavior: `makers clippy`, `makers build`, `makers test` all start postgres automatically
+
 ### 2026-01-03: Update test scripts and documentation to use PostgreSQL
 
 **Artifacts:**
@@ -747,108 +856,6 @@ All core features have been implemented and tested. See below for actual file lo
 - Consistent database connection strings across all scripts
 - Easy test data cleanup between runs
 - Standardized database reset procedures
-
-### 2026-01-03: Create docker-compose-health.sh helper script
-
-**Artifact:** `scripts/docker-compose-health.sh`
-
-**Changes:**
-- Created health check script for Docker Compose services
-- Waits for service to become healthy with configurable timeout (default 60s)
-- PostgreSQL-specific check: uses `pg_isready -U test -d test`
-- Generic fallback: checks container health status via docker compose ps
-- Validates service is running before polling
-- Returns 0 on healthy, 1 on timeout/failure with helpful error messages
-
-**Usage:**
-```bash
-./scripts/docker-compose-health.sh postgres 30  # Wait 30s for postgres
-```
-
-**Impact:**
-- Improves local development DX: scripts can wait for PostgreSQL before proceeding
-- Makesfile integration: replaces inline health checks with reusable script
-- Better error messages: guides users to check logs/status on failure
-
-### 2026-01-03: Document PostgreSQL requirement in API .env.example
-
-**Artifact:** `api/.env.example`
-
-**Changes:**
-- Added comprehensive PostgreSQL documentation header with local development setup instructions
-- Documented docker compose workflow: `docker compose up -d postgres` connects to `postgres://test:test@localhost:5432/test`
-- Added hostname guidance: use `postgres` (not `localhost`) when running API from within Docker
-- Provided clear connection string format and production example
-
-**Impact:**
-- Clear setup path for local development (docker compose)
-- Production-ready example format
-- Prevents connection errors from incorrect hostnames
-
-### 2026-01-03: Add postgres-start task to Makefile.toml
-
-**Artifacts:**
-- `Makefile.toml`
-
-**Changes:**
-- Added `[tasks.postgres-start]` task with robust Docker Compose integration
-- Starts PostgreSQL with port conflict detection (clear error if port 5432 in use)
-- Waits for PostgreSQL to be healthy (30s timeout with pg_isready checks)
-- Integrated as `init_task` - runs automatically before any cargo command
-- Integrated into `dfx-start` dependencies (ensures DB ready before DFX)
-- Integrated into build/test dependencies (format, clippy, build, test)
-
-**Implementation Details:**
-- Starts postgres via `docker compose up -d postgres`
-- Port conflict detection: catches "port is already allocated" errors
-- Health check: loops with `pg_isready -U test -d test` until ready
-- Timeout: 30 seconds with helpful error message on failure
-- Exit codes: proper error propagation for failures
-
-**Impact:**
-- Zero-configuration local development - PostgreSQL starts automatically
-- No manual `docker compose up` needed before running tests
-- Better DX: `makers clippy` just works
-- Prevents "connection refused" errors in tests
-- Automatic cleanup via existing `cleanup` task (dfx-stop + postgres-stop)
-
-### 2026-01-03: Add postgres-stop task to Makefile.toml
-
-**Artifacts:**
-- `Makefile.toml`
-
-**Changes:**
-- Added `[tasks.postgres-stop]` task to stop PostgreSQL via `docker compose down`
-- Integrated into `cleanup` task (runs after dfx-stop)
-- Configured `end_task` and `on_error_task` to use cleanup for automatic teardown
-
-**Impact:**
-- Automatic PostgreSQL cleanup on build completion/error
-- Prevents orphaned Docker containers
-- Complements postgres-start/dfx-start/dfx-stop lifecycle
-
-### 2026-01-03: Create docker-compose.yml for local development with PostgreSQL
-
-**Artifacts:**
-- `docker-compose.yml`
-
-**Changes:**
-Added PostgreSQL 16-alpine service for local development:
-- Port 5432 exposed (test/test/test credentials)
-- Health check with pg_isready
-- Persistent volume for data
-- Custom bridge network for service isolation
-
-**Usage:**
-```bash
-docker-compose up -d  # Start PostgreSQL
-# Connect: postgresql://test:test@localhost:5432/test
-```
-
-**Impact:**
-- Local development environment standardized
-- No external PostgreSQL dependency
-- Easy testing with `docker-compose up`
 
 ### 2026-01-02: Replace identity.expect() with proper error handling in CLI commands
 
