@@ -1,12 +1,21 @@
 # PostgreSQL Migration: SQLite to PostgreSQL
 
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2026-01-03
+**Updated:** 2026-01-03
 **Author:** Claude Code
 
 ## Summary
 
 Migrate the entire codebase from SQLite to PostgreSQL for production readiness. Fix all cargo make warnings and errors, ensure complete schema migration with flattened design, implement automatic test postgres instance provisioning, and achieve solid test coverage for all database operations.
+
+**Current State (2026-01-03 14:17 UTC):**
+- Test run output available in `logs/nextest-run.txt`
+- **2 test failures** (both `test_migrations_via_database_new`):
+  - `api database::migration_tests::test_migrations_via_database_new`
+  - `api::bin/api-server database::migration_tests::test_migrations_via_database_new`
+- **Root cause:** Test tries to connect to postgres but fails with "failed to lookup address information: Name or service not known"
+- **Immediate action needed:** Set up automatic postgres test instance provisioning for cargo make/cargo nextest
 
 ## Problem Statement
 
@@ -308,7 +317,26 @@ Environment variables:
 
 **Success:** `cargo make postgres-up` starts test postgres; `cargo make postgres-down` stops it; healthcheck ensures postgres is ready
 
-**Status:** Pending
+**Status:** **CRITICAL - Current blocker** (test failures due to missing postgres instance)
+
+**Current failures:**
+```
+FAIL [   0.036s] ( 175/1486) api database::migration_tests::test_migrations_via_database_new
+FAIL [   0.052s] ( 754/1486) api::bin/api-server database::migration_tests::test_migrations_via_database_new
+```
+
+Error: `failed to connect to setup test database: Io(Custom { kind: Uncategorized, error: "failed to lookup address information: Name or service not known" })`
+
+**Action items:**
+1. Create `docker-compose.test.yml` with postgres service (check `agent/` directory for reference)
+2. Add postgres lifecycle tasks to `Makefile.toml`:
+   - `postgres-up` - start test postgres
+   - `postgres-down` - stop test postgres
+   - `postgres-logs` - view logs
+   - `postgres-reset` - reset database
+3. Integrate postgres startup with `cargo make` and `cargo nextest run`
+4. Add healthcheck to ensure postgres is ready before tests run
+5. Update test environment variables to use test postgres instance
 
 Files to create:
 - `docker-compose.test.yml` - Postgres service definition
@@ -322,6 +350,33 @@ Files to create:
 
 Files to create:
 - `docs/sqlite-schema-analysis.md` - Schema documentation
+
+### Step 2a: Critically review consolidated migrations
+
+**Success:** New postgres migrations are objectively as good or better than old sqlite schema
+
+**Status:** Pending
+
+**Review criteria:**
+1. **Completeness:** All tables from sqlite schema exist in postgres
+2. **Flattening:** Schema is appropriately flattened (no unnecessary normalization)
+3. **Types:** Proper postgres types used (BIGINT, TEXT, TIMESTAMP, JSONB, etc.)
+4. **Constraints:** Foreign keys, unique constraints, and indexes preserved or improved
+5. **Indexes:** Performance-critical indexes maintained
+6. **Data integrity:** NOT NULL constraints, CHECK constraints preserved
+7. **Defaults:** Default values preserved
+8. **Migration path:** Clear upgrade path from sqlite to postgres
+
+**Action items:**
+1. Extract and document complete sqlite schema
+2. Extract and document new postgres schema
+3. Create comparison matrix: sqlite table → postgres table
+4. Identify any missing tables or columns
+5. Identify any broken constraints or relationships
+6. Verify indexes are appropriate for postgres
+7. Check for proper use of postgres-specific features (JSONB, arrays, etc.)
+8. Validate migration scripts produce equivalent schema
+9. Test data migration preserves all data and relationships
 
 ### Step 3: Design postgres schema
 
