@@ -40,8 +40,9 @@ if command -v initdb >/dev/null 2>&1; then
 
     echo "Ephemeral PostgreSQL: ${EPHEMERAL_PG_DIR} on port ${EPHEMERAL_PG_PORT}"
 
-    # Initialize the database cluster
-    initdb -D "${EPHEMERAL_PG_DIR}/data" --no-locale --encoding=UTF8 -A trust >/dev/null 2>&1
+    # Initialize the database cluster with minimal shared memory requirements
+    initdb -D "${EPHEMERAL_PG_DIR}/data" --no-locale --encoding=UTF8 -A trust \
+        -c shared_buffers=128kB -c dynamic_shared_memory_type=mmap >/dev/null 2>&1
 
     # Configure for testing (no fsync for speed, high connection limit for parallel tests)
     cat >> "${EPHEMERAL_PG_DIR}/data/postgresql.conf" <<EOF
@@ -52,6 +53,10 @@ fsync = off
 synchronous_commit = off
 full_page_writes = off
 max_connections = 300
+# Use minimal shared_buffers to avoid /dev/shm exhaustion
+shared_buffers = 128kB
+# Use mmap instead of POSIX shared memory to avoid /dev/shm
+dynamic_shared_memory_type = mmap
 EOF
 
     # Start PostgreSQL
