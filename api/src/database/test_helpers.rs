@@ -332,17 +332,43 @@ async fn ensure_template_db(base_url: &str) -> String {
         .await
         .expect("Failed to connect to PostgreSQL admin database");
 
-    // Check if template exists
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate = TRUE)",
-    )
-    .bind(&template_name)
-    .fetch_one(&admin_pool)
-    .await
-    .expect("Failed to check template existence");
+    // Check if template exists and is properly marked
+    let template_status: Option<bool> =
+        sqlx::query_scalar("SELECT datistemplate FROM pg_database WHERE datname = $1")
+            .bind(&template_name)
+            .fetch_optional(&admin_pool)
+            .await
+            .expect("Failed to check template existence");
 
-    if !exists {
-        // Clean up old templates
+    let needs_creation = match template_status {
+        Some(true) => {
+            // Template exists and is properly marked
+            false
+        }
+        Some(false) => {
+            // Database exists but is NOT a template (leftover from failed run)
+            // Terminate connections and drop it
+            let _ = sqlx::query(&format!(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
+                template_name
+            ))
+            .execute(&admin_pool)
+            .await;
+
+            sqlx::query(&format!("DROP DATABASE {}", template_name))
+                .execute(&admin_pool)
+                .await
+                .expect("Failed to drop non-template database");
+            true
+        }
+        None => {
+            // Database doesn't exist
+            true
+        }
+    };
+
+    if needs_creation {
+        // Clean up old templates from previous migration versions
         let old_templates: Vec<String> = sqlx::query_scalar(
             "SELECT datname FROM pg_database WHERE datname LIKE 'template_test_db_%' AND datistemplate = TRUE"
         )
@@ -364,46 +390,72 @@ async fn ensure_template_db(base_url: &str) -> String {
                 .await;
         }
 
-        // Create new template database
-        sqlx::query(&format!("CREATE DATABASE {}", template_name))
+        // Try to create new template database
+        let create_result = sqlx::query(&format!("CREATE DATABASE {}", template_name))
+            .execute(&admin_pool)
+            .await;
+
+        // Handle creation - might fail if another process created it concurrently
+        let created_by_us = match create_result {
+            Ok(_) => true,
+            Err(sqlx::Error::Database(ref db_err)) if db_err.code().as_deref() == Some("42P04") => {
+                // Database already exists - another concurrent test created it
+                // Verify it's properly marked as a template
+                let is_template: bool =
+                    sqlx::query_scalar("SELECT datistemplate FROM pg_database WHERE datname = $1")
+                        .bind(&template_name)
+                        .fetch_one(&admin_pool)
+                        .await
+                        .expect("Failed to verify template status after concurrent creation");
+
+                if !is_template {
+                    panic!(
+                        "Template database '{}' exists but is not marked as template",
+                        template_name
+                    );
+                }
+                false // Created by another process
+            }
+            Err(e) => panic!("Failed to create template database: {:#?}", e),
+        };
+
+        // Only run migrations if we created the database
+        if created_by_us {
+            // Connect to template and run migrations
+            let template_url = format!("{}/{}", base_url, template_name);
+            let template_pool = PgPool::connect(&template_url)
+                .await
+                .expect("Failed to connect to template database");
+
+            let migrations = [
+                (
+                    "001_schema.sql",
+                    include_str!("../../migrations_pg/001_schema.sql"),
+                ),
+                (
+                    "002_seed_data.sql",
+                    include_str!("../../migrations_pg/002_seed_data.sql"),
+                ),
+            ];
+
+            for (name, migration) in &migrations {
+                sqlx::raw_sql(migration)
+                    .execute(&template_pool)
+                    .await
+                    .unwrap_or_else(|e| panic!("Template migration failed for {}: {:#?}", name, e));
+            }
+
+            template_pool.close().await;
+
+            // Mark as template
+            sqlx::query(&format!(
+                "UPDATE pg_database SET datistemplate = TRUE WHERE datname = '{}'",
+                template_name
+            ))
             .execute(&admin_pool)
             .await
-            .expect("Failed to create template database");
-
-        // Connect to template and run migrations
-        let template_url = format!("{}/{}", base_url, template_name);
-        let template_pool = PgPool::connect(&template_url)
-            .await
-            .expect("Failed to connect to template database");
-
-        let migrations = [
-            (
-                "001_schema.sql",
-                include_str!("../../migrations_pg/001_schema.sql"),
-            ),
-            (
-                "002_seed_data.sql",
-                include_str!("../../migrations_pg/002_seed_data.sql"),
-            ),
-        ];
-
-        for (name, migration) in &migrations {
-            sqlx::raw_sql(migration)
-                .execute(&template_pool)
-                .await
-                .unwrap_or_else(|e| panic!("Template migration failed for {}: {:#?}", name, e));
+            .expect("Failed to mark database as template");
         }
-
-        template_pool.close().await;
-
-        // Mark as template
-        sqlx::query(&format!(
-            "UPDATE pg_database SET datistemplate = TRUE WHERE datname = '{}'",
-            template_name
-        ))
-        .execute(&admin_pool)
-        .await
-        .expect("Failed to mark database as template");
     }
 
     admin_pool.close().await;
