@@ -35,7 +35,7 @@ async fn test_cleanup_once() {
     .bind(&public_key[..])
     .bind(chrono::Utc::now().timestamp_nanos_opt().unwrap())
     .bind(&old_nonce.as_bytes()[..])
-    .bind(0)
+    .bind(false)
     .bind(old_created_at)
     .execute(&db.pool)
     .await

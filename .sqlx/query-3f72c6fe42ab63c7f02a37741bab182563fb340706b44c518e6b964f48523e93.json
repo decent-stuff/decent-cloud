@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT pubkey, COALESCE(SUM(change_amount), 0) as \"total_reputation!: i64\", COUNT(*) as \"change_count!: i64\"\n             FROM reputation_changes\n             GROUP BY pubkey\n             ORDER BY COALESCE(SUM(change_amount), 0) DESC\n             LIMIT $1",
+  "query": "SELECT pubkey, COALESCE(SUM(change_amount), 0)::BIGINT as \"total_reputation!: i64\", COUNT(*)::BIGINT as \"change_count!: i64\"\n             FROM reputation_changes\n             WHERE pubkey = $1\n             GROUP BY pubkey",
   "describe": {
     "columns": [
       {
@@ -11,7 +11,7 @@
       {
         "ordinal": 1,
         "name": "total_reputation!: i64",
-        "type_info": "Numeric"
+        "type_info": "Int8"
       },
       {
         "ordinal": 2,
@@ -21,7 +21,7 @@
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Bytea"
       ]
     },
     "nullable": [
@@ -30,5 +30,5 @@
       null
     ]
   },
-  "hash": "d936e5122d9c1d1447456204ef470d22deb9bc08ca6c6b662df40f53a02c8b92"
+  "hash": "3f72c6fe42ab63c7f02a37741bab182563fb340706b44c518e6b964f48523e93"
 }

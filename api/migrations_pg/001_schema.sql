@@ -856,7 +856,7 @@ CREATE INDEX idx_receipt_tracking_contract ON receipt_tracking(contract_id);
 
 -- Invoices (migration 039, recreated in 046)
 CREATE TABLE invoices (
-    id BYTEA PRIMARY KEY DEFAULT gen_random_bytes(16),
+    id BIGSERIAL PRIMARY KEY,
     contract_id BYTEA NOT NULL UNIQUE,
     invoice_number TEXT NOT NULL UNIQUE,
     invoice_date_ns BIGINT NOT NULL,
@@ -895,7 +895,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Tax tracking (migration 040)
 CREATE TABLE tax_tracking (
     id BIGSERIAL PRIMARY KEY,
-    invoice_id BYTEA NOT NULL REFERENCES invoices(id),
+    invoice_id BIGINT NOT NULL REFERENCES invoices(id),
     tax_type TEXT NOT NULL,
     tax_rate_ppm INTEGER NOT NULL,
     tax_amount_e9s BIGINT NOT NULL,

@@ -14,6 +14,11 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+# Source existing ephemeral PostgreSQL environment if available
+if [ -f /tmp/ephemeral_pg_env.sh ]; then
+    source /tmp/ephemeral_pg_env.sh
+fi
+
 # Check if we already have a PostgreSQL connection
 if [ -n "${TEST_DATABASE_URL:-}" ]; then
     echo "Using existing TEST_DATABASE_URL: ${TEST_DATABASE_URL}"
@@ -24,11 +29,8 @@ fi
 if command -v initdb >/dev/null 2>&1; then
     echo "Starting ephemeral PostgreSQL..."
 
-    # Use /dev/shm for speed if available, otherwise /tmp
-    BASE_DIR="/dev/shm"
-    if [ ! -d "$BASE_DIR" ] || [ ! -w "$BASE_DIR" ]; then
-        BASE_DIR="/tmp"
-    fi
+    # Use /tmp for ephemeral PostgreSQL (/dev/shm may be too small)
+    BASE_DIR="/tmp"
 
     # Create unique directory for this test run
     export EPHEMERAL_PG_DIR=$(mktemp -d "${BASE_DIR}/pg_test_XXXXXX")
@@ -41,7 +43,7 @@ if command -v initdb >/dev/null 2>&1; then
     # Initialize the database cluster
     initdb -D "${EPHEMERAL_PG_DIR}/data" --no-locale --encoding=UTF8 -A trust >/dev/null 2>&1
 
-    # Configure for testing (no fsync for speed)
+    # Configure for testing (no fsync for speed, high connection limit for parallel tests)
     cat >> "${EPHEMERAL_PG_DIR}/data/postgresql.conf" <<EOF
 listen_addresses = '127.0.0.1'
 port = ${EPHEMERAL_PG_PORT}
@@ -49,6 +51,7 @@ unix_socket_directories = '${EPHEMERAL_PG_DIR}'
 fsync = off
 synchronous_commit = off
 full_page_writes = off
+max_connections = 300
 EOF
 
     # Start PostgreSQL
@@ -174,6 +177,7 @@ python3 ./docs/whitepaper/build.py
 
 
 [tasks.test]
+command = ""
 dependencies = [
     "postgres-start",
     "sqlx-prepare",
@@ -206,21 +210,65 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-# Check for ephemeral PostgreSQL
+CLEANED_UP=false
+
+# Function to stop a PostgreSQL instance by data directory
+stop_pg_instance() {
+    local pg_dir="$1"
+    if [ -d "${pg_dir}/data" ]; then
+        echo "Stopping PostgreSQL instance at ${pg_dir}..."
+        pg_ctl -D "${pg_dir}/data" stop -m immediate >/dev/null 2>&1 || true
+        rm -rf "${pg_dir}"
+        CLEANED_UP=true
+    fi
+}
+
+# 1. Check for ephemeral PostgreSQL with environment file
 if [ -f /tmp/ephemeral_pg_env.sh ]; then
     source /tmp/ephemeral_pg_env.sh
     if [ -n "${EPHEMERAL_PG_DIR:-}" ] && [ -d "${EPHEMERAL_PG_DIR}/data" ]; then
-        echo "Stopping ephemeral PostgreSQL..."
-        pg_ctl -D "${EPHEMERAL_PG_DIR}/data" stop -m immediate >/dev/null 2>&1 || true
-        rm -rf "${EPHEMERAL_PG_DIR}"
+        echo "Stopping ephemeral PostgreSQL (from env file)..."
+        stop_pg_instance "${EPHEMERAL_PG_DIR}"
         rm -f /tmp/ephemeral_pg_env.sh
         echo "✓ Ephemeral PostgreSQL stopped"
-        exit 0
     fi
 fi
 
-echo "Stopping postgres via docker compose..."
-docker compose down
+# 2. Clean up ANY orphaned ephemeral PostgreSQL instances
+# These may exist if the env file was deleted but PostgreSQL wasn't stopped
+for pg_dir in /tmp/pg_test_*; do
+    if [ -d "$pg_dir" ]; then
+        echo "Found orphaned ephemeral PostgreSQL directory: $pg_dir"
+        stop_pg_instance "$pg_dir"
+    fi
+done
+
+# 3. Kill any orphaned postgres processes owned by current user
+# that are NOT part of docker compose
+echo "Checking for orphaned PostgreSQL processes..."
+if docker compose ps postgres >/dev/null 2>&1; then
+    # Get docker compose postgres PID
+    DOCKER_PG_PID=$(docker compose ps -q postgres 2>/dev/null | xargs -r docker inspect -f '{{.State.Pid}}' 2>/dev/null || echo "")
+
+    # Kill postgres processes owned by user, excluding docker compose's
+    if [ -n "$DOCKER_PG_PID" ]; then
+        pgrep -u $(whoami) postgres | grep -v "^${DOCKER_PG_PID}$" | xargs -r kill -9 2>/dev/null || true
+    else
+        # No docker compose postgres running, kill all user postgres processes
+        pkill -u $(whoami) -9 postgres 2>/dev/null || true
+    fi
+else
+    # Docker compose not running, kill all user postgres processes
+    pkill -u $(whoami) -9 postgres 2>/dev/null || true
+fi
+
+# 4. Fall back to docker compose if no ephemeral instances were found
+if [ "$CLEANED_UP" = false ]; then
+    echo "Stopping postgres via docker compose..."
+    docker compose down
+else
+    echo "✓ Cleanup complete - stopped ephemeral PostgreSQL instances"
+fi
 '''
 
 [tasks.sqlx-prepare]

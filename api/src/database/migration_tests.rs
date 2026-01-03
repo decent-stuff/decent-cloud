@@ -11,7 +11,7 @@
 use sqlx::{PgPool, Row};
 
 /// Test that migrations run correctly via Database::new (api-server context)
-#[sqlx::test]
+#[sqlx::test(migrations = "./migrations_pg")]
 async fn test_migrations_via_database_new(pool: PgPool) {
     // This test verifies the sqlx::migrate!() macro works correctly
     // when called from Database::new() in api-server context
@@ -116,20 +116,28 @@ async fn test_migration_approaches_are_equivalent() {
     assert!(schema_migration.contains("CREATE TABLE sync_state"));
     assert!(schema_migration.contains("CREATE TABLE user_registrations"));
     assert!(schema_migration.contains("CREATE TABLE provider_registrations"));
+    // sync_state INSERT is in schema migration as it's required for the schema to be functional
+    assert!(schema_migration.contains("INSERT INTO sync_state"));
 
-    assert!(seed_migration.contains("INSERT INTO sync_state"));
-    assert!(seed_migration.contains("INSERT INTO email_templates"));
+    // Seed data contains example provider offerings, not system config
+    assert!(seed_migration.contains("INSERT INTO provider_offerings"));
 }
 
 /// Helper test to verify sqlx-data.json files are properly generated
 #[tokio::test]
 async fn test_sqlx_offline_mode_data_exists() {
     // Verify that .sqlx/query-*.json files exist (offline mode support)
+    // Note: .sqlx directory is at the workspace root, not crate root
     use std::fs;
     use std::path::Path;
 
-    let sqlx_dir = format!("{}/.sqlx", env!("CARGO_MANIFEST_DIR"));
-    let sqlx_path = Path::new(&sqlx_dir);
+    // Get workspace root (parent of crate manifest dir)
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = crate_dir
+        .parent()
+        .expect("Crate should be inside workspace");
+    let sqlx_dir = workspace_root.join(".sqlx");
+    let sqlx_path = &sqlx_dir;
 
     assert!(
         sqlx_path.exists(),

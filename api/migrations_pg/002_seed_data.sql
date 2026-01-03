@@ -157,4 +157,45 @@ INSERT INTO provider_offerings (
     FALSE, '10 Gbps', 5000, 'US', 'Multiple POPs', NULL, NULL,
     'REST API', 720, 8760,
     'ICP,ckBTC', '50+ Edge Locations,SSL/TLS,DDoS Protection,Real-time Analytics', 1700000000000000000
+),
+(
+    E'\\x6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    'network-002', 'Dedicated Bandwidth', 'Guaranteed bandwidth for high-traffic applications', NULL,
+    'ICP', 50.0, 25.0, 'public', 'network', 'monthly', 'in_stock',
+    TRUE, '10 Gbps', NULL, 'JP', 'Tokyo', 35.6762, 139.6503,
+    NULL, 720, 8760,
+    'ICP,ckBTC', 'Burstable to 20 Gbps,Low Latency,BGP Sessions,99.9% Uptime', 1700000000000000000
+);
+
+-- Example dedicated server offerings
+INSERT INTO provider_offerings (
+    pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price, setup_fee,
+    visibility, product_type, virtualization_type, billing_interval, stock_status,
+    processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+    memory_error_correction, memory_type, memory_amount,
+    hdd_amount, total_hdd_capacity, ssd_amount, total_ssd_capacity,
+    unmetered_bandwidth, uplink_speed, traffic,
+    datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
+    control_panel, min_contract_hours, max_contract_hours,
+    payment_methods, features, operating_systems, created_at_ns
+) VALUES
+(
+    E'\\x6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    'dedicated-001', 'Entry Dedicated Server', 'Affordable dedicated server for small businesses', NULL,
+    'ICP', 75.0, 25.0, 'public', 'dedicated', 'Bare Metal', 'monthly', 'in_stock',
+    'Intel', 1, 8, '3.4 GHz', 'Xeon E-2388G', 'ECC', 'DDR4', '32 GB',
+    2, '2 TB', 2, '480 GB', FALSE, '1 Gbps', 20000,
+    'FR', 'Paris', 48.8566, 2.3522,
+    'IPMI', 720, 8760,
+    'ICP,ckBTC', 'Full Root Access,RAID 1,Remote Reboot,24/7 Support', 'Ubuntu 22.04,Debian 12,CentOS 9,Windows Server 2022', 1700000000000000000
+),
+(
+    E'\\x6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572',
+    'dedicated-002', 'Enterprise Dedicated Server', 'High-performance dedicated server for enterprise workloads', NULL,
+    'ICP', 250.0, 50.0, 'public', 'dedicated', 'Bare Metal', 'monthly', 'in_stock',
+    'AMD', 2, 128, '2.45 GHz', 'EPYC 7763', 'ECC', 'DDR4', '512 GB',
+    NULL, NULL, 4, '8 TB', TRUE, '10 Gbps', NULL,
+    'CA', 'Toronto', 43.6532, -79.3832,
+    'IPMI,ILO', 720, 8760,
+    'ICP,ckBTC,ckETH', 'NVMe RAID 10,Redundant PSU,IPMI,Premium Support,99.99% SLA', 'Ubuntu 22.04,RHEL 9,Windows Server 2022', 1700000000000000000
 );

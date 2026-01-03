@@ -18,14 +18,14 @@ receipt_number: number | undefined, receipt_sent_at_ns: number | undefined, stri
  */
 gateway_slug: string | null, 
 /**
- * SSH port accessible via gateway
+ * SSH port accessible via gateway (0-65535)
  */
 gateway_ssh_port: number | undefined, 
 /**
- * Start of allocated port range
+ * Start of allocated port range (0-65535)
  */
 gateway_port_range_start: number | undefined, 
 /**
- * End of allocated port range
+ * End of allocated port range (0-65535)
  */
 gateway_port_range_end: number | undefined, };

@@ -101,7 +101,7 @@ impl Database {
     pub async fn get_reputation(&self, pubkey: &[u8]) -> Result<Option<ReputationInfo>> {
         let info = sqlx::query_as!(
             ReputationInfo,
-            r#"SELECT pubkey, COALESCE(SUM(change_amount), 0) as "total_reputation!: i64", COUNT(*) as "change_count!: i64"
+            r#"SELECT pubkey, COALESCE(SUM(change_amount), 0)::BIGINT as "total_reputation!: i64", COUNT(*)::BIGINT as "change_count!: i64"
              FROM reputation_changes
              WHERE pubkey = $1
              GROUP BY pubkey"#,
@@ -117,10 +117,10 @@ impl Database {
     pub async fn get_top_providers_by_reputation(&self, limit: i64) -> Result<Vec<ReputationInfo>> {
         let top = sqlx::query_as!(
             ReputationInfo,
-            r#"SELECT pubkey, COALESCE(SUM(change_amount), 0) as "total_reputation!: i64", COUNT(*) as "change_count!: i64"
+            r#"SELECT pubkey, COALESCE(SUM(change_amount), 0)::BIGINT as "total_reputation!: i64", COUNT(*)::BIGINT as "change_count!: i64"
              FROM reputation_changes
              GROUP BY pubkey
-             ORDER BY COALESCE(SUM(change_amount), 0) DESC
+             ORDER BY SUM(change_amount) DESC NULLS LAST
              LIMIT $1"#,
             limit
         )
@@ -698,9 +698,9 @@ impl Database {
                 a.username,
                 a.display_name,
                 encode(apk.public_key, 'hex') as pubkey,
-                COALESCE(rep.total_reputation, 0) as reputation_score,
-                COALESCE(contracts.contract_count, 0) as contract_count,
-                COALESCE(offerings.offering_count, 0) as offering_count
+                COALESCE(MAX(rep.total_reputation), 0)::BIGINT as reputation_score,
+                COALESCE(SUM(contracts.contract_count), 0)::BIGINT as contract_count,
+                COALESCE(MAX(offerings.offering_count), 0)::BIGINT as offering_count
             FROM accounts a
             INNER JOIN account_public_keys apk ON a.id = apk.account_id
             LEFT JOIN (
@@ -726,7 +726,7 @@ impl Database {
               AND (
                 lower(a.username) LIKE $1
                 OR lower(a.display_name) LIKE $2
-                OR encode(apk.public_key, 'hex') LIKE $3
+                OR upper(encode(apk.public_key, 'hex')) LIKE $3
               )
             GROUP BY a.username, a.display_name, apk.public_key
             ORDER BY reputation_score DESC, contract_count DESC, offering_count DESC

@@ -1,15 +1,11 @@
-use crate::database::{Database, LedgerEntryData};
+use crate::database::test_helpers::setup_test_db;
+use crate::database::LedgerEntryData;
 use candid::Principal;
 use ledger_map::LedgerMap;
 use sqlx::Row;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::NamedTempFile;
-
-/// Test setup helper for creating a database
-async fn setup_test_db() -> Database {
-    Database::new(":memory:").await.unwrap()
-}
 
 #[test]
 fn test_sync_service_interval_creation() {

@@ -488,7 +488,7 @@ impl Database {
         let nonce_bytes = nonce.as_bytes().to_vec();
 
         let result: Option<(i64,)> = sqlx::query_as(
-            "SELECT 1 FROM signature_audit
+            "SELECT 1::BIGINT FROM signature_audit
              WHERE nonce = $1 AND created_at > $2
              LIMIT 1",
         )
@@ -1029,11 +1029,17 @@ impl Database {
         let mut username = base_username.clone();
         let mut suffix = 0u32;
         loop {
+            // Use more of the pubkey for email uniqueness (suffix iteration + full pubkey hash)
+            let email_suffix = if suffix == 0 {
+                pubkey_hex[..16].to_string()
+            } else {
+                format!("{}_{}", &pubkey_hex[..16], suffix)
+            };
             match self
                 .create_account_internal(
                     &username,
                     pubkey,
-                    &format!("auto-{}@noemail.local", &pubkey_hex[..8]),
+                    &format!("auto-{}@noemail.local", email_suffix),
                 )
                 .await
             {

@@ -291,7 +291,7 @@ async fn test_get_example_offerings() {
     // Test retrieving example offerings
     let example_offerings = db.get_example_offerings().await.unwrap();
 
-    // Should have exactly 10 example offerings from migration (2 per product type)
+    // Should have 10 example offerings from seed data (2 per product type)
     assert_eq!(example_offerings.len(), 10);
 
     // Verify we have offerings for all product types
@@ -311,7 +311,7 @@ async fn test_get_example_offerings() {
         .find(|o| o.offering_id == "compute-001")
         .expect("Should have compute-001");
     assert_eq!(compute_offering.offer_name, "Basic VPS");
-    assert_eq!(compute_offering.currency, "USD");
+    assert_eq!(compute_offering.currency, "ICP");
     assert_eq!(compute_offering.product_type, "compute");
 
     // Verify it has required data

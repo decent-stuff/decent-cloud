@@ -45,12 +45,8 @@ impl EphemeralPostgres {
             return Err("initdb not found - install PostgreSQL server".to_string());
         }
 
-        // Use /dev/shm for speed if available, otherwise /tmp
-        let base_dir = if std::path::Path::new("/dev/shm").exists() {
-            "/dev/shm"
-        } else {
-            "/tmp"
-        };
+        // Use /tmp for PostgreSQL data (more space than /dev/shm which may be too small)
+        let base_dir = "/tmp";
 
         // Create unique data directory
         let data_dir =
@@ -66,7 +62,7 @@ impl EphemeralPostgres {
         let port = find_free_port()?;
 
         // Initialize the database cluster
-        let init_status = Command::new("initdb")
+        let init_output = Command::new("initdb")
             .args([
                 "-D",
                 pg_data.to_str().unwrap(),
@@ -75,13 +71,19 @@ impl EphemeralPostgres {
                 "-A",
                 "trust",
             ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map_err(|e| format!("initdb failed: {}", e))?;
+            .output()
+            .map_err(|e| format!("initdb failed to run: {}", e))?;
 
-        if !init_status.success() {
-            return Err("initdb failed".to_string());
+        if !init_output.status.success() {
+            let _ = std::fs::remove_dir_all(&data_dir);
+            let stderr = String::from_utf8_lossy(&init_output.stderr);
+            let stdout = String::from_utf8_lossy(&init_output.stdout);
+            return Err(format!(
+                "initdb failed (exit {}): stdout={}, stderr={}",
+                init_output.status,
+                stdout.trim(),
+                stderr.trim()
+            ));
         }
 
         // Write optimized config for testing
@@ -218,9 +220,20 @@ fn wait_for_postgres(base_url: &str, max_attempts: u32) -> Result<(), String> {
 
 /// Get or start the ephemeral PostgreSQL server
 fn get_postgres_url() -> String {
-    // Check for external PostgreSQL first
+    // Check for external PostgreSQL first (set by cargo make or user)
     if let Ok(url) = std::env::var("TEST_DATABASE_URL") {
         return url;
+    }
+
+    // Check for ephemeral_pg_env.sh (created by cargo make postgres-start)
+    if let Ok(content) = std::fs::read_to_string("/tmp/ephemeral_pg_env.sh") {
+        for line in content.lines() {
+            if let Some(url) = line.strip_prefix("export TEST_DATABASE_URL=\"") {
+                if let Some(url) = url.strip_suffix('"') {
+                    return url.to_string();
+                }
+            }
+        }
     }
 
     // Start or get ephemeral PostgreSQL

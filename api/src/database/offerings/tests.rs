@@ -940,30 +940,30 @@ async fn test_duplicate_offering_success() {
     let db = setup_test_db().await;
     let pubkey = vec![1u8; 32];
 
-    // Create offering with payment_methods
-    let db_id = test_id_to_db_id(1);
-    let offering_id = "off-1".to_string();
-    {
+    // Create offering with payment_methods - let PostgreSQL generate the ID
+    let offering_id = "off-dup-test".to_string();
+    let db_id: i64 = {
         let pubkey_ref = &pubkey;
         let offering_id_ref = &offering_id;
-        sqlx::query!(
-            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES ($1, $2, $3, 'Test Offer', 'USD', $4, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 'BTC', NULL, NULL, 0)",
-            db_id,
+        sqlx::query_scalar!(
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, payment_methods, features, operating_systems, created_at_ns) VALUES ($1, $2, 'Test Offer', 'USD', $3, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 'BTC', NULL, NULL, 0) RETURNING id",
             pubkey_ref,
             offering_id_ref,
             100.0
         )
-        .execute(&db.pool)
+        .fetch_one(&db.pool)
         .await
-        .expect("Failed to execute SQL query");
-    }
+        .expect("Failed to insert test offering")
+    };
 
     let new_id = db
-        .duplicate_offering(&pubkey, db_id, "off-1-copy".to_string())
+        .duplicate_offering(&pubkey, db_id, "off-dup-test-copy".to_string())
         .await
         .expect("Failed to duplicate offering");
 
-    assert!(new_id > db_id);
+    // New ID should be different and valid (auto-generated IDs are always positive)
+    assert_ne!(new_id, db_id);
+    assert!(new_id > 0);
 
     // Verify duplication
     let duplicated = db
@@ -1199,7 +1199,9 @@ off-2,New Offer,New desc,,DER,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,
     .fetch_one(&db.pool)
     .await
     .expect("Failed to fetch from database");
-    assert!(off2 > db_id);
+    // Just verify it exists and has a valid ID
+    assert!(off2 > 0);
+    assert_ne!(off2, db_id);
 }
 
 #[tokio::test]

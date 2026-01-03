@@ -197,9 +197,9 @@ impl Database {
         let rows = sqlx::query_as::<_, PoolWithStatsRow>(
             r#"SELECT
                 p.pool_id, p.provider_pubkey, p.name, p.location, p.provisioner_type, p.created_at_ns,
-                COUNT(DISTINCT d.agent_pubkey) as agent_count,
-                COUNT(DISTINCT CASE WHEN s.online = TRUE AND s.last_heartbeat_ns > $1 THEN d.agent_pubkey END) as online_count,
-                COALESCE(SUM(s.active_contracts), 0) as active_contracts
+                COUNT(DISTINCT d.agent_pubkey)::BIGINT as agent_count,
+                COUNT(DISTINCT CASE WHEN s.online = TRUE AND s.last_heartbeat_ns > $1 THEN d.agent_pubkey END)::BIGINT as online_count,
+                COALESCE(SUM(s.active_contracts), 0)::BIGINT as active_contracts
             FROM agent_pools p
             LEFT JOIN provider_agent_delegations d ON d.pool_id = p.pool_id AND d.revoked_at_ns IS NULL
             LEFT JOIN provider_agent_status s ON s.provider_pubkey = p.provider_pubkey
