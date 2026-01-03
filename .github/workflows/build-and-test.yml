@@ -15,6 +15,21 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
@@ -39,5 +54,8 @@ jobs:
             -w /workspace \
             -e XDG_DATA_HOME=/usr/local \
             -e CARGO_TERM_COLOR=always \
+            -e DATABASE_URL=postgres://test:test@localhost:5432/test \
+            -e TEST_DATABASE_URL=postgres://test:test@localhost:5432/test \
+            --network host \
             $CI_IMAGE \
             /bin/bash -c "git config --global --add safe.directory /workspace && dfxvm default 0.28.0 && dfx --version && /tini -s -- cargo make"
