@@ -672,6 +672,16 @@ CREATE TABLE agent_pools (
 
 CREATE INDEX idx_agent_pools_provider ON agent_pools(provider_pubkey);
 
+-- Add foreign key constraints for tables that reference agent_pools
+-- (These tables were defined earlier in the schema before agent_pools existed)
+ALTER TABLE provider_offerings
+    ADD CONSTRAINT fk_offerings_agent_pool
+    FOREIGN KEY (agent_pool_id) REFERENCES agent_pools(pool_id);
+
+ALTER TABLE provider_agent_delegations
+    ADD CONSTRAINT fk_delegations_pool
+    FOREIGN KEY (pool_id) REFERENCES agent_pools(pool_id);
+
 -- Agent setup tokens
 CREATE TABLE agent_setup_tokens (
     token TEXT PRIMARY KEY,
