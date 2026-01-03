@@ -580,7 +580,7 @@ fn test_sql_unknown_field_error() {
 
 #[test]
 fn test_sql_empty_filters() {
-    let (sql, values) = build_sql(&[]).unwrap();
+    let (sql, values): (String, Vec<SqlValue>) = build_sql(&[]).unwrap();
     assert_eq!(sql, "");
     assert_eq!(values.len(), 0);
 }
