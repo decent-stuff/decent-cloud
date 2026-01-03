@@ -118,8 +118,8 @@ async fn test_disable_account_key() {
     let key1_after = keys_after.iter().find(|k| k.id == key1_id).unwrap();
     let key2_after = keys_after.iter().find(|k| k.id == key2.id).unwrap();
 
-    assert_eq!(key1_after.is_active, true, "Key1 should still be active");
-    assert_eq!(key2_after.is_active, false, "Key2 should be disabled");
+    assert!(key1_after.is_active, "Key1 should still be active");
+    assert!(!key2_after.is_active, "Key2 should be disabled");
     assert!(
         key2_after.disabled_at.is_some(),
         "Key2 should have disabled_at set"
@@ -649,7 +649,7 @@ async fn test_create_oauth_linked_account_queues_welcome_email() {
     assert_eq!(email.subject, "Welcome to Decent Cloud");
     assert!(email.body.contains("emailtest"));
     assert!(email.body.contains("Welcome to Decent Cloud"));
-    assert_eq!(email.is_html, false);
+    assert!(!email.is_html);
     assert_eq!(email.status, "pending");
 }
 
@@ -751,7 +751,7 @@ async fn test_verify_email_token_success() {
             .expect("Failed to create email verification token");
 
     assert!(result.is_some());
-    assert_eq!(result.unwrap().0, true);
+    assert!(result.unwrap().0);
 
     // Check that token is marked as used
     let token_result: Option<(Option<i64>,)> =
@@ -854,11 +854,11 @@ async fn test_is_admin_migration() {
         .expect("Failed to create account");
 
     // Verify is_admin is false by default
-    assert_eq!(account.is_admin, false);
+    assert!(!account.is_admin);
 
     // Verify is_admin is included in get_account query
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
-    assert_eq!(fetched.is_admin, false);
+    assert!(!fetched.is_admin);
 
     // Verify is_admin is included in get_account_by_username query
     let fetched = db
@@ -866,7 +866,7 @@ async fn test_is_admin_migration() {
         .await
         .expect("Failed to create account")
         .unwrap();
-    assert_eq!(fetched.is_admin, false);
+    assert!(!fetched.is_admin);
 
     // Verify is_admin is included in get_account_by_email query
     let fetched = db
@@ -874,7 +874,7 @@ async fn test_is_admin_migration() {
         .await
         .expect("Failed to fetch account by username")
         .unwrap();
-    assert_eq!(fetched.is_admin, false);
+    assert!(!fetched.is_admin);
 
     // Manually set is_admin to TRUE to test non-default value
     sqlx::query!(
@@ -887,7 +887,7 @@ async fn test_is_admin_migration() {
 
     // Verify is_admin is now true
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
-    assert_eq!(fetched.is_admin, true);
+    assert!(fetched.is_admin);
 }
 
 #[tokio::test]
@@ -901,14 +901,14 @@ async fn test_set_admin_status_grant() {
         .expect("Failed to create account");
 
     // Verify not admin initially
-    assert_eq!(account.is_admin, false);
+    assert!(!account.is_admin);
 
     // Grant admin status
     db.set_admin_status("testadmin", true).await.unwrap();
 
     // Verify is_admin is now true
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
-    assert_eq!(fetched.is_admin, true);
+    assert!(fetched.is_admin);
 }
 
 #[tokio::test]
@@ -930,14 +930,14 @@ async fn test_set_admin_status_revoke() {
     .expect("Failed to create account");
 
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
-    assert_eq!(fetched.is_admin, true);
+    assert!(fetched.is_admin);
 
     // Revoke admin status
     db.set_admin_status("revokeadmin", false).await.unwrap();
 
     // Verify is_admin is now false
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
-    assert_eq!(fetched.is_admin, false);
+    assert!(!fetched.is_admin);
 }
 
 #[tokio::test]
@@ -955,7 +955,7 @@ async fn test_set_admin_status_case_insensitive() {
 
     // Verify is_admin is true
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
-    assert_eq!(fetched.is_admin, true);
+    assert!(fetched.is_admin);
 }
 
 #[tokio::test]
@@ -1018,7 +1018,7 @@ async fn test_list_admins() {
 
     // Verify all returned accounts have is_admin = true
     for admin in admins {
-        assert_eq!(admin.is_admin, true);
+        assert!(admin.is_admin);
     }
 }
 
@@ -1332,8 +1332,8 @@ async fn test_oauth_account_creation_sets_email_verified() {
         .expect("Failed to create OAuth linked account");
 
     // Verify email_verified is set to true
-    assert_eq!(
-        account.email_verified, true,
+    assert!(
+        account.email_verified,
         "OAuth accounts should have email_verified set to true"
     );
 }
@@ -1349,8 +1349,8 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
         .unwrap();
 
     // Verify email is not verified initially
-    assert_eq!(
-        account.email_verified, false,
+    assert!(
+        !account.email_verified,
         "New accounts should have email_verified=false"
     );
 
@@ -1374,8 +1374,8 @@ async fn test_oauth_linking_to_existing_account_sets_email_verified() {
         .expect("Failed to create OAuth linked account")
         .unwrap();
 
-    assert_eq!(
-        updated_account.email_verified, true,
+    assert!(
+        updated_account.email_verified,
         "Linking OAuth should set email_verified to true"
     );
 }
@@ -1593,7 +1593,7 @@ async fn test_admin_set_account_email() {
     // Verify new email and that email_verified was reset
     let fetched = db.get_account(&account.id).await.unwrap().unwrap();
     assert_eq!(fetched.email, Some("new@example.com".to_string()));
-    assert_eq!(fetched.email_verified, false);
+    assert!(!fetched.email_verified);
 }
 
 #[tokio::test]
@@ -1819,8 +1819,8 @@ async fn test_list_all_accounts_includes_admin_status() {
         .find(|a| a.username == "regular_user")
         .unwrap();
 
-    assert_eq!(admin.is_admin, true);
-    assert_eq!(regular.is_admin, false);
+    assert!(admin.is_admin);
+    assert!(!regular.is_admin);
 }
 
 /// Test that admin_delete_account properly handles accounts with offerings and profiles

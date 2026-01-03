@@ -30,8 +30,8 @@ async fn test_queue_email() {
     assert_eq!(email.max_attempts, 999); // Time-based retry (7 days)
     assert!(email.last_attempted_at.is_none());
     assert!(email.related_account_id.is_none());
-    assert_eq!(email.user_notified_retry, false);
-    assert_eq!(email.user_notified_gave_up, false);
+    assert!(!email.user_notified_retry);
+    assert!(!email.user_notified_gave_up);
 }
 
 #[tokio::test]
@@ -52,7 +52,7 @@ async fn test_queue_html_email() {
     let emails = db.get_pending_emails(10).await.unwrap();
     assert_eq!(emails.len(), 1);
     let email = &emails[0];
-    assert_eq!(email.is_html, true);
+    assert!(email.is_html);
     assert_eq!(email.email_type, "welcome");
     assert_eq!(email.max_attempts, 999); // Time-based retry (7 days)
     assert_eq!(email.body, "<h1>HTML Body</h1>");
@@ -360,8 +360,8 @@ async fn test_reset_email_for_retry_success() {
     assert_eq!(pending[0].status, "pending");
     assert_eq!(pending[0].attempts, 0);
     assert!(pending[0].last_error.is_none());
-    assert_eq!(pending[0].user_notified_retry, false);
-    assert_eq!(pending[0].user_notified_gave_up, false);
+    assert!(!pending[0].user_notified_retry);
+    assert!(!pending[0].user_notified_gave_up);
 }
 
 #[tokio::test]

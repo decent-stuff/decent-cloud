@@ -21,24 +21,35 @@ async fn test_migrations_via_database_new(pool: PgPool) {
         "SELECT table_name FROM information_schema.tables
          WHERE table_schema = 'public'
          AND table_name IN ('sync_state', 'user_registrations', 'provider_registrations')
-         ORDER BY table_name"
+         ORDER BY table_name",
     )
     .fetch_all(&pool)
     .await
     .expect("Failed to query tables");
 
     assert_eq!(result.len(), 3, "Expected 3 tables to exist");
-    assert_eq!(result[0].get::<String, _>("table_name"), "provider_registrations");
+    assert_eq!(
+        result[0].get::<String, _>("table_name"),
+        "provider_registrations"
+    );
     assert_eq!(result[1].get::<String, _>("table_name"), "sync_state");
-    assert_eq!(result[2].get::<String, _>("table_name"), "user_registrations");
+    assert_eq!(
+        result[2].get::<String, _>("table_name"),
+        "user_registrations"
+    );
 
     // Check that seed data was loaded
-    let sync_position: Option<i64> = sqlx::query_scalar("SELECT last_position FROM sync_state WHERE id = 1")
-        .fetch_one(&pool)
-        .await
-        .expect("Failed to query sync_state");
+    let sync_position: Option<i64> =
+        sqlx::query_scalar("SELECT last_position FROM sync_state WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to query sync_state");
 
-    assert_eq!(sync_position, Some(0), "Expected initial sync position to be 0");
+    assert_eq!(
+        sync_position,
+        Some(0),
+        "Expected initial sync position to be 0"
+    );
 }
 
 /// Test that migration path resolution works relative to crate root
@@ -156,8 +167,8 @@ async fn test_sqlx_offline_mode_data_exists() {
             .map(|n| n.starts_with("query-"))
             .unwrap_or(false)
     }) {
-        let content = fs::read_to_string(first_query.path())
-            .expect("Should be able to read query file");
+        let content =
+            fs::read_to_string(first_query.path()).expect("Should be able to read query file");
 
         // Verify it's valid JSON with expected structure
         let json: serde_json::Value =
