@@ -177,7 +177,7 @@ python3 ./docs/whitepaper/build.py
 
 
 [tasks.test]
-command = ""
+clear = true
 dependencies = [
     "postgres-start",
     "sqlx-prepare",
