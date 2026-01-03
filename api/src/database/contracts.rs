@@ -132,7 +132,6 @@ pub struct Contract {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-#[allow(dead_code)]
 pub struct ContractReply {
     pub contract_id: Vec<u8>,
     pub provider_pubkey: Vec<u8>,
@@ -143,7 +142,6 @@ pub struct ContractReply {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-#[allow(dead_code)]
 pub struct PaymentEntry {
     pub pricing_model: String,
     pub time_period_unit: String,
@@ -382,7 +380,6 @@ impl Database {
     }
 
     /// Get contract reply
-    #[allow(dead_code)]
     pub async fn get_contract_reply(&self, contract_id: &[u8]) -> Result<Option<ContractReply>> {
         let reply = sqlx::query_as!(
             ContractReply,
@@ -396,7 +393,6 @@ impl Database {
     }
 
     /// Get contract payment entries
-    #[allow(dead_code)]
     pub async fn get_contract_payments(&self, contract_id: &[u8]) -> Result<Vec<PaymentEntry>> {
         let payments = sqlx::query_as!(
             PaymentEntry,
@@ -1161,7 +1157,6 @@ impl Database {
     ///
     /// # Returns
     /// Tuple of (refund_amount_e9s, refund_id)
-    #[cfg_attr(test, allow(dead_code))]
     async fn process_icpay_refund(
         &self,
         contract: &Contract,
@@ -1569,13 +1564,11 @@ impl Database {
 
         Ok(rows
             .into_iter()
-            .filter_map(|r| {
-                Some(PendingStripeReceipt {
-                    contract_id: r.contract_id,
-                    created_at_ns: r.created_at_ns,
-                    next_attempt_at_ns: r.next_attempt_at_ns,
-                    attempts: r.attempts,
-                })
+            .map(|r| PendingStripeReceipt {
+                contract_id: r.contract_id,
+                created_at_ns: r.created_at_ns,
+                next_attempt_at_ns: r.next_attempt_at_ns,
+                attempts: r.attempts,
             })
             .collect())
     }
@@ -2204,7 +2197,6 @@ pub struct ContractUsage {
 
 /// Pending Stripe receipt for background processing
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct PendingStripeReceipt {
     pub contract_id: Vec<u8>,
     pub created_at_ns: i64,

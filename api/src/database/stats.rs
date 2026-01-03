@@ -114,7 +114,6 @@ impl Database {
     }
 
     /// Get top providers by reputation
-    #[allow(dead_code)]
     pub async fn get_top_providers_by_reputation(&self, limit: i64) -> Result<Vec<ReputationInfo>> {
         let top = sqlx::query_as!(
             ReputationInfo,
@@ -275,7 +274,7 @@ impl Database {
 
         // Average response time (time from created_at to first status change)
         let avg_response_time_ns: Option<f64> = sqlx::query_scalar!(
-            r#"SELECT AVG(CAST(h.changed_at_ns - c.created_at_ns AS REAL)) as "avg: f64"
+            r#"SELECT AVG(CAST(h.changed_at_ns - c.created_at_ns AS DOUBLE PRECISION)) as "avg: f64"
                FROM contract_sign_requests c
                INNER JOIN contract_status_history h ON c.contract_id = h.contract_id
                WHERE c.provider_pubkey = $1
@@ -289,7 +288,7 @@ impl Database {
         // Time to delivery (median time from created to provisioned)
         // Using average as PostgreSQL's MEDIAN requires window function
         let avg_delivery_time_ns: Option<f64> = sqlx::query_scalar!(
-            r#"SELECT AVG(CAST(provisioning_completed_at_ns - created_at_ns AS REAL)) as "avg: f64"
+            r#"SELECT AVG(CAST(provisioning_completed_at_ns - created_at_ns AS DOUBLE PRECISION)) as "avg: f64"
                FROM contract_sign_requests
                WHERE provider_pubkey = $1
                AND provisioning_completed_at_ns IS NOT NULL"#,
@@ -400,7 +399,7 @@ impl Database {
                                 WHEN status = 'cancelled' AND status_updated_at_ns IS NOT NULL AND start_timestamp_ns IS NOT NULL THEN
                                     (status_updated_at_ns - start_timestamp_ns) / 3600000000000.0
                                 ELSE NULL
-                            END AS REAL
+                            END AS DOUBLE PRECISION
                         )) / AVG(duration_hours)
                     ELSE NULL
                 END as "ratio: f64"

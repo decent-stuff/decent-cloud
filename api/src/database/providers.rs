@@ -355,7 +355,7 @@ impl Database {
                 ep.logo_url,
                 ep.data_source,
                 ep.created_at_ns,
-                CAST(COUNT(po.id) AS INTEGER) as "offerings_count!: i64"
+                CAST(COUNT(po.id) AS BIGINT) as "offerings_count!: i64"
             FROM external_providers ep
             LEFT JOIN provider_offerings po ON ep.pubkey = po.pubkey AND po.offering_source = 'seeded'
             GROUP BY ep.pubkey, ep.name, ep.domain, ep.website_url, ep.logo_url, ep.data_source, ep.created_at_ns
@@ -382,7 +382,6 @@ impl Database {
     }
 
     /// Create or update an external provider (used by api-cli scraper)
-    #[allow(dead_code)]
     pub async fn create_or_update_external_provider(
         &self,
         pubkey: &[u8],
@@ -548,7 +547,7 @@ impl Database {
         pubkey: &[u8],
         enabled: bool,
     ) -> Result<()> {
-        let value = if enabled { 1 } else { 0 };
+        let value: i64 = if enabled { 1 } else { 0 };
         let result = sqlx::query!(
             "UPDATE provider_profiles SET auto_accept_rentals = $1 WHERE pubkey = $2",
             value,

@@ -141,7 +141,6 @@ pub struct SearchOfferingsParams<'a> {
     pub offset: i64,
 }
 
-#[allow(dead_code)]
 impl Database {
     /// Search offerings with filters.
     /// Excludes offerings that don't have a matching agent pool.
@@ -569,7 +568,6 @@ impl Database {
     }
 }
 
-#[allow(dead_code)]
 impl Database {
     /// Count offerings
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {

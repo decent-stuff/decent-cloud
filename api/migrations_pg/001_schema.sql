@@ -1,6 +1,7 @@
 -- Consolidated PostgreSQL Schema for Decent Cloud API
 -- Flattened from 64 SQLite migrations
--- Generated: 2026-01-02
+-- Generated: 2026-01-03
+-- Fixed: All missing tables, columns, indexes, and constraints from SQLite migrations
 
 -- Enable UUID generation
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -56,11 +57,11 @@ CREATE TABLE provider_profiles (
     chatwoot_inbox_id BIGINT,
     chatwoot_portal_slug TEXT,
     chatwoot_team_id BIGINT,
-    -- Added: trust fields
+    -- Added: trust fields (migration 018)
     trust_score BIGINT,
     has_critical_flags BOOLEAN DEFAULT FALSE,
     -- Added: auto_accept_rentals (migration 048/049)
-    auto_accept_rentals INTEGER NOT NULL DEFAULT 1,
+    auto_accept_rentals BOOLEAN NOT NULL DEFAULT 1,
     -- Added: account_id (migration 050)
     account_id BYTEA
 );
@@ -143,22 +144,14 @@ CREATE TABLE provider_offerings (
     UNIQUE(pubkey, offering_id)
 );
 
--- Provider trust cache
+-- Provider trust cache (migration 018)
 CREATE TABLE provider_trust_cache (
     pubkey BYTEA PRIMARY KEY,
     trust_score BIGINT NOT NULL,
     updated_at_ns BIGINT NOT NULL
 );
 
--- Provider notification config
-CREATE TABLE provider_notification_config (
-    provider_pubkey BYTEA PRIMARY KEY,
-    telegram_chat_id TEXT,
-    telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at_ns BIGINT NOT NULL
-);
-
--- Provider onboarding tracking
+-- Provider onboarding tracking (migration 034)
 CREATE TABLE provider_onboarding (
     provider_pubkey BYTEA PRIMARY KEY,
     onboarding_step TEXT NOT NULL DEFAULT 'initial',
@@ -241,7 +234,7 @@ CREATE TABLE user_public_keys (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- User notification config (migration 032)
+-- User notification config (migration 032) - REPLACES provider_notification_config
 CREATE TABLE user_notification_config (
     user_pubkey BYTEA PRIMARY KEY,
     notify_telegram BOOLEAN NOT NULL DEFAULT FALSE,
@@ -276,6 +269,8 @@ CREATE TABLE accounts (
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     -- Last login tracking (migration 019)
     last_login_at BIGINT,
+    -- Admin flag (migration 021)
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
     -- Chatwoot user ID (migration 027)
     chatwoot_user_id BIGINT,
     -- Subscription fields (migration 057)
@@ -285,9 +280,7 @@ CREATE TABLE accounts (
     subscription_stripe_id TEXT,
     subscription_current_period_end BIGINT,
     subscription_cancel_at_period_end BOOLEAN DEFAULT FALSE,
-    -- Admin flag
-    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
-    -- Billing info
+    -- Billing info (migration 042)
     billing_address TEXT,
     billing_vat_id TEXT,
     billing_country_code TEXT,
@@ -304,10 +297,11 @@ CREATE UNIQUE INDEX idx_accounts_username_unique ON accounts(LOWER(username));
 CREATE INDEX idx_accounts_username ON accounts(username);
 CREATE INDEX idx_accounts_auth_provider ON accounts(auth_provider);
 CREATE UNIQUE INDEX idx_accounts_email_unique ON accounts(email) WHERE email IS NOT NULL;
+CREATE INDEX idx_accounts_last_login ON accounts(last_login_at);
+CREATE INDEX idx_accounts_is_admin ON accounts(is_admin);
 CREATE INDEX idx_accounts_stripe_customer ON accounts(stripe_customer_id);
 CREATE INDEX idx_accounts_subscription_status ON accounts(subscription_status);
 CREATE INDEX idx_accounts_subscription_plan ON accounts(subscription_plan_id);
-CREATE INDEX idx_accounts_last_login ON accounts(last_login_at);
 
 -- Account public keys (multi-device support)
 CREATE TABLE account_public_keys (
@@ -401,7 +395,7 @@ CREATE INDEX idx_oauth_accounts_account ON oauth_accounts(account_id);
 CREATE INDEX idx_oauth_accounts_provider_external ON oauth_accounts(provider, external_id);
 CREATE INDEX idx_oauth_accounts_email ON oauth_accounts(email);
 
--- Admin accounts
+-- Admin accounts (migration 021)
 CREATE TABLE admin_accounts (
     account_id BYTEA PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
     granted_at_ns BIGINT NOT NULL,
@@ -437,7 +431,7 @@ CREATE TABLE token_approvals (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Escrow
+-- Escrow (migration 030)
 CREATE TABLE escrow (
     id BIGSERIAL PRIMARY KEY,
     contract_id BYTEA NOT NULL UNIQUE,
@@ -482,8 +476,8 @@ CREATE TABLE contract_sign_requests (
     status_updated_by BYTEA,
     provisioning_instance_details TEXT,
     provisioning_completed_at_ns BIGINT,
-    -- Added: currency (migration 013-017)
-    currency TEXT NOT NULL DEFAULT 'ICP',
+    -- Added: currency (migrations 013-017) - NO DEFAULT for fail-fast behavior
+    currency TEXT NOT NULL,
     -- Added: Chatwoot tracking (migration 024, 027)
     chatwoot_conversation_id INTEGER,
     chatwoot_user_id INTEGER,
@@ -506,7 +500,7 @@ CREATE TABLE contract_sign_requests (
     cancel_at_period_end BOOLEAN DEFAULT FALSE,
     -- Added: gateway configuration (migration 063)
     gateway_slug TEXT,
-    gateway_ssh_port BIGINT,
+    gateway_ssh_port INTEGER,
     gateway_port_range_start BIGINT,
     gateway_port_range_end BIGINT,
     -- Added: payment methods (migration 010)
@@ -805,13 +799,13 @@ CREATE TABLE reseller_commissions_mapping (
     UNIQUE(referred_account_id)
 );
 
--- Reseller relationships - who can resell which external provider's offerings (migration 036)
+-- Reseller relationships (migration 036)
 CREATE TABLE reseller_relationships (
     id BIGSERIAL PRIMARY KEY,
-    reseller_pubkey BYTEA NOT NULL,           -- Onboarded provider acting as reseller
-    external_provider_pubkey BYTEA NOT NULL,  -- External provider being resold
-    commission_percent BIGINT NOT NULL DEFAULT 10,  -- 0-50%, markup on base price
-    status TEXT NOT NULL DEFAULT 'active',   -- 'active', 'suspended'
+    reseller_pubkey BYTEA NOT NULL,
+    external_provider_pubkey BYTEA NOT NULL,
+    commission_percent BIGINT NOT NULL DEFAULT 10,
+    status TEXT NOT NULL DEFAULT 'active',
     created_at_ns BIGINT NOT NULL,
     updated_at_ns BIGINT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -821,19 +815,19 @@ CREATE TABLE reseller_relationships (
 CREATE INDEX idx_reseller_relationships_reseller ON reseller_relationships(reseller_pubkey);
 CREATE INDEX idx_reseller_relationships_status ON reseller_relationships(status);
 
--- Reseller orders - contracts proxied through reseller (migration 036)
+-- Reseller orders (migration 036)
 CREATE TABLE reseller_orders (
     id BIGSERIAL PRIMARY KEY,
-    contract_id BYTEA NOT NULL UNIQUE,        -- FK to contract
+    contract_id BYTEA NOT NULL UNIQUE,
     reseller_pubkey BYTEA NOT NULL,
     external_provider_pubkey BYTEA NOT NULL,
-    offering_id BIGINT NOT NULL,            -- Which offering was ordered
-    base_price_e9s BIGINT NOT NULL,         -- Original price
-    commission_e9s BIGINT NOT NULL,         -- Reseller commission
-    total_paid_e9s BIGINT NOT NULL,         -- What user paid
-    external_order_id TEXT,                  -- Provider's order ID
-    external_order_details TEXT,             -- JSON: instance details
-    status TEXT NOT NULL DEFAULT 'pending',  -- 'pending', 'fulfilled', 'failed'
+    offering_id BIGINT NOT NULL,
+    base_price_e9s BIGINT NOT NULL,
+    commission_e9s BIGINT NOT NULL,
+    total_paid_e9s BIGINT NOT NULL,
+    external_order_id TEXT,
+    external_order_details TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
     created_at_ns BIGINT NOT NULL,
     fulfilled_at_ns BIGINT,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -860,27 +854,45 @@ CREATE TABLE receipt_tracking (
 
 CREATE INDEX idx_receipt_tracking_contract ON receipt_tracking(contract_id);
 
--- Invoices
+-- Invoices (migration 039, recreated in 046)
 CREATE TABLE invoices (
     id BYTEA PRIMARY KEY DEFAULT gen_random_bytes(16),
-    contract_id BYTEA NOT NULL,
+    contract_id BYTEA NOT NULL UNIQUE,
     invoice_number TEXT NOT NULL UNIQUE,
-    provider_pubkey BYTEA NOT NULL,
-    buyer_pubkey BYTEA NOT NULL,
-    amount_e9s BIGINT NOT NULL,
+    invoice_date_ns BIGINT NOT NULL,
+    seller_name TEXT NOT NULL,
+    seller_address TEXT NOT NULL,
+    seller_vat_id TEXT,
+    buyer_name TEXT,
+    buyer_address TEXT,
+    buyer_vat_id TEXT,
+    subtotal_e9s BIGINT NOT NULL,
+    vat_rate_percent BIGINT NOT NULL DEFAULT 0,
+    vat_amount_e9s BIGINT NOT NULL DEFAULT 0,
+    total_e9s BIGINT NOT NULL,
     currency TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft',
-    issued_at_ns BIGINT,
-    paid_at_ns BIGINT,
-    created_at_ns BIGINT NOT NULL
+    pdf_generated_at_ns BIGINT,
+    created_at_ns BIGINT NOT NULL,
+    FOREIGN KEY (contract_id) REFERENCES contract_sign_requests(contract_id)
 );
 
-CREATE INDEX idx_invoices_contract ON invoices(contract_id);
-CREATE INDEX idx_invoices_provider ON invoices(provider_pubkey);
-CREATE INDEX idx_invoices_buyer ON invoices(buyer_pubkey);
-CREATE INDEX idx_invoices_number ON invoices(invoice_number);
+CREATE INDEX idx_invoices_contract_id ON invoices(contract_id);
+CREATE INDEX idx_invoices_invoice_number ON invoices(invoice_number);
+CREATE INDEX idx_invoices_created_at ON invoices(created_at_ns);
 
--- Tax tracking
+-- Invoice sequence for sequential numbering (migration 039)
+CREATE TABLE invoice_sequence (
+    id BIGINT PRIMARY KEY CHECK (id = 1),
+    year BIGINT NOT NULL,
+    next_number BIGINT NOT NULL DEFAULT 1
+);
+
+-- Initialize invoice sequence for current year
+INSERT INTO invoice_sequence (id, year, next_number)
+VALUES (1, EXTRACT(YEAR FROM NOW()), 1)
+ON CONFLICT (id) DO NOTHING;
+
+-- Tax tracking (migration 040)
 CREATE TABLE tax_tracking (
     id BIGSERIAL PRIMARY KEY,
     invoice_id BYTEA NOT NULL REFERENCES invoices(id),
@@ -892,7 +904,7 @@ CREATE TABLE tax_tracking (
 
 CREATE INDEX idx_tax_tracking_invoice ON tax_tracking(invoice_id);
 
--- Billing settings
+-- Billing settings (migration 042)
 CREATE TABLE billing_settings (
     account_id BYTEA PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
     company_name TEXT,
@@ -902,7 +914,7 @@ CREATE TABLE billing_settings (
     updated_at_ns BIGINT NOT NULL
 );
 
--- Pending Stripe receipts
+-- Pending Stripe receipts (migration 045)
 CREATE TABLE pending_stripe_receipts (
     contract_id BYTEA PRIMARY KEY,
     created_at_ns BIGINT NOT NULL,
@@ -912,14 +924,15 @@ CREATE TABLE pending_stripe_receipts (
 
 CREATE INDEX idx_pending_stripe_receipts_next_attempt ON pending_stripe_receipts(next_attempt_at_ns);
 
--- Receipt sequence for sequential receipt numbering (migration 038)
+-- Receipt sequence (migration 038)
 CREATE TABLE receipt_sequence (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+    id BIGINT PRIMARY KEY CHECK (id = 1),
     next_number BIGINT NOT NULL DEFAULT 1
 );
 
 -- Initialize with first receipt number
-INSERT INTO receipt_sequence (id, next_number) VALUES (1, 1);
+INSERT INTO receipt_sequence (id, next_number) VALUES (1, 1)
+ON CONFLICT (id) DO NOTHING;
 
 -- Receipt number index on contract_sign_requests
 CREATE INDEX idx_contract_sign_requests_receipt_number ON contract_sign_requests(receipt_number) WHERE receipt_number IS NOT NULL;
@@ -951,6 +964,7 @@ CREATE TABLE email_queue (
 
 CREATE INDEX idx_email_queue_status ON email_queue(status);
 CREATE INDEX idx_email_queue_created_at ON email_queue(created_at);
+CREATE INDEX idx_email_queue_related_account ON email_queue(related_account_id);
 
 -- Email verification tokens (migration 020)
 CREATE TABLE email_verification_tokens (
@@ -982,7 +996,7 @@ CREATE INDEX idx_recovery_tokens_expires_at ON recovery_tokens(expires_at);
 -- MESSAGING/NOTIFICATION TABLES
 --------------------------------------------------------------------------------
 
--- Telegram message tracking for reply handling (migration 029)
+-- Telegram message tracking (migration 029)
 CREATE TABLE telegram_message_tracking (
     telegram_message_id BIGINT PRIMARY KEY,
     conversation_id BIGINT NOT NULL,
@@ -996,15 +1010,15 @@ CREATE INDEX idx_telegram_tracking_created_at ON telegram_message_tracking(creat
 CREATE TABLE notification_usage (
     id BIGSERIAL PRIMARY KEY,
     provider_id TEXT NOT NULL,
-    channel TEXT NOT NULL,      -- 'telegram', 'sms', 'email'
-    date TEXT NOT NULL,         -- YYYY-MM-DD format
+    channel TEXT NOT NULL,
+    date TEXT NOT NULL,
     count BIGINT NOT NULL DEFAULT 0,
     UNIQUE(provider_id, channel, date)
 );
 
 CREATE INDEX idx_notification_usage_provider_date ON notification_usage(provider_id, date);
 
--- Chatwoot message events for response time metrics (migration 024)
+-- Chatwoot message events (migration 024, 026)
 CREATE TABLE chatwoot_message_events (
     id BIGSERIAL PRIMARY KEY,
     contract_id TEXT NOT NULL,
@@ -1012,9 +1026,8 @@ CREATE TABLE chatwoot_message_events (
     chatwoot_message_id BIGINT NOT NULL UNIQUE,
     sender_type TEXT NOT NULL CHECK (sender_type IN ('customer', 'provider')),
     created_at BIGINT NOT NULL,
-    -- SLA tracking (migration 026)
-    sla_breached INTEGER NOT NULL DEFAULT 0,
-    sla_alert_sent INTEGER NOT NULL DEFAULT 0
+    sla_breached BIGINT NOT NULL DEFAULT 0,
+    sla_alert_sent BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_chatwoot_events_contract ON chatwoot_message_events(contract_id);
@@ -1023,7 +1036,7 @@ CREATE INDEX idx_chatwoot_events_conversation ON chatwoot_message_events(chatwoo
 -- Provider SLA configuration (migration 026)
 CREATE TABLE provider_sla_config (
     provider_pubkey BYTEA PRIMARY KEY,
-    response_time_seconds BIGINT NOT NULL DEFAULT 14400,  -- 4 hours default
+    response_time_seconds BIGINT NOT NULL DEFAULT 14400,
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL
 );
@@ -1042,13 +1055,36 @@ CREATE TABLE chatwoot_tracking (
 
 CREATE INDEX idx_chatwoot_tracking_entity ON chatwoot_tracking(entity_type, entity_id);
 
--- Chatwoot provider resources
+-- Chatwoot provider resources (migration 037)
 CREATE TABLE chatwoot_provider_resources (
     provider_pubkey BYTEA PRIMARY KEY,
     portal_slug TEXT,
     category_id INTEGER,
     created_at_ns BIGINT NOT NULL
 );
+
+--------------------------------------------------------------------------------
+-- PAYMENT RELEASES
+--------------------------------------------------------------------------------
+
+-- Payment releases for ICPay periodic payouts (migration 030)
+CREATE TABLE payment_releases (
+    id BIGSERIAL PRIMARY KEY,
+    contract_id BYTEA NOT NULL REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE,
+    release_type TEXT NOT NULL CHECK(release_type IN ('daily', 'hourly', 'final', 'cancellation')),
+    period_start_ns BIGINT NOT NULL,
+    period_end_ns BIGINT NOT NULL,
+    amount_e9s BIGINT NOT NULL,
+    provider_pubkey BYTEA NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'released', 'paid_out', 'refunded')),
+    created_at_ns BIGINT NOT NULL,
+    released_at_ns BIGINT,
+    payout_id TEXT
+);
+
+CREATE INDEX idx_payment_releases_contract ON payment_releases(contract_id);
+CREATE INDEX idx_payment_releases_provider ON payment_releases(provider_pubkey);
+CREATE INDEX idx_payment_releases_status ON payment_releases(status);
 
 --------------------------------------------------------------------------------
 -- MISC TABLES
@@ -1066,12 +1102,12 @@ CREATE TABLE linked_ic_ids (
 
 -- Sync state
 CREATE TABLE sync_state (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+    id BIGINT PRIMARY KEY CHECK (id = 1),
     last_position BIGINT NOT NULL DEFAULT 0,
     last_sync_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Bandwidth history
+-- Bandwidth history (migration 064)
 CREATE TABLE bandwidth_history (
     id BIGSERIAL PRIMARY KEY,
     contract_id TEXT NOT NULL,
@@ -1121,6 +1157,8 @@ CREATE INDEX idx_contract_sign_requests_requester_pubkey ON contract_sign_reques
 CREATE INDEX idx_contract_sign_requests_provider ON contract_sign_requests(provider_pubkey);
 CREATE INDEX idx_contract_sign_requests_status ON contract_sign_requests(status);
 CREATE INDEX idx_contract_sign_requests_offering ON contract_sign_requests(offering_id);
+-- IMPORTANT: idx_contract_currency (migration 013, recreated in 017)
+CREATE INDEX idx_contract_currency ON contract_sign_requests(currency);
 CREATE INDEX idx_contracts_requester_account ON contract_sign_requests(requester_account_id);
 CREATE INDEX idx_contracts_provider_account ON contract_sign_requests(provider_account_id);
 CREATE INDEX idx_contracts_lock ON contract_sign_requests(provisioning_lock_expires_ns) WHERE provisioning_lock_agent IS NOT NULL;
@@ -1140,25 +1178,6 @@ CREATE INDEX idx_contract_sign_requests_payment_method_status ON contract_sign_r
 CREATE INDEX idx_contract_sign_requests_icpay_transaction ON contract_sign_requests(icpay_transaction_id) WHERE icpay_transaction_id IS NOT NULL;
 CREATE INDEX idx_contract_sign_requests_stripe_invoice ON contract_sign_requests(stripe_invoice_id) WHERE stripe_invoice_id IS NOT NULL;
 CREATE INDEX idx_contract_refund_id ON contract_sign_requests(stripe_refund_id) WHERE stripe_refund_id IS NOT NULL;
-
--- Payment releases for ICPay periodic payouts (migration 030)
-CREATE TABLE payment_releases (
-    id BIGSERIAL PRIMARY KEY,
-    contract_id BYTEA NOT NULL REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE,
-    release_type TEXT NOT NULL CHECK(release_type IN ('daily', 'hourly', 'final', 'cancellation')),
-    period_start_ns BIGINT NOT NULL,
-    period_end_ns BIGINT NOT NULL,
-    amount_e9s BIGINT NOT NULL,
-    provider_pubkey BYTEA NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'released', 'paid_out', 'refunded')),
-    created_at_ns BIGINT NOT NULL,
-    released_at_ns BIGINT,
-    payout_id TEXT
-);
-
-CREATE INDEX idx_payment_releases_contract ON payment_releases(contract_id);
-CREATE INDEX idx_payment_releases_provider ON payment_releases(provider_pubkey);
-CREATE INDEX idx_payment_releases_status ON payment_releases(status);
 
 -- Reputation indexes
 CREATE INDEX idx_reputation_changes_pubkey ON reputation_changes(pubkey);
@@ -1184,10 +1203,12 @@ CREATE INDEX idx_user_public_keys_fingerprint ON user_public_keys(key_fingerprin
 --------------------------------------------------------------------------------
 
 -- Initialize sync state
-INSERT INTO sync_state (id, last_position) VALUES (1, 0);
+INSERT INTO sync_state (id, last_position) VALUES (1, 0)
+ON CONFLICT (id) DO NOTHING;
 
 -- Default subscription plans
 INSERT INTO subscription_plans (id, name, description, monthly_price_cents, trial_days, features) VALUES
     ('free', 'Free', 'Basic marketplace access', 0, 0, '["marketplace_browse","one_rental"]'),
     ('pro', 'Pro', 'Full platform access', 2900, 14, '["marketplace_browse","unlimited_rentals","priority_support","api_access"]'),
-    ('enterprise', 'Enterprise', 'Enterprise features', 9900, 14, '["marketplace_browse","unlimited_rentals","priority_support","api_access","dedicated_support","sla_guarantee"]');
+    ('enterprise', 'Enterprise', 'Enterprise features', 9900, 14, '["marketplace_browse","unlimited_rentals","priority_support","api_access","dedicated_support","sla_guarantee"]')
+ON CONFLICT (id) DO NOTHING;

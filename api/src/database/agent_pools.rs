@@ -570,7 +570,7 @@ impl Database {
                     }
                 };
                 let active = row.revoked_at_ns.is_none()
-                    && row.expires_at_ns.map_or(true, |expires| expires > now_ns);
+                    && row.expires_at_ns.is_none_or(|expires| expires > now_ns);
                 AgentDelegation {
                     agent_pubkey: hex::encode(row.agent_pubkey),
                     provider_pubkey: hex::encode(row.provider_pubkey),
