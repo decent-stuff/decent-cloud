@@ -102,6 +102,7 @@ core
 *.core
 *.log
 crash-*
+logs/
 
 ### Internet Computer / DFINITY ###
 .dfx/
