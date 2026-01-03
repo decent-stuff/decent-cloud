@@ -334,7 +334,7 @@ async fn ensure_template_db(base_url: &str) -> String {
 
     // Check if template exists
     let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate = TRUE)"
+        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate = TRUE)",
     )
     .bind(&template_name)
     .fetch_one(&admin_pool)
@@ -377,8 +377,14 @@ async fn ensure_template_db(base_url: &str) -> String {
             .expect("Failed to connect to template database");
 
         let migrations = [
-            ("001_schema.sql", include_str!("../../migrations_pg/001_schema.sql")),
-            ("002_seed_data.sql", include_str!("../../migrations_pg/002_seed_data.sql")),
+            (
+                "001_schema.sql",
+                include_str!("../../migrations_pg/001_schema.sql"),
+            ),
+            (
+                "002_seed_data.sql",
+                include_str!("../../migrations_pg/002_seed_data.sql"),
+            ),
         ];
 
         for (name, migration) in &migrations {
@@ -463,10 +469,13 @@ pub async fn setup_test_db() -> Database {
         .expect("Failed to drop existing test database");
 
     // Clone from template (FAST! ~100ms vs 6-10s for full migration)
-    sqlx::query(&format!("CREATE DATABASE {} TEMPLATE {}", db_name, template_name))
-        .execute(&admin_pool)
-        .await
-        .expect("Failed to create test database from template");
+    sqlx::query(&format!(
+        "CREATE DATABASE {} TEMPLATE {}",
+        db_name, template_name
+    ))
+    .execute(&admin_pool)
+    .await
+    .expect("Failed to create test database from template");
 
     admin_pool.close().await;
 
