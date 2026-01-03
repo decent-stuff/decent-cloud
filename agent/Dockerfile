@@ -6,7 +6,7 @@ FROM rust:1.91
 # Environment variables (from CI Dockerfile)
 ENV HOME=/home/ubuntu \
     XDG_DATA_HOME=/home/ubuntu/.cache/data \
-    PATH=/home/ubuntu/.cache/data/dfx/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:/home/ubuntu/bin:/home/ubuntu/.npm-global/bin:/home/ubuntu/.venv/bin:$PATH \
+    PATH=/usr/lib/postgresql/17/bin:/home/ubuntu/.cache/data/dfx/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:/home/ubuntu/bin:/home/ubuntu/.npm-global/bin:/home/ubuntu/.venv/bin:$PATH \
     POCKET_IC_BIN=/home/ubuntu/bin/pocket-ic \
     RUST_BACKTRACE=1 \
     VIRTUAL_ENV=/home/ubuntu/.venv
