@@ -61,7 +61,7 @@ CREATE TABLE provider_profiles (
     trust_score BIGINT,
     has_critical_flags BOOLEAN DEFAULT FALSE,
     -- Added: auto_accept_rentals (migration 048/049)
-    auto_accept_rentals BOOLEAN NOT NULL DEFAULT 1,
+    auto_accept_rentals BOOLEAN NOT NULL DEFAULT TRUE,
     -- Added: account_id (migration 050)
     account_id BYTEA
 );
@@ -501,8 +501,8 @@ CREATE TABLE contract_sign_requests (
     -- Added: gateway configuration (migration 063)
     gateway_slug TEXT,
     gateway_ssh_port INTEGER,
-    gateway_port_range_start BIGINT,
-    gateway_port_range_end BIGINT,
+    gateway_port_range_start INTEGER,
+    gateway_port_range_end INTEGER,
     -- Added: payment methods (migration 010)
     payment_method TEXT NOT NULL DEFAULT 'icpay',
     stripe_payment_intent_id TEXT,
