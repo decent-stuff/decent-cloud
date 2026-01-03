@@ -16,18 +16,15 @@ mod tests {
         match check_schema_applied(&database_url).await {
             Ok(true) => {
                 // Schema exists - test passes
-                assert!(true);
             }
             Ok(false) => {
                 // Schema doesn't exist - this is expected if DB is empty
                 // We'll mark this as passed since we verified we can connect
-                assert!(true);
             }
             Err(_) => {
                 // Can't connect - skip test rather than fail
                 // (CI environments may not have PostgreSQL running)
                 println!("Skipping test_check_schema_applied_with_valid_database: PostgreSQL not available");
-                assert!(true);
             }
         }
     }

@@ -53,7 +53,7 @@ thread_local! {
             LABEL_REWARD_DISTRIBUTION.to_string(),
         ])) {
             Ok(ledger) => RefCell::new(ledger),
-            Err(e) => ic_cdk::trap(&format!("CRITICAL: Failed to create LedgerMap: {}", e)),
+            Err(e) => ic_cdk::trap(format!("CRITICAL: Failed to create LedgerMap: {}", e)),
         }
     };
     pub(crate) static AUTHORIZED_PUSHER: RefCell<Option<Principal>> = const { RefCell::new(None) };
@@ -111,7 +111,7 @@ fn ledger_periodic_task() {
 pub fn encode_to_cbor_bytes(obj: &impl Serialize) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::new();
     ciborium::into_writer(obj, &mut buf)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("CRITICAL: Failed to encode to CBOR: {}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("CRITICAL: Failed to encode to CBOR: {}", e)));
     buf
 }
 
@@ -138,7 +138,7 @@ pub fn _init(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
         if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
-            ic_cdk::trap(&format!(
+            ic_cdk::trap(format!(
                 "CRITICAL: _init failed to load caches from ledger: {}",
                 e
             ));
@@ -169,7 +169,7 @@ pub fn _post_upgrade(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
         if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
-            ic_cdk::trap(&format!(
+            ic_cdk::trap(format!(
                 "CRITICAL: _post_upgrade failed to load caches from ledger: {}",
                 e
             ));
@@ -369,9 +369,7 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
                             reward_e9s_per_block_recalculate();
                         })
                 });
-                if let Err(e) = refresh_result {
-                    return Err(e);
-                }
+                refresh_result?;
                 "; ledger refreshed".to_string()
             };
             let response = format!(

@@ -1,0 +1,1038 @@
+{
+  "tables": {
+    "provider_registrations": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL", "UNIQUE"]},
+        {"name": "signature", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "provider_check_ins": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "memo", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "nonce_signature", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "block_timestamp_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "provider_profiles": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL", "UNIQUE"]},
+        {"name": "name", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "description", "type": "TEXT"},
+        {"name": "website_url", "type": "TEXT"},
+        {"name": "logo_url", "type": "TEXT"},
+        {"name": "why_choose_us", "type": "TEXT"},
+        {"name": "api_version", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "profile_version", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "updated_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "updated_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "provider_profiles_contacts": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "provider_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "contact_type", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "contact_value", "type": "TEXT", "constraints": ["NOT NULL"]}
+      ],
+      "foreign_keys": [
+        {"columns": ["provider_pubkey"], "references": "provider_profiles(pubkey)", "on_delete": "CASCADE"}
+      ]
+    },
+    "provider_offerings": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "offering_id", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "offer_name", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "description", "type": "TEXT"},
+        {"name": "product_page_url", "type": "TEXT"},
+        {"name": "currency", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "monthly_price", "type": "REAL", "constraints": ["NOT NULL"]},
+        {"name": "setup_fee", "type": "REAL", "constraints": ["NOT NULL"], "default": "0.0"},
+        {"name": "visibility", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "product_type", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "virtualization_type", "type": "TEXT"},
+        {"name": "billing_interval", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "stock_status", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "processor_brand", "type": "TEXT"},
+        {"name": "processor_amount", "type": "INTEGER"},
+        {"name": "processor_cores", "type": "INTEGER"},
+        {"name": "processor_speed", "type": "TEXT"},
+        {"name": "processor_name", "type": "TEXT"},
+        {"name": "memory_error_correction", "type": "TEXT"},
+        {"name": "memory_type", "type": "TEXT"},
+        {"name": "memory_amount", "type": "TEXT"},
+        {"name": "hdd_amount", "type": "INTEGER", "default": "0"},
+        {"name": "total_hdd_capacity", "type": "TEXT"},
+        {"name": "ssd_amount", "type": "INTEGER", "default": "0"},
+        {"name": "total_ssd_capacity", "type": "TEXT"},
+        {"name": "unmetered_bandwidth", "type": "BOOLEAN", "default": "FALSE"},
+        {"name": "uplink_speed", "type": "TEXT"},
+        {"name": "traffic", "type": "INTEGER"},
+        {"name": "datacenter_country", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "datacenter_city", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "datacenter_latitude", "type": "REAL"},
+        {"name": "datacenter_longitude", "type": "REAL"},
+        {"name": "control_panel", "type": "TEXT"},
+        {"name": "gpu_name", "type": "TEXT"},
+        {"name": "min_contract_hours", "type": "INTEGER"},
+        {"name": "max_contract_hours", "type": "INTEGER"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"},
+        {"name": "payment_methods", "type": "TEXT"},
+        {"name": "features", "type": "TEXT"},
+        {"name": "operating_systems", "type": "TEXT"},
+        {"name": "gpu_count", "type": "INTEGER", "added_in": "006_gpu_fields"},
+        {"name": "gpu_memory_gb", "type": "INTEGER", "added_in": "006_gpu_fields"}
+      ],
+      "unique_constraints": [
+        {"columns": ["pubkey", "offering_id"]}
+      ]
+    },
+    "user_registrations": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL", "UNIQUE"]},
+        {"name": "signature", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "token_transfers": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "from_account", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "to_account", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "amount_e9s", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "fee_e9s", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "0"},
+        {"name": "memo", "type": "TEXT"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"},
+        {"name": "block_hash", "type": "BLOB"},
+        {"name": "block_offset", "type": "INTEGER"}
+      ]
+    },
+    "token_approvals": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "owner_account", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "spender_account", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "amount_e9s", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "expires_at_ns", "type": "INTEGER"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "contract_sign_requests": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "contract_id", "type": "BLOB", "constraints": ["NOT NULL", "UNIQUE"]},
+        {"name": "requester_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "requester_ssh_pubkey", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "requester_contact", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "provider_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "offering_id", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "region_name", "type": "TEXT"},
+        {"name": "instance_config", "type": "TEXT"},
+        {"name": "payment_amount_e9s", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "start_timestamp_ns", "type": "INTEGER"},
+        {"name": "end_timestamp_ns", "type": "INTEGER"},
+        {"name": "duration_hours", "type": "INTEGER"},
+        {"name": "original_duration_hours", "type": "INTEGER"},
+        {"name": "request_memo", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"},
+        {"name": "status", "type": "TEXT", "default": "'pending'"},
+        {"name": "status_updated_at_ns", "type": "INTEGER"},
+        {"name": "status_updated_by", "type": "BLOB"},
+        {"name": "provisioning_instance_details", "type": "TEXT"},
+        {"name": "provisioning_completed_at_ns", "type": "INTEGER"},
+        {"name": "payment_method", "type": "TEXT", "constraints": ["NOT NULL"], "default": "'dct'", "added_in": "010_payment_methods"},
+        {"name": "stripe_payment_intent_id", "type": "TEXT", "added_in": "010_payment_methods"},
+        {"name": "stripe_customer_id", "type": "TEXT", "added_in": "010_payment_methods"},
+        {"name": "payment_status", "type": "TEXT", "constraints": ["NOT NULL"], "default": "'pending'", "added_in": "011_payment_status"},
+        {"name": "refund_amount_e9s", "type": "INTEGER", "added_in": "012_refund_tracking"},
+        {"name": "stripe_refund_id", "type": "TEXT", "added_in": "012_refund_tracking"},
+        {"name": "refund_created_at_ns", "type": "INTEGER", "added_in": "012_refund_tracking"},
+        {"name": "currency", "type": "TEXT", "constraints": ["NOT NULL"], "default": "'???'", "added_in": "013_contract_currency", "note": "Default changed from 'usd' to '???' in migration 016"}
+      ]
+    },
+    "contract_provisioning_details": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "contract_id", "type": "BLOB", "constraints": ["PRIMARY KEY"]},
+        {"name": "instance_ip", "type": "TEXT"},
+        {"name": "instance_credentials", "type": "TEXT"},
+        {"name": "connection_instructions", "type": "TEXT"},
+        {"name": "provisioned_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["contract_id"], "references": "contract_sign_requests(contract_id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "contract_status_history": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "contract_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "old_status", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "new_status", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "changed_by", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "changed_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "change_memo", "type": "TEXT"},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["contract_id"], "references": "contract_sign_requests(contract_id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "contract_payment_entries": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "contract_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "pricing_model", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "time_period_unit", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "quantity", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "amount_e9s", "type": "INTEGER", "constraints": ["NOT NULL"]}
+      ],
+      "foreign_keys": [
+        {"columns": ["contract_id"], "references": "contract_sign_requests(contract_id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "contract_sign_replies": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "contract_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "provider_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "reply_status", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "reply_memo", "type": "TEXT"},
+        {"name": "instance_details", "type": "TEXT"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["contract_id"], "references": "contract_sign_requests(contract_id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "contract_extensions": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "contract_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "extended_by_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "extension_hours", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "extension_payment_e9s", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "previous_end_timestamp_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "new_end_timestamp_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "extension_memo", "type": "TEXT"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["contract_id"], "references": "contract_sign_requests(contract_id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "reputation_changes": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "change_amount", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "reason", "type": "TEXT", "constraints": ["NOT NULL"], "default": "''"},
+        {"name": "block_timestamp_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "reputation_aging": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "block_timestamp_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "aging_factor_ppm", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "reward_distributions": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "block_timestamp_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "total_amount_e9s", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "providers_count", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "amount_per_provider_e9s", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "linked_ic_ids": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "ic_principal", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "operation", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "linked_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "sync_state": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY"], "check_constraints": ["id = 1"]},
+        {"name": "last_position", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "0"},
+        {"name": "last_sync_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ]
+    },
+    "user_profiles": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "pubkey", "type": "BLOB", "constraints": ["NOT NULL", "UNIQUE"]},
+        {"name": "display_name", "type": "TEXT"},
+        {"name": "bio", "type": "TEXT"},
+        {"name": "avatar_url", "type": "TEXT"},
+        {"name": "updated_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "updated_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["pubkey"], "references": "user_registrations(pubkey)", "on_delete": "CASCADE"}
+      ]
+    },
+    "user_contacts": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "user_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "contact_type", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "contact_value", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "verified", "type": "BOOLEAN", "default": "FALSE"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["user_pubkey"], "references": "user_registrations(pubkey)", "on_delete": "CASCADE"}
+      ]
+    },
+    "user_socials": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "user_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "platform", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "username", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "profile_url", "type": "TEXT"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["user_pubkey"], "references": "user_registrations(pubkey)", "on_delete": "CASCADE"}
+      ]
+    },
+    "user_public_keys": {
+      "created_in": "001_original_schema",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "user_pubkey", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "key_type", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "key_data", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "key_fingerprint", "type": "TEXT"},
+        {"name": "label", "type": "TEXT"},
+        {"name": "created_at_ns", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "DATETIME", "default": "CURRENT_TIMESTAMP"}
+      ],
+      "foreign_keys": [
+        {"columns": ["user_pubkey"], "references": "user_registrations(pubkey)", "on_delete": "CASCADE"}
+      ]
+    },
+    "accounts": {
+      "created_in": "002_account_profiles",
+      "columns": [
+        {"name": "id", "type": "BLOB", "constraints": ["PRIMARY KEY"], "default": "(randomblob(16))"},
+        {"name": "username", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"},
+        {"name": "updated_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"},
+        {"name": "display_name", "type": "TEXT", "added_in": "004_account_profiles_fix"},
+        {"name": "bio", "type": "TEXT", "added_in": "004_account_profiles_fix"},
+        {"name": "avatar_url", "type": "TEXT", "added_in": "004_account_profiles_fix"},
+        {"name": "profile_updated_at", "type": "INTEGER", "added_in": "004_account_profiles_fix"},
+        {"name": "auth_provider", "type": "TEXT", "constraints": ["NOT NULL"], "default": "'seed_phrase'", "added_in": "005_oauth_support"},
+        {"name": "email", "type": "TEXT", "added_in": "005_oauth_support"}
+      ],
+      "check_constraints": [
+        "username GLOB '[a-zA-Z0-9][a-zA-Z0-9._@-]*[a-zA-Z0-9]' AND length(username) >= 3 AND length(username) <= 64"
+      ],
+      "note": "Username constraint updated in migration 007 to allow uppercase letters"
+    },
+    "account_public_keys": {
+      "created_in": "002_account_profiles",
+      "columns": [
+        {"name": "id", "type": "BLOB", "constraints": ["PRIMARY KEY"], "default": "(randomblob(16))"},
+        {"name": "account_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "public_key", "type": "BLOB", "constraints": ["UNIQUE", "NOT NULL"]},
+        {"name": "is_active", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "1"},
+        {"name": "added_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"},
+        {"name": "disabled_at", "type": "INTEGER"},
+        {"name": "disabled_by_key_id", "type": "BLOB"},
+        {"name": "device_name", "type": "TEXT", "added_in": "003_device_names"}
+      ],
+      "foreign_keys": [
+        {"columns": ["account_id"], "references": "accounts(id)", "on_delete": "CASCADE"},
+        {"columns": ["disabled_by_key_id"], "references": "account_public_keys(id)"}
+      ],
+      "check_constraints": [
+        "length(public_key) = 32"
+      ],
+      "unique_constraints": [
+        {"columns": ["account_id", "public_key"]}
+      ]
+    },
+    "signature_audit": {
+      "created_in": "002_account_profiles",
+      "columns": [
+        {"name": "id", "type": "BLOB", "constraints": ["PRIMARY KEY"], "default": "(randomblob(16))"},
+        {"name": "account_id", "type": "BLOB"},
+        {"name": "action", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "payload", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "signature", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "public_key", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "timestamp", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "nonce", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "is_admin_action", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "0"},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"}
+      ],
+      "foreign_keys": [
+        {"columns": ["account_id"], "references": "accounts(id)"}
+      ],
+      "check_constraints": [
+        "length(signature) = 64",
+        "length(public_key) = 32",
+        "length(nonce) = 16"
+      ]
+    },
+    "account_contacts": {
+      "created_in": "004_account_profiles_fix",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "account_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "contact_type", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "contact_value", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "verified", "type": "BOOLEAN", "default": "FALSE"},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"}
+      ],
+      "foreign_keys": [
+        {"columns": ["account_id"], "references": "accounts(id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "account_socials": {
+      "created_in": "004_account_profiles_fix",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "account_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "platform", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "username", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "profile_url", "type": "TEXT"},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"}
+      ],
+      "foreign_keys": [
+        {"columns": ["account_id"], "references": "accounts(id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "account_external_keys": {
+      "created_in": "004_account_profiles_fix",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "constraints": ["PRIMARY KEY", "AUTOINCREMENT"]},
+        {"name": "account_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "key_type", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "key_data", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "key_fingerprint", "type": "TEXT"},
+        {"name": "label", "type": "TEXT"},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"}
+      ],
+      "foreign_keys": [
+        {"columns": ["account_id"], "references": "accounts(id)", "on_delete": "CASCADE"}
+      ]
+    },
+    "oauth_accounts": {
+      "created_in": "005_oauth_support",
+      "columns": [
+        {"name": "id", "type": "BLOB", "constraints": ["PRIMARY KEY"], "default": "(randomblob(16))"},
+        {"name": "account_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "provider", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "external_id", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "email", "type": "TEXT"},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "(strftime('%s', 'now') * 1000000000)"}
+      ],
+      "foreign_keys": [
+        {"columns": ["account_id"], "references": "accounts(id)", "on_delete": "CASCADE"}
+      ],
+      "unique_constraints": [
+        {"columns": ["provider", "external_id"]}
+      ],
+      "check_constraints": [
+        "provider IN ('google_oauth')"
+      ]
+    },
+    "email_queue": {
+      "created_in": "009_email_queue",
+      "columns": [
+        {"name": "id", "type": "BLOB", "constraints": ["PRIMARY KEY", "NOT NULL"]},
+        {"name": "to_addr", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "from_addr", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "subject", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "body", "type": "TEXT", "constraints": ["NOT NULL"]},
+        {"name": "is_html", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "0"},
+        {"name": "email_type", "type": "TEXT", "constraints": ["NOT NULL"], "default": "'general'"},
+        {"name": "status", "type": "TEXT", "constraints": ["NOT NULL"], "default": "'pending'"},
+        {"name": "attempts", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "0},
+        {"name": "max_attempts", "type": "INTEGER", "constraints": ["NOT NULL"], "default": "6},
+        {"name": "last_error", "type": "TEXT"},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "last_attempted_at", "type": "INTEGER"},
+        {"name": "sent_at", "type": "INTEGER"}
+      ]
+    },
+    "recovery_tokens": {
+      "created_in": "009_email_queue",
+      "columns": [
+        {"name": "token", "type": "BLOB", "constraints": ["PRIMARY KEY", "NOT NULL"]},
+        {"name": "account_id", "type": "BLOB", "constraints": ["NOT NULL"]},
+        {"name": "created_at", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "expires_at", "type": "INTEGER", "constraints": ["NOT NULL"]},
+        {"name": "used_at", "type": "INTEGER"}
+      ],
+      "foreign_keys": [
+        {"columns": ["account_id"], "references": "accounts(id)", "on_delete": "CASCADE"}
+      ]
+    }
+  },
+  "indexes": {
+    "idx_provider_registrations_pubkey": {"table": "provider_registrations", "columns": ["pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_check_ins_pubkey": {"table": "provider_check_ins", "columns": ["pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_check_ins_timestamp": {"table": "provider_check_ins", "columns": ["block_timestamp_ns"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_profiles_pubkey": {"table": "provider_profiles", "columns": ["pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_profiles_contacts_provider": {"table": "provider_profiles_contacts", "columns": ["provider_pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_profiles_contacts_type": {"table": "provider_profiles_contacts", "columns": ["contact_type"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_offerings_pubkey": {"table": "provider_offerings", "columns": ["pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_offerings_offering_id": {"table": "provider_offerings", "columns": ["offering_id"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_offerings_visibility": {"table": "provider_offerings", "columns": ["visibility"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_offerings_country": {"table": "provider_offerings", "columns": ["datacenter_country"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_offerings_product_type": {"table": "provider_offerings", "columns": ["product_type"], "unique": false, "created_in": "001_original_schema"},
+    "idx_provider_offerings_stock": {"table": "provider_offerings", "columns": ["stock_status"], "unique": false, "created_in": "001_original_schema"},
+    "idx_token_transfers_from_account": {"table": "token_transfers", "columns": ["from_account"], "unique": false, "created_in": "001_original_schema"},
+    "idx_token_transfers_to_account": {"table": "token_transfers", "columns": ["to_account"], "unique": false, "created_in": "001_original_schema"},
+    "idx_token_transfers_timestamp": {"table": "token_transfers", "columns": ["created_at_ns"], "unique": false, "created_in": "001_original_schema"},
+    "idx_token_transfers_block_hash": {"table": "token_transfers", "columns": ["block_hash"], "unique": false, "created_in": "001_original_schema"},
+    "idx_token_approvals_owner_account": {"table": "token_approvals", "columns": ["owner_account"], "unique": false, "created_in": "001_original_schema"},
+    "idx_token_approvals_spender_account": {"table": "token_approvals", "columns": ["spender_account"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_sign_requests_contract_id": {"table": "contract_sign_requests", "columns": ["contract_id"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_sign_requests_requester_pubkey": {"table": "contract_sign_requests", "columns": ["requester_pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_sign_requests_provider": {"table": "contract_sign_requests", "columns": ["provider_pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_sign_requests_status": {"table": "contract_sign_requests", "columns": ["status"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_sign_requests_offering": {"table": "contract_sign_requests", "columns": ["offering_id"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_sign_requests_payment_method": {"table": "contract_sign_requests", "columns": ["payment_method"], "unique": false, "created_in": "010_payment_methods"},
+    "idx_contract_sign_requests_stripe_payment_intent": {"table": "contract_sign_requests", "columns": ["stripe_payment_intent_id"], "unique": false, "partial": "WHERE stripe_payment_intent_id IS NOT NULL", "created_in": "010_payment_methods"},
+    "idx_contract_sign_requests_payment_status": {"table": "contract_sign_requests", "columns": ["payment_status"], "unique": false, "created_in": "011_payment_status"},
+    "idx_contract_sign_requests_payment_method_status": {"table": "contract_sign_requests", "columns": ["payment_method", "payment_status"], "unique": false, "created_in": "011_payment_status"},
+    "idx_contract_refund_id": {"table": "contract_sign_requests", "columns": ["stripe_refund_id"], "unique": false, "created_in": "012_refund_tracking"},
+    "idx_contract_currency": {"table": "contract_sign_requests", "columns": ["currency"], "unique": false, "created_in": "013_contract_currency"},
+    "idx_contract_payment_entries_contract_id": {"table": "contract_payment_entries", "columns": ["contract_id"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_sign_replies_contract_id": {"table": "contract_sign_replies", "columns": ["contract_id"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_extensions_contract_id": {"table": "contract_extensions", "columns": ["contract_id"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_extensions_extended_by": {"table": "contract_extensions", "columns": ["extended_by_pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_status_history_contract": {"table": "contract_status_history", "columns": ["contract_id"], "unique": false, "created_in": "001_original_schema"},
+    "idx_contract_status_history_changed_at": {"table": "contract_status_history", "columns": ["changed_at_ns"], "unique": false, "created_in": "001_original_schema"},
+    "idx_reputation_changes_pubkey": {"table": "reputation_changes", "columns": ["pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_reputation_changes_timestamp": {"table": "reputation_changes", "columns": ["block_timestamp_ns"], "unique": false, "created_in": "001_original_schema"},
+    "idx_linked_ic_ids_pubkey": {"table": "linked_ic_ids", "columns": ["pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_linked_ic_ids_principal": {"table": "linked_ic_ids", "columns": ["ic_principal"], "unique": false, "created_in": "001_original_schema"},
+    "idx_linked_ic_ids_operation": {"table": "linked_ic_ids", "columns": ["operation"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_profiles_pubkey": {"table": "user_profiles", "columns": ["pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_contacts_pubkey": {"table": "user_contacts", "columns": ["user_pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_contacts_type": {"table": "user_contacts", "columns": ["contact_type"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_socials_pubkey": {"table": "user_socials", "columns": ["user_pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_socials_platform": {"table": "user_socials", "columns": ["platform"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_public_keys_pubkey": {"table": "user_public_keys", "columns": ["user_pubkey"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_public_keys_type": {"table": "user_public_keys", "columns": ["key_type"], "unique": false, "created_in": "001_original_schema"},
+    "idx_user_public_keys_fingerprint": {"table": "user_public_keys", "columns": ["key_fingerprint"], "unique": false, "created_in": "001_original_schema"},
+    "idx_accounts_username_unique": {"table": "accounts", "columns": ["LOWER(username)"], "unique": true, "created_in": "007_username_case_sensitive", "note": "Case-insensitive unique index"},
+    "idx_accounts_username": {"table": "accounts", "columns": ["username"], "unique": false, "created_in": "002_account_profiles"},
+    "idx_accounts_auth_provider": {"table": "accounts", "columns": ["auth_provider"], "unique": false, "created_in": "005_oauth_support"},
+    "idx_accounts_email_unique": {"table": "accounts", "columns": ["email"], "unique": true, "partial": "WHERE email IS NOT NULL", "created_in": "005_oauth_support"},
+    "idx_keys_account": {"table": "account_public_keys", "columns": ["account_id"], "unique": false, "created_in": "002_account_profiles"},
+    "idx_keys_pubkey": {"table": "account_public_keys", "columns": ["public_key"], "unique": false, "created_in": "002_account_profiles"},
+    "idx_keys_active": {"table": "account_public_keys", "columns": ["account_id", "is_active"], "unique": false, "created_in": "002_account_profiles"},
+    "idx_audit_nonce_time": {"table": "signature_audit", "columns": ["nonce", "created_at"], "unique": false, "created_in": "002_account_profiles"},
+    "idx_audit_account": {"table": "signature_audit", "columns": ["account_id"], "unique": false, "created_in": "002_account_profiles"},
+    "idx_audit_created": {"table": "signature_audit", "columns": ["created_at"], "unique": false, "created_in": "002_account_profiles"},
+    "idx_account_contacts_account_id": {"table": "account_contacts", "columns": ["account_id"], "unique": false, "created_in": "004_account_profiles_fix"},
+    "idx_account_socials_account_id": {"table": "account_socials", "columns": ["account_id"], "unique": false, "created_in": "004_account_profiles_fix"},
+    "idx_account_external_keys_account_id": {"table": "account_external_keys", "columns": ["account_id"], "unique": false, "created_in": "004_account_profiles_fix"},
+    "idx_oauth_accounts_account": {"table": "oauth_accounts", "columns": ["account_id"], "unique": false, "created_in": "005_oauth_support"},
+    "idx_oauth_accounts_provider_external": {"table": "oauth_accounts", "columns": ["provider", "external_id"], "unique": false, "created_in": "005_oauth_support"},
+    "idx_oauth_accounts_email": {"table": "oauth_accounts", "columns": ["email"], "unique": false, "created_in": "005_oauth_support"},
+    "idx_email_queue_status": {"table": "email_queue", "columns": ["status"], "unique": false, "created_in": "009_email_queue"},
+    "idx_email_queue_created_at": {"table": "email_queue", "columns": ["created_at"], "unique": false, "created_in": "009_email_queue"},
+    "idx_email_queue_type_status": {"table": "email_queue", "columns": ["email_type", "status"], "unique": false, "created_in": "009_email_queue"},
+    "idx_recovery_tokens_account_id": {"table": "recovery_tokens", "columns": ["account_id"], "unique": false, "created_in": "009_email_queue"},
+    "idx_recovery_tokens_expires_at": {"table": "recovery_tokens", "columns": ["expires_at"], "unique": false, "created_in": "009_email_queue"}
+  },
+  "unique_constraints": {
+    "provider_registrations_pubkey": {"table": "provider_registrations", "columns": ["pubkey"]},
+    "provider_profiles_pubkey": {"table": "provider_profiles", "columns": ["pubkey"]},
+    "provider_offerings_pubkey_offering_id": {"table": "provider_offerings", "columns": ["pubkey", "offering_id"]},
+    "user_registrations_pubkey": {"table": "user_registrations", "columns": ["pubkey"]},
+    "user_profiles_pubkey": {"table": "user_profiles", "columns": ["pubkey"]},
+    "contract_sign_requests_contract_id": {"table": "contract_sign_requests", "columns": ["contract_id"]},
+    "account_public_keys_public_key": {"table": "account_public_keys", "columns": ["public_key"]},
+    "account_public_keys_account_id_public_key": {"table": "account_public_keys", "columns": ["account_id", "public_key"]},
+    "accounts_username": {"table": "accounts", "columns": ["LOWER(username)"], "note": "Case-insensitive unique index created in migration 007"},
+    "accounts_email": {"table": "accounts", "columns": ["email"], "partial": "WHERE email IS NOT NULL"},
+    "oauth_accounts_provider_external_id": {"table": "oauth_accounts", "columns": ["provider", "external_id"]}
+  },
+  "check_constraints": {
+    "sync_state_id": {"table": "sync_state", "constraint": "id = 1"},
+    "accounts_username": {"table": "accounts", "constraint": "username GLOB '[a-zA-Z0-9][a-zA-Z0-9._@-]*[a-zA-Z0-9]' AND length(username) >= 3 AND length(username) <= 64", "note": "Updated in migration 007 to allow uppercase"},
+    "account_public_keys_public_key_length": {"table": "account_public_keys", "constraint": "length(public_key) = 32"},
+    "signature_audit_signature_length": {"table": "signature_audit", "constraint": "length(signature) = 64"},
+    "signature_audit_public_key_length": {"table": "signature_audit", "constraint": "length(public_key) = 32"},
+    "signature_audit_nonce_length": {"table": "signature_audit", "constraint": "length(nonce) = 16"},
+    "oauth_accounts_provider": {"table": "oauth_accounts", "constraint": "provider IN ('google_oauth')"}
+  },
+  "foreign_keys": {
+    "provider_profiles_contacts_provider_pubkey": {"from_table": "provider_profiles_contacts", "from_columns": ["provider_pubkey"], "to_table": "provider_profiles", "to_columns": ["pubkey"], "on_delete": "CASCADE"},
+    "contract_provisioning_details_contract_id": {"from_table": "contract_provisioning_details", "from_columns": ["contract_id"], "to_table": "contract_sign_requests", "to_columns": ["contract_id"], "on_delete": "CASCADE"},
+    "contract_status_history_contract_id": {"from_table": "contract_status_history", "from_columns": ["contract_id"], "to_table": "contract_sign_requests", "to_columns": ["contract_id"], "on_delete": "CASCADE"},
+    "contract_payment_entries_contract_id": {"from_table": "contract_payment_entries", "from_columns": ["contract_id"], "to_table": "contract_sign_requests", "to_columns": ["contract_id"], "on_delete": "CASCADE"},
+    "contract_sign_replies_contract_id": {"from_table": "contract_sign_replies", "from_columns": ["contract_id"], "to_table": "contract_sign_requests", "to_columns": ["contract_id"], "on_delete": "CASCADE"},
+    "contract_extensions_contract_id": {"from_table": "contract_extensions", "from_columns": ["contract_id"], "to_table": "contract_sign_requests", "to_columns": ["contract_id"], "on_delete": "CASCADE"},
+    "user_profiles_pubkey": {"from_table": "user_profiles", "from_columns": ["pubkey"], "to_table": "user_registrations", "to_columns": ["pubkey"], "on_delete": "CASCADE"},
+    "user_contacts_user_pubkey": {"from_table": "user_contacts", "from_columns": ["user_pubkey"], "to_table": "user_registrations", "to_columns": ["pubkey"], "on_delete": "CASCADE"},
+    "user_socials_user_pubkey": {"from_table": "user_socials", "from_columns": ["user_pubkey"], "to_table": "user_registrations", "to_columns": ["pubkey"], "on_delete": "CASCADE"},
+    "user_public_keys_user_pubkey": {"from_table": "user_public_keys", "from_columns": ["user_pubkey"], "to_table": "user_registrations", "to_columns": ["pubkey"], "on_delete": "CASCADE"},
+    "account_public_keys_account_id": {"from_table": "account_public_keys", "from_columns": ["account_id"], "to_table": "accounts", "to_columns": ["id"], "on_delete": "CASCADE"},
+    "account_public_keys_disabled_by_key_id": {"from_table": "account_public_keys", "from_columns": ["disabled_by_key_id"], "to_table": "account_public_keys", "to_columns": ["id"]},
+    "signature_audit_account_id": {"from_table": "signature_audit", "from_columns": ["account_id"], "to_table": "accounts", "to_columns": ["id"]},
+    "account_contacts_account_id": {"from_table": "account_contacts", "from_columns": ["account_id"], "to_table": "accounts", "to_columns": ["id"], "on_delete": "CASCADE"},
+    "account_socials_account_id": {"from_table": "account_socials", "from_columns": ["account_id"], "to_table": "accounts", "to_columns": ["id"], "on_delete": "CASCADE"},
+    "account_external_keys_account_id": {"from_table": "account_external_keys", "from_columns": ["account_id"], "to_table": "accounts", "to_columns": ["id"], "on_delete": "CASCADE"},
+    "oauth_accounts_account_id": {"from_table": "oauth_accounts", "from_columns": ["account_id"], "to_table": "accounts", "to_columns": ["id"], "on_delete": "CASCADE"},
+    "recovery_tokens_account_id": {"from_table": "recovery_tokens", "from_columns": ["account_id"], "to_table": "accounts", "to_columns": ["id"], "on_delete": "CASCADE"}
+  },
+  "seed_data": {
+    "sync_state": {
+      "table": "sync_state",
+      "created_in": "001_original_schema",
+      "data": [{"id": 1, "last_position": 0}]
+    },
+    "provider_registrations": {
+      "table": "provider_registrations",
+      "created_in": "001_original_schema",
+      "data": [
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "signature": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "created_at_ns": 1609459200000000000
+        }
+      ]
+    },
+    "provider_profiles": {
+      "table": "provider_profiles",
+      "created_in": "001_original_schema",
+      "data": [
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "name": "Example Provider",
+          "description": "Example provider for template and demonstration purposes",
+          "website_url": "https://example.com",
+          "logo_url": "https://example.com/logo.png",
+          "why_choose_us": "This is an example provider used to demonstrate the offerings system",
+          "api_version": "1.0.0",
+          "profile_version": "1.0.0",
+          "updated_at_ns": 1609459200000000000
+        }
+      ]
+    },
+    "provider_offerings_compute": {
+      "table": "provider_offerings",
+      "created_in": "008_example_offerings",
+      "data": [
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "compute-001",
+          "offer_name": "Basic VPS",
+          "description": "Ideal for small websites and development environments",
+          "currency": "USD",
+          "monthly_price": 5.0,
+          "setup_fee": 0.0,
+          "visibility": "public",
+          "product_type": "compute",
+          "virtualization_type": "KVM",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "processor_brand": "AMD",
+          "processor_amount": 1,
+          "processor_cores": 2,
+          "processor_speed": "3.5 GHz",
+          "processor_name": "EPYC 7763",
+          "memory_type": "DDR4",
+          "memory_amount": "4 GB",
+          "ssd_amount": 1,
+          "total_ssd_capacity": "50 GB",
+          "unmetered_bandwidth": 0,
+          "uplink_speed": "1 Gbps",
+          "traffic": 1000,
+          "datacenter_country": "USA",
+          "datacenter_city": "New York",
+          "datacenter_latitude": 40.7128,
+          "datacenter_longitude": -74.0060,
+          "control_panel": "cPanel",
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC",
+          "features": "Daily Backups,DDoS Protection,Root Access",
+          "operating_systems": "Ubuntu 22.04,Debian 12,Rocky Linux 9",
+          "created_at_ns": 1700000000000000000
+        },
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "compute-002",
+          "offer_name": "Performance VPS",
+          "description": "High-performance compute for demanding applications",
+          "currency": "EUR",
+          "monthly_price": 15.0,
+          "setup_fee": 0.0,
+          "visibility": "public",
+          "product_type": "compute",
+          "virtualization_type": "KVM",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "processor_brand": "Intel",
+          "processor_amount": 1,
+          "processor_cores": 4,
+          "processor_speed": "4.0 GHz",
+          "processor_name": "Xeon E-2388G",
+          "memory_type": "DDR4",
+          "memory_amount": "8 GB",
+          "ssd_amount": 1,
+          "total_ssd_capacity": "100 GB",
+          "unmetered_bandwidth": 0,
+          "uplink_speed": "1 Gbps",
+          "traffic": 2000,
+          "datacenter_country": "Germany",
+          "datacenter_city": "Frankfurt",
+          "datacenter_latitude": 50.1109,
+          "datacenter_longitude": 8.6821,
+          "control_panel": "Plesk",
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC,ckETH",
+          "features": "NVMe Storage,Auto-scaling,99.9% Uptime SLA",
+          "operating_systems": "Ubuntu 22.04,Windows Server 2022",
+          "created_at_ns": 1700000000000000000
+        }
+      ],
+      "note": "Currency updated in migration 015: compute-001 to USD, compute-002 to EUR"
+    },
+    "provider_offerings_gpu": {
+      "table": "provider_offerings",
+      "created_in": "008_example_offerings",
+      "data": [
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "gpu-001",
+          "offer_name": "AI Training - RTX 4090",
+          "description": "Perfect for deep learning and AI model training",
+          "currency": "ICP",
+          "monthly_price": 150.0,
+          "setup_fee": 10.0,
+          "visibility": "public",
+          "product_type": "gpu",
+          "virtualization_type": "Bare Metal",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "processor_brand": "AMD",
+          "processor_amount": 1,
+          "processor_cores": 16,
+          "processor_speed": "3.7 GHz",
+          "processor_name": "Ryzen 9 7950X",
+          "memory_type": "DDR5",
+          "memory_amount": "64 GB",
+          "ssd_amount": 1,
+          "total_ssd_capacity": "1 TB",
+          "unmetered_bandwidth": 0,
+          "uplink_speed": "10 Gbps",
+          "traffic": 10000,
+          "datacenter_country": "USA",
+          "datacenter_city": "San Francisco",
+          "datacenter_latitude": 37.7749,
+          "datacenter_longitude": -122.4194,
+          "gpu_name": "NVIDIA RTX 4090",
+          "gpu_count": 1,
+          "gpu_memory_gb": 24,
+          "min_contract_hours": 168,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC",
+          "features": "CUDA 12.0,PyTorch,TensorFlow Pre-installed,Jupyter Notebook",
+          "operating_systems": "Ubuntu 22.04 LTS,Rocky Linux 9",
+          "created_at_ns": 1700000000000000000
+        },
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "gpu-002",
+          "offer_name": "Multi-GPU Workstation - A100",
+          "description": "Enterprise-grade AI infrastructure with multiple A100 GPUs",
+          "currency": "ICP",
+          "monthly_price": 800.0,
+          "setup_fee": 50.0,
+          "visibility": "public",
+          "product_type": "gpu",
+          "virtualization_type": "Bare Metal",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "processor_brand": "AMD",
+          "processor_amount": 2,
+          "processor_cores": 64,
+          "processor_speed": "2.9 GHz",
+          "processor_name": "EPYC 7763",
+          "memory_type": "DDR4",
+          "memory_amount": "512 GB",
+          "ssd_amount": 2,
+          "total_ssd_capacity": "4 TB",
+          "unmetered_bandwidth": 1,
+          "uplink_speed": "25 Gbps",
+          "traffic": null,
+          "datacenter_country": "Singapore",
+          "datacenter_city": "Singapore",
+          "datacenter_latitude": 1.3521,
+          "datacenter_longitude": 103.8198,
+          "gpu_name": "NVIDIA A100",
+          "gpu_count": 4,
+          "gpu_memory_gb": 320,
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC",
+          "features": "NVLink,InfiniBand,Professional Support,99.95% SLA",
+          "operating_systems": "Ubuntu 22.04 LTS",
+          "created_at_ns": 1700000000000000000
+        }
+      ]
+    },
+    "provider_offerings_storage": {
+      "table": "provider_offerings",
+      "created_in": "008_example_offerings",
+      "data": [
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "storage-001",
+          "offer_name": "Object Storage Standard",
+          "description": "Scalable cloud storage for backups and archives",
+          "currency": "ICP",
+          "monthly_price": 2.5,
+          "setup_fee": 0.0,
+          "visibility": "public",
+          "product_type": "storage",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "hdd_amount": 4,
+          "total_hdd_capacity": "4 TB",
+          "unmetered_bandwidth": 0,
+          "uplink_speed": "1 Gbps",
+          "traffic": 500,
+          "datacenter_country": "USA",
+          "datacenter_city": "Dallas",
+          "datacenter_latitude": 32.7767,
+          "datacenter_longitude": -96.7970,
+          "control_panel": "S3-Compatible API",
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC",
+          "features": "S3 API,Versioning,Lifecycle Policies,Encryption at Rest",
+          "created_at_ns": 1700000000000000000
+        },
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "storage-002",
+          "offer_name": "High-Performance NVMe Storage",
+          "description": "Ultra-fast NVMe storage for database workloads",
+          "currency": "ICP",
+          "monthly_price": 20.0,
+          "setup_fee": 0.0,
+          "visibility": "public",
+          "product_type": "storage",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "ssd_amount": 2,
+          "total_ssd_capacity": "2 TB",
+          "unmetered_bandwidth": 0,
+          "uplink_speed": "10 Gbps",
+          "traffic": 2000,
+          "datacenter_country": "Netherlands",
+          "datacenter_city": "Amsterdam",
+          "datacenter_latitude": 52.3676,
+          "datacenter_longitude": 4.9041,
+          "control_panel": "Block Storage API",
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC,ckETH",
+          "features": "NVMe Gen4,Snapshots,RAID 10,99.99% Availability",
+          "created_at_ns": 1700000000000000000
+        }
+      ]
+    },
+    "provider_offerings_network": {
+      "table": "provider_offerings",
+      "created_in": "008_example_offerings",
+      "data": [
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "network-001",
+          "offer_name": "CDN Basic",
+          "description": "Global content delivery network for fast website performance",
+          "currency": "ICP",
+          "monthly_price": 10.0,
+          "setup_fee": 0.0,
+          "visibility": "public",
+          "product_type": "network",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "unmetered_bandwidth": 0,
+          "uplink_speed": "10 Gbps",
+          "traffic": 5000,
+          "datacenter_country": "Global",
+          "datacenter_city": "Multiple POPs",
+          "control_panel": "REST API",
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC",
+          "features": "50+ Edge Locations,SSL/TLS,DDoS Protection,Real-time Analytics",
+          "created_at_ns": 1700000000000000000
+        },
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "network-002",
+          "offer_name": "Dedicated Bandwidth",
+          "description": "Guaranteed bandwidth for high-traffic applications",
+          "currency": "ICP",
+          "monthly_price": 50.0,
+          "setup_fee": 25.0,
+          "visibility": "public",
+          "product_type": "network",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "unmetered_bandwidth": 1,
+          "uplink_speed": "10 Gbps",
+          "datacenter_country": "Japan",
+          "datacenter_city": "Tokyo",
+          "datacenter_latitude": 35.6762,
+          "datacenter_longitude": 139.6503,
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC",
+          "features": "Burstable to 20 Gbps,Low Latency,BGP Sessions,99.9% Uptime",
+          "created_at_ns": 1700000000000000000
+        }
+      ]
+    },
+    "provider_offerings_dedicated": {
+      "table": "provider_offerings",
+      "created_in": "008_example_offerings",
+      "data": [
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "dedicated-001",
+          "offer_name": "Entry Dedicated Server",
+          "description": "Affordable dedicated server for small businesses",
+          "currency": "ICP",
+          "monthly_price": 75.0,
+          "setup_fee": 25.0,
+          "visibility": "public",
+          "product_type": "dedicated",
+          "virtualization_type": "Bare Metal",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "processor_brand": "Intel",
+          "processor_amount": 1,
+          "processor_cores": 8,
+          "processor_speed": "3.4 GHz",
+          "processor_name": "Xeon E-2388G",
+          "memory_error_correction": "ECC",
+          "memory_type": "DDR4",
+          "memory_amount": "32 GB",
+          "hdd_amount": 2,
+          "total_hdd_capacity": "2 TB",
+          "ssd_amount": 2,
+          "total_ssd_capacity": "480 GB",
+          "unmetered_bandwidth": 0,
+          "uplink_speed": "1 Gbps",
+          "traffic": 20000,
+          "datacenter_country": "France",
+          "datacenter_city": "Paris",
+          "datacenter_latitude": 48.8566,
+          "datacenter_longitude": 2.3522,
+          "control_panel": "IPMI",
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC",
+          "features": "Full Root Access,RAID 1,Remote Reboot,24/7 Support",
+          "operating_systems": "Ubuntu 22.04,Debian 12,CentOS 9,Windows Server 2022",
+          "created_at_ns": 1700000000000000000
+        },
+        {
+          "pubkey": "x'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572'",
+          "offering_id": "dedicated-002",
+          "offer_name": "Enterprise Dedicated Server",
+          "description": "High-performance dedicated server for enterprise workloads",
+          "currency": "ICP",
+          "monthly_price": 250.0,
+          "setup_fee": 50.0,
+          "visibility": "public",
+          "product_type": "dedicated",
+          "virtualization_type": "Bare Metal",
+          "billing_interval": "monthly",
+          "stock_status": "in_stock",
+          "processor_brand": "AMD",
+          "processor_amount": 2,
+          "processor_cores": 128,
+          "processor_speed": "2.45 GHz",
+          "processor_name": "EPYC 7763",
+          "memory_error_correction": "ECC",
+          "memory_type": "DDR4",
+          "memory_amount": "512 GB",
+          "ssd_amount": 4,
+          "total_ssd_capacity": "8 TB",
+          "unmetered_bandwidth": 1,
+          "uplink_speed": "10 Gbps",
+          "datacenter_country": "Canada",
+          "datacenter_city": "Toronto",
+          "datacenter_latitude": 43.6532,
+          "datacenter_longitude": -79.3832,
+          "control_panel": "IPMI,ILO",
+          "min_contract_hours": 720,
+          "max_contract_hours": 8760,
+          "payment_methods": "ICP,ckBTC,ckETH",
+          "features": "NVMe RAID 10,Redundant PSU,IPMI,Premium Support,99.99% SLA",
+          "operating_systems": "Ubuntu 22.04,RHEL 9,Windows Server 2022",
+          "created_at_ns": 1700000000000000000
+        }
+      ]
+    }
+  }
+}

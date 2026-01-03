@@ -144,7 +144,8 @@ impl FieldConfig {
 
 /// Builds SQL WHERE clause and bind values from parsed DSL filters
 /// Uses PostgreSQL-style numbered placeholders ($1, $2, etc.)
-pub fn build_sql(filters: &[Filter]) -> Result<(String, Vec<SqlValue>), String> {
+#[cfg(test)]
+pub(crate) fn build_sql(filters: &[Filter]) -> Result<(String, Vec<SqlValue>), String> {
     build_sql_with_offset(filters, 0)
 }
 

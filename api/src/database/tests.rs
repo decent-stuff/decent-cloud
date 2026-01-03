@@ -148,7 +148,7 @@ async fn test_all_entry_types_storage() {
     let base_timestamp = 1234567890;
 
     let entries = vec![
-        // Registration entries (should use INSERT OR REPLACE)
+        // Registration entries (use ON CONFLICT DO UPDATE for upsert)
         TestDataFactory::registration_entry("ProvRegister", provider_key),
         TestDataFactory::registration_entry("UserRegister", user_key),
     ]

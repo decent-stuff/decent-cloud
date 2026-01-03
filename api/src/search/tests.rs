@@ -1,5 +1,6 @@
 use super::types::{Operator, Value};
-use super::{build_sql, parse_dsl, SqlValue};
+use super::{parse_dsl, SqlValue};
+use crate::search::builder::build_sql;
 
 #[test]
 fn test_simple_exact_match() {

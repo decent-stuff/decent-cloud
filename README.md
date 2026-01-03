@@ -45,7 +45,7 @@ Trust verified through transparent track records, regular health checks, and pro
 - **PostgreSQL 14+** - Required for local development (see [Development Guide](docs/development.md))
 - Rust toolchain (1.70+)
 - Node.js 18+ (for frontend development)
-- Docker and Docker Compose (recommended for local PostgreSQL)
+- Docker and Docker Compose (required for local PostgreSQL)
 
 ## Quick Start
 
