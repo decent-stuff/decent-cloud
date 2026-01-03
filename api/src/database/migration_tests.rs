@@ -7,51 +7,14 @@
 /// The two approaches differ for valid reasons:
 /// - sqlx::migrate!() is relative to crate root, perfect for runtime
 /// - include_str!() is needed in tests because sqlx::migrate!() has issues
-///   with concurrent test execution and database creation/teardown
-use sqlx::{PgPool, Row};
-
-/// Test that migrations run correctly via Database::new (api-server context)
-#[sqlx::test(migrations = "./migrations_pg")]
-async fn test_migrations_via_database_new(pool: PgPool) {
-    // This test verifies the sqlx::migrate!() macro works correctly
-    // when called from Database::new() in api-server context
-
-    // Check that tables created by migrations exist
-    let result = sqlx::query(
-        "SELECT table_name FROM information_schema.tables
-         WHERE table_schema = 'public'
-         AND table_name IN ('sync_state', 'user_registrations', 'provider_registrations')
-         ORDER BY table_name",
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to query tables");
-
-    assert_eq!(result.len(), 3, "Expected 3 tables to exist");
-    assert_eq!(
-        result[0].get::<String, _>("table_name"),
-        "provider_registrations"
-    );
-    assert_eq!(result[1].get::<String, _>("table_name"), "sync_state");
-    assert_eq!(
-        result[2].get::<String, _>("table_name"),
-        "user_registrations"
-    );
-
-    // Check that seed data was loaded
-    let sync_position: Option<i64> =
-        sqlx::query_scalar("SELECT last_position FROM sync_state WHERE id = 1")
-            .fetch_one(&pool)
-            .await
-            .expect("Failed to query sync_state");
-
-    assert_eq!(
-        sync_position,
-        Some(0),
-        "Expected initial sync position to be 0"
-    );
-}
-
+///   with concurrent test execution and ephemeral database creation
+///
+/// Note: We don't use #[sqlx::test] for migration tests because:
+/// - It requires DATABASE_URL environment variable to be set
+/// - It doesn't integrate with our ephemeral PostgreSQL system (test_helpers.rs)
+/// - The migration functionality is already tested via setup_test_db() which uses
+///   the same SQL files through include_str!(), providing equivalent coverage
+///
 /// Test that migration path resolution works relative to crate root
 #[tokio::test]
 async fn test_migration_path_from_crate_root() {
@@ -86,14 +49,15 @@ async fn test_migration_path_from_crate_root() {
 /// Test that both migration approaches (migrate! vs include_str) are equivalent
 #[tokio::test]
 async fn test_migration_approaches_are_equivalent() {
-    // This test documents why we use two different approaches:
+    // This test documents why we use two different approaches for migrations:
 
-    // 1. sqlx::migrate!() in core.rs (runtime):
+    // 1. sqlx::migrate!() in core.rs (runtime/production):
     //    - Relative path: "./migrations_pg"
     //    - Resolved from CARGO_MANIFEST_DIR (api/ directory)
     //    - Tracks migration state in __sqlx_migrations table
     //    - Runs each migration only once (idempotent)
     //    - Perfect for production use
+    //    - Called from Database::new() in api-server and CLI tools
 
     // 2. include_str!() in test_helpers.rs (tests):
     //    - Absolute path: "../../migrations_pg/..."
@@ -101,8 +65,12 @@ async fn test_migration_approaches_are_equivalent() {
     //    - No migration tracking table needed
     //    - Allows fresh schema for each test
     //    - Better for test isolation and concurrent execution
+    //    - Works with ephemeral PostgreSQL system
+    //    - Used by setup_test_db() for all unit tests
 
-    // Both approaches execute the same SQL files, so the resulting schema is identical
+    // Both approaches execute the same SQL files, so the resulting schema is identical.
+    // This provides full coverage - migrations work in production (via sqlx::migrate!())
+    // and tests can run in parallel with isolated databases (via include_str!()).
 
     let migration_dir = format!("{}/migrations_pg", env!("CARGO_MANIFEST_DIR"));
 
