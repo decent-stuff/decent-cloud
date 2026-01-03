@@ -36,7 +36,6 @@ impl AgentPermission {
     }
 
     /// All permissions for a standard provisioning agent
-    #[allow(dead_code)]
     pub fn all() -> Vec<Self> {
         vec![
             AgentPermission::Provision,

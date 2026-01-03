@@ -30,7 +30,6 @@ pub enum EmailType {
     /// General notifications
     General,
     /// Message notifications - deprecated, kept for backward compatibility with existing DB records
-    #[allow(dead_code)]
     MessageNotification,
 }
 

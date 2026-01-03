@@ -46,7 +46,6 @@ impl Database {
 
     /// Verify a recovery token and return the account ID if valid
     /// Returns error if token is invalid, expired, or already used
-    #[allow(dead_code)]
     pub async fn verify_recovery_token(&self, token: &[u8]) -> Result<Vec<u8>> {
         let now = chrono::Utc::now().timestamp();
 
@@ -133,7 +132,6 @@ impl Database {
     }
 
     /// Clean up expired recovery tokens (should be called periodically)
-    #[allow(dead_code)]
     pub async fn cleanup_expired_recovery_tokens(&self) -> Result<u64> {
         let now = chrono::Utc::now().timestamp();
 
