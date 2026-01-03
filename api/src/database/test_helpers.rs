@@ -1,4 +1,23 @@
 /// Shared test helpers for database tests
+///
+/// MIGRATION APPROACH DIFFERENCES:
+///
+/// This module uses `include_str!()` to manually execute SQL files, while core.rs uses
+/// `sqlx::migrate!()`. This is intentional and both approaches are correct for their contexts:
+///
+/// **core.rs (api-server runtime):**
+/// - Uses `sqlx::migrate!("./migrations_pg")`
+/// - Macro resolves path relative to crate root (CARGO_MANIFEST_DIR)
+/// - Tracks migration state in __sqlx_migrations table
+/// - Each migration runs only once (idempotent)
+/// - Perfect for production use
+///
+/// **test_helpers.rs (tests):**
+/// - Uses `include_str!("../../migrations_pg/...")`
+/// - Embeds SQL at compile time, no runtime file access needed
+/// - Creates fresh schema for each test database
+/// - Better for test isolation and concurrent test execution
+/// - Both approaches execute the same SQL, resulting schema is identical
 use super::Database;
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -6,11 +25,15 @@ use std::sync::atomic::{AtomicU32, Ordering};
 static TEST_DB_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 /// Set up a test database with all migrations applied
-/// Requires TEST_DATABASE_URL environment variable pointing to a PostgreSQL server
-/// Each test gets a unique database that is dropped after the test
+///
+/// Requires TEST_DATABASE_URL environment variable pointing to a PostgreSQL server.
+/// Default: postgres://test:test@localhost:5432 (without database name for admin connections).
+///
+/// Each test gets a unique database that is dropped after the test.
+/// Uses `include_str!()` instead of `sqlx::migrate!()` for better test isolation.
 pub async fn setup_test_db() -> Database {
     let base_url = std::env::var("TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432".to_string());
+        .unwrap_or_else(|_| "postgres://test:test@localhost:5432".to_string());
 
     // Create a unique database name for this test
     let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);

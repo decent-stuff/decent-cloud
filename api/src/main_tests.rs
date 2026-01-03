@@ -7,8 +7,11 @@ mod tests {
     async fn test_check_schema_applied_with_valid_database() {
         // This test requires a running PostgreSQL with schema applied
         // It will be skipped in CI if database is not available
-        let database_url = env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://test:test@localhost:5432/test".to_string());
+        // Uses TEST_DATABASE_URL default (without database name), then appends /test
+        // for the docker-compose database
+        let base_url = env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://test:test@localhost:5432".to_string());
+        let database_url = format!("{}/test", base_url);
 
         match check_schema_applied(&database_url).await {
             Ok(true) => {
