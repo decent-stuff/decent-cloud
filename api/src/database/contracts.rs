@@ -117,18 +117,18 @@ pub struct Contract {
     /// Gateway slug (6-char alphanumeric) for subdomain routing
     #[oai(skip_serializing_if_is_none)]
     pub gateway_slug: Option<String>,
-    /// SSH port accessible via gateway
+    /// SSH port accessible via gateway (0-65535)
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
-    pub gateway_ssh_port: Option<i64>,
-    /// Start of allocated port range
+    pub gateway_ssh_port: Option<i32>,
+    /// Start of allocated port range (0-65535)
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
-    pub gateway_port_range_start: Option<i64>,
-    /// End of allocated port range
+    pub gateway_port_range_start: Option<i32>,
+    /// End of allocated port range (0-65535)
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
-    pub gateway_port_range_end: Option<i64>,
+    pub gateway_port_range_end: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -816,9 +816,9 @@ impl Database {
             },
         );
 
-        let gateway_ssh_port = gateway.gateway_ssh_port.map(|p| p as i64);
-        let gateway_port_range_start = gateway.gateway_port_range_start.map(|p| p as i64);
-        let gateway_port_range_end = gateway.gateway_port_range_end.map(|p| p as i64);
+        let gateway_ssh_port = gateway.gateway_ssh_port.map(|p| p as i32);
+        let gateway_port_range_start = gateway.gateway_port_range_start.map(|p| p as i32);
+        let gateway_port_range_end = gateway.gateway_port_range_end.map(|p| p as i32);
 
         let mut tx = self.pool.begin().await?;
 
