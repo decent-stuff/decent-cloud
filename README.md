@@ -33,6 +33,20 @@ Trust verified through transparent track records, regular health checks, and pro
 - [Token Distribution](docs/token-distribution.md) – Overview of token creation and rewards.
 - [Development Guide](docs/development.md) – Guidelines for contributors, including setup, testing, and best practices.
 
+## Requirements
+
+### For Users
+
+- Modern web browser (Chrome, Firefox, Safari, Edge)
+- Stable internet connection
+
+### For Contributors
+
+- **PostgreSQL 14+** - Required for local development (see [Development Guide](docs/development.md))
+- Rust toolchain (1.70+)
+- Node.js 18+ (for frontend development)
+- Docker and Docker Compose (recommended for local PostgreSQL)
+
 ## Quick Start
 
 ### Web Interface (Easiest)

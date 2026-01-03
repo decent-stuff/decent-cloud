@@ -109,32 +109,32 @@ message = timestamp + nonce + method + path + body
 - ✅ Valid: `alice`, `bob123`, `charlie-delta`, `user_99`, `alice.smith`, `user@example.com`, `dev@org`
 - ❌ Invalid: `ab` (too short), `-alice` (starts with hyphen), `alice.` (ends with period), `ALICE` (uppercase → normalized to `alice`), `admin` (reserved)
 
-## Database Schema (SQLite)
+## Database Schema (PostgreSQL)
 
 ### Tables
 
 ```sql
 -- Accounts table
 CREATE TABLE accounts (
-    id BLOB PRIMARY KEY DEFAULT (randomblob(16)), -- 16-byte UUID
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT UNIQUE NOT NULL,
-    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000000000),
-    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000000000),
-    CHECK (username GLOB '[a-z0-9][a-z0-9._@-]*[a-z0-9]' AND length(username) >= 3 AND length(username) <= 64)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT username_format CHECK (username ~ '^[a-z0-9][a-z0-9._@-]*[a-z0-9]$' AND length(username) >= 3 AND length(username) <= 64)
 );
 
 CREATE INDEX idx_accounts_username ON accounts(username);
 
 -- Account public keys table
 CREATE TABLE account_public_keys (
-    id BLOB PRIMARY KEY DEFAULT (randomblob(16)),
-    account_id BLOB NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    public_key BLOB UNIQUE NOT NULL, -- 32-byte Ed25519 pubkey
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    public_key BYTEA UNIQUE NOT NULL, -- 32-byte Ed25519 pubkey
     device_name TEXT, -- Optional user-friendly name (e.g., "My iPhone", "Work Laptop")
-    is_active INTEGER NOT NULL DEFAULT 1, -- SQLite boolean (0/1)
-    added_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000000000),
-    disabled_at INTEGER,
-    disabled_by_key_id BLOB REFERENCES account_public_keys(id),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    disabled_at TIMESTAMPTZ,
+    disabled_by_key_id UUID REFERENCES account_public_keys(id),
     UNIQUE(account_id, public_key)
 );
 
@@ -144,16 +144,16 @@ CREATE INDEX idx_keys_active ON account_public_keys(account_id, is_active);
 
 -- Signature audit trail
 CREATE TABLE signature_audit (
-    id BLOB PRIMARY KEY DEFAULT (randomblob(16)),
-    account_id BLOB REFERENCES accounts(id),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID REFERENCES accounts(id),
     action TEXT NOT NULL, -- 'register_account', 'add_key', 'remove_key', etc.
     payload TEXT NOT NULL, -- Full request body (JSON)
-    signature BLOB NOT NULL, -- 64-byte Ed25519 signature
-    public_key BLOB NOT NULL, -- 32-byte Ed25519 pubkey
-    timestamp INTEGER NOT NULL, -- Client timestamp (nanoseconds)
-    nonce BLOB NOT NULL, -- 16-byte UUID
-    is_admin_action INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000000000)
+    signature BYTEA NOT NULL, -- 64-byte Ed25519 signature
+    public_key BYTEA NOT NULL, -- 32-byte Ed25519 pubkey
+    timestamp BIGINT NOT NULL, -- Client timestamp (nanoseconds)
+    nonce UUID NOT NULL, -- UUID v4
+    is_admin_action BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_audit_nonce_time ON signature_audit(nonce, created_at);

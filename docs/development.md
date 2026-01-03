@@ -130,10 +130,44 @@ docker compose down
 - Database: `test`
 - Connection URL: `postgres://test:test@localhost:5432/test`
 
+**DATABASE_URL vs TEST_DATABASE_URL:**
+
+The project uses two separate database environment variables for different purposes:
+
+- **DATABASE_URL**: Used by the API server at runtime
+  - Includes the database name: `postgres://test:test@localhost:5432/test`
+  - Points to a specific database for the application to use
+  - Set in `api/.env` for local development
+
+- **TEST_DATABASE_URL**: Used by tests for database management
+  - Does NOT include a database name: `postgres://test:test@localhost:5432`
+  - Tests connect to the PostgreSQL server without specifying a database
+  - Tests then create unique databases (e.g., `test_db_12345_1`) for isolation
+  - Each test gets a fresh database that is dropped after the test completes
+  - Required for running unit tests and integration tests
+
+**Why the distinction?**
+
+Tests need admin-level access to create and drop databases. By connecting to the server's default `postgres` database (via TEST_DATABASE_URL without a database name), tests can execute `CREATE DATABASE` and `DROP DATABASE` commands. The runtime API server doesn't need this capability - it only needs to connect to its specific database.
+
+**Running Tests:**
+
+```bash
+# Tests work automatically with TEST_DATABASE_URL from api/.env
+cargo test
+
+# Or override the default if needed
+TEST_DATABASE_URL=postgres://test:test@localhost:5432 cargo test
+```
+
 **Verify Connection:**
 
 ```bash
+# Verify runtime database connection
 psql postgres://test:test@localhost:5432/test -c "SELECT 1;"
+
+# Verify test database server connection
+psql postgres://test:test@localhost:5432/postgres -c "SELECT 1;"
 ```
 
 **Run Migrations:**
@@ -159,6 +193,12 @@ DATABASE_URL=postgres://test:test@localhost:5432/test sqlx migrate run --source 
 - **Reset database**: Drop and recreate schema
   ```bash
   psql postgres://test:test@localhost:5432/test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+  ```
+
+- **Test failures**: Ensure TEST_DATABASE_URL is set correctly in `api/.env`
+  ```bash
+  # Check your api/.env file has:
+  TEST_DATABASE_URL=postgres://test:test@localhost:5432
   ```
 
 ### Docker Setup for Volume Permissions
@@ -530,6 +570,18 @@ password: <generated token>
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
+
+### Development Environment Requirements
+
+Before contributing, ensure your development environment is set up with:
+
+- **PostgreSQL Database**: Required for local development and automatically managed via docker-compose
+  - See "PostgreSQL Database" section above for setup details
+  - Database URL: `postgres://test:test@localhost:5432/test`
+  - Migrations location: `api/migrations_pg/`
+
+- **Build Tools**: Rust, Node.js, dfx (Internet Computer SDK)
+  - See "Prerequisites" section for installation instructions
 
 ### Contribution Guidelines
 

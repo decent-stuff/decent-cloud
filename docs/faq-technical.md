@@ -117,7 +117,7 @@ Multiple mechanisms:
 - **Frontend**: SvelteKit (Svelte 5)
 - **Backend API**: Rust with Poem framework
 - **Blockchain**: Internet Computer (ICP) canister
-- **Database**: SQLite with ledger synchronization
+- **Database**: PostgreSQL with ledger synchronization
 - **Client library**: WASM (Rust compiled to WebAssembly)
 - **CLI**: Native Rust binary
 

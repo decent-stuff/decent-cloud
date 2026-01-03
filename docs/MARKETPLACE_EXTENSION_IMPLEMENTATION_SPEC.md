@@ -17,7 +17,7 @@ Enable the marketplace to support multiple resource types beyond compute/dedicat
 
 **Design Goals:**
 - High development velocity for adding new types
-- Works on SQLite now, PostgreSQL later
+- PostgreSQL-based storage
 - Minimal code changes per new type
 - No breaking changes to existing functionality
 
