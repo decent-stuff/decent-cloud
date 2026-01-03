@@ -1,12 +1,21 @@
 /// Shared test helpers for database tests
 ///
 /// This module provides ephemeral PostgreSQL instances for testing.
-/// It will automatically spin up a PostgreSQL server if one isn't available,
-/// allowing `cargo nextest run` to work without any external setup.
 ///
-/// Priority order for PostgreSQL connection:
-/// 1. TEST_DATABASE_URL environment variable (external PostgreSQL)
-/// 2. Ephemeral PostgreSQL server (started automatically)
+/// **PostgreSQL Connection Priority:**
+/// 1. `TEST_DATABASE_URL` environment variable (set by user or CI)
+/// 2. `/tmp/ephemeral_pg_env.sh` (created by `cargo make postgres-start`)
+/// 3. Auto-started ephemeral PostgreSQL (fallback for quick `cargo test` runs)
+///
+/// **Recommended usage:**
+/// - Use `cargo make test` for full test suite (starts PostgreSQL once, reuses it)
+/// - Use `cargo nextest run` for quick iteration (auto-starts PostgreSQL per process)
+///
+/// **Configuration:**
+/// Both Makefile.toml and this module use identical PostgreSQL settings:
+/// - `shared_buffers=128kB` - Minimal memory to avoid /dev/shm exhaustion
+/// - `dynamic_shared_memory_type=mmap` - Use mmap instead of POSIX shm
+/// - `fsync=off`, `synchronous_commit=off` - Speed optimizations for tests
 use super::Database;
 use sqlx::PgPool;
 use std::io::Write;
@@ -27,23 +36,77 @@ struct EphemeralPostgres {
     url: String,
     /// Data directory (cleaned up on drop)
     data_dir: PathBuf,
+    /// PostgreSQL binary directory
+    pg_bin_dir: PathBuf,
     /// PostgreSQL server process
     _process: Child,
 }
 
+/// Find PostgreSQL binary directory by checking common installation paths
+fn find_postgres_bin_dir() -> Option<PathBuf> {
+    // Common PostgreSQL installation paths (ordered by preference)
+    let search_paths = [
+        // In PATH
+        "",
+        // Debian/Ubuntu standard locations
+        "/usr/lib/postgresql/17/bin",
+        "/usr/lib/postgresql/16/bin",
+        "/usr/lib/postgresql/15/bin",
+        "/usr/lib/postgresql/14/bin",
+        // Red Hat/Fedora/CentOS standard locations
+        "/usr/pgsql-17/bin",
+        "/usr/pgsql-16/bin",
+        "/usr/pgsql-15/bin",
+        "/usr/pgsql-14/bin",
+        // Homebrew on macOS
+        "/opt/homebrew/opt/postgresql@17/bin",
+        "/opt/homebrew/opt/postgresql@16/bin",
+        "/usr/local/opt/postgresql@17/bin",
+        "/usr/local/opt/postgresql@16/bin",
+    ];
+
+    for path_str in &search_paths {
+        let path = if path_str.is_empty() {
+            // Check if initdb is in PATH
+            if Command::new("initdb")
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok()
+            {
+                return Some(PathBuf::from(""));
+            }
+            continue;
+        } else {
+            PathBuf::from(path_str)
+        };
+
+        let initdb = path.join("initdb");
+        if initdb.exists() && initdb.is_file() {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
 impl EphemeralPostgres {
+    /// Get full path to a PostgreSQL binary command
+    fn pg_cmd(pg_bin_dir: &PathBuf, cmd: &str) -> PathBuf {
+        if pg_bin_dir.as_os_str().is_empty() {
+            // Command is in PATH
+            PathBuf::from(cmd)
+        } else {
+            pg_bin_dir.join(cmd)
+        }
+    }
+
     /// Start a new ephemeral PostgreSQL server
     fn start() -> Result<Self, String> {
-        // Check if initdb is available
-        if Command::new("initdb")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_err()
-        {
-            return Err("initdb not found - install PostgreSQL server".to_string());
-        }
+        // Find PostgreSQL binaries - check common installation paths
+        let pg_bin_dir = find_postgres_bin_dir()
+            .ok_or_else(|| "PostgreSQL not found - install postgresql-server (Red Hat) or postgresql (Debian/Ubuntu)".to_string())?;
 
         // Use /tmp for PostgreSQL data (more space than /dev/shm which may be too small)
         let base_dir = "/tmp";
@@ -61,8 +124,9 @@ impl EphemeralPostgres {
         // Find a free port
         let port = find_free_port()?;
 
-        // Initialize the database cluster
-        let init_output = Command::new("initdb")
+        // Initialize the database cluster with minimal shared memory requirements
+        // Use -c to set shared_buffers and other memory settings low during bootstrap
+        let init_output = Command::new(Self::pg_cmd(&pg_bin_dir, "initdb"))
             .args([
                 "-D",
                 pg_data.to_str().unwrap(),
@@ -70,6 +134,11 @@ impl EphemeralPostgres {
                 "--encoding=UTF8",
                 "-A",
                 "trust",
+                // Reduce shared memory usage during bootstrap to avoid /dev/shm space issues
+                "-c",
+                "shared_buffers=128kB",
+                "-c",
+                "dynamic_shared_memory_type=mmap",
             ])
             .output()
             .map_err(|e| format!("initdb failed to run: {}", e))?;
@@ -102,6 +171,10 @@ unix_socket_directories = '{}'
 fsync = off
 synchronous_commit = off
 full_page_writes = off
+# Use minimal shared_buffers to avoid /dev/shm exhaustion
+shared_buffers = 128kB
+# Use mmap instead of POSIX shared memory to avoid /dev/shm
+dynamic_shared_memory_type = mmap
 "#,
             port,
             socket_dir.to_str().unwrap()
@@ -110,7 +183,7 @@ full_page_writes = off
 
         // Start PostgreSQL
         let log_file = data_dir.join("postgres.log");
-        let process = Command::new("pg_ctl")
+        let process = Command::new(Self::pg_cmd(&pg_bin_dir, "pg_ctl"))
             .args([
                 "-D",
                 pg_data.to_str().unwrap(),
@@ -127,7 +200,7 @@ full_page_writes = off
 
         // Wait for PostgreSQL to be ready
         let url = format!("postgres://{}@127.0.0.1:{}", whoami(), port);
-        wait_for_postgres(&url, 50)?;
+        wait_for_postgres(&pg_bin_dir, &url, 50)?;
 
         // Note: The 'postgres' database is automatically created by initdb,
         // so no need to create it explicitly.
@@ -135,6 +208,7 @@ full_page_writes = off
         Ok(Self {
             url,
             data_dir,
+            pg_bin_dir,
             _process: process,
         })
     }
@@ -144,7 +218,7 @@ impl Drop for EphemeralPostgres {
     fn drop(&mut self) {
         // Stop PostgreSQL
         let pg_data = self.data_dir.join("data");
-        let _ = Command::new("pg_ctl")
+        let _ = Command::new(Self::pg_cmd(&self.pg_bin_dir, "pg_ctl"))
             .args(["-D", pg_data.to_str().unwrap(), "stop", "-m", "immediate"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -187,7 +261,7 @@ fn rand_u32() -> u32 {
 }
 
 /// Wait for PostgreSQL to accept connections using pg_isready (synchronous)
-fn wait_for_postgres(base_url: &str, max_attempts: u32) -> Result<(), String> {
+fn wait_for_postgres(pg_bin_dir: &PathBuf, base_url: &str, max_attempts: u32) -> Result<(), String> {
     // Parse host and port from postgres URL: postgres://user@host:port
     let url_without_scheme = base_url
         .strip_prefix("postgres://")
@@ -205,7 +279,7 @@ fn wait_for_postgres(base_url: &str, max_attempts: u32) -> Result<(), String> {
         .ok_or_else(|| "Missing port in URL".to_string())?;
 
     for attempt in 0..max_attempts {
-        let status = Command::new("pg_isready")
+        let status = Command::new(EphemeralPostgres::pg_cmd(pg_bin_dir, "pg_isready"))
             .args(["-h", host, "-p", port])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
