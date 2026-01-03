@@ -241,17 +241,17 @@
       {
         "ordinal": 47,
         "name": "gateway_ssh_port",
-        "type_info": "Int8"
+        "type_info": "Int4"
       },
       {
         "ordinal": 48,
         "name": "gateway_port_range_start",
-        "type_info": "Int8"
+        "type_info": "Int4"
       },
       {
         "ordinal": 49,
         "name": "gateway_port_range_end",
-        "type_info": "Int8"
+        "type_info": "Int4"
       }
     ],
     "parameters": {
