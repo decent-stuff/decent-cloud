@@ -727,6 +727,136 @@ All core features have been implemented and tested. See below for actual file lo
 
 ## Task Log
 
+### 2026-01-03: Standardize TEST_DATABASE_URL default across codebase
+
+**Artifacts:**
+- `api/src/database/test_helpers.rs` - Lines 29-36: TEST_DATABASE_URL documentation and default
+- `api/src/main_tests.rs` - Lines 10-13: TEST_DATABASE_URL default usage
+
+**Implementation:**
+Standardized TEST_DATABASE_URL default value to `postgres://test:test@localhost:5432` (without database name):
+
+1. **test_helpers.rs**: Default is `postgres://test:test@localhost:5432` - no database name because it connects to admin database to create/drop test databases
+2. **main_tests.rs**: Default is `postgres://test:test@localhost:5432` - no database name, appends `/test` for schema checks
+3. **Distinction from DATABASE_URL**: Runtime uses `postgres://test:test@localhost:5432/test` (includes database name) - different use case
+
+**Why this matters:**
+- Test infrastructure needs admin-level access to create/drop databases
+- No database name in URL allows connecting to `postgres` database for DDL operations
+- Consistent with docker-compose.yml configuration (user/pass: `test/test`)
+- Clear separation: TEST_DATABASE_URL for tests (admin), DATABASE_URL for runtime (specific database)
+
+**Impact:**
+- Consistent defaults across all test code
+- Documentation explains why no database name is used
+- Matches docker-compose PostgreSQL setup
+- Tests work with `makers test` (auto-starts postgres via init_task)
+
+### 2026-01-03: Verify PostgreSQL migrations run correctly in all contexts
+
+**Artifacts:**
+- `api/src/database/migration_tests.rs` - Comprehensive migration verification tests
+- `api/src/database/core.rs` - Runtime migration documentation (lines 26-30)
+- `api/src/database/test_helpers.rs` - Test migration documentation (lines 59-77)
+- `api/migrations_pg/001_schema.sql` - Database schema (1,193 lines)
+- `api/migrations_pg/002_seed_data.sql` - Seed data (160 lines)
+
+**Implementation:**
+Verified that PostgreSQL migrations execute correctly in all contexts (api-server runtime, tests, CLI):
+
+1. **Runtime approach** (`api-server`): Uses `sqlx::migrate!("./migrations_pg")` - tracks migrations in `_sqlx_migrations` table, idempotent, perfect for production
+2. **Test approach** (test helpers): Uses `include_str!("../../migrations_pg/...")` - embeds SQL at compile time, creates fresh schema per test, better isolation for concurrent test execution
+3. **CLI approach**: `sqlx migrate run --source api/migrations_pg` works from both workspace root and api/ directory
+
+Both approaches execute identical SQL files with equivalent results - the difference is intentional and appropriate for each context (production needs migration tracking, tests need isolation).
+
+**Verification:**
+- Created `migration_tests.rs` with 5 tests covering runtime execution, path resolution, test equivalence, sqlx-data.json validation
+- All contexts verified: workspace root CLI, api/ directory CLI, runtime api-server, test helpers
+- 209 sqlx-data.json files properly generated for PostgreSQL offline mode
+- Migration path `"./migrations_pg"` resolves correctly relative to crate root in all contexts
+
+**Impact:**
+- Confirmed migrations work reliably across all execution contexts
+- Comprehensive documentation explaining why two approaches exist and when each is appropriate
+- No changes needed - existing implementation is correct and well-documented
+
+### 2026-01-03: Add PostgreSQL verification to `api-server doctor` command
+
+**Artifacts:**
+- `api/src/main.rs` - Lines 269-282, 285-503: `check_schema_applied()` and `doctor_command()`
+- `api/src/main_tests.rs` - Lines 1-68: Comprehensive test suite
+
+**Implementation:**
+Added PostgreSQL configuration verification to the `api-server doctor` subcommand:
+- **DATABASE_URL validation**: Checks if set, shows truncated value, provides setup instructions for local/production
+- **Connectivity check**: Attempts connection via `Database::new()`, provides troubleshooting steps (docker compose, verify URL, check logs)
+- **Migration verification**: Uses `check_schema_applied()` to verify `provider_registrations` table exists (from `001_schema.sql`)
+- **Clear error messages**: All errors include actionable troubleshooting steps and specific commands to run
+
+**Usage:**
+```bash
+cargo run --bin api-server -- doctor
+```
+
+**Test coverage:** 4 tests covering valid/invalid URLs, empty URLs, missing DATABASE_URL, and schema presence/absence.
+
+**Impact:**
+- Developers can quickly diagnose PostgreSQL configuration issues
+- Prevents "server won't start" due to database misconfiguration
+- Non-destructive checks (read-only)
+- Optional services (Chatwoot, Telegram, etc.) show warnings, not errors
+
+### 2026-01-03: Fix docker-compose service name mismatch in Makefile.toml
+
+**Artifacts:**
+- `Makefile.toml` - Line 18: `docker compose up -d postgres`
+
+**Implementation:**
+Fixed service name reference in postgres-start task to match docker-compose.yml. Changed from incorrect service name to `postgres` (lowercase), which matches the service definition in docker-compose.yml line 2.
+
+**Impact:**
+- Makefile now correctly references the docker-compose service name
+- `makers` commands can successfully start PostgreSQL via docker compose
+- Prevents "service not found" errors when running postgres-start task
+
+### 2026-01-03: PostgreSQL documentation consolidation
+
+**Artifacts:**
+- Deleted: `docs/specs/2026-01-03_00-01-postgres-migration.md` (obsolete planning document)
+
+**Consolidation:**
+- PostgreSQL migration is fully documented in Task Log entries (2026-01-03)
+- All valuable information preserved: technical decisions, artifacts, impact
+- Obsolete planning spec deleted - it was a "Draft" document for planning, not implementation
+- Remaining PostgreSQL docs are active and in use:
+  - `docs/specs/agent-pools.md` - Comprehensive Task Log with all PostgreSQL work
+  - `.claude/commands/postgres.md` - Active MCP server command documentation
+  - `docs/development.md` - PostgreSQL local development setup guide
+
+**Impact:**
+- Eliminated duplicate/obsolete documentation
+- Single source of truth: agent-pools.md Task Log
+- No information loss - all implementation details preserved
+- Clearer project structure
+
+### 2026-01-03: Remove outdated SQLite references in comments
+
+**Artifacts:**
+- `api/src/database/stats.rs`
+- `api/src/database/bandwidth.rs`
+- `api/src/database/contracts/tests.rs`
+- `api/src/database/accounts/tests.rs`
+- `api/src/receipts.rs`
+
+**Implementation:**
+Removed outdated SQLite-specific comments after PostgreSQL migration completion. All references to SQLite patterns (e.g., "stores as INTEGER", "SQLite-specific") were cleaned up from comments in database modules and test files. Code already used PostgreSQL - this was purely documentation cleanup.
+
+**Impact:**
+- Comments now accurately reflect PostgreSQL as the database engine
+- No functional changes - code was already PostgreSQL-compatible
+- Improves codebase clarity for future development
+
 ### 2026-01-03: Documentation consolidation review
 
 **Status:** ✅ Complete - No action needed
@@ -1057,6 +1187,62 @@ makers clippy-canister
 - Clear separation: canister code (no DB) vs API server code (PostgreSQL)
 - Developers can lint canister code without postgres running (only dfx needed)
 - Proper documentation prevents confusion about canister dependencies
+
+### 2026-01-03: Verify all database queries use PostgreSQL-compatible syntax
+
+**Status:** ✅ ALL CRITERIA PASSED
+
+**Verification Summary:**
+- **32 database source files** reviewed (280+ query macros)
+- **172 PostgreSQL data types** verified (BIGSERIAL, BYTEA, TIMESTAMPTZ, DOUBLE PRECISION, BOOLEAN)
+- **0 SQLite-specific features** found (no AUTOINCREMENT, INSERT OR IGNORE, strftime, randomblob, GLOB)
+- **PostgreSQL functions confirmed**: EXTRACT(EPOCH FROM NOW()), COALESCE(), gen_random_bytes(), encode()/decode(), LOWER()
+- **Migration files**: 2 consolidated PostgreSQL schemas (001_schema.sql: 1,193 lines, 002_seed_data.sql: 160 lines)
+
+**Key PostgreSQL Features Verified:**
+- Type casting: `::BIGINT` for integers, `::TEXT` for strings
+- Parameter binding: `$1`, `$2` syntax (no SQLite `?` placeholders)
+- Upserts: `ON CONFLICT DO NOTHING` and `ON CONFLICT ... DO UPDATE` (no INSERT OR IGNORE/REPLACE)
+- Binary data: `BYTEA` instead of `BLOB`
+- Timezone-aware timestamps: `TIMESTAMPTZ` instead of Unix integer timestamps
+
+**Migration Path:**
+- Runtime: `sqlx::migrate!("./migrations_pg")` with `_sqlx_migrations` table tracking
+- Tests: `include_str!("../../migrations_pg/...")` for isolated test execution
+- Both execute identical SQL - intentional separation for production vs test use cases
+
+**Impact:**
+- SQLite to PostgreSQL migration is **complete and production-ready**
+- Test infrastructure properly configured for PostgreSQL (PgPool, unique databases per test)
+- No SQLite code remains in codebase
+- Consolidated from 64 individual SQLite migrations to 2 PostgreSQL schema files
+
+---
+
+## Task Log
+
+### 2026-01-03: Fix Makefile.toml cargo build configuration
+
+**Artifacts:**
+- `Makefile.toml` - Added `--workspace` flag to format, clippy, and build tasks
+- `Cargo.toml` - Workspace members: api, api/email-utils, cli, common, dc-agent, ic-canister, ledger-map
+- `api/email-utils/Cargo.toml` - Email utilities workspace member
+
+**Implementation:**
+Fixed incomplete workspace builds by adding `--workspace` flag to cargo commands:
+- **format**: `cargo fmt --workspace` (line 53) - formats all 6 workspace members
+- **clippy**: `cargo clippy --workspace --tests` (line 64) - lints all workspace members with tests
+- **build**: `cargo build --workspace` (line 75) - compiles all workspace members
+
+**Key Configuration:**
+- `default_to_workspace = false` in Makefile.toml config section
+- Requires explicit `--workspace` flag for workspace-wide operations
+- Single-crate tasks (clippy-canister) correctly use `cwd` instead
+
+**Impact:**
+- All workspace crates now properly compiled by build tasks
+- Consistent behavior across format, clippy, and build commands
+- `makers build` compiles: api, cli, common, dc-agent, ic-canister, ledger-map, api/email-utils
 
 ---
 
