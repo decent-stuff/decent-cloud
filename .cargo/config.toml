@@ -3,6 +3,10 @@
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
+# Use offline mode by default for sqlx to avoid requiring database at compile time
+[env]
+SQLX_OFFLINE = "true"
+
 [profile.dev]
 opt-level = 0
 debug = 2
