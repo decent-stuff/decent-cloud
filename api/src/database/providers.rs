@@ -536,8 +536,8 @@ impl Database {
         .fetch_optional(&self.pool)
         .await?;
 
-        // row is Option<i64> - None if no row found, Some(value) if found
-        Ok(row.unwrap_or(0) != 0)
+        // row is Option<bool> - None if no row found, Some(value) if found
+        Ok(row.unwrap_or(false))
     }
 
     /// Set provider auto-accept rentals setting.
@@ -547,10 +547,9 @@ impl Database {
         pubkey: &[u8],
         enabled: bool,
     ) -> Result<()> {
-        let value: i64 = if enabled { 1 } else { 0 };
         let result = sqlx::query!(
             "UPDATE provider_profiles SET auto_accept_rentals = $1 WHERE pubkey = $2",
-            value,
+            enabled,
             pubkey
         )
         .execute(&self.pool)

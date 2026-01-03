@@ -1531,7 +1531,7 @@ async fn test_try_auto_accept_contract_enabled() {
 
     // Create provider profile with auto_accept_rentals enabled
     sqlx::query!(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, 1)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, TRUE)",
         provider_pk
     )
     .execute(&db.pool)
@@ -1568,7 +1568,7 @@ async fn test_try_auto_accept_contract_disabled() {
 
     // Create provider profile with auto_accept_rentals explicitly disabled
     sqlx::query!(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, FALSE)",
         provider_pk
     )
     .execute(&db.pool)
@@ -1605,7 +1605,7 @@ async fn test_try_auto_accept_contract_idempotent() {
 
     // Create provider profile with auto_accept_rentals enabled
     sqlx::query!(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, 1)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, TRUE)",
         provider_pk
     )
     .execute(&db.pool)
