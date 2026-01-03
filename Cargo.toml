@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["api", "cli", "common", "dc-agent", "ic-canister", "ledger-map"]
+members = ["api", "api/email-utils", "cli", "common", "dc-agent", "ic-canister", "ledger-map"]
 
 [workspace.package]
 version = "0.4.4"
