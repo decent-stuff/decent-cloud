@@ -10,7 +10,6 @@ ARG GROUP_ID=1000
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
-    sqlite3 \
     xz-utils \
     fonts-liberation \
     && curl -L https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJ -C /usr/local/bin --strip-components=1 typst-x86_64-unknown-linux-musl/typst \
@@ -32,13 +31,12 @@ RUN echo "API binary hash: ${BINARY_HASH}"
 COPY target/x86_64-unknown-linux-gnu/release/api-server /usr/local/bin/api-server
 COPY target/x86_64-unknown-linux-gnu/release/dc /usr/local/bin/dc
 
-# Copy migrations and validation script
-COPY api/migrations /migrations
+# Copy validation script
 COPY cf/validator-entrypoint.sh /usr/local/bin/validator-entrypoint.sh
 
 # Create data directory and set permissions
 RUN mkdir -p /data /identity && \
-    chown -R appuser:appuser /usr/local/bin/api-server /usr/local/bin/dc /usr/local/bin/validator-entrypoint.sh /migrations /data /identity && \
+    chown -R appuser:appuser /usr/local/bin/api-server /usr/local/bin/dc /usr/local/bin/validator-entrypoint.sh /data /identity && \
     chmod +x /usr/local/bin/validator-entrypoint.sh
 
 # Set Typst cache directory for package downloads (uses mounted /data volume)

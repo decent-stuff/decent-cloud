@@ -1220,7 +1220,7 @@ done
   - OVH: 132 offerings
   - Total: 345 seeded offerings
 - **Review:** All offerings have offering_source='seeded' and external_checkout_url set
-- **Verification:** sqlite3 query confirms 345 seeded offerings with external URLs
+- **Verification:** Database query confirms 345 seeded offerings with external URLs
 - **Outcome:** Success
 
 ## Completion Summary
