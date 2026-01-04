@@ -501,6 +501,17 @@ fn get_postgres_url() -> String {
     // Check for external PostgreSQL first (set by cargo make or user)
     // This takes precedence over everything else
     if let Ok(url) = std::env::var("TEST_DATABASE_URL") {
+        // Strip database name if present (e.g., "postgres://user@host:port/dbname" -> "postgres://user@host:port")
+        // The template creation code expects a base URL without a database name
+        if let Some(pos) = url.rfind('/') {
+            // Check if this is the database name (not part of the host)
+            // URLs are in format: postgres://user@host:port or postgres://user@host:port/dbname
+            let before_slash = &url[..pos];
+            if before_slash.contains("://") && before_slash.contains('@') {
+                // This is the database name separator, strip it
+                return before_slash.to_string();
+            }
+        }
         return url;
     }
 
