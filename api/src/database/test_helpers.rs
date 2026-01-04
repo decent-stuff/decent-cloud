@@ -13,7 +13,7 @@
 ///
 /// **Configuration:**
 /// Both Makefile.toml and this module use identical PostgreSQL settings:
-/// - `shared_buffers=128kB` - Minimal memory to avoid /dev/shm exhaustion
+/// - `shared_buffers=4MB` - Balanced for concurrent operations without /dev/shm exhaustion
 /// - `dynamic_shared_memory_type=mmap` - Use mmap instead of POSIX shm
 /// - `fsync=off`, `synchronous_commit=off` - Speed optimizations for tests
 use super::Database;
@@ -128,7 +128,7 @@ impl EphemeralPostgres {
         let port = find_free_port()?;
 
         // Initialize the database cluster with minimal shared memory requirements
-        // Use -c to set shared_buffers and other memory settings low during bootstrap
+        // Use -c to set shared_buffers and other memory settings during bootstrap
         let init_output = Command::new(Self::pg_cmd(&pg_bin_dir, "initdb"))
             .args([
                 "-D",
@@ -137,9 +137,9 @@ impl EphemeralPostgres {
                 "--encoding=UTF8",
                 "-A",
                 "trust",
-                // Reduce shared memory usage during bootstrap to avoid /dev/shm space issues
+                // Use small but sufficient shared memory during bootstrap
                 "-c",
-                "shared_buffers=128kB",
+                "shared_buffers=4MB",
                 "-c",
                 "dynamic_shared_memory_type=mmap",
             ])
@@ -147,7 +147,8 @@ impl EphemeralPostgres {
             .map_err(|e| format!("initdb failed to run: {}", e))?;
 
         if !init_output.status.success() {
-            let _ = std::fs::remove_dir_all(&data_dir);
+            // Best-effort cleanup of failed initialization (ignore errors)
+            std::fs::remove_dir_all(&data_dir).ok();
             let stderr = String::from_utf8_lossy(&init_output.stderr);
             let stdout = String::from_utf8_lossy(&init_output.stdout);
             return Err(format!(
@@ -174,8 +175,9 @@ unix_socket_directories = '{}'
 fsync = off
 synchronous_commit = off
 full_page_writes = off
-# Use minimal shared_buffers to avoid /dev/shm exhaustion
-shared_buffers = 128kB
+# Balanced shared_buffers: large enough for concurrent operations, small enough for /tmp
+# With 4MB we can handle ~100 concurrent CREATE DATABASE operations
+shared_buffers = 4MB
 # Use mmap instead of POSIX shared memory to avoid /dev/shm
 dynamic_shared_memory_type = mmap
 "#,
@@ -219,16 +221,17 @@ dynamic_shared_memory_type = mmap
 
 impl Drop for EphemeralPostgres {
     fn drop(&mut self) {
-        // Stop PostgreSQL
+        // Best-effort cleanup: stop PostgreSQL and remove data directory
+        // Errors are expected if process already died or directory was removed
         let pg_data = self.data_dir.join("data");
-        let _ = Command::new(Self::pg_cmd(&self.pg_bin_dir, "pg_ctl"))
+        Command::new(Self::pg_cmd(&self.pg_bin_dir, "pg_ctl"))
             .args(["-D", pg_data.to_str().unwrap(), "stop", "-m", "immediate"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status()
+            .ok();
 
-        // Clean up data directory
-        let _ = std::fs::remove_dir_all(&self.data_dir);
+        std::fs::remove_dir_all(&self.data_dir).ok();
     }
 }
 
@@ -346,19 +349,17 @@ async fn ensure_template_db(base_url: &str) -> String {
             false
         }
         Some(false) => {
-            // Database exists but is NOT a template (leftover from failed run)
-            // Terminate connections and drop it
-            let _ = sqlx::query(&format!(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
-                template_name
-            ))
-            .execute(&admin_pool)
-            .await;
-
-            sqlx::query(&format!("DROP DATABASE {}", template_name))
-                .execute(&admin_pool)
-                .await
-                .expect("Failed to drop non-template database");
+            // Database exists but is NOT a template
+            // This could be:
+            // 1. A leftover from a failed run (should be cleaned up)
+            // 2. Another process actively setting it up (should wait for it)
+            //
+            // CRITICAL: We must NOT clean up databases with the current migration hash
+            // because another process might be running migrations on it right now.
+            // Only mark as needs_creation=true, and let the CREATE DATABASE error
+            // handling coordinate with the other process.
+            //
+            // Cleanup of truly stale databases happens in the old templates cleanup below.
             true
         }
         None => {
@@ -377,17 +378,28 @@ async fn ensure_template_db(base_url: &str) -> String {
         .expect("Failed to query old templates");
 
         for old_template in old_templates {
-            // Terminate connections and drop old template
-            let _ = sqlx::query(&format!(
+            // Terminate connections to old template (best effort)
+            match sqlx::query(&format!(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
                 old_template
             ))
             .execute(&admin_pool)
-            .await;
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => eprintln!(
+                    "Warning: Failed to terminate connections to old template '{}': {:#?}",
+                    old_template, e
+                ),
+            }
 
-            let _ = sqlx::query(&format!("DROP DATABASE IF EXISTS {}", old_template))
+            // Drop old template
+            sqlx::query(&format!("DROP DATABASE IF EXISTS {}", old_template))
                 .execute(&admin_pool)
-                .await;
+                .await
+                .unwrap_or_else(|e| {
+                    panic!("Failed to drop old template '{}': {:#?}", old_template, e)
+                });
         }
 
         // Try to create new template database
@@ -398,21 +410,39 @@ async fn ensure_template_db(base_url: &str) -> String {
         // Handle creation - might fail if another process created it concurrently
         let created_by_us = match create_result {
             Ok(_) => true,
-            Err(sqlx::Error::Database(ref db_err)) if db_err.code().as_deref() == Some("42P04") => {
-                // Database already exists - another concurrent test created it
-                // Verify it's properly marked as a template
-                let is_template: bool =
-                    sqlx::query_scalar("SELECT datistemplate FROM pg_database WHERE datname = $1")
-                        .bind(&template_name)
-                        .fetch_one(&admin_pool)
-                        .await
-                        .expect("Failed to verify template status after concurrent creation");
+            Err(sqlx::Error::Database(ref db_err))
+                if db_err.code().as_deref() == Some("42P04")
+                    || db_err.code().as_deref() == Some("23505") =>
+            {
+                // Database already exists or unique constraint violated (concurrent creation)
+                // Both error codes indicate another process is creating the template
+                // Wait for it to be marked as a template (with timeout)
+                for attempt in 0..100 {
+                    let is_template: Option<bool> = sqlx::query_scalar(
+                        "SELECT datistemplate FROM pg_database WHERE datname = $1",
+                    )
+                    .bind(&template_name)
+                    .fetch_optional(&admin_pool)
+                    .await
+                    .expect("Failed to query template status");
 
-                if !is_template {
-                    panic!(
-                        "Template database '{}' exists but is not marked as template",
-                        template_name
-                    );
+                    if matches!(is_template, Some(true)) {
+                        // Template is ready!
+                        break;
+                    } else if matches!(is_template, Some(false)) {
+                        // Database exists but not yet marked as template - wait
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    } else {
+                        // Database was dropped? Retry template creation
+                        panic!("Template database disappeared during concurrent setup");
+                    }
+
+                    if attempt == 99 {
+                        panic!(
+                            "Timeout waiting for concurrent process to finish template setup for '{}'",
+                            template_name
+                        );
+                    }
                 }
                 false // Created by another process
             }
@@ -460,8 +490,8 @@ async fn ensure_template_db(base_url: &str) -> String {
 
     admin_pool.close().await;
 
-    // Cache the template name
-    let _ = TEMPLATE_INITIALIZED.set(template_name.clone());
+    // Cache the template name (ok if another thread already set it)
+    TEMPLATE_INITIALIZED.set(template_name.clone()).ok();
 
     template_name
 }
@@ -469,26 +499,150 @@ async fn ensure_template_db(base_url: &str) -> String {
 /// Get or start the ephemeral PostgreSQL server
 fn get_postgres_url() -> String {
     // Check for external PostgreSQL first (set by cargo make or user)
+    // This takes precedence over everything else
     if let Ok(url) = std::env::var("TEST_DATABASE_URL") {
         return url;
     }
 
-    // Check for ephemeral_pg_env.sh (created by cargo make postgres-start)
-    if let Ok(content) = std::fs::read_to_string("/tmp/ephemeral_pg_env.sh") {
-        for line in content.lines() {
-            if let Some(url) = line.strip_prefix("export TEST_DATABASE_URL=\"") {
-                if let Some(url) = url.strip_suffix('"') {
-                    return url.to_string();
+    // For all other cases (env file or auto-start), use the coordinated approach
+    // which verifies PostgreSQL is actually running
+    start_or_wait_for_shared_postgres()
+}
+
+/// Start PostgreSQL if we're first, or wait for another process to start it
+fn start_or_wait_for_shared_postgres() -> String {
+    use std::fs::File;
+    use std::io::Write;
+
+    let env_file = "/tmp/ephemeral_pg_env.sh";
+    let lock_dir = "/tmp/ephemeral_pg_env.lock.d";
+
+    // Try to acquire exclusive lock via atomic directory creation
+    // Only one process succeeds - this is guaranteed atomic by the filesystem
+    match std::fs::create_dir(lock_dir) {
+        Ok(_) => {
+            // We got the lock! Check if env file already exists from previous run
+            if let Ok(content) = std::fs::read_to_string(env_file) {
+                for line in content.lines() {
+                    if let Some(url) = line.strip_prefix("export TEST_DATABASE_URL=\"") {
+                        if let Some(url) = url.strip_suffix('"') {
+                            // Verify PostgreSQL is actually running by trying to connect
+                            use std::net::TcpStream;
+                            if let Some(port_str) = url.split(':').next_back() {
+                                if let Ok(port) = port_str.parse::<u16>() {
+                                    if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                                        // PostgreSQL from previous run is still alive, reuse it
+                                        return url.to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
+
+            // No existing PostgreSQL or it's dead - start new one
+            let pg = EphemeralPostgres::start().expect("Failed to start ephemeral PostgreSQL");
+            let url = pg.url.clone();
+
+            // Store in global static so Drop handler works
+            // This should succeed since we hold the lock
+            match EPHEMERAL_PG.set(pg) {
+                Ok(_) => {}
+                Err(_) => panic!("Failed to store PostgreSQL instance in global static - already set by another thread"),
+            }
+
+            // Write env file for other processes
+            let env_content = format!("export TEST_DATABASE_URL=\"{}\"\n", url);
+            let mut file = File::create(env_file).expect("Failed to create env file");
+            file.write_all(env_content.as_bytes())
+                .expect("Failed to write env file");
+            file.sync_all().expect("Failed to sync env file");
+
+            // Keep lock directory until process exits (don't remove it)
+            // This ensures other processes know someone owns the PostgreSQL instance
+
+            url
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            // Another process has the lock and is starting/has started PostgreSQL
+            // Check if lock is stale (>10 seconds old with dead PostgreSQL)
+            if let Ok(metadata) = std::fs::metadata(lock_dir) {
+                if let Ok(created) = metadata.modified() {
+                    if let Ok(elapsed) = created.elapsed() {
+                        if elapsed.as_secs() > 10 {
+                            // Lock is old - check if PostgreSQL is dead
+                            let mut pg_dead = true;
+                            if let Ok(content) = std::fs::read_to_string(env_file) {
+                                for line in content.lines() {
+                                    if let Some(url) =
+                                        line.strip_prefix("export TEST_DATABASE_URL=\"")
+                                    {
+                                        if let Some(url) = url.strip_suffix('"') {
+                                            use std::net::TcpStream;
+                                            if let Some(port_str) = url.split(':').next_back() {
+                                                if let Ok(port) = port_str.parse::<u16>() {
+                                                    if TcpStream::connect(("127.0.0.1", port))
+                                                        .is_ok()
+                                                    {
+                                                        pg_dead = false;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if pg_dead {
+                                // PostgreSQL is dead and lock is stale - clean up and retry
+                                eprintln!("Warning: Detected stale lock directory with dead PostgreSQL, cleaning up...");
+                                std::fs::remove_dir_all(lock_dir).ok();
+                                std::fs::remove_file(env_file).ok();
+                                // Random backoff to avoid thundering herd (0-500ms)
+                                let backoff_ms = rand_u32() % 500;
+                                std::thread::sleep(std::time::Duration::from_millis(
+                                    backoff_ms as u64,
+                                ));
+                                // Retry acquisition by recursing
+                                return start_or_wait_for_shared_postgres();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Wait for env file to appear and PostgreSQL to be ready (up to 30 seconds)
+            for _attempt in 0..300 {
+                if let Ok(content) = std::fs::read_to_string(env_file) {
+                    for line in content.lines() {
+                        if let Some(url) = line.strip_prefix("export TEST_DATABASE_URL=\"") {
+                            if let Some(url) = url.strip_suffix('"') {
+                                // Verify it's actually running
+                                use std::net::TcpStream;
+                                if let Some(port_str) = url.split(':').next_back() {
+                                    if let Ok(port) = port_str.parse::<u16>() {
+                                        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                                            return url.to_string();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+
+            panic!(
+                "Timed out waiting for shared PostgreSQL instance to start. \
+                Check /tmp/ephemeral_pg_env.sh and lock directory."
+            );
+        }
+        Err(e) => {
+            panic!("Failed to create lock directory: {}", e);
         }
     }
-
-    // Start or get ephemeral PostgreSQL
-    let pg = EPHEMERAL_PG
-        .get_or_init(|| EphemeralPostgres::start().expect("Failed to start ephemeral PostgreSQL"));
-
-    pg.url.clone()
 }
 
 /// Set up a test database with all migrations applied

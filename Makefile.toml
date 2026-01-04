@@ -40,9 +40,9 @@ if command -v initdb >/dev/null 2>&1; then
 
     echo "Ephemeral PostgreSQL: ${EPHEMERAL_PG_DIR} on port ${EPHEMERAL_PG_PORT}"
 
-    # Initialize the database cluster with minimal shared memory requirements
+    # Initialize the database cluster with balanced shared memory settings
     initdb -D "${EPHEMERAL_PG_DIR}/data" --no-locale --encoding=UTF8 -A trust \
-        -c shared_buffers=128kB -c dynamic_shared_memory_type=mmap >/dev/null 2>&1
+        -c shared_buffers=4MB -c dynamic_shared_memory_type=mmap >/dev/null 2>&1
 
     # Configure for testing (no fsync for speed, high connection limit for parallel tests)
     cat >> "${EPHEMERAL_PG_DIR}/data/postgresql.conf" <<EOF
@@ -53,8 +53,9 @@ fsync = off
 synchronous_commit = off
 full_page_writes = off
 max_connections = 300
-# Use minimal shared_buffers to avoid /dev/shm exhaustion
-shared_buffers = 128kB
+# Balanced shared_buffers: large enough for concurrent operations, small enough for /tmp
+# With 4MB we can handle ~100 concurrent CREATE DATABASE operations
+shared_buffers = 4MB
 # Use mmap instead of POSIX shared memory to avoid /dev/shm
 dynamic_shared_memory_type = mmap
 EOF
@@ -194,9 +195,11 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-# Source ephemeral PostgreSQL environment if available
+# Source ephemeral PostgreSQL environment if available and export for child processes
 if [ -f /tmp/ephemeral_pg_env.sh ]; then
     source /tmp/ephemeral_pg_env.sh
+    export TEST_DATABASE_URL
+    echo "Running tests with shared PostgreSQL: ${TEST_DATABASE_URL}"
 fi
 
 cargo nextest run --workspace
@@ -267,7 +270,11 @@ else
     pkill -u $(whoami) -9 postgres 2>/dev/null || true
 fi
 
-# 4. Fall back to docker compose if no ephemeral instances were found
+# 4. Clean up coordination files
+rm -f /tmp/ephemeral_pg_env.sh
+rm -rf /tmp/ephemeral_pg_env.lock.d
+
+# 5. Fall back to docker compose if no ephemeral instances were found
 if [ "$CLEANED_UP" = false ]; then
     echo "Stopping postgres via docker compose..."
     docker compose down
@@ -292,9 +299,11 @@ fi
 
 # Determine connection details based on environment
 if [ -n "${TEST_DATABASE_URL:-}" ]; then
-    # Using ephemeral PostgreSQL
+    # Using ephemeral PostgreSQL - extract connection details from URL
+    # Format: postgres://user@host:port or postgres://user@host:port/db
     PG_HOST="127.0.0.1"
-    PG_PORT="${EPHEMERAL_PG_PORT}"
+    # Extract port from TEST_DATABASE_URL (format: postgres://user@host:port or postgres://user@host:port/db)
+    PG_PORT=$(echo "${TEST_DATABASE_URL}" | sed -n 's/.*:\([0-9]\+\)\(\/.*\)\?$/\1/p')
     PG_USER="$(whoami)"
     PG_DB="test"
     USE_DOCKER=false
