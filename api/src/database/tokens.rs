@@ -114,7 +114,10 @@ impl Database {
             let to_account = transfer.to().to_string();
             let amount_i64 = transfer.amount() as i64;
             let fee_i64 = transfer.fee().unwrap_or(0) as i64;
-            let memo = String::from_utf8_lossy(transfer.memo()).to_string();
+            // Filter out NULL bytes (0x00) which PostgreSQL TEXT type doesn't accept
+            let memo = String::from_utf8_lossy(transfer.memo())
+                .replace('\0', "")
+                .to_string();
             let timestamp_i64 = entry.block_timestamp_ns as i64;
             let block_offset_i64 = entry.block_offset as i64;
 
