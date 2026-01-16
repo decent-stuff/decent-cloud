@@ -696,7 +696,8 @@ impl Provisioner for ProxmoxProvisioner {
 
         // Fail if no IP address was obtained - VM is not accessible
         if ipv4.is_none() && ipv6.is_none() {
-            let total_wait = self.config.ip_wait_attempts as u64 * self.config.ip_wait_interval_secs;
+            let total_wait =
+                self.config.ip_wait_attempts as u64 * self.config.ip_wait_interval_secs;
             bail!(
                 "VM {} started but no IP address obtained after {} seconds. \
                 Check that qemu-guest-agent is installed and running in the template.",
