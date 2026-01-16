@@ -21,6 +21,7 @@
 	let offeringsCount = $state(0);
 	let onboardingData = $state<ProviderOnboarding | null>(null);
 	let providerDataLoading = $state(false);
+	let providerDataError = $state(false);
 
 	const CHATWOOT_BASE_URL =
 		import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
@@ -74,10 +75,11 @@
 
 		try {
 			providerDataLoading = true;
+			providerDataError = false;
 			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
 
 			const [offerings, onboarding] = await Promise.all([
-				getProviderOfferings(pubkeyHex).catch(() => []),
+				getProviderOfferings(pubkeyHex),
 				getProviderOnboarding(pubkeyHex).catch(() => null)
 			]);
 
@@ -85,6 +87,9 @@
 			onboardingData = onboarding;
 		} catch (err) {
 			console.error('Failed to load provider data:', err);
+			providerDataError = true;
+			offeringsCount = 0;
+			onboardingData = null;
 		} finally {
 			providerDataLoading = false;
 		}
@@ -182,7 +187,12 @@
 
 			<!-- Provider section -->
 			<div class="pt-5 pb-2 px-3">
-				<div class="section-label">Provider</div>
+				<div class="section-label flex items-center gap-2">
+					Provider
+					{#if providerDataError}
+						<span class="status-dot status-dot-danger" title="Failed to load provider data"></span>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Provider Setup -->

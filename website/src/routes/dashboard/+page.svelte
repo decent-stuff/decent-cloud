@@ -22,26 +22,31 @@
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let responseMetrics = $state<ProviderResponseMetrics | null>(null);
 	let trustMetricsLoading = $state(false);
+	let trustMetricsError = $state<string | null>(null);
 
 	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
 		if (!publicKeyBytes) {
 			trustMetrics = null;
 			responseMetrics = null;
+			trustMetricsError = null;
 			return;
 		}
 
 		trustMetricsLoading = true;
+		trustMetricsError = null;
 		try {
 			const pubkeyHex = computePubkey(publicKeyBytes);
 			const [trustData, responseData] = await Promise.all([
-				getProviderTrustMetrics(publicKeyBytes).catch(() => null),
+				getProviderTrustMetrics(publicKeyBytes),
 				getProviderResponseMetrics(pubkeyHex).catch(() => null),
 			]);
 			trustMetrics = trustData;
 			responseMetrics = responseData;
-		} catch {
+		} catch (err) {
+			console.error('Failed to load trust metrics:', err);
 			trustMetrics = null;
 			responseMetrics = null;
+			trustMetricsError = err instanceof Error ? err.message : 'Failed to load trust metrics';
 		} finally {
 			trustMetricsLoading = false;
 		}
@@ -104,6 +109,11 @@
 		{#if trustMetricsLoading}
 			<div class="flex justify-center items-center p-8">
 				<div class="w-5 h-5 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
+			</div>
+		{:else if trustMetricsError}
+			<div class="bg-danger/10 border border-danger/20 p-4">
+				<p class="text-sm text-danger">Failed to load trust metrics</p>
+				<p class="text-xs text-neutral-500 mt-1">{trustMetricsError}</p>
 			</div>
 		{:else if trustMetrics}
 			<div class="flex items-center justify-between mb-3">
