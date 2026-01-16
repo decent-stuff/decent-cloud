@@ -678,8 +678,8 @@ impl Provisioner for ProxmoxProvisioner {
         let mut ipv4 = None;
         let mut ipv6 = None;
 
-        for attempt in 1..=12 {
-            tokio::time::sleep(Duration::from_secs(10)).await;
+        for attempt in 1..=self.config.ip_wait_attempts {
+            tokio::time::sleep(Duration::from_secs(self.config.ip_wait_interval_secs)).await;
 
             match self.get_vm_ip(vmid).await {
                 Ok((v4, v6)) if v4.is_some() || v6.is_some() => {
@@ -696,10 +696,12 @@ impl Provisioner for ProxmoxProvisioner {
 
         // Fail if no IP address was obtained - VM is not accessible
         if ipv4.is_none() && ipv6.is_none() {
+            let total_wait = self.config.ip_wait_attempts as u64 * self.config.ip_wait_interval_secs;
             bail!(
-                "VM {} started but no IP address obtained after 2 minutes. \
+                "VM {} started but no IP address obtained after {} seconds. \
                 Check that qemu-guest-agent is installed and running in the template.",
-                vmid
+                vmid,
+                total_wait
             );
         }
 

@@ -15,6 +15,9 @@ mod tests {
             storage: "local-lvm".to_string(),
             pool: None,
             verify_ssl: false,
+            // Fast retry for tests: 2 attempts with no delay
+            ip_wait_attempts: 2,
+            ip_wait_interval_secs: 0,
         }
     }
 
@@ -257,8 +260,8 @@ mod tests {
         );
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("no IP address obtained"),
-            "Error should mention IP address issue: {}",
+            err.contains("no IP address obtained") && err.contains("0 seconds"),
+            "Error should mention IP address issue and timeout: {}",
             err
         );
     }
@@ -545,6 +548,8 @@ mod tests {
             storage: "local-lvm".to_string(),
             pool: None,
             verify_ssl: false,
+            ip_wait_attempts: 2,
+            ip_wait_interval_secs: 0,
         };
 
         let provisioner = ProxmoxProvisioner::new(config).unwrap();

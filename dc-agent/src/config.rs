@@ -151,6 +151,10 @@ struct RawProvisionerConfig {
     pool: Option<String>,
     #[serde(default = "default_verify_ssl")]
     verify_ssl: bool,
+    #[serde(default = "default_ip_wait_attempts")]
+    ip_wait_attempts: u32,
+    #[serde(default = "default_ip_wait_interval_secs")]
+    ip_wait_interval_secs: u64,
     // Flat fields for script
     provision: Option<String>,
     terminate: Option<String>,
@@ -199,6 +203,8 @@ where
                     storage: raw.storage,
                     pool: raw.pool,
                     verify_ssl: raw.verify_ssl,
+                    ip_wait_attempts: raw.ip_wait_attempts,
+                    ip_wait_interval_secs: raw.ip_wait_interval_secs,
                 }
             };
             Ok(ProvisionerConfig::Proxmox(config))
@@ -255,6 +261,12 @@ pub struct ProxmoxConfig {
     pub pool: Option<String>,
     #[serde(default = "default_verify_ssl")]
     pub verify_ssl: bool,
+    /// Number of attempts to wait for VM IP address (default: 12)
+    #[serde(default = "default_ip_wait_attempts")]
+    pub ip_wait_attempts: u32,
+    /// Seconds between IP address check attempts (default: 10)
+    #[serde(default = "default_ip_wait_interval_secs")]
+    pub ip_wait_interval_secs: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -304,6 +316,14 @@ fn default_script_timeout() -> u64 {
     300
 }
 
+fn default_ip_wait_attempts() -> u32 {
+    12
+}
+
+fn default_ip_wait_interval_secs() -> u64 {
+    10
+}
+
 /// Deserialize additional provisioners from [[additional_provisioners]] array
 fn deserialize_additional_provisioners<'de, D>(
     deserializer: D,
@@ -345,6 +365,8 @@ where
                         storage: raw.storage,
                         pool: raw.pool,
                         verify_ssl: raw.verify_ssl,
+                        ip_wait_attempts: raw.ip_wait_attempts,
+                        ip_wait_interval_secs: raw.ip_wait_interval_secs,
                     }
                 };
                 ProvisionerConfig::Proxmox(config)
@@ -825,6 +847,8 @@ endpoint = "https://api.decent-cloud.org"
             storage: "local".to_string(),
             pool: None,
             verify_ssl: true,
+            ip_wait_attempts: 12,
+            ip_wait_interval_secs: 10,
         });
         assert_eq!(proxmox.type_name(), "proxmox");
 

@@ -718,6 +718,8 @@ async fn run_proxmox_setup_if_requested(
         storage: result.storage,
         pool: None,
         verify_ssl: false,
+        ip_wait_attempts: 12,
+        ip_wait_interval_secs: 10,
     };
 
     Ok(Some(config))
