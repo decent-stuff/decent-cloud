@@ -14,97 +14,14 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-# Source existing ephemeral PostgreSQL environment if available
-if [ -f /tmp/ephemeral_pg_env.sh ]; then
-    source /tmp/ephemeral_pg_env.sh
-fi
-
-# Check if we already have a PostgreSQL connection
-if [ -n "${TEST_DATABASE_URL:-}" ]; then
-    echo "Using existing TEST_DATABASE_URL: ${TEST_DATABASE_URL}"
-    exit 0
-fi
-
-# Check if initdb is available (ephemeral PostgreSQL)
-if command -v initdb >/dev/null 2>&1; then
-    echo "Starting ephemeral PostgreSQL..."
-
-    # Use /tmp for ephemeral PostgreSQL (/dev/shm may be too small)
-    BASE_DIR="/tmp"
-
-    # Create unique directory for this test run
-    export EPHEMERAL_PG_DIR=$(mktemp -d "${BASE_DIR}/pg_test_XXXXXX")
-
-    # Find a free port
-    export EPHEMERAL_PG_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
-
-    echo "Ephemeral PostgreSQL: ${EPHEMERAL_PG_DIR} on port ${EPHEMERAL_PG_PORT}"
-
-    # Initialize the database cluster with balanced shared memory settings
-    initdb -D "${EPHEMERAL_PG_DIR}/data" --no-locale --encoding=UTF8 -A trust \
-        -c shared_buffers=4MB -c dynamic_shared_memory_type=mmap >/dev/null 2>&1
-
-    # Configure for testing (no fsync for speed, high connection limit for parallel tests)
-    cat >> "${EPHEMERAL_PG_DIR}/data/postgresql.conf" <<EOF
-listen_addresses = '127.0.0.1'
-port = ${EPHEMERAL_PG_PORT}
-unix_socket_directories = '${EPHEMERAL_PG_DIR}'
-fsync = off
-synchronous_commit = off
-full_page_writes = off
-max_connections = 300
-# Balanced shared_buffers: large enough for concurrent operations, small enough for /tmp
-# With 4MB we can handle ~100 concurrent CREATE DATABASE operations
-shared_buffers = 4MB
-# Use mmap instead of POSIX shared memory to avoid /dev/shm
-dynamic_shared_memory_type = mmap
-EOF
-
-    # Start PostgreSQL
-    pg_ctl -D "${EPHEMERAL_PG_DIR}/data" -l "${EPHEMERAL_PG_DIR}/postgres.log" -o "-k ${EPHEMERAL_PG_DIR}" start >/dev/null 2>&1
-
-    # Wait for PostgreSQL to be ready
-    RETRIES=30
-    while ! pg_isready -h 127.0.0.1 -p "${EPHEMERAL_PG_PORT}" >/dev/null 2>&1; do
-        RETRIES=$((RETRIES - 1))
-        if [ $RETRIES -le 0 ]; then
-            echo "ERROR: PostgreSQL failed to start. Log:" >&2
-            cat "${EPHEMERAL_PG_DIR}/postgres.log" >&2
-            exit 1
-        fi
-        sleep 0.1
-    done
-
-    # Create test database
-    createdb -h 127.0.0.1 -p "${EPHEMERAL_PG_PORT}" test >/dev/null 2>&1
-
-    # Export connection URL
-    export TEST_DATABASE_URL="postgres://$(whoami)@127.0.0.1:${EPHEMERAL_PG_PORT}"
-    echo "✓ Ephemeral PostgreSQL ready: ${TEST_DATABASE_URL}"
-
-    # Write env vars to a file for other tasks to source
-    echo "export TEST_DATABASE_URL=\"${TEST_DATABASE_URL}\"" > "${EPHEMERAL_PG_DIR}/env.sh"
-    echo "export EPHEMERAL_PG_DIR=\"${EPHEMERAL_PG_DIR}\"" >> "${EPHEMERAL_PG_DIR}/env.sh"
-    echo "export EPHEMERAL_PG_PORT=\"${EPHEMERAL_PG_PORT}\"" >> "${EPHEMERAL_PG_DIR}/env.sh"
-    ln -sf "${EPHEMERAL_PG_DIR}/env.sh" /tmp/ephemeral_pg_env.sh
-    exit 0
-fi
-
-# Fall back to docker compose
-echo "Starting postgres via docker compose..."
-if ! output=$(docker compose up -d postgres 2>&1); then
-    if echo "$output" | grep -q "port is already allocated"; then
-        echo "✗ Port 5432 is already in use"
-        echo "Check running containers: docker ps"
-        echo "Stop other postgres containers or change the port mapping"
-        exit 1
-    fi
-    echo "✗ Failed to start postgres"
-    echo "$output"
+# Start postgres via docker compose
+if ! docker compose up -d postgres 2>&1; then
+    echo "✗ Failed to start postgres" >&2
     exit 1
 fi
 
 scripts/docker-compose-health.sh postgres 30
+echo "✓ PostgreSQL ready"
 '''
 
 [tasks.dfx-start]
@@ -195,13 +112,7 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-# Source ephemeral PostgreSQL environment if available and export for child processes
-if [ -f /tmp/ephemeral_pg_env.sh ]; then
-    source /tmp/ephemeral_pg_env.sh
-    export TEST_DATABASE_URL
-    echo "Running tests with shared PostgreSQL: ${TEST_DATABASE_URL}"
-fi
-
+export TEST_DATABASE_URL="postgres://test:test@localhost:15432"
 cargo nextest run --workspace
 '''
 
@@ -218,69 +129,8 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-CLEANED_UP=false
-
-# Function to stop a PostgreSQL instance by data directory
-stop_pg_instance() {
-    local pg_dir="$1"
-    if [ -d "${pg_dir}/data" ]; then
-        echo "Stopping PostgreSQL instance at ${pg_dir}..."
-        pg_ctl -D "${pg_dir}/data" stop -m immediate >/dev/null 2>&1 || true
-        rm -rf "${pg_dir}"
-        CLEANED_UP=true
-    fi
-}
-
-# 1. Check for ephemeral PostgreSQL with environment file
-if [ -f /tmp/ephemeral_pg_env.sh ]; then
-    source /tmp/ephemeral_pg_env.sh
-    if [ -n "${EPHEMERAL_PG_DIR:-}" ] && [ -d "${EPHEMERAL_PG_DIR}/data" ]; then
-        echo "Stopping ephemeral PostgreSQL (from env file)..."
-        stop_pg_instance "${EPHEMERAL_PG_DIR}"
-        rm -f /tmp/ephemeral_pg_env.sh
-        echo "✓ Ephemeral PostgreSQL stopped"
-    fi
-fi
-
-# 2. Clean up ANY orphaned ephemeral PostgreSQL instances
-# These may exist if the env file was deleted but PostgreSQL wasn't stopped
-for pg_dir in /tmp/pg_test_*; do
-    if [ -d "$pg_dir" ]; then
-        echo "Found orphaned ephemeral PostgreSQL directory: $pg_dir"
-        stop_pg_instance "$pg_dir"
-    fi
-done
-
-# 3. Kill any orphaned postgres processes owned by current user
-# that are NOT part of docker compose
-echo "Checking for orphaned PostgreSQL processes..."
-if docker compose ps postgres >/dev/null 2>&1; then
-    # Get docker compose postgres PID
-    DOCKER_PG_PID=$(docker compose ps -q postgres 2>/dev/null | xargs -r docker inspect -f '{{.State.Pid}}' 2>/dev/null || echo "")
-
-    # Kill postgres processes owned by user, excluding docker compose's
-    if [ -n "$DOCKER_PG_PID" ]; then
-        pgrep -u $(whoami) postgres | grep -v "^${DOCKER_PG_PID}$" | xargs -r kill -9 2>/dev/null || true
-    else
-        # No docker compose postgres running, kill all user postgres processes
-        pkill -u $(whoami) -9 postgres 2>/dev/null || true
-    fi
-else
-    # Docker compose not running, kill all user postgres processes
-    pkill -u $(whoami) -9 postgres 2>/dev/null || true
-fi
-
-# 4. Clean up coordination files
-rm -f /tmp/ephemeral_pg_env.sh
-rm -rf /tmp/ephemeral_pg_env.lock.d
-
-# 5. Fall back to docker compose if no ephemeral instances were found
-if [ "$CLEANED_UP" = false ]; then
-    echo "Stopping postgres via docker compose..."
-    docker compose down
-else
-    echo "✓ Cleanup complete - stopped ephemeral PostgreSQL instances"
-fi
+docker compose stop postgres
+echo "✓ PostgreSQL stopped"
 '''
 
 [tasks.sqlx-prepare]
@@ -289,125 +139,51 @@ script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-# Unset SQLX_OFFLINE to enable live database connection
 unset SQLX_OFFLINE
 
-# Check for ephemeral PostgreSQL
-if [ -f /tmp/ephemeral_pg_env.sh ]; then
-    source /tmp/ephemeral_pg_env.sh
-fi
+PG_USER="test"
+PG_PASSWORD="test"
+PG_HOST="localhost"
+PG_PORT="15432"
+PG_DB="test"
 
-# Determine connection details based on environment
-if [ -n "${TEST_DATABASE_URL:-}" ]; then
-    # Using ephemeral PostgreSQL - extract connection details from URL
-    # Format: postgres://user@host:port or postgres://user@host:port/db
-    PG_HOST="127.0.0.1"
-    # Extract port from TEST_DATABASE_URL (format: postgres://user@host:port or postgres://user@host:port/db)
-    PG_PORT=$(echo "${TEST_DATABASE_URL}" | sed -n 's/.*:\([0-9]\+\)\(\/.*\)\?$/\1/p')
-    PG_USER="$(whoami)"
-    PG_DB="test"
-    USE_DOCKER=false
-else
-    # Using docker compose
-    PG_USER="test"
-    PG_PASSWORD="test"
-    PG_HOST="localhost"
-    PG_PORT="5432"
-    PG_DB="test"
-    USE_DOCKER=true
-fi
-
-# Helper function to run psql commands
+# Helper to run psql in docker
 psql_exec() {
-    if [ "$USE_DOCKER" = true ]; then
-        docker compose exec -T postgres psql -U "${PG_USER}" -d "${PG_DB}" "$@"
-    else
-        psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" "$@"
-    fi
+    docker compose exec -T postgres psql -U "${PG_USER}" -d "${PG_DB}" "$@"
 }
 
 # Generate unique temporary database name
 TMP_DB_NAME="sqlx_prepare_$(date +%s)_$$"
 
-# Cleanup function
 cleanup() {
     local exit_code=$?
     echo "Cleaning up temporary database..."
-    if psql_exec -c "DROP DATABASE IF EXISTS ${TMP_DB_NAME};" 2>/dev/null; then
-        echo "✓ Dropped temporary database ${TMP_DB_NAME}"
-    else
-        echo "✗ Failed to drop temporary database ${TMP_DB_NAME}"
-    fi
+    psql_exec -c "DROP DATABASE IF EXISTS ${TMP_DB_NAME};" 2>/dev/null || true
     exit ${exit_code}
 }
 trap cleanup EXIT INT TERM
 
-# Wait for PostgreSQL service to be ready
-echo "Checking PostgreSQL connection..."
-MAX_RETRIES=10
-RETRY_COUNT=0
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if [ "$USE_DOCKER" = true ]; then
-        if docker compose exec -T postgres pg_isready -U "${PG_USER}" -d "${PG_DB}" >/dev/null 2>&1; then
-            if psql_exec -c "SELECT 1;" >/dev/null 2>&1; then
-                echo "✓ PostgreSQL is ready (docker)"
-                break
-            fi
-        fi
-    else
-        if pg_isready -h "${PG_HOST}" -p "${PG_PORT}" >/dev/null 2>&1; then
-            if psql_exec -c "SELECT 1;" >/dev/null 2>&1; then
-                echo "✓ PostgreSQL is ready (ephemeral)"
-                break
-            fi
-        fi
-    fi
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-        echo "Waiting for PostgreSQL... ($RETRY_COUNT/$MAX_RETRIES)"
-        sleep 1
-    fi
-done
-
-if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-    echo "✗ PostgreSQL is not ready after $MAX_RETRIES attempts"
-    if [ "$USE_DOCKER" = true ]; then
-        echo "Check: docker compose ps postgres"
-    else
-        echo "Check ephemeral PostgreSQL log: ${EPHEMERAL_PG_DIR:-}/postgres.log"
-    fi
-    exit 1
-fi
-
 # Create temporary database
 echo "Creating temporary database: ${TMP_DB_NAME}"
 if ! psql_exec -c "CREATE DATABASE ${TMP_DB_NAME};" >/dev/null 2>&1; then
-    echo "✗ Failed to create temporary database ${TMP_DB_NAME}"
-    echo "Check PostgreSQL permissions and connection"
+    echo "✗ Failed to create temporary database" >&2
     exit 1
 fi
-echo "✓ Created temporary database ${TMP_DB_NAME}"
 
-# Update DATABASE_URL to use temporary database
-if [ "$USE_DOCKER" = true ]; then
-    DATABASE_URL="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${TMP_DB_NAME}"
-else
-    DATABASE_URL="postgresql://${PG_USER}@${PG_HOST}:${PG_PORT}/${TMP_DB_NAME}"
-fi
-export DATABASE_URL
+# Set DATABASE_URL for sqlx
+export DATABASE_URL="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${TMP_DB_NAME}"
 
 # Run migrations
-echo "Running migrations from api/migrations_pg..."
+echo "Running migrations..."
 if ! sqlx migrate run --source api/migrations_pg; then
-    echo "✗ Migration failed"
+    echo "✗ Migration failed" >&2
     exit 1
 fi
-echo "✓ Migrations completed"
 
 # Prepare sqlx data
 echo "Preparing sqlx data..."
 if ! cargo sqlx prepare --workspace -- --tests; then
-    echo "✗ sqlx prepare failed"
+    echo "✗ sqlx prepare failed" >&2
     exit 1
 fi
 echo "✓ sqlx prepare completed"
