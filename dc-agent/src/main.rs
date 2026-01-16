@@ -1379,30 +1379,59 @@ async fn poll_and_provision(
                         );
                     }
 
-                    // Log if offering has custom provisioner_config (not yet used)
-                    if contract.provisioner_config.is_some() {
-                        warn!(
-                            contract_id = %contract.contract_id,
-                            "Offering has provisioner_config but per-contract config override is not yet implemented"
-                        );
-                    }
+                    // Parse provisioner_config from offering
+                    let provisioner_config: Option<serde_json::Value> =
+                        match &contract.provisioner_config {
+                            Some(s) => match serde_json::from_str(s) {
+                                Ok(v) => Some(v),
+                                Err(e) => {
+                                    warn!(
+                                        contract_id = %contract.contract_id,
+                                        error = %e,
+                                        raw_config = %s,
+                                        "Invalid provisioner_config JSON, ignoring"
+                                    );
+                                    None
+                                }
+                            },
+                            None => None,
+                        };
 
                     // Parse instance_config if present - log warning if malformed
-                    let instance_config: Option<serde_json::Value> = match &contract.instance_config
-                    {
-                        Some(s) => match serde_json::from_str(s) {
-                            Ok(v) => Some(v),
-                            Err(e) => {
-                                warn!(
-                                    contract_id = %contract.contract_id,
-                                    error = %e,
-                                    raw_config = %s,
-                                    "Invalid instance_config JSON, ignoring"
-                                );
-                                None
+                    let contract_instance_config: Option<serde_json::Value> =
+                        match &contract.instance_config {
+                            Some(s) => match serde_json::from_str(s) {
+                                Ok(v) => Some(v),
+                                Err(e) => {
+                                    warn!(
+                                        contract_id = %contract.contract_id,
+                                        error = %e,
+                                        raw_config = %s,
+                                        "Invalid instance_config JSON, ignoring"
+                                    );
+                                    None
+                                }
+                            },
+                            None => None,
+                        };
+
+                    // Merge configs: contract instance_config overrides provisioner_config
+                    let instance_config = match (provisioner_config, contract_instance_config) {
+                        (Some(prov), Some(inst)) => {
+                            // Merge: instance config takes precedence
+                            let mut merged = prov;
+                            if let serde_json::Value::Object(ref mut prov_map) = merged {
+                                if let serde_json::Value::Object(inst_map) = inst {
+                                    for (k, v) in inst_map {
+                                        prov_map.insert(k, v);
+                                    }
+                                }
                             }
-                        },
-                        None => None,
+                            Some(merged)
+                        }
+                        (Some(prov), None) => Some(prov),
+                        (None, Some(inst)) => Some(inst),
+                        (None, None) => None,
                     };
 
                     // Extract specs from offering (returned by API)

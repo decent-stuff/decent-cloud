@@ -315,6 +315,7 @@ fn migration_hash() -> String {
     let mut hasher = DefaultHasher::new();
     include_str!("../../migrations_pg/001_schema.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/002_seed_data.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/003_offering_templates.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -378,6 +379,11 @@ async fn ensure_template_db(base_url: &str) -> String {
         .expect("Failed to query old templates");
 
         for old_template in old_templates {
+            // Skip if this is the current template (shouldn't happen, but be safe)
+            if old_template == template_name {
+                continue;
+            }
+
             // Terminate connections to old template (best effort)
             match sqlx::query(&format!(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
@@ -392,6 +398,20 @@ async fn ensure_template_db(base_url: &str) -> String {
                     old_template, e
                 ),
             }
+
+            // Unmark as template first (required before dropping)
+            sqlx::query(&format!(
+                "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '{}'",
+                old_template
+            ))
+            .execute(&admin_pool)
+            .await
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to unmark old template '{}' as template: {:#?}",
+                    old_template, e
+                )
+            });
 
             // Drop old template
             sqlx::query(&format!("DROP DATABASE IF EXISTS {}", old_template))
@@ -465,6 +485,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "002_seed_data.sql",
                     include_str!("../../migrations_pg/002_seed_data.sql"),
+                ),
+                (
+                    "003_offering_templates.sql",
+                    include_str!("../../migrations_pg/003_offering_templates.sql"),
                 ),
             ];
 

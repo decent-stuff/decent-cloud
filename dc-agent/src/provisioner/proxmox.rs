@@ -579,11 +579,20 @@ impl Provisioner for ProxmoxProvisioner {
         let vmid = self.allocate_vmid(&request.contract_id);
         let vm_name = format!("dc-{}", request.contract_id);
 
+        // Check for template override in instance_config
+        let template_vmid_for_log = request
+            .instance_config
+            .as_ref()
+            .and_then(|config| config.get("template_vmid"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32)
+            .unwrap_or(self.config.template_vmid);
+
         tracing::info!(
             "Provisioning VM {} (VMID: {}) from template {}",
             vm_name,
             vmid,
-            self.config.template_vmid
+            template_vmid_for_log
         );
 
         // Check if VM already exists (idempotency)
@@ -629,14 +638,18 @@ impl Provisioner for ProxmoxProvisioner {
             });
         }
 
-        // Step 1: Clone template
-        tracing::debug!(
-            "Cloning template {} to VMID {}",
-            self.config.template_vmid,
-            vmid
-        );
+        // Step 1: Clone template - check instance_config for template override
+        let template_vmid = request
+            .instance_config
+            .as_ref()
+            .and_then(|config| config.get("template_vmid"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32)
+            .unwrap_or(self.config.template_vmid);
+
+        tracing::debug!("Cloning template {} to VMID {}", template_vmid, vmid);
         let clone_upid = self
-            .clone_vm(self.config.template_vmid, vmid, &vm_name)
+            .clone_vm(template_vmid, vmid, &vm_name)
             .await
             .context("Failed to clone VM")?;
 

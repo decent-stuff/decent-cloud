@@ -871,4 +871,104 @@ mod tests {
         let instances = provisioner.list_running_instances().await.unwrap();
         assert!(instances.is_empty());
     }
+
+    #[tokio::test]
+    async fn test_provision_vm_template_override() {
+        // Test that instance_config.template_vmid overrides the default template
+        let mut server = Server::new_async().await;
+
+        // Mock clone endpoint for template 8000 (the override), NOT 9000 (the default)
+        let clone_mock = server
+            .mock("POST", "/api2/json/nodes/pve1/qemu/8000/clone")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":"UPID:pve1:00001234:12345678:12345678:qmclone:100:root@pam:"}"#)
+            .expect(1) // Expect exactly 1 call to template 8000
+            .create_async()
+            .await;
+
+        // Mock task status - completed
+        let _task_mock = server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/tasks/.*/status".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":{"status":"stopped","exitstatus":"OK"}}"#)
+            .create_async()
+            .await;
+
+        // Mock configure endpoint
+        let _config_mock = server
+            .mock(
+                "PUT",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/config".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":null}"#)
+            .create_async()
+            .await;
+
+        // Mock resize endpoint
+        let _resize_mock = server
+            .mock(
+                "PUT",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/resize".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":null}"#)
+            .create_async()
+            .await;
+
+        // Mock start endpoint
+        let _start_mock = server
+            .mock(
+                "POST",
+                mockito::Matcher::Regex(r"/api2/json/nodes/pve1/qemu/\d+/status/start".to_string()),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"data":"UPID:pve1:00001235:12345678:12345678:qmstart:100:root@pam:"}"#)
+            .create_async()
+            .await;
+
+        // Mock get IP
+        let _network_mock = server
+            .mock(
+                "GET",
+                mockito::Matcher::Regex(
+                    r"/api2/json/nodes/pve1/qemu/\d+/agent/network-get-interfaces".to_string(),
+                ),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"data":{"result":[{"name":"eth0","ip-addresses":[{"ip-address":"10.0.0.100","ip-address-type":"ipv4"}]}]}}"#,
+            )
+            .create_async()
+            .await;
+
+        let config = test_config(&server.url());
+        let provisioner = ProxmoxProvisioner::new(config).unwrap();
+
+        // Create request with template_vmid override in instance_config
+        let request = ProvisionRequest {
+            contract_id: "template-override-test".to_string(),
+            offering_id: "off-1".to_string(),
+            cpu_cores: Some(2),
+            memory_mb: Some(2048),
+            storage_gb: Some(20),
+            requester_ssh_pubkey: Some("ssh-ed25519 AAAA... user@host".to_string()),
+            instance_config: Some(serde_json::json!({"template_vmid": 8000})),
+        };
+
+        let result = provisioner.provision(&request).await;
+        assert!(result.is_ok(), "Provision should succeed: {:?}", result);
+
+        // Verify the clone was made from template 8000, not the default 9000
+        clone_mock.assert();
+    }
 }

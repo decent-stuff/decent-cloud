@@ -937,6 +937,9 @@ impl ProvidersApi {
                     "features",
                     "operating_systems",
                     "agent_pool_id",
+                    "template_name",
+                    "provisioner_type",
+                    "provisioner_config",
                 ]) {
                     return poem_openapi::payload::PlainText(format!(
                         "CSV header write error: {}",
@@ -1018,6 +1021,9 @@ impl ProvidersApi {
                         &offering.features.unwrap_or_default(),
                         &offering.operating_systems.unwrap_or_default(),
                         &offering.agent_pool_id.unwrap_or_default(),
+                        &offering.template_name.unwrap_or_default(),
+                        &offering.provisioner_type.unwrap_or_default(),
+                        &offering.provisioner_config.unwrap_or_default(),
                     ]) {
                         return poem_openapi::payload::PlainText(format!(
                             "CSV row write error for offering {}: {}",

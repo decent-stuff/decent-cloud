@@ -402,6 +402,12 @@
 								<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><Icon name="alert" size={20} class="text-amber-400" /> No pool</span>
 							{/if}
 						</div>
+						{#if offering.template_name}
+							<div class="flex items-center justify-between text-neutral-400">
+								<span>Template</span>
+								<span class="text-white font-medium font-mono text-xs">{offering.template_name}</span>
+							</div>
+						{/if}
 						{#if offering.description}
 							<div class="text-neutral-500 text-xs mt-3 line-clamp-2">{offering.description}</div>
 						{/if}

@@ -516,6 +516,7 @@ async fn test_create_offering_success() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -634,6 +635,7 @@ async fn test_create_offering_duplicate_id() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -716,6 +718,7 @@ async fn test_create_offering_missing_required_fields() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -795,6 +798,7 @@ async fn test_update_offering_success() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -891,6 +895,7 @@ async fn test_update_offering_unauthorized() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -1779,6 +1784,7 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -1878,6 +1884,7 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: Some("pool-eu-2".to_string()),
         provider_online: None,
         resolved_pool_id: None,
@@ -1974,6 +1981,7 @@ async fn test_get_provider_offerings_no_matching_pool() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -2076,6 +2084,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None, // No explicit pool - should auto-match by location
         provider_online: None,
         resolved_pool_id: None,
@@ -2147,6 +2156,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: Some(pool.pool_id.clone()), // Explicit pool
         provider_online: None,
         resolved_pool_id: None,
@@ -2218,6 +2228,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -2324,6 +2335,7 @@ async fn test_create_subscription_offering() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -2412,6 +2424,7 @@ async fn test_create_yearly_subscription_offering() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -2500,6 +2513,7 @@ async fn test_get_subscription_offering_fields() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -2612,6 +2626,7 @@ async fn test_one_time_offering_default_subscription_fields() {
         owner_username: None,
         provisioner_type: None,
         provisioner_config: None,
+        template_name: None,
         agent_pool_id: None,
         provider_online: None,
         resolved_pool_id: None,
@@ -2631,4 +2646,192 @@ async fn test_one_time_offering_default_subscription_fields() {
     // One-time offerings should have is_subscription = false and no interval
     assert!(!offering.is_subscription);
     assert_eq!(offering.subscription_interval_days, None);
+}
+
+#[tokio::test]
+async fn test_template_name_generates_provisioner_config() {
+    let db = setup_test_db().await;
+    let pubkey = vec![42u8; 32];
+
+    // Create offering with numeric template_name (should auto-generate provisioner_config)
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "template-test".to_string(),
+        offer_name: "Template Test".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 50.0,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "vps".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "NYC".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None, // Not set - should be auto-generated
+        template_name: Some("9001".to_string()), // Numeric template name
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    let db_id = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
+
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
+
+    // Verify provisioner_config was auto-generated from numeric template_name
+    assert_eq!(offering.template_name, Some("9001".to_string()));
+    let config = offering
+        .provisioner_config
+        .expect("provisioner_config should be auto-generated");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&config).expect("provisioner_config should be valid JSON");
+    assert_eq!(parsed["template_vmid"], 9001);
+}
+
+#[tokio::test]
+async fn test_template_name_non_numeric_no_config() {
+    let db = setup_test_db().await;
+    let pubkey = vec![43u8; 32];
+
+    // Create offering with non-numeric template_name (should NOT generate provisioner_config)
+    let params = Offering {
+        id: None,
+        pubkey: hex::encode(&pubkey),
+        offering_id: "template-non-numeric".to_string(),
+        offer_name: "Non-Numeric Template".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 50.0,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "vps".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "NYC".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        is_example: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        template_name: Some("ubuntu-22.04".to_string()), // Non-numeric
+        agent_pool_id: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+    };
+
+    let db_id = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect("Failed to create offering");
+
+    let offering = db
+        .get_offering(db_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Expected offering to exist");
+
+    // Non-numeric template_name should be stored but NOT generate provisioner_config
+    assert_eq!(offering.template_name, Some("ubuntu-22.04".to_string()));
+    assert!(
+        offering.provisioner_config.is_none(),
+        "Non-numeric template_name should not generate provisioner_config"
+    );
 }

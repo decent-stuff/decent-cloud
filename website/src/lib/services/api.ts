@@ -419,11 +419,17 @@ export function offeringToCSVRow(offering: Offering): string[] {
 		offering.datacenter_longitude?.toString() || '',
 		offering.control_panel || '',
 		offering.gpu_name || '',
+		offering.gpu_count?.toString() || '',
+		offering.gpu_memory_gb?.toString() || '',
 		offering.min_contract_hours?.toString() || '',
 		offering.max_contract_hours?.toString() || '',
 		offering.payment_methods || '',
 		offering.features || '',
-		offering.operating_systems || ''
+		offering.operating_systems || '',
+		offering.agent_pool_id || '',
+		offering.template_name || '',
+		offering.provisioner_type || '',
+		offering.provisioner_config || ''
 	];
 }
 
@@ -462,11 +468,17 @@ const OFFERINGS_CSV_HEADER = [
 	'datacenter_longitude',
 	'control_panel',
 	'gpu_name',
+	'gpu_count',
+	'gpu_memory_gb',
 	'min_contract_hours',
 	'max_contract_hours',
 	'payment_methods',
 	'features',
-	'operating_systems'
+	'operating_systems',
+	'agent_pool_id',
+	'template_name',
+	'provisioner_type',
+	'provisioner_config'
 ];
 
 export function offeringsToCSV(offerings: Offering[]): string {

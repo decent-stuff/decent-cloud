@@ -29,6 +29,12 @@
 	let setupFee = $state(0);
 	let stockStatus = $state('in_stock');
 	let visibility = $state('public');
+	let templateName = $state('');
+
+	// Check if template name is non-numeric (won't auto-generate provisioner_config)
+	let templateWarning = $derived(
+		templateName.trim() !== '' && !/^\d+$/.test(templateName.trim())
+	);
 
 	$effect(() => {
 		if (offering && open) {
@@ -38,6 +44,7 @@
 			setupFee = offering.setup_fee;
 			stockStatus = offering.stock_status;
 			visibility = offering.visibility;
+			templateName = offering.template_name || '';
 			error = null;
 		}
 	});
@@ -112,6 +119,7 @@
 				owner_username: undefined,
 				provisioner_type: offering.provisioner_type || undefined,
 				provisioner_config: offering.provisioner_config || undefined,
+				template_name: templateName.trim() || undefined,
 				agent_pool_id: offering.agent_pool_id || undefined,
 				provider_online: undefined,
 				// Subscription fields
@@ -288,6 +296,31 @@
 							<option value="private">Private</option>
 						</select>
 					</div>
+				</div>
+
+				<!-- VM Template for Instant Provisioning -->
+				<div>
+					<label for="template-name" class="block text-white font-medium mb-2">
+						VM Template
+					</label>
+					<input
+						id="template-name"
+						type="text"
+						bind:value={templateName}
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+						class:border-yellow-500={templateWarning}
+						placeholder="e.g. 9000"
+						disabled={saving}
+					/>
+					{#if templateWarning}
+						<p class="text-yellow-500 text-sm mt-2">
+							⚠ Non-numeric template names require manual provisioner_config setup. Use a numeric Proxmox VMID for automatic configuration.
+						</p>
+					{:else}
+						<p class="text-neutral-500 text-sm mt-2">
+							Proxmox template VMID for instant provisioning. Leave empty to use the default template from your dc-agent config.
+						</p>
+					{/if}
 				</div>
 
 				<!-- Error Display -->
