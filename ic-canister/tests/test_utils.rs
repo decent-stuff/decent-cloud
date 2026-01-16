@@ -2,10 +2,10 @@ use candid::{encode_one, Encode, Nat, Principal};
 use dcc_common::{DccIdentity, TokenAmountE9s, BLOCK_INTERVAL_SECS, FIRST_BLOCK_TIMESTAMP_NS};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::LazyLock;
 
 // ---- Common Macros ----
 
@@ -63,7 +63,7 @@ pub fn workspace_dir() -> PathBuf {
     cargo_path.parent().unwrap().to_path_buf()
 }
 
-pub static CANISTER_WASM: Lazy<Vec<u8>> = Lazy::new(|| {
+pub static CANISTER_WASM: LazyLock<Vec<u8>> = LazyLock::new(|| {
     let mut path = workspace_dir();
     let canister_dir = path.join("ic-canister");
     let output = Command::new("dfx")
@@ -87,10 +87,14 @@ pub static CANISTER_WASM: Lazy<Vec<u8>> = Lazy::new(|| {
     fs_err::read(path).unwrap()
 });
 
+/// Shared PocketIc instance across all tests.
+/// Each test creates its own canister for isolation while sharing the IC runtime.
+static SHARED_PIC: LazyLock<PocketIc> = LazyLock::new(PocketIc::new);
+
 // ---- Test Context ----
 
 pub struct TestContext {
-    pub pic: PocketIc,
+    pub pic: &'static PocketIc,
     pub canister_id: Principal,
 }
 
@@ -103,7 +107,7 @@ impl Default for TestContext {
 #[allow(dead_code)]
 impl TestContext {
     pub fn new() -> Self {
-        let pic = PocketIc::new();
+        let pic = &*SHARED_PIC;
         let canister_id = pic.create_canister();
         pic.add_cycles(canister_id, 20_000_000_000_000);
 
