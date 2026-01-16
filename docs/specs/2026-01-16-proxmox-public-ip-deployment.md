@@ -31,11 +31,18 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 - UI display of connection details (`website/src/routes/dashboard/rentals/[contract_id]/+page.svelte` lines 546-568)
 - Bandwidth monitoring via heartbeat (`dc-agent/src/gateway/bandwidth.rs`)
 
-### Requires Manual Infrastructure Setup
-- Public IP forwarding on Proxmox host
-- Firewall rules (ports 22, 80, 443, 8006, 20000-59999)
-- NAT masquerade for VM subnet
-- Traefik installation via `dc-agent setup gateway`
+### Automated via `dc-agent setup gateway`
+- IP forwarding (`net.ipv4.ip_forward=1`)
+- NAT masquerade for VM subnet (10.0.0.0/8)
+- Firewall rules (80, 443, 20000-59999 for VMs)
+- FORWARD chain rules for VM traffic
+- iptables persistence via `iptables-persistent`
+- Traefik installation and configuration
+
+### Requires Manual Setup (Pre-requisites)
+- Public IP must be assigned to host interface
+- SSH access to host with root privileges
+- Cloudflare API token with DNS edit permission
 
 ## Scope
 
@@ -56,74 +63,45 @@ Before starting:
 
 **Goal:** Configure the Proxmox host to route traffic between public IP and private VMs.
 
-#### 1.1 Verify Current Network State
+> **Note:** This phase is now **fully automated** by `dc-agent setup gateway`. The command will:
+> - Detect the public interface automatically
+> - Enable IP forwarding and persist it
+> - Configure NAT masquerade for VM subnet (10.0.0.0/8)
+> - Open firewall ports (80, 443, 20000-59999)
+> - Add FORWARD rules for VM traffic
+> - Install and persist iptables rules
 
+#### What Gets Configured (for reference)
+
+**IP Forwarding:**
 ```bash
-# Check interfaces
-ip addr show
-
-# Check routing table
-ip route show
-
-# Check if IP forwarding is enabled
-sysctl net.ipv4.ip_forward
+# Enabled via sysctl and persisted to /etc/sysctl.d/99-dc-gateway.conf
+net.ipv4.ip_forward = 1
 ```
 
-#### 1.2 Configure IP Forwarding
-
+**NAT Masquerade:**
 ```bash
-# Enable immediately
-sudo sysctl -w net.ipv4.ip_forward=1
-
-# Make persistent
-echo "net.ipv4.ip_forward = 1" | sudo tee /etc/sysctl.d/99-ip-forward.conf
+# Auto-detects public interface from provided IP
+iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -o <public_iface> -j MASQUERADE
 ```
 
-#### 1.3 Configure NAT/Masquerade
-
-VMs use private IPs (e.g., `10.0.0.0/8`). They need NAT to reach the internet.
-
+**Firewall Rules:**
 ```bash
-# Identify the public interface (replace eth0 with actual interface)
-PUBLIC_IFACE="eth0"
-
-# Add masquerade rule for VM traffic
-sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -o $PUBLIC_IFACE -j MASQUERADE
-
-# Persist iptables rules
-sudo apt install iptables-persistent
-sudo netfilter-persistent save
-```
-
-#### 1.4 Configure Firewall
-
-Allow necessary ports:
-
-```bash
-# SSH to Proxmox host
-sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-
-# Proxmox web UI
-sudo iptables -A INPUT -p tcp --dport 8006 -j ACCEPT
-
 # HTTP/HTTPS for Traefik
-sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
-# VM port range (20000-59999)
-sudo iptables -A INPUT -p tcp --dport 20000:59999 -j ACCEPT
-sudo iptables -A INPUT -p udp --dport 20000:59999 -j ACCEPT
+# VM port range
+iptables -A INPUT -p tcp --dport 20000:59999 -j ACCEPT
+iptables -A INPUT -p udp --dport 20000:59999 -j ACCEPT
 
-# Allow forwarded traffic
-sudo iptables -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
-sudo iptables -A FORWARD -s 10.0.0.0/8 -j ACCEPT
-sudo iptables -A FORWARD -d 10.0.0.0/8 -j ACCEPT
-
-# Save rules
-sudo netfilter-persistent save
+# FORWARD chain for VM traffic
+iptables -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -s 10.0.0.0/8 -j ACCEPT
+iptables -A FORWARD -d 10.0.0.0/8 -j ACCEPT
 ```
 
-#### 1.5 Verify Network Configuration
+#### Verify Network Configuration (after setup)
 
 ```bash
 # Test from a VM (after provisioning one)
@@ -374,14 +352,30 @@ dig k7m2p4.dc-lk.decent-cloud.org  # Should return NXDOMAIN
 
 ## Task Checklist
 
-### Infrastructure (Manual)
+### Pre-requisites (Manual)
 - [ ] Assign public IP to Proxmox host interface
-- [ ] Enable IP forwarding (`net.ipv4.ip_forward=1`)
-- [ ] Configure NAT masquerade for VM subnet
-- [ ] Open firewall ports (22, 80, 443, 8006, 20000-59999)
+- [ ] Ensure SSH access to host with root privileges
 - [ ] Create Cloudflare API token with DNS edit permission
-- [ ] Run `dc-agent setup gateway`
-- [ ] Verify Traefik is running and obtains wildcard certificate
+
+### Infrastructure (Automated by `dc-agent setup gateway`)
+- [x] Enable IP forwarding (`net.ipv4.ip_forward=1`)
+- [x] Configure NAT masquerade for VM subnet
+- [x] Open firewall ports (80, 443, 20000-59999)
+- [x] Configure FORWARD rules for VM traffic
+- [x] Persist iptables rules
+- [x] Install Traefik binary
+- [x] Configure Traefik with wildcard TLS via Cloudflare DNS challenge
+- [x] Start Traefik systemd service
+
+### To Deploy
+```bash
+dc-agent setup gateway \
+  --host <PROXMOX_HOST> \
+  --datacenter <DC_ID> \
+  --domain decent-cloud.org \
+  --public-ip <PUBLIC_IP> \
+  --cloudflare-token <CF_API_TOKEN>
+```
 
 ### Code Integration
 - [x] Wire `GatewayManager::setup_gateway()` into provisioning (`dc-agent/src/main.rs:1511-1535`)

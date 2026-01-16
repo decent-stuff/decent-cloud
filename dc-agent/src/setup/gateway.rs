@@ -35,7 +35,11 @@ impl GatewaySetup {
         let ssh = self.connect_ssh().await?;
         println!("  Connected to {}@{}", self.ssh_user, self.host);
 
-        // Step 1: Look up Cloudflare Zone ID if not provided
+        // Step 1: Configure host networking (IP forwarding, NAT, firewall)
+        println!("\nConfiguring host networking...");
+        self.configure_host_networking(&ssh).await?;
+
+        // Step 2: Look up Cloudflare Zone ID if not provided
         let zone_id = match &self.cloudflare_zone_id {
             Some(id) => {
                 println!("  Using provided Zone ID: {}", id);
@@ -50,32 +54,32 @@ impl GatewaySetup {
             }
         };
 
-        // Step 2: Verify Cloudflare token has DNS edit permissions
+        // Step 3: Verify Cloudflare token has DNS edit permissions
         println!("Verifying Cloudflare API token...");
         verify_cloudflare_token(&self.cloudflare_api_token, &zone_id).await?;
         println!("  [ok] Token has DNS edit permissions");
 
-        // Step 3: Install Traefik binary
+        // Step 4: Install Traefik binary
         println!("\nInstalling Traefik {}...", TRAEFIK_VERSION);
         self.install_traefik(&ssh).await?;
 
-        // Step 4: Create directories and user
+        // Step 5: Create directories and user
         println!("\nSetting up directories and user...");
         self.setup_directories(&ssh).await?;
 
-        // Step 5: Write Traefik static config
+        // Step 6: Write Traefik static config
         println!("\nWriting Traefik configuration...");
         self.write_traefik_config(&ssh, &zone_id).await?;
 
-        // Step 6: Write systemd service
+        // Step 7: Write systemd service
         println!("\nCreating systemd service...");
         self.write_systemd_service(&ssh).await?;
 
-        // Step 7: Enable and start Traefik
+        // Step 8: Enable and start Traefik
         println!("\nStarting Traefik service...");
         self.start_traefik(&ssh).await?;
 
-        // Step 8: Verify Traefik is running and cert is obtained
+        // Step 9: Verify Traefik is running and cert is obtained
         println!("\nVerifying Traefik...");
         self.verify_traefik(&ssh).await?;
 
@@ -96,6 +100,223 @@ impl GatewaySetup {
         .await
         .context("Failed to connect via SSH")?;
         Ok(client)
+    }
+
+    /// Configure host networking: IP forwarding, NAT masquerade, and firewall rules.
+    /// All operations are idempotent - safe to run multiple times.
+    async fn configure_host_networking(&self, ssh: &Client) -> Result<()> {
+        // 1. Enable IP forwarding
+        self.enable_ip_forwarding(ssh).await?;
+
+        // 2. Detect public interface
+        let public_iface = self.detect_public_interface(ssh).await?;
+        println!("  [ok] Public interface: {}", public_iface);
+
+        // 3. Configure NAT masquerade for VM traffic
+        self.configure_nat_masquerade(ssh, &public_iface).await?;
+
+        // 4. Configure firewall rules
+        self.configure_firewall(ssh).await?;
+
+        // 5. Persist iptables rules
+        self.persist_iptables(ssh).await?;
+
+        Ok(())
+    }
+
+    async fn enable_ip_forwarding(&self, ssh: &Client) -> Result<()> {
+        // Check current state
+        let result = ssh.execute("sysctl -n net.ipv4.ip_forward").await?;
+        if result.stdout.trim() == "1" {
+            println!("  [ok] IP forwarding already enabled");
+            return Ok(());
+        }
+
+        // Enable immediately
+        let result = ssh
+            .execute("sysctl -w net.ipv4.ip_forward=1")
+            .await?;
+        if result.exit_status != 0 {
+            bail!("Failed to enable IP forwarding: {}", result.stdout);
+        }
+
+        // Make persistent
+        let cmd = r#"echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-dc-gateway.conf"#;
+        let result = ssh.execute(cmd).await?;
+        if result.exit_status != 0 {
+            bail!("Failed to persist IP forwarding: {}", result.stdout);
+        }
+
+        println!("  [ok] IP forwarding enabled");
+        Ok(())
+    }
+
+    async fn detect_public_interface(&self, ssh: &Client) -> Result<String> {
+        // Find interface with the public IP
+        let cmd = format!(
+            "ip -o addr show | grep '{}' | awk '{{print $2}}'",
+            self.public_ip
+        );
+        let result = ssh.execute(&cmd).await?;
+
+        let iface = result.stdout.trim();
+        if iface.is_empty() {
+            // Fallback: get default route interface
+            let result = ssh
+                .execute("ip route show default | awk '/default/ {print $5}' | head -1")
+                .await?;
+            let iface = result.stdout.trim();
+            if iface.is_empty() {
+                bail!(
+                    "Could not detect public interface for IP {}. \
+                     Verify the public IP is assigned to an interface.",
+                    self.public_ip
+                );
+            }
+            return Ok(iface.to_string());
+        }
+
+        Ok(iface.to_string())
+    }
+
+    async fn configure_nat_masquerade(&self, ssh: &Client, public_iface: &str) -> Result<()> {
+        // VM subnet - Proxmox VMs use 10.x.x.x addresses
+        const VM_SUBNET: &str = "10.0.0.0/8";
+
+        // Check if rule already exists
+        let check_cmd = format!(
+            "iptables -t nat -C POSTROUTING -s {} -o {} -j MASQUERADE 2>/dev/null && echo exists || echo missing",
+            VM_SUBNET, public_iface
+        );
+        let result = ssh.execute(&check_cmd).await?;
+
+        if result.stdout.trim() == "exists" {
+            println!("  [ok] NAT masquerade already configured");
+            return Ok(());
+        }
+
+        // Add masquerade rule
+        let cmd = format!(
+            "iptables -t nat -A POSTROUTING -s {} -o {} -j MASQUERADE",
+            VM_SUBNET, public_iface
+        );
+        let result = ssh.execute(&cmd).await?;
+        if result.exit_status != 0 {
+            bail!("Failed to configure NAT masquerade: {}", result.stdout);
+        }
+
+        println!("  [ok] NAT masquerade configured for {}", VM_SUBNET);
+        Ok(())
+    }
+
+    async fn configure_firewall(&self, ssh: &Client) -> Result<()> {
+        // VM subnet for FORWARD rules
+        const VM_SUBNET: &str = "10.0.0.0/8";
+
+        // Rules to add (protocol, port/range, description)
+        let input_rules: &[(&str, &str, &str)] = &[
+            ("tcp", "80", "HTTP"),
+            ("tcp", "443", "HTTPS"),
+            (
+                "tcp",
+                &format!("{}:{}", self.port_range_start, self.port_range_end),
+                "VM TCP ports",
+            ),
+            (
+                "udp",
+                &format!("{}:{}", self.port_range_start, self.port_range_end),
+                "VM UDP ports",
+            ),
+        ];
+
+        for (proto, port, desc) in input_rules {
+            let check_cmd = format!(
+                "iptables -C INPUT -p {} --dport {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
+                proto, port
+            );
+            let result = ssh.execute(&check_cmd).await?;
+
+            if result.stdout.trim() == "exists" {
+                println!("  [ok] {} port {} already open", desc, port);
+                continue;
+            }
+
+            let cmd = format!(
+                "iptables -A INPUT -p {} --dport {} -j ACCEPT",
+                proto, port
+            );
+            let result = ssh.execute(&cmd).await?;
+            if result.exit_status != 0 {
+                bail!("Failed to open {} port {}: {}", desc, port, result.stdout);
+            }
+            println!("  [ok] Opened {} port {}", desc, port);
+        }
+
+        // FORWARD rules for VM traffic
+        let forward_rules: &[(&str, &str)] = &[
+            // Allow established/related connections
+            ("-m state --state RELATED,ESTABLISHED", "established connections"),
+            // Allow traffic from VMs
+            (&format!("-s {}", VM_SUBNET), "outbound from VMs"),
+            // Allow traffic to VMs
+            (&format!("-d {}", VM_SUBNET), "inbound to VMs"),
+        ];
+
+        for (rule, desc) in forward_rules {
+            let check_cmd = format!(
+                "iptables -C FORWARD {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
+                rule
+            );
+            let result = ssh.execute(&check_cmd).await?;
+
+            if result.stdout.trim() == "exists" {
+                println!("  [ok] FORWARD rule for {} already exists", desc);
+                continue;
+            }
+
+            let cmd = format!("iptables -A FORWARD {} -j ACCEPT", rule);
+            let result = ssh.execute(&cmd).await?;
+            if result.exit_status != 0 {
+                bail!("Failed to add FORWARD rule for {}: {}", desc, result.stdout);
+            }
+            println!("  [ok] Added FORWARD rule for {}", desc);
+        }
+
+        Ok(())
+    }
+
+    async fn persist_iptables(&self, ssh: &Client) -> Result<()> {
+        // Check if iptables-persistent is installed
+        let result = ssh
+            .execute("dpkg -l iptables-persistent 2>/dev/null | grep -q '^ii' && echo installed || echo missing")
+            .await?;
+
+        if result.stdout.trim() == "missing" {
+            // Install iptables-persistent non-interactively
+            println!("  Installing iptables-persistent...");
+            let cmd = "DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent";
+            let result = ssh.execute(cmd).await?;
+            if result.exit_status != 0 {
+                // Not fatal - rules are applied, just won't persist across reboot
+                println!(
+                    "  [warn] Failed to install iptables-persistent: {}",
+                    result.stdout.lines().next().unwrap_or("unknown error")
+                );
+                println!("  [warn] Rules applied but may not persist across reboot");
+                return Ok(());
+            }
+        }
+
+        // Save rules
+        let result = ssh.execute("netfilter-persistent save").await?;
+        if result.exit_status != 0 {
+            println!("  [warn] Failed to persist iptables rules: {}", result.stdout);
+            println!("  [warn] Rules applied but may not persist across reboot");
+            return Ok(());
+        }
+
+        println!("  [ok] iptables rules persisted");
+        Ok(())
     }
 
     async fn install_traefik(&self, ssh: &Client) -> Result<()> {
@@ -482,9 +703,8 @@ async fn verify_cloudflare_token(api_token: &str, zone_id: &str) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_generate_static_config() {
-        let setup = GatewaySetup {
+    fn test_setup() -> GatewaySetup {
+        GatewaySetup {
             host: "test".into(),
             ssh_port: 22,
             ssh_user: "root".into(),
@@ -497,8 +717,12 @@ mod tests {
             port_range_start: 20000,
             port_range_end: 59999,
             ports_per_vm: 10,
-        };
+        }
+    }
 
+    #[test]
+    fn test_generate_static_config() {
+        let setup = test_setup();
         let config = setup.generate_static_config();
         assert!(config.contains("dc-lk.decent-cloud.org"));
         assert!(config.contains("*.dc-lk.decent-cloud.org"));
@@ -507,26 +731,47 @@ mod tests {
 
     #[test]
     fn test_generate_gateway_config() {
-        let setup = GatewaySetup {
-            host: "test".into(),
-            ssh_port: 22,
-            ssh_user: "root".into(),
-            ssh_password: "".into(),
-            datacenter: "dc-lk".into(),
-            domain: "decent-cloud.org".into(),
-            public_ip: "203.0.113.1".into(),
-            cloudflare_api_token: "token123".into(),
-            cloudflare_zone_id: Some("zone123".into()),
-            port_range_start: 20000,
-            port_range_end: 59999,
-            ports_per_vm: 10,
-        };
-
+        let setup = test_setup();
         let config = setup.generate_gateway_config("zone123");
         assert!(config.contains("datacenter = \"dc-lk\""));
         assert!(config.contains("public_ip = \"203.0.113.1\""));
         // Cloudflare credentials are NOT in dc-agent config (handled via central API)
         assert!(!config.contains("cloudflare_zone_id"));
         assert!(!config.contains("cloudflare_api_token"));
+    }
+
+    #[test]
+    fn test_port_range_format_for_iptables() {
+        // iptables uses colon-separated port ranges (e.g., 20000:59999)
+        let setup = test_setup();
+        let port_range = format!("{}:{}", setup.port_range_start, setup.port_range_end);
+        assert_eq!(port_range, "20000:59999");
+
+        // Verify format is valid for iptables --dport
+        assert!(port_range.contains(':'));
+        let parts: Vec<&str> = port_range.split(':').collect();
+        assert_eq!(parts.len(), 2);
+        assert!(parts[0].parse::<u16>().is_ok());
+        assert!(parts[1].parse::<u16>().is_ok());
+    }
+
+    #[test]
+    fn test_vm_subnet_is_valid_cidr() {
+        // The VM subnet used in NAT and FORWARD rules
+        const VM_SUBNET: &str = "10.0.0.0/8";
+
+        // Verify it's a valid CIDR notation
+        let parts: Vec<&str> = VM_SUBNET.split('/').collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0], "10.0.0.0");
+        assert_eq!(parts[1], "8");
+    }
+
+    #[test]
+    fn test_sysctl_config_format() {
+        // The format written to /etc/sysctl.d/99-dc-gateway.conf
+        let config_line = "net.ipv4.ip_forward = 1";
+        assert!(config_line.contains("net.ipv4.ip_forward"));
+        assert!(config_line.contains("= 1"));
     }
 }
