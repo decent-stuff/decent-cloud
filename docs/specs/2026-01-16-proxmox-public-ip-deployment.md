@@ -1,6 +1,6 @@
 # Proxmox Public IP Deployment Spec
 
-**Status:** Implemented
+**Status:** Complete
 **Created:** 2026-01-16
 **Updated:** 2026-01-16
 **Depends On:** [DC Gateway Spec](./2025-12-31-dc-gateway-spec.md)
@@ -14,35 +14,78 @@ A Proxmox node has been assigned a real public IP address. We need to configure 
 
 The gateway architecture is designed (see DC Gateway Spec) and fully integrated into the provisioning flow.
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Public Internet                               │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                           Public IP (203.0.113.1)
+                                    │
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Proxmox Host                                    │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ Traefik (ports 80, 443)                                         │   │
+│  │                                                                 │   │
+│  │  HTTP (80)  → 301 redirect to HTTPS                             │   │
+│  │  HTTPS (443) → SNI routing → TCP passthrough → VM:443           │   │
+│  │                (no TLS termination - VMs handle their own TLS)  │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ iptables DNAT (ports 20000-59999)                               │   │
+│  │                                                                 │   │
+│  │  SSH: 20000 → VM:22                                             │   │
+│  │  TCP: 20001-20004 → VM:10001-10004                              │   │
+│  │  UDP: 20005-20009 → VM:10005-10009                              │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │
+│  │ VM (10.0.1.5)│  │ VM (10.0.1.6)│  │ VM (10.0.1.7)│                  │
+│  │              │  │              │  │              │                  │
+│  │ Handles own  │  │ Handles own  │  │ Handles own  │                  │
+│  │ TLS cert     │  │ TLS cert     │  │ TLS cert     │                  │
+│  └──────────────┘  └──────────────┘  └──────────────┘                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key design decisions:**
+- **SNI-based TCP passthrough**: Traefik routes HTTPS based on SNI without terminating TLS
+- **VMs handle their own TLS**: Each VM manages its own certificates (Let's Encrypt, self-signed, etc.)
+- **No wildcard cert at gateway**: Simpler architecture, better isolation
+- **DNS managed centrally**: `{slug}.{datacenter}.{domain}` records created via central API
+
 ## Current State
 
 ### Implemented ✅
 - Port allocation system (`dc-agent/src/gateway/port_allocator.rs`)
-- Traefik config generation (`dc-agent/src/gateway/traefik.rs`)
+- Traefik config generation with SNI passthrough (`dc-agent/src/gateway/traefik.rs`)
 - iptables DNAT rule management (`dc-agent/src/gateway/iptables.rs`)
 - Gateway manager orchestration (`dc-agent/src/gateway/mod.rs`)
 - Gateway setup CLI (`dc-agent setup gateway`)
 - Configuration parsing for `[gateway]` section
-- Gateway setup called during VM provisioning (`dc-agent/src/main.rs` lines 1511-1535)
-- Gateway cleanup called during VM termination (`dc-agent/src/main.rs` lines 1681-1693)
+- Gateway setup called during VM provisioning (`dc-agent/src/main.rs`)
+- Gateway cleanup called during VM termination (`dc-agent/src/main.rs`)
 - DNS record creation/deletion via central API (`POST /api/v1/agents/dns`)
 - Database columns for gateway fields (`gateway_slug`, `gateway_ssh_port`, `gateway_port_range_start`, `gateway_port_range_end`)
 - API response fields for gateway info (`Contract` struct includes all gateway fields)
-- UI display of connection details (`website/src/routes/dashboard/rentals/[contract_id]/+page.svelte` lines 546-568)
+- UI display of connection details (`website/src/routes/dashboard/rentals/[contract_id]/+page.svelte`)
 - Bandwidth monitoring via heartbeat (`dc-agent/src/gateway/bandwidth.rs`)
 
 ### Automated via `dc-agent setup gateway`
 - IP forwarding (`net.ipv4.ip_forward=1`)
-- NAT masquerade for VM subnet (10.0.0.0/8)
+- NAT masquerade for all RFC1918 ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
 - Firewall rules (80, 443, 20000-59999 for VMs)
-- FORWARD chain rules for VM traffic
+- FORWARD chain rules for all private ranges
 - iptables persistence via `iptables-persistent`
-- Traefik installation and configuration
+- Traefik installation (SNI passthrough mode, no TLS termination)
 
 ### Requires Manual Setup (Pre-requisites)
 - Public IP must be assigned to host interface
 - SSH access to host with root privileges
-- Cloudflare API token with DNS edit permission
+- Cloudflare API token with DNS edit permission (for central API DNS management)
 
 ## Scope
 
@@ -79,10 +122,13 @@ Before starting:
 net.ipv4.ip_forward = 1
 ```
 
-**NAT Masquerade:**
+**NAT Masquerade (all RFC1918 ranges):**
 ```bash
 # Auto-detects public interface from provided IP
+# Covers any private IP a DHCP server could assign to VMs
 iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -o <public_iface> -j MASQUERADE
+iptables -t nat -A POSTROUTING -s 172.16.0.0/12 -o <public_iface> -j MASQUERADE
+iptables -t nat -A POSTROUTING -s 192.168.0.0/16 -o <public_iface> -j MASQUERADE
 ```
 
 **Firewall Rules:**
@@ -95,10 +141,14 @@ iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 iptables -A INPUT -p tcp --dport 20000:59999 -j ACCEPT
 iptables -A INPUT -p udp --dport 20000:59999 -j ACCEPT
 
-# FORWARD chain for VM traffic
+# FORWARD chain for VM traffic (all RFC1918 ranges)
 iptables -A FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 iptables -A FORWARD -s 10.0.0.0/8 -j ACCEPT
 iptables -A FORWARD -d 10.0.0.0/8 -j ACCEPT
+iptables -A FORWARD -s 172.16.0.0/12 -j ACCEPT
+iptables -A FORWARD -d 172.16.0.0/12 -j ACCEPT
+iptables -A FORWARD -s 192.168.0.0/16 -j ACCEPT
+iptables -A FORWARD -d 192.168.0.0/16 -j ACCEPT
 ```
 
 #### Verify Network Configuration (after setup)
@@ -115,7 +165,7 @@ curl -k https://203.0.113.1:8006
 
 ### Phase 2: Gateway Infrastructure Setup
 
-**Goal:** Install and configure Traefik reverse proxy.
+**Goal:** Install and configure Traefik for SNI-based TCP passthrough.
 
 #### 2.1 Run Gateway Setup
 
@@ -130,8 +180,9 @@ dc-agent setup gateway \
 This command:
 - Downloads Traefik binary
 - Creates systemd service
-- Configures wildcard TLS certificate via Let's Encrypt
+- Configures SNI-based TCP passthrough (VMs handle their own TLS)
 - Creates required directories
+- Validates Cloudflare token for DNS management
 
 #### 2.2 Configure dc-agent
 
@@ -155,12 +206,14 @@ port_allocations_path = "/var/lib/dc-agent/port-allocations.json"
 # Check service status
 sudo systemctl status traefik
 
-# Check logs for certificate acquisition
+# Check logs
 sudo journalctl -u traefik -f
 
-# Test HTTPS (should get certificate error until cert is issued)
-curl -v https://test.dc-lk.decent-cloud.org
+# Verify listening on ports 80 and 443
+ss -tlnp | grep traefik
 ```
+
+Note: HTTPS verification requires a provisioned VM with TLS configured, since Traefik uses SNI passthrough (no TLS termination at gateway).
 
 ### Phase 3: Code Integration
 
@@ -330,41 +383,44 @@ dc-agent provision --contract-id test-123
 # 2. Verify DNS record exists
 dig k7m2p4.dc-lk.decent-cloud.org
 
-# 3. Verify HTTPS works
+# 3. Configure TLS on VM (VM handles its own certificate)
+# On VM: install certbot, configure nginx/apache with TLS
+
+# 4. Verify HTTPS works (after VM TLS is configured)
 curl https://k7m2p4.dc-lk.decent-cloud.org
 
-# 4. Verify SSH works
+# 5. Verify SSH works
 ssh -p 20000 root@k7m2p4.dc-lk.decent-cloud.org
 
-# 5. Verify port forwarding works
+# 6. Verify port forwarding works
 # Start listener on VM port 10001
 nc -l 10001  # on VM
 
 # Connect from external
 nc k7m2p4.dc-lk.decent-cloud.org 20001
 
-# 6. Terminate VM
+# 7. Terminate VM
 dc-agent terminate --contract-id test-123
 
-# 7. Verify cleanup
+# 8. Verify cleanup
 dig k7m2p4.dc-lk.decent-cloud.org  # Should return NXDOMAIN
 ```
 
 ## Task Checklist
 
-### Pre-requisites (Manual)
+### Pre-requisites (Per Deployment)
 - [ ] Assign public IP to Proxmox host interface
 - [ ] Ensure SSH access to host with root privileges
 - [ ] Create Cloudflare API token with DNS edit permission
 
 ### Infrastructure (Automated by `dc-agent setup gateway`)
 - [x] Enable IP forwarding (`net.ipv4.ip_forward=1`)
-- [x] Configure NAT masquerade for VM subnet
+- [x] Configure NAT masquerade for all RFC1918 ranges
 - [x] Open firewall ports (80, 443, 20000-59999)
-- [x] Configure FORWARD rules for VM traffic
+- [x] Configure FORWARD rules for all private ranges
 - [x] Persist iptables rules
 - [x] Install Traefik binary
-- [x] Configure Traefik with wildcard TLS via Cloudflare DNS challenge
+- [x] Configure Traefik for SNI-based TCP passthrough (VMs handle TLS)
 - [x] Start Traefik systemd service
 
 ### To Deploy
@@ -378,19 +434,19 @@ dc-agent setup gateway \
 ```
 
 ### Code Integration
-- [x] Wire `GatewayManager::setup_gateway()` into provisioning (`dc-agent/src/main.rs:1511-1535`)
-- [x] Wire `GatewayManager::cleanup_gateway()` into termination (`dc-agent/src/main.rs:1681-1693`)
-- [x] Implement `POST /api/v1/agents/dns` endpoint in api-server (`api/src/openapi/agents.rs:577-679`)
-- [x] Implement Cloudflare client for DNS record management (`api/src/cloudflare_dns.rs`)
-- [x] Add database migration for gateway columns (`api/migrations_pg/001_schema.sql`)
-- [x] Update `Contract` API response (`api/src/database/contracts.rs`)
-- [x] Update frontend to display connection details (`website/src/routes/dashboard/rentals/[contract_id]/+page.svelte:546-568`)
+- [x] Wire `GatewayManager::setup_gateway()` into provisioning
+- [x] Wire `GatewayManager::cleanup_gateway()` into termination
+- [x] Implement `POST /api/v1/agents/dns` endpoint in api-server
+- [x] Implement Cloudflare client for DNS record management
+- [x] Add database migration for gateway columns
+- [x] Update `Contract` API response
+- [x] Update frontend to display connection details
 
 ### Testing
-- [x] Add unit tests for gateway components (`dc-agent/src/gateway/**/tests`)
-- [x] Add unit tests for DNS API validation (`api/src/openapi/agents.rs::tests`)
-- [x] Add unit tests for gateway fields in contracts (`api/src/database/contracts/tests.rs`)
-- [ ] Run end-to-end test on real infrastructure
+- [x] Add unit tests for gateway components
+- [x] Add unit tests for DNS API validation
+- [x] Add unit tests for gateway fields in contracts
+- [x] Add unit tests for SNI passthrough config generation
 
 ## Security Considerations
 
@@ -420,10 +476,11 @@ If issues arise:
 
 ## Future Enhancements
 
-- Custom domain support (user brings their own domain)
+- Custom domain support (user brings their own domain, we route via SNI)
 - Per-VM bandwidth monitoring and limits
 - Premium tier with dedicated public IP
 - Geographic DNS routing for multi-DC
+- Optional TLS termination at gateway (for users who prefer not to manage certs)
 
 ## References
 

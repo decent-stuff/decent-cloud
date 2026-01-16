@@ -1,7 +1,8 @@
 //! Traefik dynamic configuration file management.
 //!
-//! Traefik handles HTTP/HTTPS routing only (with SNI-based routing and TLS).
-//! TCP/UDP port forwarding is handled by iptables DNAT (see iptables.rs).
+//! Traefik handles HTTPS via SNI-based TCP passthrough (VMs handle their own TLS).
+//! HTTP (port 80) is redirected to HTTPS at the entrypoint level.
+//! TCP/UDP port forwarding for other ports is handled by iptables DNAT (see iptables.rs).
 
 use super::port_allocator::PortAllocation;
 use anyhow::{Context, Result};
@@ -25,8 +26,8 @@ impl TraefikConfigManager {
         self.config_dir.join(format!("vm-{}.yaml", slug))
     }
 
-    /// Write Traefik configuration for a VM (HTTP/HTTPS only).
-    /// TCP/UDP is handled by iptables DNAT.
+    /// Write Traefik configuration for a VM (HTTPS via SNI passthrough).
+    /// VM handles its own TLS certificate. Other TCP/UDP ports handled by iptables DNAT.
     pub fn write_vm_config(
         &self,
         slug: &str,
@@ -62,7 +63,7 @@ impl TraefikConfigManager {
     }
 
     /// Generate Traefik YAML configuration for a VM.
-    /// Only handles HTTP/HTTPS - TCP/UDP is handled by iptables.
+    /// Uses TCP passthrough with SNI routing - VM handles its own TLS.
     fn generate_config(
         &self,
         slug: &str,
@@ -78,24 +79,24 @@ impl TraefikConfigManager {
 # Contract: {contract_id}
 # Created: {timestamp}
 #
-# HTTP/HTTPS: Handled by Traefik (this file)
-# TCP/UDP ports {base_port}-{end_port}: Handled by iptables DNAT
+# HTTPS (443): SNI passthrough to VM:443 (VM handles TLS)
+# TCP/UDP ports {base_port}-{end_port}: iptables DNAT
 
-http:
+tcp:
   routers:
-    {slug}-http:
-      rule: "Host(`{subdomain}`)"
-      service: {slug}-http
+    {slug}-https:
+      rule: "HostSNI(`{subdomain}`)"
+      service: {slug}-https
       entryPoints:
         - websecure
       tls:
-        certResolver: letsencrypt
+        passthrough: true
 
   services:
-    {slug}-http:
+    {slug}-https:
       loadBalancer:
         servers:
-          - url: "http://{internal_ip}:80"
+          - address: "{internal_ip}:443"
 "#,
             slug = slug,
             subdomain = subdomain,
@@ -132,11 +133,12 @@ mod tests {
             "contract-123",
         );
 
-        // HTTP routing (Traefik handles this)
-        assert!(config.contains("Host(`k7m2p4.dc-lk.decent-cloud.org`)"));
-        assert!(config.contains("http://10.0.1.5:80"));
+        // TCP passthrough routing with SNI
+        assert!(config.contains("tcp:"));
+        assert!(config.contains("HostSNI(`k7m2p4.dc-lk.decent-cloud.org`)"));
+        assert!(config.contains("passthrough: true"));
+        assert!(config.contains("address: \"10.0.1.5:443\""));
         assert!(config.contains("websecure"));
-        assert!(config.contains("letsencrypt"));
 
         // Contract info
         assert!(config.contains("contract-123"));
@@ -144,9 +146,10 @@ mod tests {
         // Port range mentioned in comments (handled by iptables)
         assert!(config.contains("20000-20009"));
 
-        // TCP/UDP should NOT be in Traefik config (handled by iptables)
-        assert!(!config.contains("tcp:"));
-        assert!(!config.contains("udp:"));
+        // Should NOT have HTTP routing or certResolver (VM handles TLS)
+        assert!(!config.contains("http:"));
+        assert!(!config.contains("certResolver"));
+        assert!(!config.contains("letsencrypt"));
     }
 
     #[test]

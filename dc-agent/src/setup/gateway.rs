@@ -69,7 +69,7 @@ impl GatewaySetup {
 
         // Step 6: Write Traefik static config
         println!("\nWriting Traefik configuration...");
-        self.write_traefik_config(&ssh, &zone_id).await?;
+        self.write_traefik_config(&ssh).await?;
 
         // Step 7: Write systemd service
         println!("\nCreating systemd service...");
@@ -180,38 +180,44 @@ impl GatewaySetup {
     }
 
     async fn configure_nat_masquerade(&self, ssh: &Client, public_iface: &str) -> Result<()> {
-        // VM subnet - Proxmox VMs use 10.x.x.x addresses
-        const VM_SUBNET: &str = "10.0.0.0/8";
+        // All RFC1918 private ranges - VMs could get any private IP via DHCP
+        const PRIVATE_RANGES: &[&str] = &["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
 
-        // Check if rule already exists
-        let check_cmd = format!(
-            "iptables -t nat -C POSTROUTING -s {} -o {} -j MASQUERADE 2>/dev/null && echo exists || echo missing",
-            VM_SUBNET, public_iface
-        );
-        let result = ssh.execute(&check_cmd).await?;
+        for subnet in PRIVATE_RANGES {
+            // Check if rule already exists
+            let check_cmd = format!(
+                "iptables -t nat -C POSTROUTING -s {} -o {} -j MASQUERADE 2>/dev/null && echo exists || echo missing",
+                subnet, public_iface
+            );
+            let result = ssh.execute(&check_cmd).await?;
 
-        if result.stdout.trim() == "exists" {
-            println!("  [ok] NAT masquerade already configured");
-            return Ok(());
+            if result.stdout.trim() == "exists" {
+                println!("  [ok] NAT masquerade for {} already configured", subnet);
+                continue;
+            }
+
+            // Add masquerade rule
+            let cmd = format!(
+                "iptables -t nat -A POSTROUTING -s {} -o {} -j MASQUERADE",
+                subnet, public_iface
+            );
+            let result = ssh.execute(&cmd).await?;
+            if result.exit_status != 0 {
+                bail!(
+                    "Failed to configure NAT masquerade for {}: {}",
+                    subnet,
+                    result.stdout
+                );
+            }
+
+            println!("  [ok] NAT masquerade configured for {}", subnet);
         }
-
-        // Add masquerade rule
-        let cmd = format!(
-            "iptables -t nat -A POSTROUTING -s {} -o {} -j MASQUERADE",
-            VM_SUBNET, public_iface
-        );
-        let result = ssh.execute(&cmd).await?;
-        if result.exit_status != 0 {
-            bail!("Failed to configure NAT masquerade: {}", result.stdout);
-        }
-
-        println!("  [ok] NAT masquerade configured for {}", VM_SUBNET);
         Ok(())
     }
 
     async fn configure_firewall(&self, ssh: &Client) -> Result<()> {
-        // VM subnet for FORWARD rules
-        const VM_SUBNET: &str = "10.0.0.0/8";
+        // All RFC1918 private ranges - VMs could get any private IP via DHCP
+        const PRIVATE_RANGES: &[&str] = &["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
 
         // Rules to add (protocol, port/range, description)
         let input_rules: &[(&str, &str, &str)] = &[
@@ -252,34 +258,72 @@ impl GatewaySetup {
             println!("  [ok] Opened {} port {}", desc, port);
         }
 
-        // FORWARD rules for VM traffic
-        let forward_rules: &[(&str, &str)] = &[
-            // Allow established/related connections
-            ("-m state --state RELATED,ESTABLISHED", "established connections"),
-            // Allow traffic from VMs
-            (&format!("-s {}", VM_SUBNET), "outbound from VMs"),
-            // Allow traffic to VMs
-            (&format!("-d {}", VM_SUBNET), "inbound to VMs"),
-        ];
+        // FORWARD rule for established/related connections (only need one)
+        let established_rule = "-m state --state RELATED,ESTABLISHED";
+        let check_cmd = format!(
+            "iptables -C FORWARD {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
+            established_rule
+        );
+        let result = ssh.execute(&check_cmd).await?;
+        if result.stdout.trim() != "exists" {
+            let cmd = format!("iptables -A FORWARD {} -j ACCEPT", established_rule);
+            let result = ssh.execute(&cmd).await?;
+            if result.exit_status != 0 {
+                bail!(
+                    "Failed to add FORWARD rule for established: {}",
+                    result.stdout
+                );
+            }
+            println!("  [ok] FORWARD rule for established connections");
+        } else {
+            println!("  [ok] FORWARD rule for established connections already exists");
+        }
 
-        for (rule, desc) in forward_rules {
+        // FORWARD rules for each private range (source and destination)
+        for subnet in PRIVATE_RANGES {
+            // Outbound from VMs
+            let rule = format!("-s {}", subnet);
             let check_cmd = format!(
                 "iptables -C FORWARD {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
                 rule
             );
             let result = ssh.execute(&check_cmd).await?;
-
-            if result.stdout.trim() == "exists" {
-                println!("  [ok] FORWARD rule for {} already exists", desc);
-                continue;
+            if result.stdout.trim() != "exists" {
+                let cmd = format!("iptables -A FORWARD {} -j ACCEPT", rule);
+                let result = ssh.execute(&cmd).await?;
+                if result.exit_status != 0 {
+                    bail!(
+                        "Failed to add FORWARD rule for outbound {}: {}",
+                        subnet,
+                        result.stdout
+                    );
+                }
+                println!("  [ok] FORWARD outbound from {}", subnet);
+            } else {
+                println!("  [ok] FORWARD outbound from {} already exists", subnet);
             }
 
-            let cmd = format!("iptables -A FORWARD {} -j ACCEPT", rule);
-            let result = ssh.execute(&cmd).await?;
-            if result.exit_status != 0 {
-                bail!("Failed to add FORWARD rule for {}: {}", desc, result.stdout);
+            // Inbound to VMs
+            let rule = format!("-d {}", subnet);
+            let check_cmd = format!(
+                "iptables -C FORWARD {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
+                rule
+            );
+            let result = ssh.execute(&check_cmd).await?;
+            if result.stdout.trim() != "exists" {
+                let cmd = format!("iptables -A FORWARD {} -j ACCEPT", rule);
+                let result = ssh.execute(&cmd).await?;
+                if result.exit_status != 0 {
+                    bail!(
+                        "Failed to add FORWARD rule for inbound {}: {}",
+                        subnet,
+                        result.stdout
+                    );
+                }
+                println!("  [ok] FORWARD inbound to {}", subnet);
+            } else {
+                println!("  [ok] FORWARD inbound to {} already exists", subnet);
             }
-            println!("  [ok] Added FORWARD rule for {}", desc);
         }
 
         Ok(())
@@ -389,9 +433,9 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn write_traefik_config(&self, ssh: &Client, zone_id: &str) -> Result<()> {
+    async fn write_traefik_config(&self, ssh: &Client) -> Result<()> {
         let static_config = self.generate_static_config();
-        let env_config = self.generate_env_file(zone_id);
+        let env_config = self.generate_env_file();
 
         // Write static config
         let cmd = format!(
@@ -423,9 +467,12 @@ impl GatewaySetup {
     }
 
     fn generate_static_config(&self) -> String {
-        format!(
-            r#"# Traefik static configuration
+        r#"# Traefik static configuration
 # Generated by dc-agent setup gateway
+#
+# Architecture: SNI-based TCP passthrough
+# - HTTP (80): Redirects to HTTPS
+# - HTTPS (443): TCP passthrough based on SNI, VMs handle their own TLS
 
 global:
   checkNewVersion: false
@@ -449,40 +496,20 @@ entryPoints:
 
   websecure:
     address: ":443"
-    http:
-      tls:
-        certResolver: letsencrypt
-        domains:
-          - main: "{datacenter}.{domain}"
-            sans:
-              - "*.{datacenter}.{domain}"
-
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: admin@{domain}
-      storage: /var/lib/traefik/acme.json
-      dnsChallenge:
-        provider: cloudflare
-        resolvers:
-          - "1.1.1.1:53"
-          - "8.8.8.8:53"
+    # No TLS config here - passthrough is configured per-router in dynamic configs
 
 providers:
   file:
     directory: /etc/traefik/dynamic
     watch: true
-"#,
-            datacenter = self.datacenter,
-            domain = self.domain
-        )
+"#
+        .to_string()
     }
 
-    fn generate_env_file(&self, _zone_id: &str) -> String {
-        format!(
-            "CF_API_EMAIL=\nCF_DNS_API_TOKEN={}\nCF_ZONE_API_TOKEN={}\n",
-            self.cloudflare_api_token, self.cloudflare_api_token
-        )
+    fn generate_env_file(&self) -> String {
+        // Env file kept for systemd service compatibility (EnvironmentFile directive)
+        // No credentials needed - VMs handle their own TLS, DNS managed via central API
+        "# Traefik environment (no secrets needed for SNI passthrough mode)\n".to_string()
     }
 
     async fn write_systemd_service(&self, ssh: &Client) -> Result<()> {
@@ -724,9 +751,25 @@ mod tests {
     fn test_generate_static_config() {
         let setup = test_setup();
         let config = setup.generate_static_config();
-        assert!(config.contains("dc-lk.decent-cloud.org"));
-        assert!(config.contains("*.dc-lk.decent-cloud.org"));
-        assert!(config.contains("provider: cloudflare"));
+
+        // SNI passthrough architecture
+        assert!(config.contains("SNI-based TCP passthrough"));
+        assert!(config.contains("VMs handle their own TLS"));
+
+        // HTTP redirect to HTTPS
+        assert!(config.contains("web:"));
+        assert!(config.contains(":80"));
+        assert!(config.contains("to: websecure"));
+
+        // HTTPS entrypoint (no TLS termination)
+        assert!(config.contains("websecure:"));
+        assert!(config.contains(":443"));
+
+        // Should NOT have certificate resolver (VMs handle TLS)
+        assert!(!config.contains("certResolver"));
+        assert!(!config.contains("letsencrypt"));
+        assert!(!config.contains("cloudflare"));
+        assert!(!config.contains("acme"));
     }
 
     #[test]
@@ -756,15 +799,24 @@ mod tests {
     }
 
     #[test]
-    fn test_vm_subnet_is_valid_cidr() {
-        // The VM subnet used in NAT and FORWARD rules
-        const VM_SUBNET: &str = "10.0.0.0/8";
+    fn test_private_ranges_are_valid_cidr() {
+        // All RFC1918 private ranges used in NAT and FORWARD rules
+        const PRIVATE_RANGES: &[&str] = &["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
 
-        // Verify it's a valid CIDR notation
-        let parts: Vec<&str> = VM_SUBNET.split('/').collect();
-        assert_eq!(parts.len(), 2);
-        assert_eq!(parts[0], "10.0.0.0");
-        assert_eq!(parts[1], "8");
+        for range in PRIVATE_RANGES {
+            let parts: Vec<&str> = range.split('/').collect();
+            assert_eq!(parts.len(), 2, "Invalid CIDR: {}", range);
+            // Verify IP part has 4 octets
+            let octets: Vec<&str> = parts[0].split('.').collect();
+            assert_eq!(octets.len(), 4, "Invalid IP in CIDR: {}", range);
+            // Verify prefix is a number
+            assert!(parts[1].parse::<u8>().is_ok(), "Invalid prefix in CIDR: {}", range);
+        }
+
+        // Verify we cover all RFC1918 ranges
+        assert!(PRIVATE_RANGES.contains(&"10.0.0.0/8"));
+        assert!(PRIVATE_RANGES.contains(&"172.16.0.0/12"));
+        assert!(PRIVATE_RANGES.contains(&"192.168.0.0/16"));
     }
 
     #[test]
