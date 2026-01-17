@@ -95,6 +95,10 @@
 		}
 	}
 
+	function handleProviderDataUpdate() {
+		loadProviderData();
+	}
+
 	onMount(() => {
 		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
@@ -105,10 +109,13 @@
 				onboardingData = null;
 			}
 		});
+		// Listen for provider data updates from other components
+		window.addEventListener('provider-data-updated', handleProviderDataUpdate);
 	});
 
 	onDestroy(() => {
 		unsubscribeIdentity?.();
+		window.removeEventListener('provider-data-updated', handleProviderDataUpdate);
 	});
 
 	async function handleLogout() {

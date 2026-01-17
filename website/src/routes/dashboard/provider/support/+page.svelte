@@ -80,6 +80,9 @@
 	let creating = $state(false);
 	let newPassword = $state<string | null>(null);
 
+	// Onboarding completion state
+	let onboardingCompleted = $state(false);
+
 	const accountEmail = $derived(currentIdentity?.account?.email);
 
 	// Dynamic URLs based on provider's portal status
@@ -177,6 +180,7 @@
 		const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
 		const data = await getProviderOnboarding(pubkeyHex).catch(() => null);
 		if (data) {
+			onboardingCompleted = data.onboarding_completed_at !== null;
 			supportHours = data.support_hours || "";
 			if (
 				supportHours &&
@@ -325,6 +329,9 @@
 			);
 			success = `Help center ${result.action}!`;
 			articleUrl = result.articleUrl;
+			onboardingCompleted = true;
+			// Notify sidebar to refresh provider data (unlocks offerings menu)
+			window.dispatchEvent(new CustomEvent('provider-data-updated'));
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Save failed";
 			articleUrl = null;
@@ -445,6 +452,19 @@
 			Manage your support account, notifications, and provider profile
 		</p>
 	</div>
+
+	<!-- Onboarding prompt for new providers -->
+	{#if isAuthenticated && !loading && !onboardingCompleted}
+		<div class="bg-primary-500/20 border border-primary-500/40 p-4 flex items-start gap-3">
+			<span class="text-2xl">👋</span>
+			<div>
+				<h3 class="text-white font-semibold">Welcome, Provider!</h3>
+				<p class="text-neutral-300 text-sm mt-1">
+					Complete your <a href="#helpcenter" class="text-primary-400 underline hover:text-primary-300">Help Center Profile</a> below to unlock <strong>My Offerings</strong>, <strong>Rental Requests</strong>, and other provider features in the sidebar.
+				</p>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Section Navigation -->
 	<nav class="flex flex-wrap gap-2 bg-surface-elevated  p-2">
