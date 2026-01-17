@@ -1,25 +1,32 @@
 #!/bin/bash
 # DC-Agent One-Liner Installer
-# Usage: curl -sSL https://raw.githubusercontent.com/decent-stuff/decent-cloud/main/scripts/install-dc-agent.sh | sudo bash -s YOUR_TOKEN
+# Usage: curl -sSL .../install-dc-agent.sh | bash -s TOKEN [API_URL]
+#   TOKEN   - Registration token from the Decent Cloud dashboard
+#   API_URL - Optional API endpoint (default: https://api.decent-cloud.org)
 set -euo pipefail
 
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/dc-agent"
 SYSTEMD_DIR="/etc/systemd/system"
 GITHUB_REPO="decent-stuff/decent-cloud"
-API_URL="${DC_API_URL:-https://api.decent-cloud.org}"
 
 error() { echo "ERROR: $1" >&2; exit 1; }
 info() { echo "==> $1"; }
 
 TOKEN="${1:-}"
-[[ -z "$TOKEN" ]] && error "Usage: curl -sSL .../install-dc-agent.sh | sudo bash -s YOUR_TOKEN"
+API_URL="${2:-${DC_API_URL:-https://api.decent-cloud.org}}"
+[[ -z "$TOKEN" ]] && error "Usage: curl -sSL .../install-dc-agent.sh | bash -s TOKEN [API_URL]"
 [[ $EUID -ne 0 ]] && error "Must run as root"
 command -v curl >/dev/null || error "curl required"
 command -v systemctl >/dev/null || error "systemd required"
 
 ARCH=$(uname -m)
 [[ "$ARCH" != "x86_64" ]] && error "Only x86_64 supported (got: $ARCH)"
+
+info "Installing dc-agent"
+echo "    API: ${API_URL}"
+echo "    Token: ${TOKEN:0:10}..."
+echo ""
 
 info "Getting latest release..."
 VERSION=$(curl -sSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
@@ -35,7 +42,7 @@ info "Installing binary to ${INSTALL_DIR}/dc-agent..."
 mv /tmp/dc-agent "${INSTALL_DIR}/dc-agent"
 mkdir -p "$CONFIG_DIR"
 
-info "Registering agent with API..."
+info "Registering agent with ${API_URL}..."
 "${INSTALL_DIR}/dc-agent" setup token \
     --token "$TOKEN" \
     --api-url "$API_URL" \

@@ -138,7 +138,7 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "api"
-version = "0.4.5"
+version = "0.4.9"
 dependencies = [
  "anyhow",
  "async-stripe",
@@ -1049,7 +1049,7 @@ checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
 
 [[package]]
 name = "dc-agent"
-version = "0.4.5"
+version = "0.4.9"
 dependencies = [
  "anyhow",
  "async-ssh2-tokio",
@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "dcc-common"
-version = "0.4.5"
+version = "0.4.9"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1117,7 +1117,7 @@ dependencies = [
 
 [[package]]
 name = "decent-cloud"
-version = "0.4.5"
+version = "0.4.9"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1158,7 +1158,7 @@ dependencies = [
 
 [[package]]
 name = "decent_cloud_canister"
-version = "0.4.5"
+version = "0.4.9"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1453,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "email-utils"
-version = "0.4.5"
+version = "0.4.9"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3001,7 +3001,7 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 
 [[package]]
 name = "ledger-map"
-version = "0.4.5"
+version = "0.4.9"
 dependencies = [
  "ahash",
  "anyhow",

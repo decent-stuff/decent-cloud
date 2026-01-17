@@ -15,7 +15,7 @@ docker run --rm \
     bash -c '
         set -euo pipefail
         apt-get update -qq
-        apt-get install -y -qq curl gcc pkg-config libssl-dev ca-certificates >/dev/null
+        apt-get install -y -qq curl gcc pkg-config ca-certificates >/dev/null
         curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable -q
         . "$HOME/.cargo/env"
         # Remove mold linker config (not available in container), restore after build
