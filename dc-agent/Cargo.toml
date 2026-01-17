@@ -19,7 +19,7 @@ dcc-common.workspace = true
 dirs = "5.0"
 ed25519-dalek.workspace = true
 hex.workspace = true
-public-ip-address = "0.3"
+public-ip-address = { version = "0.4", default-features = false, features = ["rustls-tls"] }
 rand = "0.8"
 reqwest.workspace = true
 rpassword = "7.4.0"
