@@ -41,7 +41,7 @@
 	}
 
 	function getInstallCommand(token: string): string {
-		return `curl -sSL https://raw.githubusercontent.com/decent-stuff/decent-cloud/main/scripts/install-dc-agent.sh | sudo bash -s ${token}`;
+		return `curl -sSL https://raw.githubusercontent.com/decent-stuff/decent-cloud/main/scripts/install-dc-agent.sh | sudo bash -s ${token} ${API_BASE_URL}`;
 	}
 
 	function formatTimestamp(ns: number): string {
