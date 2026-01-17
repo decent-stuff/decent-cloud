@@ -79,26 +79,13 @@ jobs:
           fi
 
       - name: Prepare binary
-        run: |
-          if [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ]; then
-            cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
-          else
-            cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
-          fi
+        run: cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} ${{ matrix.asset_name }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: Release ${{ github.ref_name }}
-          body: |
-            ## Changelog
-            ${{ needs.create-release.outputs.changelog }}
-          files: |
-            ${{ matrix.asset_name }}
-          draft: false
-          prerelease: false
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
 
   build-dc-agent:
     needs: create-release
@@ -112,15 +99,42 @@ jobs:
       - name: Prepare binary
         run: cp target/release/dc-agent dc-agent-linux-amd64
 
-      - name: Upload to release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dc-agent-linux-amd64
+          path: dc-agent-linux-amd64
+
+  upload-release:
+    needs: [create-release, build-release, build-dc-agent]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec mv {} release/ \;
+          ls -la release/
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: dc-agent-linux-amd64
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## Changelog
+            ${{ needs.create-release.outputs.changelog }}
+          files: release/*
+          draft: false
+          prerelease: false
 
   update-version:
-    needs: [create-release, build-release, build-dc-agent]
+    needs: [create-release, upload-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
