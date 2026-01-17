@@ -30,7 +30,7 @@ struct OrphanTracker {
 }
 
 #[derive(Parser)]
-#[command(name = "dc-agent")]
+#[command(name = "dc-agent", version)]
 #[command(about = "Decent Cloud Provider Provisioning Agent", long_about = None)]
 struct Cli {
     /// Path to configuration file

@@ -29,9 +29,7 @@ info "Downloading dc-agent $VERSION..."
 DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/dc-agent-linux-amd64"
 curl -sSL -o /tmp/dc-agent "$DOWNLOAD_URL" || error "Failed to download from $DOWNLOAD_URL"
 chmod +x /tmp/dc-agent
-if ! /tmp/dc-agent --version 2>&1; then
-    error "Binary failed to run. Missing libraries? Try: ldd /tmp/dc-agent"
-fi
+/tmp/dc-agent --version || error "Binary verification failed"
 
 info "Installing binary to ${INSTALL_DIR}/dc-agent..."
 mv /tmp/dc-agent "${INSTALL_DIR}/dc-agent"
