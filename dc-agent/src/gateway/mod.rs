@@ -2,23 +2,21 @@
 //!
 //! This module handles:
 //! - Port allocation tracking
-//! - Traefik for HTTP/HTTPS routing (SNI-based with TLS)
+//! - Caddy for HTTP/HTTPS routing (TLS termination with automatic HTTP-01 certs)
 //! - iptables DNAT for TCP/UDP port forwarding (SSH, databases, game servers)
 //! - DNS record management (via central API)
 //! - Gateway slug generation
 //! - Bandwidth monitoring via iptables
 
 mod bandwidth;
-mod cloudflare;
+mod caddy;
 mod iptables;
 mod port_allocator;
-mod traefik;
 
 pub use bandwidth::{BandwidthMonitor, BandwidthStats};
-pub use cloudflare::CloudflareClient;
+pub use caddy::CaddyConfigManager;
 pub use iptables::IptablesNat;
 pub use port_allocator::{PortAllocation, PortAllocator};
-pub use traefik::TraefikConfigManager;
 
 use crate::api_client::ApiClient;
 use crate::config::GatewayConfig;
@@ -27,11 +25,11 @@ use anyhow::{Context, Result};
 use rand::Rng;
 use std::sync::Arc;
 
-/// Gateway manager that coordinates port allocation, Traefik config, iptables, and DNS.
+/// Gateway manager that coordinates port allocation, Caddy config, iptables, and DNS.
 pub struct GatewayManager {
     config: GatewayConfig,
     port_allocator: PortAllocator,
-    traefik_manager: TraefikConfigManager,
+    caddy_manager: CaddyConfigManager,
     api_client: Arc<ApiClient>,
 }
 
@@ -46,7 +44,7 @@ impl GatewayManager {
             config.ports_per_vm,
         )?;
 
-        let traefik_manager = TraefikConfigManager::new(&config.traefik_dynamic_dir);
+        let caddy_manager = CaddyConfigManager::new(&config.caddy_sites_dir);
 
         // Initialize iptables NAT chain for port forwarding
         if let Err(e) = IptablesNat::init_chain() {
@@ -59,7 +57,7 @@ impl GatewayManager {
         Ok(Self {
             config,
             port_allocator,
-            traefik_manager,
+            caddy_manager,
             api_client,
         })
     }
@@ -98,16 +96,16 @@ impl GatewayManager {
             .allocate(&slug, contract_id)
             .context("Failed to allocate ports for gateway")?;
 
-        // Get internal IP (required for Traefik routing)
+        // Get internal IP (required for Caddy routing)
         let internal_ip = instance
             .ip_address
             .as_ref()
             .context("Instance must have an IP address for gateway setup")?;
 
-        // Write Traefik config (HTTP/HTTPS only)
-        self.traefik_manager
+        // Write Caddy config (HTTP/HTTPS only)
+        self.caddy_manager
             .write_vm_config(&slug, &subdomain, internal_ip, &allocation, contract_id)
-            .context("Failed to write Traefik config")?;
+            .context("Failed to write Caddy config")?;
 
         // Setup iptables DNAT for TCP/UDP port forwarding
         IptablesNat::setup_forwarding(&slug, internal_ip, &allocation)
@@ -146,10 +144,10 @@ impl GatewayManager {
 
     /// Cleanup gateway for a terminated VM.
     pub async fn cleanup_gateway(&mut self, slug: &str) -> Result<()> {
-        // Delete Traefik config
-        self.traefik_manager
+        // Delete Caddy config
+        self.caddy_manager
             .delete_vm_config(slug)
-            .context("Failed to delete Traefik config")?;
+            .context("Failed to delete Caddy config")?;
 
         // Cleanup iptables DNAT rules
         if let Err(e) = IptablesNat::cleanup_forwarding(slug) {

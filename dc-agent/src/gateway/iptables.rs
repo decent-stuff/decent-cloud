@@ -52,6 +52,11 @@ impl IptablesNat {
         internal_ip: &str,
         allocation: &PortAllocation,
     ) -> Result<()> {
+        // Validate internal_ip is a valid IPv4 address (defense in depth)
+        internal_ip
+            .parse::<std::net::Ipv4Addr>()
+            .with_context(|| format!("Invalid internal IP address: {}", internal_ip))?;
+
         // Port mapping:
         // base+0: SSH (-> VM:22)
         // base+1 to base+4: TCP (-> VM:10001-10004)

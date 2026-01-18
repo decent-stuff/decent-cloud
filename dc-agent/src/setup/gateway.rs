@@ -1,10 +1,13 @@
-//! Gateway setup - automates Traefik installation and configuration on Proxmox hosts.
+//! Gateway setup - automates Caddy installation and configuration on Proxmox hosts.
+//!
+//! Caddy provides automatic HTTPS via Let's Encrypt HTTP-01 challenge.
+//! No Cloudflare token needed - certs are obtained automatically.
 
 use anyhow::{bail, Context, Result};
 use async_ssh2_tokio::{AuthMethod, Client, ServerCheckMethod};
 
-/// Latest stable Traefik version
-const TRAEFIK_VERSION: &str = "3.2.3";
+/// Latest stable Caddy version
+const CADDY_VERSION: &str = "2.10.2";
 
 /// Gateway setup configuration
 pub struct GatewaySetup {
@@ -15,8 +18,6 @@ pub struct GatewaySetup {
     pub datacenter: String,
     pub domain: String,
     pub public_ip: String,
-    pub cloudflare_api_token: String,
-    pub cloudflare_zone_id: Option<String>, // If None, will be looked up from domain
     pub port_range_start: u16,
     pub port_range_end: u16,
     pub ports_per_vm: u16,
@@ -24,8 +25,7 @@ pub struct GatewaySetup {
 
 /// Result of successful gateway setup
 pub struct GatewaySetupResult {
-    pub cloudflare_zone_id: String,
-    pub traefik_version: String,
+    pub caddy_version: String,
 }
 
 impl GatewaySetup {
@@ -39,53 +39,32 @@ impl GatewaySetup {
         println!("\nConfiguring host networking...");
         self.configure_host_networking(&ssh).await?;
 
-        // Step 2: Look up Cloudflare Zone ID if not provided
-        let zone_id = match &self.cloudflare_zone_id {
-            Some(id) => {
-                println!("  Using provided Zone ID: {}", id);
-                id.clone()
-            }
-            None => {
-                println!("Looking up Cloudflare Zone ID for {}...", self.domain);
-                let id =
-                    lookup_cloudflare_zone_id(&self.cloudflare_api_token, &self.domain).await?;
-                println!("  [ok] Zone ID: {}", id);
-                id
-            }
-        };
+        // Step 2: Install Caddy binary
+        println!("\nInstalling Caddy {}...", CADDY_VERSION);
+        self.install_caddy(&ssh).await?;
 
-        // Step 3: Verify Cloudflare token has DNS edit permissions
-        println!("Verifying Cloudflare API token...");
-        verify_cloudflare_token(&self.cloudflare_api_token, &zone_id).await?;
-        println!("  [ok] Token has DNS edit permissions");
-
-        // Step 4: Install Traefik binary
-        println!("\nInstalling Traefik {}...", TRAEFIK_VERSION);
-        self.install_traefik(&ssh).await?;
-
-        // Step 5: Create directories and user
+        // Step 3: Create directories and user
         println!("\nSetting up directories and user...");
         self.setup_directories(&ssh).await?;
 
-        // Step 6: Write Traefik static config
-        println!("\nWriting Traefik configuration...");
-        self.write_traefik_config(&ssh).await?;
+        // Step 4: Write Caddy config
+        println!("\nWriting Caddy configuration...");
+        self.write_caddy_config(&ssh).await?;
 
-        // Step 7: Write systemd service
+        // Step 5: Write systemd service
         println!("\nCreating systemd service...");
         self.write_systemd_service(&ssh).await?;
 
-        // Step 8: Enable and start Traefik
-        println!("\nStarting Traefik service...");
-        self.start_traefik(&ssh).await?;
+        // Step 6: Enable and start Caddy
+        println!("\nStarting Caddy service...");
+        self.start_caddy(&ssh).await?;
 
-        // Step 9: Verify Traefik is running and cert is obtained
-        println!("\nVerifying Traefik...");
-        self.verify_traefik(&ssh).await?;
+        // Step 7: Verify Caddy is running
+        println!("\nVerifying Caddy...");
+        self.verify_caddy(&ssh).await?;
 
         Ok(GatewaySetupResult {
-            cloudflare_zone_id: zone_id,
-            traefik_version: TRAEFIK_VERSION.to_string(),
+            caddy_version: CADDY_VERSION.to_string(),
         })
     }
 
@@ -135,7 +114,10 @@ impl GatewaySetup {
     /// Returns true if public_ip is NOT on any local interface but external services see it.
     async fn detect_nat_mode(&self, ssh: &Client) -> Result<bool> {
         // Check if public IP is assigned to any local interface
-        let cmd = format!("ip addr show | grep -q '{}' && echo local || echo not_local", self.public_ip);
+        let cmd = format!(
+            "ip addr show | grep -q '{}' && echo local || echo not_local",
+            self.public_ip
+        );
         let result = ssh.execute(&cmd).await?;
         let ip_is_local = result.stdout.trim() == "local";
 
@@ -151,7 +133,10 @@ impl GatewaySetup {
         let external_ip = result.stdout.trim();
 
         if external_ip == self.public_ip {
-            println!("  [ok] 1:1 NAT detected: {} not on interface but is external IP", self.public_ip);
+            println!(
+                "  [ok] 1:1 NAT detected: {} not on interface but is external IP",
+                self.public_ip
+            );
             Ok(true)
         } else if external_ip == "unknown" {
             // Can't verify - assume direct assignment needed, masquerade won't hurt
@@ -159,7 +144,10 @@ impl GatewaySetup {
             Ok(false)
         } else {
             // External IP doesn't match - misconfiguration?
-            println!("  [warn] Public IP {} doesn't match external IP {}", self.public_ip, external_ip);
+            println!(
+                "  [warn] Public IP {} doesn't match external IP {}",
+                self.public_ip, external_ip
+            );
             println!("         Proceeding with masquerade rules");
             Ok(false)
         }
@@ -174,9 +162,7 @@ impl GatewaySetup {
         }
 
         // Enable immediately
-        let result = ssh
-            .execute("sysctl -w net.ipv4.ip_forward=1")
-            .await?;
+        let result = ssh.execute("sysctl -w net.ipv4.ip_forward=1").await?;
         if result.exit_status != 0 {
             bail!("Failed to enable IP forwarding: {}", result.stdout);
         }
@@ -288,10 +274,7 @@ impl GatewaySetup {
                 continue;
             }
 
-            let cmd = format!(
-                "iptables -A INPUT -p {} --dport {} -j ACCEPT",
-                proto, port
-            );
+            let cmd = format!("iptables -A INPUT -p {} --dport {} -j ACCEPT", proto, port);
             let result = ssh.execute(&cmd).await?;
             if result.exit_status != 0 {
                 bail!("Failed to open {} port {}: {}", desc, port, result.stdout);
@@ -395,7 +378,10 @@ impl GatewaySetup {
         // Save rules
         let result = ssh.execute("netfilter-persistent save").await?;
         if result.exit_status != 0 {
-            println!("  [warn] Failed to persist iptables rules: {}", result.stdout);
+            println!(
+                "  [warn] Failed to persist iptables rules: {}",
+                result.stdout
+            );
             println!("  [warn] Rules applied but may not persist across reboot");
             return Ok(());
         }
@@ -404,11 +390,11 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn install_traefik(&self, ssh: &Client) -> Result<()> {
+    async fn install_caddy(&self, ssh: &Client) -> Result<()> {
         // Check if already installed with correct version
-        let check = ssh.execute("traefik version 2>/dev/null || true").await?;
-        if check.stdout.contains(TRAEFIK_VERSION) {
-            println!("  Traefik {} already installed", TRAEFIK_VERSION);
+        let check = ssh.execute("caddy version 2>/dev/null || true").await?;
+        if check.stdout.contains(CADDY_VERSION) {
+            println!("  Caddy {} already installed", CADDY_VERSION);
             return Ok(());
         }
 
@@ -421,45 +407,45 @@ impl GatewaySetup {
         };
 
         let download_url = format!(
-            "https://github.com/traefik/traefik/releases/download/v{}/traefik_v{}_{}_linux.tar.gz",
-            TRAEFIK_VERSION, TRAEFIK_VERSION, arch
+            "https://github.com/caddyserver/caddy/releases/download/v{}/caddy_{}_linux_{}.tar.gz",
+            CADDY_VERSION, CADDY_VERSION, arch
         );
 
         let cmd = format!(
             "cd /tmp && \
-             curl -sSL '{}' -o traefik.tar.gz && \
-             tar xzf traefik.tar.gz traefik && \
-             mv traefik /usr/local/bin/traefik && \
-             chmod +x /usr/local/bin/traefik && \
-             rm traefik.tar.gz",
+             curl -sSL '{}' -o caddy.tar.gz && \
+             tar xzf caddy.tar.gz caddy && \
+             mv caddy /usr/local/bin/caddy && \
+             chmod +x /usr/local/bin/caddy && \
+             rm caddy.tar.gz",
             download_url
         );
 
         let result = ssh.execute(&cmd).await?;
         if result.exit_status != 0 {
-            bail!("Failed to install Traefik: {}", result.stdout);
+            bail!("Failed to install Caddy: {}", result.stdout);
         }
 
         // Verify installation
-        let verify = ssh.execute("traefik version").await?;
-        if !verify.stdout.contains(TRAEFIK_VERSION) {
-            bail!("Traefik installation verification failed");
+        let verify = ssh.execute("caddy version").await?;
+        if !verify.stdout.contains(CADDY_VERSION) {
+            bail!("Caddy installation verification failed");
         }
 
-        println!("  [ok] Traefik {} installed", TRAEFIK_VERSION);
+        println!("  [ok] Caddy {} installed", CADDY_VERSION);
         Ok(())
     }
 
     async fn setup_directories(&self, ssh: &Client) -> Result<()> {
         let commands = [
-            // Create traefik user/group
-            "id traefik >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin traefik",
-            // Create directories (logs go to journald, no /var/log/traefik needed)
-            "mkdir -p /etc/traefik/dynamic /var/lib/traefik /var/lib/dc-agent",
+            // Create caddy user/group
+            "id caddy >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin caddy",
+            // Create directories
+            "mkdir -p /etc/caddy/sites /var/lib/caddy /var/lib/dc-agent",
             // Set ownership
-            "chown -R traefik:traefik /etc/traefik /var/lib/traefik",
-            // dc-agent needs write access to dynamic dir
-            "chmod 775 /etc/traefik/dynamic",
+            "chown -R caddy:caddy /etc/caddy /var/lib/caddy",
+            // dc-agent needs write access to sites dir
+            "chmod 775 /etc/caddy/sites",
         ];
 
         for cmd in commands {
@@ -470,107 +456,79 @@ impl GatewaySetup {
         }
 
         println!("  [ok] Directories created");
-        println!("  [ok] traefik user created");
+        println!("  [ok] caddy user created");
         Ok(())
     }
 
-    async fn write_traefik_config(&self, ssh: &Client) -> Result<()> {
-        let static_config = self.generate_static_config();
-        let env_config = self.generate_env_file();
+    async fn write_caddy_config(&self, ssh: &Client) -> Result<()> {
+        let caddyfile = self.generate_caddyfile();
 
-        // Write static config
+        // Write Caddyfile
         let cmd = format!(
-            "cat > /etc/traefik/traefik.yaml << 'EOFCONFIG'\n{}\nEOFCONFIG",
-            static_config
+            "cat > /etc/caddy/Caddyfile << 'EOFCONFIG'\n{}\nEOFCONFIG",
+            caddyfile
         );
         let result = ssh.execute(&cmd).await?;
         if result.exit_status != 0 {
-            bail!("Failed to write traefik.yaml: {}", result.stdout);
+            bail!("Failed to write Caddyfile: {}", result.stdout);
         }
-        println!("  [ok] /etc/traefik/traefik.yaml");
+        println!("  [ok] /etc/caddy/Caddyfile");
 
-        // Write environment file
-        let cmd = format!(
-            "cat > /etc/traefik/env << 'EOFENV'\n{}\nEOFENV\nchmod 600 /etc/traefik/env",
-            env_config
-        );
-        let result = ssh.execute(&cmd).await?;
-        if result.exit_status != 0 {
-            bail!("Failed to write env file: {}", result.stdout);
-        }
-        println!("  [ok] /etc/traefik/env");
-
-        // Set permissions
-        ssh.execute("chown traefik:traefik /etc/traefik/traefik.yaml /etc/traefik/env")
+        // Set ownership and permissions (640 = rw-r-----)
+        ssh.execute("chown caddy:caddy /etc/caddy/Caddyfile && chmod 640 /etc/caddy/Caddyfile")
             .await?;
 
         Ok(())
     }
 
-    fn generate_static_config(&self) -> String {
-        r#"# Traefik static configuration
+    fn generate_caddyfile(&self) -> String {
+        format!(
+            r#"# Caddy configuration for DC Gateway
 # Generated by dc-agent setup gateway
 #
-# Architecture: SNI-based TCP passthrough
-# - HTTP (80): Redirects to HTTPS
-# - HTTPS (443): TCP passthrough based on SNI, VMs handle their own TLS
+# Architecture: TLS termination at gateway with automatic HTTP-01 certificates
+# - HTTP (80): Automatic redirect to HTTPS + ACME challenge
+# - HTTPS (443): TLS terminated here, proxies to VMs
 #
-# Logs: stdout → journald (view with: journalctl -u traefik)
+# VM-specific configs are imported from /etc/caddy/sites/*.caddy
+#
+# Logs: stdout → journald (view with: journalctl -u caddy)
 
-global:
-  checkNewVersion: false
-  sendAnonymousUsage: false
+{{
+    # Global options
+    admin off
+    persist_config off
 
-log:
-  level: INFO
-  # Logs to stdout, captured by systemd/journald (automatic rotation)
+    # Let's Encrypt email (optional but recommended)
+    # email admin@{domain}
 
-api:
-  dashboard: false
+    # Data directory for certificates
+    storage file_system /var/lib/caddy
+}}
 
-entryPoints:
-  web:
-    address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
+# HTTP to HTTPS redirect is automatic in Caddy
 
-  websecure:
-    address: ":443"
-    # No TLS config here - passthrough is configured per-router in dynamic configs
-
-providers:
-  file:
-    directory: /etc/traefik/dynamic
-    watch: true
-"#
-        .to_string()
-    }
-
-    fn generate_env_file(&self) -> String {
-        // Env file kept for systemd service compatibility (EnvironmentFile directive)
-        // No credentials needed - VMs handle their own TLS, DNS managed via central API
-        "# Traefik environment (no secrets needed for SNI passthrough mode)\n".to_string()
+# Import all VM-specific site configurations
+import /etc/caddy/sites/*.caddy
+"#,
+            domain = self.domain
+        )
     }
 
     async fn write_systemd_service(&self, ssh: &Client) -> Result<()> {
         let service = r#"[Unit]
-Description=Traefik Reverse Proxy
+Description=Caddy Web Server
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yaml
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
 Restart=always
 RestartSec=5
-User=traefik
-Group=traefik
-
-# Environment (for Cloudflare DNS challenge)
-EnvironmentFile=/etc/traefik/env
+User=caddy
+Group=caddy
 
 # Bind to privileged ports
 AmbientCapabilities=CAP_NET_BIND_SERVICE
@@ -579,14 +537,14 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/etc/traefik /var/lib/traefik
+ReadWritePaths=/etc/caddy /var/lib/caddy
 
 [Install]
 WantedBy=multi-user.target
 "#;
 
         let cmd = format!(
-            "cat > /etc/systemd/system/traefik.service << 'EOFSERVICE'\n{}\nEOFSERVICE",
+            "cat > /etc/systemd/system/caddy.service << 'EOFSERVICE'\n{}\nEOFSERVICE",
             service
         );
         let result = ssh.execute(&cmd).await?;
@@ -600,57 +558,55 @@ WantedBy=multi-user.target
             bail!("Failed to reload systemd: {}", result.stdout);
         }
 
-        println!("  [ok] /etc/systemd/system/traefik.service");
+        println!("  [ok] /etc/systemd/system/caddy.service");
         Ok(())
     }
 
-    async fn start_traefik(&self, ssh: &Client) -> Result<()> {
+    async fn start_caddy(&self, ssh: &Client) -> Result<()> {
         // Enable and start
-        let result = ssh.execute("systemctl enable --now traefik").await?;
+        let result = ssh.execute("systemctl enable --now caddy").await?;
         if result.exit_status != 0 {
-            bail!("Failed to start Traefik: {}", result.stdout);
+            bail!("Failed to start Caddy: {}", result.stdout);
         }
 
         // Wait a moment for startup
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         // Check status
-        let result = ssh.execute("systemctl is-active traefik").await?;
+        let result = ssh.execute("systemctl is-active caddy").await?;
         if result.stdout.trim() != "active" {
             // Get logs for debugging
-            let logs = ssh
-                .execute("journalctl -u traefik -n 20 --no-pager")
-                .await?;
+            let logs = ssh.execute("journalctl -u caddy -n 20 --no-pager").await?;
             bail!(
-                "Traefik failed to start. Status: {}. Logs:\n{}",
+                "Caddy failed to start. Status: {}. Logs:\n{}",
                 result.stdout.trim(),
                 logs.stdout
             );
         }
 
-        println!("  [ok] Traefik service started");
+        println!("  [ok] Caddy service started");
         Ok(())
     }
 
-    async fn verify_traefik(&self, ssh: &Client) -> Result<()> {
+    async fn verify_caddy(&self, ssh: &Client) -> Result<()> {
         // Check if listening on ports 80 and 443
         let result = ssh
-            .execute("ss -tlnp | grep -E ':80|:443' | grep traefik || true")
+            .execute("ss -tlnp | grep -E ':80|:443' | grep caddy || true")
             .await?;
         if result.stdout.is_empty() {
-            println!("  [warn] Traefik not yet listening on ports (may still be starting)");
+            println!("  [warn] Caddy not yet listening on ports (may still be starting)");
         } else {
             println!("  [ok] Listening on ports 80 and 443");
         }
 
-        // Check for certificate (may take time on first run)
+        // Check for certificate storage directory
         let result = ssh
-            .execute("test -f /var/lib/traefik/acme.json && echo exists || echo missing")
+            .execute("test -d /var/lib/caddy/certificates && echo exists || echo missing")
             .await?;
         if result.stdout.trim() == "exists" {
-            println!("  [ok] ACME storage initialized");
+            println!("  [ok] Certificate storage initialized");
         } else {
-            println!("  [info] ACME storage will be created on first request");
+            println!("  [info] Certificate storage will be created on first request");
         }
 
         println!("\nGateway setup complete!");
@@ -666,9 +622,8 @@ WantedBy=multi-user.target
     }
 
     /// Generate gateway config section for dc-agent.toml.
-    /// Note: Cloudflare credentials are stored in Traefik's env file, not in dc-agent config.
     /// DNS management for individual VMs is handled via the central API.
-    pub fn generate_gateway_config(&self, _zone_id: &str) -> String {
+    pub fn generate_gateway_config(&self) -> String {
         format!(
             r#"
 [gateway]
@@ -678,9 +633,10 @@ public_ip = "{public_ip}"
 port_range_start = {port_start}
 port_range_end = {port_end}
 ports_per_vm = {ports_per_vm}
-traefik_dynamic_dir = "/etc/traefik/dynamic"
+caddy_sites_dir = "/etc/caddy/sites"
 port_allocations_path = "/var/lib/dc-agent/port-allocations.json"
-# DNS management is handled via the central API (no Cloudflare credentials needed here)
+# DNS management is handled via the central API (no Cloudflare credentials needed)
+# TLS certificates are managed automatically by Caddy via HTTP-01 challenge
 "#,
             datacenter = self.datacenter,
             domain = self.domain,
@@ -690,83 +646,6 @@ port_allocations_path = "/var/lib/dc-agent/port-allocations.json"
             ports_per_vm = self.ports_per_vm,
         )
     }
-}
-
-/// Look up Cloudflare Zone ID from domain name
-pub async fn lookup_cloudflare_zone_id(api_token: &str, domain: &str) -> Result<String> {
-    #[derive(serde::Deserialize)]
-    struct ZoneResponse {
-        success: bool,
-        result: Vec<Zone>,
-        errors: Vec<CfError>,
-    }
-
-    #[derive(serde::Deserialize)]
-    struct Zone {
-        id: String,
-        name: String,
-    }
-
-    #[derive(serde::Deserialize)]
-    struct CfError {
-        message: String,
-    }
-
-    let client = reqwest::Client::new();
-    let url = format!("https://api.cloudflare.com/client/v4/zones?name={}", domain);
-
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_token))
-        .send()
-        .await
-        .context("Failed to query Cloudflare zones")?;
-
-    let status = response.status();
-    let body = response.text().await?;
-
-    if !status.is_success() {
-        bail!("Cloudflare API error ({}): {}", status, body);
-    }
-
-    let resp: ZoneResponse =
-        serde_json::from_str(&body).context("Failed to parse Cloudflare response")?;
-
-    if !resp.success {
-        let errors: Vec<_> = resp.errors.iter().map(|e| &e.message).collect();
-        bail!("Cloudflare errors: {:?}", errors);
-    }
-
-    resp.result
-        .into_iter()
-        .find(|z| z.name == domain)
-        .map(|z| z.id)
-        .ok_or_else(|| anyhow::anyhow!("Zone not found for domain: {}", domain))
-}
-
-/// Verify Cloudflare token has DNS edit permissions
-async fn verify_cloudflare_token(api_token: &str, zone_id: &str) -> Result<()> {
-    let client = reqwest::Client::new();
-
-    // Try to list DNS records - this verifies we have read access at minimum
-    let url = format!(
-        "https://api.cloudflare.com/client/v4/zones/{}/dns_records?per_page=1",
-        zone_id
-    );
-
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_token))
-        .send()
-        .await
-        .context("Failed to verify Cloudflare token")?;
-
-    if !response.status().is_success() {
-        let body = response.text().await?;
-        bail!("Cloudflare token verification failed: {}", body);
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -782,8 +661,6 @@ mod tests {
             datacenter: "dc-lk".into(),
             domain: "decent-cloud.org".into(),
             public_ip: "203.0.113.1".into(),
-            cloudflare_api_token: "token".into(),
-            cloudflare_zone_id: Some("zone123".into()),
             port_range_start: 20000,
             port_range_end: 59999,
             ports_per_vm: 10,
@@ -791,37 +668,33 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_static_config() {
+    fn test_generate_caddyfile() {
         let setup = test_setup();
-        let config = setup.generate_static_config();
+        let config = setup.generate_caddyfile();
 
-        // SNI passthrough architecture
-        assert!(config.contains("SNI-based TCP passthrough"));
-        assert!(config.contains("VMs handle their own TLS"));
+        // TLS termination architecture
+        assert!(config.contains("TLS termination at gateway"));
+        assert!(config.contains("HTTP-01 certificates"));
 
-        // HTTP redirect to HTTPS
-        assert!(config.contains("web:"));
-        assert!(config.contains(":80"));
-        assert!(config.contains("to: websecure"));
+        // Global options
+        assert!(config.contains("admin off"));
+        assert!(config.contains("storage file_system /var/lib/caddy"));
 
-        // HTTPS entrypoint (no TLS termination)
-        assert!(config.contains("websecure:"));
-        assert!(config.contains(":443"));
+        // Should import VM-specific configs
+        assert!(config.contains("import /etc/caddy/sites/*.caddy"));
 
-        // Should NOT have certificate resolver (VMs handle TLS)
-        assert!(!config.contains("certResolver"));
-        assert!(!config.contains("letsencrypt"));
+        // Should NOT have cloudflare references
         assert!(!config.contains("cloudflare"));
-        assert!(!config.contains("acme"));
     }
 
     #[test]
     fn test_generate_gateway_config() {
         let setup = test_setup();
-        let config = setup.generate_gateway_config("zone123");
+        let config = setup.generate_gateway_config();
         assert!(config.contains("datacenter = \"dc-lk\""));
         assert!(config.contains("public_ip = \"203.0.113.1\""));
-        // Cloudflare credentials are NOT in dc-agent config (handled via central API)
+        assert!(config.contains("caddy_sites_dir = \"/etc/caddy/sites\""));
+        // No Cloudflare credentials needed
         assert!(!config.contains("cloudflare_zone_id"));
         assert!(!config.contains("cloudflare_api_token"));
     }
@@ -853,7 +726,11 @@ mod tests {
             let octets: Vec<&str> = parts[0].split('.').collect();
             assert_eq!(octets.len(), 4, "Invalid IP in CIDR: {}", range);
             // Verify prefix is a number
-            assert!(parts[1].parse::<u8>().is_ok(), "Invalid prefix in CIDR: {}", range);
+            assert!(
+                parts[1].parse::<u8>().is_ok(),
+                "Invalid prefix in CIDR: {}",
+                range
+            );
         }
 
         // Verify we cover all RFC1918 ranges

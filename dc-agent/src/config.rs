@@ -17,7 +17,7 @@ pub struct Config {
     pub gateway: Option<GatewayConfig>,
 }
 
-/// Gateway configuration for per-host reverse proxy (Traefik)
+/// Gateway configuration for per-host reverse proxy (Caddy)
 #[derive(Debug, Clone, Deserialize)]
 pub struct GatewayConfig {
     /// Datacenter identifier (e.g., "dc-lk" for Sri Lanka)
@@ -35,14 +35,14 @@ pub struct GatewayConfig {
     /// Number of ports to allocate per VM (default: 10)
     #[serde(default = "default_ports_per_vm")]
     pub ports_per_vm: u16,
-    /// Directory for Traefik dynamic configuration files
-    #[serde(default = "default_traefik_dynamic_dir")]
-    pub traefik_dynamic_dir: String,
+    /// Directory for Caddy site configuration files
+    #[serde(default = "default_caddy_sites_dir", alias = "traefik_dynamic_dir")]
+    pub caddy_sites_dir: String,
     /// Path to port allocations state file
     #[serde(default = "default_port_allocations_path")]
     pub port_allocations_path: String,
     // Note: DNS is managed via the central API (/api/v1/agents/dns)
-    // The agent authenticates with its agent key and the API handles Cloudflare.
+    // TLS certificates are managed automatically by Caddy via HTTP-01 challenge.
 }
 
 fn default_port_range_start() -> u16 {
@@ -57,8 +57,8 @@ fn default_ports_per_vm() -> u16 {
     10
 }
 
-fn default_traefik_dynamic_dir() -> String {
-    "/etc/traefik/dynamic".to_string()
+fn default_caddy_sites_dir() -> String {
+    "/etc/caddy/sites".to_string()
 }
 
 fn default_port_allocations_path() -> String {
@@ -1014,7 +1014,7 @@ public_ip = "203.0.113.1"
         assert_eq!(gateway.port_range_start, 20000);
         assert_eq!(gateway.port_range_end, 59999);
         assert_eq!(gateway.ports_per_vm, 10);
-        assert_eq!(gateway.traefik_dynamic_dir, "/etc/traefik/dynamic");
+        assert_eq!(gateway.caddy_sites_dir, "/etc/caddy/sites");
         assert_eq!(
             gateway.port_allocations_path,
             "/var/lib/dc-agent/port-allocations.json"
@@ -1057,7 +1057,8 @@ port_allocations_path = "/custom/allocations.json"
         assert_eq!(gateway.port_range_start, 30000);
         assert_eq!(gateway.port_range_end, 40000);
         assert_eq!(gateway.ports_per_vm, 5);
-        assert_eq!(gateway.traefik_dynamic_dir, "/custom/traefik");
+        // traefik_dynamic_dir is aliased to caddy_sites_dir for backward compatibility
+        assert_eq!(gateway.caddy_sites_dir, "/custom/traefik");
         assert_eq!(gateway.port_allocations_path, "/custom/allocations.json");
     }
 

@@ -125,7 +125,7 @@ enum SetupProvisioner {
         #[arg(long, default_value = "false")]
         non_interactive: bool,
 
-        // === Optional: Gateway setup (Traefik reverse proxy) ===
+        // === Optional: Gateway setup (Caddy reverse proxy) ===
         /// Datacenter identifier for gateway (e.g., dc-lk). Enables gateway setup.
         #[arg(long)]
         gateway_datacenter: Option<String>,
@@ -133,14 +133,6 @@ enum SetupProvisioner {
         /// Host's public IPv4 address (required if --gateway-datacenter is set)
         #[arg(long)]
         gateway_public_ip: Option<String>,
-
-        /// Cloudflare API token with DNS edit permissions (required if --gateway-datacenter is set)
-        #[arg(long)]
-        cloudflare_token: Option<String>,
-
-        /// Cloudflare Zone ID (auto-detected from domain if not provided)
-        #[arg(long)]
-        cloudflare_zone_id: Option<String>,
 
         /// Base domain for gateway (default: decent-cloud.org)
         #[arg(long, default_value = "decent-cloud.org")]
@@ -244,8 +236,6 @@ async fn run_setup_token(
     // Gateway parameters
     gateway_datacenter: Option<String>,
     gateway_public_ip: Option<String>,
-    cloudflare_token: Option<String>,
-    cloudflare_zone_id: Option<String>,
     gateway_domain: &str,
     gateway_port_start: u16,
     gateway_port_end: u16,
@@ -438,8 +428,6 @@ type = "{provisioner_type}"
     let gateway_configured = run_gateway_setup_if_requested(
         gateway_datacenter,
         gateway_public_ip,
-        cloudflare_token,
-        cloudflare_zone_id,
         gateway_domain,
         gateway_port_start,
         gateway_port_end,
@@ -473,7 +461,7 @@ type = "{provisioner_type}"
                     println!();
                     println!("Note: Gateway not configured. VMs will need public IPs.");
                     println!("  To enable gateway, run setup again with:");
-                    println!("    --gateway-datacenter <DC> --gateway-public-ip <IP> --cloudflare-token <TOKEN>");
+                    println!("    --gateway-datacenter <DC> --gateway-public-ip <IP>");
                 }
             } else {
                 println!(
@@ -682,8 +670,6 @@ async fn run_proxmox_setup_if_requested(
 async fn run_gateway_setup_if_requested(
     datacenter: Option<String>,
     public_ip: Option<String>,
-    cloudflare_token: Option<String>,
-    cloudflare_zone_id: Option<String>,
     domain: &str,
     port_start: u16,
     port_end: u16,
@@ -710,16 +696,12 @@ async fn run_gateway_setup_if_requested(
         anyhow::anyhow!("--gateway-public-ip is required when --gateway-datacenter is set")
     })?;
 
-    let cf_token = cloudflare_token.ok_or_else(|| {
-        anyhow::anyhow!("--cloudflare-token is required when --gateway-datacenter is set")
-    })?;
-
     let host = ssh_host.ok_or_else(|| {
         anyhow::anyhow!("--proxmox-host is required for gateway setup (used as SSH target)")
     })?;
 
     println!();
-    println!("Setting up Gateway (Traefik reverse proxy)...");
+    println!("Setting up Gateway (Caddy reverse proxy)...");
     println!("  Host: {}", host);
     println!("  Datacenter: {}", datacenter);
     println!("  Domain: {}", domain);
@@ -728,6 +710,7 @@ async fn run_gateway_setup_if_requested(
         "  Port range: {}-{} ({} per VM)",
         port_start, port_end, ports_per_vm
     );
+    println!("  TLS: Automatic via Let's Encrypt HTTP-01 challenge");
     println!();
 
     // In non-interactive mode, we can't prompt for password
@@ -747,17 +730,15 @@ async fn run_gateway_setup_if_requested(
         datacenter: datacenter.clone(),
         domain: domain.to_string(),
         public_ip: public_ip.clone(),
-        cloudflare_api_token: cf_token,
-        cloudflare_zone_id,
         port_range_start: port_start,
         port_range_end: port_end,
         ports_per_vm,
     };
 
-    let result = setup.run().await?;
+    let _result = setup.run().await?;
 
     // Generate and append gateway config
-    let gateway_config = setup.generate_gateway_config(&result.cloudflare_zone_id);
+    let gateway_config = setup.generate_gateway_config();
 
     let mut file = std::fs::OpenOptions::new()
         .append(true)
@@ -788,8 +769,6 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             non_interactive,
             gateway_datacenter,
             gateway_public_ip,
-            cloudflare_token,
-            cloudflare_zone_id,
             gateway_domain,
             gateway_port_start,
             gateway_port_end,
@@ -810,8 +789,6 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 // Gateway parameters
                 gateway_datacenter,
                 gateway_public_ip,
-                cloudflare_token,
-                cloudflare_zone_id,
                 &gateway_domain,
                 gateway_port_start,
                 gateway_port_end,
@@ -1885,54 +1862,55 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 "  Port range: {}-{} ({} ports/VM)",
                 gw.port_range_start, gw.port_range_end, gw.ports_per_vm
             );
-            println!("  Traefik config dir: {}", gw.traefik_dynamic_dir);
+            println!("  Caddy sites dir: {}", gw.caddy_sites_dir);
             println!("  Port allocations: {}", gw.port_allocations_path);
             println!("  DNS management: via central API");
+            println!("  TLS: Automatic via Let's Encrypt HTTP-01");
 
             // Verify paths exist
-            if std::path::Path::new(&gw.traefik_dynamic_dir).exists() {
-                println!("  [ok] Traefik config directory exists");
+            if std::path::Path::new(&gw.caddy_sites_dir).exists() {
+                println!("  [ok] Caddy sites directory exists");
             } else {
                 println!(
-                    "  [WARN] Traefik config directory does not exist: {}",
-                    gw.traefik_dynamic_dir
+                    "  [WARN] Caddy sites directory does not exist: {}",
+                    gw.caddy_sites_dir
                 );
                 println!("       Re-run setup with --gateway-datacenter to configure gateway");
             }
 
-            // Check if Traefik is running
+            // Check if Caddy is running
             match std::process::Command::new("systemctl")
-                .args(["is-active", "traefik"])
+                .args(["is-active", "caddy"])
                 .output()
             {
                 Ok(output) => {
                     let status = String::from_utf8_lossy(&output.stdout);
                     if status.trim() == "active" {
-                        println!("  [ok] Traefik service is running");
+                        println!("  [ok] Caddy service is running");
 
-                        // Check if Traefik is listening on expected ports
+                        // Check if Caddy is listening on expected ports
                         if let Ok(ss_output) =
                             std::process::Command::new("ss").args(["-tlnp"]).output()
                         {
                             let ss = String::from_utf8_lossy(&ss_output.stdout);
-                            if ss.contains(":443") && ss.contains("traefik") {
-                                println!("  [ok] Traefik listening on port 443");
+                            if ss.contains(":443") && ss.contains("caddy") {
+                                println!("  [ok] Caddy listening on port 443");
                             } else if ss.contains(":443") {
-                                println!("  [ok] Port 443 in use (Traefik or other)");
+                                println!("  [ok] Port 443 in use (Caddy or other)");
                             } else {
-                                println!("  [WARN] Traefik not listening on port 443");
+                                println!("  [WARN] Caddy not listening on port 443");
                             }
                         }
                     } else {
                         println!(
-                            "  [WARN] Traefik service not running (status: {})",
+                            "  [WARN] Caddy service not running (status: {})",
                             status.trim()
                         );
-                        println!("       Run: systemctl start traefik");
+                        println!("       Run: systemctl start caddy");
                     }
                 }
                 Err(_) => {
-                    println!("  [info] Cannot check Traefik status (systemctl not available)");
+                    println!("  [info] Cannot check Caddy status (systemctl not available)");
                 }
             }
 
