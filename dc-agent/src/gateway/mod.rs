@@ -102,20 +102,22 @@ impl GatewayManager {
             .as_ref()
             .context("Instance must have an IP address for gateway setup")?;
 
-        // Write Caddy config (HTTP/HTTPS only)
-        self.caddy_manager
-            .write_vm_config(&slug, &subdomain, internal_ip, &allocation, contract_id)
-            .context("Failed to write Caddy config")?;
+        // Create DNS record FIRST via central API
+        // Must exist before Caddy config so HTTP-01 challenge can succeed
+        self.api_client
+            .create_dns_record(&slug, &self.config.datacenter, &self.config.public_ip)
+            .await
+            .context("Failed to create DNS record")?;
 
         // Setup iptables DNAT for TCP/UDP port forwarding
         IptablesNat::setup_forwarding(&slug, internal_ip, &allocation)
             .context("Failed to setup iptables port forwarding")?;
 
-        // Create DNS record via central API
-        self.api_client
-            .create_dns_record(&slug, &self.config.datacenter, &self.config.public_ip)
-            .await
-            .context("Failed to create DNS record")?;
+        // Write Caddy config AFTER DNS exists
+        // Caddy will reload and obtain Let's Encrypt cert via HTTP-01
+        self.caddy_manager
+            .write_vm_config(&slug, &subdomain, internal_ip, &allocation, contract_id)
+            .context("Failed to write Caddy config")?;
 
         // Setup bandwidth monitoring
         if let Err(e) = BandwidthMonitor::setup_accounting(&slug, internal_ip) {
