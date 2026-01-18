@@ -2,7 +2,7 @@
 
 **Status:** Complete
 **Created:** 2026-01-16
-**Updated:** 2026-01-16
+**Updated:** 2026-01-18
 **Depends On:** [DC Gateway Spec](./2025-12-31-dc-gateway-spec.md)
 
 ## Problem Statement
@@ -27,11 +27,11 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 │                         Proxmox Host                                    │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │ Traefik (ports 80, 443)                                         │   │
+│  │ Caddy (ports 80, 443)                                           │   │
 │  │                                                                 │   │
-│  │  HTTP (80)  → 301 redirect to HTTPS                             │   │
-│  │  HTTPS (443) → SNI routing → TCP passthrough → VM:443           │   │
-│  │                (no TLS termination - VMs handle their own TLS)  │   │
+│  │  HTTP (80)  → Automatic redirect to HTTPS                       │   │
+│  │  HTTPS (443) → TLS termination → HTTP proxy to VM:80            │   │
+│  │               (per-subdomain Let's Encrypt certs via HTTP-01)   │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
@@ -45,23 +45,23 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │
 │  │ VM (10.0.1.5)│  │ VM (10.0.1.6)│  │ VM (10.0.1.7)│                  │
 │  │              │  │              │  │              │                  │
-│  │ Handles own  │  │ Handles own  │  │ Handles own  │                  │
-│  │ TLS cert     │  │ TLS cert     │  │ TLS cert     │                  │
+│  │ Runs HTTP    │  │ Runs HTTP    │  │ Runs HTTP    │                  │
+│  │ on port 80   │  │ on port 80   │  │ on port 80   │                  │
 │  └──────────────┘  └──────────────┘  └──────────────┘                  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key design decisions:**
-- **SNI-based TCP passthrough**: Traefik routes HTTPS based on SNI without terminating TLS
-- **VMs handle their own TLS**: Each VM manages its own certificates (Let's Encrypt, self-signed, etc.)
-- **No wildcard cert at gateway**: Simpler architecture, better isolation
+- **TLS termination at Caddy**: Caddy obtains per-subdomain certs via HTTP-01 challenge
+- **VMs serve plain HTTP**: No TLS config needed on VMs - users get HTTPS automatically
+- **No Cloudflare credentials on host**: DNS managed via central API, HTTP-01 for certs
 - **DNS managed centrally**: `{slug}.{datacenter}.{domain}` records created via central API
 
 ## Current State
 
 ### Implemented ✅
 - Port allocation system (`dc-agent/src/gateway/port_allocator.rs`)
-- Traefik config generation with SNI passthrough (`dc-agent/src/gateway/traefik.rs`)
+- Caddy config generation (`dc-agent/src/gateway/caddy.rs`)
 - iptables DNAT rule management (`dc-agent/src/gateway/iptables.rs`)
 - Gateway manager orchestration (`dc-agent/src/gateway/mod.rs`)
 - Gateway setup CLI (`dc-agent setup gateway`)
@@ -80,12 +80,12 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 - Firewall rules (80, 443, 20000-59999 for VMs)
 - FORWARD chain rules for all private ranges
 - iptables persistence via `iptables-persistent`
-- Traefik installation (SNI passthrough mode, no TLS termination)
+- Caddy installation (automatic TLS via HTTP-01)
 
 ### Requires Manual Setup (Pre-requisites)
 - Public IP must be assigned to host interface
 - SSH access to host with root privileges
-- Cloudflare API token with DNS edit permission (for central API DNS management)
+- Port 80 must be reachable from internet (for HTTP-01 challenge)
 
 ## Scope
 
@@ -97,7 +97,7 @@ Before starting:
 - [ ] Public IP assigned to Proxmox node (e.g., `203.0.113.1`)
 - [ ] Proxmox host accessible via SSH
 - [ ] `dc-agent` binary available
-- [ ] Cloudflare API token with DNS edit permission for `decent-cloud.org`
+- [ ] Port 80 reachable from internet (for Let's Encrypt HTTP-01 challenge)
 - [ ] Central API server running and accessible
 
 ## Implementation Plan
@@ -133,7 +133,7 @@ iptables -t nat -A POSTROUTING -s 192.168.0.0/16 -o <public_iface> -j MASQUERADE
 
 **Firewall Rules:**
 ```bash
-# HTTP/HTTPS for Traefik
+# HTTP/HTTPS for Caddy
 iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
@@ -165,24 +165,23 @@ curl -k https://203.0.113.1:8006
 
 ### Phase 2: Gateway Infrastructure Setup
 
-**Goal:** Install and configure Traefik for SNI-based TCP passthrough.
+**Goal:** Install and configure Caddy for automatic TLS termination.
 
 #### 2.1 Run Gateway Setup
 
 ```bash
-dc-agent setup gateway \
-  --datacenter dc-lk \
-  --domain decent-cloud.org \
-  --public-ip 203.0.113.1 \
-  --cloudflare-token <CF_API_TOKEN>
+dc-agent setup token \
+  --token <AGENT_TOKEN> \
+  --proxmox-host <PROXMOX_HOST> \
+  --gateway-datacenter dc-lk \
+  --gateway-public-ip 203.0.113.1
 ```
 
 This command:
-- Downloads Traefik binary
+- Downloads Caddy binary
 - Creates systemd service
-- Configures SNI-based TCP passthrough (VMs handle their own TLS)
+- Configures automatic TLS via HTTP-01 (no Cloudflare credentials needed)
 - Creates required directories
-- Validates Cloudflare token for DNS management
 
 #### 2.2 Configure dc-agent
 
@@ -196,185 +195,28 @@ public_ip = "203.0.113.1"
 port_range_start = 20000
 port_range_end = 59999
 ports_per_vm = 10
-traefik_dynamic_dir = "/etc/traefik/dynamic"
+caddy_sites_dir = "/etc/caddy/sites"
 port_allocations_path = "/var/lib/dc-agent/port-allocations.json"
 ```
 
-#### 2.3 Verify Traefik
+#### 2.3 Verify Caddy
 
 ```bash
 # Check service status
-sudo systemctl status traefik
+sudo systemctl status caddy
 
 # Check logs
-sudo journalctl -u traefik -f
+sudo journalctl -u caddy -f
 
 # Verify listening on ports 80 and 443
-ss -tlnp | grep traefik
+ss -tlnp | grep caddy
 ```
 
-Note: HTTPS verification requires a provisioned VM with TLS configured, since Traefik uses SNI passthrough (no TLS termination at gateway).
+Note: HTTPS verification requires a provisioned VM. Caddy obtains certificates on first request via HTTP-01 challenge.
 
-### Phase 3: Code Integration
+### Phase 3: Testing
 
-**Goal:** Wire gateway setup into VM provisioning lifecycle.
-
-#### 3.1 Integrate Gateway into Provisioning
-
-**File:** `dc-agent/src/provisioner/proxmox.rs`
-
-Modify `provision()` to call gateway setup after VM is created:
-
-```rust
-// After VM is provisioned and IP is obtained...
-
-// Setup gateway (if gateway config exists)
-if let Some(gateway_config) = &self.config.gateway {
-    let gateway_manager = GatewayManager::new(gateway_config.clone());
-
-    let gateway_info = gateway_manager
-        .setup_vm_gateway(&contract_id, &vm_ip)
-        .await?;
-
-    // Create DNS record via central API
-    api_client
-        .create_dns_record(&gateway_info.slug, &gateway_config.datacenter, &gateway_config.public_ip)
-        .await?;
-
-    instance.gateway_slug = Some(gateway_info.slug);
-    instance.gateway_subdomain = Some(gateway_info.subdomain);
-    instance.gateway_ssh_port = Some(gateway_info.ssh_port);
-    instance.gateway_port_range_start = Some(gateway_info.port_range_start);
-    instance.gateway_port_range_end = Some(gateway_info.port_range_end);
-}
-```
-
-#### 3.2 Integrate Gateway into Termination
-
-**File:** `dc-agent/src/provisioner/proxmox.rs`
-
-Modify `terminate()` to clean up gateway:
-
-```rust
-// Before VM is destroyed...
-
-if let Some(gateway_config) = &self.config.gateway {
-    if let Some(slug) = &instance.gateway_slug {
-        let gateway_manager = GatewayManager::new(gateway_config.clone());
-
-        // Remove gateway configuration
-        gateway_manager.cleanup_vm_gateway(slug).await?;
-
-        // Delete DNS record via central API
-        api_client.delete_dns_record(slug).await?;
-    }
-}
-
-// Then destroy VM...
-```
-
-#### 3.3 Add DNS API Endpoints
-
-**File:** `api-server/src/routes/agents.rs`
-
-Add endpoint for agents to manage DNS:
-
-```rust
-#[post("/agents/dns")]
-async fn manage_dns(
-    auth: AgentAuth,
-    payload: Json<DnsRequest>,
-) -> Result<Json<DnsResponse>> {
-    // Verify agent has DnsManage permission
-    auth.require_permission(Permission::DnsManage)?;
-
-    match payload.action {
-        DnsAction::Create => {
-            cloudflare_client
-                .create_a_record(&payload.slug, &payload.datacenter, &payload.public_ip)
-                .await?
-        }
-        DnsAction::Delete => {
-            cloudflare_client
-                .delete_a_record(&payload.slug, &payload.datacenter)
-                .await?
-        }
-    }
-
-    Ok(Json(DnsResponse { success: true }))
-}
-```
-
-#### 3.4 Database Migration
-
-**File:** `migrations/YYYYMMDD_add_gateway_fields.sql`
-
-```sql
-ALTER TABLE contract_sign_requests
-    ADD COLUMN gateway_slug TEXT,
-    ADD COLUMN gateway_ssh_port INTEGER,
-    ADD COLUMN gateway_port_range_start INTEGER,
-    ADD COLUMN gateway_port_range_end INTEGER;
-
-CREATE UNIQUE INDEX idx_gateway_slug
-    ON contract_sign_requests(gateway_slug)
-    WHERE gateway_slug IS NOT NULL;
-```
-
-#### 3.5 Update API Responses
-
-Ensure `ContractDetail` response includes gateway fields:
-
-```rust
-#[derive(Serialize)]
-pub struct ContractDetail {
-    // ... existing fields ...
-
-    pub gateway_slug: Option<String>,
-    pub gateway_subdomain: Option<String>,
-    pub gateway_ssh_port: Option<u16>,
-    pub gateway_port_range_start: Option<u16>,
-    pub gateway_port_range_end: Option<u16>,
-}
-```
-
-#### 3.6 Update UI
-
-**File:** `frontend/src/components/ContractDetails.tsx` (or equivalent)
-
-Display connection information:
-
-```
-┌─────────────────────────────────────────────┐
-│ Connection Details                          │
-├─────────────────────────────────────────────┤
-│ Web Access:  https://k7m2p4.dc-lk.decent-cloud.org
-│                                             │
-│ SSH Access:  ssh root@k7m2p4.dc-lk.decent-cloud.org -p 20000
-│                                             │
-│ Available Ports: 20001-20009                │
-│   TCP: 20001-20004 → VM:10001-10004         │
-│   UDP: 20005-20009 → VM:10005-10009         │
-└─────────────────────────────────────────────┘
-```
-
-### Phase 4: Testing
-
-#### 4.1 Unit Tests
-
-- [ ] Port allocation edge cases (full range, fragmentation)
-- [ ] Traefik config YAML generation
-- [ ] iptables rule generation
-- [ ] Slug generation uniqueness
-
-#### 4.2 Integration Tests
-
-- [ ] Provision VM → verify gateway setup
-- [ ] Terminate VM → verify gateway cleanup
-- [ ] DNS record creation via API
-- [ ] DNS record deletion via API
-
-#### 4.3 End-to-End Tests
+#### 3.1 End-to-End Tests
 
 ```bash
 # 1. Provision a test VM
@@ -383,10 +225,10 @@ dc-agent provision --contract-id test-123
 # 2. Verify DNS record exists
 dig k7m2p4.dc-lk.decent-cloud.org
 
-# 3. Configure TLS on VM (VM handles its own certificate)
-# On VM: install certbot, configure nginx/apache with TLS
+# 3. Start a simple HTTP server on the VM
+# On VM: python3 -m http.server 80
 
-# 4. Verify HTTPS works (after VM TLS is configured)
+# 4. Verify HTTPS works (Caddy will auto-obtain cert)
 curl https://k7m2p4.dc-lk.decent-cloud.org
 
 # 5. Verify SSH works
@@ -411,7 +253,7 @@ dig k7m2p4.dc-lk.decent-cloud.org  # Should return NXDOMAIN
 ### Pre-requisites (Per Deployment)
 - [ ] Assign public IP to Proxmox host interface
 - [ ] Ensure SSH access to host with root privileges
-- [ ] Create Cloudflare API token with DNS edit permission
+- [ ] Ensure port 80 is reachable from internet
 
 ### Infrastructure (Automated by `dc-agent setup gateway`)
 - [x] Enable IP forwarding (`net.ipv4.ip_forward=1`)
@@ -419,18 +261,17 @@ dig k7m2p4.dc-lk.decent-cloud.org  # Should return NXDOMAIN
 - [x] Open firewall ports (80, 443, 20000-59999)
 - [x] Configure FORWARD rules for all private ranges
 - [x] Persist iptables rules
-- [x] Install Traefik binary
-- [x] Configure Traefik for SNI-based TCP passthrough (VMs handle TLS)
-- [x] Start Traefik systemd service
+- [x] Install Caddy binary
+- [x] Configure Caddy for automatic TLS (HTTP-01)
+- [x] Start Caddy systemd service
 
 ### To Deploy
 ```bash
-dc-agent setup gateway \
-  --host <PROXMOX_HOST> \
-  --datacenter <DC_ID> \
-  --domain decent-cloud.org \
-  --public-ip <PUBLIC_IP> \
-  --cloudflare-token <CF_API_TOKEN>
+dc-agent setup token \
+  --token <AGENT_TOKEN> \
+  --proxmox-host <PROXMOX_HOST> \
+  --gateway-datacenter <DC_ID> \
+  --gateway-public-ip <PUBLIC_IP>
 ```
 
 ### Code Integration
@@ -446,12 +287,12 @@ dc-agent setup gateway \
 - [x] Add unit tests for gateway components
 - [x] Add unit tests for DNS API validation
 - [x] Add unit tests for gateway fields in contracts
-- [x] Add unit tests for SNI passthrough config generation
+- [x] Add unit tests for Caddy config generation
 
 ## Security Considerations
 
 1. **Firewall before gateway**: Ensure host firewall is configured before exposing gateway ports
-2. **Cloudflare token scope**: Token should only have DNS edit permission, not full account
+2. **Cloudflare token centralized**: Only the central API has Cloudflare credentials
 3. **Agent authentication**: DNS endpoint requires agent auth with DnsManage permission
 4. **Rate limiting**: Consider rate limiting DNS operations to prevent abuse
 5. **Audit logging**: Log all DNS changes for security review
@@ -467,11 +308,11 @@ If issues arise:
    # Remove all gateway iptables rules
    sudo iptables -t nat -F DC_GATEWAY
 
-   # Remove Traefik configs
-   sudo rm /etc/traefik/dynamic/vm-*.yaml
+   # Remove Caddy configs
+   sudo rm /etc/caddy/sites/*.caddy
 
-   # Stop Traefik
-   sudo systemctl stop traefik
+   # Stop Caddy
+   sudo systemctl stop caddy
    ```
 
 ## Future Enhancements
@@ -480,10 +321,9 @@ If issues arise:
 - Per-VM bandwidth monitoring and limits
 - Premium tier with dedicated public IP
 - Geographic DNS routing for multi-DC
-- Optional TLS termination at gateway (for users who prefer not to manage certs)
 
 ## References
 
 - [DC Gateway Spec](./2025-12-31-dc-gateway-spec.md) - Architecture details
-- [Traefik Documentation](https://doc.traefik.io/traefik/)
-- [Cloudflare API](https://developers.cloudflare.com/api/)
+- [Caddy Documentation](https://caddyserver.com/docs/)
+- [Let's Encrypt HTTP-01](https://letsencrypt.org/docs/challenge-types/#http-01-challenge)

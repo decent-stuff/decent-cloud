@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 **Created:** 2025-12-31
-**Updated:** 2026-01-01
+**Updated:** 2026-01-18
 
 ## Problem Statement
 
@@ -13,14 +13,15 @@ Public IPv4 addresses are scarce and expensive (~$1.61 USD/month each). A typica
 Deploy a reverse proxy on each Proxmox host alongside dc-agent. Each host gets one public IPv4.
 
 **Routing architecture:**
-- **HTTP/HTTPS**: Traefik with SNI-based routing and wildcard TLS certificate
+- **HTTP/HTTPS**: Caddy with automatic TLS via Let's Encrypt HTTP-01 challenge
 - **TCP/UDP**: iptables DNAT for port forwarding (SSH, databases, game servers)
 
-**DNS architecture:**
-- **Wildcard cert**: Traefik uses Cloudflare API token directly (stored in `/etc/traefik/env`)
-- **Per-VM records**: dc-agent calls central API, which proxies to Cloudflare (agent never has CF credentials)
+**Key benefits:**
+- VMs serve plain HTTP on port 80 - users get HTTPS automatically
+- No Cloudflare credentials needed on hosts - Caddy handles TLS via HTTP-01
+- DNS managed via central API (agents never have Cloudflare access)
 
-dc-agent manages Traefik config and iptables rules as part of VM provisioning lifecycle.
+dc-agent manages Caddy config and iptables rules as part of VM provisioning lifecycle.
 
 ```
                          Internet
@@ -32,7 +33,7 @@ dc-agent manages Traefik config and iptables rules as part of VM provisioning li
    ┌──────────┐         ┌──────────┐         ┌──────────┐
    │ Proxmox 1│         │ Proxmox 2│         │ Proxmox N│
    │          │         │          │         │          │
-   │ traefik  │         │ traefik  │         │ traefik  │
+   │  caddy   │         │  caddy   │         │  caddy   │
    │ dc-agent │         │ dc-agent │         │ dc-agent │
    │          │         │          │         │          │
    │ ┌──────┐ │         │ ┌──────┐ │         │ ┌──────┐ │
@@ -48,15 +49,14 @@ DNS (dynamic, per-VM):
 ## Requirements
 
 ### Must-have
-- [x] Traefik running as systemd service on each Proxmox host (`dc-agent setup gateway` automates this)
-- [x] Wildcard TLS certificate for `*.{dc}.decent-cloud.org` via Let's Encrypt DNS-01 (automated via Traefik)
-- [x] dc-agent writes Traefik dynamic config on VM provision/destroy
-- [x] dc-agent updates Cloudflare DNS on VM provision/destroy
-- [x] HTTP/HTTPS routing via subdomain (SNI)
+- [x] Caddy running as systemd service on each Proxmox host (`dc-agent setup gateway` automates this)
+- [x] Automatic TLS via Let's Encrypt HTTP-01 challenge (per-subdomain certificates)
+- [x] dc-agent writes Caddy site config on VM provision/destroy
+- [x] dc-agent updates Cloudflare DNS via central API on VM provision/destroy
+- [x] HTTP/HTTPS routing via subdomain
 - [x] TCP port mapping for SSH and custom services
 - [x] UDP port mapping for game servers and similar
 - [x] Port range allocation per VM (default: 10 ports)
-- [x] Cloudflare Zone ID auto-lookup from domain name
 
 ### Nice-to-have
 - [ ] Custom domain support (user brings their own domain)
@@ -72,7 +72,7 @@ DNS (dynamic, per-VM):
 - Provider has BGP peering with upstream (standard DC practice)
 - Provider routes one IPv4 per Proxmox host
 - VMs use private IPs (e.g., 10.0.0.0/16) internally
-- Traefik on host receives public traffic, proxies to VMs
+- Caddy on host receives public traffic, terminates TLS, proxies HTTP to VMs
 
 **Traffic flow:**
 ```
@@ -82,16 +82,16 @@ User HTTPS request
 ┌─────────────────────────────────────────────────────┐
 │ Proxmox Host (203.0.113.1)                          │
 │                                                     │
-│   Traefik (:443)                                    │
+│   Caddy (:443)                                      │
 │      │                                              │
-│      │ SNI match: k7m2p4.dc-lk.decent-cloud.org     │
-│      │ TLS termination (wildcard cert)              │
+│      │ TLS termination (auto Let's Encrypt cert)   │
+│      │                                              │
 │      ▼                                              │
-│   Proxy to 10.0.1.5:80                              │
+│   Proxy HTTP to 10.0.1.5:80                         │
 │      │                                              │
 │      ▼                                              │
 │   ┌─────────┐                                       │
-│   │   VM    │                                       │
+│   │   VM    │  ← runs plain HTTP (WordPress, etc.) │
 │   │10.0.1.5 │                                       │
 │   └─────────┘                                       │
 └─────────────────────────────────────────────────────┘
@@ -99,23 +99,18 @@ User HTTPS request
 
 ### DNS Configuration
 
-**Zone:** `decent-cloud.org` (managed via Cloudflare)
+**Zone:** `decent-cloud.org` (managed via Cloudflare, accessed only by central API)
 
-**Static records:**
-```
-dc-lk.decent-cloud.org    A    203.0.113.1    ; Optional: points to first host
-```
-
-**Dynamic records (created per-VM by dc-agent):**
+**Dynamic records (created per-VM by dc-agent via central API):**
 ```
 k7m2p4.dc-lk    A    203.0.113.1    ; VM on host 1
 x9f3a2.dc-lk    A    203.0.113.2    ; VM on host 2
 ```
 
-**Wildcard for TLS:**
-- Certificate covers `*.dc-lk.decent-cloud.org`
-- Each DC gets its own wildcard cert
-- DNS-01 challenge via Cloudflare API
+**TLS certificates:**
+- Per-subdomain certificates via HTTP-01 challenge
+- Caddy obtains certs automatically when first request arrives
+- No wildcard cert needed, no Cloudflare credentials on hosts
 
 ### Subdomain Format
 
@@ -158,7 +153,6 @@ VM 3: 20020-20029
 **Port allocation file:** `/var/lib/dc-agent/port-allocations.json`
 ```json
 {
-  "next_base": 20030,
   "allocations": {
     "k7m2p4": { "base": 20000, "count": 10, "contract_id": "..." },
     "x9f3a2": { "base": 20010, "count": 10, "contract_id": "..." }
@@ -166,92 +160,46 @@ VM 3: 20020-20029
 }
 ```
 
-### Traefik Configuration (HTTP/HTTPS Only)
+### Caddy Configuration
 
-Traefik handles HTTP/HTTPS routing with SNI-based routing and TLS termination.
+Caddy handles HTTP/HTTPS routing with automatic TLS termination.
 TCP/UDP port forwarding is handled by iptables DNAT (see below).
 
-**Static config:** `/etc/traefik/traefik.yaml`
+**Main config:** `/etc/caddy/Caddyfile`
 
-```yaml
-global:
-  checkNewVersion: false
-  sendAnonymousUsage: false
+```
+# Caddy configuration for DC Gateway
+# Generated by dc-agent setup gateway
 
-log:
-  level: INFO
-  filePath: /var/log/traefik/traefik.log
+{
+    admin off
+    persist_config off
+    storage file_system /var/lib/caddy
+}
 
-api:
-  dashboard: false  # Enable only if needed for debugging
-
-entryPoints:
-  web:
-    address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-
-  websecure:
-    address: ":443"
-    http:
-      tls:
-        certResolver: letsencrypt
-        domains:
-          - main: "dc-lk.decent-cloud.org"
-            sans:
-              - "*.dc-lk.decent-cloud.org"
-
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: admin@decent-cloud.org
-      storage: /var/lib/traefik/acme.json
-      dnsChallenge:
-        provider: cloudflare
-        resolvers:
-          - "1.1.1.1:53"
-          - "8.8.8.8:53"
-
-providers:
-  file:
-    directory: /etc/traefik/dynamic
-    watch: true
+# Import all VM-specific site configurations
+import /etc/caddy/sites/*.caddy
 ```
 
-**Dynamic config (per-VM):** `/etc/traefik/dynamic/vm-k7m2p4.yaml`
+**Per-VM config:** `/etc/caddy/sites/k7m2p4.caddy`
 
-```yaml
+```
 # Generated by dc-agent for VM k7m2p4
 # Contract: c_abc123...
-# Created: 2025-12-31T10:30:00Z
+# Created: 2026-01-18T10:30:00Z
 #
-# HTTP/HTTPS: Handled by Traefik (this file)
-# TCP/UDP ports 20000-20009: Handled by iptables DNAT
+# HTTPS: TLS terminated at gateway, proxied to VM:80 (plain HTTP)
+# TCP/UDP ports 20000-20009: iptables DNAT
 
-http:
-  routers:
-    k7m2p4-http:
-      rule: "Host(`k7m2p4.dc-lk.decent-cloud.org`)"
-      service: k7m2p4-http
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-
-  services:
-    k7m2p4-http:
-      loadBalancer:
-        servers:
-          - url: "http://10.0.1.5:80"
+k7m2p4.dc-lk.decent-cloud.org {
+    reverse_proxy 10.0.1.5:80
+}
 ```
 
 ### iptables DNAT (TCP/UDP Port Forwarding)
 
 TCP/UDP port forwarding uses kernel-level iptables DNAT rules. This is more efficient
-than Traefik for raw TCP/UDP since there's no userspace proxy.
+than userspace proxies since there's no application overhead.
 
 **Port mapping scheme:**
 ```
@@ -273,8 +221,8 @@ iptables -t nat -A DC_GATEWAY -p tcp --dport 20001 -j DNAT --to-destination 10.0
 iptables -t nat -A DC_GATEWAY -p udp --dport 20005 -j DNAT --to-destination 10.0.1.5:10005 -m comment --comment "DC_VM_k7m2p4_20005"
 ```
 
-**Why iptables instead of Traefik for TCP/UDP:**
-- Traefik requires static entrypoint definitions (can't dynamically add ports)
+**Why iptables instead of Caddy for TCP/UDP:**
+- Caddy's TCP/UDP proxy requires static config (can't dynamically add ports)
 - iptables DNAT is kernel-level with zero userspace overhead
 - Rules are isolated per-VM using comments for easy cleanup
 
@@ -293,37 +241,30 @@ port_range_start = 20000
 port_range_end = 59999
 ports_per_vm = 10
 
-# Traefik integration
-traefik_dynamic_dir = "/etc/traefik/dynamic"
+# Caddy integration
+caddy_sites_dir = "/etc/caddy/sites"
 port_allocations_path = "/var/lib/dc-agent/port-allocations.json"
 
 # DNS management is handled via central API (no Cloudflare credentials needed)
+# TLS certificates are managed automatically by Caddy via HTTP-01 challenge
 ```
 
-**Note:** Cloudflare credentials are NOT stored in dc-agent config. The dc-agent calls the central API (`POST /api/v1/agents/dns`) which proxies DNS operations to Cloudflare. This is more secure since individual hosts don't need Cloudflare access.
-
-**Traefik environment (for wildcard cert only):** `/etc/traefik/env`
-```bash
-CF_API_EMAIL=admin@decent-cloud.org
-CF_API_TOKEN=<token>  # Only needs DNS edit for ACME challenges
-```
-
-**Provisioning flow changes:**
+**Provisioning flow:**
 
 ```
 1. VM Provisioned (existing flow)
    └── dc-agent creates VM on Proxmox
    └── VM gets internal IP (e.g., 10.0.1.5)
 
-2. Gateway Setup (new)
+2. Gateway Setup
    ├── Generate slug: k7m2p4
    ├── Allocate port range: 20000-20009
-   ├── Write Traefik config: /etc/traefik/dynamic/vm-k7m2p4.yaml (HTTP/HTTPS only)
-   ├── Traefik auto-reloads (watches directory)
+   ├── Create DNS record via central API (must exist before Caddy config)
    ├── Setup iptables DNAT rules (TCP/UDP port forwarding)
-   └── Call API: POST /api/v1/agents/dns → API creates Cloudflare A record
+   └── Write Caddy config: /etc/caddy/sites/k7m2p4.caddy
+       └── Caddy reloads, obtains Let's Encrypt cert via HTTP-01
 
-3. Report to API (modified)
+3. Report to API
    └── Include in provisioned response:
        - gateway_slug: k7m2p4
        - gateway_subdomain: k7m2p4.dc-lk.decent-cloud.org
@@ -334,20 +275,20 @@ CF_API_TOKEN=<token>  # Only needs DNS edit for ACME challenges
 **Destroy flow:**
 
 ```
-1. VM Termination (existing)
-   └── dc-agent destroys VM on Proxmox
-
-2. Gateway Cleanup (new)
-   ├── Delete Traefik config: rm /etc/traefik/dynamic/vm-k7m2p4.yaml
-   ├── Traefik auto-reloads
+1. Gateway Cleanup
+   ├── Delete Caddy config: rm /etc/caddy/sites/k7m2p4.caddy
+   ├── Caddy reloads
    ├── Remove iptables DNAT rules for this slug
-   ├── Call API: POST /api/v1/agents/dns (action: delete) → API deletes Cloudflare record
+   ├── Delete DNS record via central API
    └── Free port range in allocation file
+
+2. VM Termination (existing)
+   └── dc-agent destroys VM on Proxmox
 ```
 
 ### Cloudflare DNS Integration
 
-DNS management is centralized in the API server for security. Individual dc-agent hosts never have Cloudflare credentials (except for Traefik's ACME certificate).
+DNS management is centralized in the API server for security. Individual dc-agent hosts never have Cloudflare credentials.
 
 **Architecture:**
 ```
@@ -371,14 +312,8 @@ dc-agent                         Central API                      Cloudflare
 ```bash
 CF_API_TOKEN=...     # Cloudflare API token with Zone.DNS edit permission
 CF_ZONE_ID=...       # Zone ID for decent-cloud.org
-CF_DOMAIN=decent-cloud.org  # Optional, defaults to decent-cloud.org
+CF_DOMAIN=decent-cloud.org
 ```
-
-**Agent endpoint:** `POST /api/v1/agents/dns`
-- Requires agent authentication (DnsManage permission)
-- Validates slug format (6 lowercase alphanumeric)
-- Validates datacenter (1-20 chars)
-- Creates/deletes A record via Cloudflare API
 
 **Security benefits:**
 - Cloudflare token never leaves central API server
@@ -410,7 +345,7 @@ EnvironmentFile=/etc/dc-agent/env
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/dc-agent /etc/traefik/dynamic
+ReadWritePaths=/var/lib/dc-agent /etc/caddy/sites
 
 # Logging
 StandardOutput=journal
@@ -421,24 +356,22 @@ SyslogIdentifier=dc-agent
 WantedBy=multi-user.target
 ```
 
-**Traefik service:** `/etc/systemd/system/traefik.service`
+**Caddy service:** `/etc/systemd/system/caddy.service`
 
 ```ini
 [Unit]
-Description=Traefik Reverse Proxy
+Description=Caddy Web Server
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yaml
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
 Restart=always
 RestartSec=5
-User=traefik
-Group=traefik
-
-# Environment (for Cloudflare DNS challenge)
-EnvironmentFile=/etc/traefik/env
+User=caddy
+Group=caddy
 
 # Bind to privileged ports
 AmbientCapabilities=CAP_NET_BIND_SERVICE
@@ -447,7 +380,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/etc/traefik /var/lib/traefik /var/log/traefik
+ReadWritePaths=/etc/caddy /var/lib/caddy
 
 [Install]
 WantedBy=multi-user.target
@@ -462,7 +395,7 @@ pub struct ProvisionedInstance {
     // Existing fields...
     pub internal_ip: String,          // "10.0.1.5"
 
-    // New gateway fields
+    // Gateway fields
     pub gateway_slug: Option<String>,           // "k7m2p4"
     pub gateway_subdomain: Option<String>,      // "k7m2p4.dc-lk.decent-cloud.org"
     pub gateway_ssh_port: Option<u16>,          // 20000
@@ -491,8 +424,7 @@ CREATE UNIQUE INDEX idx_gateway_slug ON contract_sign_requests(gateway_slug)
 Connection Details
 ──────────────────
 Web Access:    https://k7m2p4.dc-lk.decent-cloud.org
-SSH Access:    ssh user@dc-lk.decent-cloud.org -p 20000
-               or: ssh user@k7m2p4.dc-lk.decent-cloud.org -p 20000
+SSH Access:    ssh user@k7m2p4.dc-lk.decent-cloud.org -p 20000
 
 Additional Ports: 20001-20009 available for your services
 ```
@@ -500,17 +432,17 @@ Additional Ports: 20001-20009 available for your services
 **SSH config suggestion:**
 ```
 Host myvm
-    HostName dc-lk.decent-cloud.org
+    HostName k7m2p4.dc-lk.decent-cloud.org
     Port 20000
     User root
 ```
 
 ## Security Considerations
 
-1. **TLS everywhere**: All HTTP traffic forced to HTTPS via redirect
-2. **Wildcard cert isolation**: Each DC has own cert, compromise limited to that DC
-3. **No cross-VM access**: Traefik routes are isolated per VM
-4. **Cloudflare API token**: Scoped to DNS edit only, not full account access
+1. **TLS everywhere**: All HTTP traffic forced to HTTPS via Caddy's automatic redirect
+2. **Per-subdomain certs**: Each VM gets its own certificate (no shared wildcard)
+3. **No cross-VM access**: Caddy routes are isolated per VM
+4. **Cloudflare credentials centralized**: Only the API server has Cloudflare access
 5. **systemd hardening**: NoNewPrivileges, ProtectSystem, ProtectHome
 6. **Port range isolation**: Each VM only gets its allocated ports
 
@@ -528,91 +460,34 @@ Host myvm
 - Gateway approach (5 hosts): $8.05/month
 - **Savings: ~$153/month**
 
-## Implementation Steps
+## Gateway Setup
 
-### Phase 1: Infrastructure Setup (Automated)
-
-**Step 1.1: Create Cloudflare API Token (Manual - One Time)**
-- Log into Cloudflare dashboard: https://dash.cloudflare.com/profile/api-tokens
-- Click "Create Token" → Use template "Edit zone DNS"
-- Scope to zone: decent-cloud.org
-- Copy the token (this is the only manual step)
-
-**Step 1.2: Run Gateway Setup (Automated)**
+**Run on Proxmox host:**
 ```bash
-dc-agent setup gateway \
-  --host 203.0.113.1 \
-  --datacenter dc-lk \
-  --domain decent-cloud.org \
-  --public-ip 203.0.113.1 \
-  --cloudflare-token <YOUR_TOKEN> \
-  --append-config dc-agent.toml
+dc-agent setup token \
+  --token <AGENT_TOKEN> \
+  --proxmox-host <HOST_IP> \
+  --gateway-datacenter dc-lk \
+  --gateway-public-ip <PUBLIC_IP>
 ```
 
 This automatically:
-- Downloads and installs Traefik v3.x
-- Creates traefik user/group
-- Sets up directories: /etc/traefik, /var/lib/traefik, /var/log/traefik
-- Generates static config with DNS-01 challenge
+- Downloads and installs Caddy
+- Creates caddy user/group
+- Sets up directories: /etc/caddy, /var/lib/caddy
+- Generates Caddyfile with site import
 - Creates systemd service
-- Enables and starts Traefik
-- Auto-detects Cloudflare Zone ID from domain
-- Appends [gateway] config to dc-agent.toml
-
-**Step 1.3: Wildcard Certificate (Automatic)**
-- Traefik auto-obtains wildcard cert on first HTTPS request
-- Certificate covers *.{dc}.decent-cloud.org
-
-### Phase 2: dc-agent Integration
-
-**Step 2.1: Gateway Configuration**
-- Add `[gateway]` section to dc-agent config
-- Parse and validate on startup
-
-**Step 2.2: Port Allocation**
-- Implement port allocation file management
-- Add allocate/free functions
-
-**Step 2.3: Traefik Config Generation**
-- Implement template for dynamic config YAML
-- Write on provision, delete on destroy
-
-**Step 2.4: Cloudflare DNS Integration**
-- Add cloudflare API client (or use crate)
-- Create DNS record on provision
-- Delete DNS record on destroy
-
-**Step 2.5: API Reporting**
-- Include gateway fields in provisioned response
-- Store in database
-
-### Phase 3: API & UI
-
-**Step 3.1: Database Migration**
-- Add gateway columns to contract_sign_requests
-
-**Step 3.2: API Response**
-- Include gateway fields in contract detail endpoint
-
-**Step 3.3: UI Updates**
-- Display connection details on contract page
-- Show subdomain, SSH command, port range
-
-### Phase 4: Testing & Documentation
-
-**Step 4.1: End-to-End Test**
-- Provision VM
-- Verify DNS record created
-- Verify HTTPS accessible via subdomain
-- Verify SSH accessible via port
-- Destroy VM
-- Verify cleanup
-
-**Step 4.2: Documentation**
-- Update provider setup guide
-- Add user guide for connecting to VMs
+- Enables and starts Caddy
+- Configures IP forwarding and NAT masquerade
+- Opens firewall ports (80, 443, 20000-59999)
+- Persists iptables rules
 
 ## Alternatives Considered
+
+### Traefik instead of Caddy
+- More complex configuration
+- DNS-01 challenge requires Cloudflare credentials on each host
+- **Rejected:** Caddy is simpler and HTTP-01 eliminates credential distribution
 
 ### Centralized Gateway VM
 - Single gateway VM handles all traffic
@@ -622,11 +497,7 @@ This automatically:
 - Tunnel from host to external relay
 - **Rejected:** Unnecessary when hosts have public IPs; adds complexity
 
-### BGP on Proxmox Hosts
-- Each host announces its own IPs via BGP
-- **Rejected:** Overkill; provider handles BGP, we just need routing
-
-### Nginx instead of Traefik
+### Nginx
 - More mature, widely deployed
 - **Rejected:** No native dynamic config; requires reload on changes
 
@@ -638,8 +509,7 @@ This automatically:
 
 ## References
 
-- [Traefik Documentation](https://doc.traefik.io/traefik/)
-- [Traefik File Provider](https://doc.traefik.io/traefik/providers/file/)
-- [Let's Encrypt DNS-01 Challenge](https://letsencrypt.org/docs/challenge-types/#dns-01-challenge)
+- [Caddy Documentation](https://caddyserver.com/docs/)
+- [Let's Encrypt HTTP-01 Challenge](https://letsencrypt.org/docs/challenge-types/#http-01-challenge)
 - [Cloudflare API](https://developers.cloudflare.com/api/)
 - [systemd Service Hardening](https://www.freedesktop.org/software/systemd/man/systemd.exec.html)
