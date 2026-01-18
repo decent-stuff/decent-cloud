@@ -1,6 +1,7 @@
 //! Caddy site configuration file management.
 //!
 //! Caddy terminates TLS at the gateway with automatic HTTP-01 certificates.
+//! VMs serve plain HTTP on port 80 - users get HTTPS automatically without any TLS setup.
 //! TCP/UDP port forwarding for other ports is handled by iptables DNAT (see iptables.rs).
 
 use super::port_allocator::PortAllocation;
@@ -27,7 +28,7 @@ impl CaddyConfigManager {
     }
 
     /// Write Caddy configuration for a VM (HTTPS with automatic TLS).
-    /// Caddy terminates TLS and proxies to the VM. TCP/UDP ports handled by iptables DNAT.
+    /// Caddy terminates TLS and proxies to VM:80 (plain HTTP). TCP/UDP ports handled by iptables DNAT.
     pub fn write_vm_config(
         &self,
         slug: &str,
@@ -86,7 +87,7 @@ impl CaddyConfigManager {
     }
 
     /// Generate Caddy site configuration for a VM.
-    /// Caddy terminates TLS and proxies to the VM's internal HTTPS endpoint.
+    /// Caddy terminates TLS and proxies to VM:80 (plain HTTP).
     fn generate_config(
         &self,
         slug: &str,
@@ -102,16 +103,11 @@ impl CaddyConfigManager {
 # Contract: {contract_id}
 # Created: {timestamp}
 #
-# HTTPS: TLS terminated at gateway, proxied to VM:443
+# HTTPS: TLS terminated at gateway, proxied to VM:80 (plain HTTP)
 # TCP/UDP ports {base_port}-{end_port}: iptables DNAT
 
 {subdomain} {{
-    reverse_proxy {internal_ip}:443 {{
-        transport http {{
-            tls
-            tls_insecure_skip_verify
-        }}
-    }}
+    reverse_proxy {internal_ip}:80
 }}
 "#,
             slug = slug,
@@ -149,14 +145,13 @@ mod tests {
             "contract-123",
         );
 
-        // Caddy site block
+        // Caddy site block with reverse proxy to HTTP
         assert!(config.contains("k7m2p4.dc-lk.decent-cloud.org {"));
-        assert!(config.contains("reverse_proxy 10.0.1.5:443"));
+        assert!(config.contains("reverse_proxy 10.0.1.5:80"));
 
-        // TLS to backend
-        assert!(config.contains("transport http"));
-        assert!(config.contains("tls"));
-        assert!(config.contains("tls_insecure_skip_verify"));
+        // Should NOT have TLS to backend (we proxy plain HTTP)
+        assert!(!config.contains("transport http"));
+        assert!(!config.contains("tls_insecure_skip_verify"));
 
         // Contract info
         assert!(config.contains("contract-123"));
