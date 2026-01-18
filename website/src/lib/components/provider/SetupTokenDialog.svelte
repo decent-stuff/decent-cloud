@@ -44,6 +44,10 @@
 		return `curl -sSL https://raw.githubusercontent.com/decent-stuff/decent-cloud/main/scripts/install-dc-agent.sh | sudo bash -s ${token} ${API_BASE_URL}`;
 	}
 
+	function getManualCommand(token: string): string {
+		return `dc-agent setup token --token ${token} --api-url ${API_BASE_URL}`;
+	}
+
 	function formatTimestamp(ns: number): string {
 		const date = new Date(ns / 1_000_000);
 		return date.toLocaleString();
@@ -138,28 +142,35 @@
 											<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
 										</button>
 									</div>
-									<!-- One-liner install command -->
-									<div class="bg-black/30  p-3">
-										<div class="text-xs text-neutral-500 mb-2">Run on your server:</div>
+									<!-- New installation command -->
+									<div class="bg-black/30 p-3">
+										<div class="flex items-center justify-between mb-2">
+											<span class="text-xs text-neutral-500">New installation</span>
+											<button
+												onclick={() => copyToClipboard(getInstallCommand(token.token))}
+												class="text-xs text-emerald-400 hover:text-emerald-300"
+											>
+												Copy
+											</button>
+										</div>
 										<div class="font-mono text-xs text-primary-300 break-all select-all">
 											{getInstallCommand(token.token)}
 										</div>
 									</div>
-									<div class="flex gap-2">
-										<button
-											onclick={() => copyToClipboard(getInstallCommand(token.token))}
-											class="flex-1 px-3 py-2  text-sm font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
-											title="Copy one-liner install command"
-										>
-											Copy Install Command
-										</button>
-										<button
-											onclick={() => copyToClipboard(`dc-agent setup token --token ${token.token} --api-url ${API_BASE_URL}`)}
-											class="px-3 py-2  text-sm font-medium bg-surface-elevated text-neutral-400 hover:bg-surface-elevated transition-colors"
-											title="Copy manual setup command (if dc-agent already installed)"
-										>
-											Manual
-										</button>
+									<!-- Manual setup command (dc-agent already installed) -->
+									<div class="bg-black/30 p-3">
+										<div class="flex items-center justify-between mb-2">
+											<span class="text-xs text-neutral-500">Already have dc-agent?</span>
+											<button
+												onclick={() => copyToClipboard(getManualCommand(token.token))}
+												class="text-xs text-emerald-400 hover:text-emerald-300"
+											>
+												Copy
+											</button>
+										</div>
+										<div class="font-mono text-xs text-primary-300 break-all select-all">
+											{getManualCommand(token.token)}
+										</div>
 									</div>
 								</div>
 							{/each}
