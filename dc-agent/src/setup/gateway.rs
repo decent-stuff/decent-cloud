@@ -108,20 +108,61 @@ impl GatewaySetup {
         // 1. Enable IP forwarding
         self.enable_ip_forwarding(ssh).await?;
 
-        // 2. Detect public interface
+        // 2. Detect if we're behind 1:1 NAT (public IP not on any interface)
+        let nat_mode = self.detect_nat_mode(ssh).await?;
+
+        // 3. Detect public interface (for masquerade rules if not NAT mode)
         let public_iface = self.detect_public_interface(ssh).await?;
         println!("  [ok] Public interface: {}", public_iface);
 
-        // 3. Configure NAT masquerade for VM traffic
-        self.configure_nat_masquerade(ssh, &public_iface).await?;
+        // 4. Configure NAT masquerade for VM traffic (skip if provider handles 1:1 NAT)
+        if nat_mode {
+            println!("  [ok] 1:1 NAT detected - skipping masquerade rules (provider handles NAT)");
+        } else {
+            self.configure_nat_masquerade(ssh, &public_iface).await?;
+        }
 
-        // 4. Configure firewall rules
+        // 5. Configure firewall rules
         self.configure_firewall(ssh).await?;
 
-        // 5. Persist iptables rules
+        // 6. Persist iptables rules
         self.persist_iptables(ssh).await?;
 
         Ok(())
+    }
+
+    /// Detect if host is behind 1:1 NAT.
+    /// Returns true if public_ip is NOT on any local interface but external services see it.
+    async fn detect_nat_mode(&self, ssh: &Client) -> Result<bool> {
+        // Check if public IP is assigned to any local interface
+        let cmd = format!("ip addr show | grep -q '{}' && echo local || echo not_local", self.public_ip);
+        let result = ssh.execute(&cmd).await?;
+        let ip_is_local = result.stdout.trim() == "local";
+
+        if ip_is_local {
+            println!("  [ok] Public IP {} is directly assigned", self.public_ip);
+            return Ok(false);
+        }
+
+        // Public IP not local - verify it's actually our external IP (1:1 NAT)
+        let result = ssh
+            .execute("curl -sf --max-time 5 https://ifconfig.me 2>/dev/null || curl -sf --max-time 5 https://api.ipify.org 2>/dev/null || echo unknown")
+            .await?;
+        let external_ip = result.stdout.trim();
+
+        if external_ip == self.public_ip {
+            println!("  [ok] 1:1 NAT detected: {} not on interface but is external IP", self.public_ip);
+            Ok(true)
+        } else if external_ip == "unknown" {
+            // Can't verify - assume direct assignment needed, masquerade won't hurt
+            println!("  [warn] Could not verify external IP, assuming direct assignment");
+            Ok(false)
+        } else {
+            // External IP doesn't match - misconfiguration?
+            println!("  [warn] Public IP {} doesn't match external IP {}", self.public_ip, external_ip);
+            println!("         Proceeding with masquerade rules");
+            Ok(false)
+        }
     }
 
     async fn enable_ip_forwarding(&self, ssh: &Client) -> Result<()> {
@@ -413,10 +454,10 @@ impl GatewaySetup {
         let commands = [
             // Create traefik user/group
             "id traefik >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin traefik",
-            // Create directories
-            "mkdir -p /etc/traefik/dynamic /var/lib/traefik /var/log/traefik /var/lib/dc-agent",
+            // Create directories (logs go to journald, no /var/log/traefik needed)
+            "mkdir -p /etc/traefik/dynamic /var/lib/traefik /var/lib/dc-agent",
             // Set ownership
-            "chown -R traefik:traefik /etc/traefik /var/lib/traefik /var/log/traefik",
+            "chown -R traefik:traefik /etc/traefik /var/lib/traefik",
             // dc-agent needs write access to dynamic dir
             "chmod 775 /etc/traefik/dynamic",
         ];
@@ -473,6 +514,8 @@ impl GatewaySetup {
 # Architecture: SNI-based TCP passthrough
 # - HTTP (80): Redirects to HTTPS
 # - HTTPS (443): TCP passthrough based on SNI, VMs handle their own TLS
+#
+# Logs: stdout → journald (view with: journalctl -u traefik)
 
 global:
   checkNewVersion: false
@@ -480,7 +523,7 @@ global:
 
 log:
   level: INFO
-  filePath: /var/log/traefik/traefik.log
+  # Logs to stdout, captured by systemd/journald (automatic rotation)
 
 api:
   dashboard: false
@@ -536,7 +579,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/etc/traefik /var/lib/traefik /var/log/traefik
+ReadWritePaths=/etc/traefik /var/lib/traefik
 
 [Install]
 WantedBy=multi-user.target

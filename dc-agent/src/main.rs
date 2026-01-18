@@ -191,57 +191,8 @@ enum SetupProvisioner {
         #[arg(long, default_value = "dc-agent.toml")]
         output: PathBuf,
     },
-    /// Set up gateway (Traefik reverse proxy) on the host.
-    /// Installs Traefik, configures wildcard TLS via Let's Encrypt/Cloudflare.
-    Gateway {
-        /// Host IP or hostname (SSH target)
-        #[arg(long)]
-        host: String,
-
-        /// SSH port (default: 22)
-        #[arg(long, default_value = "22")]
-        ssh_port: u16,
-
-        /// SSH username (default: root)
-        #[arg(long, default_value = "root")]
-        ssh_user: String,
-
-        /// Datacenter identifier (e.g., dc-lk)
-        #[arg(long)]
-        datacenter: String,
-
-        /// Base domain (e.g., decent-cloud.org)
-        #[arg(long)]
-        domain: String,
-
-        /// Host's public IPv4 address
-        #[arg(long)]
-        public_ip: String,
-
-        /// Cloudflare API token with DNS edit permissions
-        #[arg(long)]
-        cloudflare_token: String,
-
-        /// Cloudflare Zone ID (auto-detected from domain if not provided)
-        #[arg(long)]
-        cloudflare_zone_id: Option<String>,
-
-        /// Start of port range for VM allocation (default: 20000)
-        #[arg(long, default_value = "20000")]
-        port_range_start: u16,
-
-        /// End of port range for VM allocation (default: 59999)
-        #[arg(long, default_value = "59999")]
-        port_range_end: u16,
-
-        /// Number of ports per VM (default: 10)
-        #[arg(long, default_value = "10")]
-        ports_per_vm: u16,
-
-        /// Append gateway config to existing dc-agent.toml
-        #[arg(long)]
-        append_config: Option<PathBuf>,
-    },
+    // Note: Gateway setup is integrated into the Token command via --gateway-* flags.
+    // Use: dc-agent setup token --gateway-datacenter <DC> --gateway-public-ip <IP> ...
 }
 
 #[tokio::main]
@@ -958,80 +909,6 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             println!("     This will register the agent and add API credentials to the config.");
             println!("  4. Run: dc-agent --config {} doctor", output.display());
             println!("  5. Run: dc-agent --config {} run", output.display());
-
-            Ok(())
-        }
-        SetupProvisioner::Gateway {
-            host,
-            ssh_port,
-            ssh_user,
-            datacenter,
-            domain,
-            public_ip,
-            cloudflare_token,
-            cloudflare_zone_id,
-            port_range_start,
-            port_range_end,
-            ports_per_vm,
-            append_config,
-        } => {
-            println!("Decent Cloud Agent - Gateway Setup");
-            println!("===================================\n");
-
-            println!("Gateway Setup");
-            println!("  Host: {}", host);
-            println!("  SSH User: {}", ssh_user);
-            println!("  Datacenter: {}", datacenter);
-            println!("  Domain: {}", domain);
-            println!("  Public IP: {}", public_ip);
-            println!(
-                "  Port range: {}-{} ({} per VM)",
-                port_range_start, port_range_end, ports_per_vm
-            );
-            println!();
-
-            // Prompt for SSH password
-            let ssh_password =
-                rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?;
-
-            println!();
-
-            let setup = GatewaySetup {
-                host: host.clone(),
-                ssh_port,
-                ssh_user,
-                ssh_password,
-                datacenter: datacenter.clone(),
-                domain: domain.clone(),
-                public_ip: public_ip.clone(),
-                cloudflare_api_token: cloudflare_token.clone(),
-                cloudflare_zone_id,
-                port_range_start,
-                port_range_end,
-                ports_per_vm,
-            };
-
-            let result = setup.run().await?;
-
-            // Generate gateway config section
-            let gateway_config = setup.generate_gateway_config(&result.cloudflare_zone_id);
-
-            // Optionally append to existing config
-            if let Some(config_path) = append_config {
-                use std::io::Write;
-                let mut file = std::fs::OpenOptions::new()
-                    .append(true)
-                    .open(&config_path)
-                    .context("Failed to open config file for appending")?;
-                file.write_all(gateway_config.as_bytes())?;
-                println!(
-                    "\nGateway configuration appended to: {}",
-                    config_path.display()
-                );
-            } else {
-                println!("\nAdd this to your dc-agent.toml:");
-                println!("{}", gateway_config);
-            }
 
             Ok(())
         }
@@ -2020,7 +1897,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                     "  [WARN] Traefik config directory does not exist: {}",
                     gw.traefik_dynamic_dir
                 );
-                println!("       Run: dc-agent setup gateway --host <HOST> ...");
+                println!("       Re-run setup with --gateway-datacenter to configure gateway");
             }
 
             // Check if Traefik is running
@@ -2096,7 +1973,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
         None => {
             println!("Gateway: Not configured");
             println!("  VMs will not get public subdomains");
-            println!("  To enable: dc-agent setup gateway --host <HOST> ...");
+            println!("  To enable: re-run setup with --gateway-datacenter <DC> --gateway-public-ip <IP> ...");
         }
     }
     println!();
