@@ -1145,7 +1145,7 @@ async fn run_agent(config: Config) -> Result<()> {
             }
             Err(e) => {
                 warn!(
-                    error = %e,
+                    error = ?e,
                     "Gateway configured but failed to initialize - gateway features disabled"
                 );
                 None
@@ -1290,13 +1290,13 @@ async fn send_heartbeat(
             // Escalate to error level after 3 consecutive failures
             if *consecutive_failures >= 3 {
                 error!(
-                    error = %e,
+                    error = ?e,
                     consecutive_failures = *consecutive_failures,
                     "HEARTBEAT FAILURE: Agent cannot reach API server! Check network connectivity."
                 );
             } else {
                 warn!(
-                    error = %e,
+                    error = ?e,
                     consecutive_failures = *consecutive_failures,
                     "Failed to send heartbeat"
                 );
@@ -1365,7 +1365,7 @@ async fn poll_and_provision(
                             {
                                 error!(
                                     contract_id = %contract.contract_id,
-                                    error = %e,
+                                    error = ?e,
                                     "Failed to report provisioner mismatch to API"
                                 );
                             }
@@ -1389,7 +1389,7 @@ async fn poll_and_provision(
                                 Err(e) => {
                                     warn!(
                                         contract_id = %contract.contract_id,
-                                        error = %e,
+                                        error = ?e,
                                         raw_config = %s,
                                         "Invalid provisioner_config JSON, ignoring"
                                     );
@@ -1407,7 +1407,7 @@ async fn poll_and_provision(
                                 Err(e) => {
                                     warn!(
                                         contract_id = %contract.contract_id,
-                                        error = %e,
+                                        error = ?e,
                                         raw_config = %s,
                                         "Invalid instance_config JSON, ignoring"
                                     );
@@ -1469,7 +1469,7 @@ async fn poll_and_provision(
                         Err(e) => {
                             warn!(
                                 contract_id = %contract.contract_id,
-                                error = %e,
+                                error = ?e,
                                 "Failed to acquire lock, skipping contract"
                             );
                             continue;
@@ -1493,7 +1493,7 @@ async fn poll_and_provision(
                     {
                         warn!(
                             contract_id = %contract.contract_id,
-                            error = %e,
+                            error = ?e,
                             "Failed to report provisioning started, continuing anyway"
                         );
                     }
@@ -1528,7 +1528,7 @@ async fn poll_and_provision(
                                         // VM is usable via internal IP even without gateway
                                         warn!(
                                             contract_id = %contract.contract_id,
-                                            error = %e,
+                                            error = ?e,
                                             "Gateway setup failed - VM accessible via internal IP only"
                                         );
                                     }
@@ -1544,7 +1544,7 @@ async fn poll_and_provision(
                                     contract_id = %contract.contract_id,
                                     external_id = %instance.external_id,
                                     ip_address = ?instance.ip_address,
-                                    error = %e,
+                                    error = ?e,
                                     "CRITICAL: VM provisioned but failed to report to API! \
                                      Contract may be stuck. Manual intervention may be required."
                                 );
@@ -1582,13 +1582,13 @@ async fn poll_and_provision(
             // Escalate to error level after 3 consecutive failures
             if *consecutive_failures >= 3 {
                 error!(
-                    error = %e,
+                    error = ?e,
                     consecutive_failures = *consecutive_failures,
                     "POLL FAILURE: Cannot fetch contracts from API server! Check network connectivity."
                 );
             } else {
                 warn!(
-                    error = %e,
+                    error = ?e,
                     consecutive_failures = *consecutive_failures,
                     "Failed to fetch pending contracts"
                 );
@@ -1637,7 +1637,7 @@ async fn reconcile_instances(
             Err(e) => {
                 warn!(
                     provisioner_type = %ptype,
-                    error = %e,
+                    error = ?e,
                     "Failed to list running instances from this provisioner"
                 );
             }
@@ -1652,7 +1652,7 @@ async fn reconcile_instances(
     let response: ReconcileResponse = match api_client.reconcile(&all_running_instances).await {
         Ok(r) => r,
         Err(e) => {
-            warn!(error = %e, "Failed to reconcile with API");
+            warn!(error = ?e, "Failed to reconcile with API");
             return;
         }
     };
@@ -1685,7 +1685,7 @@ async fn reconcile_instances(
                                 warn!(
                                     contract_id = %vm.contract_id,
                                     slug = %slug,
-                                    error = %e,
+                                    error = ?e,
                                     "Gateway cleanup failed"
                                 );
                             }
@@ -1695,7 +1695,7 @@ async fn reconcile_instances(
                     if let Err(e) = api_client.report_terminated(&vm.contract_id).await {
                         error!(
                             contract_id = %vm.contract_id,
-                            error = %e,
+                            error = ?e,
                             "Failed to report termination to API. May retry on next poll."
                         );
                     }

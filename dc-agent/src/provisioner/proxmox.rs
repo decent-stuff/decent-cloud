@@ -170,7 +170,7 @@ impl ProxmoxProvisioner {
             let body = match response.text().await {
                 Ok(text) => text,
                 Err(e) => {
-                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    tracing::warn!(error = ?e, path, "Failed to read response body");
                     format!("<failed to read response body: {}>", e)
                 }
             };
@@ -212,7 +212,7 @@ impl ProxmoxProvisioner {
             let body = match response.text().await {
                 Ok(text) => text,
                 Err(e) => {
-                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    tracing::warn!(error = ?e, path, "Failed to read response body");
                     format!("<failed to read response body: {}>", e)
                 }
             };
@@ -250,7 +250,7 @@ impl ProxmoxProvisioner {
             let body = match response.text().await {
                 Ok(text) => text,
                 Err(e) => {
-                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    tracing::warn!(error = ?e, path, "Failed to read response body");
                     format!("<failed to read response body: {}>", e)
                 }
             };
@@ -283,7 +283,7 @@ impl ProxmoxProvisioner {
             let body = match response.text().await {
                 Ok(text) => text,
                 Err(e) => {
-                    tracing::warn!(error = %e, path, "Failed to read response body");
+                    tracing::warn!(error = ?e, path, "Failed to read response body");
                     format!("<failed to read response body: {}>", e)
                 }
             };
@@ -326,7 +326,7 @@ impl ProxmoxProvisioner {
                             Ok(log) if log.is_empty() => None,
                             Ok(log) => Some(log),
                             Err(e) => {
-                                tracing::warn!(error = %e, "Failed to fetch task log for error details");
+                                tracing::warn!(error = ?e, "Failed to fetch task log for error details");
                                 None
                             }
                         };
