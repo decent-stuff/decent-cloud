@@ -222,10 +222,17 @@ impl ProxmoxSetup {
         let file_exists = self.execute(&check_file)?;
         if file_exists.exit_status != 0 {
             println!("  Downloading cloud image (this may take a few minutes)...");
-            let download_cmd = format!("wget -q -O {} {}", tmp_path, image_url);
+            // Try wget first (common on Proxmox), fall back to curl
+            let download_cmd = format!(
+                "wget -q -O {} {} 2>/dev/null || curl -sSL -o {} {}",
+                tmp_path, image_url, tmp_path, image_url
+            );
             let download_result = self.execute(&download_cmd)?;
             if download_result.exit_status != 0 {
-                bail!("Failed to download image: {}", download_result.stdout);
+                bail!(
+                    "Failed to download image (tried wget and curl): {}",
+                    download_result.stdout
+                );
             }
         } else {
             println!("  Cloud image already downloaded, reusing");

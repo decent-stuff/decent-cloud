@@ -21,7 +21,6 @@ hex.workspace = true
 public-ip-address = { version = "0.4", default-features = false, features = ["rustls-tls"] }
 rand = "0.8"
 reqwest.workspace = true
-rpassword = "7.4.0"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
