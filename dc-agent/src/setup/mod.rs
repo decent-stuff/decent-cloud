@@ -3,5 +3,5 @@
 pub mod gateway;
 pub mod proxmox;
 
-pub use gateway::GatewaySetup;
+pub use gateway::{detect_public_ip, GatewaySetup};
 pub use proxmox::ProxmoxSetup;

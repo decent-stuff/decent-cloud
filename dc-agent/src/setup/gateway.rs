@@ -10,6 +10,39 @@ use std::process::Command;
 /// Latest stable Caddy version
 const CADDY_VERSION: &str = "2.10.2";
 
+/// Detect the host's public IP address using external services.
+/// Tries multiple services for reliability.
+pub fn detect_public_ip() -> Result<String> {
+    // Services to try, in order of preference
+    const SERVICES: &[&str] = &[
+        "https://ifconfig.me",
+        "https://api.ipify.org",
+        "https://icanhazip.com",
+    ];
+
+    for service in SERVICES {
+        let output = Command::new("curl")
+            .args(["-sf", "--max-time", "5", service])
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                let ip = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                // Basic validation: should look like an IP
+                if ip.contains('.') && ip.len() >= 7 && ip.len() <= 15 {
+                    return Ok(ip);
+                }
+            }
+        }
+    }
+
+    bail!(
+        "Could not detect public IP. Tried: {}\n\
+         Use --gateway-public-ip to specify manually.",
+        SERVICES.join(", ")
+    )
+}
+
 /// Gateway setup configuration.
 /// Runs locally on the Proxmox host.
 pub struct GatewaySetup {
@@ -746,5 +779,40 @@ mod tests {
         let config_line = "net.ipv4.ip_forward = 1";
         assert!(config_line.contains("net.ipv4.ip_forward"));
         assert!(config_line.contains("= 1"));
+    }
+
+    #[test]
+    fn test_ip_validation_logic() {
+        // The validation logic used in detect_public_ip
+        fn is_valid_ipv4(ip: &str) -> bool {
+            ip.contains('.') && ip.len() >= 7 && ip.len() <= 15
+        }
+
+        // Valid IPs
+        assert!(is_valid_ipv4("1.2.3.4")); // 7 chars (minimum)
+        assert!(is_valid_ipv4("192.168.1.1")); // 11 chars
+        assert!(is_valid_ipv4("255.255.255.255")); // 15 chars (maximum)
+
+        // Invalid IPs
+        assert!(!is_valid_ipv4("1.2.3")); // Too short (5 chars)
+        assert!(!is_valid_ipv4("1234567")); // No dots
+        assert!(!is_valid_ipv4("1234.1234.1234.1234")); // Too long (19 chars)
+    }
+
+    #[test]
+    #[ignore] // Requires network access - run manually with: cargo test -- --ignored
+    fn test_detect_public_ip_integration() {
+        let ip = detect_public_ip().expect("Should detect public IP");
+        // Basic validation
+        assert!(ip.contains('.'), "Should be IPv4 format");
+        assert!(ip.len() >= 7, "IP too short");
+        assert!(ip.len() <= 15, "IP too long");
+        // Should be parseable as IP address octets
+        let parts: Vec<&str> = ip.split('.').collect();
+        assert_eq!(parts.len(), 4, "Should have 4 octets");
+        for part in parts {
+            // parse::<u8>() already validates 0-255 range
+            let _octet: u8 = part.parse().expect("Each octet should be 0-255");
+        }
     }
 }

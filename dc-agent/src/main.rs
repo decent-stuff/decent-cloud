@@ -9,7 +9,7 @@ use dc_agent::{
         ProvisionRequest, Provisioner,
     },
     registration::{default_agent_dir, generate_agent_keypair},
-    setup::{proxmox::OsTemplate, GatewaySetup, ProxmoxSetup},
+    setup::{detect_public_ip, proxmox::OsTemplate, GatewaySetup, ProxmoxSetup},
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -122,7 +122,7 @@ enum SetupProvisioner {
         #[arg(long)]
         gateway_datacenter: Option<String>,
 
-        /// Host's public IPv4 address (required if --gateway-datacenter is set)
+        /// Host's public IPv4 address (auto-detected if not provided)
         #[arg(long)]
         gateway_public_ip: Option<String>,
 
@@ -169,7 +169,7 @@ enum SetupProvisioner {
         non_interactive: bool,
     },
     // Note: Gateway setup is integrated into the Token command via --gateway-* flags.
-    // Use: dc-agent setup token --gateway-datacenter <DC> --gateway-public-ip <IP> ...
+    // Use: dc-agent setup token --gateway-datacenter <DC> (public IP auto-detected)
 }
 
 #[tokio::main]
@@ -437,7 +437,7 @@ type = "{provisioner_type}"
                     println!();
                     println!("Note: Gateway not configured. VMs will need public IPs.");
                     println!("  To enable gateway, run setup again with:");
-                    println!("    --gateway-datacenter <DC> --gateway-public-ip <IP>");
+                    println!("    --gateway-datacenter <DC>");
                 }
             } else {
                 println!(
@@ -645,10 +645,19 @@ async fn run_gateway_setup_if_requested(
         }
     };
 
-    // Validate required parameters
-    let public_ip = public_ip.ok_or_else(|| {
-        anyhow::anyhow!("--gateway-public-ip is required when --gateway-datacenter is set")
-    })?;
+    // Auto-detect public IP if not provided
+    let public_ip = match public_ip {
+        Some(ip) => {
+            println!("Using provided public IP: {}", ip);
+            ip
+        }
+        None => {
+            println!("Detecting public IP...");
+            let ip = detect_public_ip()?;
+            println!("  Detected: {}", ip);
+            ip
+        }
+    };
 
     println!();
     println!("Setting up Gateway (Caddy reverse proxy) locally...");
@@ -1873,7 +1882,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
         None => {
             println!("Gateway: Not configured");
             println!("  VMs will not get public subdomains");
-            println!("  To enable: re-run setup with --gateway-datacenter <DC> --gateway-public-ip <IP> ...");
+            println!("  To enable: re-run setup with --gateway-datacenter <DC>");
         }
     }
     println!();
