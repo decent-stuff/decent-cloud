@@ -131,6 +131,13 @@ jobs:
           find artifacts -type f -exec mv {} release/ \;
           ls -la release/
 
+      - name: Generate SHA256 checksums
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS
+          echo "=== SHA256SUMS ==="
+          cat SHA256SUMS
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:

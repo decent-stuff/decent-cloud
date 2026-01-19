@@ -74,6 +74,20 @@ enum Commands {
         #[arg(long)]
         contract_id: Option<String>,
     },
+    /// Check for and apply updates
+    Upgrade {
+        /// Only check for updates, don't install
+        #[arg(long)]
+        check_only: bool,
+
+        /// Skip confirmation prompt
+        #[arg(long, short = 'y')]
+        yes: bool,
+
+        /// Force upgrade even if same version
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -201,6 +215,11 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Setup { provisioner } => run_setup(*provisioner).await,
+        Commands::Upgrade {
+            check_only,
+            yes,
+            force,
+        } => dc_agent::upgrade::run_upgrade(check_only, yes, force).await,
     }
 }
 
@@ -983,10 +1002,16 @@ async fn run_agent(config: Config) -> Result<()> {
     let mut heartbeat_failures: u32 = 0;
     let mut poll_failures: u32 = 0;
 
+    // Update check every hour (3600 seconds)
+    const UPDATE_CHECK_INTERVAL_SECS: u64 = 3600;
+    let mut update_check_ticker = interval(Duration::from_secs(UPDATE_CHECK_INTERVAL_SECS));
+    update_check_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     info!(
         poll_interval_seconds = config.polling.interval_seconds,
         heartbeat_interval_seconds = heartbeat_interval_secs,
         orphan_grace_period_seconds = config.polling.orphan_grace_period_seconds,
+        update_check_interval_seconds = UPDATE_CHECK_INTERVAL_SECS,
         "Agent started"
     );
 
@@ -1010,6 +1035,33 @@ async fn run_agent(config: Config) -> Result<()> {
             _ = heartbeat_ticker.tick() => {
                 send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures, gateway_manager.clone()).await;
             }
+            _ = update_check_ticker.tick() => {
+                check_for_updates_and_log().await;
+            }
+        }
+    }
+}
+
+/// Check for available updates and log if a new version is available.
+/// Runs periodically during agent operation to notify about updates.
+async fn check_for_updates_and_log() {
+    use tracing::debug;
+
+    let current = env!("CARGO_PKG_VERSION");
+    match dc_agent::upgrade::check_latest_version().await {
+        Ok(latest) if dc_agent::upgrade::is_newer(current, &latest) => {
+            warn!(
+                current_version = %current,
+                latest_version = %latest,
+                "Update available! Run 'dc-agent upgrade' to install"
+            );
+        }
+        Ok(_) => {
+            debug!("Version check: up to date");
+        }
+        Err(e) => {
+            // Don't spam logs on network issues - use debug level
+            debug!(error = %e, "Failed to check for updates");
         }
     }
 }

@@ -5,3 +5,4 @@ pub mod geolocation;
 pub mod provisioner;
 pub mod registration;
 pub mod setup;
+pub mod upgrade;
