@@ -211,8 +211,8 @@ impl GatewaySetup {
         }
 
         // Make persistent
-        let result = self
-            .execute(r#"echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-dc-gateway.conf"#)?;
+        let result =
+            self.execute(r#"echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-dc-gateway.conf"#)?;
         if result.exit_status != 0 {
             bail!("Failed to persist IP forwarding: {}", result.stdout);
         }
@@ -232,8 +232,8 @@ impl GatewaySetup {
         let iface = result.stdout.trim();
         if iface.is_empty() {
             // Fallback: get default route interface
-            let result = self
-                .execute("ip route show default | awk '/default/ {print $5}' | head -1")?;
+            let result =
+                self.execute("ip route show default | awk '/default/ {print $5}' | head -1")?;
             let iface = result.stdout.trim();
             if iface.is_empty() {
                 bail!(

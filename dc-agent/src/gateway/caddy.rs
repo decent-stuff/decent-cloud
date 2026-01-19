@@ -40,9 +40,8 @@ impl CaddyConfigManager {
         let config = self.generate_config(slug, subdomain, internal_ip, allocation, contract_id);
 
         // Ensure directory exists
-        std::fs::create_dir_all(&self.sites_dir).with_context(|| {
-            format!("Failed to create Caddy sites dir {:?}", self.sites_dir)
-        })?;
+        std::fs::create_dir_all(&self.sites_dir)
+            .with_context(|| format!("Failed to create Caddy sites dir {:?}", self.sites_dir))?;
 
         let path = self.config_path(slug);
         std::fs::write(&path, config)
