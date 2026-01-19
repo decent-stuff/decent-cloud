@@ -1,11 +1,13 @@
 //! Proxmox VE setup wizard - automates template creation and API token setup.
+//!
+//! This setup runs LOCALLY on the Proxmox host where dc-agent is installed.
 
 use anyhow::{bail, Context, Result};
-use async_ssh2_tokio::{AuthMethod, Client, ServerCheckMethod};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, COOKIE};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
+use std::process::Command;
 
 /// Supported OS templates for Proxmox VMs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,11 +106,8 @@ impl std::fmt::Display for OsTemplate {
 }
 
 /// Proxmox setup configuration.
+/// Runs locally on the Proxmox host.
 pub struct ProxmoxSetup {
-    pub host: String,
-    pub port: u16,
-    pub ssh_user: String,
-    pub ssh_password: String,
     pub proxmox_user: String,
     pub proxmox_password: String,
     pub storage: String,
@@ -116,25 +115,24 @@ pub struct ProxmoxSetup {
 }
 
 impl ProxmoxSetup {
-    /// Run the complete setup process.
+    /// Run the complete setup process locally on the Proxmox host.
     pub async fn run(&self) -> Result<SetupResult> {
-        println!("Connecting to Proxmox host via SSH...");
-        let ssh = self.connect_ssh().await?;
-        println!("  Connected to {}@{}", self.ssh_user, self.host);
+        // Verify we're running on a Proxmox host
+        self.verify_proxmox_host()?;
 
         // Get node name
-        let node = self.get_node_name(&ssh).await?;
+        let node = self.get_node_name()?;
         println!("  Proxmox node: {}", node);
 
         // Check available storage
-        self.verify_storage(&ssh).await?;
+        self.verify_storage()?;
         println!("  Storage '{}' verified", self.storage);
 
         // Create templates
         let mut template_vmids = HashMap::new();
         for template in &self.templates {
             println!("\nSetting up {} template...", template);
-            let vmid = self.create_template(&ssh, &node, *template).await?;
+            let vmid = self.create_template(&node, *template)?;
             template_vmids.insert(*template, vmid);
             println!("  Template created with VMID {}", vmid);
         }
@@ -150,7 +148,7 @@ impl ProxmoxSetup {
         println!("  Token verified successfully");
 
         Ok(SetupResult {
-            api_url: format!("https://{}:8006", self.host),
+            api_url: "https://127.0.0.1:8006".to_string(),
             api_token_id: token_id,
             api_token_secret: token_secret,
             node,
@@ -159,33 +157,44 @@ impl ProxmoxSetup {
         })
     }
 
-    async fn connect_ssh(&self) -> Result<Client> {
-        let auth = AuthMethod::with_password(&self.ssh_password);
-        let client = Client::connect(
-            (self.host.as_str(), self.port),
-            &self.ssh_user,
-            auth,
-            ServerCheckMethod::NoCheck,
-        )
-        .await
-        .context("Failed to connect via SSH")?;
-        Ok(client)
+    /// Execute a shell command locally and return output.
+    fn execute(&self, cmd: &str) -> Result<CommandOutput> {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .with_context(|| format!("Failed to execute command: {}", cmd))?;
+
+        Ok(CommandOutput {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            exit_status: output.status.code().unwrap_or(-1),
+        })
     }
 
-    async fn get_node_name(&self, ssh: &Client) -> Result<String> {
-        let result = ssh
-            .execute("hostname")
-            .await
-            .context("Failed to get hostname")?;
+    /// Verify we're running on a Proxmox host.
+    fn verify_proxmox_host(&self) -> Result<()> {
+        let result = self.execute("which pvesm")?;
+        if result.exit_status != 0 {
+            bail!(
+                "This doesn't appear to be a Proxmox host (pvesm not found).\n\
+                 dc-agent setup must be run directly on the Proxmox host."
+            );
+        }
+        Ok(())
+    }
+
+    fn get_node_name(&self) -> Result<String> {
+        let result = self.execute("hostname")?;
         if result.exit_status != 0 {
             bail!("Failed to get hostname: exit status {}", result.exit_status);
         }
         Ok(result.stdout.trim().to_string())
     }
 
-    async fn verify_storage(&self, ssh: &Client) -> Result<()> {
+    fn verify_storage(&self) -> Result<()> {
         let cmd = format!("pvesm status -storage {}", self.storage);
-        let result = ssh.execute(&cmd).await.context("Failed to check storage")?;
+        let result = self.execute(&cmd)?;
         if result.exit_status != 0 {
             bail!(
                 "Storage '{}' not found or not available. Check 'pvesm status' output.",
@@ -195,12 +204,7 @@ impl ProxmoxSetup {
         Ok(())
     }
 
-    async fn create_template(
-        &self,
-        ssh: &Client,
-        _node: &str,
-        template: OsTemplate,
-    ) -> Result<u32> {
+    fn create_template(&self, _node: &str, template: OsTemplate) -> Result<u32> {
         let vmid = template.default_vmid();
         let name = template.template_name();
         let image_url = template.image_url();
@@ -209,7 +213,7 @@ impl ProxmoxSetup {
 
         // Check if template already exists
         let check_cmd = format!("qm status {}", vmid);
-        let check_result = ssh.execute(&check_cmd).await?;
+        let check_result = self.execute(&check_cmd)?;
         if check_result.exit_status == 0 {
             println!("  Template VMID {} already exists, skipping creation", vmid);
             return Ok(vmid);
@@ -217,14 +221,11 @@ impl ProxmoxSetup {
 
         // Download cloud image if not present
         let check_file = format!("test -f {}", tmp_path);
-        let file_exists = ssh.execute(&check_file).await?;
+        let file_exists = self.execute(&check_file)?;
         if file_exists.exit_status != 0 {
             println!("  Downloading cloud image (this may take a few minutes)...");
             let download_cmd = format!("wget -q -O {} {}", tmp_path, image_url);
-            let download_result = ssh
-                .execute(&download_cmd)
-                .await
-                .context("Failed to download cloud image")?;
+            let download_result = self.execute(&download_cmd)?;
             if download_result.exit_status != 0 {
                 bail!("Failed to download image: {}", download_result.stdout);
             }
@@ -242,7 +243,7 @@ impl ProxmoxSetup {
             name,
             template.os_type()
         );
-        let create_result = ssh.execute(&create_cmd).await?;
+        let create_result = self.execute(&create_cmd)?;
         if create_result.exit_status != 0 {
             bail!("Failed to create VM: {}", create_result.stdout);
         }
@@ -253,11 +254,11 @@ impl ProxmoxSetup {
             "qm importdisk {} {} {} --format qcow2",
             vmid, tmp_path, self.storage
         );
-        let import_result = ssh.execute(&import_cmd).await?;
+        let import_result = self.execute(&import_cmd)?;
         if import_result.exit_status != 0 {
-            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
-            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after import failure - system may have orphaned VM");
+            // Cleanup VM on failure
+            if let Err(cleanup_err) = self.execute(&format!("qm destroy {}", vmid)) {
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after import failure");
             }
             bail!("Failed to import disk: {}", import_result.stdout);
         }
@@ -275,28 +276,25 @@ impl ProxmoxSetup {
         ];
 
         for cmd in &config_cmds {
-            let result = ssh.execute(cmd).await?;
+            let result = self.execute(cmd)?;
             if result.exit_status != 0 {
-                // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
-                if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                    tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after config failure - system may have orphaned VM");
+                // Cleanup VM on failure
+                if let Err(cleanup_err) = self.execute(&format!("qm destroy {}", vmid)) {
+                    tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after config failure");
                 }
                 bail!("Failed to configure VM: {}", result.stdout);
             }
         }
 
         // Customize the image: install qemu-guest-agent and clear machine-id
-        // First ensure libguestfs-tools is installed
         println!("  Ensuring libguestfs-tools is installed...");
-        let install_result = ssh
-            .execute(
-                "dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools",
-            )
-            .await?;
+        let install_result = self.execute(
+            "dpkg -l libguestfs-tools >/dev/null 2>&1 || apt-get install -y libguestfs-tools",
+        )?;
         if install_result.exit_status != 0 {
-            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
-            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after libguestfs-tools install failure - system may have orphaned VM");
+            // Cleanup VM on failure
+            if let Err(cleanup_err) = self.execute(&format!("qm destroy {}", vmid)) {
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after libguestfs-tools install failure");
             }
             bail!(
                 "Failed to install libguestfs-tools (required for template customization).\n\
@@ -307,13 +305,13 @@ impl ProxmoxSetup {
         }
 
         println!("  Customizing image (installing qemu-guest-agent)...");
-        // Get actual disk path using pvesm (works for all storage types: LVM, directory, etc.)
+        // Get actual disk path using pvesm
         let volume_id = format!("{}:{}", self.storage, disk_name);
-        let path_result = ssh.execute(&format!("pvesm path {}", volume_id)).await?;
+        let path_result = self.execute(&format!("pvesm path {}", volume_id))?;
         if path_result.exit_status != 0 {
-            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
-            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after path lookup failure - system may have orphaned VM");
+            // Cleanup VM on failure
+            if let Err(cleanup_err) = self.execute(&format!("qm destroy {}", vmid)) {
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after path lookup failure");
             }
             bail!(
                 "Failed to get disk path for {}: {}",
@@ -329,23 +327,20 @@ impl ProxmoxSetup {
             disk_path
         );
         // Try with KVM first (faster), fall back to direct mode for nested virtualization
-        let customize_result = ssh
-            .execute(&format!("virt-customize {}", virt_customize_args))
-            .await?;
+        let customize_result = self.execute(&format!("virt-customize {}", virt_customize_args))?;
         let customize_result = if customize_result.exit_status != 0 {
             println!("  KVM mode failed, trying direct mode (nested virtualization?)...");
-            ssh.execute(&format!(
+            self.execute(&format!(
                 "LIBGUESTFS_BACKEND=direct virt-customize {}",
                 virt_customize_args
-            ))
-            .await?
+            ))?
         } else {
             customize_result
         };
         if customize_result.exit_status != 0 {
-            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
-            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after image customization failure - system may have orphaned VM");
+            // Cleanup VM on failure
+            if let Err(cleanup_err) = self.execute(&format!("qm destroy {}", vmid)) {
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after image customization failure");
             }
             // Show last 10 lines of output for debugging
             let error_context: String = customize_result
@@ -370,11 +365,11 @@ impl ProxmoxSetup {
         // Convert to template
         println!("  Converting to template...");
         let template_cmd = format!("qm template {}", vmid);
-        let template_result = ssh.execute(&template_cmd).await?;
+        let template_result = self.execute(&template_cmd)?;
         if template_result.exit_status != 0 {
-            // Cleanup VM on failure - log at error level since cleanup failure leaves system in inconsistent state
-            if let Err(cleanup_err) = ssh.execute(&format!("qm destroy {}", vmid)).await {
-                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after template conversion failure - system may have orphaned VM");
+            // Cleanup VM on failure
+            if let Err(cleanup_err) = self.execute(&format!("qm destroy {}", vmid)) {
+                tracing::error!(vmid, error = %cleanup_err, "CRITICAL: Failed to cleanup VM after template conversion failure");
             }
             bail!("Failed to convert to template: {}", template_result.stdout);
         }
@@ -388,14 +383,14 @@ impl ProxmoxSetup {
             .danger_accept_invalid_certs(true)
             .build()?;
 
-        let auth_url = format!("https://{}:8006/api2/json/access/ticket", self.host);
+        let auth_url = "https://127.0.0.1:8006/api2/json/access/ticket";
         let auth_params = [
             ("username", self.proxmox_user.as_str()),
             ("password", self.proxmox_password.as_str()),
         ];
 
         let auth_response = client
-            .post(&auth_url)
+            .post(auth_url)
             .form(&auth_params)
             .send()
             .await
@@ -428,8 +423,7 @@ impl ProxmoxSetup {
         let token_id = format!("{}@{}!{}", user_part, realm, token_name);
 
         let token_url = format!(
-            "https://{}:8006/api2/json/access/users/{}/token/{}",
-            self.host,
+            "https://127.0.0.1:8006/api2/json/access/users/{}/token/{}",
             urlencoding::encode(&format!("{}@{}", user_part, realm)),
             token_name
         );
@@ -489,11 +483,11 @@ impl ProxmoxSetup {
             .danger_accept_invalid_certs(true)
             .build()?;
 
-        let url = format!("https://{}:8006/api2/json/version", self.host);
+        let url = "https://127.0.0.1:8006/api2/json/version";
         let auth_header = format!("PVEAPIToken={}={}", token_id, token_secret);
 
         let response = client
-            .get(&url)
+            .get(url)
             .header(AUTHORIZATION, auth_header)
             .send()
             .await
@@ -505,6 +499,14 @@ impl ProxmoxSetup {
 
         Ok(())
     }
+}
+
+/// Output from command execution.
+struct CommandOutput {
+    stdout: String,
+    #[allow(dead_code)]
+    stderr: String,
+    exit_status: i32,
 }
 
 /// Result of successful setup.
@@ -732,7 +734,7 @@ mod tests {
         template_vmids.insert(OsTemplate::Ubuntu2404, 9000);
 
         let result = SetupResult {
-            api_url: "https://192.168.1.100:8006".to_string(),
+            api_url: "https://127.0.0.1:8006".to_string(),
             api_token_id: "root@pam!dc-agent".to_string(),
             api_token_secret: "secret-uuid".to_string(),
             node: "pve".to_string(),
@@ -742,7 +744,7 @@ mod tests {
 
         let config =
             result.generate_config("https://api.example.com", "pubkey123", Some("/path/to/key"));
-        assert!(config.contains("api_url = \"https://192.168.1.100:8006\""));
+        assert!(config.contains("api_url = \"https://127.0.0.1:8006\""));
         assert!(config.contains("api_token_id = \"root@pam!dc-agent\""));
         assert!(config.contains("template_vmid = 9000"));
         assert!(config.contains("agent_secret_key = \"/path/to/key\""));
@@ -754,7 +756,7 @@ mod tests {
         template_vmids.insert(OsTemplate::Ubuntu2404, 9000);
 
         let result = SetupResult {
-            api_url: "https://192.168.1.100:8006".to_string(),
+            api_url: "https://127.0.0.1:8006".to_string(),
             api_token_id: "root@pam!dc-agent".to_string(),
             api_token_secret: "secret-uuid".to_string(),
             node: "pve".to_string(),

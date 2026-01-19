@@ -1,20 +1,18 @@
 //! Gateway setup - automates Caddy installation and configuration on Proxmox hosts.
 //!
+//! This setup runs LOCALLY on the Proxmox host where dc-agent is installed.
 //! Caddy provides automatic HTTPS via Let's Encrypt HTTP-01 challenge.
 //! No Cloudflare token needed - certs are obtained automatically.
 
 use anyhow::{bail, Context, Result};
-use async_ssh2_tokio::{AuthMethod, Client, ServerCheckMethod};
+use std::process::Command;
 
 /// Latest stable Caddy version
 const CADDY_VERSION: &str = "2.10.2";
 
-/// Gateway setup configuration
+/// Gateway setup configuration.
+/// Runs locally on the Proxmox host.
 pub struct GatewaySetup {
-    pub host: String,
-    pub ssh_port: u16,
-    pub ssh_user: String,
-    pub ssh_password: String,
     pub datacenter: String,
     pub domain: String,
     pub public_ip: String,
@@ -28,97 +26,109 @@ pub struct GatewaySetupResult {
     pub caddy_version: String,
 }
 
+/// Output from local command execution
+struct CommandOutput {
+    stdout: String,
+    #[allow(dead_code)]
+    stderr: String,
+    exit_status: i32,
+}
+
 impl GatewaySetup {
-    /// Run the complete gateway setup process.
+    /// Execute a shell command locally and return output.
+    fn execute(&self, cmd: &str) -> Result<CommandOutput> {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .with_context(|| format!("Failed to execute command: {}", cmd))?;
+
+        Ok(CommandOutput {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            exit_status: output.status.code().unwrap_or(-1),
+        })
+    }
+
+    /// Run the complete gateway setup process locally.
     pub async fn run(&self) -> Result<GatewaySetupResult> {
-        println!("Connecting to host via SSH...");
-        let ssh = self.connect_ssh().await?;
-        println!("  Connected to {}@{}", self.ssh_user, self.host);
+        // Verify we're running as root
+        let result = self.execute("id -u")?;
+        if result.stdout.trim() != "0" {
+            bail!("Gateway setup must be run as root");
+        }
 
         // Step 1: Configure host networking (IP forwarding, NAT, firewall)
-        println!("\nConfiguring host networking...");
-        self.configure_host_networking(&ssh).await?;
+        println!("Configuring host networking...");
+        self.configure_host_networking()?;
 
         // Step 2: Install Caddy binary
         println!("\nInstalling Caddy {}...", CADDY_VERSION);
-        self.install_caddy(&ssh).await?;
+        self.install_caddy()?;
 
         // Step 3: Create directories and user
         println!("\nSetting up directories and user...");
-        self.setup_directories(&ssh).await?;
+        self.setup_directories()?;
 
         // Step 4: Write Caddy config
         println!("\nWriting Caddy configuration...");
-        self.write_caddy_config(&ssh).await?;
+        self.write_caddy_config()?;
 
         // Step 5: Write systemd service
         println!("\nCreating systemd service...");
-        self.write_systemd_service(&ssh).await?;
+        self.write_systemd_service()?;
 
         // Step 6: Enable and start Caddy
         println!("\nStarting Caddy service...");
-        self.start_caddy(&ssh).await?;
+        self.start_caddy()?;
 
         // Step 7: Verify Caddy is running
         println!("\nVerifying Caddy...");
-        self.verify_caddy(&ssh).await?;
+        self.verify_caddy()?;
 
         Ok(GatewaySetupResult {
             caddy_version: CADDY_VERSION.to_string(),
         })
     }
 
-    async fn connect_ssh(&self) -> Result<Client> {
-        let auth = AuthMethod::with_password(&self.ssh_password);
-        let client = Client::connect(
-            (self.host.as_str(), self.ssh_port),
-            &self.ssh_user,
-            auth,
-            ServerCheckMethod::NoCheck,
-        )
-        .await
-        .context("Failed to connect via SSH")?;
-        Ok(client)
-    }
-
     /// Configure host networking: IP forwarding, NAT masquerade, and firewall rules.
     /// All operations are idempotent - safe to run multiple times.
-    async fn configure_host_networking(&self, ssh: &Client) -> Result<()> {
+    fn configure_host_networking(&self) -> Result<()> {
         // 1. Enable IP forwarding
-        self.enable_ip_forwarding(ssh).await?;
+        self.enable_ip_forwarding()?;
 
         // 2. Detect if we're behind 1:1 NAT (public IP not on any interface)
-        let nat_mode = self.detect_nat_mode(ssh).await?;
+        let nat_mode = self.detect_nat_mode()?;
 
         // 3. Detect public interface (for masquerade rules if not NAT mode)
-        let public_iface = self.detect_public_interface(ssh).await?;
+        let public_iface = self.detect_public_interface()?;
         println!("  [ok] Public interface: {}", public_iface);
 
         // 4. Configure NAT masquerade for VM traffic (skip if provider handles 1:1 NAT)
         if nat_mode {
             println!("  [ok] 1:1 NAT detected - skipping masquerade rules (provider handles NAT)");
         } else {
-            self.configure_nat_masquerade(ssh, &public_iface).await?;
+            self.configure_nat_masquerade(&public_iface)?;
         }
 
         // 5. Configure firewall rules
-        self.configure_firewall(ssh).await?;
+        self.configure_firewall()?;
 
         // 6. Persist iptables rules
-        self.persist_iptables(ssh).await?;
+        self.persist_iptables()?;
 
         Ok(())
     }
 
     /// Detect if host is behind 1:1 NAT.
     /// Returns true if public_ip is NOT on any local interface but external services see it.
-    async fn detect_nat_mode(&self, ssh: &Client) -> Result<bool> {
+    fn detect_nat_mode(&self) -> Result<bool> {
         // Check if public IP is assigned to any local interface
         let cmd = format!(
             "ip addr show | grep -q '{}' && echo local || echo not_local",
             self.public_ip
         );
-        let result = ssh.execute(&cmd).await?;
+        let result = self.execute(&cmd)?;
         let ip_is_local = result.stdout.trim() == "local";
 
         if ip_is_local {
@@ -127,9 +137,9 @@ impl GatewaySetup {
         }
 
         // Public IP not local - verify it's actually our external IP (1:1 NAT)
-        let result = ssh
-            .execute("curl -sf --max-time 5 https://ifconfig.me 2>/dev/null || curl -sf --max-time 5 https://api.ipify.org 2>/dev/null || echo unknown")
-            .await?;
+        let result = self.execute(
+            "curl -sf --max-time 5 https://ifconfig.me 2>/dev/null || curl -sf --max-time 5 https://api.ipify.org 2>/dev/null || echo unknown"
+        )?;
         let external_ip = result.stdout.trim();
 
         if external_ip == self.public_ip {
@@ -153,23 +163,23 @@ impl GatewaySetup {
         }
     }
 
-    async fn enable_ip_forwarding(&self, ssh: &Client) -> Result<()> {
+    fn enable_ip_forwarding(&self) -> Result<()> {
         // Check current state
-        let result = ssh.execute("sysctl -n net.ipv4.ip_forward").await?;
+        let result = self.execute("sysctl -n net.ipv4.ip_forward")?;
         if result.stdout.trim() == "1" {
             println!("  [ok] IP forwarding already enabled");
             return Ok(());
         }
 
         // Enable immediately
-        let result = ssh.execute("sysctl -w net.ipv4.ip_forward=1").await?;
+        let result = self.execute("sysctl -w net.ipv4.ip_forward=1")?;
         if result.exit_status != 0 {
             bail!("Failed to enable IP forwarding: {}", result.stdout);
         }
 
         // Make persistent
-        let cmd = r#"echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-dc-gateway.conf"#;
-        let result = ssh.execute(cmd).await?;
+        let result = self
+            .execute(r#"echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-dc-gateway.conf"#)?;
         if result.exit_status != 0 {
             bail!("Failed to persist IP forwarding: {}", result.stdout);
         }
@@ -178,20 +188,19 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn detect_public_interface(&self, ssh: &Client) -> Result<String> {
+    fn detect_public_interface(&self) -> Result<String> {
         // Find interface with the public IP
         let cmd = format!(
             "ip -o addr show | grep '{}' | awk '{{print $2}}'",
             self.public_ip
         );
-        let result = ssh.execute(&cmd).await?;
+        let result = self.execute(&cmd)?;
 
         let iface = result.stdout.trim();
         if iface.is_empty() {
             // Fallback: get default route interface
-            let result = ssh
-                .execute("ip route show default | awk '/default/ {print $5}' | head -1")
-                .await?;
+            let result = self
+                .execute("ip route show default | awk '/default/ {print $5}' | head -1")?;
             let iface = result.stdout.trim();
             if iface.is_empty() {
                 bail!(
@@ -206,7 +215,7 @@ impl GatewaySetup {
         Ok(iface.to_string())
     }
 
-    async fn configure_nat_masquerade(&self, ssh: &Client, public_iface: &str) -> Result<()> {
+    fn configure_nat_masquerade(&self, public_iface: &str) -> Result<()> {
         // All RFC1918 private ranges - VMs could get any private IP via DHCP
         const PRIVATE_RANGES: &[&str] = &["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
 
@@ -216,7 +225,7 @@ impl GatewaySetup {
                 "iptables -t nat -C POSTROUTING -s {} -o {} -j MASQUERADE 2>/dev/null && echo exists || echo missing",
                 subnet, public_iface
             );
-            let result = ssh.execute(&check_cmd).await?;
+            let result = self.execute(&check_cmd)?;
 
             if result.stdout.trim() == "exists" {
                 println!("  [ok] NAT masquerade for {} already configured", subnet);
@@ -228,7 +237,7 @@ impl GatewaySetup {
                 "iptables -t nat -A POSTROUTING -s {} -o {} -j MASQUERADE",
                 subnet, public_iface
             );
-            let result = ssh.execute(&cmd).await?;
+            let result = self.execute(&cmd)?;
             if result.exit_status != 0 {
                 bail!(
                     "Failed to configure NAT masquerade for {}: {}",
@@ -242,7 +251,7 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn configure_firewall(&self, ssh: &Client) -> Result<()> {
+    fn configure_firewall(&self) -> Result<()> {
         // All RFC1918 private ranges - VMs could get any private IP via DHCP
         const PRIVATE_RANGES: &[&str] = &["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
 
@@ -267,7 +276,7 @@ impl GatewaySetup {
                 "iptables -C INPUT -p {} --dport {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
                 proto, port
             );
-            let result = ssh.execute(&check_cmd).await?;
+            let result = self.execute(&check_cmd)?;
 
             if result.stdout.trim() == "exists" {
                 println!("  [ok] {} port {} already open", desc, port);
@@ -275,7 +284,7 @@ impl GatewaySetup {
             }
 
             let cmd = format!("iptables -A INPUT -p {} --dport {} -j ACCEPT", proto, port);
-            let result = ssh.execute(&cmd).await?;
+            let result = self.execute(&cmd)?;
             if result.exit_status != 0 {
                 bail!("Failed to open {} port {}: {}", desc, port, result.stdout);
             }
@@ -288,10 +297,10 @@ impl GatewaySetup {
             "iptables -C FORWARD {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
             established_rule
         );
-        let result = ssh.execute(&check_cmd).await?;
+        let result = self.execute(&check_cmd)?;
         if result.stdout.trim() != "exists" {
             let cmd = format!("iptables -A FORWARD {} -j ACCEPT", established_rule);
-            let result = ssh.execute(&cmd).await?;
+            let result = self.execute(&cmd)?;
             if result.exit_status != 0 {
                 bail!(
                     "Failed to add FORWARD rule for established: {}",
@@ -311,10 +320,10 @@ impl GatewaySetup {
                 "iptables -C FORWARD {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
                 rule
             );
-            let result = ssh.execute(&check_cmd).await?;
+            let result = self.execute(&check_cmd)?;
             if result.stdout.trim() != "exists" {
                 let cmd = format!("iptables -A FORWARD {} -j ACCEPT", rule);
-                let result = ssh.execute(&cmd).await?;
+                let result = self.execute(&cmd)?;
                 if result.exit_status != 0 {
                     bail!(
                         "Failed to add FORWARD rule for outbound {}: {}",
@@ -333,10 +342,10 @@ impl GatewaySetup {
                 "iptables -C FORWARD {} -j ACCEPT 2>/dev/null && echo exists || echo missing",
                 rule
             );
-            let result = ssh.execute(&check_cmd).await?;
+            let result = self.execute(&check_cmd)?;
             if result.stdout.trim() != "exists" {
                 let cmd = format!("iptables -A FORWARD {} -j ACCEPT", rule);
-                let result = ssh.execute(&cmd).await?;
+                let result = self.execute(&cmd)?;
                 if result.exit_status != 0 {
                     bail!(
                         "Failed to add FORWARD rule for inbound {}: {}",
@@ -353,17 +362,17 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn persist_iptables(&self, ssh: &Client) -> Result<()> {
+    fn persist_iptables(&self) -> Result<()> {
         // Check if iptables-persistent is installed
-        let result = ssh
-            .execute("dpkg -l iptables-persistent 2>/dev/null | grep -q '^ii' && echo installed || echo missing")
-            .await?;
+        let result = self.execute(
+            "dpkg -l iptables-persistent 2>/dev/null | grep -q '^ii' && echo installed || echo missing",
+        )?;
 
         if result.stdout.trim() == "missing" {
             // Install iptables-persistent non-interactively
             println!("  Installing iptables-persistent...");
-            let cmd = "DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent";
-            let result = ssh.execute(cmd).await?;
+            let result = self
+                .execute("DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent")?;
             if result.exit_status != 0 {
                 // Not fatal - rules are applied, just won't persist across reboot
                 println!(
@@ -376,7 +385,7 @@ impl GatewaySetup {
         }
 
         // Save rules
-        let result = ssh.execute("netfilter-persistent save").await?;
+        let result = self.execute("netfilter-persistent save")?;
         if result.exit_status != 0 {
             println!(
                 "  [warn] Failed to persist iptables rules: {}",
@@ -390,17 +399,17 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn install_caddy(&self, ssh: &Client) -> Result<()> {
+    fn install_caddy(&self) -> Result<()> {
         // Check if already installed with correct version
-        let check = ssh.execute("caddy version 2>/dev/null || true").await?;
+        let check = self.execute("caddy version 2>/dev/null || true")?;
         if check.stdout.contains(CADDY_VERSION) {
             println!("  Caddy {} already installed", CADDY_VERSION);
             return Ok(());
         }
 
         // Download and install
-        let arch = ssh.execute("uname -m").await?;
-        let arch = match arch.stdout.trim() {
+        let arch_result = self.execute("uname -m")?;
+        let arch = match arch_result.stdout.trim() {
             "x86_64" => "amd64",
             "aarch64" => "arm64",
             other => bail!("Unsupported architecture: {}", other),
@@ -421,13 +430,13 @@ impl GatewaySetup {
             download_url
         );
 
-        let result = ssh.execute(&cmd).await?;
+        let result = self.execute(&cmd)?;
         if result.exit_status != 0 {
             bail!("Failed to install Caddy: {}", result.stdout);
         }
 
         // Verify installation
-        let verify = ssh.execute("caddy version").await?;
+        let verify = self.execute("caddy version")?;
         if !verify.stdout.contains(CADDY_VERSION) {
             bail!("Caddy installation verification failed");
         }
@@ -436,7 +445,7 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn setup_directories(&self, ssh: &Client) -> Result<()> {
+    fn setup_directories(&self) -> Result<()> {
         let commands = [
             // Create caddy user/group
             "id caddy >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin caddy",
@@ -449,7 +458,7 @@ impl GatewaySetup {
         ];
 
         for cmd in commands {
-            let result = ssh.execute(cmd).await?;
+            let result = self.execute(cmd)?;
             if result.exit_status != 0 {
                 bail!("Failed to setup directories: {} - {}", cmd, result.stdout);
             }
@@ -460,7 +469,7 @@ impl GatewaySetup {
         Ok(())
     }
 
-    async fn write_caddy_config(&self, ssh: &Client) -> Result<()> {
+    fn write_caddy_config(&self) -> Result<()> {
         let caddyfile = self.generate_caddyfile();
 
         // Write Caddyfile
@@ -468,15 +477,14 @@ impl GatewaySetup {
             "cat > /etc/caddy/Caddyfile << 'EOFCONFIG'\n{}\nEOFCONFIG",
             caddyfile
         );
-        let result = ssh.execute(&cmd).await?;
+        let result = self.execute(&cmd)?;
         if result.exit_status != 0 {
             bail!("Failed to write Caddyfile: {}", result.stdout);
         }
         println!("  [ok] /etc/caddy/Caddyfile");
 
         // Set ownership and permissions (640 = rw-r-----)
-        ssh.execute("chown caddy:caddy /etc/caddy/Caddyfile && chmod 640 /etc/caddy/Caddyfile")
-            .await?;
+        self.execute("chown caddy:caddy /etc/caddy/Caddyfile && chmod 640 /etc/caddy/Caddyfile")?;
 
         Ok(())
     }
@@ -515,7 +523,7 @@ import /etc/caddy/sites/*.caddy
         )
     }
 
-    async fn write_systemd_service(&self, ssh: &Client) -> Result<()> {
+    fn write_systemd_service(&self) -> Result<()> {
         let service = r#"[Unit]
 Description=Caddy Web Server
 After=network-online.target
@@ -547,13 +555,13 @@ WantedBy=multi-user.target
             "cat > /etc/systemd/system/caddy.service << 'EOFSERVICE'\n{}\nEOFSERVICE",
             service
         );
-        let result = ssh.execute(&cmd).await?;
+        let result = self.execute(&cmd)?;
         if result.exit_status != 0 {
             bail!("Failed to write systemd service: {}", result.stdout);
         }
 
         // Reload systemd
-        let result = ssh.execute("systemctl daemon-reload").await?;
+        let result = self.execute("systemctl daemon-reload")?;
         if result.exit_status != 0 {
             bail!("Failed to reload systemd: {}", result.stdout);
         }
@@ -562,21 +570,21 @@ WantedBy=multi-user.target
         Ok(())
     }
 
-    async fn start_caddy(&self, ssh: &Client) -> Result<()> {
+    fn start_caddy(&self) -> Result<()> {
         // Enable and start
-        let result = ssh.execute("systemctl enable --now caddy").await?;
+        let result = self.execute("systemctl enable --now caddy")?;
         if result.exit_status != 0 {
             bail!("Failed to start Caddy: {}", result.stdout);
         }
 
         // Wait a moment for startup
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        std::thread::sleep(std::time::Duration::from_secs(2));
 
         // Check status
-        let result = ssh.execute("systemctl is-active caddy").await?;
+        let result = self.execute("systemctl is-active caddy")?;
         if result.stdout.trim() != "active" {
             // Get logs for debugging
-            let logs = ssh.execute("journalctl -u caddy -n 20 --no-pager").await?;
+            let logs = self.execute("journalctl -u caddy -n 20 --no-pager")?;
             bail!(
                 "Caddy failed to start. Status: {}. Logs:\n{}",
                 result.stdout.trim(),
@@ -588,11 +596,9 @@ WantedBy=multi-user.target
         Ok(())
     }
 
-    async fn verify_caddy(&self, ssh: &Client) -> Result<()> {
+    fn verify_caddy(&self) -> Result<()> {
         // Check if listening on ports 80 and 443
-        let result = ssh
-            .execute("ss -tlnp | grep -E ':80|:443' | grep caddy || true")
-            .await?;
+        let result = self.execute("ss -tlnp | grep -E ':80|:443' | grep caddy || true")?;
         if result.stdout.is_empty() {
             println!("  [warn] Caddy not yet listening on ports (may still be starting)");
         } else {
@@ -600,9 +606,8 @@ WantedBy=multi-user.target
         }
 
         // Check for certificate storage directory
-        let result = ssh
-            .execute("test -d /var/lib/caddy/certificates && echo exists || echo missing")
-            .await?;
+        let result =
+            self.execute("test -d /var/lib/caddy/certificates && echo exists || echo missing")?;
         if result.stdout.trim() == "exists" {
             println!("  [ok] Certificate storage initialized");
         } else {
@@ -654,10 +659,6 @@ mod tests {
 
     fn test_setup() -> GatewaySetup {
         GatewaySetup {
-            host: "test".into(),
-            ssh_port: 22,
-            ssh_user: "root".into(),
-            ssh_password: "".into(),
             datacenter: "dc-lk".into(),
             domain: "decent-cloud.org".into(),
             public_ip: "203.0.113.1".into(),

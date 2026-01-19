@@ -97,17 +97,9 @@ enum SetupProvisioner {
         force: bool,
 
         // === Optional: Automated Proxmox setup ===
-        /// Proxmox host IP or hostname (enables automatic Proxmox setup)
+        /// Enable automatic Proxmox setup (creates templates and API token)
         #[arg(long)]
-        proxmox_host: Option<String>,
-
-        /// Proxmox SSH port (default: 22)
-        #[arg(long, default_value = "22")]
-        proxmox_ssh_port: u16,
-
-        /// Proxmox SSH username (default: root)
-        #[arg(long, default_value = "root")]
-        proxmox_ssh_user: String,
+        setup_proxmox: bool,
 
         /// Proxmox API username (default: root@pam)
         #[arg(long, default_value = "root@pam")]
@@ -121,7 +113,7 @@ enum SetupProvisioner {
         #[arg(long, default_value = "ubuntu-24.04")]
         proxmox_templates: String,
 
-        /// Skip interactive prompts (use with --proxmox-host for non-interactive setup)
+        /// Skip interactive prompts
         #[arg(long, default_value = "false")]
         non_interactive: bool,
 
@@ -151,21 +143,10 @@ enum SetupProvisioner {
         gateway_ports_per_vm: u16,
     },
     /// Set up Proxmox VE provisioner (creates templates and API token).
-    /// Note: Agent registration now requires a setup token from a pool.
+    /// Must be run on the Proxmox host itself.
+    /// Note: Agent registration requires a setup token from a pool.
     /// Create a pool via the provider dashboard, then run: dc-agent setup token --token <TOKEN>
     Proxmox {
-        /// Proxmox host IP or hostname
-        #[arg(long)]
-        host: String,
-
-        /// SSH port (default: 22)
-        #[arg(long, default_value = "22")]
-        ssh_port: u16,
-
-        /// SSH username (default: root)
-        #[arg(long, default_value = "root")]
-        ssh_user: String,
-
         /// Proxmox API username (default: root@pam)
         #[arg(long, default_value = "root@pam")]
         proxmox_user: String,
@@ -182,6 +163,10 @@ enum SetupProvisioner {
         /// Output config file path
         #[arg(long, default_value = "dc-agent.toml")]
         output: PathBuf,
+
+        /// Skip interactive prompts (requires PROXMOX_PASSWORD env var)
+        #[arg(long, default_value = "false")]
+        non_interactive: bool,
     },
     // Note: Gateway setup is integrated into the Token command via --gateway-* flags.
     // Use: dc-agent setup token --gateway-datacenter <DC> --gateway-public-ip <IP> ...
@@ -226,9 +211,7 @@ async fn run_setup_token(
     api_url: &str,
     output: &std::path::Path,
     force: bool,
-    proxmox_host: Option<String>,
-    proxmox_ssh_port: u16,
-    proxmox_ssh_user: &str,
+    setup_proxmox: bool,
     proxmox_user: &str,
     proxmox_storage: &str,
     proxmox_templates: &str,
@@ -240,7 +223,6 @@ async fn run_setup_token(
     gateway_port_start: u16,
     gateway_port_end: u16,
     gateway_ports_per_vm: u16,
-    gateway_ssh_host: Option<String>,
 ) -> Result<()> {
     use dc_agent::geolocation::{country_to_region, detect_country, region_display_name};
     use std::io::Write;
@@ -315,12 +297,9 @@ async fn run_setup_token(
     println!("Permissions: {}", response.permissions.join(", "));
 
     // Step 5: If pool uses Proxmox, optionally run automated setup
-    let proxmox_host_for_gateway = proxmox_host.clone();
     let proxmox_config = if response.provisioner_type == "proxmox" {
         run_proxmox_setup_if_requested(
-            proxmox_host,
-            proxmox_ssh_port,
-            proxmox_ssh_user,
+            setup_proxmox,
             proxmox_user,
             proxmox_storage,
             proxmox_templates,
@@ -425,6 +404,7 @@ type = "{provisioner_type}"
     println!("Configuration written to: {}", output.display());
 
     // Step 7: Run gateway setup if parameters provided
+    // Gateway setup runs locally on the host (same as Proxmox setup)
     let gateway_configured = run_gateway_setup_if_requested(
         gateway_datacenter,
         gateway_public_ip,
@@ -432,10 +412,6 @@ type = "{provisioner_type}"
         gateway_port_start,
         gateway_port_end,
         gateway_ports_per_vm,
-        gateway_ssh_host.or(proxmox_host_for_gateway),
-        proxmox_ssh_port,
-        proxmox_ssh_user,
-        non_interactive,
         output,
     )
     .await?;
@@ -475,9 +451,9 @@ type = "{provisioner_type}"
                 println!("     - node: Your Proxmox node name");
                 println!("     - template_vmid: Create a template VM (e.g., Ubuntu 24.04)");
                 println!();
-                println!("  Alternative: Run setup again with --proxmox-host flag");
+                println!("  Alternative: Run setup again with --setup-proxmox flag");
                 println!(
-                    "     dc-agent setup token --token {} --proxmox-host YOUR-HOST",
+                    "     dc-agent setup token --token {} --setup-proxmox",
                     token
                 );
                 println!();
@@ -523,11 +499,10 @@ type = "{provisioner_type}"
 }
 
 /// Optionally run Proxmox setup based on CLI args or interactive prompt.
+/// This runs locally on the Proxmox host - no SSH required.
 /// Returns Some(ProxmoxConfig) if setup was completed, None otherwise.
 async fn run_proxmox_setup_if_requested(
-    proxmox_host: Option<String>,
-    proxmox_ssh_port: u16,
-    proxmox_ssh_user: &str,
+    setup_proxmox: bool,
     proxmox_user: &str,
     proxmox_storage: &str,
     proxmox_templates: &str,
@@ -537,18 +512,19 @@ async fn run_proxmox_setup_if_requested(
     use dc_agent::setup::proxmox::{OsTemplate, ProxmoxSetup};
 
     // Determine if we should run Proxmox setup
-    let host = if let Some(h) = proxmox_host {
-        // Host provided via CLI - run setup
-        h
+    let should_setup = if setup_proxmox {
+        // Explicitly requested via CLI flag
+        true
     } else if non_interactive {
-        // Non-interactive mode without host - skip setup
+        // Non-interactive mode without flag - skip setup
         return Ok(None);
     } else {
         // Interactive mode - ask user
         println!();
         println!("This pool uses Proxmox VE provisioner.");
         println!("Would you like to configure Proxmox automatically now?");
-        println!("(This will SSH into Proxmox, create API tokens, and download templates)");
+        println!("(This will create API tokens and download templates)");
+        println!("Note: Must be run on the Proxmox host.");
         print!("Configure Proxmox now? (y/n): ");
         std::io::Write::flush(&mut std::io::stdout())?;
 
@@ -559,21 +535,12 @@ async fn run_proxmox_setup_if_requested(
             println!("Skipping Proxmox setup. You'll need to configure it manually.");
             return Ok(None);
         }
-
-        // Prompt for Proxmox host
-        print!("Proxmox host (IP or hostname): ");
-        std::io::Write::flush(&mut std::io::stdout())?;
-        let mut host_input = String::new();
-        std::io::stdin().read_line(&mut host_input)?;
-        let host = host_input.trim().to_string();
-
-        if host.is_empty() {
-            println!("No host provided. Skipping Proxmox setup.");
-            return Ok(None);
-        }
-
-        host
+        true
     };
+
+    if !should_setup {
+        return Ok(None);
+    }
 
     // Parse templates
     let template_list: Vec<OsTemplate> = proxmox_templates
@@ -588,10 +555,8 @@ async fn run_proxmox_setup_if_requested(
     }
 
     println!();
-    println!("Proxmox Auto-Configuration");
-    println!("==========================");
-    println!("  Host: {}", host);
-    println!("  SSH User: {}", proxmox_ssh_user);
+    println!("Proxmox Auto-Configuration (Local)");
+    println!("===================================");
     println!("  Proxmox User: {}", proxmox_user);
     println!("  Storage: {}", proxmox_storage);
     println!(
@@ -604,36 +569,29 @@ async fn run_proxmox_setup_if_requested(
     );
     println!();
 
-    // Prompt for passwords
-    let ssh_password =
-        rpassword::prompt_password(format!("SSH password for {}@{}: ", proxmox_ssh_user, host))?;
-
-    // Extract user part from proxmox_user (e.g., "root" from "root@pam")
-    let proxmox_user_part = proxmox_user
-        .split_once('@')
-        .map(|(user, _)| user)
-        .unwrap_or(proxmox_user);
-
-    let proxmox_password = if proxmox_ssh_user == proxmox_user_part {
-        ssh_password.clone()
-    } else {
-        rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
+    // Get Proxmox password from env or prompt
+    let proxmox_password = match std::env::var("PROXMOX_PASSWORD") {
+        Ok(pw) if !pw.is_empty() => pw,
+        _ => {
+            if non_interactive {
+                anyhow::bail!(
+                    "PROXMOX_PASSWORD environment variable required in non-interactive mode"
+                );
+            }
+            rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
+        }
     };
 
     println!();
 
     let setup = ProxmoxSetup {
-        host: host.clone(),
-        port: proxmox_ssh_port,
-        ssh_user: proxmox_ssh_user.to_string(),
-        ssh_password,
         proxmox_user: proxmox_user.to_string(),
         proxmox_password,
         storage: proxmox_storage.to_string(),
         templates: template_list,
     };
 
-    println!("Running Proxmox setup...");
+    println!("Running Proxmox setup locally...");
     let result = setup.run().await?;
 
     println!();
@@ -665,8 +623,8 @@ async fn run_proxmox_setup_if_requested(
 }
 
 /// Optionally run gateway setup based on CLI args.
+/// Runs locally on the Proxmox host - no SSH required.
 /// Returns true if gateway was configured, false otherwise.
-#[allow(clippy::too_many_arguments)]
 async fn run_gateway_setup_if_requested(
     datacenter: Option<String>,
     public_ip: Option<String>,
@@ -674,10 +632,6 @@ async fn run_gateway_setup_if_requested(
     port_start: u16,
     port_end: u16,
     ports_per_vm: u16,
-    ssh_host: Option<String>,
-    ssh_port: u16,
-    ssh_user: &str,
-    non_interactive: bool,
     config_path: &std::path::Path,
 ) -> Result<bool> {
     use std::io::Write;
@@ -696,13 +650,8 @@ async fn run_gateway_setup_if_requested(
         anyhow::anyhow!("--gateway-public-ip is required when --gateway-datacenter is set")
     })?;
 
-    let host = ssh_host.ok_or_else(|| {
-        anyhow::anyhow!("--proxmox-host is required for gateway setup (used as SSH target)")
-    })?;
-
     println!();
-    println!("Setting up Gateway (Caddy reverse proxy)...");
-    println!("  Host: {}", host);
+    println!("Setting up Gateway (Caddy reverse proxy) locally...");
     println!("  Datacenter: {}", datacenter);
     println!("  Domain: {}", domain);
     println!("  Public IP: {}", public_ip);
@@ -713,20 +662,7 @@ async fn run_gateway_setup_if_requested(
     println!("  TLS: Automatic via Let's Encrypt HTTP-01 challenge");
     println!();
 
-    // In non-interactive mode, we can't prompt for password
-    let ssh_password = if non_interactive {
-        anyhow::bail!("Gateway setup requires SSH password. Cannot run in non-interactive mode.");
-    } else {
-        rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?
-    };
-
-    println!();
-
     let setup = GatewaySetup {
-        host: host.clone(),
-        ssh_port,
-        ssh_user: ssh_user.to_string(),
-        ssh_password,
         datacenter: datacenter.clone(),
         domain: domain.to_string(),
         public_ip: public_ip.clone(),
@@ -760,9 +696,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             api_url,
             output,
             force,
-            proxmox_host,
-            proxmox_ssh_port,
-            proxmox_ssh_user,
+            setup_proxmox,
             proxmox_user,
             proxmox_storage,
             proxmox_templates,
@@ -779,9 +713,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 &api_url,
                 &output,
                 force,
-                proxmox_host.clone(),
-                proxmox_ssh_port,
-                &proxmox_ssh_user,
+                setup_proxmox,
                 &proxmox_user,
                 &proxmox_storage,
                 &proxmox_templates,
@@ -793,21 +725,18 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 gateway_port_start,
                 gateway_port_end,
                 gateway_ports_per_vm,
-                proxmox_host, // Reuse as SSH host for gateway
             )
             .await
         }
         SetupProvisioner::Proxmox {
-            host,
-            ssh_port,
-            ssh_user,
             proxmox_user,
             storage,
             templates,
             output,
+            non_interactive,
         } => {
-            println!("Decent Cloud Agent - Proxmox Setup");
-            println!("===================================\n");
+            println!("Decent Cloud Agent - Proxmox Setup (Local)");
+            println!("==========================================\n");
 
             // Parse templates
             let template_list: Vec<OsTemplate> = templates
@@ -827,8 +756,6 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
 
             println!();
             println!("Proxmox Setup");
-            println!("  Host: {}", host);
-            println!("  SSH User: {}", ssh_user);
             println!("  Proxmox User: {}", proxmox_user);
             println!("  Storage: {}", storage);
             println!(
@@ -841,27 +768,22 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             );
             println!();
 
-            // Prompt for passwords
-            let ssh_password =
-                rpassword::prompt_password(format!("SSH password for {}@{}: ", ssh_user, host))?;
-            // Extract user part from proxmox_user (e.g., "root" from "root@pam")
-            let proxmox_user_part = proxmox_user
-                .split_once('@')
-                .map(|(user, _)| user)
-                .unwrap_or(&proxmox_user);
-            let proxmox_password = if ssh_user == proxmox_user_part {
-                ssh_password.clone()
-            } else {
-                rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
+            // Get Proxmox password from env or prompt
+            let proxmox_password = match std::env::var("PROXMOX_PASSWORD") {
+                Ok(pw) if !pw.is_empty() => pw,
+                _ => {
+                    if non_interactive {
+                        anyhow::bail!(
+                            "PROXMOX_PASSWORD environment variable required in non-interactive mode"
+                        );
+                    }
+                    rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
+                }
             };
 
             println!();
 
             let setup = ProxmoxSetup {
-                host: host.clone(),
-                port: ssh_port,
-                ssh_user,
-                ssh_password,
                 proxmox_user,
                 proxmox_password,
                 storage,
@@ -874,7 +796,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             result.write_proxmox_config(&output)?;
 
             println!();
-            println!("===================================");
+            println!("==========================================");
             println!("Proxmox setup complete!");
             println!();
             println!("Proxmox configuration written to: {}", output.display());

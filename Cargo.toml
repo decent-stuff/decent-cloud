@@ -30,6 +30,7 @@ ed25519-dalek = { version = "2", default-features = false, features = [
     "digest",
     "pkcs8",
     "pem",
+    "rand_core",
 ] }
 env_logger = "0.11"
 filetime = "0.2"
