@@ -55,6 +55,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Update version in Cargo.toml
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          sed -i.bak 's/^version = "[0-9.]*"/version = "'"$VERSION"'"/' Cargo.toml
+          rm -f Cargo.toml.bak
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -92,6 +98,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Update version in Cargo.toml
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          sed -i 's/^version = "[0-9.]*"/version = "'"$VERSION"'"/' Cargo.toml
 
       - name: Build dc-agent
         run: ./scripts/build-dc-agent.sh

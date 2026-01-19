@@ -3,8 +3,7 @@
 //! This setup runs LOCALLY on the Proxmox host where dc-agent is installed.
 
 use anyhow::{bail, Context, Result};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, COOKIE};
-use serde::Deserialize;
+use reqwest::header::AUTHORIZATION;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
@@ -106,10 +105,9 @@ impl std::fmt::Display for OsTemplate {
 }
 
 /// Proxmox setup configuration.
-/// Runs locally on the Proxmox host.
+/// Runs locally on the Proxmox host as root - no password needed.
 pub struct ProxmoxSetup {
     pub proxmox_user: String,
-    pub proxmox_password: String,
     pub storage: String,
     pub templates: Vec<OsTemplate>,
 }
@@ -378,104 +376,56 @@ impl ProxmoxSetup {
     }
 
     async fn create_api_token(&self) -> Result<(String, String)> {
-        // First, get authentication ticket
-        let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .build()?;
-
-        let auth_url = "https://127.0.0.1:8006/api2/json/access/ticket";
-        let auth_params = [
-            ("username", self.proxmox_user.as_str()),
-            ("password", self.proxmox_password.as_str()),
-        ];
-
-        let auth_response = client
-            .post(auth_url)
-            .form(&auth_params)
-            .send()
-            .await
-            .context("Failed to authenticate with Proxmox API")?;
-
-        if !auth_response.status().is_success() {
-            bail!("Proxmox authentication failed: {}", auth_response.status());
-        }
-
-        let auth_data: AuthResponse = auth_response
-            .json()
-            .await
-            .context("Failed to parse auth response")?;
-
-        let ticket = &auth_data.data.ticket;
-        let csrf_token = &auth_data.data.csrf_prevention_token;
-
-        // Create API token
+        // Use CLI tools (pveum) since we're running as root on Proxmox host
+        // This avoids needing password authentication
         let token_name = "dc-agent";
         let (user_part, realm) = match self.proxmox_user.split_once('@') {
             Some((user, realm)) => (user, realm),
-            None => {
-                tracing::warn!(
-                    proxmox_user = %self.proxmox_user,
-                    "No realm specified in proxmox_user, defaulting to 'pam'"
-                );
-                (self.proxmox_user.as_str(), "pam")
-            }
+            None => (self.proxmox_user.as_str(), "pam"),
         };
-        let token_id = format!("{}@{}!{}", user_part, realm, token_name);
+        let full_user = format!("{}@{}", user_part, realm);
+        let token_id = format!("{}!{}", full_user, token_name);
 
-        let token_url = format!(
-            "https://127.0.0.1:8006/api2/json/access/users/{}/token/{}",
-            urlencoding::encode(&format!("{}@{}", user_part, realm)),
-            token_name
-        );
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            COOKIE,
-            HeaderValue::from_str(&format!("PVEAuthCookie={}", ticket))?,
-        );
-        headers.insert("CSRFPreventionToken", HeaderValue::from_str(csrf_token)?);
-
-        // Check if token already exists, delete it first
-        let check_response = client
-            .get(&token_url)
-            .headers(headers.clone())
-            .send()
-            .await?;
-
-        if check_response.status().is_success() {
-            // Token exists, delete it
-            client
-                .delete(&token_url)
-                .headers(headers.clone())
-                .send()
-                .await
-                .context("Failed to delete existing token")?;
+        // Check if token already exists and delete it
+        let check_result = self.execute(&format!(
+            "pveum user token list {} --output-format json 2>/dev/null | grep -q '\"{}\"'",
+            full_user, token_name
+        ))?;
+        if check_result.exit_status == 0 {
+            println!("  Removing existing API token...");
+            let delete_result =
+                self.execute(&format!("pveum user token remove {} {}", full_user, token_name))?;
+            if delete_result.exit_status != 0 {
+                bail!(
+                    "Failed to remove existing token: {}",
+                    delete_result.stdout.trim()
+                );
+            }
         }
 
         // Create new token with privilege separation disabled (inherits user permissions)
-        let token_response = client
-            .post(&token_url)
-            .headers(headers)
-            .form(&[("privsep", "0")])
-            .send()
-            .await
-            .context("Failed to create API token")?;
-
-        if !token_response.status().is_success() {
-            let status = token_response.status();
-            let body = token_response
-                .text()
-                .await
-                .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
-            bail!("Failed to create API token: {} - {}", status, body);
+        // pveum outputs the token value to stdout
+        let create_result = self.execute(&format!(
+            "pveum user token add {} {} --privsep 0 --output-format json",
+            full_user, token_name
+        ))?;
+        if create_result.exit_status != 0 {
+            bail!(
+                "Failed to create API token: {}",
+                create_result.stdout.trim()
+            );
         }
 
-        let token_data: TokenResponse = token_response
-            .json()
-            .await
-            .context("Failed to parse token response")?;
+        // Parse the JSON output to get the token value
+        // Output format: {"full-tokenid":"root@pam!dc-agent","info":{"privsep":"0"},"value":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+        let token_output: serde_json::Value = serde_json::from_str(&create_result.stdout)
+            .context("Failed to parse pveum token output")?;
+        let token_secret = token_output["value"]
+            .as_str()
+            .context("Token output missing 'value' field")?
+            .to_string();
 
-        Ok((token_id, token_data.data.value))
+        Ok((token_id, token_secret))
     }
 
     async fn verify_api_token(&self, token_id: &str, token_secret: &str) -> Result<()> {
@@ -666,28 +616,6 @@ verify_ssl = false
         std::fs::write(path, content).context("Failed to write config file")?;
         Ok(())
     }
-}
-
-#[derive(Deserialize)]
-struct AuthResponse {
-    data: AuthData,
-}
-
-#[derive(Deserialize)]
-struct AuthData {
-    ticket: String,
-    #[serde(rename = "CSRFPreventionToken")]
-    csrf_prevention_token: String,
-}
-
-#[derive(Deserialize)]
-struct TokenResponse {
-    data: TokenData,
-}
-
-#[derive(Deserialize)]
-struct TokenData {
-    value: String,
 }
 
 // Hash implementation for OsTemplate to use in HashMap

@@ -12,11 +12,13 @@ This guide covers installing the dc-agent provisioning agent on your infrastruct
 
 ### 2. Run the Installer
 
-On your Proxmox host (or any Linux x86_64 server):
+On your Proxmox host (or any Linux x86_64 server), run as root:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/decent-stuff/decent-cloud/main/scripts/install-dc-agent.sh | sudo bash -s YOUR_TOKEN
+curl -sSL https://raw.githubusercontent.com/decent-stuff/decent-cloud/main/scripts/install-dc-agent.sh | bash -s YOUR_TOKEN
 ```
+
+> **Note:** Run this command as root. If not logged in as root, use `su -` first. Proxmox systems typically don't have `sudo` installed.
 
 This will:
 - Download the latest dc-agent binary

@@ -310,6 +310,31 @@ async fn run_setup_token(
         None
     };
 
+    // Step 5b: Auto-derive gateway datacenter from pool_id if not provided
+    // Pool ID format: "sl-8eba3c90" -> datacenter "dc-sl"
+    let gateway_datacenter = gateway_datacenter.or_else(|| {
+        // Only auto-enable if:
+        // 1. On Proxmox host (where VMs will be created)
+        // 2. Pool has dns_manage permission (can manage gateway DNS)
+        // 3. Proxmox was configured (so we have VMs to route to)
+        if is_proxmox_host()
+            && response.permissions.contains(&"dns_manage".to_string())
+            && proxmox_config.is_some()
+        {
+            // Extract datacenter code from pool_id (e.g., "sl-8eba3c90" -> "sl")
+            if let Some(dc_code) = response.pool_id.split('-').next() {
+                let datacenter = format!("dc-{}", dc_code);
+                println!();
+                println!("[auto] Gateway enabled: {} (derived from pool {})", datacenter, response.pool_id);
+                Some(datacenter)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
     // Step 6: Write config file with appropriate template based on provisioner type
     let provisioner_template = match response.provisioner_type.as_str() {
         "proxmox" => {
@@ -498,7 +523,16 @@ type = "{provisioner_type}"
     Ok(())
 }
 
-/// Optionally run Proxmox setup based on CLI args or interactive prompt.
+/// Check if we're running on a Proxmox host by looking for pvesm command.
+fn is_proxmox_host() -> bool {
+    std::process::Command::new("which")
+        .arg("pvesm")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Optionally run Proxmox setup based on CLI args or auto-detection.
 /// This runs locally on the Proxmox host - no SSH required.
 /// Returns Some(ProxmoxConfig) if setup was completed, None otherwise.
 async fn run_proxmox_setup_if_requested(
@@ -511,31 +545,47 @@ async fn run_proxmox_setup_if_requested(
     use dc_agent::config::ProxmoxConfig;
     use dc_agent::setup::proxmox::{OsTemplate, ProxmoxSetup};
 
+    // Auto-detect if we're on a Proxmox host
+    let on_proxmox = is_proxmox_host();
+
     // Determine if we should run Proxmox setup
     let should_setup = if setup_proxmox {
         // Explicitly requested via CLI flag
         true
-    } else if non_interactive {
-        // Non-interactive mode without flag - skip setup
-        return Ok(None);
-    } else {
-        // Interactive mode - ask user
+    } else if on_proxmox && non_interactive {
+        // Non-interactive mode on Proxmox host - auto-enable setup!
         println!();
-        println!("This pool uses Proxmox VE provisioner.");
+        println!("[auto] Proxmox host detected - running automatic Proxmox setup");
+        true
+    } else if non_interactive {
+        // Non-interactive mode, not on Proxmox - skip setup
+        return Ok(None);
+    } else if on_proxmox {
+        // Interactive mode on Proxmox host - ask but default to yes
+        println!();
+        println!("Proxmox host detected!");
         println!("Would you like to configure Proxmox automatically now?");
         println!("(This will create API tokens and download templates)");
-        println!("Note: Must be run on the Proxmox host.");
-        print!("Configure Proxmox now? (y/n): ");
+        print!("Configure Proxmox now? (Y/n): ");
         std::io::Write::flush(&mut std::io::stdout())?;
 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
+        let input = input.trim();
 
-        if !input.trim().eq_ignore_ascii_case("y") {
+        // Default to yes (empty input or 'y')
+        if input.is_empty() || input.eq_ignore_ascii_case("y") {
+            true
+        } else {
             println!("Skipping Proxmox setup. You'll need to configure it manually.");
             return Ok(None);
         }
-        true
+    } else {
+        // Not on Proxmox host - skip unless explicitly requested
+        println!();
+        println!("Note: Not running on a Proxmox host.");
+        println!("      Use --setup-proxmox if this IS a Proxmox host.");
+        return Ok(None);
     };
 
     if !should_setup {
@@ -555,9 +605,9 @@ async fn run_proxmox_setup_if_requested(
     }
 
     println!();
-    println!("Proxmox Auto-Configuration (Local)");
-    println!("===================================");
-    println!("  Proxmox User: {}", proxmox_user);
+    println!("Proxmox Auto-Configuration");
+    println!("==========================");
+    println!("  User: {} (for API token)", proxmox_user);
     println!("  Storage: {}", proxmox_storage);
     println!(
         "  Templates: {}",
@@ -569,24 +619,8 @@ async fn run_proxmox_setup_if_requested(
     );
     println!();
 
-    // Get Proxmox password from env or prompt
-    let proxmox_password = match std::env::var("PROXMOX_PASSWORD") {
-        Ok(pw) if !pw.is_empty() => pw,
-        _ => {
-            if non_interactive {
-                anyhow::bail!(
-                    "PROXMOX_PASSWORD environment variable required in non-interactive mode"
-                );
-            }
-            rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
-        }
-    };
-
-    println!();
-
     let setup = ProxmoxSetup {
         proxmox_user: proxmox_user.to_string(),
-        proxmox_password,
         storage: proxmox_storage.to_string(),
         templates: template_list,
     };
@@ -742,7 +776,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             storage,
             templates,
             output,
-            non_interactive,
+            non_interactive: _, // No longer needed - CLI tools don't require password
         } => {
             println!("Decent Cloud Agent - Proxmox Setup (Local)");
             println!("==========================================\n");
@@ -765,7 +799,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
 
             println!();
             println!("Proxmox Setup");
-            println!("  Proxmox User: {}", proxmox_user);
+            println!("  User: {} (for API token)", proxmox_user);
             println!("  Storage: {}", storage);
             println!(
                 "  Templates: {}",
@@ -777,24 +811,8 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             );
             println!();
 
-            // Get Proxmox password from env or prompt
-            let proxmox_password = match std::env::var("PROXMOX_PASSWORD") {
-                Ok(pw) if !pw.is_empty() => pw,
-                _ => {
-                    if non_interactive {
-                        anyhow::bail!(
-                            "PROXMOX_PASSWORD environment variable required in non-interactive mode"
-                        );
-                    }
-                    rpassword::prompt_password(format!("Proxmox password for {}: ", proxmox_user))?
-                }
-            };
-
-            println!();
-
             let setup = ProxmoxSetup {
                 proxmox_user,
-                proxmox_password,
                 storage,
                 templates: template_list,
             };
