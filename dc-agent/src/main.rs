@@ -544,11 +544,21 @@ type = "{provisioner_type}"
 
 /// Check if we're running on a Proxmox host by looking for pvesm command.
 fn is_proxmox_host() -> bool {
+    // Check multiple indicators for Proxmox VE:
+    // 1. pvesm command exists (Proxmox storage manager)
+    // 2. pveversion command exists
+    // 3. /etc/pve directory exists (Proxmox config dir)
     std::process::Command::new("which")
         .arg("pvesm")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+        || std::process::Command::new("which")
+            .arg("pveversion")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        || std::path::Path::new("/etc/pve").exists()
 }
 
 /// Optionally run Proxmox setup based on CLI args or auto-detection.

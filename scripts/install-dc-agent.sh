@@ -106,8 +106,18 @@ info "Installing binary to ${INSTALL_DIR}/dc-agent..."
 mv /tmp/dc-agent "${INSTALL_DIR}/dc-agent"
 mkdir -p "$CONFIG_DIR"
 
-# For fresh installs, run setup
-if [[ "$IS_UPGRADE" != "true" ]] || [[ ! -f "${CONFIG_DIR}/dc-agent.toml" ]]; then
+# Check if setup needs to run:
+# - Fresh install (no config file)
+# - Config has placeholder values that need to be replaced
+NEEDS_SETUP=false
+if [[ ! -f "${CONFIG_DIR}/dc-agent.toml" ]]; then
+    NEEDS_SETUP=true
+elif grep -q "YOUR-PROXMOX-HOST\|REPLACE-WITH-YOUR" "${CONFIG_DIR}/dc-agent.toml" 2>/dev/null; then
+    info "Config has placeholder values - re-running setup"
+    NEEDS_SETUP=true
+fi
+
+if [[ "$NEEDS_SETUP" == "true" ]]; then
     info "Registering agent with ${API_URL}..."
     "${INSTALL_DIR}/dc-agent" setup token \
         --token "$TOKEN" \
