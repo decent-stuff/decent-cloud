@@ -18,9 +18,21 @@ pub trait SmsProvider: Send + Sync {
 /// Priority: TextBee (if configured) > Twilio (if configured) > None
 pub fn get_sms_provider() -> Option<Box<dyn SmsProvider>> {
     if TextBeeClient::is_configured() {
-        TextBeeClient::from_env().ok().map(|c| Box::new(c) as _)
+        match TextBeeClient::from_env() {
+            Ok(c) => Some(Box::new(c) as _),
+            Err(e) => {
+                tracing::error!("TextBee is configured but failed to initialize: {:#}", e);
+                None
+            }
+        }
     } else if TwilioClient::is_configured() {
-        TwilioClient::from_env().ok().map(|c| Box::new(c) as _)
+        match TwilioClient::from_env() {
+            Ok(c) => Some(Box::new(c) as _),
+            Err(e) => {
+                tracing::error!("Twilio is configured but failed to initialize: {:#}", e);
+                None
+            }
+        }
     } else {
         None
     }
@@ -202,7 +214,16 @@ impl SmsProvider for TextBeeClient {
         }
 
         // Parse response to extract message ID if available
-        let response: TextBeeResponse = resp.json().await.unwrap_or(TextBeeResponse { data: None });
+        let response: TextBeeResponse = match resp.json().await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(
+                    "TextBee response parsing failed (SMS may still have been sent): {:#}",
+                    e
+                );
+                TextBeeResponse { data: None }
+            }
+        };
 
         let msg_id = response
             .data

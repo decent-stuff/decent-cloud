@@ -226,7 +226,7 @@ pub async fn google_callback(
     let (account_id, username) = if let Some(oauth_acc) = existing_oauth_account {
         // OAuth account already linked - fetch account
         let account = db
-            .get_account_by_id(&oauth_acc.account_id)
+            .get_account(&oauth_acc.account_id)
             .await
             .map_err(|e| {
                 poem::Error::from_string(

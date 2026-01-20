@@ -83,9 +83,16 @@ pub async fn dispatch_notification(
         } else {
             match send_telegram_notification(db, notification, &config).await {
                 Ok(()) => {
-                    db.increment_notification_usage(&provider_id, "telegram")
+                    if let Err(e) = db
+                        .increment_notification_usage(&provider_id, "telegram")
                         .await
-                        .ok();
+                    {
+                        tracing::error!(
+                            "Failed to increment telegram notification usage for {}: {:#}",
+                            provider_id,
+                            e
+                        );
+                    }
                     channels_sent.push("telegram");
                 }
                 Err(e) => errors.push(format!("telegram: {}", e)),
@@ -97,9 +104,16 @@ pub async fn dispatch_notification(
     if config.notify_email {
         match send_email_notification(db, email_service, notification).await {
             Ok(()) => {
-                db.increment_notification_usage(&provider_id, "email")
+                if let Err(e) = db
+                    .increment_notification_usage(&provider_id, "email")
                     .await
-                    .ok();
+                {
+                    tracing::error!(
+                        "Failed to increment email notification usage for {}: {:#}",
+                        provider_id,
+                        e
+                    );
+                }
                 channels_sent.push("email");
             }
             Err(e) => errors.push(format!("email: {}", e)),
@@ -117,9 +131,16 @@ pub async fn dispatch_notification(
         } else {
             match send_sms_notification(notification, &config).await {
                 Ok(()) => {
-                    db.increment_notification_usage(&provider_id, "sms")
+                    if let Err(e) = db
+                        .increment_notification_usage(&provider_id, "sms")
                         .await
-                        .ok();
+                    {
+                        tracing::error!(
+                            "Failed to increment sms notification usage for {}: {:#}",
+                            provider_id,
+                            e
+                        );
+                    }
                     channels_sent.push("sms");
                 }
                 Err(e) => errors.push(format!("sms: {}", e)),
@@ -192,7 +213,7 @@ async fn send_email_notification(
         .ok_or_else(|| anyhow::anyhow!("No account found for pubkey"))?;
 
     let account = db
-        .get_account_by_id(&account_id)
+        .get_account(&account_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
 

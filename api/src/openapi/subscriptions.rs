@@ -191,7 +191,7 @@ impl SubscriptionsApi {
         };
 
         // Get account for email
-        let account = match db.get_account_by_id(&account_id).await {
+        let account = match db.get_account(&account_id).await {
             Ok(Some(a)) => a,
             Ok(None) => {
                 return Json(ApiResponse {

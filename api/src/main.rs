@@ -101,7 +101,7 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     // Database setup
     // Note: DATABASE_URL should be set via environment variable or .env file
     let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://test:test@localhost:5432/test".to_string());
+        .unwrap_or_else(|_| crate::database::DEFAULT_DATABASE_URL.to_string());
     let database = match Database::new(&database_url).await {
         Ok(db) => {
             tracing::info!("Database initialized at {}", database_url);
@@ -323,7 +323,8 @@ async fn doctor_command() -> Result<(), std::io::Error> {
             errors += 1;
             println!("\n  Set DATABASE_URL in your .env file or environment:");
             println!(
-                "    - Local dev (with docker compose): postgres://test:test@localhost:5432/test"
+                "    - Local dev (with docker compose): {}",
+                crate::database::DEFAULT_DATABASE_URL
             );
             println!("    - Production: postgres://user:password@host:5432/database");
             println!("\n  To start PostgreSQL locally:");

@@ -131,10 +131,6 @@ fn new_temp_ledger(labels_to_index: Option<Vec<String>>) -> LedgerMap {
         .expect("Failed to create a test temp ledger")
 }
 
-// fn new_test_account(desc: &[u8]) -> Account {
-//     Account::from(Principal::from_slice(desc))
-// }
-
 #[test]
 fn test_get_last_rewards_distribution_ts() {
     let mut test_ledger = new_temp_ledger(None);

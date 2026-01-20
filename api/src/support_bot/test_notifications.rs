@@ -75,7 +75,7 @@ async fn send_test_email(
         .ok_or_else(|| anyhow::anyhow!("No account found for this key"))?;
 
     let account = db
-        .get_account_by_id(&account_id)
+        .get_account(&account_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
 

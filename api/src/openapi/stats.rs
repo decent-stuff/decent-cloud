@@ -1,4 +1,4 @@
-use super::common::{ApiResponse, ApiTags};
+use super::common::{decode_pubkey, ApiResponse, ApiTags};
 use crate::{database::Database, metadata_cache::MetadataCache};
 use poem::web::Data;
 use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
@@ -120,13 +120,13 @@ impl StatsApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<crate::database::stats::ReputationInfo>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(e),
                 })
             }
         };

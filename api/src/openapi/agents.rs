@@ -679,93 +679,9 @@ impl AgentsApi {
     }
 }
 
-/// Validate gateway slug format (6 lowercase alphanumeric characters)
-fn validate_slug(slug: &str) -> Result<(), &'static str> {
-    if slug.len() != 6 {
-        return Err("Invalid slug: must be 6 lowercase alphanumeric characters");
-    }
-    if !slug
-        .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-    {
-        return Err("Invalid slug: must be 6 lowercase alphanumeric characters");
-    }
-    Ok(())
-}
-
-/// Validate datacenter format (1-20 characters)
-fn validate_datacenter(datacenter: &str) -> Result<(), &'static str> {
-    if datacenter.is_empty() || datacenter.len() > 20 {
-        return Err("Invalid datacenter: must be 1-20 characters");
-    }
-    Ok(())
-}
-
-/// Validate DNS action (must be "create" or "delete")
-fn validate_action(action: &str) -> Result<(), &'static str> {
-    match action {
-        "create" | "delete" => Ok(()),
-        _ => Err("Invalid action: must be 'create' or 'delete'"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_validate_slug_valid() {
-        assert!(validate_slug("abc123").is_ok());
-        assert!(validate_slug("k7m2p4").is_ok());
-        assert!(validate_slug("aaaaaa").is_ok());
-        assert!(validate_slug("000000").is_ok());
-    }
-
-    #[test]
-    fn test_validate_slug_invalid_length() {
-        assert!(validate_slug("").is_err());
-        assert!(validate_slug("abc").is_err());
-        assert!(validate_slug("abc12").is_err());
-        assert!(validate_slug("abc1234").is_err());
-        assert!(validate_slug("abcdefghij").is_err());
-    }
-
-    #[test]
-    fn test_validate_slug_invalid_chars() {
-        assert!(validate_slug("ABC123").is_err()); // uppercase
-        assert!(validate_slug("abc-12").is_err()); // hyphen
-        assert!(validate_slug("abc_12").is_err()); // underscore
-        assert!(validate_slug("abc 12").is_err()); // space
-        assert!(validate_slug("abc!12").is_err()); // special char
-    }
-
-    #[test]
-    fn test_validate_datacenter_valid() {
-        assert!(validate_datacenter("dc-lk").is_ok());
-        assert!(validate_datacenter("a").is_ok());
-        assert!(validate_datacenter("datacenter-name-01").is_ok());
-        assert!(validate_datacenter("12345678901234567890").is_ok()); // exactly 20 chars
-    }
-
-    #[test]
-    fn test_validate_datacenter_invalid() {
-        assert!(validate_datacenter("").is_err()); // empty
-        assert!(validate_datacenter("123456789012345678901").is_err()); // 21 chars
-    }
-
-    #[test]
-    fn test_validate_action_valid() {
-        assert!(validate_action("create").is_ok());
-        assert!(validate_action("delete").is_ok());
-    }
-
-    #[test]
-    fn test_validate_action_invalid() {
-        assert!(validate_action("").is_err());
-        assert!(validate_action("CREATE").is_err());
-        assert!(validate_action("update").is_err());
-        assert!(validate_action("remove").is_err());
-    }
 
     #[test]
     fn test_gateway_dns_request_deserialization() {

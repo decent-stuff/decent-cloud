@@ -15,7 +15,11 @@ impl Database {
                 .map_err(|e| anyhow::anyhow!("Failed to parse reputation change: {}", e))?;
 
             let timestamp_i64 = entry.block_timestamp_ns as i64;
-            let delta_amount = change.changes()[0].1; // Get delta amount from first change
+            let delta_amount = change
+                .changes()
+                .first()
+                .map(|(_, delta)| *delta)
+                .ok_or_else(|| anyhow::anyhow!("Reputation change has no entries"))?;
 
             sqlx::query!(
                 "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, $2, $3, $4)",

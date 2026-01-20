@@ -726,11 +726,6 @@ impl Database {
         Ok(oauth_account)
     }
 
-    /// Get account by ID
-    pub async fn get_account_by_id(&self, account_id: &[u8]) -> Result<Option<Account>> {
-        self.get_account(account_id).await
-    }
-
     /// Get account by email
     pub async fn get_account_by_email(&self, email: &str) -> Result<Option<Account>> {
         let account = sqlx::query_as::<_, Account>(

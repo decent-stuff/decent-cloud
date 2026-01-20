@@ -1187,10 +1187,14 @@ pub async fn telegram_webhook(
             }
         }
     } else {
-        tracing::warn!(
-            "TELEGRAM_WEBHOOK_SECRET not set - webhook requests are NOT verified! \
-             Set this env var and use it when calling setWebhook API."
+        tracing::error!(
+            "TELEGRAM_WEBHOOK_SECRET not set - rejecting webhook request! \
+             Set this env var and use it when calling Telegram's setWebhook API."
         );
+        return Err(PoemError::from_string(
+            "Webhook secret not configured",
+            poem::http::StatusCode::SERVICE_UNAVAILABLE,
+        ));
     }
 
     let body_bytes = body.into_vec().await.map_err(|e| {

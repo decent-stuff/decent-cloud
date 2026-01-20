@@ -23,11 +23,6 @@ use crate::ED25519_SIGN_CONTEXT;
 // See https://tools.ietf.org/html/rfc8410#section-10.3
 const ED25519_OBJECT_IDENTIFIER: [u8; 3] = [43, 101, 112];
 const ED25519_PEM_SIGNING_KEY_TAG: &str = "PRIVATE KEY";
-// const ED25519_PEM_VERIFYING_KEY_TAG: &str = "PUBLIC KEY";
-
-// const SECP256K1_OBJECT_IDENTIFIER: [u8; 5] = [43, 129, 4, 0, 10];
-// const SECP256K1_PEM_SIGNING_KEY_TAG: &str = "EC PRIVATE KEY";
-// const SECP256K1_PEM_VERIFYING_KEY_TAG: &str = "PUBLIC KEY";
 
 #[allow(clippy::large_enum_variant)]
 #[repr(u8)]
@@ -37,12 +32,6 @@ pub enum DccIdentity {
     Invalid,
     Ed25519(Option<SigningKey>, VerifyingKey),
 }
-
-// #[derive(Debug)]
-// pub struct DccIdentity {
-//     ed25519_signing_key: Option<SigningKey>,
-//     ed25519_verifying_key: VerifyingKey,
-// }
 
 impl DccIdentity {
     pub fn new_signing(ed25519_signing_key: &SigningKey) -> Result<Self, CryptoError> {

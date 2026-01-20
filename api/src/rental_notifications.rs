@@ -53,9 +53,16 @@ pub async fn notify_provider_new_rental(
         if let Some(chat_id) = &config.telegram_chat_id {
             match send_telegram_rental_notification(chat_id, contract, &summary).await {
                 Ok(()) => {
-                    db.increment_notification_usage(provider_id, "telegram")
+                    if let Err(e) = db
+                        .increment_notification_usage(provider_id, "telegram")
                         .await
-                        .ok();
+                    {
+                        tracing::error!(
+                            "Failed to increment telegram notification usage for {}: {:#}",
+                            provider_id,
+                            e
+                        );
+                    }
                     channels_sent.push("telegram");
                 }
                 Err(e) => errors.push(format!("telegram: {}", e)),
@@ -75,9 +82,16 @@ pub async fn notify_provider_new_rental(
         .await
         {
             Ok(()) => {
-                db.increment_notification_usage(provider_id, "email")
+                if let Err(e) = db
+                    .increment_notification_usage(provider_id, "email")
                     .await
-                    .ok();
+                {
+                    tracing::error!(
+                        "Failed to increment email notification usage for {}: {:#}",
+                        provider_id,
+                        e
+                    );
+                }
                 channels_sent.push("email");
             }
             Err(e) => errors.push(format!("email: {}", e)),
@@ -158,7 +172,7 @@ async fn send_email_rental_notification(
         .ok_or_else(|| anyhow::anyhow!("No account found for provider pubkey"))?;
 
     let account = db
-        .get_account_by_id(&account_id)
+        .get_account(&account_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
 
@@ -248,9 +262,16 @@ pub async fn notify_user_provisioned(
             match send_telegram_provisioned_notification(chat_id, contract, instance_details).await
             {
                 Ok(()) => {
-                    db.increment_notification_usage(user_id, "telegram")
+                    if let Err(e) = db
+                        .increment_notification_usage(user_id, "telegram")
                         .await
-                        .ok();
+                    {
+                        tracing::error!(
+                            "Failed to increment telegram notification usage for {}: {:#}",
+                            user_id,
+                            e
+                        );
+                    }
                     channels_sent.push("telegram");
                 }
                 Err(e) => errors.push(format!("telegram: {}", e)),
@@ -270,7 +291,13 @@ pub async fn notify_user_provisioned(
         .await
         {
             Ok(()) => {
-                db.increment_notification_usage(user_id, "email").await.ok();
+                if let Err(e) = db.increment_notification_usage(user_id, "email").await {
+                    tracing::error!(
+                        "Failed to increment email notification usage for {}: {:#}",
+                        user_id,
+                        e
+                    );
+                }
                 channels_sent.push("email");
             }
             Err(e) => errors.push(format!("email: {}", e)),
@@ -365,7 +392,7 @@ async fn send_email_provisioned_notification(
         .ok_or_else(|| anyhow::anyhow!("No account found for requester pubkey"))?;
 
     let account = db
-        .get_account_by_id(&account_id)
+        .get_account(&account_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
 
