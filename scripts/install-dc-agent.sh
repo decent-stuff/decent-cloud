@@ -15,6 +15,10 @@ CONFIG_DIR="/etc/dc-agent"
 SYSTEMD_DIR="/etc/systemd/system"
 GITHUB_REPO="decent-stuff/decent-cloud"
 
+# Retry configuration (override via env vars)
+SETUP_ATTEMPTS="${DC_SETUP_ATTEMPTS:-3}"
+DOCTOR_ATTEMPTS="${DC_DOCTOR_ATTEMPTS:-3}"
+
 error() { echo "ERROR: $1" >&2; exit 1; }
 info() { echo "==> $1"; }
 
@@ -118,12 +122,26 @@ elif grep -q "YOUR-PROXMOX-HOST\|REPLACE-WITH-YOUR" "${CONFIG_DIR}/dc-agent.toml
 fi
 
 if [[ "$NEEDS_SETUP" == "true" ]]; then
-    info "Registering agent with ${API_URL}..."
-    "${INSTALL_DIR}/dc-agent" setup token \
-        --token "$TOKEN" \
-        --api-url "$API_URL" \
-        --output "${CONFIG_DIR}/dc-agent.toml" \
-        --non-interactive || error "Agent setup failed - check token validity"
+    # Retry setup with exponential backoff
+    setup_delay=5
+    for attempt in $(seq 1 "$SETUP_ATTEMPTS"); do
+        info "Registering agent with ${API_URL} (attempt $attempt/$SETUP_ATTEMPTS)..."
+        if "${INSTALL_DIR}/dc-agent" setup token \
+            --token "$TOKEN" \
+            --api-url "$API_URL" \
+            --output "${CONFIG_DIR}/dc-agent.toml" \
+            --non-interactive; then
+            break
+        fi
+
+        if [[ $attempt -eq $SETUP_ATTEMPTS ]]; then
+            error "Setup failed after $SETUP_ATTEMPTS attempts. Check network connectivity and token validity."
+        fi
+
+        echo "Setup failed, retrying in ${setup_delay}s..."
+        sleep $setup_delay
+        setup_delay=$((setup_delay * 2))
+    done
 fi
 
 info "Installing systemd service..."
@@ -147,8 +165,26 @@ EOF
 systemctl daemon-reload
 systemctl enable dc-agent
 
-info "Verifying configuration..."
-if "${INSTALL_DIR}/dc-agent" --config "${CONFIG_DIR}/dc-agent.toml" doctor --no-test-provision; then
+# Retry doctor verification with exponential backoff (services may need time to start)
+doctor_delay=5
+doctor_success=false
+for attempt in $(seq 1 "$DOCTOR_ATTEMPTS"); do
+    info "Verifying configuration (attempt $attempt/$DOCTOR_ATTEMPTS)..."
+    if "${INSTALL_DIR}/dc-agent" --config "${CONFIG_DIR}/dc-agent.toml" doctor --no-test-provision; then
+        doctor_success=true
+        break
+    fi
+
+    if [[ $attempt -eq $DOCTOR_ATTEMPTS ]]; then
+        break
+    fi
+
+    echo "Verification failed, retrying in ${doctor_delay}s..."
+    sleep $doctor_delay
+    doctor_delay=$((doctor_delay * 2))
+done
+
+if [[ "$doctor_success" == "true" ]]; then
     echo ""
     info "Starting dc-agent service..."
     systemctl restart dc-agent
@@ -168,7 +204,7 @@ if "${INSTALL_DIR}/dc-agent" --config "${CONFIG_DIR}/dc-agent.toml" doctor --no-
     echo "  dc-agent upgrade --check-only # Check for updates"
 else
     echo ""
-    echo "WARNING: Configuration verification failed!"
+    echo "WARNING: Configuration verification failed after $DOCTOR_ATTEMPTS attempts!"
     echo "The agent service has NOT been started."
     echo ""
     # Rollback on upgrade failure

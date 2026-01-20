@@ -36,8 +36,12 @@ pub struct GatewayConfig {
     #[serde(default = "default_ports_per_vm")]
     pub ports_per_vm: u16,
     /// Directory for Caddy site configuration files
-    #[serde(default = "default_caddy_sites_dir", alias = "traefik_dynamic_dir")]
+    #[serde(default = "default_caddy_sites_dir")]
     pub caddy_sites_dir: String,
+    /// DEPRECATED: Legacy field name for caddy_sites_dir. Traefik is no longer supported.
+    /// If set, Config::load() will fail with a clear error message.
+    #[serde(default)]
+    traefik_dynamic_dir: Option<String>,
     /// Path to port allocations state file
     #[serde(default = "default_port_allocations_path")]
     pub port_allocations_path: String,
@@ -89,6 +93,10 @@ pub struct PollingConfig {
     /// Orphans are VMs without valid contract IDs. Default: 3600 (1 hour)
     #[serde(default = "default_orphan_grace_period")]
     pub orphan_grace_period_seconds: u64,
+    /// Path to orphan tracker persistence file.
+    /// Default: /var/lib/dc-agent/orphans.json
+    #[serde(default = "default_orphan_tracker_path")]
+    pub orphan_tracker_path: String,
 }
 
 /// Provisioner configuration enum.
@@ -173,6 +181,14 @@ where
 
     match raw.provisioner_type.as_str() {
         "proxmox" => {
+            // Check for dual format (both flat fields AND nested section)
+            let has_flat_fields = raw.api_url.is_some() || raw.api_token_id.is_some() || raw.api_token_secret.is_some();
+            let has_nested = raw.proxmox.is_some();
+            if has_flat_fields && has_nested {
+                // Can't use tracing in serde deserializer, print to stderr
+                eprintln!("WARNING: Both flat and nested provisioner config found for 'proxmox'. Using nested [provisioner.proxmox] format, flat fields ignored.");
+            }
+
             // Prefer nested [provisioner.proxmox] section if present
             let config = if let Some(nested) = raw.proxmox {
                 nested
@@ -210,6 +226,13 @@ where
             Ok(ProvisionerConfig::Proxmox(config))
         }
         "script" => {
+            // Check for dual format (both flat fields AND nested section)
+            let has_flat_fields = raw.provision.is_some() || raw.terminate.is_some() || raw.health_check.is_some();
+            let has_nested = raw.script.is_some();
+            if has_flat_fields && has_nested {
+                eprintln!("WARNING: Both flat and nested provisioner config found for 'script'. Using nested [provisioner.script] format, flat fields ignored.");
+            }
+
             let config = if let Some(nested) = raw.script {
                 nested
             } else {
@@ -233,6 +256,13 @@ where
             Ok(ProvisionerConfig::Script(config))
         }
         "manual" => {
+            // Check for dual format (both flat fields AND nested section)
+            let has_flat_fields = raw.notification_webhook.is_some();
+            let has_nested = raw.manual.is_some();
+            if has_flat_fields && has_nested {
+                eprintln!("WARNING: Both flat and nested provisioner config found for 'manual'. Using nested [provisioner.manual] format, flat fields ignored.");
+            }
+
             let config = if let Some(nested) = raw.manual {
                 nested
             } else {
@@ -283,12 +313,94 @@ pub struct ManualConfig {
     pub notification_webhook: Option<String>,
 }
 
+/// Placeholder patterns that indicate unconfigured values
+const PLACEHOLDER_PATTERNS: &[&str] = &[
+    "YOUR-PROXMOX-HOST",
+    "REPLACE-WITH-YOUR",
+    "YOUR_TOKEN",
+    "CHANGEME",
+    "YOUR-API",
+    "EXAMPLE.COM",
+];
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-        toml::from_str(&content)
-            .with_context(|| format!("Failed to parse config file: {}", path.display()))
+        let config: Self = toml::from_str(&content)
+            .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
+
+        // Check for deprecated traefik_dynamic_dir
+        if let Some(ref gw) = config.gateway {
+            if gw.traefik_dynamic_dir.is_some() {
+                anyhow::bail!(
+                    "Config uses deprecated 'traefik_dynamic_dir'. Rename to 'caddy_sites_dir'. \
+                     Traefik is no longer supported - the gateway now uses Caddy."
+                );
+            }
+        }
+
+        Ok(config)
+    }
+
+    /// Validate config for placeholder values that indicate unconfigured settings.
+    /// Returns Err with a clear message if placeholders are found.
+    pub fn validate(&self) -> Result<()> {
+        let mut placeholders_found = Vec::new();
+
+        // Check provisioner config based on type
+        match &self.provisioner {
+            ProvisionerConfig::Proxmox(proxmox) => {
+                Self::check_placeholder(&proxmox.api_url, "provisioner.proxmox.api_url", &mut placeholders_found);
+                Self::check_placeholder(&proxmox.api_token_id, "provisioner.proxmox.api_token_id", &mut placeholders_found);
+                Self::check_placeholder(&proxmox.api_token_secret, "provisioner.proxmox.api_token_secret", &mut placeholders_found);
+                Self::check_placeholder(&proxmox.node, "provisioner.proxmox.node", &mut placeholders_found);
+            }
+            ProvisionerConfig::Script(script) => {
+                Self::check_placeholder(&script.provision, "provisioner.script.provision", &mut placeholders_found);
+                Self::check_placeholder(&script.terminate, "provisioner.script.terminate", &mut placeholders_found);
+                Self::check_placeholder(&script.health_check, "provisioner.script.health_check", &mut placeholders_found);
+            }
+            ProvisionerConfig::Manual(manual) => {
+                if let Some(webhook) = &manual.notification_webhook {
+                    Self::check_placeholder(webhook, "provisioner.manual.notification_webhook", &mut placeholders_found);
+                }
+            }
+        }
+
+        // Check additional provisioners
+        for (idx, additional) in self.additional_provisioners.iter().enumerate() {
+            match additional {
+                ProvisionerConfig::Proxmox(proxmox) => {
+                    Self::check_placeholder(&proxmox.api_url, &format!("additional_provisioners[{}].api_url", idx), &mut placeholders_found);
+                    Self::check_placeholder(&proxmox.api_token_secret, &format!("additional_provisioners[{}].api_token_secret", idx), &mut placeholders_found);
+                }
+                ProvisionerConfig::Script(script) => {
+                    Self::check_placeholder(&script.provision, &format!("additional_provisioners[{}].provision", idx), &mut placeholders_found);
+                }
+                ProvisionerConfig::Manual(_) => {}
+            }
+        }
+
+        if !placeholders_found.is_empty() {
+            anyhow::bail!(
+                "Config contains placeholder values that must be configured:\n  - {}\n\nRun 'dc-agent setup token --token <TOKEN>' to configure, or edit the config file manually.",
+                placeholders_found.join("\n  - ")
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Check if a value contains any placeholder patterns
+    fn check_placeholder(value: &str, field_name: &str, placeholders: &mut Vec<String>) {
+        let upper = value.to_uppercase();
+        for pattern in PLACEHOLDER_PATTERNS {
+            if upper.contains(pattern) {
+                placeholders.push(format!("{} contains '{}'", field_name, pattern));
+                break;
+            }
+        }
     }
 }
 
@@ -302,6 +414,10 @@ fn default_health_interval() -> u64 {
 
 fn default_orphan_grace_period() -> u64 {
     3600 // 1 hour
+}
+
+fn default_orphan_tracker_path() -> String {
+    "/var/lib/dc-agent/orphans.json".to_string()
 }
 
 fn default_storage() -> String {
@@ -662,6 +778,11 @@ template_vmid = 9000
         // Check polling defaults
         assert_eq!(config.polling.interval_seconds, 30);
         assert_eq!(config.polling.health_check_interval_seconds, 300);
+        assert_eq!(config.polling.orphan_grace_period_seconds, 3600);
+        assert_eq!(
+            config.polling.orphan_tracker_path,
+            "/var/lib/dc-agent/orphans.json"
+        );
 
         // Check proxmox defaults
         let proxmox = config.provisioner.as_proxmox().expect("Should be Proxmox");
@@ -1044,7 +1165,7 @@ public_ip = "10.0.0.1"
 port_range_start = 30000
 port_range_end = 40000
 ports_per_vm = 5
-traefik_dynamic_dir = "/custom/traefik"
+caddy_sites_dir = "/custom/caddy"
 port_allocations_path = "/custom/allocations.json"
 "#;
 
@@ -1057,9 +1178,43 @@ port_allocations_path = "/custom/allocations.json"
         assert_eq!(gateway.port_range_start, 30000);
         assert_eq!(gateway.port_range_end, 40000);
         assert_eq!(gateway.ports_per_vm, 5);
-        // traefik_dynamic_dir is aliased to caddy_sites_dir for backward compatibility
-        assert_eq!(gateway.caddy_sites_dir, "/custom/traefik");
+        assert_eq!(gateway.caddy_sites_dir, "/custom/caddy");
         assert_eq!(gateway.port_allocations_path, "/custom/allocations.json");
+    }
+
+    #[test]
+    fn test_deprecated_traefik_dynamic_dir_fails() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+datacenter = "dc-us"
+domain = "example.org"
+public_ip = "10.0.0.1"
+traefik_dynamic_dir = "/old/traefik/path"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = Config::load(&config_path);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("traefik_dynamic_dir") && err_msg.contains("caddy_sites_dir"),
+            "Error should mention both old and new field names: {}",
+            err_msg
+        );
     }
 
     #[test]
@@ -1085,5 +1240,254 @@ type = "manual"
         let config = Config::load(&config_path).unwrap();
 
         assert!(config.gateway.is_none());
+    }
+
+    #[test]
+    fn test_validate_rejects_proxmox_placeholder_api_url() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "proxmox"
+api_url = "https://YOUR-PROXMOX-HOST:8006"
+api_token_id = "root@pam!dc-agent"
+api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+node = "pve1"
+template_vmid = 9000
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("YOUR-PROXMOX-HOST"),
+            "Error should mention placeholder: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_validate_rejects_proxmox_placeholder_token_secret() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "proxmox"
+api_url = "https://proxmox.local:8006"
+api_token_id = "root@pam!dc-agent"
+api_token_secret = "REPLACE-WITH-YOUR-API-TOKEN-SECRET"
+node = "pve1"
+template_vmid = 9000
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("REPLACE-WITH-YOUR"),
+            "Error should mention placeholder: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_validate_accepts_valid_proxmox_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "proxmox"
+api_url = "https://proxmox.local:8006"
+api_token_id = "root@pam!dc-agent"
+api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+node = "pve1"
+template_vmid = 9000
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_accepts_manual_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_rejects_changeme_placeholder() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "proxmox"
+api_url = "https://proxmox.local:8006"
+api_token_id = "root@pam!dc-agent"
+api_token_secret = "changeme"
+node = "pve1"
+template_vmid = 9000
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("CHANGEME"),
+            "Error should mention placeholder: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_validate_case_insensitive() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Test lowercase version of placeholder
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "proxmox"
+api_url = "https://your-proxmox-host:8006"
+api_token_id = "root@pam!dc-agent"
+api_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+node = "pve1"
+template_vmid = 9000
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        let result = config.validate();
+        assert!(result.is_err(), "Should reject lowercase placeholder too");
+    }
+
+    #[test]
+    fn test_validate_multiple_placeholders() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "proxmox"
+api_url = "https://YOUR-PROXMOX-HOST:8006"
+api_token_id = "YOUR_TOKEN_ID"
+api_token_secret = "REPLACE-WITH-YOUR-API-TOKEN-SECRET"
+node = "pve1"
+template_vmid = 9000
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        let result = config.validate();
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        // Should report all placeholders
+        assert!(
+            err_msg.contains("api_url") && err_msg.contains("api_token"),
+            "Error should mention both fields: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_custom_orphan_tracker_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+orphan_tracker_path = "/custom/path/orphans.json"
+
+[provisioner]
+type = "manual"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        assert_eq!(
+            config.polling.orphan_tracker_path,
+            "/custom/path/orphans.json"
+        );
     }
 }

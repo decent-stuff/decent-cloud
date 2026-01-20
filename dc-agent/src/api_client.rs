@@ -76,17 +76,25 @@ impl PendingContract {
     }
 }
 
-/// Parse size string to MB (e.g. "16 GB" -> 16384, "2048 MB" -> 2048)
-fn parse_size_to_mb(size_str: Option<&str>) -> Option<u32> {
+/// Target unit for size parsing
+#[derive(Clone, Copy)]
+enum SizeUnit {
+    MB,
+    GB,
+}
+
+/// Parse size string to bytes, then convert to target unit.
+/// Supports: "1TB", "16GB", "512MB", "1 TB", "16 GB", "512 MB"
+fn parse_size(size_str: Option<&str>, target_unit: SizeUnit) -> Option<u32> {
     let s = size_str?.trim().to_uppercase();
 
     // Try to extract number and unit
-    let (num_str, unit) = if s.ends_with("GB") {
+    let (num_str, unit) = if s.ends_with("TB") {
+        (s.trim_end_matches("TB").trim(), "TB")
+    } else if s.ends_with("GB") {
         (s.trim_end_matches("GB").trim(), "GB")
     } else if s.ends_with("MB") {
         (s.trim_end_matches("MB").trim(), "MB")
-    } else if s.ends_with("TB") {
-        (s.trim_end_matches("TB").trim(), "TB")
     } else {
         // Try splitting on space
         let parts: Vec<&str> = s.split_whitespace().collect();
@@ -98,44 +106,31 @@ fn parse_size_to_mb(size_str: Option<&str>) -> Option<u32> {
     };
 
     let num: f64 = num_str.parse().ok()?;
+
+    // Convert to MB first (common base), then to target unit
     let mb = match unit {
-        "TB" => (num * 1024.0 * 1024.0) as u32,
-        "GB" => (num * 1024.0) as u32,
-        "MB" => num as u32,
+        "TB" => num * 1024.0 * 1024.0,
+        "GB" => num * 1024.0,
+        "MB" => num,
         _ => return None,
     };
-    Some(mb)
+
+    let result = match target_unit {
+        SizeUnit::MB => mb,
+        SizeUnit::GB => mb / 1024.0,
+    };
+
+    Some(result as u32)
+}
+
+/// Parse size string to MB (e.g. "16 GB" -> 16384, "2048 MB" -> 2048)
+fn parse_size_to_mb(size_str: Option<&str>) -> Option<u32> {
+    parse_size(size_str, SizeUnit::MB)
 }
 
 /// Parse size string to GB (e.g. "100 GB" -> 100, "1 TB" -> 1024)
 fn parse_size_to_gb(size_str: Option<&str>) -> Option<u32> {
-    let s = size_str?.trim().to_uppercase();
-
-    // Try to extract number and unit
-    let (num_str, unit) = if s.ends_with("GB") {
-        (s.trim_end_matches("GB").trim(), "GB")
-    } else if s.ends_with("MB") {
-        (s.trim_end_matches("MB").trim(), "MB")
-    } else if s.ends_with("TB") {
-        (s.trim_end_matches("TB").trim(), "TB")
-    } else {
-        // Try splitting on space
-        let parts: Vec<&str> = s.split_whitespace().collect();
-        if parts.len() >= 2 {
-            (parts[0], parts[1])
-        } else {
-            return None;
-        }
-    };
-
-    let num: f64 = num_str.parse().ok()?;
-    let gb = match unit {
-        "TB" => (num * 1024.0) as u32,
-        "GB" => num as u32,
-        "MB" => (num / 1024.0) as u32,
-        _ => return None,
-    };
-    Some(gb)
+    parse_size(size_str, SizeUnit::GB)
 }
 
 #[derive(Debug, Serialize)]

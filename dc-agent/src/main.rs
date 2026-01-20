@@ -4,15 +4,16 @@ use dc_agent::{
     api_client::{setup_agent, ApiClient, ReconcileResponse},
     config::{Config, ProvisionerConfig},
     gateway::GatewayManager,
+    orphan_tracker::OrphanTracker,
     provisioner::{
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
         ProvisionRequest, Provisioner,
     },
     registration::{default_agent_dir, generate_agent_keypair},
-    setup::{detect_public_ip, proxmox::OsTemplate, GatewaySetup, ProxmoxSetup},
+    setup::{detect_public_ip, GatewaySetup},
 };
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Map of provisioner type name to provisioner instance
@@ -21,13 +22,6 @@ type ProvisionerMap = HashMap<String, Box<dyn Provisioner>>;
 type OptionalGatewayManager = Option<std::sync::Arc<tokio::sync::Mutex<GatewayManager>>>;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
-
-/// Tracks when orphan VMs were first detected for automatic pruning
-#[derive(Debug, Default)]
-struct OrphanTracker {
-    /// Map of external_id -> timestamp when first detected
-    first_seen: HashMap<String, u64>,
-}
 
 #[derive(Parser)]
 #[command(name = "dc-agent", version)]
@@ -155,32 +149,11 @@ enum SetupProvisioner {
         /// Number of ports per VM (default: 10)
         #[arg(long, default_value = "10")]
         gateway_ports_per_vm: u16,
-    },
-    /// Set up Proxmox VE provisioner (creates templates and API token).
-    /// Must be run on the Proxmox host itself.
-    /// Note: Agent registration requires a setup token from a pool.
-    /// Create a pool via the provider dashboard, then run: dc-agent setup token --token <TOKEN>
-    Proxmox {
-        /// Proxmox API username (default: root@pam)
-        #[arg(long, default_value = "root@pam")]
-        proxmox_user: String,
 
-        /// Storage for VM disks (default: local-lvm)
-        #[arg(long, default_value = "local-lvm")]
-        storage: String,
-
-        /// OS templates to create (comma-separated: ubuntu-24.04,debian-12,rocky-9)
-        /// Available: ubuntu-24.04, ubuntu-22.04, debian-12, rocky-9
-        #[arg(long, default_value = "ubuntu-24.04")]
-        templates: String,
-
-        /// Output config file path
-        #[arg(long, default_value = "dc-agent.toml")]
-        output: PathBuf,
-
-        /// Skip interactive prompts (requires PROXMOX_PASSWORD env var)
-        #[arg(long, default_value = "false")]
-        non_interactive: bool,
+        /// Install and start systemd service after setup
+        /// (default: true when --non-interactive on Proxmox host)
+        #[arg(long)]
+        install_service: Option<bool>,
     },
     // Note: Gateway setup is integrated into the Token command via --gateway-* flags.
     // Use: dc-agent setup token --gateway-datacenter <DC> (public IP auto-detected)
@@ -242,6 +215,8 @@ async fn run_setup_token(
     gateway_port_start: u16,
     gateway_port_end: u16,
     gateway_ports_per_vm: u16,
+    // Service installation
+    install_service: Option<bool>,
 ) -> Result<()> {
     use dc_agent::geolocation::{country_to_region, detect_country, region_display_name};
     use std::io::Write;
@@ -332,28 +307,41 @@ async fn run_setup_token(
     // Step 5b: Auto-derive gateway datacenter from pool_id if not provided
     // Pool ID format: "sl-8eba3c90" -> datacenter "dc-sl"
     let gateway_datacenter = gateway_datacenter.or_else(|| {
-        // Only auto-enable if:
-        // 1. On Proxmox host (where VMs will be created)
-        // 2. Pool has dns_manage permission (can manage gateway DNS)
-        // 3. Proxmox was configured (so we have VMs to route to)
-        if is_proxmox_host()
-            && response.permissions.contains(&"dns_manage".to_string())
-            && proxmox_config.is_some()
-        {
-            // Extract datacenter code from pool_id (e.g., "sl-8eba3c90" -> "sl")
-            if let Some(dc_code) = response.pool_id.split('-').next() {
-                let datacenter = format!("dc-{}", dc_code);
+        // Check each condition and explain why auto-enable is skipped
+        if !is_proxmox_host() {
+            println!();
+            println!("[info] Gateway auto-enable skipped: not running on Proxmox host");
+            return None;
+        }
+        if !response.permissions.contains(&"dns_manage".to_string()) {
+            println!();
+            println!("[info] Gateway auto-enable skipped: pool lacks 'dns_manage' permission");
+            return None;
+        }
+        if proxmox_config.is_none() {
+            println!();
+            println!("[info] Gateway auto-enable skipped: Proxmox setup not completed");
+            return None;
+        }
+
+        // Validate pool_id format: expected "<dc_code>-<uuid>" like "sl-8eba3c90"
+        match parse_datacenter_from_pool_id(&response.pool_id) {
+            Some(datacenter) => {
                 println!();
                 println!(
                     "[auto] Gateway enabled: {} (derived from pool {})",
                     datacenter, response.pool_id
                 );
                 Some(datacenter)
-            } else {
+            }
+            None => {
+                println!();
+                println!(
+                    "[warn] Cannot derive gateway datacenter: pool_id '{}' has invalid format (expected 'code-uuid')",
+                    response.pool_id
+                );
                 None
             }
-        } else {
-            None
         }
     });
 
@@ -463,84 +451,220 @@ type = "{provisioner_type}"
     )
     .await?;
 
-    println!();
+    // Step 8: Install systemd service if requested
+    // Default: install service if --non-interactive on Proxmox host with successful setup
+    let should_install_service = install_service.unwrap_or_else(|| {
+        // Auto-install when: non-interactive AND on Proxmox host AND Proxmox was configured
+        non_interactive && is_proxmox_host() && proxmox_config.is_some()
+    });
 
-    // Provide type-specific next steps
-    match response.provisioner_type.as_str() {
-        "proxmox" => {
-            if proxmox_config.is_some() && gateway_configured {
-                println!("✓ Proxmox and Gateway configured successfully!");
-                println!();
-                println!("Configuration is ready to use. Next steps:");
-                println!("  1. Verify: dc-agent --config {} doctor", output.display());
-                println!("  2. Start: dc-agent --config {} run", output.display());
-            } else if proxmox_config.is_some() {
-                println!("✓ Proxmox configured successfully!");
-                println!();
-                println!("Configuration is ready to use. Next steps:");
-                println!("  1. Verify: dc-agent --config {} doctor", output.display());
-                println!("  2. Start: dc-agent --config {} run", output.display());
-                if !gateway_configured {
-                    println!();
-                    println!("Note: Gateway not configured. VMs will need public IPs.");
-                    println!("  To enable gateway, run setup again with:");
-                    println!("    --gateway-datacenter <DC>");
-                }
-            } else {
-                println!(
-                    "IMPORTANT: You must configure Proxmox settings before running the agent!"
-                );
-                println!();
-                println!("Next steps:");
-                println!("  1. Edit {} and fill in:", output.display());
-                println!("     - api_url: Your Proxmox host URL");
-                println!("     - api_token_id and api_token_secret: Create in Proxmox UI");
-                println!("     - node: Your Proxmox node name");
-                println!("     - template_vmid: Create a template VM (e.g., Ubuntu 24.04)");
-                println!();
-                println!("  Alternative: Run setup again with --setup-proxmox flag");
-                println!(
-                    "     dc-agent setup token --token {} --setup-proxmox",
-                    token
-                );
-                println!();
-                println!("  2. Verify: dc-agent --config {} doctor", output.display());
-                println!("  3. Start: dc-agent --config {} run", output.display());
+    let service_installed = if should_install_service {
+        println!();
+        println!("Installing systemd service...");
+        match install_systemd_service(output) {
+            Ok(()) => {
+                println!("✓ Systemd service installed and started!");
+                true
+            }
+            Err(e) => {
+                println!("[WARN] Failed to install systemd service: {:#}", e);
+                println!("       You can manually start the agent with:");
+                println!("         dc-agent --config {} run", output.display());
+                false
             }
         }
-        "script" => {
-            println!("IMPORTANT: You must configure script paths before running the agent!");
+    } else {
+        false
+    };
+
+    println!();
+
+    // Provide type-specific next steps based on what was configured
+    let setup_complete = proxmox_config.is_some();
+
+    if service_installed && setup_complete {
+        // Full success - service is running
+        println!("==========================================");
+        println!("dc-agent is now running!");
+        println!("==========================================");
+        println!();
+        println!("  Config: {}", output.display());
+        println!("  Keys:   /root/.dc-agent/");
+        println!();
+        println!("Commands:");
+        println!("  systemctl status dc-agent     # Check status");
+        println!("  journalctl -fu dc-agent       # View logs");
+        println!("  dc-agent upgrade --check-only # Check for updates");
+        if !gateway_configured {
             println!();
-            println!("Next steps:");
-            println!("  1. Edit {} and configure:", output.display());
-            println!("     - provision: Path to provisioning script");
-            println!("     - terminate: Path to termination script");
-            println!("     - health_check: Path to health check script");
-            println!();
-            println!("  2. Verify: dc-agent --config {} doctor", output.display());
-            println!("  3. Start: dc-agent --config {} run", output.display());
+            println!("Note: Gateway not configured. VMs will need public IPs.");
+            println!("  To enable gateway, re-run setup with --gateway-datacenter <DC>");
         }
-        "manual" => {
-            println!("Manual provisioner configured - no additional setup required!");
-            println!();
-            println!("Next steps:");
-            println!(
-                "  1. Optional: Edit {} to add notification webhook",
-                output.display()
-            );
-            println!("  2. Verify: dc-agent --config {} doctor", output.display());
-            println!("  3. Start: dc-agent --config {} run", output.display());
+    } else if setup_complete {
+        // Setup complete but service not installed
+        if gateway_configured {
+            println!("✓ Proxmox and Gateway configured successfully!");
+        } else {
+            println!("✓ Proxmox configured successfully!");
         }
-        _ => {
-            println!("Next steps:");
-            println!(
-                "  1. Edit {} and configure provisioner settings",
-                output.display()
-            );
-            println!("  2. Run: dc-agent --config {} doctor", output.display());
-            println!("  3. Run: dc-agent --config {} run", output.display());
+        println!();
+        println!("Next steps:");
+        println!("  1. Verify: dc-agent --config {} doctor", output.display());
+        println!("  2. Start:  dc-agent --config {} run", output.display());
+        println!();
+        println!("Or install as systemd service:");
+        println!(
+            "  dc-agent setup token --token {} --install-service",
+            token
+        );
+        if !gateway_configured {
+            println!();
+            println!("Note: Gateway not configured. VMs will need public IPs.");
+            println!("  To enable gateway, re-run setup with --gateway-datacenter <DC>");
+        }
+    } else {
+        // Proxmox not configured - show appropriate instructions
+        match response.provisioner_type.as_str() {
+            "proxmox" => {
+                // On Proxmox host, suggest --setup-proxmox as primary option
+                if is_proxmox_host() {
+                    println!(
+                        "IMPORTANT: Proxmox setup incomplete. Re-run with --setup-proxmox:"
+                    );
+                    println!();
+                    println!(
+                        "  dc-agent setup token --token {} --setup-proxmox --non-interactive",
+                        token
+                    );
+                    println!();
+                    println!("This will automatically configure Proxmox and install the service.");
+                } else {
+                    // Not on Proxmox host - show manual instructions
+                    println!(
+                        "IMPORTANT: You must configure Proxmox settings before running the agent!"
+                    );
+                    println!();
+                    println!("Next steps:");
+                    println!("  1. Edit {} and fill in:", output.display());
+                    println!("     - api_url: Your Proxmox host URL");
+                    println!("     - api_token_id and api_token_secret: Create in Proxmox UI");
+                    println!("     - node: Your Proxmox node name");
+                    println!("     - template_vmid: Create a template VM (e.g., Ubuntu 24.04)");
+                    println!();
+                    println!(
+                        "  2. Verify: dc-agent --config {} doctor",
+                        output.display()
+                    );
+                    println!("  3. Start: dc-agent --config {} run", output.display());
+                }
+            }
+            "script" => {
+                println!("IMPORTANT: You must configure script paths before running the agent!");
+                println!();
+                println!("Next steps:");
+                println!("  1. Edit {} and configure:", output.display());
+                println!("     - provision: Path to provisioning script");
+                println!("     - terminate: Path to termination script");
+                println!("     - health_check: Path to health check script");
+                println!();
+                println!(
+                    "  2. Verify: dc-agent --config {} doctor",
+                    output.display()
+                );
+                println!("  3. Start: dc-agent --config {} run", output.display());
+            }
+            "manual" => {
+                println!("Manual provisioner configured - no additional setup required!");
+                println!();
+                println!("Next steps:");
+                println!(
+                    "  1. Optional: Edit {} to add notification webhook",
+                    output.display()
+                );
+                println!(
+                    "  2. Verify: dc-agent --config {} doctor",
+                    output.display()
+                );
+                println!("  3. Start: dc-agent --config {} run", output.display());
+            }
+            _ => {
+                println!("Next steps:");
+                println!(
+                    "  1. Edit {} and configure provisioner settings",
+                    output.display()
+                );
+                println!("  2. Run: dc-agent --config {} doctor", output.display());
+                println!("  3. Run: dc-agent --config {} run", output.display());
+            }
         }
     }
+
+    Ok(())
+}
+
+/// Install systemd service for dc-agent.
+/// Writes service unit file, reloads systemd, enables and starts the service.
+fn install_systemd_service(config_path: &std::path::Path) -> Result<()> {
+    use std::io::Write;
+
+    const SYSTEMD_DIR: &str = "/etc/systemd/system";
+    const SERVICE_FILE: &str = "dc-agent.service";
+
+    // Create the systemd service unit file
+    let service_content = format!(
+        r#"[Unit]
+Description=Decent Cloud Provisioning Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/dc-agent --config {} run
+Restart=always
+RestartSec=10
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
+"#,
+        config_path.display()
+    );
+
+    let service_path = format!("{}/{}", SYSTEMD_DIR, SERVICE_FILE);
+    let mut file = std::fs::File::create(&service_path)
+        .with_context(|| format!("Failed to create systemd service file: {}", service_path))?;
+    file.write_all(service_content.as_bytes())?;
+    println!("[ok] Created {}", service_path);
+
+    // Reload systemd to pick up new service file
+    let reload_status = std::process::Command::new("systemctl")
+        .arg("daemon-reload")
+        .status()
+        .context("Failed to run systemctl daemon-reload")?;
+    if !reload_status.success() {
+        anyhow::bail!("systemctl daemon-reload failed with exit code {:?}", reload_status.code());
+    }
+    println!("[ok] Systemd daemon reloaded");
+
+    // Enable service
+    let enable_status = std::process::Command::new("systemctl")
+        .args(["enable", SERVICE_FILE])
+        .status()
+        .context("Failed to run systemctl enable")?;
+    if !enable_status.success() {
+        anyhow::bail!("systemctl enable failed with exit code {:?}", enable_status.code());
+    }
+    println!("[ok] Service enabled");
+
+    // Start service
+    let start_status = std::process::Command::new("systemctl")
+        .args(["start", SERVICE_FILE])
+        .status()
+        .context("Failed to run systemctl start")?;
+    if !start_status.success() {
+        anyhow::bail!("systemctl start failed with exit code {:?}", start_status.code());
+    }
+    println!("[ok] Service started");
 
     Ok(())
 }
@@ -562,6 +686,40 @@ fn is_proxmox_host() -> bool {
             .map(|o| o.status.success())
             .unwrap_or(false)
         || std::path::Path::new("/etc/pve").exists()
+}
+
+/// Parse datacenter identifier from pool_id.
+/// Pool ID format: "<dc_code>-<uuid>" like "sl-8eba3c90" or "usw-abc123"
+/// Returns "dc-<code>" (e.g., "dc-sl") if valid, None otherwise.
+///
+/// Validation rules:
+/// - Must contain at least one dash
+/// - dc_code (before first dash) must be 2-4 lowercase ASCII letters
+fn parse_datacenter_from_pool_id(pool_id: &str) -> Option<String> {
+    let parts: Vec<&str> = pool_id.split('-').collect();
+
+    // Must have at least 2 parts (code and uuid)
+    if parts.len() < 2 {
+        return None;
+    }
+
+    let dc_code = parts[0];
+
+    // dc_code must not be empty
+    if dc_code.is_empty() {
+        return None;
+    }
+
+    // dc_code must be 2-4 lowercase ASCII letters
+    if dc_code.len() < 2 || dc_code.len() > 4 {
+        return None;
+    }
+
+    if !dc_code.chars().all(|c| c.is_ascii_lowercase()) {
+        return None;
+    }
+
+    Some(format!("dc-{}", dc_code))
 }
 
 /// Optionally run Proxmox setup based on CLI args or auto-detection.
@@ -782,6 +940,7 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             gateway_port_start,
             gateway_port_end,
             gateway_ports_per_vm,
+            install_service,
         } => {
             run_setup_token(
                 &token,
@@ -800,75 +959,9 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 gateway_port_start,
                 gateway_port_end,
                 gateway_ports_per_vm,
+                install_service,
             )
             .await
-        }
-        SetupProvisioner::Proxmox {
-            proxmox_user,
-            storage,
-            templates,
-            output,
-            non_interactive: _, // No longer needed - CLI tools don't require password
-        } => {
-            println!("Decent Cloud Agent - Proxmox Setup (Local)");
-            println!("==========================================\n");
-
-            // Parse templates
-            let template_list: Vec<OsTemplate> = templates
-                .split(',')
-                .filter_map(|s| {
-                    let t = OsTemplate::parse(s.trim());
-                    if t.is_none() {
-                        warn!(template = %s.trim(), "Unknown template, skipping");
-                    }
-                    t
-                })
-                .collect();
-
-            if template_list.is_empty() {
-                anyhow::bail!("No valid templates specified. Available: ubuntu-24.04, ubuntu-22.04, debian-12, rocky-9");
-            }
-
-            println!();
-            println!("Proxmox Setup");
-            println!("  User: {} (for API token)", proxmox_user);
-            println!("  Storage: {}", storage);
-            println!(
-                "  Templates: {}",
-                template_list
-                    .iter()
-                    .map(|t| t.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            println!();
-
-            let setup = ProxmoxSetup {
-                proxmox_user,
-                storage,
-                templates: template_list,
-            };
-
-            let result = setup.run().await?;
-
-            // Write partial config file (without API credentials - those come from token setup)
-            result.write_proxmox_config(&output)?;
-
-            println!();
-            println!("==========================================");
-            println!("Proxmox setup complete!");
-            println!();
-            println!("Proxmox configuration written to: {}", output.display());
-            println!();
-            println!("Next steps:");
-            println!("  1. Create an agent pool in the provider dashboard");
-            println!("  2. Generate a setup token for the pool");
-            println!("  3. Run: dc-agent setup token --token <YOUR_TOKEN>");
-            println!("     This will register the agent and add API credentials to the config.");
-            println!("  4. Run: dc-agent --config {} doctor", output.display());
-            println!("  5. Run: dc-agent --config {} run", output.display());
-
-            Ok(())
         }
     }
 }
@@ -962,8 +1055,29 @@ async fn run_test_provision(
 async fn run_agent(config: Config) -> Result<()> {
     info!("Starting dc-agent");
 
+    // Validate config for placeholder values before starting
+    config.validate()?;
+
     let api_client = std::sync::Arc::new(ApiClient::new(&config.api)?);
     let (provisioners, default_provisioner_type) = create_provisioner_map(&config)?;
+
+    // Verify provisioner setup before starting the polling loop
+    // This catches issues like unreachable Proxmox API early
+    let default_provisioner = provisioners
+        .get(&default_provisioner_type)
+        .expect("default provisioner must exist");
+    let verification = default_provisioner.verify_setup().await;
+    if !verification.is_ok() {
+        error!(
+            errors = ?verification.errors,
+            "Provisioner setup verification failed"
+        );
+        anyhow::bail!(
+            "Provisioner setup verification failed:\n  - {}\n\nRun 'dc-agent doctor' for detailed diagnostics.",
+            verification.errors.join("\n  - ")
+        );
+    }
+    info!("Provisioner setup verified successfully");
 
     // Initialize gateway manager if configured
     let gateway_manager = match &config.gateway {
@@ -1008,8 +1122,15 @@ async fn run_agent(config: Config) -> Result<()> {
     // Track active contracts for heartbeat reporting
     let mut active_contracts: i64 = 0;
 
-    // Track orphan VMs for automatic cleanup
-    let mut orphan_tracker = OrphanTracker::default();
+    // Load orphan tracker from disk (persists across restarts)
+    let orphan_tracker_path = Path::new(&config.polling.orphan_tracker_path);
+    let mut orphan_tracker = OrphanTracker::load(orphan_tracker_path)
+        .with_context(|| format!("Failed to load orphan tracker from {:?}", orphan_tracker_path))?;
+    info!(
+        path = %config.polling.orphan_tracker_path,
+        tracked_orphans = orphan_tracker.first_seen.len(),
+        "Orphan tracker loaded"
+    );
 
     // Track consecutive failures for escalating log levels
     let mut heartbeat_failures: u32 = 0;
@@ -1535,6 +1656,7 @@ async fn reconcile_instances(
         );
 
         let mut terminated = false;
+        let mut termination_errors: Vec<(String, String)> = Vec::new();
         for (ptype, provisioner) in provisioners {
             match provisioner.terminate(&vm.external_id).await {
                 Ok(()) => {
@@ -1570,8 +1692,14 @@ async fn reconcile_instances(
                     terminated = true;
                     break;
                 }
-                Err(_) => {
-                    // Try next provisioner
+                Err(e) => {
+                    warn!(
+                        external_id = %vm.external_id,
+                        provisioner_type = %ptype,
+                        error = ?e,
+                        "Provisioner failed to terminate, trying next"
+                    );
+                    termination_errors.push((ptype.to_string(), format!("{e:#}")));
                     continue;
                 }
             }
@@ -1581,6 +1709,7 @@ async fn reconcile_instances(
             error!(
                 external_id = %vm.external_id,
                 contract_id = %vm.contract_id,
+                errors = ?termination_errors,
                 "Termination failed - no provisioner could terminate this instance"
             );
         }
@@ -1602,17 +1731,13 @@ async fn reconcile_instances(
     // Track new orphans and check grace period for existing ones
     let mut to_prune = Vec::new();
     for vm in &response.unknown {
-        let first_seen = *orphan_tracker
-            .first_seen
-            .entry(vm.external_id.clone())
-            .or_insert(now);
-
+        let first_seen = orphan_tracker.record_orphan(&vm.external_id, now);
         let age_seconds = now.saturating_sub(first_seen);
 
         if age_seconds >= orphan_grace_period_seconds {
             // Grace period exceeded - prune this orphan
             to_prune.push(vm);
-        } else if age_seconds == 0 || first_seen == now {
+        } else if first_seen == now {
             // Newly detected orphan
             info!(
                 external_id = %vm.external_id,
@@ -1642,6 +1767,7 @@ async fn reconcile_instances(
         );
 
         let mut pruned = false;
+        let mut prune_errors: Vec<(String, String)> = Vec::new();
         for (ptype, provisioner) in provisioners {
             match provisioner.terminate(&vm.external_id).await {
                 Ok(()) => {
@@ -1653,8 +1779,14 @@ async fn reconcile_instances(
                     pruned = true;
                     break;
                 }
-                Err(_) => {
-                    // Try next provisioner
+                Err(e) => {
+                    warn!(
+                        external_id = %vm.external_id,
+                        provisioner_type = %ptype,
+                        error = ?e,
+                        "Provisioner failed to prune orphan, trying next"
+                    );
+                    prune_errors.push((ptype.to_string(), format!("{e:#}")));
                     continue;
                 }
             }
@@ -1663,31 +1795,28 @@ async fn reconcile_instances(
         if !pruned {
             error!(
                 external_id = %vm.external_id,
+                errors = ?prune_errors,
                 "Orphan pruning failed - no provisioner could terminate this instance"
             );
         } else {
             // Remove from tracker after successful pruning
-            orphan_tracker.first_seen.remove(&vm.external_id);
+            orphan_tracker.remove(&vm.external_id);
         }
     }
 
     // Clean up tracker - remove orphans that are no longer present (resolved)
-    orphan_tracker
-        .first_seen
-        .retain(|external_id, first_seen_ts| {
-            if current_orphans.contains(external_id) {
-                true // Still an orphan, keep tracking
-            } else {
-                // Orphan resolved (contract fixed or VM removed manually)
-                let age_seconds = now.saturating_sub(*first_seen_ts);
-                info!(
-                    external_id = %external_id,
-                    was_tracked_for_seconds = age_seconds,
-                    "Orphan VM resolved - no longer present"
-                );
-                false // Remove from tracker
-            }
-        });
+    let removed = orphan_tracker.retain_present(&current_orphans);
+    for external_id in removed {
+        info!(
+            external_id = %external_id,
+            "Orphan VM resolved - no longer present"
+        );
+    }
+
+    // Persist orphan tracker to disk so state survives restarts
+    if let Err(e) = orphan_tracker.save() {
+        error!(error = ?e, "Failed to save orphan tracker - state may be lost on restart");
+    }
 }
 
 /// Create a single provisioner from config
@@ -2102,4 +2231,100 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
 
     println!("Doctor check complete!");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_valid() {
+        // Standard 2-letter datacenter codes
+        assert_eq!(
+            parse_datacenter_from_pool_id("sl-8eba3c90"),
+            Some("dc-sl".to_string())
+        );
+        assert_eq!(
+            parse_datacenter_from_pool_id("us-abc123"),
+            Some("dc-us".to_string())
+        );
+
+        // 3-letter datacenter codes
+        assert_eq!(
+            parse_datacenter_from_pool_id("usw-abc123"),
+            Some("dc-usw".to_string())
+        );
+        assert_eq!(
+            parse_datacenter_from_pool_id("euw-deadbeef"),
+            Some("dc-euw".to_string())
+        );
+
+        // 4-letter datacenter codes (max allowed)
+        assert_eq!(
+            parse_datacenter_from_pool_id("apne-12345"),
+            Some("dc-apne".to_string())
+        );
+
+        // Multiple dashes in uuid part
+        assert_eq!(
+            parse_datacenter_from_pool_id("sl-abc-def-123"),
+            Some("dc-sl".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_invalid_no_dash() {
+        // No dash at all
+        assert_eq!(parse_datacenter_from_pool_id("8eba3c90"), None);
+        assert_eq!(parse_datacenter_from_pool_id("slabc123"), None);
+    }
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_invalid_empty_code() {
+        // Empty code (starts with dash)
+        assert_eq!(parse_datacenter_from_pool_id("-8eba3c90"), None);
+        assert_eq!(parse_datacenter_from_pool_id("-"), None);
+    }
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_invalid_uppercase() {
+        // Uppercase letters
+        assert_eq!(parse_datacenter_from_pool_id("SL-8eba3c90"), None);
+        assert_eq!(parse_datacenter_from_pool_id("Sl-8eba3c90"), None);
+        assert_eq!(parse_datacenter_from_pool_id("USW-abc123"), None);
+    }
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_invalid_too_short() {
+        // Code too short (< 2 chars)
+        assert_eq!(parse_datacenter_from_pool_id("s-8eba3c90"), None);
+        assert_eq!(parse_datacenter_from_pool_id("a-123"), None);
+    }
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_invalid_too_long() {
+        // Code too long (> 4 chars)
+        assert_eq!(parse_datacenter_from_pool_id("abcde-8eba3c90"), None);
+        assert_eq!(parse_datacenter_from_pool_id("uswest-123"), None);
+    }
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_invalid_non_alpha() {
+        // Non-alphabetic characters in code
+        assert_eq!(parse_datacenter_from_pool_id("s1-8eba3c90"), None);
+        assert_eq!(parse_datacenter_from_pool_id("12-abc123"), None);
+        assert_eq!(parse_datacenter_from_pool_id("u_s-abc123"), None);
+    }
+
+    #[test]
+    fn test_parse_datacenter_from_pool_id_edge_cases() {
+        // Empty string
+        assert_eq!(parse_datacenter_from_pool_id(""), None);
+
+        // Just a dash
+        assert_eq!(parse_datacenter_from_pool_id("-"), None);
+
+        // Only code, no uuid
+        assert_eq!(parse_datacenter_from_pool_id("sl"), None);
+    }
 }
