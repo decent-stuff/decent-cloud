@@ -323,7 +323,7 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
         if backup_path.exists() {
             fs::copy(&backup_path, &install_path).ok();
         }
-        bail!("Failed to install new binary: {}", e);
+        bail!("Failed to install new binary: {:#}", e);
     }
     println!("  [ok] Installed to {}", install_path.display());
 
@@ -336,7 +336,7 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
         println!("\nRestarting service...");
         if let Err(e) = restart_service() {
             // Rollback on restart failure
-            println!("  [FAILED] Service restart failed: {}", e);
+            println!("  [FAILED] Service restart failed: {:#}", e);
             println!("\nRolling back...");
             if backup_path.exists() {
                 fs::copy(&backup_path, &install_path)?;
@@ -344,7 +344,7 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
                 // Try to restart with old version
                 if let Err(e2) = restart_service() {
                     bail!(
-                        "Rollback complete but service still failed to start: {}\n\
+                        "Rollback complete but service still failed to start: {:#}\n\
                          Manual intervention required: systemctl status dc-agent",
                         e2
                     );

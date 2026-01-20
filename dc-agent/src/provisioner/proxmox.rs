@@ -851,7 +851,7 @@ impl Provisioner for ProxmoxProvisioner {
                 result.api_reachable = Some(false);
                 result
                     .errors
-                    .push(format!("Cannot reach Proxmox API: {}", e));
+                    .push(format!("Cannot reach Proxmox API: {:#}", e));
                 return result; // No point checking further if API is unreachable
             }
         }
@@ -871,7 +871,7 @@ impl Provisioner for ProxmoxProvisioner {
             Err(e) => {
                 result.template_exists = Some(false);
                 result.errors.push(format!(
-                    "Template VM {} not found: {}",
+                    "Template VM {} not found: {:#}",
                     self.config.template_vmid, e
                 ));
             }
@@ -889,7 +889,7 @@ impl Provisioner for ProxmoxProvisioner {
             Err(e) => {
                 result.storage_accessible = Some(false);
                 result.errors.push(format!(
-                    "Storage '{}' not accessible: {}",
+                    "Storage '{}' not accessible: {:#}",
                     self.config.storage, e
                 ));
             }
@@ -906,7 +906,7 @@ impl Provisioner for ProxmoxProvisioner {
                     result.pool_exists = Some(false);
                     result
                         .errors
-                        .push(format!("Pool '{}' not found: {}", pool, e));
+                        .push(format!("Pool '{}' not found: {:#}", pool, e));
                 }
             }
         }

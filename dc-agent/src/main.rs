@@ -265,7 +265,7 @@ async fn run_setup_token(
             None
         }
         Err(e) => {
-            println!("[warn] Failed to detect location: {}", e);
+            println!("[warn] Failed to detect location: {:#}", e);
             None
         }
     };
@@ -1942,7 +1942,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                             }
                         }
                     }
-                    Err(e) => println!("  [FAILED] Gateway initialization: {}", e),
+                    Err(e) => println!("  [FAILED] Gateway initialization: {:#}", e),
                 },
                 None => {
                     println!("  [WARN] Cannot verify gateway manager (API client not available)");
@@ -1983,14 +1983,14 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 println!("  Next heartbeat in: {}s", response.next_heartbeat_seconds);
             }
             Err(e) => {
-                println!("[FAILED] API verification failed: {}", e);
+                println!("[FAILED] API verification failed: {:#}", e);
                 println!();
                 println!("Possible causes:");
                 println!("  - Agent not registered (run: dc-agent register)");
                 println!("  - Agent delegation expired or revoked");
                 println!("  - Invalid agent key");
                 println!("  - Network connectivity issue");
-                return Err(anyhow::anyhow!("API verification failed: {}", e));
+                return Err(anyhow::anyhow!("API verification failed: {:#}", e));
             }
         }
     }
@@ -2060,7 +2060,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                                 }
                             }
                             Err(e) => {
-                                println!("[WARN] Test VM created but termination failed: {}", e);
+                                println!("[WARN] Test VM created but termination failed: {:#}", e);
                                 println!(
                                     "  Manual cleanup may be required for VMID {}",
                                     instance.external_id
