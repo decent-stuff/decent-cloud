@@ -78,22 +78,16 @@ curl -sSL -o /tmp/dc-agent "$DOWNLOAD_URL" || error "Failed to download from $DO
 
 # Download and verify checksum
 info "Verifying checksum..."
-if curl -sSL -o /tmp/SHA256SUMS "$CHECKSUMS_URL" 2>/dev/null; then
-    EXPECTED_SUM=$(grep "dc-agent-linux-amd64" /tmp/SHA256SUMS | cut -d' ' -f1)
-    if [[ -n "$EXPECTED_SUM" ]]; then
-        ACTUAL_SUM=$(sha256sum /tmp/dc-agent | cut -d' ' -f1)
-        if [[ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]]; then
-            rm -f /tmp/dc-agent /tmp/SHA256SUMS
-            error "CHECKSUM VERIFICATION FAILED!\n  Expected: $EXPECTED_SUM\n  Got:      $ACTUAL_SUM\n\nThe binary may be corrupted or tampered with."
-        fi
-        echo "    [ok] SHA256 verified"
-    else
-        echo "    [warn] Checksum not found in SHA256SUMS (older release?)"
-    fi
-    rm -f /tmp/SHA256SUMS
-else
-    echo "    [warn] SHA256SUMS not available (older release?)"
+curl -sSLf -o /tmp/SHA256SUMS "$CHECKSUMS_URL" || error "Failed to download SHA256SUMS from $CHECKSUMS_URL"
+EXPECTED_SUM=$(grep "dc-agent-linux-amd64" /tmp/SHA256SUMS | cut -d' ' -f1)
+[[ -z "$EXPECTED_SUM" ]] && error "Checksum for dc-agent-linux-amd64 not found in SHA256SUMS"
+ACTUAL_SUM=$(sha256sum /tmp/dc-agent | cut -d' ' -f1)
+if [[ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]]; then
+    rm -f /tmp/dc-agent /tmp/SHA256SUMS
+    error "CHECKSUM VERIFICATION FAILED!\n  Expected: $EXPECTED_SUM\n  Got:      $ACTUAL_SUM\n\nThe binary may be corrupted or tampered with."
 fi
+echo "    [ok] SHA256 verified"
+rm -f /tmp/SHA256SUMS
 
 # Verify binary runs and reports correct version
 chmod +x /tmp/dc-agent
