@@ -97,6 +97,13 @@ pub struct AgentDelegation {
     pub active: bool,
     /// Pool ID this agent belongs to (null for legacy agents)
     pub pool_id: Option<String>,
+    /// Whether agent is currently online (from last heartbeat)
+    pub online: bool,
+    /// Agent version (from last heartbeat)
+    pub version: Option<String>,
+    /// Last heartbeat timestamp
+    #[ts(type = "number | null")]
+    pub last_heartbeat_ns: Option<i64>,
 }
 
 /// Agent status record
@@ -123,18 +130,29 @@ pub struct AgentStatus {
     pub active_contracts: i64,
 }
 
-/// Internal row type for database queries
+/// Internal row type for delegation verification queries
 #[derive(Debug, sqlx::FromRow)]
 pub struct DelegationRow {
+    pub provider_pubkey: Vec<u8>,
+    pub permissions: String,
+    pub signature: Vec<u8>,
+    pub pool_id: Option<String>,
+}
+
+/// Internal row type for delegation queries with status info
+#[derive(Debug, sqlx::FromRow)]
+pub struct DelegationWithStatusRow {
     pub agent_pubkey: Vec<u8>,
     pub provider_pubkey: Vec<u8>,
     pub permissions: String,
     pub expires_at_ns: Option<i64>,
     pub label: Option<String>,
-    pub signature: Vec<u8>,
     pub created_at_ns: i64,
     pub revoked_at_ns: Option<i64>,
     pub pool_id: Option<String>,
+    pub version: Option<String>,
+    pub last_heartbeat_ns: Option<i64>,
+    pub online: bool,
 }
 
 /// Internal row type for agent status queries
@@ -211,7 +229,7 @@ impl Database {
 
         let row = sqlx::query_as!(
             DelegationRow,
-            r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns, pool_id
+            r#"SELECT provider_pubkey, permissions, signature, pool_id
                FROM provider_agent_delegations
                WHERE agent_pubkey = $1
                  AND revoked_at_ns IS NULL
@@ -244,15 +262,23 @@ impl Database {
         provider_pubkey: &[u8],
     ) -> Result<Vec<AgentDelegation>> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        // 5 minutes in nanoseconds for online check
+        let online_threshold_ns = now_ns - (5 * 60 * 1_000_000_000i64);
 
-        let rows = sqlx::query_as!(
-            DelegationRow,
-            r#"SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, label, signature, created_at_ns, revoked_at_ns, pool_id
-               FROM provider_agent_delegations
-               WHERE provider_pubkey = $1
-               ORDER BY created_at_ns DESC"#,
-            provider_pubkey
+        // Join with status table to get version and online status
+        let rows = sqlx::query_as::<_, DelegationWithStatusRow>(
+            r#"SELECT
+                d.agent_pubkey, d.provider_pubkey, d.permissions, d.expires_at_ns,
+                d.label, d.created_at_ns, d.revoked_at_ns, d.pool_id,
+                s.version, s.last_heartbeat_ns,
+                COALESCE(s.online = TRUE AND s.last_heartbeat_ns > $2, FALSE) as online
+               FROM provider_agent_delegations d
+               LEFT JOIN provider_agent_status s ON d.provider_pubkey = s.provider_pubkey
+               WHERE d.provider_pubkey = $1
+               ORDER BY d.created_at_ns DESC"#,
         )
+        .bind(provider_pubkey)
+        .bind(online_threshold_ns)
         .fetch_all(&self.pool)
         .await?;
 
@@ -271,6 +297,9 @@ impl Database {
                     created_at_ns: r.created_at_ns,
                     active,
                     pool_id: r.pool_id,
+                    online: r.online,
+                    version: r.version,
+                    last_heartbeat_ns: r.last_heartbeat_ns,
                 }
             })
             .collect();

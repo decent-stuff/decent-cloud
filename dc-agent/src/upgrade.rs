@@ -42,9 +42,7 @@ pub async fn check_latest_version() -> Result<String> {
         GITHUB_REPO
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("dc-agent")
-        .build()?;
+    let client = reqwest::Client::builder().user_agent("dc-agent").build()?;
 
     let response = client
         .get(&url)
@@ -71,9 +69,7 @@ pub async fn check_latest_version() -> Result<String> {
 
 /// Download a file from URL to the specified path.
 async fn download_file(url: &str, dest: &Path) -> Result<()> {
-    let client = reqwest::Client::builder()
-        .user_agent("dc-agent")
-        .build()?;
+    let client = reqwest::Client::builder().user_agent("dc-agent").build()?;
 
     let response = client
         .get(url)
@@ -179,10 +175,12 @@ fn current_binary_path() -> Result<PathBuf> {
 /// Acquire upgrade lock to prevent concurrent upgrades.
 fn acquire_lock() -> Result<()> {
     if Path::new(LOCK_FILE).exists() {
-        bail!("Another upgrade is in progress (lock file exists: {})", LOCK_FILE);
+        bail!(
+            "Another upgrade is in progress (lock file exists: {})",
+            LOCK_FILE
+        );
     }
-    fs::write(LOCK_FILE, std::process::id().to_string())
-        .context("Failed to create lock file")?;
+    fs::write(LOCK_FILE, std::process::id().to_string()).context("Failed to create lock file")?;
     Ok(())
 }
 
@@ -219,7 +217,10 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
     if !needs_upgrade && force {
         println!("Note: Already up to date, but --force specified");
     } else {
-        println!("Upgrade available: {} → {}", current_version, latest_version);
+        println!(
+            "Upgrade available: {} → {}",
+            current_version, latest_version
+        );
     }
 
     if check_only {
@@ -312,8 +313,7 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
     // Backup current binary
     println!("\nInstalling...");
     if install_path.exists() {
-        fs::copy(&install_path, &backup_path)
-            .context("Failed to backup current binary")?;
+        fs::copy(&install_path, &backup_path).context("Failed to backup current binary")?;
         println!("  [ok] Backed up to {}", backup_path.display());
     }
 
@@ -359,7 +359,10 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
         println!("Please restart dc-agent manually to use the new version.");
     }
 
-    println!("\n✓ Upgrade complete: {} → {}", current_version, latest_version);
+    println!(
+        "\n✓ Upgrade complete: {} → {}",
+        current_version, latest_version
+    );
 
     Ok(())
 }

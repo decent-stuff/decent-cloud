@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT provider_pubkey, permissions, signature, pool_id\n               FROM provider_agent_delegations\n               WHERE agent_pubkey = $1\n                 AND revoked_at_ns IS NULL\n                 AND (expires_at_ns IS NULL OR expires_at_ns > $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "permissions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "signature",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "pool_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "52f73ea05767484efbd7f2181e3636a478b2272caccc4bb3a1815100af6c2fdc"
+}

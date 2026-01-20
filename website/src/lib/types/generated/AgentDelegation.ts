@@ -35,4 +35,16 @@ active: boolean,
 /**
  * Pool ID this agent belongs to (null for legacy agents)
  */
-poolId: string | null, };
+poolId: string | null, 
+/**
+ * Whether agent is currently online (from last heartbeat)
+ */
+online: boolean, 
+/**
+ * Agent version (from last heartbeat)
+ */
+version: string | null, 
+/**
+ * Last heartbeat timestamp
+ */
+lastHeartbeatNs: number | null, };

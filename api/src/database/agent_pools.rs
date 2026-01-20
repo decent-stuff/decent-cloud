@@ -2,7 +2,7 @@
 //!
 //! Handles agent pool management for load distribution and location-based routing.
 
-use super::agent_delegations::{AgentDelegation, DelegationRow};
+use super::agent_delegations::AgentDelegation;
 use super::types::Database;
 use anyhow::{anyhow, Result};
 use poem_openapi::Object;
@@ -520,11 +520,26 @@ impl Database {
 
     /// List all active agent delegations for a specific pool.
     pub async fn list_agents_in_pool(&self, pool_id: &str) -> Result<Vec<AgentDelegation>> {
+        use super::agent_delegations::DelegationWithStatusRow;
+
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let rows = sqlx::query_as::<_, DelegationRow>(
-            "SELECT agent_pubkey, provider_pubkey, permissions, expires_at_ns, created_at_ns, revoked_at_ns, label, pool_id, signature FROM provider_agent_delegations WHERE pool_id = $1 AND revoked_at_ns IS NULL ORDER BY created_at_ns DESC"
+        // 5 minutes in nanoseconds for online check
+        let online_threshold_ns = now_ns - (5 * 60 * 1_000_000_000i64);
+
+        // Join with status table to get version and online status
+        let rows = sqlx::query_as::<_, DelegationWithStatusRow>(
+            r#"SELECT
+                d.agent_pubkey, d.provider_pubkey, d.permissions, d.expires_at_ns,
+                d.label, d.created_at_ns, d.revoked_at_ns, d.pool_id,
+                s.version, s.last_heartbeat_ns,
+                COALESCE(s.online = TRUE AND s.last_heartbeat_ns > $2, FALSE) as online
+               FROM provider_agent_delegations d
+               LEFT JOIN provider_agent_status s ON d.provider_pubkey = s.provider_pubkey
+               WHERE d.pool_id = $1 AND d.revoked_at_ns IS NULL
+               ORDER BY d.created_at_ns DESC"#,
         )
         .bind(pool_id)
+        .bind(online_threshold_ns)
         .fetch_all(&self.pool)
         .await?;
 
@@ -553,6 +568,9 @@ impl Database {
                     active,
                     pool_id: row.pool_id,
                     label: row.label,
+                    online: row.online,
+                    version: row.version,
+                    last_heartbeat_ns: row.last_heartbeat_ns,
                 }
             })
             .collect();

@@ -282,6 +282,7 @@
 					<tr>
 						<th scope="col" class="px-6 py-3">Label</th>
 						<th scope="col" class="px-6 py-3">Agent Pubkey</th>
+						<th scope="col" class="px-6 py-3">Version</th>
 						<th scope="col" class="px-6 py-3">Permissions</th>
 						<th scope="col" class="px-6 py-3">Created</th>
 						<th scope="col" class="px-6 py-3">Status</th>
@@ -291,7 +292,7 @@
 				<tbody>
 					{#if delegations.length === 0}
 						<tr>
-							<td colspan="6" class="text-center py-8 text-neutral-500">
+							<td colspan="7" class="text-center py-8 text-neutral-500">
 								No agents delegated to this pool yet.
 							</td>
 						</tr>
@@ -303,6 +304,9 @@
 							</th>
 							<td class="px-6 py-4 font-mono text-xs text-neutral-400" title={delegation.agentPubkey}>
 								{formatPubkey(delegation.agentPubkey)}
+							</td>
+							<td class="px-6 py-4 text-neutral-300">
+								{delegation.version || "—"}
 							</td>
 							<td class="px-6 py-4">
 								<div class="flex flex-wrap gap-1">
@@ -317,15 +321,20 @@
 								{formatTimestamp(delegation.createdAtNs)}
 							</td>
 							<td class="px-6 py-4">
-								{#if delegation.active}
-									<span class="flex items-center gap-2 text-green-400">
-										<span class="h-2 w-2 rounded-full bg-green-400"></span>
-										Active
-									</span>
-								{:else}
+								{#if !delegation.active}
 									<span class="flex items-center gap-2 text-red-400">
 										<span class="h-2 w-2 rounded-full bg-red-400"></span>
 										Revoked
+									</span>
+								{:else if delegation.online}
+									<span class="flex items-center gap-2 text-green-400">
+										<span class="h-2 w-2 rounded-full bg-green-400"></span>
+										Online
+									</span>
+								{:else}
+									<span class="flex items-center gap-2 text-amber-400">
+										<span class="h-2 w-2 rounded-full bg-amber-400"></span>
+										Offline
 									</span>
 								{/if}
 							</td>

@@ -400,8 +400,10 @@ impl ProxmoxSetup {
         ))?;
         if check_result.exit_status == 0 {
             println!("  Removing existing API token...");
-            let delete_result =
-                self.execute(&format!("pveum user token remove {} {}", full_user, token_name))?;
+            let delete_result = self.execute(&format!(
+                "pveum user token remove {} {}",
+                full_user, token_name
+            ))?;
             if delete_result.exit_status != 0 {
                 bail!(
                     "Failed to remove existing token: {}",

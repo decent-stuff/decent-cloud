@@ -344,7 +344,10 @@ async fn run_setup_token(
             if let Some(dc_code) = response.pool_id.split('-').next() {
                 let datacenter = format!("dc-{}", dc_code);
                 println!();
-                println!("[auto] Gateway enabled: {} (derived from pool {})", datacenter, response.pool_id);
+                println!(
+                    "[auto] Gateway enabled: {} (derived from pool {})",
+                    datacenter, response.pool_id
+                );
                 Some(datacenter)
             } else {
                 None
