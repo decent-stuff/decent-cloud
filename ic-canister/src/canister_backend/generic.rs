@@ -88,13 +88,13 @@ fn ledger_periodic_task() {
         let ledger = &mut ledger.borrow_mut();
         match rewards_distribute(ledger) {
             Ok(_) => {}
-            Err(e) => error!("Ledger commit: Failed to distribute rewards: {}", e),
+            Err(e) => error!("Ledger commit: Failed to distribute rewards: {:#}", e),
             // Intentionally don't panic. If needed, transactions can be replayed and corrected.
         }
 
         // Commit the block
         ledger.commit_block().unwrap_or_else(|e| {
-            error!("Failed to commit ledger: {}", e);
+            error!("Failed to commit ledger: {:#}", e);
         });
 
         // Set certified data, for compliance with ICRC-3
@@ -158,7 +158,7 @@ pub fn _pre_upgrade() {
             .borrow_mut()
             .force_commit_block()
             .unwrap_or_else(|e| {
-                error!("Failed to force commit ledger: {}", e);
+                error!("Failed to force commit ledger: {:#}", e);
             });
         // Set certified data, for compliance with ICRC-3
         ic_cdk::api::certified_data_set(ledger.borrow().get_latest_block_hash());
@@ -361,10 +361,10 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
                 let refresh_result = LEDGER_MAP.with(|ledger| {
                     // TODO: Entire ledger is iterated twice, effectively. It should be possible to do this in a single go.
                     if let Err(e) = ledger.borrow_mut().refresh_ledger() {
-                        error!("Failed to refresh ledger: {}", e)
+                        error!("Failed to refresh ledger: {:#}", e)
                     }
                     refresh_caches_from_ledger(&ledger.borrow())
-                        .map_err(|e| format!("Failed to refresh caches from ledger: {}", e))
+                        .map_err(|e| format!("Failed to refresh caches from ledger: {:#}", e))
                         .map(|_| {
                             reward_e9s_per_block_recalculate();
                         })
@@ -542,7 +542,7 @@ pub(crate) fn _ledger_entries(
                         current_block_pos += block_header.jump_bytes_next_block() as u64;
                     }
                     Err(e) => {
-                        error!("Failed to read block during iter_raw: {}", e);
+                        error!("Failed to read block during iter_raw: {:#}", e);
                         break;
                     }
                 }

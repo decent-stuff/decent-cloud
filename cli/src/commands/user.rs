@@ -41,7 +41,7 @@ pub async fn handle_user_command(
                     println!("Registration successful: {}", response);
                 }
                 Err(e) => {
-                    println!("Registration failed: {}", e);
+                    println!("Registration failed: {:#}", e);
                 }
             }
         }

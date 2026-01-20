@@ -441,21 +441,21 @@ async fn doctor_command() -> Result<(), std::io::Error> {
                                 match client.assign_agent_bot_to_inbox(inbox_id, bot_id).await {
                                     Ok(()) => println!("[OK]"),
                                     Err(e) => {
-                                        println!("[ERROR] {}", e);
+                                        println!("[ERROR] {:#}", e);
                                         errors += 1;
                                     }
                                 }
                             }
                         }
                         Err(e) => {
-                            println!("  [ERROR] Failed to list inboxes: {}", e);
+                            println!("  [ERROR] Failed to list inboxes: {:#}", e);
                             errors += 1;
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("[ERROR] {}", e);
+                println!("[ERROR] {:#}", e);
                 errors += 1;
             }
         }

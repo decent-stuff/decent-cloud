@@ -142,7 +142,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
             amount_e9s as i64,
         )?),
         Err(e) => {
-            info!("Failed to charge fees: {}", e);
+            info!("Failed to charge fees: {:#}", e);
             Err(e.to_string())
         }
     }
@@ -175,7 +175,7 @@ pub fn charge_fees_to_account_no_bump_reputation(
     ) {
         Ok(_) => Ok(()),
         Err(e) => {
-            info!("Failed to charge fees: {}", e);
+            info!("Failed to charge fees: {:#}", e);
             Err(e.to_string())
         }
     }
@@ -245,7 +245,7 @@ pub fn do_funds_transfer(
             Ok(response)
         }
         Err(e) => {
-            info!("Failed to charge fees: {}", e);
+            info!("Failed to charge fees: {:#}", e);
             Err(e.to_string())
         }
     }

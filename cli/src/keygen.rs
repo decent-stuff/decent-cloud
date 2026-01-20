@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match dcc_id.verify(message, &signature) {
         Ok(()) => println!("Signature is valid."),
-        Err(e) => println!("Signature is invalid: {}", e),
+        Err(e) => println!("Signature is invalid: {:#}", e),
     }
 
     Ok(())

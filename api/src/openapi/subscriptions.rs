@@ -227,7 +227,7 @@ impl SubscriptionsApi {
                     Ok(id) => {
                         // Save customer ID
                         if let Err(e) = db.set_stripe_customer_id(&account_id, &id).await {
-                            tracing::error!("Failed to save Stripe customer ID: {}", e);
+                            tracing::error!("Failed to save Stripe customer ID: {:#}", e);
                         }
                         id
                     }

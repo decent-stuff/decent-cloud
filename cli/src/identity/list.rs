@@ -17,7 +17,7 @@ pub fn list_local_identities(include_balances: bool) -> Result<(), Box<dyn std::
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(e) => {
-                eprintln!("Failed to read identity: {}", e);
+                eprintln!("Failed to read identity: {:#}", e);
                 None
             }
         })
