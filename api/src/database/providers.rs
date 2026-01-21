@@ -381,7 +381,8 @@ impl Database {
         Ok(providers)
     }
 
-    /// Create or update an external provider (used by api-cli scraper)
+    /// Create or update an external provider.
+    /// Used by: `api-cli scrape-provider` command
     pub async fn create_or_update_external_provider(
         &self,
         pubkey: &[u8],

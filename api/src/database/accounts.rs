@@ -882,7 +882,8 @@ impl Database {
         Ok(result.0)
     }
 
-    /// List all admin accounts
+    /// List all admin accounts.
+    /// Used by: `api-cli list-admins` command
     pub async fn list_admins(&self) -> Result<Vec<Account>> {
         let admins = sqlx::query_as::<_, Account>(
             "SELECT id, username, created_at, updated_at, auth_provider, email, email_verified, display_name, bio, avatar_url, profile_updated_at, last_login_at, is_admin, chatwoot_user_id, billing_address, billing_vat_id, billing_country_code

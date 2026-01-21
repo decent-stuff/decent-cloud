@@ -401,7 +401,8 @@ impl Database {
         Ok(offering)
     }
 
-    /// Get example offerings for CSV template generation
+    /// Get example offerings for CSV template generation.
+    /// Used by: database tests for example data verification
     pub async fn get_example_offerings(&self) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
         let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
@@ -428,7 +429,8 @@ impl Database {
         Ok(offerings)
     }
 
-    /// Get example offerings filtered by product type
+    /// Get example offerings filtered by product type.
+    /// Used by: GET /offerings/csv-template endpoint
     pub async fn get_example_offerings_by_type(&self, product_type: &str) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
         let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
@@ -549,7 +551,8 @@ impl Database {
 }
 
 impl Database {
-    /// Count offerings
+    /// Count offerings.
+    /// Used by: database tests for count verification
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {
         let query = if let Some(f) = filters {
             format!(
@@ -1185,7 +1188,8 @@ impl Database {
             .await
     }
 
-    /// Import seeded offerings from CSV data with offering_source='seeded'
+    /// Import seeded offerings from CSV data with offering_source='seeded'.
+    /// Used by: `api-cli import-seeded-offerings` command
     /// Returns (success_count, errors) where errors is Vec<(row_number, error_message)>
     pub async fn import_seeded_offerings_csv(
         &self,

@@ -35,7 +35,8 @@ impl Database {
         Ok(())
     }
 
-    /// Access the underlying pool (needed for session store and testing)
+    /// Access the underlying pool.
+    /// Used by: sync_service tests for direct SQL verification
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
