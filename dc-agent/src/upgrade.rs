@@ -314,6 +314,8 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
     // Get current binary path and backup path
     let install_path = current_binary_path()?;
     let backup_path = install_path.with_extension("previous");
+    // Stage new binary in same directory for atomic rename
+    let staged_path = install_path.with_extension("new");
 
     // Backup current binary
     println!("\nInstalling...");
@@ -322,12 +324,20 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
         println!("  [ok] Backed up to {}", backup_path.display());
     }
 
-    // Install new binary
-    if let Err(e) = fs::copy(&temp_binary, &install_path) {
-        // Restore backup on failure
-        if backup_path.exists() {
-            fs::copy(&backup_path, &install_path).ok();
-        }
+    // Copy new binary to staging location (same filesystem as target)
+    fs::copy(&temp_binary, &staged_path).context("Failed to stage new binary")?;
+
+    // Set permissions on staged binary
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&staged_path, fs::Permissions::from_mode(0o755))?;
+    }
+
+    // Atomic rename replaces running binary (old inode stays valid for running process)
+    if let Err(e) = fs::rename(&staged_path, &install_path) {
+        // Clean up staged file on failure (old binary still in place, no restoration needed)
+        fs::remove_file(&staged_path).ok();
         bail!("Failed to install new binary: {:#}", e);
     }
     println!("  [ok] Installed to {}", install_path.display());
@@ -344,7 +354,8 @@ pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> R
             println!("  [FAILED] Service restart failed: {:#}", e);
             println!("\nRolling back...");
             if backup_path.exists() {
-                fs::copy(&backup_path, &install_path)?;
+                // Use rename for atomic replacement (avoids ETXTBSY if new binary is running)
+                fs::rename(&backup_path, &install_path)?;
                 println!("  [ok] Restored previous version");
                 // Try to restart with old version
                 if let Err(e2) = restart_service() {
