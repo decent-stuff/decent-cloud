@@ -7,6 +7,7 @@ use super::types::Database;
 use anyhow::{anyhow, Result};
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use ts_rs::TS;
 
 // Re-export region utilities for convenience
@@ -80,6 +81,42 @@ pub struct SetupToken {
     pub used_at_ns: Option<i64>,
     /// Agent pubkey that used this token (hex, null if unused)
     pub used_by_agent: Option<String>,
+}
+
+/// Aggregated hardware capabilities for a pool (from online agents)
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct PoolCapabilities {
+    /// Pool identifier
+    pub pool_id: String,
+    /// Number of online agents with resource data
+    pub online_agents: u32,
+    /// Total CPU cores across all online agents
+    pub total_cpu_cores: u32,
+    /// Minimum CPU cores on any single agent (determines max VM size)
+    pub min_agent_cpu_cores: u32,
+    /// Total memory in MB across all online agents
+    #[ts(type = "number")]
+    pub total_memory_mb: u64,
+    /// Minimum memory in MB on any single agent
+    #[ts(type = "number")]
+    pub min_agent_memory_mb: u64,
+    /// Total storage in GB across all online agents
+    #[ts(type = "number")]
+    pub total_storage_gb: u64,
+    /// Minimum storage in GB on any single agent
+    #[ts(type = "number")]
+    pub min_agent_storage_gb: u64,
+    /// Unique CPU models across all agents
+    pub cpu_models: Vec<String>,
+    /// Whether any agent has GPU capability
+    pub has_gpu: bool,
+    /// Unique GPU models across all agents
+    pub gpu_models: Vec<String>,
+    /// Union of all available templates
+    pub available_templates: Vec<String>,
 }
 
 /// Internal row for pool queries
@@ -260,6 +297,128 @@ impl Database {
                 }
             })
             .collect())
+    }
+
+    /// Get aggregated hardware capabilities for a pool from online agents.
+    ///
+    /// Returns None if no online agents have reported resources.
+    pub async fn get_pool_capabilities(&self, pool_id: &str) -> Result<Option<PoolCapabilities>> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let five_mins_ns = 5 * 60 * 1_000_000_000i64;
+        let cutoff_ns = now_ns - five_mins_ns;
+
+        // Query all online agents in this pool that have resources
+        // Use DISTINCT to avoid duplicates when multiple delegations reference the same provider's status
+        let rows: Vec<serde_json::Value> = sqlx::query_scalar(
+            r#"SELECT DISTINCT s.resources
+               FROM agent_pools p
+               JOIN provider_agent_delegations d ON d.pool_id = p.pool_id AND d.revoked_at_ns IS NULL
+               JOIN provider_agent_status s ON s.provider_pubkey = d.provider_pubkey
+               WHERE p.pool_id = $1
+                 AND s.online = TRUE
+                 AND s.last_heartbeat_ns > $2
+                 AND s.resources IS NOT NULL"#,
+        )
+        .bind(pool_id)
+        .bind(cutoff_ns)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if rows.is_empty() {
+            return Ok(None);
+        }
+
+        // Aggregate resources from all agents
+        let mut total_cpu_cores: u32 = 0;
+        let mut min_cpu_cores: Option<u32> = None;
+        let mut total_memory_mb: u64 = 0;
+        let mut min_memory_mb: Option<u64> = None;
+        let mut total_storage_gb: u64 = 0;
+        let mut min_storage_gb: Option<u64> = None;
+        let mut cpu_models: HashSet<String> = HashSet::new();
+        let mut gpu_models: HashSet<String> = HashSet::new();
+        let mut templates: HashSet<String> = HashSet::new();
+
+        for resources in &rows {
+            // CPU cores
+            if let Some(cores) = resources.get("cpuCores").and_then(|v| v.as_u64()) {
+                let cores = cores as u32;
+                total_cpu_cores += cores;
+                min_cpu_cores = Some(min_cpu_cores.map_or(cores, |m| m.min(cores)));
+            }
+
+            // Memory
+            if let Some(mem) = resources.get("memoryTotalMb").and_then(|v| v.as_u64()) {
+                total_memory_mb += mem;
+                min_memory_mb = Some(min_memory_mb.map_or(mem, |m| m.min(mem)));
+            }
+
+            // Storage (sum all pools)
+            if let Some(pools) = resources.get("storagePools").and_then(|v| v.as_array()) {
+                let mut agent_storage_gb: u64 = 0;
+                for pool in pools {
+                    if let Some(gb) = pool.get("totalGb").and_then(|v| v.as_u64()) {
+                        agent_storage_gb += gb;
+                    }
+                }
+                total_storage_gb += agent_storage_gb;
+                if agent_storage_gb > 0 {
+                    min_storage_gb =
+                        Some(min_storage_gb.map_or(agent_storage_gb, |m| m.min(agent_storage_gb)));
+                }
+            }
+
+            // CPU model
+            if let Some(model) = resources.get("cpuModel").and_then(|v| v.as_str()) {
+                if !model.is_empty() {
+                    cpu_models.insert(model.to_string());
+                }
+            }
+
+            // GPU devices
+            if let Some(gpus) = resources.get("gpuDevices").and_then(|v| v.as_array()) {
+                for gpu in gpus {
+                    if let Some(name) = gpu.get("name").and_then(|v| v.as_str()) {
+                        if !name.is_empty() {
+                            gpu_models.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+
+            // Templates
+            if let Some(tmpls) = resources.get("templates").and_then(|v| v.as_array()) {
+                for tmpl in tmpls {
+                    if let Some(name) = tmpl.get("name").and_then(|v| v.as_str()) {
+                        if !name.is_empty() {
+                            templates.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut cpu_models_vec: Vec<_> = cpu_models.into_iter().collect();
+        cpu_models_vec.sort();
+        let mut gpu_models_vec: Vec<_> = gpu_models.into_iter().collect();
+        gpu_models_vec.sort();
+        let mut templates_vec: Vec<_> = templates.into_iter().collect();
+        templates_vec.sort();
+
+        Ok(Some(PoolCapabilities {
+            pool_id: pool_id.to_string(),
+            online_agents: rows.len() as u32,
+            total_cpu_cores,
+            min_agent_cpu_cores: min_cpu_cores.unwrap_or(0),
+            total_memory_mb,
+            min_agent_memory_mb: min_memory_mb.unwrap_or(0),
+            total_storage_gb,
+            min_agent_storage_gb: min_storage_gb.unwrap_or(0),
+            cpu_models: cpu_models_vec,
+            has_gpu: !gpu_models_vec.is_empty(),
+            gpu_models: gpu_models_vec,
+            available_templates: templates_vec,
+        }))
     }
 
     /// Update a pool's name, location, or provisioner type.
@@ -791,6 +950,116 @@ mod tests {
         assert_eq!(
             pool_na_stats.offerings_count, 1,
             "pool-na should have 1 offering (explicit assignment)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_pool_capabilities_aggregation() {
+        let db = setup_test_db().await;
+
+        // Create a provider
+        let provider_pubkey = vec![5u8; 32];
+        register_provider(&db, &provider_pubkey).await;
+
+        // Create pool
+        let pool = db
+            .create_agent_pool(
+                "test-caps-pool",
+                &provider_pubkey,
+                "Capabilities Test Pool",
+                "europe",
+                "proxmox",
+            )
+            .await
+            .unwrap();
+
+        // Create two agents with different resources
+        let agent1_pubkey = vec![6u8; 32];
+        let agent2_pubkey = vec![7u8; 32];
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        // Register agent delegations
+        for (agent_pk, label) in [(&agent1_pubkey, "Agent 1"), (&agent2_pubkey, "Agent 2")] {
+            sqlx::query(
+                "INSERT INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, label, signature, created_at_ns, pool_id) VALUES ($1, $2, '[]', $3, '\\x00', $4, $5)",
+            )
+            .bind(&provider_pubkey)
+            .bind(agent_pk)
+            .bind(label)
+            .bind(now_ns)
+            .bind(&pool.pool_id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        }
+
+        // Insert agent status with resources for agent 1
+        let resources1 = serde_json::json!({
+            "cpuModel": "AMD EPYC 7763 64-Core Processor",
+            "cpuCores": 16,
+            "cpuThreads": 32,
+            "memoryTotalMb": 32768, // 32 GB
+            "memoryAvailableMb": 16384,
+            "storagePools": [
+                {"name": "local-lvm", "totalGb": 500, "availableGb": 400, "storageType": "lvmthin"}
+            ],
+            "gpuDevices": [],
+            "templates": [
+                {"vmid": 100, "name": "ubuntu-22.04"}
+            ]
+        });
+
+        sqlx::query(
+            "INSERT INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns, resources) VALUES ($1, TRUE, $2, $3, $4)",
+        )
+        .bind(&provider_pubkey) // Note: status uses provider_pubkey but delegations link to pool
+        .bind(now_ns)
+        .bind(now_ns)
+        .bind(&resources1)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Get capabilities - should return the resources we inserted
+        let caps = db.get_pool_capabilities(&pool.pool_id).await.unwrap();
+
+        // Verify capabilities were found
+        assert!(caps.is_some(), "Should have capabilities from online agent");
+        let caps = caps.unwrap();
+        assert_eq!(caps.pool_id, pool.pool_id);
+        assert_eq!(caps.total_cpu_cores, 16);
+        assert_eq!(caps.total_memory_mb, 32768);
+        assert_eq!(caps.total_storage_gb, 500);
+        assert!(!caps.has_gpu);
+        assert_eq!(caps.cpu_models, vec!["AMD EPYC 7763 64-Core Processor"]);
+        assert_eq!(caps.available_templates, vec!["ubuntu-22.04"])
+    }
+
+    #[tokio::test]
+    async fn test_get_pool_capabilities_no_resources() {
+        let db = setup_test_db().await;
+
+        // Create a provider
+        let provider_pubkey = vec![8u8; 32];
+        register_provider(&db, &provider_pubkey).await;
+
+        // Create pool without any agents
+        let pool = db
+            .create_agent_pool(
+                "empty-pool",
+                &provider_pubkey,
+                "Empty Pool",
+                "na",
+                "proxmox",
+            )
+            .await
+            .unwrap();
+
+        // Get capabilities - should return None (no agents with resources)
+        let caps = db.get_pool_capabilities(&pool.pool_id).await.unwrap();
+        assert!(
+            caps.is_none(),
+            "Pool without agents should have no capabilities"
         );
     }
 }

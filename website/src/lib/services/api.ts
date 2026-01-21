@@ -8,6 +8,9 @@ import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHea
 import type { ProviderTrustMetrics as ProviderTrustMetricsRaw } from '$lib/types/generated/ProviderTrustMetrics';
 import type { ProviderOnboarding as ProviderOnboardingRaw } from '$lib/types/generated/ProviderOnboarding';
 import type { ContractUsage } from '$lib/types/generated/ContractUsage';
+import type { PoolCapabilities } from '$lib/types/generated/PoolCapabilities';
+import type { OfferingSuggestion } from '$lib/types/generated/OfferingSuggestion';
+import type { UnavailableTier } from '$lib/types/generated/UnavailableTier';
 import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
@@ -1972,4 +1975,119 @@ export async function getContractBandwidthHistory(
 	}
 
 	return payload.data ?? [];
+}
+
+// ==================== Offering Generation Types ====================
+
+/** Response from offering suggestions endpoint */
+export interface OfferingSuggestionsResponse {
+	poolCapabilities: PoolCapabilities;
+	suggestedOfferings: OfferingSuggestion[];
+	unavailableTiers: UnavailableTier[];
+}
+
+/** Pricing configuration for a single tier */
+export interface TierPricing {
+	monthlyPrice: number;
+	currency: string;
+}
+
+/** Request to generate offerings from pool capabilities */
+export interface GenerateOfferingsRequest {
+	tiers?: string[];
+	pricing: Record<string, TierPricing>;
+	visibility?: string;
+	dryRun?: boolean;
+}
+
+/** Response from offering generation endpoint */
+export interface GenerateOfferingsResponse {
+	createdOfferings: Offering[];
+	skippedTiers: UnavailableTier[];
+}
+
+// Re-export types for convenience
+export type { PoolCapabilities, OfferingSuggestion, UnavailableTier };
+
+// ==================== Offering Generation API Functions ====================
+
+/**
+ * Get offering suggestions for a pool based on its hardware capabilities
+ * Requires provider authentication
+ */
+export async function getOfferingSuggestions(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	headers: SignedRequestHeaders
+): Promise<OfferingSuggestionsResponse> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}/offering-suggestions`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch offering suggestions: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<OfferingSuggestionsResponse>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch offering suggestions');
+	}
+
+	if (!payload.data) {
+		throw new Error('No data returned from offering suggestions');
+	}
+
+	return payload.data;
+}
+
+/**
+ * Generate offerings for a pool with provided pricing
+ * Requires provider authentication
+ */
+export async function generateOfferings(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	request: GenerateOfferingsRequest,
+	headers: SignedRequestHeaders
+): Promise<GenerateOfferingsResponse> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}/generate-offerings`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: {
+			...headers,
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(request)
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to generate offerings: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<GenerateOfferingsResponse>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to generate offerings');
+	}
+
+	if (!payload.data) {
+		throw new Error('No data returned from offering generation');
+	}
+
+	return payload.data;
 }

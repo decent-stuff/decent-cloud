@@ -228,8 +228,8 @@ impl EmailProcessor {
             return Ok(());
         };
 
-        let from_addr =
-            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
+        let from_addr = std::env::var("SMTP_FROM_ADDR")
+            .unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
 
         let subject = "Email delivery issue - we're retrying";
         let body = format!(
@@ -288,8 +288,8 @@ impl EmailProcessor {
             return Ok(());
         };
 
-        let from_addr =
-            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
+        let from_addr = std::env::var("SMTP_FROM_ADDR")
+            .unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
 
         let subject = "Email delivery failed permanently";
         let body = format!(

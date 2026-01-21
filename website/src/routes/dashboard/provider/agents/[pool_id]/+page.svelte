@@ -9,9 +9,12 @@
 		deleteSetupToken,
 		revokeAgentDelegation,
 		updateAgentDelegationLabel,
+		getOfferingSuggestions,
+		generateOfferings,
 		hexEncode,
 		type CreateSetupTokenParams,
 		type AgentDelegation,
+		type GenerateOfferingsRequest,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
@@ -19,6 +22,7 @@
 	import type { AgentPoolWithStats } from "$lib/types/generated/AgentPoolWithStats";
 	import type { SetupToken } from "$lib/types/generated/SetupToken";
 	import SetupTokenDialog from "$lib/components/provider/SetupTokenDialog.svelte";
+	import GenerateOfferingsDialog from "$lib/components/provider/GenerateOfferingsDialog.svelte";
 
 	let pool = $state<AgentPoolWithStats | null>(null);
 	let delegations = $state<AgentDelegation[]>([]);
@@ -27,6 +31,7 @@
 	let error = $state<string | null>(null);
 
 	let showTokenDialog = $state(false);
+	let showGenerateOfferingsDialog = $state(false);
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -212,6 +217,31 @@
 		}
 	}
 
+	async function handleLoadOfferingSuggestions() {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) throw new Error("Not authenticated");
+
+		const signed = await signRequest(
+			activeIdentity.identity,
+			"GET",
+			`/api/v1/providers/${providerHex}/pools/${poolId}/offering-suggestions`
+		);
+		return getOfferingSuggestions(providerHex, poolId, signed.headers);
+	}
+
+	async function handleGenerateOfferings(request: GenerateOfferingsRequest) {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) throw new Error("Not authenticated");
+
+		const signed = await signRequest(
+			activeIdentity.identity,
+			"POST",
+			`/api/v1/providers/${providerHex}/pools/${poolId}/generate-offerings`,
+			request
+		);
+		return generateOfferings(providerHex, poolId, request, signed.headers);
+	}
+
 	function formatPubkey(hex: string): string {
 		if (hex.length <= 16) return hex;
 		return hex.slice(0, 8) + "..." + hex.slice(-8);
@@ -245,10 +275,17 @@
 						<span class="px-2 py-0.5 rounded bg-purple-500/20 text-primary-300 border border-purple-500/30">{pool.provisionerType}</span>
 					</div>
 				</div>
-				<div>
+				<div class="flex gap-3">
+					<button
+						onclick={() => showGenerateOfferingsDialog = true}
+						class="px-5 py-2.5 bg-primary-500/20 border border-primary-500/30 font-semibold text-primary-300 hover:bg-primary-500/30 transition-all"
+						title="Auto-generate VPS offerings based on pool hardware"
+					>
+						Generate Offerings
+					</button>
 					<button
 						onclick={() => showTokenDialog = true}
-						class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600  font-semibold text-white hover:brightness-110 transition-all"
+						class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 font-semibold text-white hover:brightness-110 transition-all"
 					>
 						+ Add Agent
 					</button>
@@ -375,6 +412,17 @@
 				showTokenDialog = false;
 				// Refresh agent data in case a token was used to add an agent
 				refreshAgentData();
+			}}
+		/>
+
+		<!-- Generate Offerings Dialog -->
+		<GenerateOfferingsDialog
+			bind:isOpen={showGenerateOfferingsDialog}
+			{pool}
+			onLoad={handleLoadOfferingSuggestions}
+			onGenerate={handleGenerateOfferings}
+			onClose={() => {
+				showGenerateOfferingsDialog = false;
 			}}
 		/>
 	{/if}

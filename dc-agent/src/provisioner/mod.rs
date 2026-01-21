@@ -1,3 +1,4 @@
+use crate::api_client::ResourceInventory;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -107,5 +108,12 @@ pub trait Provisioner: Send + Sync {
     /// Verify provisioner setup without creating resources
     async fn verify_setup(&self) -> SetupVerification {
         SetupVerification::default()
+    }
+
+    /// Collect hardware resource inventory.
+    /// Returns None if not supported or collection fails.
+    async fn collect_resources(&self) -> Option<ResourceInventory> {
+        // Default: not supported
+        None
     }
 }

@@ -182,7 +182,9 @@ where
     match raw.provisioner_type.as_str() {
         "proxmox" => {
             // Check for dual format (both flat fields AND nested section)
-            let has_flat_fields = raw.api_url.is_some() || raw.api_token_id.is_some() || raw.api_token_secret.is_some();
+            let has_flat_fields = raw.api_url.is_some()
+                || raw.api_token_id.is_some()
+                || raw.api_token_secret.is_some();
             let has_nested = raw.proxmox.is_some();
             if has_flat_fields && has_nested {
                 // Can't use tracing in serde deserializer, print to stderr
@@ -227,7 +229,8 @@ where
         }
         "script" => {
             // Check for dual format (both flat fields AND nested section)
-            let has_flat_fields = raw.provision.is_some() || raw.terminate.is_some() || raw.health_check.is_some();
+            let has_flat_fields =
+                raw.provision.is_some() || raw.terminate.is_some() || raw.health_check.is_some();
             let has_nested = raw.script.is_some();
             if has_flat_fields && has_nested {
                 eprintln!("WARNING: Both flat and nested provisioner config found for 'script'. Using nested [provisioner.script] format, flat fields ignored.");
@@ -351,19 +354,51 @@ impl Config {
         // Check provisioner config based on type
         match &self.provisioner {
             ProvisionerConfig::Proxmox(proxmox) => {
-                Self::check_placeholder(&proxmox.api_url, "provisioner.proxmox.api_url", &mut placeholders_found);
-                Self::check_placeholder(&proxmox.api_token_id, "provisioner.proxmox.api_token_id", &mut placeholders_found);
-                Self::check_placeholder(&proxmox.api_token_secret, "provisioner.proxmox.api_token_secret", &mut placeholders_found);
-                Self::check_placeholder(&proxmox.node, "provisioner.proxmox.node", &mut placeholders_found);
+                Self::check_placeholder(
+                    &proxmox.api_url,
+                    "provisioner.proxmox.api_url",
+                    &mut placeholders_found,
+                );
+                Self::check_placeholder(
+                    &proxmox.api_token_id,
+                    "provisioner.proxmox.api_token_id",
+                    &mut placeholders_found,
+                );
+                Self::check_placeholder(
+                    &proxmox.api_token_secret,
+                    "provisioner.proxmox.api_token_secret",
+                    &mut placeholders_found,
+                );
+                Self::check_placeholder(
+                    &proxmox.node,
+                    "provisioner.proxmox.node",
+                    &mut placeholders_found,
+                );
             }
             ProvisionerConfig::Script(script) => {
-                Self::check_placeholder(&script.provision, "provisioner.script.provision", &mut placeholders_found);
-                Self::check_placeholder(&script.terminate, "provisioner.script.terminate", &mut placeholders_found);
-                Self::check_placeholder(&script.health_check, "provisioner.script.health_check", &mut placeholders_found);
+                Self::check_placeholder(
+                    &script.provision,
+                    "provisioner.script.provision",
+                    &mut placeholders_found,
+                );
+                Self::check_placeholder(
+                    &script.terminate,
+                    "provisioner.script.terminate",
+                    &mut placeholders_found,
+                );
+                Self::check_placeholder(
+                    &script.health_check,
+                    "provisioner.script.health_check",
+                    &mut placeholders_found,
+                );
             }
             ProvisionerConfig::Manual(manual) => {
                 if let Some(webhook) = &manual.notification_webhook {
-                    Self::check_placeholder(webhook, "provisioner.manual.notification_webhook", &mut placeholders_found);
+                    Self::check_placeholder(
+                        webhook,
+                        "provisioner.manual.notification_webhook",
+                        &mut placeholders_found,
+                    );
                 }
             }
         }
@@ -372,11 +407,23 @@ impl Config {
         for (idx, additional) in self.additional_provisioners.iter().enumerate() {
             match additional {
                 ProvisionerConfig::Proxmox(proxmox) => {
-                    Self::check_placeholder(&proxmox.api_url, &format!("additional_provisioners[{}].api_url", idx), &mut placeholders_found);
-                    Self::check_placeholder(&proxmox.api_token_secret, &format!("additional_provisioners[{}].api_token_secret", idx), &mut placeholders_found);
+                    Self::check_placeholder(
+                        &proxmox.api_url,
+                        &format!("additional_provisioners[{}].api_url", idx),
+                        &mut placeholders_found,
+                    );
+                    Self::check_placeholder(
+                        &proxmox.api_token_secret,
+                        &format!("additional_provisioners[{}].api_token_secret", idx),
+                        &mut placeholders_found,
+                    );
                 }
                 ProvisionerConfig::Script(script) => {
-                    Self::check_placeholder(&script.provision, &format!("additional_provisioners[{}].provision", idx), &mut placeholders_found);
+                    Self::check_placeholder(
+                        &script.provision,
+                        &format!("additional_provisioners[{}].provision", idx),
+                        &mut placeholders_found,
+                    );
                 }
                 ProvisionerConfig::Manual(_) => {}
             }

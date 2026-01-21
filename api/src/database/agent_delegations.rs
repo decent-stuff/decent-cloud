@@ -128,6 +128,9 @@ pub struct AgentStatus {
     /// Number of active contracts
     #[ts(type = "number")]
     pub active_contracts: i64,
+    /// Hardware resource inventory (JSONB)
+    #[ts(type = "ResourceInventory | null")]
+    pub resources: Option<serde_json::Value>,
 }
 
 /// Internal row type for delegation verification queries
@@ -165,6 +168,7 @@ struct AgentStatusRow {
     provisioner_type: Option<String>,
     capabilities: Option<String>,
     active_contracts: Option<i64>,
+    resources: Option<serde_json::Value>,
 }
 
 impl Database {
@@ -367,6 +371,7 @@ impl Database {
         provisioner_type: Option<&str>,
         capabilities: Option<&[String]>,
         active_contracts: i64,
+        resources: Option<&serde_json::Value>,
     ) -> Result<()> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let caps_json = capabilities
@@ -375,8 +380,8 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO provider_agent_status
-               (provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, updated_at_ns)
-               VALUES ($1, TRUE, $2, $3, $4, $5, $6, $7)
+               (provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, updated_at_ns, resources)
+               VALUES ($1, TRUE, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT(provider_pubkey) DO UPDATE SET
                    online = TRUE,
                    last_heartbeat_ns = excluded.last_heartbeat_ns,
@@ -384,14 +389,16 @@ impl Database {
                    provisioner_type = COALESCE(excluded.provisioner_type, provider_agent_status.provisioner_type),
                    capabilities = COALESCE(excluded.capabilities, provider_agent_status.capabilities),
                    active_contracts = excluded.active_contracts,
-                   updated_at_ns = excluded.updated_at_ns"#,
+                   updated_at_ns = excluded.updated_at_ns,
+                   resources = COALESCE(excluded.resources, provider_agent_status.resources)"#,
             provider_pubkey,
             now_ns,
             version,
             provisioner_type,
             caps_json,
             active_contracts,
-            now_ns
+            now_ns,
+            resources
         )
         .execute(&self.pool)
         .await?;
@@ -402,7 +409,7 @@ impl Database {
     /// Get agent status for a provider.
     pub async fn get_agent_status(&self, provider_pubkey: &[u8]) -> Result<Option<AgentStatus>> {
         let row = sqlx::query_as::<_, AgentStatusRow>(
-            r#"SELECT provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts
+            r#"SELECT provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, resources
                FROM provider_agent_status
                WHERE provider_pubkey = $1"#,
         )
@@ -441,6 +448,7 @@ impl Database {
                     provisioner_type: r.provisioner_type,
                     capabilities: caps,
                     active_contracts: r.active_contracts.unwrap_or(0),
+                    resources: r.resources,
                 }))
             }
             None => Ok(None),

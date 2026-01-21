@@ -4,7 +4,7 @@ use dcc_common::DccIdentity;
 use decent_cloud::ledger_canister_client::LedgerCanister;
 use ledger_map::LedgerMap;
 use log::info;
-use std::{path::PathBuf, time::SystemTime};
+use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
 use crate::ledger::ledger_data_fetch;
 
@@ -135,6 +135,179 @@ pub async fn handle_provider_command(
 
             todo!("Update the offering in the decent-cloud api server, and sign it with the local identity");
         }
+        ProviderCommands::PoolSuggestOfferings(args) => {
+            let identity = identity.ok_or_else(|| {
+                "Identity must be specified for this command. Use --identity <name>".to_string()
+            })?;
+            let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+
+            pool_suggest_offerings(&dcc_id, &args.pool_id, &args.api_url).await?;
+        }
+        ProviderCommands::PoolGenerateOfferings(args) => {
+            let identity = identity.ok_or_else(|| {
+                "Identity must be specified for this command. Use --identity <name>".to_string()
+            })?;
+            let dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
+
+            pool_generate_offerings(
+                &dcc_id,
+                &args.pool_id,
+                args.tiers.as_deref(),
+                &args.pricing_file,
+                &args.visibility,
+                args.dry_run,
+                &args.api_url,
+            )
+            .await?;
+        }
     }
+    Ok(())
+}
+
+/// Request signing for API authentication
+fn sign_api_request(
+    dcc_id: &DccIdentity,
+    method: &str,
+    path: &str,
+    body: Option<&str>,
+) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis()
+        .to_string();
+
+    // Build message to sign: method + path + timestamp + body
+    let body_str = body.unwrap_or("");
+    let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body_str);
+    let signature = dcc_id.sign(message.as_bytes())?;
+    let sig_hex = hex::encode(signature.to_bytes());
+    let pubkey_hex = hex::encode(dcc_id.to_bytes_verifying());
+
+    Ok((pubkey_hex, timestamp, sig_hex))
+}
+
+/// Get offering suggestions for a pool
+async fn pool_suggest_offerings(
+    dcc_id: &DccIdentity,
+    pool_id: &str,
+    api_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let pubkey_hex = hex::encode(dcc_id.to_bytes_verifying());
+    let path = format!(
+        "/api/v1/providers/{}/pools/{}/offering-suggestions",
+        pubkey_hex, pool_id
+    );
+
+    let (_, timestamp, signature) = sign_api_request(dcc_id, "GET", &path, None)?;
+
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", api_url, path);
+
+    let response = client
+        .get(&url)
+        .header("X-DC-Pubkey", &pubkey_hex)
+        .header("X-DC-Timestamp", &timestamp)
+        .header("X-DC-Signature", &signature)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("API request failed ({}): {}", status, body).into());
+    }
+
+    let json: serde_json::Value = response.json().await?;
+
+    if json.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        let error = json
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown error");
+        return Err(format!("API error: {}", error).into());
+    }
+
+    // Pretty print the suggestions
+    println!("{}", serde_json::to_string_pretty(&json.get("data"))?);
+
+    Ok(())
+}
+
+/// Generate offerings for a pool
+async fn pool_generate_offerings(
+    dcc_id: &DccIdentity,
+    pool_id: &str,
+    tiers: Option<&str>,
+    pricing_file: &str,
+    visibility: &str,
+    dry_run: bool,
+    api_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Read pricing from file
+    let pricing_content = std::fs::read_to_string(pricing_file)
+        .map_err(|e| format!("Failed to read pricing file '{}': {}", pricing_file, e))?;
+
+    let pricing: HashMap<String, serde_json::Value> = serde_json::from_str(&pricing_content)
+        .map_err(|e| format!("Invalid JSON in pricing file: {}", e))?;
+
+    // Build request body
+    let mut request = serde_json::json!({
+        "pricing": pricing,
+        "visibility": visibility,
+        "dryRun": dry_run
+    });
+
+    if let Some(tier_list) = tiers {
+        let tier_vec: Vec<&str> = tier_list.split(',').map(|s| s.trim()).collect();
+        request["tiers"] = serde_json::json!(tier_vec);
+    }
+
+    let body = serde_json::to_string(&request)?;
+    let pubkey_hex = hex::encode(dcc_id.to_bytes_verifying());
+    let path = format!(
+        "/api/v1/providers/{}/pools/{}/generate-offerings",
+        pubkey_hex, pool_id
+    );
+
+    let (_, timestamp, signature) = sign_api_request(dcc_id, "POST", &path, Some(&body))?;
+
+    let client = reqwest::Client::new();
+    let url = format!("{}{}", api_url, path);
+
+    let response = client
+        .post(&url)
+        .header("X-DC-Pubkey", &pubkey_hex)
+        .header("X-DC-Timestamp", &timestamp)
+        .header("X-DC-Signature", &signature)
+        .header("Content-Type", "application/json")
+        .body(body)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("API request failed ({}): {}", status, body).into());
+    }
+
+    let json: serde_json::Value = response.json().await?;
+
+    if json.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        let error = json
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown error");
+        return Err(format!("API error: {}", error).into());
+    }
+
+    // Pretty print the result
+    let data = json.get("data");
+    if dry_run {
+        println!("Preview mode - would create:");
+    } else {
+        println!("Successfully generated offerings:");
+    }
+    println!("{}", serde_json::to_string_pretty(&data)?);
+
     Ok(())
 }

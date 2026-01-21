@@ -2835,3 +2835,234 @@ async fn test_template_name_non_numeric_no_config() {
         "Non-numeric template_name should not generate provisioner_config"
     );
 }
+
+// ==================== Tier Selection Tests ====================
+
+#[test]
+fn test_tier_selection_with_sufficient_resources() {
+    use crate::database::agent_pools::PoolCapabilities;
+    use crate::database::offerings::select_applicable_tiers;
+
+    // Pool with resources sufficient for small and medium tiers
+    let capabilities = PoolCapabilities {
+        pool_id: "test-pool".to_string(),
+        online_agents: 2,
+        total_cpu_cores: 16,
+        min_agent_cpu_cores: 8,
+        total_memory_mb: 32 * 1024, // 32 GB
+        min_agent_memory_mb: 16 * 1024,
+        total_storage_gb: 500,
+        min_agent_storage_gb: 250,
+        cpu_models: vec!["AMD EPYC 7763".to_string()],
+        has_gpu: false,
+        gpu_models: vec![],
+        available_templates: vec!["ubuntu-22.04".to_string()],
+    };
+
+    let (applicable, unavailable) = select_applicable_tiers(&capabilities);
+
+    // Should have small, medium, and large (but not xlarge)
+    let tier_names: Vec<_> = applicable.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        tier_names.contains(&"small"),
+        "Small tier should be available"
+    );
+    assert!(
+        tier_names.contains(&"medium"),
+        "Medium tier should be available"
+    );
+    assert!(
+        tier_names.contains(&"large"),
+        "Large tier should be available"
+    );
+    assert!(
+        !tier_names.contains(&"xlarge"),
+        "XLarge tier should NOT be available (need 32 cores)"
+    );
+
+    // GPU tier should be unavailable
+    let unavailable_names: Vec<_> = unavailable.iter().map(|t| t.tier.as_str()).collect();
+    assert!(
+        unavailable_names.contains(&"gpu-small"),
+        "GPU tier should be unavailable (no GPU)"
+    );
+}
+
+#[test]
+fn test_tier_selection_with_gpu() {
+    use crate::database::agent_pools::PoolCapabilities;
+    use crate::database::offerings::select_applicable_tiers;
+
+    // Pool with GPU
+    let capabilities = PoolCapabilities {
+        pool_id: "gpu-pool".to_string(),
+        online_agents: 1,
+        total_cpu_cores: 32,
+        min_agent_cpu_cores: 32,
+        total_memory_mb: 128 * 1024, // 128 GB
+        min_agent_memory_mb: 128 * 1024,
+        total_storage_gb: 2000,
+        min_agent_storage_gb: 2000,
+        cpu_models: vec!["AMD EPYC 7763".to_string()],
+        has_gpu: true,
+        gpu_models: vec!["NVIDIA RTX 4090".to_string()],
+        available_templates: vec!["ubuntu-22.04".to_string()],
+    };
+
+    let (applicable, _unavailable) = select_applicable_tiers(&capabilities);
+
+    // Should have all tiers including GPU
+    let tier_names: Vec<_> = applicable.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        tier_names.contains(&"small"),
+        "Small tier should be available"
+    );
+    assert!(
+        tier_names.contains(&"medium"),
+        "Medium tier should be available"
+    );
+    assert!(
+        tier_names.contains(&"large"),
+        "Large tier should be available"
+    );
+    assert!(
+        tier_names.contains(&"xlarge"),
+        "XLarge tier should be available"
+    );
+    assert!(
+        tier_names.contains(&"gpu-small"),
+        "GPU tier should be available"
+    );
+}
+
+#[test]
+fn test_tier_selection_with_insufficient_resources() {
+    use crate::database::agent_pools::PoolCapabilities;
+    use crate::database::offerings::select_applicable_tiers;
+
+    // Pool with minimal resources
+    let capabilities = PoolCapabilities {
+        pool_id: "tiny-pool".to_string(),
+        online_agents: 1,
+        total_cpu_cores: 2,
+        min_agent_cpu_cores: 2,
+        total_memory_mb: 4 * 1024, // 4 GB
+        min_agent_memory_mb: 4 * 1024,
+        total_storage_gb: 50,
+        min_agent_storage_gb: 50,
+        cpu_models: vec!["Intel Xeon".to_string()],
+        has_gpu: false,
+        gpu_models: vec![],
+        available_templates: vec![],
+    };
+
+    let (applicable, unavailable) = select_applicable_tiers(&capabilities);
+
+    // No tiers should be available (need at least 4 cores for small)
+    assert!(
+        applicable.is_empty(),
+        "No tiers should be available with insufficient resources"
+    );
+
+    // All tiers should be unavailable with reasons
+    assert!(
+        unavailable.len() >= 4,
+        "All compute tiers + GPU tier should be marked unavailable"
+    );
+
+    // Check that reasons are provided
+    for tier in &unavailable {
+        assert!(
+            !tier.reason.is_empty(),
+            "Unavailable tier {} should have a reason",
+            tier.tier
+        );
+    }
+}
+
+#[test]
+fn test_generate_suggestions() {
+    use crate::database::agent_pools::PoolCapabilities;
+    use crate::database::offerings::{default_compute_tiers, generate_suggestions};
+
+    let capabilities = PoolCapabilities {
+        pool_id: "eu-pool".to_string(),
+        online_agents: 2,
+        total_cpu_cores: 16,
+        min_agent_cpu_cores: 8,
+        total_memory_mb: 32 * 1024,
+        min_agent_memory_mb: 16 * 1024,
+        total_storage_gb: 500,
+        min_agent_storage_gb: 250,
+        cpu_models: vec!["AMD EPYC 7763 64-Core Processor".to_string()],
+        has_gpu: false,
+        gpu_models: vec![],
+        available_templates: vec!["ubuntu-22.04".to_string(), "debian-12".to_string()],
+    };
+
+    // Generate suggestions for first 2 tiers
+    let tiers: Vec<_> = default_compute_tiers().into_iter().take(2).collect();
+    let suggestions = generate_suggestions("eu-pool", "EU Pool", "europe", &capabilities, &tiers);
+
+    assert_eq!(suggestions.len(), 2, "Should generate 2 suggestions");
+
+    // Check first suggestion
+    let small = &suggestions[0];
+    assert_eq!(small.tier_name, "small");
+    assert_eq!(small.offering_id, "eu-pool-small");
+    assert_eq!(small.offer_name, "Basic VPS (EU Pool)");
+    assert_eq!(small.processor_cores, 1);
+    assert_eq!(small.memory_amount, "2 GB");
+    assert_eq!(small.total_ssd_capacity, "25 GB");
+    assert_eq!(small.datacenter_country, "DE"); // Default for Europe
+    assert!(small.processor_brand.is_some());
+    assert_eq!(small.processor_brand.as_deref(), Some("AMD"));
+    assert!(small.needs_pricing);
+
+    // Check medium suggestion
+    let medium = &suggestions[1];
+    assert_eq!(medium.tier_name, "medium");
+    assert_eq!(medium.processor_cores, 2);
+    assert_eq!(medium.memory_amount, "4 GB");
+}
+
+#[test]
+fn test_tier_eligibility_min_agent_check() {
+    use crate::database::agent_pools::PoolCapabilities;
+    use crate::database::offerings::select_applicable_tiers;
+
+    // Pool has lots of total resources, but smallest agent is tiny
+    let capabilities = PoolCapabilities {
+        pool_id: "heterogeneous-pool".to_string(),
+        online_agents: 10,
+        total_cpu_cores: 100,        // Lots total
+        min_agent_cpu_cores: 1,      // But smallest agent only has 1 core
+        total_memory_mb: 256 * 1024, // Lots total
+        min_agent_memory_mb: 1024,   // But smallest has only 1 GB
+        total_storage_gb: 5000,      // Lots total
+        min_agent_storage_gb: 10,    // But smallest has only 10 GB
+        cpu_models: vec!["Intel Xeon".to_string()],
+        has_gpu: false,
+        gpu_models: vec![],
+        available_templates: vec![],
+    };
+
+    let (applicable, unavailable) = select_applicable_tiers(&capabilities);
+
+    // No tiers should be available because min agent is too small
+    assert!(
+        applicable.is_empty(),
+        "No tiers should be available when smallest agent cannot host them"
+    );
+
+    // Check that unavailability reasons mention agent constraints
+    let small_tier = unavailable.iter().find(|t| t.tier == "small");
+    assert!(
+        small_tier.is_some(),
+        "Small tier should be in unavailable list"
+    );
+    assert!(
+        small_tier.unwrap().reason.contains("agent"),
+        "Reason should mention agent constraint"
+    );
+}

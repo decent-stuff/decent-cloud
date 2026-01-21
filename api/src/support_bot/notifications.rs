@@ -104,10 +104,7 @@ pub async fn dispatch_notification(
     if config.notify_email {
         match send_email_notification(db, email_service, notification).await {
             Ok(()) => {
-                if let Err(e) = db
-                    .increment_notification_usage(&provider_id, "email")
-                    .await
-                {
+                if let Err(e) = db.increment_notification_usage(&provider_id, "email").await {
                     tracing::error!(
                         "Failed to increment email notification usage for {}: {:#}",
                         provider_id,
@@ -131,10 +128,7 @@ pub async fn dispatch_notification(
         } else {
             match send_sms_notification(notification, &config).await {
                 Ok(()) => {
-                    if let Err(e) = db
-                        .increment_notification_usage(&provider_id, "sms")
-                        .await
-                    {
+                    if let Err(e) = db.increment_notification_usage(&provider_id, "sms").await {
                         tracing::error!(
                             "Failed to increment sms notification usage for {}: {:#}",
                             provider_id,

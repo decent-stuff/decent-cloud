@@ -87,18 +87,12 @@ impl BandwidthMonitor {
         }
 
         // Flush chain (may not exist)
-        if let Err(e) = Command::new("iptables")
-            .args(["-F", &chain_name])
-            .output()
-        {
+        if let Err(e) = Command::new("iptables").args(["-F", &chain_name]).output() {
             tracing::debug!("iptables chain {chain_name} flush: {e}");
         }
 
         // Delete chain (may not exist or may have references)
-        if let Err(e) = Command::new("iptables")
-            .args(["-X", &chain_name])
-            .output()
-        {
+        if let Err(e) = Command::new("iptables").args(["-X", &chain_name]).output() {
             tracing::debug!("iptables chain {chain_name} deletion: {e}");
         }
 

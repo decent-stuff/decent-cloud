@@ -132,6 +132,318 @@ pub struct Offering {
     pub resolved_pool_name: Option<String>,
 }
 
+/// A tier definition for auto-generating offerings
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OfferingTier {
+    /// Tier identifier (e.g., "small", "medium", "large", "gpu-small")
+    pub name: String,
+    /// Human-readable tier name (e.g., "Basic VPS", "Standard VPS")
+    pub display_name: String,
+    /// Number of CPU cores for this tier
+    pub cpu_cores: u32,
+    /// Memory in GB for this tier
+    pub memory_gb: u32,
+    /// Storage in GB for this tier
+    pub storage_gb: u32,
+    /// Number of GPUs (None for non-GPU tiers)
+    pub gpu_count: Option<u32>,
+    /// Minimum pool CPU cores required to offer this tier
+    pub min_pool_cpu: u32,
+    /// Minimum pool memory (GB) required to offer this tier
+    pub min_pool_memory_gb: u32,
+    /// Minimum pool storage (GB) required to offer this tier
+    pub min_pool_storage_gb: u32,
+}
+
+/// Get default compute tiers
+pub fn default_compute_tiers() -> Vec<OfferingTier> {
+    vec![
+        OfferingTier {
+            name: "small".to_string(),
+            display_name: "Basic VPS".to_string(),
+            cpu_cores: 1,
+            memory_gb: 2,
+            storage_gb: 25,
+            gpu_count: None,
+            min_pool_cpu: 4,
+            min_pool_memory_gb: 8,
+            min_pool_storage_gb: 100,
+        },
+        OfferingTier {
+            name: "medium".to_string(),
+            display_name: "Standard VPS".to_string(),
+            cpu_cores: 2,
+            memory_gb: 4,
+            storage_gb: 50,
+            gpu_count: None,
+            min_pool_cpu: 8,
+            min_pool_memory_gb: 16,
+            min_pool_storage_gb: 200,
+        },
+        OfferingTier {
+            name: "large".to_string(),
+            display_name: "Performance VPS".to_string(),
+            cpu_cores: 4,
+            memory_gb: 8,
+            storage_gb: 100,
+            gpu_count: None,
+            min_pool_cpu: 16,
+            min_pool_memory_gb: 32,
+            min_pool_storage_gb: 400,
+        },
+        OfferingTier {
+            name: "xlarge".to_string(),
+            display_name: "High Performance VPS".to_string(),
+            cpu_cores: 8,
+            memory_gb: 16,
+            storage_gb: 200,
+            gpu_count: None,
+            min_pool_cpu: 32,
+            min_pool_memory_gb: 64,
+            min_pool_storage_gb: 800,
+        },
+    ]
+}
+
+/// Get default GPU tiers
+pub fn default_gpu_tiers() -> Vec<OfferingTier> {
+    vec![OfferingTier {
+        name: "gpu-small".to_string(),
+        display_name: "GPU Instance".to_string(),
+        cpu_cores: 4,
+        memory_gb: 16,
+        storage_gb: 100,
+        gpu_count: Some(1),
+        min_pool_cpu: 8,
+        min_pool_memory_gb: 32,
+        min_pool_storage_gb: 200,
+    }]
+}
+
+/// Reason why a tier is unavailable
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UnavailableTier {
+    /// Tier name
+    pub tier: String,
+    /// Human-readable reason why tier is unavailable
+    pub reason: String,
+}
+
+/// Suggested offering based on pool capabilities
+#[derive(Debug, Clone, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OfferingSuggestion {
+    /// Tier this suggestion is based on
+    pub tier_name: String,
+    /// Suggested offering ID (format: "{pool_id}-{tier_name}")
+    pub offering_id: String,
+    /// Suggested display name
+    pub offer_name: String,
+    /// CPU brand from pool capabilities
+    pub processor_brand: Option<String>,
+    /// CPU model from pool capabilities
+    pub processor_name: Option<String>,
+    /// Number of CPU cores
+    #[ts(type = "number")]
+    pub processor_cores: i64,
+    /// Memory amount as string (e.g., "2 GB")
+    pub memory_amount: String,
+    /// Storage amount as string (e.g., "25 GB")
+    pub total_ssd_capacity: String,
+    /// GPU name if applicable
+    pub gpu_name: Option<String>,
+    /// GPU count if applicable
+    #[ts(type = "number | undefined")]
+    pub gpu_count: Option<i64>,
+    /// Available templates/operating systems
+    pub operating_systems: Option<String>,
+    /// Country code from pool location
+    pub datacenter_country: String,
+    /// Requires pricing to be set
+    pub needs_pricing: bool,
+}
+
+use super::agent_pools::PoolCapabilities;
+
+/// Select applicable tiers based on pool capabilities
+pub fn select_applicable_tiers(
+    capabilities: &PoolCapabilities,
+) -> (Vec<OfferingTier>, Vec<UnavailableTier>) {
+    let mut applicable = Vec::new();
+    let mut unavailable = Vec::new();
+
+    // Check compute tiers
+    for tier in default_compute_tiers() {
+        match check_tier_eligibility(capabilities, &tier) {
+            Ok(()) => applicable.push(tier),
+            Err(reason) => unavailable.push(UnavailableTier {
+                tier: tier.name,
+                reason,
+            }),
+        }
+    }
+
+    // Check GPU tiers only if pool has GPUs
+    if capabilities.has_gpu {
+        for tier in default_gpu_tiers() {
+            match check_tier_eligibility(capabilities, &tier) {
+                Ok(()) => applicable.push(tier),
+                Err(reason) => unavailable.push(UnavailableTier {
+                    tier: tier.name,
+                    reason,
+                }),
+            }
+        }
+    } else {
+        // Add GPU tiers as unavailable with "No GPU" reason
+        for tier in default_gpu_tiers() {
+            unavailable.push(UnavailableTier {
+                tier: tier.name,
+                reason: "No GPU devices available in pool".to_string(),
+            });
+        }
+    }
+
+    (applicable, unavailable)
+}
+
+/// Check if a tier can be offered based on pool capabilities
+fn check_tier_eligibility(
+    capabilities: &PoolCapabilities,
+    tier: &OfferingTier,
+) -> Result<(), String> {
+    // Check pool has enough total resources
+    if capabilities.total_cpu_cores < tier.min_pool_cpu {
+        return Err(format!(
+            "Need {} total CPU cores (have {})",
+            tier.min_pool_cpu, capabilities.total_cpu_cores
+        ));
+    }
+
+    let total_memory_gb = capabilities.total_memory_mb / 1024;
+    if total_memory_gb < tier.min_pool_memory_gb as u64 {
+        return Err(format!(
+            "Need {} GB total memory (have {} GB)",
+            tier.min_pool_memory_gb, total_memory_gb
+        ));
+    }
+
+    if capabilities.total_storage_gb < tier.min_pool_storage_gb as u64 {
+        return Err(format!(
+            "Need {} GB total storage (have {} GB)",
+            tier.min_pool_storage_gb, capabilities.total_storage_gb
+        ));
+    }
+
+    // Check smallest agent can host this tier
+    if capabilities.min_agent_cpu_cores < tier.cpu_cores {
+        return Err(format!(
+            "Smallest agent has {} cores, tier needs {}",
+            capabilities.min_agent_cpu_cores, tier.cpu_cores
+        ));
+    }
+
+    let min_agent_memory_gb = capabilities.min_agent_memory_mb / 1024;
+    if min_agent_memory_gb < tier.memory_gb as u64 {
+        return Err(format!(
+            "Smallest agent has {} GB memory, tier needs {} GB",
+            min_agent_memory_gb, tier.memory_gb
+        ));
+    }
+
+    if capabilities.min_agent_storage_gb < tier.storage_gb as u64 {
+        return Err(format!(
+            "Smallest agent has {} GB storage, tier needs {} GB",
+            capabilities.min_agent_storage_gb, tier.storage_gb
+        ));
+    }
+
+    // Check GPU requirement
+    if tier.gpu_count.is_some() && !capabilities.has_gpu {
+        return Err("No GPU devices available in pool".to_string());
+    }
+
+    Ok(())
+}
+
+/// Region to country code mapping for offerings
+fn region_to_country_code(region: &str) -> &'static str {
+    match region {
+        "europe" => "DE",  // Default to Germany for Europe
+        "na" => "US",      // Default to US for North America
+        "apac" => "SG",    // Default to Singapore for APAC
+        "sa" => "BR",      // Default to Brazil for South America
+        "africa" => "ZA",  // Default to South Africa
+        "oceania" => "AU", // Default to Australia
+        "mena" => "AE",    // Default to UAE for Middle East
+        _ => "US",         // Fallback
+    }
+}
+
+/// Generate offering suggestions from pool capabilities
+pub fn generate_suggestions(
+    pool_id: &str,
+    pool_name: &str,
+    pool_location: &str,
+    capabilities: &PoolCapabilities,
+    tiers: &[OfferingTier],
+) -> Vec<OfferingSuggestion> {
+    let cpu_brand = capabilities
+        .cpu_models
+        .first()
+        .and_then(|m| {
+            if m.to_lowercase().contains("amd") {
+                Some("AMD")
+            } else if m.to_lowercase().contains("intel") {
+                Some("Intel")
+            } else {
+                None
+            }
+        })
+        .map(String::from);
+
+    let cpu_model = capabilities.cpu_models.first().cloned();
+    let gpu_model = capabilities.gpu_models.first().cloned();
+    let templates_csv = if capabilities.available_templates.is_empty() {
+        None
+    } else {
+        Some(capabilities.available_templates.join(", "))
+    };
+
+    let country_code = region_to_country_code(pool_location);
+
+    tiers
+        .iter()
+        .map(|tier| OfferingSuggestion {
+            tier_name: tier.name.clone(),
+            offering_id: format!("{}-{}", pool_id, tier.name),
+            offer_name: format!("{} ({})", tier.display_name, pool_name),
+            processor_brand: cpu_brand.clone(),
+            processor_name: cpu_model.clone(),
+            processor_cores: tier.cpu_cores as i64,
+            memory_amount: format!("{} GB", tier.memory_gb),
+            total_ssd_capacity: format!("{} GB", tier.storage_gb),
+            gpu_name: if tier.gpu_count.is_some() {
+                gpu_model.clone()
+            } else {
+                None
+            },
+            gpu_count: tier.gpu_count.map(|c| c as i64),
+            operating_systems: templates_csv.clone(),
+            datacenter_country: country_code.to_string(),
+            needs_pricing: true,
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct SearchOfferingsParams<'a> {
     pub product_type: Option<&'a str>,

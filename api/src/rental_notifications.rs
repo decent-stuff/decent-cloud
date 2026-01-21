@@ -82,10 +82,7 @@ pub async fn notify_provider_new_rental(
         .await
         {
             Ok(()) => {
-                if let Err(e) = db
-                    .increment_notification_usage(provider_id, "email")
-                    .await
-                {
+                if let Err(e) = db.increment_notification_usage(provider_id, "email").await {
                     tracing::error!(
                         "Failed to increment email notification usage for {}: {:#}",
                         provider_id,
@@ -262,10 +259,7 @@ pub async fn notify_user_provisioned(
             match send_telegram_provisioned_notification(chat_id, contract, instance_details).await
             {
                 Ok(()) => {
-                    if let Err(e) = db
-                        .increment_notification_usage(user_id, "telegram")
-                        .await
-                    {
+                    if let Err(e) = db.increment_notification_usage(user_id, "telegram").await {
                         tracing::error!(
                             "Failed to increment telegram notification usage for {}: {:#}",
                             user_id,

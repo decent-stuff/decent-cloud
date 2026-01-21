@@ -287,7 +287,10 @@ async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
+        let body = resp
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("<failed to read body: {}>", e));
         anyhow::bail!("LLM API error {}: {}", status, body);
     }
 

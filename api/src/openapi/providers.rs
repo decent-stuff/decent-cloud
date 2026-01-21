@@ -1,8 +1,9 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, ApiResponse, ApiTags, AutoAcceptRequest,
     AutoAcceptResponse, BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest,
-    CsvImportError, CsvImportResult, DuplicateOfferingRequest, HelpcenterSyncResponse,
-    LockResponse, NotificationConfigResponse, NotificationUsageResponse, OnboardingUpdateResponse,
+    CsvImportError, CsvImportResult, DuplicateOfferingRequest, GenerateOfferingsRequest,
+    GenerateOfferingsResponse, HelpcenterSyncResponse, LockResponse, NotificationConfigResponse,
+    NotificationUsageResponse, OfferingSuggestionsResponse, OnboardingUpdateResponse,
     ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest, ReconcileResponse,
     ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
     ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
@@ -2853,6 +2854,373 @@ impl ProvidersApi {
                 error: Some(e.to_string()),
             }),
         }
+    }
+
+    // ==================== Offering Generation Endpoints ====================
+
+    /// Get offering suggestions for a pool
+    ///
+    /// Returns suggested offerings based on the pool's aggregated hardware capabilities
+    /// from online agents. Providers can use these suggestions to generate offerings.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id/offering-suggestions",
+        method = "get",
+        tag = "ApiTags::Pools"
+    )]
+    async fn get_offering_suggestions(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+    ) -> Json<ApiResponse<OfferingSuggestionsResponse>> {
+        use crate::database::offerings::{generate_suggestions, select_applicable_tiers};
+
+        // Decode and verify authorization
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Verify pool exists and belongs to provider
+        let pool = match db.get_agent_pool(&pool_id.0).await {
+            Ok(Some(p)) => {
+                let pool_owner = match hex::decode(&p.provider_pubkey) {
+                    Ok(pk) => pk,
+                    Err(_) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("Invalid pool owner pubkey".to_string()),
+                        });
+                    }
+                };
+                if pool_owner != provider_pubkey {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Pool does not belong to this provider".to_string()),
+                    });
+                }
+                p
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Pool not found".to_string()),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                });
+            }
+        };
+
+        // Get pool capabilities from online agents
+        let capabilities = match db.get_pool_capabilities(&pool_id.0).await {
+            Ok(Some(caps)) => caps,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(
+                        "No online agents with resource data in this pool. \
+                         Ensure agents are online and have reported their hardware capabilities."
+                            .to_string(),
+                    ),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                });
+            }
+        };
+
+        // Select applicable tiers
+        let (applicable_tiers, unavailable_tiers) = select_applicable_tiers(&capabilities);
+
+        // Generate suggestions
+        let suggestions = generate_suggestions(
+            &pool_id.0,
+            &pool.name,
+            &pool.location,
+            &capabilities,
+            &applicable_tiers,
+        );
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(OfferingSuggestionsResponse {
+                pool_capabilities: capabilities,
+                suggested_offerings: suggestions,
+                unavailable_tiers,
+            }),
+            error: None,
+        })
+    }
+
+    /// Generate offerings for a pool
+    ///
+    /// Creates offerings based on pool capabilities and provided pricing.
+    /// Requires pricing for each tier to be generated.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id/generate-offerings",
+        method = "post",
+        tag = "ApiTags::Pools"
+    )]
+    async fn generate_offerings(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+        req: Json<GenerateOfferingsRequest>,
+    ) -> Json<ApiResponse<GenerateOfferingsResponse>> {
+        use crate::database::offerings::{
+            generate_suggestions, select_applicable_tiers, Offering, UnavailableTier,
+        };
+
+        // Decode and verify authorization
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Verify pool exists and belongs to provider
+        let pool = match db.get_agent_pool(&pool_id.0).await {
+            Ok(Some(p)) => {
+                let pool_owner = match hex::decode(&p.provider_pubkey) {
+                    Ok(pk) => pk,
+                    Err(_) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("Invalid pool owner pubkey".to_string()),
+                        });
+                    }
+                };
+                if pool_owner != provider_pubkey {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Pool does not belong to this provider".to_string()),
+                    });
+                }
+                p
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Pool not found".to_string()),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                });
+            }
+        };
+
+        // Get pool capabilities
+        let capabilities = match db.get_pool_capabilities(&pool_id.0).await {
+            Ok(Some(caps)) => caps,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("No online agents with resource data in this pool".to_string()),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                });
+            }
+        };
+
+        // Select applicable tiers
+        let (mut applicable_tiers, mut unavailable_tiers) = select_applicable_tiers(&capabilities);
+
+        // Filter to requested tiers if specified
+        if !req.tiers.is_empty() {
+            let requested: std::collections::HashSet<_> = req.tiers.iter().cloned().collect();
+            let (keep, skip): (Vec<_>, Vec<_>) = applicable_tiers
+                .into_iter()
+                .partition(|t| requested.contains(&t.name));
+            applicable_tiers = keep;
+            // Mark unrequested tiers as skipped
+            for tier in skip {
+                unavailable_tiers.push(UnavailableTier {
+                    tier: tier.name,
+                    reason: "Not in requested tier list".to_string(),
+                });
+            }
+        }
+
+        // Generate suggestions first
+        let suggestions = generate_suggestions(
+            &pool_id.0,
+            &pool.name,
+            &pool.location,
+            &capabilities,
+            &applicable_tiers,
+        );
+
+        // Convert suggestions to offerings with pricing
+        let mut created_offerings = Vec::new();
+        let mut skipped_tiers = unavailable_tiers;
+
+        for suggestion in suggestions {
+            // Check if pricing is provided for this tier
+            let pricing = match req.pricing.get(&suggestion.tier_name) {
+                Some(p) => p,
+                None => {
+                    skipped_tiers.push(UnavailableTier {
+                        tier: suggestion.tier_name,
+                        reason: "No pricing provided".to_string(),
+                    });
+                    continue;
+                }
+            };
+
+            // Build the offering
+            let offering = Offering {
+                id: None,
+                pubkey: hex::encode(&provider_pubkey),
+                offering_id: suggestion.offering_id.clone(),
+                offer_name: suggestion.offer_name.clone(),
+                description: None,
+                product_page_url: None,
+                currency: pricing.currency.clone(),
+                monthly_price: pricing.monthly_price,
+                setup_fee: 0.0,
+                visibility: req.visibility.clone(),
+                product_type: "vps".to_string(),
+                virtualization_type: Some(pool.provisioner_type.clone()),
+                billing_interval: "monthly".to_string(),
+                billing_unit: "month".to_string(),
+                pricing_model: Some("flat".to_string()),
+                price_per_unit: None,
+                included_units: None,
+                overage_price_per_unit: None,
+                stripe_metered_price_id: None,
+                is_subscription: false,
+                subscription_interval_days: None,
+                stock_status: "in_stock".to_string(),
+                processor_brand: suggestion.processor_brand.clone(),
+                processor_amount: Some(1),
+                processor_cores: Some(suggestion.processor_cores),
+                processor_speed: None,
+                processor_name: suggestion.processor_name.clone(),
+                memory_error_correction: None,
+                memory_type: Some("DDR4".to_string()),
+                memory_amount: Some(suggestion.memory_amount.clone()),
+                hdd_amount: None,
+                total_hdd_capacity: None,
+                ssd_amount: Some(1),
+                total_ssd_capacity: Some(suggestion.total_ssd_capacity.clone()),
+                unmetered_bandwidth: false,
+                uplink_speed: Some("1 Gbps".to_string()),
+                traffic: None,
+                datacenter_country: suggestion.datacenter_country.clone(),
+                datacenter_city: pool.location.clone(),
+                datacenter_latitude: None,
+                datacenter_longitude: None,
+                control_panel: None,
+                gpu_name: suggestion.gpu_name.clone(),
+                gpu_count: suggestion.gpu_count,
+                gpu_memory_gb: None,
+                min_contract_hours: Some(1),
+                max_contract_hours: None,
+                payment_methods: Some("card, crypto".to_string()),
+                features: None,
+                operating_systems: suggestion.operating_systems.clone(),
+                trust_score: None,
+                has_critical_flags: None,
+                is_example: false,
+                offering_source: Some("generated".to_string()),
+                external_checkout_url: None,
+                reseller_name: None,
+                reseller_commission_percent: None,
+                owner_username: None,
+                provisioner_type: Some(pool.provisioner_type.clone()),
+                provisioner_config: None,
+                template_name: capabilities.available_templates.first().cloned(),
+                agent_pool_id: Some(pool_id.0.clone()),
+                provider_online: None,
+                resolved_pool_id: None,
+                resolved_pool_name: None,
+            };
+
+            if !req.dry_run {
+                // Create the offering
+                match db.create_offering(&provider_pubkey, offering.clone()).await {
+                    Ok(id) => {
+                        let mut created = offering;
+                        created.id = Some(id);
+                        created_offerings.push(created);
+                    }
+                    Err(e) => {
+                        skipped_tiers.push(UnavailableTier {
+                            tier: suggestion.tier_name,
+                            reason: format!("Failed to create: {}", e),
+                        });
+                    }
+                }
+            } else {
+                // Dry run - just return what would be created
+                created_offerings.push(offering);
+            }
+        }
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(GenerateOfferingsResponse {
+                created_offerings,
+                skipped_tiers,
+            }),
+            error: None,
+        })
     }
 }
 

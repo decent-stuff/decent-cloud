@@ -124,6 +124,55 @@ struct IpAddress {
     ip_address_type: String,
 }
 
+/// Node status response from /nodes/{node}/status
+#[derive(Deserialize, Debug)]
+struct NodeStatus {
+    cpuinfo: Option<CpuInfo>,
+    memory: Option<MemoryInfo>,
+}
+
+#[derive(Deserialize, Debug)]
+struct CpuInfo {
+    model: Option<String>,
+    cores: Option<u32>,
+    cpus: Option<u32>, // logical threads
+    mhz: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct MemoryInfo {
+    total: Option<u64>,
+    used: Option<u64>,
+    #[allow(dead_code)]
+    free: Option<u64>,
+}
+
+/// Storage pool entry from /nodes/{node}/storage
+#[derive(Deserialize, Debug)]
+struct StorageEntry {
+    storage: String,
+    #[serde(rename = "type")]
+    storage_type: Option<String>,
+    content: Option<String>,
+    total: Option<u64>,
+    #[allow(dead_code)]
+    used: Option<u64>,
+    avail: Option<u64>,
+    active: Option<i32>,
+    enabled: Option<i32>,
+}
+
+/// PCI device entry from /nodes/{node}/hardware/pci
+#[derive(Deserialize, Debug)]
+struct PciDevice {
+    id: String,
+    class: Option<String>,
+    device_name: Option<String>,
+    vendor_name: Option<String>,
+    #[allow(dead_code)]
+    iommu_group: Option<i32>,
+}
+
 impl ProxmoxProvisioner {
     pub fn new(config: ProxmoxConfig) -> Result<Self> {
         let client = Client::builder()
@@ -571,6 +620,175 @@ impl ProxmoxProvisioner {
 
         Ok((ipv4, ipv6))
     }
+
+    /// Get node status including CPU and memory information.
+    /// Requires Sys.Audit permission on the node.
+    async fn get_node_status(&self) -> Result<NodeStatus> {
+        let path = format!("/api2/json/nodes/{}/status", self.config.node);
+        self.api_get(&path).await
+    }
+
+    /// Get all storage pools on the node with capacity information.
+    async fn get_storage_pools(&self) -> Result<Vec<StorageEntry>> {
+        let path = format!("/api2/json/nodes/{}/storage", self.config.node);
+        self.api_get(&path).await
+    }
+
+    /// Get PCI devices available for passthrough (including GPUs).
+    /// Pass empty pci-class-blacklist to show all devices including GPUs.
+    async fn get_pci_devices(&self) -> Result<Vec<PciDevice>> {
+        let path = format!(
+            "/api2/json/nodes/{}/hardware/pci?pci-class-blacklist=",
+            self.config.node
+        );
+        self.api_get(&path).await
+    }
+
+    /// Discover VM templates by listing storage content.
+    /// Templates are VMs that have been converted to template status.
+    async fn get_templates(&self) -> Result<Vec<(u32, String)>> {
+        // First get VM list and filter for templates
+        let vms = self.list_vms().await?;
+        let mut templates = Vec::new();
+
+        for vm in vms {
+            // Check if VM is a template by looking at status
+            if let Ok(status) = self.get_vm_status(vm.vmid).await {
+                // Template VMs have specific naming convention (dc-*)
+                // and are in stopped state (templates can't be running)
+                if let Some(name) = vm.name {
+                    if name.starts_with("dc-") && status.status == "stopped" {
+                        // This might be a template - check if it's actually a template
+                        // by trying to get its config
+                        templates.push((vm.vmid, name));
+                    }
+                }
+            }
+        }
+
+        // Also include known template VMIDs from config
+        templates.push((
+            self.config.template_vmid,
+            format!("template-{}", self.config.template_vmid),
+        ));
+
+        // Deduplicate by vmid
+        templates.sort_by_key(|(vmid, _)| *vmid);
+        templates.dedup_by_key(|(vmid, _)| *vmid);
+
+        Ok(templates)
+    }
+
+    /// Collect full resource inventory for this node.
+    /// Returns None if resource collection fails (e.g., missing permissions).
+    pub async fn collect_resources(&self) -> Option<crate::api_client::ResourceInventory> {
+        use crate::api_client::{GpuDeviceInfo, ResourceInventory, StoragePoolInfo, TemplateInfo};
+
+        // Get node status (CPU, memory)
+        let node_status = match self.get_node_status().await {
+            Ok(status) => status,
+            Err(e) => {
+                tracing::warn!(error = ?e, "Failed to get node status for resource inventory");
+                return None;
+            }
+        };
+
+        let cpuinfo = node_status.cpuinfo.unwrap_or(CpuInfo {
+            model: None,
+            cores: None,
+            cpus: None,
+            mhz: None,
+        });
+        let meminfo = node_status.memory.unwrap_or(MemoryInfo {
+            total: None,
+            used: None,
+            free: None,
+        });
+
+        // Parse MHz from string like "2450.000"
+        let cpu_mhz = cpuinfo
+            .mhz
+            .and_then(|s| s.split('.').next().and_then(|n| n.parse::<u32>().ok()));
+
+        // Get storage pools
+        let storage_pools = match self.get_storage_pools().await {
+            Ok(pools) => pools
+                .into_iter()
+                .filter(|p| {
+                    // Only include active, enabled storage that can hold VM images
+                    p.active == Some(1)
+                        && p.enabled == Some(1)
+                        && p.content
+                            .as_ref()
+                            .map(|c| c.contains("images"))
+                            .unwrap_or(false)
+                })
+                .map(|p| StoragePoolInfo {
+                    name: p.storage,
+                    total_gb: p.total.unwrap_or(0) / (1024 * 1024 * 1024),
+                    available_gb: p.avail.unwrap_or(0) / (1024 * 1024 * 1024),
+                    storage_type: p.storage_type.unwrap_or_else(|| "unknown".to_string()),
+                })
+                .collect(),
+            Err(e) => {
+                tracing::warn!(error = ?e, "Failed to get storage pools");
+                Vec::new()
+            }
+        };
+
+        // Get GPU devices (VGA class = 0x030000)
+        let gpu_devices = match self.get_pci_devices().await {
+            Ok(devices) => devices
+                .into_iter()
+                .filter(|d| {
+                    // VGA compatible controller class starts with 0x03
+                    d.class
+                        .as_ref()
+                        .map(|c| c.starts_with("0x03"))
+                        .unwrap_or(false)
+                })
+                .map(|d| GpuDeviceInfo {
+                    pci_id: d.id,
+                    name: d.device_name.unwrap_or_else(|| "Unknown GPU".to_string()),
+                    vendor: d.vendor_name.unwrap_or_else(|| "Unknown".to_string()),
+                    memory_mb: None, // VRAM not available from PCI info
+                })
+                .collect(),
+            Err(e) => {
+                tracing::debug!(error = ?e, "Failed to get PCI devices (may require Sys.Modify)");
+                Vec::new()
+            }
+        };
+
+        // Get templates
+        let templates = match self.get_templates().await {
+            Ok(tpls) => tpls
+                .into_iter()
+                .map(|(vmid, name)| TemplateInfo { vmid, name })
+                .collect(),
+            Err(e) => {
+                tracing::warn!(error = ?e, "Failed to get templates");
+                Vec::new()
+            }
+        };
+
+        // Calculate available memory (total - used)
+        let memory_total_mb = meminfo.total.unwrap_or(0) / (1024 * 1024);
+        let memory_used_mb = meminfo.used.unwrap_or(0) / (1024 * 1024);
+        let memory_available_mb = memory_total_mb.saturating_sub(memory_used_mb);
+
+        Some(ResourceInventory {
+            cpu_model: cpuinfo.model,
+            cpu_cores: cpuinfo.cores.unwrap_or(0),
+            cpu_threads: cpuinfo.cpus.unwrap_or(0),
+            cpu_mhz,
+            memory_total_mb,
+            memory_available_mb,
+            storage_pools,
+            gpu_devices,
+            templates,
+        })
+    }
 }
 
 #[async_trait]
@@ -936,6 +1154,11 @@ impl Provisioner for ProxmoxProvisioner {
         }
 
         Ok(instances)
+    }
+
+    async fn collect_resources(&self) -> Option<crate::api_client::ResourceInventory> {
+        // Delegate to the inherent method
+        ProxmoxProvisioner::collect_resources(self).await
     }
 }
 
