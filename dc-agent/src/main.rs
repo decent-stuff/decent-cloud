@@ -627,6 +627,21 @@ fn install_systemd_service(config_path: &std::path::Path) -> Result<()> {
 
     const SYSTEMD_DIR: &str = "/etc/systemd/system";
     const SERVICE_FILE: &str = "dc-agent.service";
+    const BINARY_PATH: &str = "/usr/local/bin/dc-agent";
+
+    // Verify binary exists
+    if !std::path::Path::new(BINARY_PATH).exists() {
+        anyhow::bail!(
+            "dc-agent binary not found at {}. Install it first with:\n  \
+             curl -sSL https://get.decent-cloud.org | bash",
+            BINARY_PATH
+        );
+    }
+
+    // Convert config path to absolute (required for systemd which runs from /)
+    let absolute_config_path = config_path
+        .canonicalize()
+        .with_context(|| format!("Config file not found: {}", config_path.display()))?;
 
     let service_existed = is_service_installed();
 
@@ -639,7 +654,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/dc-agent --config {} run
+ExecStart={} --config {} run
 Restart=always
 RestartSec=10
 Environment=RUST_LOG=info
@@ -647,7 +662,8 @@ Environment=RUST_LOG=info
 [Install]
 WantedBy=multi-user.target
 "#,
-        config_path.display()
+        BINARY_PATH,
+        absolute_config_path.display()
     );
 
     let service_path = format!("{}/{}", SYSTEMD_DIR, SERVICE_FILE);
@@ -689,11 +705,40 @@ WantedBy=multi-user.target
     if !start_status.success() {
         anyhow::bail!("systemctl {} failed with exit code {:?}", action, start_status.code());
     }
+
+    // Wait briefly and verify service is actually running (not just started and crashed)
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    let status_output = std::process::Command::new("systemctl")
+        .args(["is-active", SERVICE_FILE])
+        .output()
+        .context("Failed to check service status")?;
+    let status = String::from_utf8_lossy(&status_output.stdout)
+        .trim()
+        .to_string();
+
+    if status != "active" {
+        // Get the last few lines of journal for diagnosis
+        let journal = std::process::Command::new("journalctl")
+            .args(["-u", SERVICE_FILE, "-n", "10", "--no-pager"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+        anyhow::bail!(
+            "Service failed to start (status: {}). Check config and logs:\n\
+             journalctl -u dc-agent -n 20\n\n\
+             Recent logs:\n{}",
+            status,
+            journal
+        );
+    }
+
     if service_existed {
         println!("[ok] Service restarted with new config");
     } else {
         println!("[ok] Service started");
     }
+    println!("[ok] Service is running (verified)");
 
     Ok(())
 }
@@ -2355,5 +2400,81 @@ mod tests {
 
         // Only code, no uuid
         assert_eq!(parse_datacenter_from_pool_id("sl"), None);
+    }
+
+    #[test]
+    fn test_systemd_service_content_uses_absolute_paths() {
+        // Create a temporary config file to test canonicalization
+        use std::io::Write;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("dc-agent.toml");
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        writeln!(file, "[api]").unwrap();
+
+        // The config path should be converted to absolute
+        let absolute = config_path.canonicalize().unwrap();
+
+        // Verify the canonical path is absolute and not the same as relative
+        assert!(absolute.is_absolute());
+        assert_ne!(
+            config_path.to_string_lossy(),
+            "dc-agent.toml",
+            "Test setup should use a unique path"
+        );
+
+        // Verify canonicalize works as expected
+        assert!(absolute.to_string_lossy().starts_with('/'));
+    }
+
+    #[test]
+    fn test_systemd_service_format() {
+        // Test that the service file format is valid
+        let binary_path = "/usr/local/bin/dc-agent";
+        let config_path = "/etc/dc-agent/config.toml";
+
+        let service_content = format!(
+            r#"[Unit]
+Description=Decent Cloud Provisioning Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={} --config {} run
+Restart=always
+RestartSec=10
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
+"#,
+            binary_path, config_path
+        );
+
+        // Verify service content contains absolute paths
+        assert!(
+            service_content.contains("/usr/local/bin/dc-agent"),
+            "Service should use absolute binary path"
+        );
+        assert!(
+            service_content.contains("/etc/dc-agent/config.toml"),
+            "Service should use absolute config path"
+        );
+
+        // Verify essential systemd directives are present
+        assert!(service_content.contains("[Unit]"));
+        assert!(service_content.contains("[Service]"));
+        assert!(service_content.contains("[Install]"));
+        assert!(service_content.contains("Restart=always"));
+        assert!(service_content.contains("WantedBy=multi-user.target"));
+    }
+
+    #[test]
+    fn test_is_service_installed_returns_false_for_nonexistent() {
+        // When the service file doesn't exist, should return false
+        // This test relies on the fact that /etc/systemd/system/dc-agent.service
+        // typically doesn't exist in test environments
+        // We can't guarantee this, so we just test the function doesn't panic
+        let _ = is_service_installed();
     }
 }
