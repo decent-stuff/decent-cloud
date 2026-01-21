@@ -526,10 +526,7 @@ type = "{provisioner_type}"
         println!("  2. Start:  dc-agent --config {} run", output.display());
         println!();
         println!("Or install as systemd service:");
-        println!(
-            "  dc-agent setup token --token {} --install-service",
-            token
-        );
+        println!("  dc-agent setup token --token {} --install-service", token);
         if !gateway_configured {
             println!();
             println!("Note: Gateway not configured. VMs will need public IPs.");
@@ -541,9 +538,7 @@ type = "{provisioner_type}"
             "proxmox" => {
                 // On Proxmox host, suggest --setup-proxmox as primary option
                 if is_proxmox_host() {
-                    println!(
-                        "IMPORTANT: Proxmox setup incomplete. Re-run with --setup-proxmox:"
-                    );
+                    println!("IMPORTANT: Proxmox setup incomplete. Re-run with --setup-proxmox:");
                     println!();
                     println!(
                         "  dc-agent setup token --token {} --setup-proxmox --non-interactive",
@@ -564,10 +559,7 @@ type = "{provisioner_type}"
                     println!("     - node: Your Proxmox node name");
                     println!("     - template_vmid: Create a template VM (e.g., Ubuntu 24.04)");
                     println!();
-                    println!(
-                        "  2. Verify: dc-agent --config {} doctor",
-                        output.display()
-                    );
+                    println!("  2. Verify: dc-agent --config {} doctor", output.display());
                     println!("  3. Start: dc-agent --config {} run", output.display());
                 }
             }
@@ -580,10 +572,7 @@ type = "{provisioner_type}"
                 println!("     - terminate: Path to termination script");
                 println!("     - health_check: Path to health check script");
                 println!();
-                println!(
-                    "  2. Verify: dc-agent --config {} doctor",
-                    output.display()
-                );
+                println!("  2. Verify: dc-agent --config {} doctor", output.display());
                 println!("  3. Start: dc-agent --config {} run", output.display());
             }
             "manual" => {
@@ -594,10 +583,7 @@ type = "{provisioner_type}"
                     "  1. Optional: Edit {} to add notification webhook",
                     output.display()
                 );
-                println!(
-                    "  2. Verify: dc-agent --config {} doctor",
-                    output.display()
-                );
+                println!("  2. Verify: dc-agent --config {} doctor", output.display());
                 println!("  3. Start: dc-agent --config {} run", output.display());
             }
             _ => {
@@ -682,7 +668,10 @@ WantedBy=multi-user.target
         .status()
         .context("Failed to run systemctl daemon-reload")?;
     if !reload_status.success() {
-        anyhow::bail!("systemctl daemon-reload failed with exit code {:?}", reload_status.code());
+        anyhow::bail!(
+            "systemctl daemon-reload failed with exit code {:?}",
+            reload_status.code()
+        );
     }
     println!("[ok] Systemd daemon reloaded");
 
@@ -692,7 +681,10 @@ WantedBy=multi-user.target
         .status()
         .context("Failed to run systemctl enable")?;
     if !enable_status.success() {
-        anyhow::bail!("systemctl enable failed with exit code {:?}", enable_status.code());
+        anyhow::bail!(
+            "systemctl enable failed with exit code {:?}",
+            enable_status.code()
+        );
     }
     println!("[ok] Service enabled");
 
@@ -703,7 +695,11 @@ WantedBy=multi-user.target
         .status()
         .context("Failed to run systemctl")?;
     if !start_status.success() {
-        anyhow::bail!("systemctl {} failed with exit code {:?}", action, start_status.code());
+        anyhow::bail!(
+            "systemctl {} failed with exit code {:?}",
+            action,
+            start_status.code()
+        );
     }
 
     // Wait briefly and verify service is actually running (not just started and crashed)
@@ -1193,13 +1189,26 @@ async fn run_agent(config: Config) -> Result<()> {
     let mut heartbeat_interval_secs: u64 = 60;
     let mut heartbeat_ticker = interval(Duration::from_secs(heartbeat_interval_secs));
 
+    // Resource collection every 5 minutes (less frequent than heartbeat)
+    const RESOURCE_COLLECTION_INTERVAL_SECS: u64 = 300;
+    let mut resource_ticker = interval(Duration::from_secs(RESOURCE_COLLECTION_INTERVAL_SECS));
+    resource_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    // Cached resources (collected periodically, sent with each heartbeat)
+    // Initialized below before first heartbeat
+    let mut cached_resources: Option<dc_agent::api_client::ResourceInventory>;
+
     // Track active contracts for heartbeat reporting
     let mut active_contracts: i64 = 0;
 
     // Load orphan tracker from disk (persists across restarts)
     let orphan_tracker_path = Path::new(&config.polling.orphan_tracker_path);
-    let mut orphan_tracker = OrphanTracker::load(orphan_tracker_path)
-        .with_context(|| format!("Failed to load orphan tracker from {:?}", orphan_tracker_path))?;
+    let mut orphan_tracker = OrphanTracker::load(orphan_tracker_path).with_context(|| {
+        format!(
+            "Failed to load orphan tracker from {:?}",
+            orphan_tracker_path
+        )
+    })?;
     info!(
         path = %config.polling.orphan_tracker_path,
         tracked_orphans = orphan_tracker.first_seen.len(),
@@ -1223,6 +1232,12 @@ async fn run_agent(config: Config) -> Result<()> {
         "Agent started"
     );
 
+    // Collect initial resources
+    cached_resources = default_provisioner.collect_resources().await;
+    if cached_resources.is_some() {
+        info!("Collected initial resource inventory");
+    }
+
     // Send initial heartbeat immediately
     send_heartbeat(
         &api_client,
@@ -1232,6 +1247,7 @@ async fn run_agent(config: Config) -> Result<()> {
         &mut heartbeat_ticker,
         &mut heartbeat_failures,
         gateway_manager.clone(),
+        cached_resources.clone(),
     )
     .await;
 
@@ -1241,7 +1257,14 @@ async fn run_agent(config: Config) -> Result<()> {
                 active_contracts = poll_and_provision(&api_client, &provisioners, &default_provisioner_type, config.polling.orphan_grace_period_seconds, &mut orphan_tracker, &mut poll_failures, gateway_manager.clone()).await;
             }
             _ = heartbeat_ticker.tick() => {
-                send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures, gateway_manager.clone()).await;
+                send_heartbeat(&api_client, &default_provisioner_type, active_contracts, &mut heartbeat_interval_secs, &mut heartbeat_ticker, &mut heartbeat_failures, gateway_manager.clone(), cached_resources.clone()).await;
+            }
+            _ = resource_ticker.tick() => {
+                // Refresh resource inventory periodically
+                if let Some(resources) = default_provisioner.collect_resources().await {
+                    cached_resources = Some(resources);
+                    info!("Refreshed resource inventory");
+                }
             }
             _ = update_check_ticker.tick() => {
                 check_for_updates_and_log().await;
@@ -1282,6 +1305,7 @@ async fn send_heartbeat(
     heartbeat_ticker: &mut tokio::time::Interval,
     consecutive_failures: &mut u32,
     gateway_manager: OptionalGatewayManager,
+    resources: Option<dc_agent::api_client::ResourceInventory>,
 ) {
     // Collect bandwidth stats from gateway manager if available
     let bandwidth_stats = if let Some(ref gw) = gateway_manager {
@@ -1324,6 +1348,7 @@ async fn send_heartbeat(
             None,
             active_contracts,
             bandwidth_stats,
+            resources,
         )
         .await
     {
@@ -2190,6 +2215,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 None,
                 0,
                 None, // No bandwidth stats in doctor mode
+                None, // No resources in doctor mode
             )
             .await
         {

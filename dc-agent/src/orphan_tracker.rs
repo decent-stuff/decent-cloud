@@ -47,8 +47,8 @@ impl OrphanTracker {
                 .with_context(|| format!("Failed to create directory {:?}", parent))?;
         }
 
-        let content = serde_json::to_string_pretty(self)
-            .context("Failed to serialize orphan tracker")?;
+        let content =
+            serde_json::to_string_pretty(self).context("Failed to serialize orphan tracker")?;
         std::fs::write(path, content)
             .with_context(|| format!("Failed to write orphan tracker to {:?}", path))?;
 
@@ -59,7 +59,10 @@ impl OrphanTracker {
     /// If already tracked, returns existing first_seen timestamp.
     /// If new, records current time and returns it.
     pub fn record_orphan(&mut self, external_id: &str, now: u64) -> u64 {
-        *self.first_seen.entry(external_id.to_string()).or_insert(now)
+        *self
+            .first_seen
+            .entry(external_id.to_string())
+            .or_insert(now)
     }
 
     /// Remove an orphan from tracking (after successful pruning).

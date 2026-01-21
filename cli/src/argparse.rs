@@ -109,6 +109,12 @@ pub enum ProviderCommands {
 
     /// Update Node Provider offering
     UpdateOffering(UpdateOfferingArgs),
+
+    /// Get offering suggestions for a pool based on hardware capabilities
+    PoolSuggestOfferings(PoolSuggestOfferingsArgs),
+
+    /// Generate offerings for a pool with provided pricing
+    PoolGenerateOfferings(PoolGenerateOfferingsArgs),
 }
 
 #[derive(Args)]
@@ -145,6 +151,44 @@ pub struct UpdateOfferingArgs {
     /// Update Node Provider offering with data from the provided file
     #[arg(long, requires = "identity")]
     pub offering_file: String,
+}
+
+#[derive(Args)]
+pub struct PoolSuggestOfferingsArgs {
+    /// Pool ID to get suggestions for
+    #[arg(long, required = true)]
+    pub pool_id: String,
+
+    /// API server URL (defaults to production)
+    #[arg(long, default_value = "https://api.decentcloud.net")]
+    pub api_url: String,
+}
+
+#[derive(Args)]
+pub struct PoolGenerateOfferingsArgs {
+    /// Pool ID to generate offerings for
+    #[arg(long, required = true)]
+    pub pool_id: String,
+
+    /// Tier names to generate (comma-separated, e.g., "small,medium")
+    #[arg(long)]
+    pub tiers: Option<String>,
+
+    /// Pricing file (JSON format with tier -> {monthlyPrice, currency})
+    #[arg(long, required = true)]
+    pub pricing_file: String,
+
+    /// Visibility: "public" or "private"
+    #[arg(long, default_value = "public")]
+    pub visibility: String,
+
+    /// Preview only - don't actually create offerings
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// API server URL (defaults to production)
+    #[arg(long, default_value = "https://api.decentcloud.net")]
+    pub api_url: String,
 }
 
 #[derive(Subcommand)]

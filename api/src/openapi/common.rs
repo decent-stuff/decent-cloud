@@ -615,6 +615,67 @@ pub struct LockResponse {
     pub expires_at_ns: i64,
 }
 
+/// Response for offering suggestions based on pool capabilities
+#[derive(Debug, Serialize, poem_openapi::Object, ts_rs::TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OfferingSuggestionsResponse {
+    /// Aggregated pool capabilities
+    pub pool_capabilities: crate::database::agent_pools::PoolCapabilities,
+    /// Suggested offerings based on capabilities
+    pub suggested_offerings: Vec<crate::database::offerings::OfferingSuggestion>,
+    /// Tiers that are unavailable due to insufficient resources
+    pub unavailable_tiers: Vec<crate::database::offerings::UnavailableTier>,
+}
+
+/// Pricing configuration for a single tier
+#[derive(Debug, Clone, Deserialize, poem_openapi::Object, ts_rs::TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TierPricing {
+    /// Monthly price for this tier
+    pub monthly_price: f64,
+    /// Currency code (e.g., "USD", "EUR")
+    pub currency: String,
+}
+
+/// Request to generate offerings from pool capabilities
+#[derive(Debug, Deserialize, poem_openapi::Object, ts_rs::TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateOfferingsRequest {
+    /// Specific tier names to generate (if empty, generates all applicable tiers)
+    #[serde(default)]
+    pub tiers: Vec<String>,
+    /// Pricing for each tier (key = tier name, e.g., "small", "medium")
+    pub pricing: std::collections::HashMap<String, TierPricing>,
+    /// Visibility for generated offerings (default: "public")
+    #[serde(default = "default_visibility")]
+    pub visibility: String,
+    /// If true, only preview what would be created without actually creating
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+fn default_visibility() -> String {
+    "public".to_string()
+}
+
+/// Response from offering generation
+#[derive(Debug, Serialize, poem_openapi::Object, ts_rs::TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateOfferingsResponse {
+    /// Offerings that were created (or would be created in dry_run mode)
+    pub created_offerings: Vec<crate::database::offerings::Offering>,
+    /// Tiers that were skipped (no pricing provided or other reasons)
+    pub skipped_tiers: Vec<crate::database::offerings::UnavailableTier>,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints

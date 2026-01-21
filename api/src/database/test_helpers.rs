@@ -316,6 +316,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/001_schema.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/002_seed_data.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/003_offering_templates.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/004_agent_resources.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -344,6 +345,63 @@ async fn ensure_template_db(base_url: &str) -> String {
             .await
             .expect("Failed to check template existence");
 
+    // Always clean up old templates from previous migration versions
+    // This runs even if current template exists, to prevent stale templates from accumulating
+    let old_templates: Vec<String> = sqlx::query_scalar(
+        "SELECT datname FROM pg_database WHERE datname LIKE 'template_test_db_%' AND datistemplate = TRUE",
+    )
+    .fetch_all(&admin_pool)
+    .await
+    .expect("Failed to query old templates");
+
+    for old_template in old_templates {
+        // Skip if this is the current template
+        if old_template == template_name {
+            continue;
+        }
+
+        // Terminate connections to old template (best effort)
+        match sqlx::query(&format!(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
+            old_template
+        ))
+        .execute(&admin_pool)
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => eprintln!(
+                "Warning: Failed to terminate connections to old template '{}': {:#?}",
+                old_template, e
+            ),
+        }
+
+        // Unmark as template first (required before dropping)
+        if let Err(e) = sqlx::query(&format!(
+            "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '{}'",
+            old_template
+        ))
+        .execute(&admin_pool)
+        .await
+        {
+            eprintln!(
+                "Warning: Failed to unmark old template '{}': {:#?}",
+                old_template, e
+            );
+            continue;
+        }
+
+        // Drop old template
+        if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS {}", old_template))
+            .execute(&admin_pool)
+            .await
+        {
+            eprintln!(
+                "Warning: Failed to drop old template '{}': {:#?}",
+                old_template, e
+            );
+        }
+    }
+
     let needs_creation = match template_status {
         Some(true) => {
             // Template exists and is properly marked
@@ -351,16 +409,7 @@ async fn ensure_template_db(base_url: &str) -> String {
         }
         Some(false) => {
             // Database exists but is NOT a template
-            // This could be:
-            // 1. A leftover from a failed run (should be cleaned up)
-            // 2. Another process actively setting it up (should wait for it)
-            //
-            // CRITICAL: We must NOT clean up databases with the current migration hash
-            // because another process might be running migrations on it right now.
-            // Only mark as needs_creation=true, and let the CREATE DATABASE error
-            // handling coordinate with the other process.
-            //
-            // Cleanup of truly stale databases happens in the old templates cleanup below.
+            // Another process might be setting it up - wait for it
             true
         }
         None => {
@@ -370,58 +419,6 @@ async fn ensure_template_db(base_url: &str) -> String {
     };
 
     if needs_creation {
-        // Clean up old templates from previous migration versions
-        let old_templates: Vec<String> = sqlx::query_scalar(
-            "SELECT datname FROM pg_database WHERE datname LIKE 'template_test_db_%' AND datistemplate = TRUE"
-        )
-        .fetch_all(&admin_pool)
-        .await
-        .expect("Failed to query old templates");
-
-        for old_template in old_templates {
-            // Skip if this is the current template (shouldn't happen, but be safe)
-            if old_template == template_name {
-                continue;
-            }
-
-            // Terminate connections to old template (best effort)
-            match sqlx::query(&format!(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
-                old_template
-            ))
-            .execute(&admin_pool)
-            .await
-            {
-                Ok(_) => {}
-                Err(e) => eprintln!(
-                    "Warning: Failed to terminate connections to old template '{}': {:#?}",
-                    old_template, e
-                ),
-            }
-
-            // Unmark as template first (required before dropping)
-            sqlx::query(&format!(
-                "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '{}'",
-                old_template
-            ))
-            .execute(&admin_pool)
-            .await
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Failed to unmark old template '{}' as template: {:#?}",
-                    old_template, e
-                )
-            });
-
-            // Drop old template
-            sqlx::query(&format!("DROP DATABASE IF EXISTS {}", old_template))
-                .execute(&admin_pool)
-                .await
-                .unwrap_or_else(|e| {
-                    panic!("Failed to drop old template '{}': {:#?}", old_template, e)
-                });
-        }
-
         // Try to create new template database
         let create_result = sqlx::query(&format!("CREATE DATABASE {}", template_name))
             .execute(&admin_pool)
@@ -489,6 +486,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "003_offering_templates.sql",
                     include_str!("../../migrations_pg/003_offering_templates.sql"),
+                ),
+                (
+                    "004_agent_resources.sql",
+                    include_str!("../../migrations_pg/004_agent_resources.sql"),
                 ),
             ];
 
