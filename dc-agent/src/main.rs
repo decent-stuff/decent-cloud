@@ -151,7 +151,7 @@ enum SetupProvisioner {
         gateway_ports_per_vm: u16,
 
         /// Install and start systemd service after setup
-        /// (default: true when --non-interactive on Proxmox host)
+        /// (default: true when Proxmox setup succeeds or service already exists)
         #[arg(long)]
         install_service: Option<bool>,
     },
@@ -451,11 +451,24 @@ type = "{provisioner_type}"
     )
     .await?;
 
-    // Step 8: Install systemd service if requested
-    // Default: install service if --non-interactive on Proxmox host with successful setup
+    // Step 8: Install systemd service
+    // Default: install/update service when on Proxmox host with successful Proxmox setup
+    // OR when service already exists (to update config path and restart)
     let should_install_service = install_service.unwrap_or_else(|| {
-        // Auto-install when: non-interactive AND on Proxmox host AND Proxmox was configured
-        non_interactive && is_proxmox_host() && proxmox_config.is_some()
+        let service_exists = is_service_installed();
+        let proxmox_setup_done = is_proxmox_host() && proxmox_config.is_some();
+
+        if service_exists {
+            // Always update existing service to use new config
+            println!();
+            println!("[auto] Existing dc-agent service detected - will update config");
+            true
+        } else if proxmox_setup_done {
+            // Auto-install when Proxmox setup succeeded
+            true
+        } else {
+            false
+        }
     });
 
     let service_installed = if should_install_service {
@@ -602,13 +615,20 @@ type = "{provisioner_type}"
     Ok(())
 }
 
-/// Install systemd service for dc-agent.
-/// Writes service unit file, reloads systemd, enables and starts the service.
+/// Check if dc-agent systemd service already exists.
+fn is_service_installed() -> bool {
+    std::path::Path::new("/etc/systemd/system/dc-agent.service").exists()
+}
+
+/// Install or update systemd service for dc-agent.
+/// Writes service unit file, reloads systemd, enables and starts/restarts the service.
 fn install_systemd_service(config_path: &std::path::Path) -> Result<()> {
     use std::io::Write;
 
     const SYSTEMD_DIR: &str = "/etc/systemd/system";
     const SERVICE_FILE: &str = "dc-agent.service";
+
+    let service_existed = is_service_installed();
 
     // Create the systemd service unit file
     let service_content = format!(
@@ -634,7 +654,11 @@ WantedBy=multi-user.target
     let mut file = std::fs::File::create(&service_path)
         .with_context(|| format!("Failed to create systemd service file: {}", service_path))?;
     file.write_all(service_content.as_bytes())?;
-    println!("[ok] Created {}", service_path);
+    if service_existed {
+        println!("[ok] Updated {}", service_path);
+    } else {
+        println!("[ok] Created {}", service_path);
+    }
 
     // Reload systemd to pick up new service file
     let reload_status = std::process::Command::new("systemctl")
@@ -656,15 +680,20 @@ WantedBy=multi-user.target
     }
     println!("[ok] Service enabled");
 
-    // Start service
+    // Use restart if service existed (to pick up new config), otherwise start
+    let action = if service_existed { "restart" } else { "start" };
     let start_status = std::process::Command::new("systemctl")
-        .args(["start", SERVICE_FILE])
+        .args([action, SERVICE_FILE])
         .status()
-        .context("Failed to run systemctl start")?;
+        .context("Failed to run systemctl")?;
     if !start_status.success() {
-        anyhow::bail!("systemctl start failed with exit code {:?}", start_status.code());
+        anyhow::bail!("systemctl {} failed with exit code {:?}", action, start_status.code());
     }
-    println!("[ok] Service started");
+    if service_existed {
+        println!("[ok] Service restarted with new config");
+    } else {
+        println!("[ok] Service started");
+    }
 
     Ok(())
 }
