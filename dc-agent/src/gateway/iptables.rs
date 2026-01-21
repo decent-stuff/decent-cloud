@@ -17,10 +17,13 @@ impl IptablesNat {
     /// Initialize the DC_GATEWAY chain in the NAT table.
     /// Called once during gateway manager initialization.
     pub fn init_chain() -> Result<()> {
-        // Create chain if it doesn't exist
-        let _ = Command::new("iptables")
+        // Create chain if it doesn't exist (ignores "chain already exists" error)
+        if let Err(e) = Command::new("iptables")
             .args(["-t", "nat", "-N", CHAIN_NAME])
-            .output();
+            .output()
+        {
+            tracing::debug!("iptables NAT chain {CHAIN_NAME} creation: {e}");
+        }
 
         // Ensure jump from PREROUTING to our chain (idempotent)
         let check = Command::new("iptables")

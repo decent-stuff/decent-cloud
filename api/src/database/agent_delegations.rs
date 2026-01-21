@@ -3,7 +3,7 @@
 //! Handles delegated keypairs for provider provisioning agents.
 
 use super::types::Database;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -285,7 +285,16 @@ impl Database {
         let delegations = rows
             .into_iter()
             .map(|r| {
-                let perms: Vec<String> = serde_json::from_str(&r.permissions).unwrap_or_default();
+                let perms: Vec<String> = match serde_json::from_str(&r.permissions) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to parse permissions JSON for agent {}: {e}",
+                            hex::encode(&r.agent_pubkey)
+                        );
+                        vec![]
+                    }
+                };
                 let active = r.revoked_at_ns.is_none()
                     && r.expires_at_ns.map(|e| e > now_ns).unwrap_or(true);
                 AgentDelegation {
@@ -360,7 +369,9 @@ impl Database {
         active_contracts: i64,
     ) -> Result<()> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let caps_json = capabilities.map(|c| serde_json::to_string(c).unwrap_or_default());
+        let caps_json = capabilities
+            .map(|c| serde_json::to_string(c).context("Failed to serialize capabilities"))
+            .transpose()?;
 
         sqlx::query!(
             r#"INSERT INTO provider_agent_status
@@ -401,10 +412,18 @@ impl Database {
 
         match row {
             Some(r) => {
-                let caps: Option<Vec<String>> = r
-                    .capabilities
-                    .as_ref()
-                    .and_then(|c| serde_json::from_str::<Vec<String>>(c).ok());
+                let caps: Option<Vec<String>> = r.capabilities.as_ref().and_then(|c| {
+                    match serde_json::from_str::<Vec<String>>(c) {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to parse capabilities JSON for provider {}: {e}",
+                                hex::encode(&r.provider_pubkey)
+                            );
+                            None
+                        }
+                    }
+                });
 
                 // Check if agent is still online (heartbeat within last 5 minutes)
                 let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);

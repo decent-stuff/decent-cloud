@@ -4,7 +4,8 @@
 //! Caddy provides automatic HTTPS via Let's Encrypt HTTP-01 challenge.
 //! No Cloudflare token needed - certs are obtained automatically.
 
-use anyhow::{bail, Context, Result};
+use super::{execute_command, CommandOutput};
+use anyhow::{bail, Result};
 use std::process::Command;
 
 /// Latest stable Caddy version
@@ -59,28 +60,10 @@ pub struct GatewaySetupResult {
     pub caddy_version: String,
 }
 
-/// Output from local command execution
-struct CommandOutput {
-    stdout: String,
-    #[allow(dead_code)]
-    stderr: String,
-    exit_status: i32,
-}
-
 impl GatewaySetup {
     /// Execute a shell command locally and return output.
     fn execute(&self, cmd: &str) -> Result<CommandOutput> {
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(cmd)
-            .output()
-            .with_context(|| format!("Failed to execute command: {}", cmd))?;
-
-        Ok(CommandOutput {
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            exit_status: output.status.code().unwrap_or(-1),
-        })
+        execute_command(cmd)
     }
 
     /// Run the complete gateway setup process locally.

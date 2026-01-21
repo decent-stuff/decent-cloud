@@ -220,3 +220,114 @@ The frontend currently uses pubkeys in URLs (e.g., `/dashboard/user/abc123...`).
 No database changes needed - the account→pubkey linking already exists.
 
 ---
+
+## Architectural Issues Requiring Review
+
+**Added:** 2025-01-21 (from codebase audit)
+**Priority:** MEDIUM - Technical debt that should be addressed
+
+### 1. Duplicate API Response Types (DRY Violation)
+
+**Issue:** `ApiResponse<T>` and related types are duplicated between `api` crate and `dc-agent` crate.
+
+**Locations:**
+- `api/src/openapi/common.rs:18` - OpenAPI version with poem attributes
+- `dc-agent/src/api_client.rs:30` - Client version without poem attributes
+
+**Also duplicated:**
+- `HeartbeatResponse`
+- `VmBandwidthReport`
+- `ReconcileResponse`, `ReconcileKeepInstance`, `ReconcileTerminateInstance`
+- `ContractPendingTermination`
+
+**Impact:** Changes must be synchronized manually; risk of drift.
+
+**Recommended Fix:** Create a shared `dcc-api-types` crate with serde-only types that both crates can depend on. OpenAPI attributes would be added via wrapper types in the API crate.
+
+### 2. Chatwoot Client Error Detail Loss
+
+**Issue:** 26+ occurrences of `.unwrap_or_default()` on `resp.text().await` after failed HTTP responses.
+
+**Location:** `api/src/chatwoot/client.rs` (lines 124, 156, 189, etc.)
+
+**Example:**
+```rust
+let body = resp.text().await.unwrap_or_default();  // Loses actual error!
+anyhow::bail!("Chatwoot API error {}: {}", status, body);
+```
+
+**Impact:** When response body extraction fails, error messages show empty bodies, making debugging difficult.
+
+**Recommended Fix:** Replace with `.context("Failed to read response body")?` or log the extraction error before falling back.
+
+### 3. Hex Decoding Without Validation in Auth
+
+**Issue:** `hex::decode().unwrap_or_default()` patterns in authorization code.
+
+**Locations:**
+- `api/src/openapi/invoices.rs:60-61`
+- `api/src/openapi/providers.rs:1869, 2147`
+
+**Example:**
+```rust
+let requester_pk = hex::decode(&contract.requester_pubkey).unwrap_or_default();
+// Empty vec on malformed hex - could affect auth checks!
+```
+
+**Impact:** If database contains malformed hex, authorization checks may behave unexpectedly. Should log warnings when hex decoding fails.
+
+**Recommended Fix:** Log a warning and return an error when hex decoding fails, rather than silently returning empty vec.
+
+### 4. Commented-Out ICRC3 Modules
+
+**Issue:** ICRC3 implementation is commented out but code still exists.
+
+**Locations:**
+- `ic-canister/src/canister_endpoints/mod.rs:5` - `// pub mod icrc3;`
+- `ic-canister/src/canister_backend/mod.rs:5` - `// pub mod icrc3;`
+- `ic-canister/src/canister_endpoints/pre_icrc3.rs:15-18` - commented `get_blocks()` endpoint
+
+**Impact:** Confusing dead code. Should either be completed or removed entirely.
+
+**Recommendation:** Decide whether ICRC3 is needed. If yes, complete the implementation. If no, remove all ICRC3 code.
+
+### 5. Hardcoded Localhost URLs as Defaults
+
+**Issue:** Multiple environment variables default to localhost URLs that would break in production if not overridden.
+
+**Examples:**
+- `GOOGLE_OAUTH_REDIRECT_URL` defaults to `http://localhost:59011/api/v1/oauth/google/callback`
+- `FRONTEND_URL` defaults to `http://localhost:59010` in multiple places
+- Inconsistent defaults: some use `59010`, others use `59000`
+
+**Impact:** Misconfiguration risk if deploying without setting all env vars.
+
+**Recommendation:** Either require these vars (fail startup if missing) or use production URLs as defaults with localhost override for development.
+
+### 6. Inconsistent Error Handling Patterns
+
+**Issue:** The codebase uses multiple error handling strategies inconsistently.
+
+**Patterns found:**
+1. Custom error types: `TransferError`, `CryptoError`, `AuthError`, `LedgerError`
+2. `anyhow::Result<T>` with `.context()`
+3. `anyhow::bail!()` for validation
+4. `.ok()` to discard errors
+5. `.unwrap_or_default()` to silence failures
+6. `panic!()` in public APIs (e.g., `common/src/dcc_identity.rs`)
+
+**Impact:** Inconsistent behavior and debugging difficulty.
+
+**Recommendation:** Establish a project-wide error handling policy and apply it consistently. Public functions should return `Result`, not panic.
+
+### 7. Timestamp Handling with `.unwrap_or(0)`
+
+**Issue:** Multiple places use `.timestamp_nanos_opt().unwrap_or(0)` which would silently use epoch time on error.
+
+**Locations:** `api/src/database/agent_delegations.rs:264, 362, 410`
+
+**Impact:** If timestamp calculation fails, code would use 1970-01-01 as timestamp, causing subtle bugs.
+
+**Recommendation:** Since `timestamp_nanos_opt()` only fails for dates beyond year ~2262, this is extremely unlikely. However, logging would make such an edge case visible.
+
+---

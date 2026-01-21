@@ -2,11 +2,11 @@
 //!
 //! This setup runs LOCALLY on the Proxmox host where dc-agent is installed.
 
+use super::{execute_command, CommandOutput};
 use anyhow::{bail, Context, Result};
 use reqwest::header::AUTHORIZATION;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
 
 /// Supported OS templates for Proxmox VMs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,17 +157,7 @@ impl ProxmoxSetup {
 
     /// Execute a shell command locally and return output.
     fn execute(&self, cmd: &str) -> Result<CommandOutput> {
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(cmd)
-            .output()
-            .with_context(|| format!("Failed to execute command: {}", cmd))?;
-
-        Ok(CommandOutput {
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            exit_status: output.status.code().unwrap_or(-1),
-        })
+        execute_command(cmd)
     }
 
     /// Verify we're running on a Proxmox host.
@@ -458,14 +448,6 @@ impl ProxmoxSetup {
 
         Ok(())
     }
-}
-
-/// Output from command execution.
-struct CommandOutput {
-    stdout: String,
-    #[allow(dead_code)]
-    stderr: String,
-    exit_status: i32,
 }
 
 /// Result of successful setup.

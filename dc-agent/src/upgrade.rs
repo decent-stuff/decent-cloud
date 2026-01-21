@@ -186,7 +186,12 @@ fn acquire_lock() -> Result<()> {
 
 /// Release upgrade lock.
 fn release_lock() {
-    let _ = fs::remove_file(LOCK_FILE);
+    if let Err(e) = fs::remove_file(LOCK_FILE) {
+        // Only warn if file exists but couldn't be removed
+        if e.kind() != std::io::ErrorKind::NotFound {
+            tracing::warn!("Failed to remove upgrade lock file {}: {e}", LOCK_FILE);
+        }
+    }
 }
 
 /// Main upgrade function.

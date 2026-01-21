@@ -33,8 +33,10 @@ impl BandwidthMonitor {
     pub fn setup_accounting(slug: &str, internal_ip: &str) -> Result<()> {
         let chain_name = format!("{}{}", Self::CHAIN_PREFIX, slug);
 
-        // Create chain if it doesn't exist
-        let _ = Command::new("iptables").args(["-N", &chain_name]).output();
+        // Create chain if it doesn't exist (ignores "chain already exists" error)
+        if let Err(e) = Command::new("iptables").args(["-N", &chain_name]).output() {
+            tracing::debug!("iptables chain {chain_name} creation: {e}");
+        }
 
         // Flush any existing rules
         Command::new("iptables")
@@ -76,15 +78,29 @@ impl BandwidthMonitor {
     pub fn cleanup_accounting(slug: &str) -> Result<()> {
         let chain_name = format!("{}{}", Self::CHAIN_PREFIX, slug);
 
-        // Remove jump from FORWARD chain
-        let _ = Command::new("iptables")
+        // Remove jump from FORWARD chain (may not exist if setup failed)
+        if let Err(e) = Command::new("iptables")
             .args(["-D", "FORWARD", "-j", &chain_name])
-            .output();
+            .output()
+        {
+            tracing::debug!("iptables FORWARD jump removal for {chain_name}: {e}");
+        }
 
-        // Flush and delete chain
-        let _ = Command::new("iptables").args(["-F", &chain_name]).output();
+        // Flush chain (may not exist)
+        if let Err(e) = Command::new("iptables")
+            .args(["-F", &chain_name])
+            .output()
+        {
+            tracing::debug!("iptables chain {chain_name} flush: {e}");
+        }
 
-        let _ = Command::new("iptables").args(["-X", &chain_name]).output();
+        // Delete chain (may not exist or may have references)
+        if let Err(e) = Command::new("iptables")
+            .args(["-X", &chain_name])
+            .output()
+        {
+            tracing::debug!("iptables chain {chain_name} deletion: {e}");
+        }
 
         tracing::debug!("Cleaned up iptables accounting for {}", slug);
         Ok(())
