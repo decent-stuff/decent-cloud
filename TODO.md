@@ -244,21 +244,13 @@ No database changes needed - the account→pubkey linking already exists.
 
 **Recommended Fix:** Create a shared `dcc-api-types` crate with serde-only types that both crates can depend on. OpenAPI attributes would be added via wrapper types in the API crate.
 
-### 2. Chatwoot Client Error Detail Loss
+### 2. ~~Chatwoot Client Error Detail Loss~~ ✅ FIXED (2025-01-21)
 
-**Issue:** 26+ occurrences of `.unwrap_or_default()` on `resp.text().await` after failed HTTP responses.
-
-**Location:** `api/src/chatwoot/client.rs` (lines 124, 156, 189, etc.)
-
-**Example:**
-```rust
-let body = resp.text().await.unwrap_or_default();  // Loses actual error!
-anyhow::bail!("Chatwoot API error {}: {}", status, body);
-```
-
-**Impact:** When response body extraction fails, error messages show empty bodies, making debugging difficult.
-
-**Recommended Fix:** Replace with `.context("Failed to read response body")?` or log the extraction error before falling back.
+**Status:** Fixed - replaced `.unwrap_or_default()` with proper error context in all HTTP response body extractions across:
+- `api/src/chatwoot/client.rs` (26 instances)
+- `api/src/support_bot/embeddings.rs`
+- `api/src/notifications/telegram.rs`
+- `api/src/support_bot/llm.rs`
 
 ### 3. Hex Decoding Without Validation in Auth
 
@@ -329,5 +321,87 @@ let requester_pk = hex::decode(&contract.requester_pubkey).unwrap_or_default();
 **Impact:** If timestamp calculation fails, code would use 1970-01-01 as timestamp, causing subtle bugs.
 
 **Recommendation:** Since `timestamp_nanos_opt()` only fails for dates beyond year ~2262, this is extremely unlikely. However, logging would make such an edge case visible.
+
+### 8. Geographic Region Mapping Duplicate (200+ lines)
+
+**Issue:** Country-to-region mapping duplicated verbatim between api and dc-agent.
+
+**Locations:**
+- `api/src/regions.rs` (250 lines)
+- `dc-agent/src/geolocation.rs` (125 lines)
+
+**Impact:** 200+ lines of duplicate code. Geographic mapping changes must be synchronized manually.
+
+**Recommended Fix:** Move to `dcc-common` crate as shared module.
+
+### 9. CLI Commands with `todo!()` Stubs
+
+**Issue:** Multiple user-facing CLI commands are completely non-functional.
+
+**Locations:**
+- `cli/src/commands/contract.rs:11-22` - ListOpen, SignRequest, SignReply all `todo!()`
+- `cli/src/commands/offering.rs:12` - Query returns `todo!()`
+- `cli/src/commands/provider.rs:128,136` - UpdateProfile, UpdateOffering return `todo!()`
+- `common/src/contract_refund_request.rs:42` - Refund processing returns `todo!()`
+
+**Impact:** Users attempting these commands get panic. Either implement or remove these commands.
+
+### 10. Hardcoded Token Value ($1 USD)
+
+**Issue:** Token USD value is hardcoded instead of fetched from exchanges.
+
+**Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
+```rust
+// FIXME: Get the Token value from ICPSwap and KongSwap
+let token_value = 1_000_000; // $1 USD hardcoded
+```
+
+**Impact:** All financial calculations using token value are incorrect.
+
+### 11. Hardcoded Secrets in Version Control
+
+**Issue:** HMAC secrets hardcoded in environment files.
+
+**Locations:**
+- `cf/.env.prod:70` - Production HMAC secret
+- `cf/.env.dev:75` - Development HMAC secret
+
+**Impact:** Security vulnerability. Secrets should be loaded from secure storage, not version control.
+
+### 12. Half-Implemented Canister Proxy
+
+**Issue:** ICP canister method proxy returns stub error.
+
+**Location:** `api/src/main.rs:214-227`
+```rust
+// TODO: Implement ICP agent and actual canister calls
+```
+
+**Impact:** Canister integration non-functional.
+
+### 13. Missing `api-server doctor` Checks
+
+**Issue:** Doctor command missing checks for critical integrations.
+
+**Missing:**
+- Stripe webhook registration verification
+- Email deliverability test
+- DKIM DNS record check
+- Cloudflare DNS API access
+- OAuth redirect URI accessibility
+- ICPay API connectivity
+
+**Recommendation:** Add comprehensive checks for all external service integrations.
+
+### 14. Manual Setup Steps That Could Be Automated
+
+**Issue:** Several setup steps require manual intervention when APIs support automation.
+
+**Examples:**
+- Stripe webhook creation (can use Stripe API)
+- DKIM DNS record setup (can use Cloudflare API already in codebase)
+- Proxmox template VM creation (partially automated but not discoverable)
+
+**Recommendation:** Add `api-server setup-<service>` commands for each integration.
 
 ---

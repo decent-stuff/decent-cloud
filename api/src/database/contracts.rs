@@ -1043,9 +1043,9 @@ impl Database {
             return 0;
         }
 
-        // Calculate prorated refund: (time_remaining / total_duration) * payment_amount
-        let refund_amount = (payment_amount_e9s as f64 * time_remaining_ns as f64
-            / total_duration_ns as f64) as i64;
+        // Calculate prorated refund using integer arithmetic (avoid float precision loss)
+        let refund_amount = ((payment_amount_e9s as i128) * (time_remaining_ns as i128)
+            / (total_duration_ns as i128)) as i64;
 
         // Ensure non-negative
         refund_amount.max(0)

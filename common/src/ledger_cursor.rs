@@ -120,10 +120,11 @@ impl From<HashMap<String, MetadataValue>> for LedgerCursor {
         for (key, value) in value.into_iter() {
             match value {
                 MetadataValue::Nat(nat) if key == "ledger:data_start_lba" => {
-                    data_begin_position = nat.0.to_u64_digits()[0];
+                    // Use first() to safely access array - to_u64_digits() can return empty for zero
+                    data_begin_position = nat.0.to_u64_digits().first().copied().unwrap_or(0);
                 }
                 MetadataValue::Nat(nat) if key == "ledger:next_block_write_position" => {
-                    data_end_position = nat.0.to_u64_digits()[0];
+                    data_end_position = nat.0.to_u64_digits().first().copied().unwrap_or(0);
                 }
                 _ => continue,
             }

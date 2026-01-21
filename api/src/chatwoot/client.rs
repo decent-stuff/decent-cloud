@@ -121,7 +121,7 @@ impl ChatwootPlatformClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot Platform API error {}: {}", status, body);
         }
 
@@ -153,7 +153,7 @@ impl ChatwootPlatformClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot Platform API error {}: {}", status, body);
         }
 
@@ -186,7 +186,7 @@ impl ChatwootPlatformClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!(
                 "Chatwoot API error listing custom roles {}: {}",
                 status,
@@ -225,7 +225,7 @@ impl ChatwootPlatformClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!(
                 "Chatwoot API error creating custom role {}: {}",
                 status,
@@ -259,7 +259,7 @@ impl ChatwootPlatformClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot Platform API error {}: {}", status, body);
         }
 
@@ -289,7 +289,7 @@ impl ChatwootPlatformClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Platform API error listing agent bots {}: {}", status, body);
         }
 
@@ -324,7 +324,7 @@ impl ChatwootPlatformClient {
 
             if !resp.status().is_success() {
                 let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
+                let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
                 anyhow::bail!("Platform API error updating agent bot {}: {}", status, body);
             }
 
@@ -359,7 +359,7 @@ impl ChatwootPlatformClient {
 
             if !resp.status().is_success() {
                 let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
+                let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
                 anyhow::bail!("Platform API error creating agent bot {}: {}", status, body);
             }
 
@@ -499,7 +499,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error listing inboxes {}: {}", status, body);
         }
 
@@ -540,7 +540,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error creating inbox {}: {}", status, body);
         }
 
@@ -584,7 +584,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!(
                 "Chatwoot API error creating team (status {}): {}",
                 status,
@@ -618,7 +618,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!(
                 "Chatwoot API error adding agents to team {}: {}",
                 status,
@@ -675,7 +675,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!(
                 "Chatwoot API error creating portal (status {}): {}",
                 status,
@@ -715,7 +715,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error listing portals {}: {}", status, body);
         }
 
@@ -752,7 +752,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error listing inboxes {}: {}", status, body);
         }
 
@@ -785,7 +785,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error listing teams {}: {}", status, body);
         }
 
@@ -837,7 +837,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error listing portals {}: {}", status, body);
         }
 
@@ -881,7 +881,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!(
                 "Chatwoot API error assigning agent bot to inbox {}: {}",
                 status,
@@ -915,7 +915,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot Help Center API error {}: {}", status, body);
         }
 
@@ -941,7 +941,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error getting profile {}: {}", status, body);
         }
 
@@ -976,7 +976,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error listing articles {}: {}", status, body);
         }
 
@@ -1030,7 +1030,7 @@ impl ChatwootClient {
 
         let status = resp.status();
         if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!(
                 "Chatwoot API error creating article (status {}): {}",
                 status,
@@ -1097,7 +1097,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error updating article {}: {}", status, body);
         }
 
@@ -1133,7 +1133,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error {}: {}", status, body);
         }
 
@@ -1169,7 +1169,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status_code = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error {}: {}", status_code, body);
         }
 
@@ -1208,7 +1208,7 @@ impl ChatwootClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.text().await.unwrap_or_else(|e| format!("<failed to read body: {}>", e));
             anyhow::bail!("Chatwoot API error {}: {}", status, body);
         }
 

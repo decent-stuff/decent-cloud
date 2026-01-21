@@ -78,11 +78,12 @@ impl PaymentReleaseService {
                 continue;
             }
 
-            // Calculate earned amount for this period
+            // Calculate earned amount for this period using integer arithmetic
+            // (avoid float precision loss in financial calculations)
             let period_duration_ns = period_end_ns - period_start_ns;
-            let release_amount_e9s = (contract.payment_amount_e9s as f64
-                * period_duration_ns as f64
-                / total_duration_ns as f64) as i64;
+            let release_amount_e9s = ((contract.payment_amount_e9s as i128)
+                * (period_duration_ns as i128)
+                / (total_duration_ns as i128)) as i64;
 
             if release_amount_e9s <= 0 {
                 tracing::debug!(

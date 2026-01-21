@@ -229,7 +229,7 @@ impl EmailProcessor {
         };
 
         let from_addr =
-            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decloud.org".to_string());
+            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
 
         let subject = "Email delivery issue - we're retrying";
         let body = format!(
@@ -289,7 +289,7 @@ impl EmailProcessor {
         };
 
         let from_addr =
-            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decloud.org".to_string());
+            std::env::var("SMTP_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
 
         let subject = "Email delivery failed permanently";
         let body = format!(
@@ -530,7 +530,7 @@ impl EmailProcessor {
 
             // Queue SLA alert email
             let from_addr = std::env::var("SMTP_FROM_ADDR")
-                .unwrap_or_else(|_| "noreply@decloud.org".to_string());
+                .unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
 
             let subject = "Action Required: Customer awaiting response";
             let contract_url = format!(
