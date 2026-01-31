@@ -1,6 +1,13 @@
 [env]
 RUST_BACKTRACE = "1"
 SQLX_OFFLINE = "true"
+# PostgreSQL defaults - compose postgres takes priority over .env
+PG_PORT = { value = "5432", condition = { env_not_set = ["PG_PORT"] } }
+PG_USER = { value = "test", condition = { env_not_set = ["PG_USER"] } }
+PG_PASSWORD = { value = "test", condition = { env_not_set = ["PG_PASSWORD"] } }
+PG_DB = { value = "test", condition = { env_not_set = ["PG_DB"] } }
+# Compose postgres IP (dc-agent-1-postgres-1 container)
+COMPOSE_PG_HOST = "172.18.0.2"
 
 [config]
 default_to_workspace = false
@@ -8,20 +15,38 @@ init_task = "postgres-start"
 end_task = "cleanup"
 on_error_task = "cleanup"
 unstable_features = ["CTRL_C_HANDLING"]
+load_script = '''
+#!/usr/bin/env bash
+# Load .env file if present
+if [ -f .env ]; then
+    set -a
+    . .env
+    set +a
+fi
+'''
 
 [tasks.postgres-start]
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
+source scripts/detect-postgres.sh
 
-# Start postgres via docker compose
-if ! docker compose up -d postgres 2>&1; then
-    echo "✗ Failed to start postgres" >&2
-    exit 1
+if [ "$PG_SOURCE" = "compose" ]; then
+    echo "✓ Using compose PostgreSQL at ${PG_HOST}:${PG_PORT}"
+    exit 0
 fi
 
-scripts/docker-compose-health.sh postgres 30
-echo "✓ PostgreSQL ready"
+echo "Compose postgres not available, checking ${PG_HOST}:${PG_PORT}..."
+for i in {1..30}; do
+    if PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -c "SELECT 1" >/dev/null 2>&1; then
+        echo "✓ PostgreSQL ready at ${PG_HOST}:${PG_PORT}"
+        exit 0
+    fi
+    echo "  waiting... ($i/30)"
+    sleep 1
+done
+echo "✗ Failed to connect to PostgreSQL at ${PG_HOST}:${PG_PORT}" >&2
+exit 1
 '''
 
 [tasks.dfx-start]
@@ -68,6 +93,28 @@ dependencies = ["postgres-start", "sqlx-prepare", "dfx-start"]
 command = "cargo"
 args = ["build", "--workspace"]
 
+# API-only tasks (no dfx/canister dependencies - for production builds)
+[tasks.build-api]
+dependencies = ["postgres-start", "sqlx-prepare"]
+command = "cargo"
+args = ["build", "-p", "api", "-p", "dc-agent", "-p", "decent-cloud"]
+
+[tasks.clippy-api]
+dependencies = ["postgres-start", "sqlx-prepare"]
+command = "cargo"
+args = ["clippy", "-p", "api", "-p", "dc-agent", "-p", "decent-cloud", "--tests"]
+
+[tasks.test-api]
+clear = true
+dependencies = ["postgres-start", "sqlx-prepare", "build-api"]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+source scripts/detect-postgres.sh
+export TEST_DATABASE_URL="postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
+cargo nextest run -p api -p dc-agent -p decent-cloud
+'''
+
 [tasks.setup-python]
 script = '''
 #!/usr/bin/env bash
@@ -111,8 +158,8 @@ dependencies = [
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
-
-export TEST_DATABASE_URL="postgres://test:test@localhost:15432"
+source scripts/detect-postgres.sh
+export TEST_DATABASE_URL="postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
 cargo nextest run --workspace
 '''
 
@@ -127,10 +174,8 @@ set -eExuo pipefail
 [tasks.postgres-stop]
 script = '''
 #!/usr/bin/env bash
-set -eEuo pipefail
-
-docker compose stop postgres
-echo "✓ PostgreSQL stopped"
+# No-op: external postgres is not managed by this build
+echo "✓ PostgreSQL (external) - nothing to stop"
 '''
 
 [tasks.sqlx-prepare]
@@ -140,16 +185,12 @@ script = '''
 set -eEuo pipefail
 
 unset SQLX_OFFLINE
+source scripts/detect-postgres.sh
+echo "Using PostgreSQL at ${PG_HOST}:${PG_PORT} (source: ${PG_SOURCE})"
 
-PG_USER="test"
-PG_PASSWORD="test"
-PG_HOST="localhost"
-PG_PORT="15432"
-PG_DB="test"
-
-# Helper to run psql in docker
+# Helper to run psql
 psql_exec() {
-    docker compose exec -T postgres psql -U "${PG_USER}" -d "${PG_DB}" "$@"
+    PGPASSWORD="${PG_PASSWORD}" psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" "$@"
 }
 
 # Generate unique temporary database name
@@ -230,6 +271,14 @@ dependencies = [
     "website-check",
     "website-build",
     "dfx-stop",
+]
+
+# API-only full check (no dfx/canister - for CI/production)
+[tasks.all-api]
+dependencies = [
+    "clippy-api",
+    "build-api",
+    "test-api",
 ]
 
 [tasks.cleanup]
