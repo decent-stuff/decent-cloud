@@ -48,7 +48,7 @@ Software that providers run to automatically provision services when contracts a
 - Dashboard online/offline badges, pool management UI
 
 ### Phase 6: Health & Reputation
-- [ ] **6.1 API:** `POST /contracts/{id}/health` endpoint + `contract_health_checks` table
+- [x] **6.1 API:** `POST /contracts/{id}/health` endpoint + `contract_health_checks` table ✓ (b3b714a)
 - [ ] **6.2 API:** Uptime calculation per provider
 - [ ] **6.3 Dashboard:** Show uptime percentage on provider profile
 
