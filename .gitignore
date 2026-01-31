@@ -108,10 +108,11 @@ logs/
 .dfx/
 .vessel/
 
-### WebAssembly ###
+### Various untracked files ###
 .just-tmp/
 .venv/
 third_party/
 dc-agent.toml
 *.db
 /.claude/orchestrator/
+/api/.sqlx/
