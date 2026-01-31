@@ -2180,4 +2180,254 @@ async fn test_cleanup_expired_provisioning_locks() {
 
 // === Contract Usage Tracking Tests ===
 
+// === Contract Health Check Tests ===
+
+#[tokio::test]
+async fn test_record_health_check_success() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let checked_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let check_id = db
+        .record_health_check(
+            &contract_id,
+            checked_at,
+            "healthy",
+            Some(42),
+            Some(r#"{"port":22}"#),
+        )
+        .await
+        .unwrap();
+
+    assert!(check_id > 0, "Should return positive check ID");
+}
+
+#[tokio::test]
+async fn test_record_health_check_all_status_values() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![4u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    // Test all valid status values
+    for status in ["healthy", "unhealthy", "unknown"] {
+        let check_id = db
+            .record_health_check(&contract_id, now, status, None, None)
+            .await
+            .unwrap();
+        assert!(check_id > 0, "Should record '{}' status", status);
+    }
+}
+
+#[tokio::test]
+async fn test_record_health_check_invalid_status() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![5u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let result = db
+        .record_health_check(&contract_id, now, "invalid_status", None, None)
+        .await;
+
+    assert!(result.is_err(), "Should reject invalid status");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("Invalid health status"),
+        "Error should mention invalid status: {}",
+        err
+    );
+}
+
+#[tokio::test]
+async fn test_get_recent_health_checks_ordered_by_checked_at() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![6u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    // Insert checks at different times
+    let base_ns = 1000000000000000000_i64; // 1 second in nanoseconds
+    db.record_health_check(&contract_id, base_ns, "healthy", Some(10), None)
+        .await
+        .unwrap();
+    db.record_health_check(
+        &contract_id,
+        base_ns + 60_000_000_000,
+        "unhealthy",
+        Some(500),
+        None,
+    )
+    .await
+    .unwrap();
+    db.record_health_check(
+        &contract_id,
+        base_ns + 120_000_000_000,
+        "healthy",
+        Some(15),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let checks = db.get_recent_health_checks(&contract_id, 10).await.unwrap();
+
+    assert_eq!(checks.len(), 3, "Should return all 3 health checks");
+    // Should be ordered by checked_at DESC (most recent first)
+    assert_eq!(checks[0].checked_at, base_ns + 120_000_000_000);
+    assert_eq!(checks[1].checked_at, base_ns + 60_000_000_000);
+    assert_eq!(checks[2].checked_at, base_ns);
+    assert_eq!(checks[0].status, "healthy");
+    assert_eq!(checks[1].status, "unhealthy");
+    assert_eq!(checks[2].status, "healthy");
+}
+
+#[tokio::test]
+async fn test_get_recent_health_checks_respects_limit() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![7u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    // Insert 5 checks
+    let base_ns = 1000000000000000000_i64;
+    for i in 0..5 {
+        db.record_health_check(
+            &contract_id,
+            base_ns + i * 60_000_000_000,
+            "healthy",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    let checks = db.get_recent_health_checks(&contract_id, 2).await.unwrap();
+
+    assert_eq!(checks.len(), 2, "Should respect limit of 2");
+    // Should return the 2 most recent
+    assert_eq!(checks[0].checked_at, base_ns + 4 * 60_000_000_000);
+    assert_eq!(checks[1].checked_at, base_ns + 3 * 60_000_000_000);
+}
+
+#[tokio::test]
+async fn test_get_recent_health_checks_empty() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![8u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let checks = db.get_recent_health_checks(&contract_id, 10).await.unwrap();
+
+    assert_eq!(
+        checks.len(),
+        0,
+        "Should return empty vec for contract with no health checks"
+    );
+}
+
+#[tokio::test]
+async fn test_record_health_check_with_details_json() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![9u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let details = r#"{"ssh_status":"ok","http_status":200,"memory_mb":1024}"#;
+    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    db.record_health_check(&contract_id, now, "healthy", Some(25), Some(details))
+        .await
+        .unwrap();
+
+    let checks = db.get_recent_health_checks(&contract_id, 1).await.unwrap();
+
+    assert_eq!(checks.len(), 1);
+    assert_eq!(checks[0].details, Some(details.to_string()));
+    assert_eq!(checks[0].latency_ms, Some(25));
+}
+
 // === Subscription Management Tests ===

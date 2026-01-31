@@ -2,10 +2,11 @@
 //!
 //! Handles agent delegations, heartbeats, and DNS management for provider provisioning agents.
 
-use super::common::{check_authorization, decode_pubkey, ApiResponse};
+use super::common::{check_authorization, decode_pubkey, ApiResponse, RecordHealthCheckRequest};
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
 use crate::cloudflare_dns::CloudflareDns;
 use crate::database::agent_delegations::CreateAgentDelegationParams;
+use crate::database::contracts::ContractHealthCheck;
 use crate::database::{AgentDelegation, AgentPermission, AgentStatus, Database};
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
@@ -656,6 +657,115 @@ impl AgentsApi {
         })
     }
 
+    /// Record contract health check
+    ///
+    /// Called by dc-agent to report the health status of a provisioned contract.
+    /// Requires agent authentication with HealthCheck permission.
+    /// The agent must be delegated by the contract's provider.
+    #[oai(
+        path = "/contracts/:id/health",
+        method = "post",
+        tag = "ApiTags::Agents"
+    )]
+    async fn record_health_check(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        id: Path<String>,
+        req: Json<RecordHealthCheckRequest>,
+    ) -> Json<ApiResponse<ContractHealthCheck>> {
+        // Check permission
+        if let Err(e) = auth.require_permission(AgentPermission::HealthCheck) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        // Decode contract ID
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                });
+            }
+        };
+
+        // Verify contract exists and agent is authorized (provider match)
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Contract not found: {}", id.0)),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to retrieve contract: {}", e)),
+                });
+            }
+        };
+
+        // Authorization: agent must be delegated by the contract's provider
+        let provider_pubkey_hex = hex::encode(&auth.provider_pubkey);
+        if contract.provider_pubkey != provider_pubkey_hex {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!(
+                    "Unauthorized: agent's provider ({}) does not match contract provider ({})",
+                    provider_pubkey_hex, contract.provider_pubkey
+                )),
+            });
+        }
+
+        // Record the health check
+        let check_id = match db
+            .record_health_check(
+                &contract_id,
+                req.checked_at,
+                &req.status,
+                req.latency_ms,
+                req.details.as_deref(),
+            )
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                });
+            }
+        };
+
+        // Return the created health check record
+        let health_check = ContractHealthCheck {
+            id: check_id,
+            contract_id: id.0.clone(),
+            checked_at: req.checked_at,
+            status: req.status.clone(),
+            latency_ms: req.latency_ms,
+            details: req.details.clone(),
+            created_at: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+        };
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(health_check),
+            error: None,
+        })
+    }
+
     /// Manage gateway DNS records
     ///
     /// Creates or deletes DNS A records for gateway subdomains.
@@ -807,5 +917,53 @@ mod tests {
 
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("k7m2p4.dc-lk.decent-cloud.org"));
+    }
+
+    #[test]
+    fn test_health_check_request_deserialization() {
+        let json = r#"{
+            "checkedAt": 1700000000000000000,
+            "status": "healthy",
+            "latencyMs": 42,
+            "details": "{\"ssh\":\"ok\"}"
+        }"#;
+
+        let request: RecordHealthCheckRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.checked_at, 1700000000000000000);
+        assert_eq!(request.status, "healthy");
+        assert_eq!(request.latency_ms, Some(42));
+        assert_eq!(request.details, Some(r#"{"ssh":"ok"}"#.to_string()));
+    }
+
+    #[test]
+    fn test_health_check_request_minimal() {
+        let json = r#"{
+            "checkedAt": 1700000000000000000,
+            "status": "unhealthy"
+        }"#;
+
+        let request: RecordHealthCheckRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.checked_at, 1700000000000000000);
+        assert_eq!(request.status, "unhealthy");
+        assert_eq!(request.latency_ms, None);
+        assert_eq!(request.details, None);
+    }
+
+    #[test]
+    fn test_contract_health_check_serialization() {
+        let check = ContractHealthCheck {
+            id: 1,
+            contract_id: "abc123".to_string(),
+            checked_at: 1700000000000000000,
+            status: "healthy".to_string(),
+            latency_ms: Some(25),
+            details: Some(r#"{"port":22}"#.to_string()),
+            created_at: 1700000000000000000,
+        };
+
+        let json = serde_json::to_string(&check).unwrap();
+        assert!(json.contains("\"id\":1"));
+        assert!(json.contains("\"status\":\"healthy\""));
+        assert!(json.contains("\"latencyMs\":25"));
     }
 }

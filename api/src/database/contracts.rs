@@ -2045,6 +2045,75 @@ impl Database {
 
         Ok(usage)
     }
+
+    // === Contract Health Checks ===
+
+    /// Record a health check for a contract
+    ///
+    /// Called by dc-agent to report the health status of a provisioned service.
+    /// Returns the ID of the created health check record.
+    pub async fn record_health_check(
+        &self,
+        contract_id: &[u8],
+        checked_at: i64,
+        status: &str,
+        latency_ms: Option<i32>,
+        details: Option<&str>,
+    ) -> Result<i64> {
+        // Validate status
+        if !matches!(status, "healthy" | "unhealthy" | "unknown") {
+            return Err(anyhow::anyhow!(
+                "Invalid health status '{}'. Must be one of: healthy, unhealthy, unknown",
+                status
+            ));
+        }
+
+        let result = sqlx::query!(
+            r#"INSERT INTO contract_health_checks (contract_id, checked_at, status, latency_ms, details)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id as "id!: i64""#,
+            contract_id,
+            checked_at,
+            status,
+            latency_ms,
+            details
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(result.id)
+    }
+
+    /// Get recent health checks for a contract
+    ///
+    /// Returns health checks ordered by checked_at descending (most recent first).
+    pub async fn get_recent_health_checks(
+        &self,
+        contract_id: &[u8],
+        limit: i64,
+    ) -> Result<Vec<ContractHealthCheck>> {
+        let checks = sqlx::query_as!(
+            ContractHealthCheck,
+            r#"SELECT
+                id as "id!: i64",
+                lower(encode(contract_id, 'hex')) as "contract_id!: String",
+                checked_at as "checked_at!: i64",
+                status as "status!: String",
+                latency_ms,
+                details,
+                created_at as "created_at!: i64"
+            FROM contract_health_checks
+            WHERE contract_id = $1
+            ORDER BY checked_at DESC
+            LIMIT $2"#,
+            contract_id,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(checks)
+    }
 }
 
 /// Contract usage tracking for billing periods
@@ -2084,6 +2153,33 @@ pub struct ContractUsage {
 pub struct PendingStripeReceipt {
     pub contract_id: Vec<u8>,
     pub attempts: i64,
+}
+
+/// Health check result for a contract
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase", skip_serializing_if_is_none)]
+pub struct ContractHealthCheck {
+    #[ts(type = "number")]
+    pub id: i64,
+    #[ts(type = "string")]
+    pub contract_id: String,
+    /// Timestamp when the check was performed (nanoseconds since epoch)
+    #[ts(type = "number")]
+    pub checked_at: i64,
+    /// Health status: "healthy", "unhealthy", or "unknown"
+    pub status: String,
+    /// Optional latency measurement in milliseconds
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub latency_ms: Option<i32>,
+    /// Optional JSON with additional diagnostic details
+    #[oai(skip_serializing_if_is_none)]
+    pub details: Option<String>,
+    /// Timestamp when this record was created (nanoseconds since epoch)
+    #[ts(type = "number")]
+    pub created_at: i64,
 }
 
 #[cfg(test)]

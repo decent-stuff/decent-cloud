@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                id as \"id!: i64\",\n                lower(encode(contract_id, 'hex')) as \"contract_id!: String\",\n                checked_at as \"checked_at!: i64\",\n                status as \"status!: String\",\n                latency_ms,\n                details,\n                created_at as \"created_at!: i64\"\n            FROM contract_health_checks\n            WHERE contract_id = $1\n            ORDER BY checked_at DESC\n            LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "checked_at!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "status!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "latency_ms",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "details",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "60360c2536f4e026cf78a542c804208495e8d1e299c05588424de4e3afc7f89d"
+}

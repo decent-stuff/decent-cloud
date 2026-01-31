@@ -196,6 +196,21 @@ pub struct RecordUsageRequest {
     pub metadata: Option<String>,
 }
 
+/// Request to record a health check result for a contract
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct RecordHealthCheckRequest {
+    /// Timestamp when the check was performed (nanoseconds since epoch)
+    pub checked_at: i64,
+    /// Health status: "healthy", "unhealthy", or "unknown"
+    pub status: String,
+    /// Optional latency measurement in milliseconds
+    pub latency_ms: Option<i32>,
+    /// Optional JSON with additional diagnostic details
+    pub details: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
