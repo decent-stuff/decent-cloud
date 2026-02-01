@@ -54,12 +54,17 @@ impl GatewayManager {
             );
         }
 
-        Ok(Self {
+        let mut manager = Self {
             config,
             port_allocator,
             caddy_manager,
             api_client,
-        })
+        };
+
+        // Restore iptables rules from persisted allocations (for reboot recovery)
+        manager.restore_iptables_rules();
+
+        Ok(manager)
     }
 
     /// Generate a 6-character alphanumeric slug for subdomain.
@@ -110,17 +115,17 @@ impl GatewayManager {
         let slug = Self::generate_slug();
         let subdomain = self.build_subdomain(&slug);
 
-        // Allocate ports
-        let allocation = self
-            .port_allocator
-            .allocate(&slug, contract_id)
-            .context("Failed to allocate ports for gateway")?;
-
-        // Get internal IP (required for Caddy routing)
+        // Get internal IP (required for Caddy routing and iptables)
         let internal_ip = instance
             .ip_address
             .as_ref()
             .context("Instance must have an IP address for gateway setup")?;
+
+        // Allocate ports (stores internal_ip for restore after reboot)
+        let allocation = self
+            .port_allocator
+            .allocate(&slug, contract_id, internal_ip)
+            .context("Failed to allocate ports for gateway")?;
 
         // Create DNS record FIRST via central API (unless skipped for testing)
         // Must exist before Caddy config so HTTP-01 challenge can succeed
@@ -225,6 +230,51 @@ impl GatewayManager {
     /// Find gateway slug by contract_id (for cleanup during termination).
     pub fn find_slug_by_contract(&self, contract_id: &str) -> Option<String> {
         self.port_allocator.find_slug_by_contract(contract_id)
+    }
+
+    /// Restore iptables rules from persisted port allocations.
+    /// Called on startup to recover gateway state after reboot.
+    fn restore_iptables_rules(&mut self) {
+        let allocations = self.port_allocator.allocations().allocations.clone();
+        if allocations.is_empty() {
+            return;
+        }
+
+        tracing::info!(
+            "Restoring iptables rules for {} allocations",
+            allocations.len()
+        );
+
+        let mut restored = 0;
+        let mut skipped = 0;
+
+        for (slug, allocation) in allocations {
+            let Some(internal_ip) = &allocation.internal_ip else {
+                tracing::warn!(
+                    "Skipping iptables restore for {}: no internal_ip stored (old allocation format)",
+                    slug
+                );
+                skipped += 1;
+                continue;
+            };
+
+            match IptablesNat::setup_forwarding(&slug, internal_ip, &allocation) {
+                Ok(()) => {
+                    tracing::debug!("Restored iptables rules for {} -> {}", slug, internal_ip);
+                    restored += 1;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to restore iptables for {}: {}", slug, e);
+                    skipped += 1;
+                }
+            }
+        }
+
+        tracing::info!(
+            "iptables restore complete: {} restored, {} skipped",
+            restored,
+            skipped
+        );
     }
 }
 

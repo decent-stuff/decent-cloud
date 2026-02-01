@@ -28,7 +28,7 @@ use tracing::{error, info, warn};
 #[command(about = "Decent Cloud Provider Provisioning Agent", long_about = None)]
 struct Cli {
     /// Path to configuration file
-    #[arg(long, default_value = "dc-agent.toml")]
+    #[arg(long, default_value = "/etc/dc-agent/dc-agent.toml")]
     config: PathBuf,
 
     #[command(subcommand)]
@@ -105,7 +105,7 @@ enum SetupProvisioner {
         api_url: String,
 
         /// Output config file path
-        #[arg(long, default_value = "dc-agent.toml")]
+        #[arg(long, default_value = "/etc/dc-agent/dc-agent.toml")]
         output: PathBuf,
 
         /// Force registration even if detected location doesn't match pool location

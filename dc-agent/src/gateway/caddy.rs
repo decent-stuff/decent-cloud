@@ -134,6 +134,7 @@ mod tests {
             base: 20000,
             count: 10,
             contract_id: "contract-123".to_string(),
+            internal_ip: Some("10.0.1.5".to_string()),
         };
 
         let config = manager.generate_config(
@@ -173,6 +174,7 @@ mod tests {
             base: 20000,
             count: 10,
             contract_id: "contract-123".to_string(),
+            internal_ip: Some("10.0.1.5".to_string()),
         };
 
         // Note: write_vm_config will try to reload Caddy which will fail in tests,
