@@ -10,7 +10,7 @@ use rand::Rng;
 /// Generate a secure random password meeting Chatwoot requirements.
 /// Must contain: uppercase, lowercase, number, and special character.
 pub fn generate_secure_password() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Character sets
     let uppercase = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -20,16 +20,16 @@ pub fn generate_secure_password() -> String {
 
     // Ensure at least one of each required type
     let mut password = vec![
-        uppercase[rng.gen_range(0..uppercase.len())] as char,
-        lowercase[rng.gen_range(0..lowercase.len())] as char,
-        numbers[rng.gen_range(0..numbers.len())] as char,
-        special[rng.gen_range(0..special.len())] as char,
+        uppercase[rng.random_range(0..uppercase.len())] as char,
+        lowercase[rng.random_range(0..lowercase.len())] as char,
+        numbers[rng.random_range(0..numbers.len())] as char,
+        special[rng.random_range(0..special.len())] as char,
     ];
 
     // Fill remaining 12 characters with random mix
     let all_chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     for _ in 0..12 {
-        password.push(all_chars[rng.gen_range(0..all_chars.len())] as char);
+        password.push(all_chars[rng.random_range(0..all_chars.len())] as char);
     }
 
     // Shuffle to avoid predictable pattern

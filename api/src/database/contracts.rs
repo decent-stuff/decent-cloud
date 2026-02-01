@@ -2180,6 +2180,7 @@ impl Database {
     ///
     /// WARNING: This function is intended for CLI testing and E2E tests only.
     /// Never expose this through a public API endpoint.
+    #[allow(dead_code)] // Used by api-cli binary for E2E testing
     pub async fn set_payment_status_for_testing(
         &self,
         contract_id: &[u8],

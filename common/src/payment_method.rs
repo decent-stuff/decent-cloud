@@ -23,6 +23,8 @@ pub enum PaymentMethod {
     #[serde(rename = "icpay")]
     ICPay,
     Stripe,
+    /// Test payment method for E2E testing - auto-succeeds without checkout
+    Test,
 }
 
 impl PaymentMethod {
@@ -33,6 +35,10 @@ impl PaymentMethod {
     pub fn is_stripe(&self) -> bool {
         matches!(self, PaymentMethod::Stripe)
     }
+
+    pub fn is_test(&self) -> bool {
+        matches!(self, PaymentMethod::Test)
+    }
 }
 
 impl std::fmt::Display for PaymentMethod {
@@ -40,6 +46,7 @@ impl std::fmt::Display for PaymentMethod {
         match self {
             PaymentMethod::ICPay => write!(f, "icpay"),
             PaymentMethod::Stripe => write!(f, "stripe"),
+            PaymentMethod::Test => write!(f, "test"),
         }
     }
 }
@@ -51,6 +58,7 @@ impl std::str::FromStr for PaymentMethod {
         match s.to_lowercase().as_str() {
             "icpay" => Ok(PaymentMethod::ICPay),
             "stripe" => Ok(PaymentMethod::Stripe),
+            "test" => Ok(PaymentMethod::Test),
             _ => Err(format!("Invalid payment method: {}", s)),
         }
     }
@@ -69,12 +77,21 @@ mod tests {
     fn test_payment_method_is_icpay() {
         assert!(PaymentMethod::ICPay.is_icpay());
         assert!(!PaymentMethod::Stripe.is_icpay());
+        assert!(!PaymentMethod::Test.is_icpay());
     }
 
     #[test]
     fn test_payment_method_is_stripe() {
         assert!(PaymentMethod::Stripe.is_stripe());
         assert!(!PaymentMethod::ICPay.is_stripe());
+        assert!(!PaymentMethod::Test.is_stripe());
+    }
+
+    #[test]
+    fn test_payment_method_is_test() {
+        assert!(PaymentMethod::Test.is_test());
+        assert!(!PaymentMethod::ICPay.is_test());
+        assert!(!PaymentMethod::Stripe.is_test());
     }
 
     #[test]
@@ -104,6 +121,18 @@ mod tests {
             "STRIPE".parse::<PaymentMethod>().unwrap(),
             PaymentMethod::Stripe
         );
+        assert_eq!(
+            "test".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Test
+        );
+        assert_eq!(
+            "Test".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Test
+        );
+        assert_eq!(
+            "TEST".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Test
+        );
     }
 
     #[test]
@@ -117,6 +146,7 @@ mod tests {
     fn test_payment_method_display() {
         assert_eq!(PaymentMethod::ICPay.to_string(), "icpay");
         assert_eq!(PaymentMethod::Stripe.to_string(), "stripe");
+        assert_eq!(PaymentMethod::Test.to_string(), "test");
     }
 
     #[test]
@@ -128,6 +158,10 @@ mod tests {
         let stripe = PaymentMethod::Stripe;
         let json = serde_json::to_string(&stripe).unwrap();
         assert_eq!(json, r#""stripe""#);
+
+        let test = PaymentMethod::Test;
+        let json = serde_json::to_string(&test).unwrap();
+        assert_eq!(json, r#""test""#);
     }
 
     #[test]
@@ -137,6 +171,9 @@ mod tests {
 
         let stripe: PaymentMethod = serde_json::from_str(r#""stripe""#).unwrap();
         assert_eq!(stripe, PaymentMethod::Stripe);
+
+        let test: PaymentMethod = serde_json::from_str(r#""test""#).unwrap();
+        assert_eq!(test, PaymentMethod::Test);
     }
 
     #[test]

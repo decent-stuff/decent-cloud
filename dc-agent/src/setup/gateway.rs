@@ -114,7 +114,7 @@ impl GatewaySetup {
         self.enable_ip_forwarding()?;
 
         // 2. Detect if we're behind 1:1 NAT (public IP not on any interface)
-        let nat_mode = self.detect_nat_mode()?;
+        let _nat_mode = self.detect_nat_mode()?;
 
         // 3. Detect public interface (for masquerade rules if not NAT mode)
         let public_iface = self.detect_public_interface()?;

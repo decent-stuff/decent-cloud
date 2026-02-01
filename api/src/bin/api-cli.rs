@@ -781,6 +781,7 @@ struct Contract {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RentalRequestResponse {
     contract_id: String,
     message: String,
@@ -838,8 +839,8 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             let client = SignedClient::new(&id, api_url)?;
 
             let payment_method = if skip_payment {
-                // For testing: use "test" payment method that auto-succeeds
-                Some("test".to_string())
+                // For testing: use "icpay" payment method that auto-succeeds without checkout
+                Some("icpay".to_string())
             } else {
                 Some("stripe".to_string())
             };
@@ -1543,13 +1544,13 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
-            // Step 1: Create contract with skip-payment
+            // Step 1: Create contract with skip-payment (icpay auto-succeeds without checkout)
             println!("Step 1: Creating contract...");
             let request = CreateContractRequest {
                 offering_db_id: offering_id,
                 ssh_pubkey: Some(ssh_pubkey.clone()),
                 duration_hours: Some(1),
-                payment_method: Some("test".to_string()),
+                payment_method: Some("icpay".to_string()),
             };
             let response: RentalRequestResponse = client.post_api("/contracts", &request).await?;
             let contract_id = response.contract_id.clone();

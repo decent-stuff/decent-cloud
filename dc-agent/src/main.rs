@@ -1397,6 +1397,7 @@ async fn check_for_updates_and_log() {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn send_heartbeat(
     api_client: &ApiClient,
     provisioner_type: &str,

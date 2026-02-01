@@ -34,7 +34,6 @@ pub struct ApiResponse<T> {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PendingContract {
     pub contract_id: String,
     pub offering_id: String,
@@ -55,7 +54,6 @@ pub struct PendingContract {
 
 /// Contract pending termination (cancelled with VM still running)
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ContractPendingTermination {
     pub contract_id: String,
     /// Instance details JSON (contains external_id needed for termination)
