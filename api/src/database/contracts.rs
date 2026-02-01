@@ -2114,6 +2114,66 @@ impl Database {
 
         Ok(checks)
     }
+
+    /// Get provider health summary with uptime calculation
+    ///
+    /// Aggregates health check data across all contracts for a provider
+    /// within the specified time window (default: last 30 days).
+    ///
+    /// # Arguments
+    /// * `provider_pubkey` - Provider's public key
+    /// * `days` - Number of days to look back (default: 30)
+    ///
+    /// # Returns
+    /// Health summary with uptime percentage and metrics
+    pub async fn get_provider_health_summary(
+        &self,
+        provider_pubkey: &[u8],
+        days: Option<i64>,
+    ) -> Result<ProviderHealthSummary> {
+        let days = days.unwrap_or(30);
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let period_start_ns = now_ns - (days * 24 * 60 * 60 * 1_000_000_000);
+
+        // Aggregate health checks for all contracts belonging to this provider
+        let stats = sqlx::query!(
+            r#"SELECT
+                COUNT(*) as "total_checks!: i64",
+                COALESCE(SUM(CASE WHEN hc.status = 'healthy' THEN 1 ELSE 0 END), 0) as "healthy_checks!: i64",
+                COALESCE(SUM(CASE WHEN hc.status = 'unhealthy' THEN 1 ELSE 0 END), 0) as "unhealthy_checks!: i64",
+                COALESCE(SUM(CASE WHEN hc.status = 'unknown' THEN 1 ELSE 0 END), 0) as "unknown_checks!: i64",
+                AVG(hc.latency_ms)::DOUBLE PRECISION as "avg_latency_ms: f64",
+                COUNT(DISTINCT hc.contract_id) as "contracts_monitored!: i64"
+            FROM contract_health_checks hc
+            JOIN contract_sign_requests csr ON hc.contract_id = csr.contract_id
+            WHERE csr.provider_pubkey = $1
+            AND hc.checked_at >= $2"#,
+            provider_pubkey,
+            period_start_ns
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Calculate uptime percentage
+        // If no checks, default to 0% (no data means we can't claim uptime)
+        let uptime_percent = if stats.total_checks > 0 {
+            (stats.healthy_checks as f64 / stats.total_checks as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(ProviderHealthSummary {
+            total_checks: stats.total_checks,
+            healthy_checks: stats.healthy_checks,
+            unhealthy_checks: stats.unhealthy_checks,
+            unknown_checks: stats.unknown_checks,
+            uptime_percent,
+            avg_latency_ms: stats.avg_latency_ms,
+            contracts_monitored: stats.contracts_monitored,
+            period_start_ns,
+            period_end_ns: now_ns,
+        })
+    }
 }
 
 /// Contract usage tracking for billing periods
@@ -2153,6 +2213,40 @@ pub struct ContractUsage {
 pub struct PendingStripeReceipt {
     pub contract_id: Vec<u8>,
     pub attempts: i64,
+}
+
+/// Provider health summary with uptime metrics
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
+pub struct ProviderHealthSummary {
+    /// Total number of health checks in the period
+    #[ts(type = "number")]
+    pub total_checks: i64,
+    /// Number of healthy checks
+    #[ts(type = "number")]
+    pub healthy_checks: i64,
+    /// Number of unhealthy checks
+    #[ts(type = "number")]
+    pub unhealthy_checks: i64,
+    /// Number of unknown status checks
+    #[ts(type = "number")]
+    pub unknown_checks: i64,
+    /// Uptime percentage (0.0 - 100.0)
+    pub uptime_percent: f64,
+    /// Average latency in milliseconds (None if no latency data)
+    #[oai(skip_serializing_if_is_none)]
+    pub avg_latency_ms: Option<f64>,
+    /// Number of contracts with health data in the period
+    #[ts(type = "number")]
+    pub contracts_monitored: i64,
+    /// Start of the measurement period (nanoseconds since epoch)
+    #[ts(type = "number")]
+    pub period_start_ns: i64,
+    /// End of the measurement period (nanoseconds since epoch)
+    #[ts(type = "number")]
+    pub period_end_ns: i64,
 }
 
 /// Health check result for a contract

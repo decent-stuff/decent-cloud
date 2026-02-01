@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                COUNT(*) as \"total_checks!: i64\",\n                COALESCE(SUM(CASE WHEN hc.status = 'healthy' THEN 1 ELSE 0 END), 0) as \"healthy_checks!: i64\",\n                COALESCE(SUM(CASE WHEN hc.status = 'unhealthy' THEN 1 ELSE 0 END), 0) as \"unhealthy_checks!: i64\",\n                COALESCE(SUM(CASE WHEN hc.status = 'unknown' THEN 1 ELSE 0 END), 0) as \"unknown_checks!: i64\",\n                AVG(hc.latency_ms)::DOUBLE PRECISION as \"avg_latency_ms: f64\",\n                COUNT(DISTINCT hc.contract_id) as \"contracts_monitored!: i64\"\n            FROM contract_health_checks hc\n            JOIN contract_sign_requests csr ON hc.contract_id = csr.contract_id\n            WHERE csr.provider_pubkey = $1\n            AND hc.checked_at >= $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "healthy_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "unhealthy_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "unknown_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "avg_latency_ms: f64",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "contracts_monitored!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "ca5498bb744b098cfab680fd601220706ecb7c66234c4053df51681a78c1e702"
+}

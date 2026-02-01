@@ -251,6 +251,49 @@ impl ProvidersApi {
         }
     }
 
+    /// Get provider health summary
+    ///
+    /// Returns uptime metrics and health check statistics for a provider.
+    /// Aggregates health check data across all contracts for the specified time window.
+    /// Default period is last 30 days.
+    #[oai(
+        path = "/providers/:pubkey/health-summary",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_health_summary(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+        /// Number of days to look back (default: 30)
+        #[oai(default)]
+        days: poem_openapi::param::Query<Option<i64>>,
+    ) -> Json<ApiResponse<crate::database::contracts::ProviderHealthSummary>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        match db.get_provider_health_summary(&pubkey_bytes, days.0).await {
+            Ok(summary) => Json(ApiResponse {
+                success: true,
+                data: Some(summary),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get provider contract response metrics
     ///
     /// Returns response time and SLA compliance metrics for contract status changes.

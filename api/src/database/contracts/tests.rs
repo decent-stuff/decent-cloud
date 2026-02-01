@@ -2430,4 +2430,301 @@ async fn test_record_health_check_with_details_json() {
     assert_eq!(checks[0].latency_ms, Some(25));
 }
 
+// === Provider Health Summary Tests ===
+
+#[tokio::test]
+async fn test_get_provider_health_summary_no_checks() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![10u8; 32];
+
+    let summary = db
+        .get_provider_health_summary(&provider_pk, Some(30))
+        .await
+        .unwrap();
+
+    assert_eq!(summary.total_checks, 0);
+    assert_eq!(summary.healthy_checks, 0);
+    assert_eq!(summary.unhealthy_checks, 0);
+    assert_eq!(summary.unknown_checks, 0);
+    assert_eq!(summary.uptime_percent, 0.0);
+    assert!(summary.avg_latency_ms.is_none());
+    assert_eq!(summary.contracts_monitored, 0);
+}
+
+#[tokio::test]
+async fn test_get_provider_health_summary_with_checks() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![11u8; 32];
+    let contract_id = vec![12u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    // Insert health checks (recent enough to be in the 30 day window)
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let one_hour_ns = 60 * 60 * 1_000_000_000_i64;
+
+    // 8 healthy, 2 unhealthy = 80% uptime
+    for i in 0..8 {
+        db.record_health_check(
+            &contract_id,
+            now_ns - i * one_hour_ns,
+            "healthy",
+            Some(20 + i as i32),
+            None,
+        )
+        .await
+        .unwrap();
+    }
+    for i in 0..2 {
+        db.record_health_check(
+            &contract_id,
+            now_ns - (8 + i) * one_hour_ns,
+            "unhealthy",
+            Some(100),
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    let summary = db
+        .get_provider_health_summary(&provider_pk, Some(30))
+        .await
+        .unwrap();
+
+    assert_eq!(summary.total_checks, 10);
+    assert_eq!(summary.healthy_checks, 8);
+    assert_eq!(summary.unhealthy_checks, 2);
+    assert_eq!(summary.unknown_checks, 0);
+    assert!((summary.uptime_percent - 80.0).abs() < 0.01);
+    assert!(summary.avg_latency_ms.is_some());
+    assert_eq!(summary.contracts_monitored, 1);
+}
+
+#[tokio::test]
+async fn test_get_provider_health_summary_multiple_contracts() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![13u8; 32];
+    let contract_id_1 = vec![14u8; 32];
+    let contract_id_2 = vec![15u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id_1,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+    insert_contract_request(
+        &db,
+        &contract_id_2,
+        &user_pk,
+        &provider_pk,
+        "off-2",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    // Contract 1: 3 healthy
+    for i in 0..3 {
+        db.record_health_check(
+            &contract_id_1,
+            now_ns - i * 60_000_000_000,
+            "healthy",
+            Some(10),
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    // Contract 2: 2 healthy, 1 unhealthy
+    for i in 0..2 {
+        db.record_health_check(
+            &contract_id_2,
+            now_ns - i * 60_000_000_000,
+            "healthy",
+            Some(15),
+            None,
+        )
+        .await
+        .unwrap();
+    }
+    db.record_health_check(
+        &contract_id_2,
+        now_ns - 3 * 60_000_000_000,
+        "unhealthy",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let summary = db
+        .get_provider_health_summary(&provider_pk, Some(30))
+        .await
+        .unwrap();
+
+    assert_eq!(summary.total_checks, 6);
+    assert_eq!(summary.healthy_checks, 5);
+    assert_eq!(summary.unhealthy_checks, 1);
+    // 5/6 = 83.33%
+    assert!((summary.uptime_percent - 83.33).abs() < 0.1);
+    assert_eq!(summary.contracts_monitored, 2);
+}
+
+#[tokio::test]
+async fn test_get_provider_health_summary_respects_time_window() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![16u8; 32];
+    let contract_id = vec![17u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let one_day_ns = 24 * 60 * 60 * 1_000_000_000_i64;
+
+    // Recent check (within 7 days)
+    db.record_health_check(&contract_id, now_ns - one_day_ns, "healthy", None, None)
+        .await
+        .unwrap();
+
+    // Old check (more than 7 days ago)
+    db.record_health_check(
+        &contract_id,
+        now_ns - 10 * one_day_ns,
+        "unhealthy",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // Query with 7 day window
+    let summary = db
+        .get_provider_health_summary(&provider_pk, Some(7))
+        .await
+        .unwrap();
+
+    // Should only include the recent healthy check
+    assert_eq!(summary.total_checks, 1);
+    assert_eq!(summary.healthy_checks, 1);
+    assert_eq!(summary.unhealthy_checks, 0);
+    assert_eq!(summary.uptime_percent, 100.0);
+
+    // Query with 30 day window (should include both)
+    let summary_30 = db
+        .get_provider_health_summary(&provider_pk, Some(30))
+        .await
+        .unwrap();
+
+    assert_eq!(summary_30.total_checks, 2);
+    assert_eq!(summary_30.healthy_checks, 1);
+    assert_eq!(summary_30.unhealthy_checks, 1);
+    assert_eq!(summary_30.uptime_percent, 50.0);
+}
+
+#[tokio::test]
+async fn test_get_provider_health_summary_default_30_days() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![18u8; 32];
+
+    // No explicit days parameter (should default to 30)
+    let summary = db
+        .get_provider_health_summary(&provider_pk, None)
+        .await
+        .unwrap();
+
+    // Should work with no data
+    assert_eq!(summary.total_checks, 0);
+    // Verify the period is approximately 30 days
+    let expected_period_ns = 30 * 24 * 60 * 60 * 1_000_000_000_i64;
+    let actual_period_ns = summary.period_end_ns - summary.period_start_ns;
+    // Allow 1 second tolerance for test execution time
+    assert!((actual_period_ns - expected_period_ns).abs() < 1_000_000_000);
+}
+
+#[tokio::test]
+async fn test_get_provider_health_summary_all_status_types() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![19u8; 32];
+    let contract_id = vec![20u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "provisioned",
+    )
+    .await;
+
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    // Add one of each status
+    db.record_health_check(&contract_id, now_ns, "healthy", None, None)
+        .await
+        .unwrap();
+    db.record_health_check(
+        &contract_id,
+        now_ns - 60_000_000_000,
+        "unhealthy",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    db.record_health_check(
+        &contract_id,
+        now_ns - 120_000_000_000,
+        "unknown",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let summary = db
+        .get_provider_health_summary(&provider_pk, Some(30))
+        .await
+        .unwrap();
+
+    assert_eq!(summary.total_checks, 3);
+    assert_eq!(summary.healthy_checks, 1);
+    assert_eq!(summary.unhealthy_checks, 1);
+    assert_eq!(summary.unknown_checks, 1);
+    // Only healthy counts toward uptime: 1/3 = 33.33%
+    assert!((summary.uptime_percent - 33.33).abs() < 0.1);
+}
+
 // === Subscription Management Tests ===
